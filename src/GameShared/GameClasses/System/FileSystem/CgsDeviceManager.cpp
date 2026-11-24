@@ -26,7 +26,7 @@ namespace CgsFileSystem
     // CgsFileSystem::GetDeviceManager @ 0x8264AD88
     DeviceManager* GetDeviceManager()
     {
-        CGS_ASSERT(DeviceManager::mpDeviceManager != 0, CgsDev::Assert::StreamMessageAt("Device manager not initialized\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsDeviceManager.h", 210));
+        CGS_ASSERT(DeviceManager::mpDeviceManager != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Device manager not initialized\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsDeviceManager.h", 210));
         return DeviceManager::mpDeviceManager;
     }
 

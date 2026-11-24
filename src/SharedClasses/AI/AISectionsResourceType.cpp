@@ -3,7 +3,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceLoadBase.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"            // CGS_ASSERT + Begin/Fire/End + KI_MESSAGEBUFFERSIZE
 #include "GameShared/GameClasses/Development/CgsStrStream.h"  // CgsDev::StrStream (GetMiddle miss message)
-
+#define CGS_ARTIST_FILE "..\\..\\..\\SharedClasses\\AI/AISectionsData.h"
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnAI::AISectionsResourceType::FixDown                       @ 0x8267F4A0
 //   BrnAI::AISectionsResourceType::FixUp                         @ 0x8267DB28
@@ -74,9 +74,9 @@ namespace BrnAI
     const BrnAI::AISection* BrnAI::AISectionsData::GetAISection( u32 luSectionIndex ) const
     {
         CGS_ASSERT( luSectionIndex < muNumSections,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "luSectionIndex < muNumSections",
-                "..\\..\\..\\SharedClasses\\AI/AISectionsData.h", 1201 /* ARTIST 0x8230F700 */));
+                CGS_ARTIST_FILE, 1201 /* ARTIST 0x8230F700 */));
         return &mpaSections[luSectionIndex];
     }
 
@@ -96,10 +96,12 @@ namespace BrnAI
                     << ", only got " << static_cast<s32>(muNumSections) << ".";
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert( lacMessageBuffer,
-                                        "..\\..\\..\\SharedClasses\\AI/AISectionsData.h", 683 );
+                                        CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 683) );
             CgsDev::Assert::EndAssert();
         }
 
         return mpaSections[luSectionIndex].GetMiddle();
     }
 }
+
+#undef CGS_ARTIST_FILE

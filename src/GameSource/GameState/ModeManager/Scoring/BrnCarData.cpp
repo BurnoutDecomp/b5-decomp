@@ -34,7 +34,7 @@
 // `*(this + N)` in the three loops therefore resolves to a named member at N - base, and each
 // one lands exactly on the keystone's declared member run.
 // ----------------------------------------------------------------------------
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\Scoring/BrnScoringSystem.h"
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h" // BrnGameState::CarData keystone
 
 // The road-rule table element type + its Copy/Construct. mpaOnlineGameRoadRuleHighScores
@@ -107,9 +107,9 @@ namespace BrnGameState
 
         CGS_ASSERT(mpNetworkHeapMalloc->GetAllocator()->ValidateHeap(
                        EA::Allocator::GeneralAllocator::kHeapValidationLevelFull),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpNetworkHeapMalloc->GetAllocator()->ValidateHeap(rw::core::GeneralAllocator::kHeapValidationLevelFull)",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\Scoring/BrnScoringSystem.h", 2963 /* ARTIST 0x8232719C */));
+                CGS_ARTIST_FILE, 2963 /* ARTIST 0x8232719C */));
 
         // Console literal 3584 == 64 * console-sizeof(56); the HOST entry is wider (widened
         // pointers/PlayerName layout), so the size is computed -- the console value stays in
@@ -122,13 +122,13 @@ namespace BrnGameState
 
         CGS_ASSERT(mpNetworkHeapMalloc->GetAllocator()->ValidateHeap(
                        EA::Allocator::GeneralAllocator::kHeapValidationLevelFull),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpNetworkHeapMalloc->GetAllocator()->ValidateHeap(rw::core::GeneralAllocator::kHeapValidationLevelFull)",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\Scoring/BrnScoringSystem.h", 2966 /* ARTIST 0x823271E8 */));
+                CGS_ARTIST_FILE, 2966 /* ARTIST 0x823271E8 */));
         CGS_ASSERT(mpaOnlineGameRoadRuleHighScores,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpaOnlineGameRoadRuleHighScores",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\Scoring/BrnScoringSystem.h", 2967 /* ARTIST 0x82327210 */));
+                CGS_ARTIST_FILE, 2967 /* ARTIST 0x82327210 */));
 
         ResetRoadRulesScores();
         return true;
@@ -147,16 +147,16 @@ namespace BrnGameState
                                      BrnStreetData::ChallengeHighScoreEntry* lpEntry) const
     {
         CGS_ASSERT(lpEntry,
-            CgsDev::Assert::MessageAt("lpEntry", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\Scoring/BrnScoringSystem.h", 3140 /* ARTIST 0x8231E100 */));
+            CGS_ASSERT_MESSAGE_AT("lpEntry", CGS_ARTIST_FILE, 3140 /* ARTIST 0x8231E100 */));
         CGS_ASSERT(lChallenge < 0x40 && lChallenge >= 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lChallengeIndex < BrnGameState::KI_MAX_CHALLENGES && lChallengeIndex >= 0",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\Scoring/BrnScoringSystem.h", 3141 /* ARTIST 0x8231E12C */));
+                CGS_ARTIST_FILE, 3141 /* ARTIST 0x8231E12C */));
 
         BrnStreetData::ChallengeHighScoreEntry* lpChallenge =
             &mpaOnlineGameRoadRuleHighScores[lChallenge];
         CGS_ASSERT(lpChallenge,
-            CgsDev::Assert::MessageAt("lpChallenge", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\Scoring/BrnScoringSystem.h", 3147 /* ARTIST 0x8231E15C */));
+            CGS_ASSERT_MESSAGE_AT("lpChallenge", CGS_ARTIST_FILE, 3147 /* ARTIST 0x8231E15C */));
 
         lpEntry->Copy(lpChallenge);
     }
@@ -172,11 +172,11 @@ namespace BrnGameState
                                      BrnStreetData::ChallengeHighScoreEntry* lpEntry)
     {
         CGS_ASSERT(lpEntry,
-            CgsDev::Assert::MessageAt("lpEntry", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\Scoring/BrnScoringSystem.h", 3157 /* ARTIST 0x8231E1B8 */));
+            CGS_ASSERT_MESSAGE_AT("lpEntry", CGS_ARTIST_FILE, 3157 /* ARTIST 0x8231E1B8 */));
         CGS_ASSERT(lChallenge < 0x40 && lChallenge >= 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lChallengeIndex < BrnGameState::KI_MAX_CHALLENGES && lChallengeIndex >= 0",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\Scoring/BrnScoringSystem.h", 3158 /* ARTIST 0x8231E1E4 */));
+                CGS_ARTIST_FILE, 3158 /* ARTIST 0x8231E1E4 */));
 
         mpaOnlineGameRoadRuleHighScores[lChallenge].Copy(lpEntry);
     }
@@ -279,3 +279,5 @@ namespace BrnGameState
         mbDisconnected             = false;                             // +0x14
     }
 }
+
+#undef CGS_ARTIST_FILE

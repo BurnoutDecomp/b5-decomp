@@ -44,10 +44,10 @@ namespace BrnParticle
     const VFXPropState* VFXProp::GetState(u32 luState) const
     {
         CGS_ASSERT(luState < muNumPropStates,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "luState < muNumPropStates", __FILE__, 402 /* ARTIST 0x822770A8 */));   // VFXPropsResourceType.h:402
         CGS_ASSERT(mpPropStates != 0,
-            CgsDev::Assert::MessageAt("mpPropStates != NULL", __FILE__, 403 /* ARTIST 0x822770D0 */));               // :403
+            CGS_ASSERT_MESSAGE_AT("mpPropStates != NULL", __FILE__, 403 /* ARTIST 0x822770D0 */));               // :403
         return reinterpret_cast<const VFXPropState*>(static_cast<uintptr_t>(mpPropStates)) + luState;
     }
 }
@@ -235,7 +235,7 @@ namespace
         const u32 lNumProps = lpPropCollection->GetTableSize();                            // :296
 
         CGS_ASSERT(lpPhysics->GetNumberOfPropTypes() <= BrnPhysics::Props::KU_MAX_PROP_TYPES,
-                   CgsDev::Assert::MessageAt("lpPhysics->GetNumberOfPropTypes() <= BrnPhysics::Props::KU_MAX_PROP_TYPES", __FILE__, 298));   // :298
+                   CGS_ASSERT_MESSAGE_AT("lpPhysics->GetNumberOfPropTypes() <= BrnPhysics::Props::KU_MAX_PROP_TYPES", __FILE__, 298));   // :298
 
         for (u32 j = 0; j < KU_MAX_PROP_TYPE_MAPPINGS; ++j)                                // :300
             maPropToMaterialMappings[j] = PropToVFXMaterialMapping();

@@ -1,5 +1,5 @@
 #include "GameSource/GameState/ModeManager/GameModes/BrnOnlineRaceMode.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\BurnoutConstants.h"
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"            // BrnGameState::ModeManager (GetScoringSystem / GetGameStateModule / GetCurrentGameMode)
 #include "GameSource/GameState/BrnGameStateModule.h"                    // BrnGameState::GameStateModule::GetPlayerActiveRaceCarIndex
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"  // BrnGameState::ScoringSystem / CarData / CarScoreData keystone
@@ -8,7 +8,7 @@
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"                // CgsSystem::Time
 #include "GameShared/GameClasses/Core/CgsAssert.h"                      // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
-
+#define CGS_ARTIST_BRNONLINERACEMODE_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnOnlineRaceMode.cpp"
 namespace BrnGameState
 {
 namespace
@@ -101,7 +101,7 @@ void OnlineRaceMode::PreWorldUpdate(GameStateModuleIO::OutputBuffer* lpOutput,
             }
 
             CGS_ASSERT(leEnumIndex + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                       CgsDev::Assert::MessageAt("leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT", "..\\..\\..\\GameSource\\BurnoutConstants.h", 39));
+                       CGS_ASSERT_MESSAGE_AT("leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 39));
         }
 
         // A winner exists -> cap the remaining racers' clock at the winner's time + the grace window.
@@ -134,12 +134,12 @@ void OnlineRaceMode::PreWorldUpdate(GameStateModuleIO::OutputBuffer* lpOutput,
 f32 OnlineRaceMode::GetOutroTimeout() const
 {
     GameStateModule* lpGameStateModule = GetModeManager()->GetGameStateModule();
-    CGS_ASSERT(lpGameStateModule, CgsDev::Assert::MessageAt("mpGameStateModule", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 5700));
+    CGS_ASSERT(lpGameStateModule, CGS_ASSERT_MESSAGE_AT("mpGameStateModule", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 5700));
 
     const EActiveRaceCarIndex leLocalPlayerActiveRaceCarIndex =
         lpGameStateModule->GetPlayerActiveRaceCarIndex();
     CGS_ASSERT(leLocalPlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID,
-               CgsDev::Assert::MessageAt("leLocalPlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnOnlineRaceMode.cpp", 268));
+               CGS_ASSERT_MESSAGE_AT("leLocalPlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID", CGS_ARTIST_BRNONLINERACEMODE_FILE, 268));
 
     ScoringSystem* lpScoringSystem = GetModeManager()->GetScoringSystem();
 
@@ -168,7 +168,7 @@ f32 OnlineRaceMode::GetOutroTimeout() const
         }
 
         CGS_ASSERT(leActiveRaceCarIndex + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   CgsDev::Assert::MessageAt("leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT", "..\\..\\..\\GameSource\\BurnoutConstants.h", 39));
+                   CGS_ASSERT_MESSAGE_AT("leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 39));
     }
 
     // The local player's own finish time.
@@ -186,7 +186,7 @@ f32 OnlineRaceMode::GetOutroTimeout() const
     // winner. If they have not finished, return the fixed not-finished outro.
     if (lfLocalPlayersTime != 0.0f)
     {
-        CGS_ASSERT(lfLocalPlayersTime >= lfWinnersTime, CgsDev::Assert::MessageAt("lfLocalPlayersTime >= lfWinnersTime", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnOnlineRaceMode.cpp", 298));
+        CGS_ASSERT(lfLocalPlayersTime >= lfWinnersTime, CGS_ASSERT_MESSAGE_AT("lfLocalPlayersTime >= lfWinnersTime", CGS_ARTIST_BRNONLINERACEMODE_FILE, 298));
 
         const f32 lfTimeBehindWinner = lfLocalPlayersTime - lfWinnersTime;
         if (lfTimeBehindWinner > KF_OUTRO_GRACE_SECONDS)
@@ -211,3 +211,6 @@ bool OnlineRaceMode::HasLoadingScreen() const
     return true;
 }
 }
+
+#undef CGS_ARTIST_FILE
+#undef CGS_ARTIST_BRNONLINERACEMODE_FILE

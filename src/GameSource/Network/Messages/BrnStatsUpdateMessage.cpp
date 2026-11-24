@@ -93,7 +93,7 @@ namespace BrnNetwork
 
         // Inlined Message::PrepareForSend frame-stamp.
         CGS_ASSERT(lu16Frame != CgsNetwork::KU16_INVALID_FRAME,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lu16Frame != KU16_INVALID_FRAME",
                 "..\\..\\..\\GameShared\\GameClasses\\Network/Packeting/Messages/CgsMessage.h", 594 /* ARTIST 0x8257FEB8 */));
         mu16Frame = lu16Frame;
@@ -107,14 +107,14 @@ namespace BrnNetwork
                                       s32* lpiNumberOfTakedowns)
     {
         CGS_ASSERT(lpiNumberOfChallenges,
-            CgsDev::Assert::MessageAt("lpiNumberOfChallenges", __FILE__, 101 /* ARTIST 0x8257FF38 */));
+            CGS_ASSERT_MESSAGE_AT("lpiNumberOfChallenges", __FILE__, 101 /* ARTIST 0x8257FF38 */));
         CGS_ASSERT(lpiNumberOfRivals,
-            CgsDev::Assert::MessageAt("lpiNumberOfRivals", __FILE__, 102 /* ARTIST 0x8257FF5C */));
+            CGS_ASSERT_MESSAGE_AT("lpiNumberOfRivals", __FILE__, 102 /* ARTIST 0x8257FF5C */));
         CGS_ASSERT(lpiNumberOfAchievements,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpiNumberOfAchievements", __FILE__, 103 /* ARTIST 0x8257FF80 */));
         CGS_ASSERT(lpiNumberOfTakedowns,
-            CgsDev::Assert::MessageAt("lpiNumberOfTakedowns", __FILE__, 104 /* ARTIST 0x8257FFA4 */));
+            CGS_ASSERT_MESSAGE_AT("lpiNumberOfTakedowns", __FILE__, 104 /* ARTIST 0x8257FFA4 */));
 
         if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0)
         {

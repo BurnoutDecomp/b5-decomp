@@ -1,6 +1,6 @@
 #ifndef GAMESHARED_GAMECLASSES_SOUND_PLAYBACK_CGSHANDLE_H
 #define GAMESHARED_GAMECLASSES_SOUND_PLAYBACK_CGSHANDLE_H
-
+#define CGS_ARTIST_CGSHANDLE_FILE "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsHandle.h"
 #include "types.hpp"
 
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
@@ -107,8 +107,8 @@ public:
     // DWARF CgsHandle.h:285; ARTIST asserts at line 287 (e.g. 0x826C4DEC, file 0x820AE018).
     T* operator->()
     {
-        CGS_ASSERT(mpObject, CgsDev::Assert::MessageAt("mpObject",
-            "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsHandle.h", 287));
+        CGS_ASSERT(mpObject, CGS_ASSERT_MESSAGE_AT("mpObject",
+            CGS_ARTIST_CGSHANDLE_FILE, 287));
         return mpObject;
     }
     const T* operator->() const
@@ -122,8 +122,8 @@ public:
     // DWARF CgsHandle.h:303; ARTIST asserts at line 305 (e.g. Factory::CreateContent 0x826AD51C).
     T& operator*()
     {
-        CGS_ASSERT(mpObject, CgsDev::Assert::MessageAt("mpObject",
-            "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsHandle.h", 305));
+        CGS_ASSERT(mpObject, CGS_ASSERT_MESSAGE_AT("mpObject",
+            CGS_ARTIST_CGSHANDLE_FILE, 305));
         return *mpObject;
     }
 
@@ -177,3 +177,5 @@ private:
 } // namespace CgsSound
 
 #endif // GAMESHARED_GAMECLASSES_SOUND_PLAYBACK_CGSHANDLE_H
+
+#undef CGS_ARTIST_CGSHANDLE_FILE

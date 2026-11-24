@@ -160,7 +160,7 @@
 //    the two inertia builders cannot name rw::collision::AABBox at all today.
 //
 // No types or bodies are fabricated here.
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\""../Physics/PropManager/BrnPropManager.cpp"
 #include "GameSource/Physics/PropManager/BrnPropManager.h"
 
 #include "GameSource/Resource/BrnResourceAllocator.h"   // BrnResource::GetDebugAllocator
@@ -3660,11 +3660,11 @@ void PropManager::ProcessRemovePartInstanceEvents(
         // file; only the line differs (735 then 737). NON-GATING: the console falls straight
         // through into the call, so nothing is skipped when they fire.
         CGS_ASSERT( liPartIndex != KI_PROP_INDEX_NOT_FOUND,
-            CgsDev::Assert::MessageAt( "liPartIndex != KI_PROP_INDEX_NOT_FOUND",
+            CGS_ASSERT_MESSAGE_AT( "liPartIndex != KI_PROP_INDEX_NOT_FOUND",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
                 "../Physics/PropManager/BrnPropManager.cpp", 735 /* ARTIST 0x82627874 */ ) );
         CGS_ASSERT( liPartIndex != KI_PROP_INDEX_NOT_FOUND,
-            CgsDev::Assert::MessageAt( "liPartIndex != KI_PROP_INDEX_NOT_FOUND",
+            CGS_ASSERT_MESSAGE_AT( "liPartIndex != KI_PROP_INDEX_NOT_FOUND",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
                 "../Physics/PropManager/BrnPropManager.cpp", 737 /* ARTIST 0x8262788C */ ) );
 
@@ -9219,3 +9219,5 @@ namespace Props
     }
 }
 }
+
+#undef CGS_ARTIST_FILE

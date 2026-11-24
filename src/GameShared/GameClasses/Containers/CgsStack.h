@@ -2,7 +2,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
-#line 6 "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsStack.h"
+#define CGS_ARTIST_CGSSTACK_FILE "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsStack.h"
 // CgsContainers::Stack<Type, Length> -- a fixed-capacity LIFO. Member set, names and lines
 // from the DecFIGS DWARF (references/DecFIGS/dwarfdump/GameShared/GameClasses/Containers/
 // CgsStack.h: namespace h:24, class h:33, maData h:81, miLength h:82); the header's shape (the
@@ -95,8 +95,8 @@ template <class Type, s32 Length>
 inline void
 Stack<Type, Length>::Push(const Type& lrEntry)
 {
-    CGS_ASSERT(miLength != KI_STACK_UNCONSTRUCTED, "Stack used before Construct/Clear was called");
-    CGS_ASSERT(!IsFull(), "!IsFull()");
+    CGS_ASSERT_AT(miLength != KI_STACK_UNCONSTRUCTED, "Stack used before Construct/Clear was called", CGS_ARTIST_CGSSTACK_FILE, 98);
+    CGS_ASSERT_AT(!IsFull(), "!IsFull()", CGS_ARTIST_CGSSTACK_FILE, 99);
 
     maData[miLength] = lrEntry;
     ++miLength;
@@ -107,8 +107,8 @@ template <class Type, s32 Length>
 inline Type*
 Stack<Type, Length>::Grow()
 {
-    CGS_ASSERT(miLength != KI_STACK_UNCONSTRUCTED, "Stack used before Construct/Clear was called");
-    CGS_ASSERT(!IsFull(), "!IsFull()");
+    CGS_ASSERT_AT(miLength != KI_STACK_UNCONSTRUCTED, "Stack used before Construct/Clear was called", CGS_ARTIST_CGSSTACK_FILE, 110);
+    CGS_ASSERT_AT(!IsFull(), "!IsFull()", CGS_ARTIST_CGSSTACK_FILE, 111);
 
     Type* lpEntry = &maData[miLength];
     ++miLength;
@@ -118,8 +118,8 @@ template <class Type, s32 Length>
 inline void
 Stack<Type, Length>::Pop()
 {
-    CGS_ASSERT(miLength != KI_STACK_UNCONSTRUCTED, "Stack used before Construct/Clear was called");
-    CGS_ASSERT(!IsEmpty(), "!IsEmpty()");
+    CGS_ASSERT_AT(miLength != KI_STACK_UNCONSTRUCTED, "Stack used before Construct/Clear was called", CGS_ARTIST_CGSSTACK_FILE, 121);
+    CGS_ASSERT_AT(!IsEmpty(), "!IsEmpty()", CGS_ARTIST_CGSSTACK_FILE, 122);
 
     --miLength;
 }
@@ -129,7 +129,7 @@ template <class Type, s32 Length>
 inline bool
 Stack<Type, Length>::Contains(const Type& lrEntry) const
 {
-    CGS_ASSERT(miLength != KI_STACK_UNCONSTRUCTED, "Stack used before Construct/Clear was called");
+    CGS_ASSERT_AT(miLength != KI_STACK_UNCONSTRUCTED, "Stack used before Construct/Clear was called", CGS_ARTIST_CGSSTACK_FILE, 132);
     // ARTIST Stack<u16,400>::Contains @0x8270A830: a linear scan of the live entries.
     for (s32 liIndex = 0; liIndex < miLength; ++liIndex)
     {
@@ -146,8 +146,8 @@ template <class Type, s32 Length>
 inline const Type&
 Stack<Type, Length>::Peek() const
 {
-    CGS_ASSERT(miLength != KI_STACK_UNCONSTRUCTED, "Stack used before Construct/Clear was called");
-    CGS_ASSERT(!IsEmpty(), "!IsEmpty()");
+    CGS_ASSERT_AT(miLength != KI_STACK_UNCONSTRUCTED, "Stack used before Construct/Clear was called", CGS_ARTIST_CGSSTACK_FILE, 149);
+    CGS_ASSERT_AT(!IsEmpty(), "!IsEmpty()", CGS_ARTIST_CGSSTACK_FILE, 150);
 
     return maData[miLength - 1];
 }
@@ -157,7 +157,7 @@ template <class Type, s32 Length>
 inline s32
 Stack<Type, Length>::GetLength() const
 {
-    CGS_ASSERT(miLength != KI_STACK_UNCONSTRUCTED, "Stack used before Construct/Clear was called");
+    CGS_ASSERT_AT(miLength != KI_STACK_UNCONSTRUCTED, "Stack used before Construct/Clear was called", CGS_ARTIST_CGSSTACK_FILE, 160);
     return miLength;
 }
 
@@ -166,7 +166,7 @@ template <class Type, s32 Length>
 inline bool
 Stack<Type, Length>::IsFull() const
 {
-    CGS_ASSERT(miLength != KI_STACK_UNCONSTRUCTED, "Stack used before Construct/Clear was called");
+    CGS_ASSERT_AT(miLength != KI_STACK_UNCONSTRUCTED, "Stack used before Construct/Clear was called", CGS_ARTIST_CGSSTACK_FILE, 169);
     return (miLength == Length);
 }
 
@@ -174,7 +174,7 @@ template <class Type, s32 Length>
 inline bool
 Stack<Type, Length>::IsEmpty() const
 {
-    CGS_ASSERT(miLength != KI_STACK_UNCONSTRUCTED, "Stack used before Construct/Clear was called");
+    CGS_ASSERT_AT(miLength != KI_STACK_UNCONSTRUCTED, "Stack used before Construct/Clear was called", CGS_ARTIST_CGSSTACK_FILE, 177);
     return (miLength == 0);
 }
 
@@ -198,9 +198,9 @@ template <class Type, s32 Length>
 inline const Type&
 Stack<Type, Length>::operator[](s32 liIndex) const
 {
-    CGS_ASSERT(miLength != KI_STACK_UNCONSTRUCTED, "Stack used before Construct/Clear was called");
-    CGS_ASSERT(liIndex >= 0, "Stack access overflow");
-    CGS_ASSERT(liIndex < miLength, "Stack access overflow");
+    CGS_ASSERT_AT(miLength != KI_STACK_UNCONSTRUCTED, "Stack used before Construct/Clear was called", CGS_ARTIST_CGSSTACK_FILE, 201);
+    CGS_ASSERT_AT(liIndex >= 0, "Stack access overflow", CGS_ARTIST_CGSSTACK_FILE, 202);
+    CGS_ASSERT_AT(liIndex < miLength, "Stack access overflow", CGS_ARTIST_CGSSTACK_FILE, 203);
 
     return maData[liIndex];
 }
@@ -210,11 +210,13 @@ template <class Type, s32 Length>
 inline Type&
 Stack<Type, Length>::operator[](s32 liIndex)
 {
-    CGS_ASSERT(miLength != KI_STACK_UNCONSTRUCTED, "Stack used before Construct/Clear was called");
-    CGS_ASSERT(liIndex >= 0, "Stack access overflow");
-    CGS_ASSERT(liIndex < miLength, "Stack access overflow");
+    CGS_ASSERT_AT(miLength != KI_STACK_UNCONSTRUCTED, "Stack used before Construct/Clear was called", CGS_ARTIST_CGSSTACK_FILE, 213);
+    CGS_ASSERT_AT(liIndex >= 0, "Stack access overflow", CGS_ARTIST_CGSSTACK_FILE, 214);
+    CGS_ASSERT_AT(liIndex < miLength, "Stack access overflow", CGS_ARTIST_CGSSTACK_FILE, 215);
 
     return maData[liIndex];
 }
 
 } // namespace CgsContainers
+
+#undef CGS_ARTIST_CGSSTACK_FILE

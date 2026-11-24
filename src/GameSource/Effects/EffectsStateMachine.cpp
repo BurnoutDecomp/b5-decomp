@@ -52,7 +52,7 @@ namespace BrnEffects
         const EffectsState leNextState =
             OnDetermineNextState(lCarState, lbStateTimerExpired, mState, lHelper);
         CGS_ASSERT(leNextState < EffectsState_MAX,
-                   CgsDev::Assert::MessageAt("Invalid State in EffectsStateMachine", __FILE__, 65));   // 0x82280500
+                   CGS_ASSERT_MESSAGE_AT("Invalid State in EffectsStateMachine", __FILE__, 65));   // 0x82280500
 
         // On a state change: reset the timer (before the entry hook, matching the X360 store
         // order), run the entry hook, then commit the new state.

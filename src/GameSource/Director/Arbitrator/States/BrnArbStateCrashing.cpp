@@ -575,7 +575,7 @@ namespace BrnDirector
         if (lpbHasChangedState == 0)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpbHasChangedState != NULL", KPC_SOURCE_FILE, 569);
+            CgsDev::Assert::FireAssert("lpbHasChangedState != NULL", CGS_ASSERT_LOCATION(KPC_SOURCE_FILE, 569));
             CgsDev::Assert::EndAssert();
         }
 
@@ -817,7 +817,7 @@ namespace BrnDirector
 
         default:
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("unhandled state", KPC_SOURCE_FILE, 441);
+            CgsDev::Assert::FireAssert("unhandled state", CGS_ASSERT_LOCATION(KPC_SOURCE_FILE, 441));
             CgsDev::Assert::EndAssert();
             break;
         }
@@ -848,7 +848,7 @@ namespace BrnDirector
             if (lrSharedInfo.mpDebugPrinter == 0)
             {
                 CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert("lSharedInfo.mpDebugPrinter != NULL", KPC_SOURCE_FILE, 273);
+                CgsDev::Assert::FireAssert("lSharedInfo.mpDebugPrinter != NULL", CGS_ASSERT_LOCATION(KPC_SOURCE_FILE, 273));
                 CgsDev::Assert::EndAssert();
             }
             lrSharedInfo.mpDebugPrinter->Print("");
@@ -874,7 +874,7 @@ namespace BrnDirector
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert(
                     "lSharedInfo.mpDirectorResourceManager->GetTakendown().Num_ShotList()>0",
-                    KPC_SOURCE_FILE, 289);
+                    CGS_ASSERT_LOCATION(KPC_SOURCE_FILE, 289));
                 CgsDev::Assert::EndAssert();
             }
 

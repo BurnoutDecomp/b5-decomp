@@ -1,7 +1,7 @@
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"
 #include "GameShared/GameClasses/Language/CgsLanguageManager.h"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/State/CgsGuiStateInterface.h"
 #include <cstring>   // memcpy
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. CgsGui::StateInterface is the
@@ -17,9 +17,9 @@ namespace CgsGui
     GuiAccessPointers* StateInterface::GetAccessPointers()
     {
         CGS_ASSERT(mpAccessPointers != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpAccessPointers != NULL",
-                "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/State/CgsGuiStateInterface.h", 344 /* ARTIST 0x8240E408 */));
+                CGS_ARTIST_FILE, 344 /* ARTIST 0x8240E408 */));
         return mpAccessPointers;
     }
 
@@ -92,7 +92,7 @@ namespace CgsGui
     // @ 0x82846F90 - install the event observer (the X360 asserts on a null pointer).
     void StateInterface::SetEventObserver(CgsGui::EventObserver* lpObserver)
     {
-        CGS_ASSERT(lpObserver != 0, CgsDev::Assert::StreamMessageAt("Invalid event observer pointer in StateInterface::SetEventObserver", "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/State/CgsGuiStateInterface.h", 478));
+        CGS_ASSERT(lpObserver != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event observer pointer in StateInterface::SetEventObserver", CGS_ARTIST_FILE, 478));
 
         mpObserver = lpObserver;
     }
@@ -177,3 +177,5 @@ namespace CgsGui
                                 37, static_cast<s32>(sizeof(lRecord)));
     }
 }
+
+#undef CGS_ARTIST_FILE

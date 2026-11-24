@@ -22,7 +22,7 @@
 // The HUD only ticks while the active game-mode type is the skills/road-rule
 // mode (GuiCache::GetCurrentGameModeType() == KI_SKILLS_ACTIVE_GAME_MODE_TYPE).
 // ============================================================================
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/BrnGuiBurnoutSkillsManager.cpp"
 #include "GameSource/Gui/BrnGuiBurnoutSkillsManager.h"
 
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
@@ -231,7 +231,7 @@ void BurnoutSkillsManager::SelectNextSkill()
 // ----------------------------------------------------------------------------
 void BurnoutSkillsManager::Update()
 {
-    CGS_ASSERT(mpCache, CgsDev::Assert::MessageAt("mpCache", "..\\..\\..\\GameSource\\Gui/BrnGuiBurnoutSkillsManager.cpp", 107 /* ARTIST 0x824F9E38 */));
+    CGS_ASSERT(mpCache, CGS_ASSERT_MESSAGE_AT("mpCache", CGS_ARTIST_FILE, 107 /* ARTIST 0x824F9E38 */));
 
     if (mpCache->GetGameMode() == KI_SKILLS_ACTIVE_GAME_MODE_TYPE)
     {
@@ -303,9 +303,9 @@ void BurnoutSkillsManager::SetRoadRuleMode(BrnGameState::EActiveRoadRule leRoadR
 
         default:
             CGS_ASSERT(false,
-                CgsDev::Assert::MessageAt(
+                CGS_ASSERT_MESSAGE_AT(
                     "Invalid road rule mode\n",
-                    "..\\..\\..\\GameSource\\Gui/BrnGuiBurnoutSkillsManager.cpp", 465 /* ARTIST 0x824F9FE0 */));
+                    CGS_ARTIST_FILE, 465 /* ARTIST 0x824F9FE0 */));
             break;
     }
 }
@@ -322,11 +322,11 @@ f32 BurnoutSkillsManager::GetBurnoutSkillForARC(
     EActiveRaceCarIndex leActiveRaceCar) const
 {
     CGS_ASSERT(leActiveRaceCar >= E_ACTIVE_RACE_CAR_INDEX_0,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0",
             KAC_ARTIST_ASSERT_FILE, 174 /* ARTIST 0x8240EBE0 */));
     CGS_ASSERT(leActiveRaceCar < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
             KAC_ARTIST_ASSERT_FILE, 175 /* ARTIST 0x8240EC04 */));
 
@@ -524,3 +524,5 @@ namespace BrnGui
         return meCurrentSkill;
     }
 }
+
+#undef CGS_ARTIST_FILE

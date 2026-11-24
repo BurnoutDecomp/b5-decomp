@@ -6,7 +6,7 @@
 #include "rw/rwcore_general_alloc.h"       // native embedded-heap allocator
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint, CgsDev::Message::gxMessageFilterFlags
 #include <xtl.h>   // GlobalMemoryStatus (PrintConsoleMemory / GetAvailableMemory)
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Resource/BrnResourceAllocator.cpp"
 namespace BrnResource
 {
     namespace
@@ -20,12 +20,12 @@ namespace BrnResource
                                          CgsDev::Assert::giMessageBufferSize);
                 lStream << lpcMessage;
                 CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                    "..\\..\\..\\GameSource\\Resource/BrnResourceAllocator.cpp", liLine);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, liLine));
                 CgsDev::Assert::EndAssert();
             }
         }
     }
-
+#define CGS_ARTIST_BRNRESOURCEALLOCATOR_FILE "..\\..\\..\\GameSource\\Resource/BrnResourceAllocator.h"
     // Native startup wrappers. ARTIST mRuntimeAllocator is 82F2C854 and
     // mEmbeddedTextureAllocator is 82F2C870; ConstructChildAllocators supplies
     // their backing allocators. Static zero initialization is not backing memory.
@@ -77,7 +77,7 @@ namespace BrnResource
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("Allocators::mpInternalDebugAllocator",
-                "..\\..\\..\\GameSource\\Resource/BrnResourceAllocator.h", 369);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_BRNRESOURCEALLOCATOR_FILE, 369));
             CgsDev::Assert::EndAssert();
         }
         return &Allocators::mGlobalDebugAllocator;
@@ -190,8 +190,8 @@ namespace BrnResource
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 lpcMessage,
-                "..\\..\\..\\GameSource\\Resource/BrnResourceAllocator.cpp",
-                liLine);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                liLine));
             CgsDev::Assert::EndAssert();
         }
     }
@@ -404,7 +404,7 @@ namespace BrnResource
                                          CgsDev::Assert::giMessageBufferSize);
                 lStream << "Failed to allocate memory type " << KAC_DEFAULT_LINEAR_RESOURCE_NAMES[luLane] << "\n";
                 CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                    "..\\..\\..\\GameSource\\Resource/BrnResourceAllocator.cpp", 1153);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 1153));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -503,7 +503,7 @@ namespace BrnResource
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("Allocators::mpInternalGlobalSystemAllocator",
-                "..\\..\\..\\GameSource\\Resource/BrnResourceAllocator.h", 362);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_BRNRESOURCEALLOCATOR_FILE, 362));
             CgsDev::Assert::EndAssert();
         }
         rw::ResourceDescriptor lDescriptor =
@@ -595,7 +595,7 @@ namespace BrnResource
                     CgsDev::Assert::BeginAssert();
                     CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
                     lStream << "Failed to allocate memory type " << lapcMemoryNames[luLane] << "\n";
-                    CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, lpcFile, 1355);
+                    CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, CGS_ASSERT_LOCATION(lpcFile, 1355));
                     CgsDev::Assert::EndAssert();
                 }
                 const u32 luAlignment = lrDescriptor.m_baseResourceDescriptors[luLane].m_alignment;
@@ -606,7 +606,7 @@ namespace BrnResource
                     CgsDev::Assert::BeginAssert();
                     CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
                     lStream << "Allocated memory is not aligned to " << luAlignment << "bytes\n";
-                    CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, lpcFile, 1358);
+                    CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, CGS_ASSERT_LOCATION(lpcFile, 1358));
                     CgsDev::Assert::EndAssert();
                 }
             }
@@ -629,12 +629,15 @@ namespace BrnResource
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("General allocator not set\n",
-                "..\\..\\..\\GameSource\\Resource/BrnResourceAllocator.cpp", 1414);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 1414));
             CgsDev::Assert::EndAssert();
         }
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("Should never be allocating or freeing disposable memory!!!\n",
-            "..\\..\\..\\GameSource\\Resource/BrnResourceAllocator.cpp", 1415);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 1415));
         CgsDev::Assert::EndAssert();
     }
 }
+
+#undef CGS_ARTIST_FILE
+#undef CGS_ARTIST_BRNRESOURCEALLOCATOR_FILE

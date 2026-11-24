@@ -2,7 +2,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventLineTestNearest.h"   // ENearestExclusionMode
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Director/Utils/BrnSceneQueryInterface.h"
 // =============================================================================
 // BrnDirector::SceneQueryInterface -- the director's per-frame scene-query handle.
 // Reconstructed from BURNOUT_X360_ARTIST.XEX (semantic parity, not byte match).
@@ -50,8 +50,8 @@ namespace BrnDirector
                                            CgsSceneManager::EntityId                        lExcludeEntityId,
                                            CgsSceneManager::SceneManagerIO::EExclusionMode leExclusionMode) const
     {
-        CGS_ASSERT(mpSceneQueryInterface != 0,    CgsDev::Assert::MessageAt("mpSceneQueryInterface != NULL", "..\\..\\..\\GameSource\\Director/Utils/BrnSceneQueryInterface.h", 188));      // h:188
-        CGS_ASSERT(mpLineTestFinePostOffice != 0, CgsDev::Assert::MessageAt("mpLineTestFinePostOffice != NULL", "..\\..\\..\\GameSource\\Director/Utils/BrnSceneQueryInterface.h", 189));   // h:189
+        CGS_ASSERT(mpSceneQueryInterface != 0,    CGS_ASSERT_MESSAGE_AT("mpSceneQueryInterface != NULL", CGS_ARTIST_FILE, 188));      // h:188
+        CGS_ASSERT(mpLineTestFinePostOffice != 0, CGS_ASSERT_MESSAGE_AT("mpLineTestFinePostOffice != NULL", CGS_ARTIST_FILE, 189));   // h:189
 
         CgsSceneManager::SceneQueryId lQueryId;
         lQueryId.Set(KU_DIRECTOR_QUERY_OWNER, mpLineTestFinePostOffice->AddPostBox(lrPostBox));
@@ -75,8 +75,8 @@ namespace BrnDirector
                                               CgsSceneManager::EntityId                        lExcludeEntityId,
                                               CgsSceneManager::SceneManagerIO::EExclusionMode leExclusionMode) const
     {
-        CGS_ASSERT(mpSceneQueryInterface != 0,       CgsDev::Assert::MessageAt("mpSceneQueryInterface != NULL", "..\\..\\..\\GameSource\\Director/Utils/BrnSceneQueryInterface.h", 216));        // h:216
-        CGS_ASSERT(mpLineTestNearestPostOffice != 0, CgsDev::Assert::MessageAt("mpLineTestNearestPostOffice != NULL", "..\\..\\..\\GameSource\\Director/Utils/BrnSceneQueryInterface.h", 217));  // h:217
+        CGS_ASSERT(mpSceneQueryInterface != 0,       CGS_ASSERT_MESSAGE_AT("mpSceneQueryInterface != NULL", CGS_ARTIST_FILE, 216));        // h:216
+        CGS_ASSERT(mpLineTestNearestPostOffice != 0, CGS_ASSERT_MESSAGE_AT("mpLineTestNearestPostOffice != NULL", CGS_ARTIST_FILE, 217));  // h:217
 
         CgsSceneManager::SceneQueryId lQueryId;
         lQueryId.Set(KU_DIRECTOR_QUERY_OWNER, mpLineTestNearestPostOffice->AddPostBox(lrPostBox));
@@ -102,8 +102,8 @@ namespace BrnDirector
                                                 CgsSceneManager::EntityId                        lExcludeEntityId,
                                                 CgsSceneManager::SceneManagerIO::EExclusionMode leExclusionMode) const
     {
-        CGS_ASSERT(mpSceneQueryInterface != 0,         CgsDev::Assert::MessageAt("mpSceneQueryInterface != NULL", "..\\..\\..\\GameSource\\Director/Utils/BrnSceneQueryInterface.h", 316));          // h:316
-        CGS_ASSERT(mpVolumeTestDeepestPostOffice != 0, CgsDev::Assert::MessageAt("mpVolumeTestDeepestPostOffice != NULL", "..\\..\\..\\GameSource\\Director/Utils/BrnSceneQueryInterface.h", 317));  // h:317
+        CGS_ASSERT(mpSceneQueryInterface != 0,         CGS_ASSERT_MESSAGE_AT("mpSceneQueryInterface != NULL", CGS_ARTIST_FILE, 316));          // h:316
+        CGS_ASSERT(mpVolumeTestDeepestPostOffice != 0, CGS_ASSERT_MESSAGE_AT("mpVolumeTestDeepestPostOffice != NULL", CGS_ARTIST_FILE, 317));  // h:317
 
         CgsSceneManager::SceneQueryId lQueryId;
         lQueryId.Set(KU_DIRECTOR_QUERY_OWNER, mpVolumeTestDeepestPostOffice->AddPostBox(lrPostBox));
@@ -113,3 +113,5 @@ namespace BrnDirector
                                                  static_cast<u32>(lExcludeEntityId), leExclusionMode);
     }
 }
+
+#undef CGS_ARTIST_FILE

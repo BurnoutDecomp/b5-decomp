@@ -44,7 +44,7 @@ namespace CgsUnicode
                                        CgsDev::Assert::giMessageBufferSize);
             lMessage << "Invalid UTF8 Character " << static_cast<u32>(*lpUtf8String) << " at "
                      << CgsDev::E_PRINTMODE_HEX << static_cast<u64>(reinterpret_cast<uintptr_t>(lpUtf8String));
-            CgsDev::Assert::FireAssert(lMessage.GetBuffer(), lpcFile, 802);
+            CgsDev::Assert::FireAssert(lMessage.GetBuffer(), CGS_ASSERT_LOCATION(lpcFile, 802));
             CgsDev::Assert::EndAssert();
         }
         // ARTIST dword_820DE4C8; trailing-byte classification uses the same
@@ -61,13 +61,13 @@ namespace CgsUnicode
                                            CgsDev::Assert::giMessageBufferSize);
                 lMessage << "Character supplied is not a valid start UTF8 character ("
                          << static_cast<u32>(*lpUtf8String) << ")";
-                CgsDev::Assert::FireAssert(lMessage.GetBuffer(), lpcFile, 808);
+                CgsDev::Assert::FireAssert(lMessage.GetBuffer(), CGS_ASSERT_LOCATION(lpcFile, 808));
                 CgsDev::Assert::EndAssert();
             }
             if (luExtraBytes >= 4)
             {
                 CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert("luExtraBytes < 4", lpcFile, 810);
+                CgsDev::Assert::FireAssert("luExtraBytes < 4", CGS_ASSERT_LOCATION(lpcFile, 810));
                 CgsDev::Assert::EndAssert();
             }
             switch (luExtraBytes)
@@ -82,7 +82,7 @@ namespace CgsUnicode
             if (luChar > 0xffffu)
             {
                 CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert("lUtf32Char <= KUTF32_MAX_UTF16", lpcFile, 841);
+                CgsDev::Assert::FireAssert("lUtf32Char <= KUTF32_MAX_UTF16", CGS_ASSERT_LOCATION(lpcFile, 841));
                 CgsDev::Assert::EndAssert();
             }
             *lpUtf16String++ = static_cast<CgsUtf16>(luChar);

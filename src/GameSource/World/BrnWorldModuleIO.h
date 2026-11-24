@@ -651,7 +651,7 @@ namespace BrnWorldIO
         // ---- gui events (+170176; :607 read-lock, :608 write-lock) ----
         const GuiEventInputQueue* GetGuiEventQueue() const
         {
-            CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt(
+            CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
                 "Not locked for reading\n",
                 "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 607));
             return &mGuiEventQueue;

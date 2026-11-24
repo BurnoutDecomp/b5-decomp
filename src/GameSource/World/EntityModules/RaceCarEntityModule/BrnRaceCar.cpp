@@ -393,7 +393,7 @@ void RaceCar::SetActiveRaceCarIndex(EActiveRaceCarIndex leIndex)
 ActiveRaceCar* RaceCar::GetActiveRaceCar()
 {
     CGS_ASSERT(IsInWorld(),
-        CgsDev::Assert::MessageAt("IsInWorld()", BRN_RACECAR_H_ASSERT_FILE, 401 /* ARTIST 0x822B39E4 */));
+        CGS_ASSERT_MESSAGE_AT("IsInWorld()", BRN_RACECAR_H_ASSERT_FILE, 401 /* ARTIST 0x822B39E4 */));
 
     return mpActiveRaceCar;
 }

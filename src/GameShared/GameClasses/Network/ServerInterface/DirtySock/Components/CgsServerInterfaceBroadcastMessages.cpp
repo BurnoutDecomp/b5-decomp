@@ -96,7 +96,7 @@ namespace CgsNetwork
     bool ServerInterfaceBroadcastMessages::Prepare(ServerInterfaceDirtySock* lpServerInterface)
     {
         CGS_ASSERT(miChatCallback == KI_NO_CHAT_CALLBACK,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "miChatCallback == -1",
                 "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceBroadcastMessages.cpp", 136 /* ARTIST 0x82886060 */));
 
@@ -252,7 +252,7 @@ namespace CgsNetwork
             // diagnostic only and is reduced to this note (mirrors the sibling
             // CgsPlayersConnectionManagerLookup reconstruction).
 
-            CGS_ASSERT(static_cast<s32>(leType) >= 0 && static_cast<s32>(leType) < E_BROADCAST_MESSAGE_TYPES_COUNT, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(static_cast<s32>(leType) >= 0 && static_cast<s32>(leType) < E_BROADCAST_MESSAGE_TYPES_COUNT, CGS_ASSERT_MESSAGE_AT(
                 "Broadcast message has invalid type",
                 __FILE__, 191 /* ARTIST 0x828861FC */));
 

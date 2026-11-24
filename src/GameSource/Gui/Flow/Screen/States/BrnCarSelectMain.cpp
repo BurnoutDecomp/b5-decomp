@@ -146,7 +146,7 @@ namespace BrnGui
         mDesiredSetupInfo = *lpSetupInfo;  // copies mCarId + mbSelectable (X360 two-qword store)
 
         CGS_ASSERT(mDesiredSetupInfo.mbSelectable,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mDesiredSetupInfo.mbSelectable",
                 "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCarSelectMain.cpp", 600 /* ARTIST 0x824B5584 */));   // cpp:600
 

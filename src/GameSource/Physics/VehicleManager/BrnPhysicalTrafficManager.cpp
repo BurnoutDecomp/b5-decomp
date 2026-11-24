@@ -8,7 +8,7 @@
 // (4-byte pointers). The bodies below reproduce the SEMANTICS by name; the literal X360
 // offsets (this+103600, this+104552, this+104688, the +0x1C/+0x32 sub-offsets, etc.) are
 // recorded in comments only and are NOT host-reproducible because host pointers are 8 bytes.
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Physics/VehicleManager/BrnPhysicalTrafficVehicle.h"
 #include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager.h"
 
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
@@ -66,18 +66,18 @@ bool KB_DO_NOT_FAIL_IF_RIGID_BODY_NOT_FOUND = false;
 PhysicalTrafficVehicle* PhysicalTrafficManager::GetTrafficVehicle(s32 liVehicle)
 {
     CGS_ASSERT(liVehicle >= 0,
-        CgsDev::Assert::MessageAt("liVehicle >= 0", KAC_ARTIST_ASSERT_FILE, 740 /* ARTIST 0x825B48AC */));
+        CGS_ASSERT_MESSAGE_AT("liVehicle >= 0", KAC_ARTIST_ASSERT_FILE, 740 /* ARTIST 0x825B48AC */));
     CGS_ASSERT(liVehicle < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC,
-        CgsDev::Assert::MessageAt("liVehicle < ku8TotalMaxNumPhysicalTraffic", KAC_ARTIST_ASSERT_FILE, 741 /* ARTIST 0x825B48D0 */));
+        CGS_ASSERT_MESSAGE_AT("liVehicle < ku8TotalMaxNumPhysicalTraffic", KAC_ARTIST_ASSERT_FILE, 741 /* ARTIST 0x825B48D0 */));
     return &mpaTrafficVehicles[liVehicle];
 }
 
 const PhysicalTrafficVehicle* PhysicalTrafficManager::GetTrafficVehicle(s32 liVehicle) const
 {
     CGS_ASSERT(liVehicle >= 0,
-        CgsDev::Assert::MessageAt("liVehicle >= 0", KAC_ARTIST_ASSERT_FILE, 729 /* ARTIST 0x825B482C */));
+        CGS_ASSERT_MESSAGE_AT("liVehicle >= 0", KAC_ARTIST_ASSERT_FILE, 729 /* ARTIST 0x825B482C */));
     CGS_ASSERT(liVehicle < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC,
-        CgsDev::Assert::MessageAt("liVehicle < ku8TotalMaxNumPhysicalTraffic", KAC_ARTIST_ASSERT_FILE, 730 /* ARTIST 0x825B4850 */));
+        CGS_ASSERT_MESSAGE_AT("liVehicle < ku8TotalMaxNumPhysicalTraffic", KAC_ARTIST_ASSERT_FILE, 730 /* ARTIST 0x825B4850 */));
     return &mpaTrafficVehicles[liVehicle];
 }
 
@@ -92,9 +92,9 @@ PhysicalTrafficVehicle::EArticulatedVehicleType PhysicalTrafficVehicle::GetArtic
 {
     CGS_ASSERT(meArticulatedVehicleType >= E_ARTICULATE_VEHICLE_NONE
                    && meArticulatedVehicleType < E_ARTICULATE_VEHICLE_COUNT,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "meArticulatedVehicleType >= E_ARTICULATE_VEHICLE_NONE && meArticulatedVehicleType < E_ARTICULATE_VEHICLE_COUNT",
-            "..\\..\\..\\GameSource\\Physics/VehicleManager/BrnPhysicalTrafficVehicle.h", 506 /* ARTIST 0x825B3388 */));
+            CGS_ARTIST_FILE, 506 /* ARTIST 0x825B3388 */));
     return meArticulatedVehicleType;
 }
 
@@ -192,17 +192,17 @@ void PhysicalTrafficManager::AllocateInternalBuffers(CgsModule::IOBufferStack* l
                                                       CgsModule::IOBufferStack* lpOutputBufferStack)
 {
     // The original body is a header inline: its asserts name BrnPhysicalTrafficManager.h:849..856.
-    CGS_ASSERT(lpInputBufferStack != 0, CgsDev::Assert::MessageAt("lpInputBufferStack != NULL",
+    CGS_ASSERT(lpInputBufferStack != 0, CGS_ASSERT_MESSAGE_AT("lpInputBufferStack != NULL",
         KAC_ARTIST_ASSERT_FILE, 849 /* ARTIST 0x82615988 */));
-    CGS_ASSERT(lpOutputBufferStack != 0, CgsDev::Assert::MessageAt("lpOutputBufferStack != NULL",
+    CGS_ASSERT(lpOutputBufferStack != 0, CGS_ASSERT_MESSAGE_AT("lpOutputBufferStack != NULL",
         KAC_ARTIST_ASSERT_FILE, 850 /* ARTIST 0x826159AC */));
-    CGS_ASSERT(mpArticulatedJointCreateBuffer == 0, CgsDev::Assert::MessageAt("mpArticulatedJointCreateBuffer == NULL",
+    CGS_ASSERT(mpArticulatedJointCreateBuffer == 0, CGS_ASSERT_MESSAGE_AT("mpArticulatedJointCreateBuffer == NULL",
         KAC_ARTIST_ASSERT_FILE, 851 /* ARTIST 0x826159DC */));
 
     lpInputBufferStack->CreateIOBuffer<ArticulatedJointCreateBuffer>(
         &mpArticulatedJointCreateBuffer, "ArticulatedJointBuffer");
 
-    CGS_ASSERT(mpArticulatedJointCreateBuffer != 0, CgsDev::Assert::MessageAt("mpArticulatedJointCreateBuffer != NULL",
+    CGS_ASSERT(mpArticulatedJointCreateBuffer != 0, CGS_ASSERT_MESSAGE_AT("mpArticulatedJointCreateBuffer != NULL",
         KAC_ARTIST_ASSERT_FILE, 856 /* ARTIST 0x82615A18 */));
 }
 
@@ -218,10 +218,10 @@ void PhysicalTrafficManager::BridgeArticulatedJointRequestsToSim(
         VehicleOutputRequestInterface* lpOutputRequestInterface)
 {
     CGS_ASSERT(lpOutputRequestInterface != 0,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lpOutputRequestInterface != NULL", KAC_ARTIST_ASSERT_FILE, 880 /* ARTIST 0x82615B3C */));
     CGS_ASSERT(mpArticulatedJointCreateBuffer != 0,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "mpArticulatedJointCreateBuffer != NULL", KAC_ARTIST_ASSERT_FILE, 881 /* ARTIST 0x82615B6C */));
 
     mArticulatedJointPool.SendCreateRemoveJointEvents(lpOutputRequestInterface,
@@ -548,8 +548,8 @@ bool PhysicalTrafficVehicle::IsSimple() const
 {
     const EPhysicalTrafficType leType = static_cast<EPhysicalTrafficType>(mu8PhysicalType);
     CGS_ASSERT(leType < E_PHYSICAL_TRAFFIC_TYPE_COUNT,
-        CgsDev::Assert::MessageAt("leType < E_PHYSICAL_TRAFFIC_TYPE_COUNT",
-            "..\\..\\..\\GameSource\\Physics/VehicleManager/BrnPhysicalTrafficVehicle.h", 382 /* ARTIST 0x825B33DC */));
+        CGS_ASSERT_MESSAGE_AT("leType < E_PHYSICAL_TRAFFIC_TYPE_COUNT",
+            CGS_ARTIST_FILE, 382 /* ARTIST 0x825B33DC */));
     return leType == E_PHYSICAL_TRAFFIC_TYPE_SIMPLE;
 }
 
@@ -593,9 +593,9 @@ bool PhysicalTrafficVehicle::HasNonBrokenJoint() const
 void PhysicalTrafficVehicle::SetCheckOwner(EActiveRaceCarIndex leCheckOwner)
 {
     CGS_ASSERT(!HasBeenChecked(),
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "!HasBeenChecked()",
-            "..\\..\\..\\GameSource\\Physics/VehicleManager/BrnPhysicalTrafficVehicle.h", 458 /* ARTIST 0x825C01E8 */));
+            CGS_ARTIST_FILE, 458 /* ARTIST 0x825C01E8 */));
     miCheckOwner = static_cast<s8>(leCheckOwner);
 }
 
@@ -1046,7 +1046,7 @@ bool PhysicalTrafficManager::PrepareTriangleCache(
     CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer_Update)
 {
     CGS_ASSERT(lpSceneInputBuffer_Update != NULL,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lpSceneInputBuffer_Update != NULL",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
             "../Physics/VehicleManager/BrnPhysicalTrafficManager.cpp", 244 /* ARTIST 0x825EE5C8 */));   // :244
@@ -2258,3 +2258,5 @@ namespace Vehicle
     }
 }
 }
+
+#undef CGS_ARTIST_FILE

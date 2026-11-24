@@ -1,6 +1,6 @@
 #ifndef BRN_STREET_DATA_H
 #define BRN_STREET_DATA_H
-
+#define CGS_ARTIST_BRNSTREETDATA_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\../../SharedClasses/StreetData/BrnStreetData.h"
 // ---------------------------------------------------------------------------
 // SharedClasses/StreetData/BrnStreetData.h  (canonical home for BrnStreetData::StreetData)
 //
@@ -254,14 +254,14 @@ namespace BrnStreetData
     StreetData::GetRoad( RoadIndex liIndex ) const
     {
         CGS_ASSERT( liIndex < miRoadCount && liIndex >= 0,
-                    CgsDev::Assert::MessageAt( "liIndex < miRoadCount && liIndex >= 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\../../SharedClasses/StreetData/BrnStreetData.h", 621 ) );
+                    CGS_ASSERT_MESSAGE_AT( "liIndex < miRoadCount && liIndex >= 0", CGS_ARTIST_BRNSTREETDATA_FILE, 621 ) );
         return &mpaRoads[ liIndex ];
     }
 
     inline const Street*
     StreetData::GetStreet( SpanIndex liIndex )
     {
-        CGS_ASSERT( IsStreet( liIndex ), CgsDev::Assert::MessageAt( "IsStreet( liIndex )", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\../../SharedClasses/StreetData/BrnStreetData.h", 651 ) );
+        CGS_ASSERT( IsStreet( liIndex ), CGS_ASSERT_MESSAGE_AT( "IsStreet( liIndex )", CGS_ARTIST_BRNSTREETDATA_FILE, 651 ) );
         return &mpaStreets[ liIndex ];
     }
 
@@ -269,7 +269,7 @@ namespace BrnStreetData
     StreetData::GetChallengeParScore( ChallengeIndex liIndex ) const
     {
         CGS_ASSERT( liIndex < miRoadCount && liIndex >= 0,
-                    CgsDev::Assert::MessageAt( "liIndex < miRoadCount && liIndex >= 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\../../SharedClasses/StreetData/BrnStreetData.h", 718 ) );
+                    CGS_ASSERT_MESSAGE_AT( "liIndex < miRoadCount && liIndex >= 0", CGS_ARTIST_BRNSTREETDATA_FILE, 718 ) );
         return &mpaChallengeParScores[ liIndex ];
     }
 
@@ -377,3 +377,5 @@ namespace BrnStreetData
 }
 
 #endif // BRN_STREET_DATA_H
+
+#undef CGS_ARTIST_BRNSTREETDATA_FILE

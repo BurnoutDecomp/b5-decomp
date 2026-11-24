@@ -190,10 +190,10 @@ void StaticPassbyControl::UpdateParams(f32 afTimeStep)
     const f32 lfSpeed = lrPhysics.mSpeedMPH.GetCurrent();
     CgsSound::Logic::State* lpStateBase = GetStateBase();
     CGS_ASSERT(lpStateBase != 0,
-        CgsDev::Assert::MessageAt("lpStateBase", KAC_ARTIST_ASSERT_FILE, 148 /* ARTIST 0x826FE214 */));
+        CGS_ASSERT_MESSAGE_AT("lpStateBase", KAC_ARTIST_ASSERT_FILE, 148 /* ARTIST 0x826FE214 */));
     const PlayerVehicleStateManager* lpPlayerStateMan = static_cast<const PlayerVehicleStateManager*>(lpStateBase->GetStateManager());
     CGS_ASSERT(lpPlayerStateMan != 0,
-        CgsDev::Assert::MessageAt("lpPlayerStateMan", KAC_ARTIST_ASSERT_FILE, 152 /* ARTIST 0x826FE23C */));
+        CGS_ASSERT_MESSAGE_AT("lpPlayerStateMan", KAC_ARTIST_ASSERT_FILE, 152 /* ARTIST 0x826FE23C */));
     ProcessPassbys(lPosition, lfSpeed, lpPlayerStateMan);
     UpdateHistory(afTimeStep);
 }

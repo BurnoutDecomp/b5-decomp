@@ -82,7 +82,7 @@ namespace CgsContainers
     BaseLinkedListNode* BaseLinkedList::InternalGetHead() const
     {
         CGS_ASSERT(miCount != KI_UNINITIALISED,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "BaseLinkedList accessed when uninitialised", __FILE__, 84 /* ARTIST 0x82814D90 */));
         return mpFirst;
     }
@@ -91,7 +91,7 @@ namespace CgsContainers
     BaseLinkedListNode* BaseLinkedList::InternalGetTail() const
     {
         CGS_ASSERT(miCount != KI_UNINITIALISED,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "BaseLinkedList accessed when uninitialised", __FILE__, 92 /* ARTIST 0x82814DF0 */));
         return mpLast;
     }
@@ -100,7 +100,7 @@ namespace CgsContainers
     void BaseLinkedList::InternalAddHead(BaseLinkedListNode* lpNode)
     {
         CGS_ASSERT(miCount != KI_UNINITIALISED,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "BaseLinkedList accessed when uninitialised", __FILE__, 100 /* ARTIST 0x82814E58 */));
 
         lpNode->mpPrev = 0;
@@ -121,7 +121,7 @@ namespace CgsContainers
     void BaseLinkedList::InternalAddTail(BaseLinkedListNode* lpNode)
     {
         CGS_ASSERT(miCount != KI_UNINITIALISED,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "BaseLinkedList accessed when uninitialised", __FILE__, 123 /* ARTIST 0x82814F00 */));
 
         lpNode->mpNext = 0;
@@ -144,10 +144,10 @@ namespace CgsContainers
     void BaseLinkedList::InternalAddBefore(BaseLinkedListNode* lpNodeInList, BaseLinkedListNode* lpNewNode)
     {
         CGS_ASSERT(miCount != KI_UNINITIALISED,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "BaseLinkedList accessed when uninitialised", __FILE__, 167 /* ARTIST 0x82815674 */));
         CGS_ASSERT(InternalGetNodeIndex(lpNodeInList) >= 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "InternalGetNodeIndex( lpNodeInList ) >= 0", __FILE__, 168 /* ARTIST 0x828156A4 */));
 
         if (lpNodeInList == mpFirst)
@@ -169,7 +169,7 @@ namespace CgsContainers
     BaseLinkedListNode* BaseLinkedList::InternalRemoveHead()
     {
         CGS_ASSERT(miCount != KI_UNINITIALISED,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "BaseLinkedList accessed when uninitialised", __FILE__, 188 /* ARTIST 0x82814FA0 */));
 
         BaseLinkedListNode* lpNode = mpFirst;
@@ -235,10 +235,10 @@ namespace CgsContainers
     void BaseLinkedList::InternalRemoveNode(BaseLinkedListNode* lpNode)
     {
         CGS_ASSERT(miCount != KI_UNINITIALISED,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "BaseLinkedList accessed when uninitialised", __FILE__, 258 /* ARTIST 0x82815740 */));
         CGS_ASSERT(InternalGetNodeIndex(lpNode) >= 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "InternalGetNodeIndex( lpNode ) >= 0", __FILE__, 259 /* ARTIST 0x82815770 */));
 
         if (mpFirst == lpNode)
@@ -262,7 +262,7 @@ namespace CgsContainers
     // 0x828150C8 - 0-based position of lpNode walking from the head, or -1 if absent.
     s32 BaseLinkedList::InternalGetNodeIndex(BaseLinkedListNode* lpNode)
     {
-        CGS_ASSERT(miCount != KI_UNINITIALISED, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(miCount != KI_UNINITIALISED, CGS_ASSERT_MESSAGE_AT(
             "BaseLinkedList accessed when uninitialised", __FILE__, 282));
 
         s32 liPosition = 0;

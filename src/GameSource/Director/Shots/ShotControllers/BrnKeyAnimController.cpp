@@ -28,10 +28,10 @@
 // branchless semantics (they differ from `fsel` only for NaN inputs, which every one of
 // these lanes has already been asserted / clamped out of).
 // ============================================================================
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Director/Shots/ShotControllers/BrnKeyAnimController.cpp"
 #include "GameSource/Director/Shots/ShotControllers/BrnKeyAnimController.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
-
+#define CGS_ARTIST_BRNKEYANIMCONTROLLER_FILE "..\\..\\..\\GameSource\\Director/Shots/ShotControllers/BrnKeyAnimController.h"
 #include "GameSource/Director/BrnDirectorResourceManager.h"    // DirectorResourceManager::GetKeyAnimFromGuid / GetIceResourceManager
 #include "GameSource/Director/Camera/Camera.h"                 // BrnDirector::Camera::Camera
 #include "GameSource/Director/Camera/Utils/CameraUtils.h"      // Utils::CreateLookAt
@@ -146,7 +146,7 @@ bool KeyAnimController::Prepare(const DirectorResourceManager& lrResourceManager
     // DirectorResourceManager::GetKeyAnimFromGuid @0x821F69A8, called by name here.
     ICE::ICETakeData* lpTakeData = lrResourceManager.GetKeyAnimFromGuid(liAnimGuid);
 
-    CGS_ASSERT(lpTakeData != 0, CgsDev::Assert::MessageAt("lpTakeData != NULL", "..\\..\\..\\GameSource\\Director/Shots/ShotControllers/BrnKeyAnimController.cpp", 68));                       // cpp:68
+    CGS_ASSERT(lpTakeData != 0, CGS_ASSERT_MESSAGE_AT("lpTakeData != NULL", CGS_ARTIST_FILE, 68));                       // cpp:68
 
     // [DIAG BRN_ICE_TRACE] BRING-UP SCAFFOLDING, NOT CONSOLE CODE. Which take guid the shot
     // reference decoded to, and what the ICE list handed back for it. Remove with the
@@ -200,7 +200,7 @@ bool KeyAnimController::Prepare(const DirectorResourceManager& lrResourceManager
 // ============================================================================
 void KeyAnimController::Update(const ShotContext& lrContext, Camera::Camera* lpCamera)
 {
-    CGS_ASSERT(mbPrepared, CgsDev::Assert::MessageAt("mbPrepared", "..\\..\\..\\GameSource\\Director/Shots/ShotControllers/BrnKeyAnimController.cpp", 226));                                     // cpp:226
+    CGS_ASSERT(mbPrepared, CGS_ASSERT_MESSAGE_AT("mbPrepared", CGS_ARTIST_FILE, 226));                                     // cpp:226
 
     if (!mbPaused)
     {
@@ -533,10 +533,10 @@ void KeyAnimController::UpdateFocus(const ICE::ICETake& lrTake, Camera::Camera* 
 // ============================================================================
 void KeyAnimController::SetParametricTime0To1(f32 lfParametricTime0To1)
 {
-    CGS_ASSERT(mbPrepared, CgsDev::Assert::MessageAt("mbPrepared", "..\\..\\..\\GameSource\\Director/Shots/ShotControllers/BrnKeyAnimController.cpp", 333));                                                // cpp:333
+    CGS_ASSERT(mbPrepared, CGS_ASSERT_MESSAGE_AT("mbPrepared", CGS_ARTIST_FILE, 333));                                                // cpp:333
     CGS_ASSERT(lfParametricTime0To1 >= 0.0f && lfParametricTime0To1 <= 1.0f,
-               CgsDev::Assert::MessageAt("lfParametricTime0To1 >= 0.0f && lfParametricTime0To1 <= 1.0f", "..\\..\\..\\GameSource\\Director/Shots/ShotControllers/BrnKeyAnimController.cpp", 334));          // cpp:334
-    CGS_ASSERT(GetLength() > 0.0f, CgsDev::Assert::MessageAt("GetLength() > 0.0f", "..\\..\\..\\GameSource\\Director/Shots/ShotControllers/BrnKeyAnimController.cpp", 335));                                // cpp:335
+               CGS_ASSERT_MESSAGE_AT("lfParametricTime0To1 >= 0.0f && lfParametricTime0To1 <= 1.0f", CGS_ARTIST_FILE, 334));          // cpp:334
+    CGS_ASSERT(GetLength() > 0.0f, CGS_ASSERT_MESSAGE_AT("GetLength() > 0.0f", CGS_ARTIST_FILE, 335));                                // cpp:335
 
     mfPlaybackTimer = mbReversed ? ((1.0f - lfParametricTime0To1) * GetLength())
                                  : (GetLength() * lfParametricTime0To1);
@@ -547,7 +547,7 @@ void KeyAnimController::SetParametricTime0To1(f32 lfParametricTime0To1)
 // ============================================================================
 f32 KeyAnimController::GetParametricTime0To1() const
 {
-    CGS_ASSERT(GetLength() > 0.0f, CgsDev::Assert::MessageAt("GetLength() > 0.0f", "..\\..\\..\\GameSource\\Director/Shots/ShotControllers/BrnKeyAnimController.cpp", 361));                                // cpp:361
+    CGS_ASSERT(GetLength() > 0.0f, CGS_ASSERT_MESSAGE_AT("GetLength() > 0.0f", CGS_ARTIST_FILE, 361));                                // cpp:361
 
     const f32 lfPlayed = mfPlaybackTimer / GetLength();
     const f32 lfParametricTime0To1 = mbReversed ? (1.0f - lfPlayed) : lfPlayed;
@@ -561,7 +561,7 @@ f32 KeyAnimController::GetParametricTime0To1() const
 ICE::eICESpace KeyAnimController::GetEyeSpace() const
 {
     CGS_ASSERT(mbPrepared,
-        CgsDev::Assert::MessageAt("mbPrepared", "..\\..\\..\\GameSource\\Director/Shots/ShotControllers/BrnKeyAnimController.h", 107 /* ARTIST 0x821F4160 */));
+        CGS_ASSERT_MESSAGE_AT("mbPrepared", CGS_ARTIST_BRNKEYANIMCONTROLLER_FILE, 107 /* ARTIST 0x821F4160 */));
     return mEyeSpace;
 }
 
@@ -571,7 +571,7 @@ ICE::eICESpace KeyAnimController::GetEyeSpace() const
 ICE::eICESpace KeyAnimController::GetLookSpace() const
 {
     CGS_ASSERT(mbPrepared,
-        CgsDev::Assert::MessageAt("mbPrepared", "..\\..\\..\\GameSource\\Director/Shots/ShotControllers/BrnKeyAnimController.h", 110 /* ARTIST 0x821F41B8 */));
+        CGS_ASSERT_MESSAGE_AT("mbPrepared", CGS_ARTIST_BRNKEYANIMCONTROLLER_FILE, 110 /* ARTIST 0x821F41B8 */));
     return mLookSpace;
 }
 
@@ -583,7 +583,7 @@ ICE::eICESpace KeyAnimController::GetLookSpace() const
 rw::math::vpu::Vector3 KeyAnimController::GetLookPos() const
 {
     CGS_ASSERT(mbPrepared,
-        CgsDev::Assert::MessageAt("mbPrepared", "..\\..\\..\\GameSource\\Director/Shots/ShotControllers/BrnKeyAnimController.h", 113 /* ARTIST 0x821F4218 */));
+        CGS_ASSERT_MESSAGE_AT("mbPrepared", CGS_ARTIST_BRNKEYANIMCONTROLLER_FILE, 113 /* ARTIST 0x821F4218 */));
     return mLookPos;
 }
 
@@ -592,7 +592,7 @@ rw::math::vpu::Vector3 KeyAnimController::GetLookPos() const
 // ============================================================================
 bool KeyAnimController::HasFinished() const
 {
-    CGS_ASSERT(mbPrepared, CgsDev::Assert::MessageAt("mbPrepared", "..\\..\\..\\GameSource\\Director/Shots/ShotControllers/BrnKeyAnimController.h", 157));
+    CGS_ASSERT(mbPrepared, CGS_ASSERT_MESSAGE_AT("mbPrepared", CGS_ARTIST_BRNKEYANIMCONTROLLER_FILE, 157));
 
     if (mbReversed)
         return mfPlaybackTimer <= 0.0f;
@@ -601,3 +601,6 @@ bool KeyAnimController::HasFinished() const
 }
 
 } // namespace BrnDirector
+
+#undef CGS_ARTIST_FILE
+#undef CGS_ARTIST_BRNKEYANIMCONTROLLER_FILE

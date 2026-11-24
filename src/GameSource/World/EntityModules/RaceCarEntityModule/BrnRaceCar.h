@@ -88,22 +88,22 @@ public:
     ERaceCarType GetType() const { return static_cast<ERaceCarType>(muType); }
     Vector3 GetPosition() const                                  // ARTIST 0x822B3500
     {
-        CGS_ASSERT(IsInWorld(), CgsDev::Assert::MessageAt("IsInWorld()", BRN_RACECAR_H_ASSERT_FILE, 365));
+        CGS_ASSERT(IsInWorld(), CGS_ASSERT_MESSAGE_AT("IsInWorld()", BRN_RACECAR_H_ASSERT_FILE, 365));
         return mTransform.Pos();
     }
     Vector3 GetPreviousPosition() const                          // ARTIST 0x822B3588
     {
-        CGS_ASSERT(IsInWorld(), CgsDev::Assert::MessageAt("IsInWorld()", BRN_RACECAR_H_ASSERT_FILE, 372));
+        CGS_ASSERT(IsInWorld(), CGS_ASSERT_MESSAGE_AT("IsInWorld()", BRN_RACECAR_H_ASSERT_FILE, 372));
         return mPreviousPosition;
     }
     Vector3 GetDirection() const                                 // ARTIST 0x822B3610
     {
-        CGS_ASSERT(IsInWorld(), CgsDev::Assert::MessageAt("IsInWorld()", BRN_RACECAR_H_ASSERT_FILE, 379));
+        CGS_ASSERT(IsInWorld(), CGS_ASSERT_MESSAGE_AT("IsInWorld()", BRN_RACECAR_H_ASSERT_FILE, 379));
         return mTransform.At();
     }
     Vector3 GetVelocity() const                                  // ARTIST 0x822B3698
     {
-        CGS_ASSERT(IsInWorld(), CgsDev::Assert::MessageAt("IsInWorld()", BRN_RACECAR_H_ASSERT_FILE, 386));
+        CGS_ASSERT(IsInWorld(), CGS_ASSERT_MESSAGE_AT("IsInWorld()", BRN_RACECAR_H_ASSERT_FILE, 386));
         return mVelocity;
     }
     Matrix44Affine GetTransform() const { return mTransform; }
@@ -112,26 +112,26 @@ public:
 
     EGlobalRaceCarIndex GetGlobalRaceCarIndex() const            // ARTIST 0x822B3A18
     {
-        CGS_ASSERT(IsInWorld(), CgsDev::Assert::MessageAt("IsInWorld()", BRN_RACECAR_H_ASSERT_FILE, 408));
+        CGS_ASSERT(IsInWorld(), CGS_ASSERT_MESSAGE_AT("IsInWorld()", BRN_RACECAR_H_ASSERT_FILE, 408));
         return static_cast<EGlobalRaceCarIndex>(miGlobalRaceCarIndex);
     }
 
     s32 GetOpponentIndex() const { return miOpponentIndex; }
     CgsID GetRivalId() const                                     // ARTIST 0x822B3AA8
     {
-        CGS_ASSERT(IsInWorld(), CgsDev::Assert::MessageAt("IsInWorld()", BRN_RACECAR_H_ASSERT_FILE, 421));
+        CGS_ASSERT(IsInWorld(), CGS_ASSERT_MESSAGE_AT("IsInWorld()", BRN_RACECAR_H_ASSERT_FILE, 421));
         return mRivalId;
     }
     CgsID GetModelId() const                                     // ARTIST 0x822B3B38
     {
-        CGS_ASSERT(IsInWorld(), CgsDev::Assert::MessageAt("IsInWorld()", BRN_RACECAR_H_ASSERT_FILE, 428));
-        CGS_ASSERT(mModelId != 0, CgsDev::Assert::MessageAt("mModelId != kCGSID_NULL", BRN_RACECAR_H_ASSERT_FILE, 429));
+        CGS_ASSERT(IsInWorld(), CGS_ASSERT_MESSAGE_AT("IsInWorld()", BRN_RACECAR_H_ASSERT_FILE, 428));
+        CGS_ASSERT(mModelId != 0, CGS_ASSERT_MESSAGE_AT("mModelId != kCGSID_NULL", BRN_RACECAR_H_ASSERT_FILE, 429));
         return mModelId;
     }
     CgsID GetWheelModelId() const                                // ARTIST 0x822B3BF0
     {
-        CGS_ASSERT(IsInWorld(), CgsDev::Assert::MessageAt("IsInWorld()", BRN_RACECAR_H_ASSERT_FILE, 436));
-        CGS_ASSERT(mWheelId != 0, CgsDev::Assert::MessageAt("mWheelId != kCGSID_NULL", BRN_RACECAR_H_ASSERT_FILE, 437));
+        CGS_ASSERT(IsInWorld(), CGS_ASSERT_MESSAGE_AT("IsInWorld()", BRN_RACECAR_H_ASSERT_FILE, 436));
+        CGS_ASSERT(mWheelId != 0, CGS_ASSERT_MESSAGE_AT("mWheelId != kCGSID_NULL", BRN_RACECAR_H_ASSERT_FILE, 437));
         return mWheelId;
     }
 
@@ -142,9 +142,9 @@ public:
 
     s8 GetRivalIndex() const                                     // ARTIST 0x822B3CA8
     {
-        CGS_ASSERT(IsAIDriven(), CgsDev::Assert::MessageAt("IsAIDriven()", BRN_RACECAR_H_ASSERT_FILE, 468));
+        CGS_ASSERT(IsAIDriven(), CGS_ASSERT_MESSAGE_AT("IsAIDriven()", BRN_RACECAR_H_ASSERT_FILE, 468));
         CGS_ASSERT((miRivalIndex >= 0 && miRivalIndex < KI_MAX_RIVALS_IN_WORLD) || miRivalIndex == KI_INVALID_RIVAL,
-                   CgsDev::Assert::MessageAt(
+                   CGS_ASSERT_MESSAGE_AT(
                        "( miRivalIndex >= 0 && miRivalIndex < KI_MAX_RIVALS_IN_WORLD ) || miRivalIndex == KI_INVALID_RIVAL",
                        BRN_RACECAR_H_ASSERT_FILE, 469));
         return miRivalIndex;
@@ -154,13 +154,13 @@ public:
     bool IsActive() const                                        // HasActiveRaceCar @0x822A0CD8
     {
         CGS_ASSERT(muType < E_RACE_CAR_TYPE_COUNT,
-                   CgsDev::Assert::MessageAt("muType < E_RACE_CAR_TYPE_COUNT", BRN_RACECAR_H_ASSERT_FILE, 482));
+                   CGS_ASSERT_MESSAGE_AT("muType < E_RACE_CAR_TYPE_COUNT", BRN_RACECAR_H_ASSERT_FILE, 482));
         return muType != E_RACE_CAR_TYPE_INACTIVE;
     }
     bool IsInWorld() const                                       // ARTIST 0x822A0C70
     {
         CGS_ASSERT(muType < E_RACE_CAR_TYPE_COUNT,
-                   CgsDev::Assert::MessageAt("muType < E_RACE_CAR_TYPE_COUNT", BRN_RACECAR_H_ASSERT_FILE, 547));
+                   CGS_ASSERT_MESSAGE_AT("muType < E_RACE_CAR_TYPE_COUNT", BRN_RACECAR_H_ASSERT_FILE, 547));
         return muType != E_RACE_CAR_TYPE_INACTIVE;
     }
     bool HasActiveRaceCar() const;                             // 0x822A0CD8
@@ -175,26 +175,26 @@ public:
     bool IsPlayerDriven() const                                  // ARTIST 0x822A0D60
     {
         CGS_ASSERT(muType < E_RACE_CAR_TYPE_COUNT,
-                   CgsDev::Assert::MessageAt("muType < E_RACE_CAR_TYPE_COUNT", BRN_RACECAR_H_ASSERT_FILE, 577));
+                   CGS_ASSERT_MESSAGE_AT("muType < E_RACE_CAR_TYPE_COUNT", BRN_RACECAR_H_ASSERT_FILE, 577));
         return muType == E_RACE_CAR_TYPE_PLAYER;
     }
     bool IsNetworkDriven() const                                 // ARTIST 0x822A0DC0
     {
         CGS_ASSERT(muType < E_RACE_CAR_TYPE_COUNT,
-                   CgsDev::Assert::MessageAt("muType < E_RACE_CAR_TYPE_COUNT", BRN_RACECAR_H_ASSERT_FILE, 590));
+                   CGS_ASSERT_MESSAGE_AT("muType < E_RACE_CAR_TYPE_COUNT", BRN_RACECAR_H_ASSERT_FILE, 590));
         return muType == E_RACE_CAR_TYPE_NETWORK;
     }
     bool IsAIDriven() const                                      // ARTIST 0x822A0E28
     {
         CGS_ASSERT(muType < E_RACE_CAR_TYPE_COUNT,
-                   CgsDev::Assert::MessageAt("muType < E_RACE_CAR_TYPE_COUNT", BRN_RACECAR_H_ASSERT_FILE, 603));
+                   CGS_ASSERT_MESSAGE_AT("muType < E_RACE_CAR_TYPE_COUNT", BRN_RACECAR_H_ASSERT_FILE, 603));
         return muType == E_RACE_CAR_TYPE_AI;
     }
     bool IsOutOfRangeRival() const;
     bool IsInRangeRival() const;
     bool IsInCurrentGameMode() const                             // ARTIST 0x822A0FA0
     {
-        CGS_ASSERT(IsInWorld(), CgsDev::Assert::MessageAt("IsInWorld()", BRN_RACECAR_H_ASSERT_FILE, 668));
+        CGS_ASSERT(IsInWorld(), CGS_ASSERT_MESSAGE_AT("IsInWorld()", BRN_RACECAR_H_ASSERT_FILE, 668));
         return mbIsInGameMode;
     }
 

@@ -1,7 +1,7 @@
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"
 #include "GameSource/Graphics/BrnRendererModuleIO.h"
 #include "GameSource/GameFlowController/TopLevel/BrnGameMainFlowStates.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h"
 #include "GameSource/GameFlowController/TopLevel/BrnGameMainFlowController.h"   // embedded controller and SendEvent
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
@@ -152,7 +152,7 @@ namespace
 void LoadingScriptedState::ResumeLoadingWorld()
 {
     CGS_ASSERT(gBrnScriptedLoadStage == E_LOADINGSTATESTAGE_START,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "meLoadingStateStage == E_LOADINGSTATESTAGE_START",
             KAC_ARTIST_ASSERT_FILE, 209 /* ARTIST 0x823A85D4 */));   // X360 h:209
     gBrnScriptedLoadPaused = false;
@@ -934,7 +934,7 @@ bool LoadingScriptedState::LoadGUIModule(
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpInputBuffer",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 238);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 238));
             CgsDev::Assert::EndAssert();
         }
         lpGuiInput->LockForWrite();
@@ -951,7 +951,7 @@ bool LoadingScriptedState::LoadGUIModule(
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpInputBuffer",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 248);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 248));
             CgsDev::Assert::EndAssert();
         }
         lpGuiInput->UnlockForWrite();
@@ -1030,7 +1030,7 @@ void MainGameFlowStateInitialLoadingScreen::Update()
     default:
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("0",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameFlowController/TopLevel/BrnGameMainFlowInitialLoadingScreenState.cpp", 268);
+            CGS_ASSERT_LOCATION("d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameFlowController/TopLevel/BrnGameMainFlowInitialLoadingScreenState.cpp", 268));
         CgsDev::Assert::EndAssert();
         break;
     }
@@ -1212,7 +1212,7 @@ void MainGameFlowStateCheckDiskSpace::OnEnter()
     // ResumeLoadingWorld does.
     gBrnScriptedLoadPaused = false;
     CGS_ASSERT(gBrnScriptedLoadStage == E_LOADINGSTATESTAGE_START,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "meLoadingStateStage == E_LOADINGSTATESTAGE_START",
             KAC_ARTIST_ASSERT_FILE, 195 /* ARTIST 0x823AAACC */));
     gBrnScriptedLoadPaused = true;
@@ -1490,3 +1490,5 @@ bool LoadingScriptedState::LoadNetworkModule(BrnResource::GameDataIO::InputBuffe
     lpUpdateOutputStack->DestroyIOBuffer<BrnNetwork::BrnNetworkModuleIO::OutputBuffer>(&lpNetworkOutputBuffer);
     return lbPrepared;
 }
+
+#undef CGS_ARTIST_FILE

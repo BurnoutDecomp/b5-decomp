@@ -8,7 +8,7 @@
 // X360 asm is the offset authority (see the per-function provenance comments). The
 // per-field Set*Parameter helpers each cache the field's last-pushed value and, when it
 // changes, push the new value to the platform presence layer through the virtual setters.
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/RichPresenceManager/BrnGameStateRichPresenceManagerBase.cpp"
 #include "GameSource/GameState/RichPresenceManager/BrnGameStateRichPresenceManagerBase.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT
@@ -77,10 +77,10 @@ void RichPresenceManagerBase::Construct(GameStateModule* lpGameStateModule,
     // GetScoringSystem() is the named accessor for that embedded sub-object.
     mpScoringSystem      = lpModeManager ? lpModeManager->GetScoringSystem() : 0;
 
-    CGS_ASSERT(mpGameStateModule, CgsDev::Assert::MessageAt("mpGameStateModule", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/RichPresenceManager/BrnGameStateRichPresenceManagerBase.cpp", 89));
-    CGS_ASSERT(mpNetworkRoundManager, CgsDev::Assert::MessageAt("mpNetworkRoundManager", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/RichPresenceManager/BrnGameStateRichPresenceManagerBase.cpp", 90));
-    CGS_ASSERT(mpModeManager, CgsDev::Assert::MessageAt("mpModeManager", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/RichPresenceManager/BrnGameStateRichPresenceManagerBase.cpp", 91));
-    CGS_ASSERT(mpScoringSystem, CgsDev::Assert::MessageAt("mpScoringSystem", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/RichPresenceManager/BrnGameStateRichPresenceManagerBase.cpp", 92));
+    CGS_ASSERT(mpGameStateModule, CGS_ASSERT_MESSAGE_AT("mpGameStateModule", CGS_ARTIST_FILE, 89));
+    CGS_ASSERT(mpNetworkRoundManager, CGS_ASSERT_MESSAGE_AT("mpNetworkRoundManager", CGS_ARTIST_FILE, 90));
+    CGS_ASSERT(mpModeManager, CGS_ASSERT_MESSAGE_AT("mpModeManager", CGS_ARTIST_FILE, 91));
+    CGS_ASSERT(mpScoringSystem, CGS_ASSERT_MESSAGE_AT("mpScoringSystem", CGS_ARTIST_FILE, 92));
 
     miCurrentRound       = -1;
     miTotalRounds        = -1;
@@ -169,8 +169,8 @@ bool RichPresenceManagerBase::SetGameTypeParameters()
 // module and looks the position up in the scoring system. Returns true if the cached position changed.
 bool RichPresenceManagerBase::SetPositionParameter()
 {
-    CGS_ASSERT(mpScoringSystem, CgsDev::Assert::MessageAt("mpScoringSystem", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/RichPresenceManager/BrnGameStateRichPresenceManagerBase.cpp", 265));
-    CGS_ASSERT(mpGameStateModule, CgsDev::Assert::MessageAt("mpGameStateModule", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/RichPresenceManager/BrnGameStateRichPresenceManagerBase.cpp", 266));
+    CGS_ASSERT(mpScoringSystem, CGS_ASSERT_MESSAGE_AT("mpScoringSystem", CGS_ARTIST_FILE, 265));
+    CGS_ASSERT(mpGameStateModule, CGS_ASSERT_MESSAGE_AT("mpGameStateModule", CGS_ARTIST_FILE, 266));
 
     if (mpScoringSystem->GetNumberOfActiveCars() == 0)
     {
@@ -197,7 +197,7 @@ bool RichPresenceManagerBase::SetPositionParameter()
 // so each is pushed only on a change; returns true if either was pushed.
 bool RichPresenceManagerBase::SetRoundParameter()
 {
-    CGS_ASSERT(mpNetworkRoundManager, CgsDev::Assert::MessageAt("mpNetworkRoundManager", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/RichPresenceManager/BrnGameStateRichPresenceManagerBase.cpp", 298));
+    CGS_ASSERT(mpNetworkRoundManager, CGS_ASSERT_MESSAGE_AT("mpNetworkRoundManager", CGS_ARTIST_FILE, 298));
 
     bool lbChanged = false;
 
@@ -225,7 +225,7 @@ bool RichPresenceManagerBase::SetRoundParameter()
 // the status was pushed.
 bool RichPresenceManagerBase::SetRankedParameter()
 {
-    CGS_ASSERT(mpNetworkRoundManager, CgsDev::Assert::MessageAt("mpNetworkRoundManager", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/RichPresenceManager/BrnGameStateRichPresenceManagerBase.cpp", 336));
+    CGS_ASSERT(mpNetworkRoundManager, CGS_ASSERT_MESSAGE_AT("mpNetworkRoundManager", CGS_ARTIST_FILE, 336));
 
     if (meIsRanked != meOldRankedStatus)
     {
@@ -248,11 +248,11 @@ bool RichPresenceManagerBase::SetRankedParameter()
 void RichPresenceManagerBase::Update(const GameStateModuleIO::PreWorldInputBuffer* lpInput,
                                      GameStateModuleIO::OutputBuffer* lpOutput)
 {
-    CGS_ASSERT(lpInput, CgsDev::Assert::MessageAt("lpInput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/RichPresenceManager/BrnGameStateRichPresenceManagerBase.cpp", 365));
-    CGS_ASSERT(lpOutput, CgsDev::Assert::MessageAt("lpOutput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/RichPresenceManager/BrnGameStateRichPresenceManagerBase.cpp", 366));
+    CGS_ASSERT(lpInput, CGS_ASSERT_MESSAGE_AT("lpInput", CGS_ARTIST_FILE, 365));
+    CGS_ASSERT(lpOutput, CGS_ASSERT_MESSAGE_AT("lpOutput", CGS_ARTIST_FILE, 366));
     // GetGameTimerStatus is the interface's first sub-status (the same address).
-    CGS_ASSERT(lpInput->GetTimerStatusInterface(), CgsDev::Assert::MessageAt("lpInput->GetTimerStatusInterface()->GetGameTimerStatus()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/RichPresenceManager/BrnGameStateRichPresenceManagerBase.cpp", 369));
-    CGS_ASSERT(lpInput->GetControllerToGameStateInterface(), CgsDev::Assert::MessageAt("lpInput->GetControllerToGameStateInterface()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/RichPresenceManager/BrnGameStateRichPresenceManagerBase.cpp", 370));
+    CGS_ASSERT(lpInput->GetTimerStatusInterface(), CGS_ASSERT_MESSAGE_AT("lpInput->GetTimerStatusInterface()->GetGameTimerStatus()", CGS_ARTIST_FILE, 369));
+    CGS_ASSERT(lpInput->GetControllerToGameStateInterface(), CGS_ASSERT_MESSAGE_AT("lpInput->GetControllerToGameStateInterface()", CGS_ARTIST_FILE, 370));
 
     miUserID = lpInput->GetControllerToGameStateInterface()->GetActiveControllerPort();
     if (miUserID == KI_INVALID_USER_ID)
@@ -381,9 +381,9 @@ RichPresenceManagerBase::ERichPresenceStates
 RichPresenceManagerBase::EGameModeTypeToERichPresenceState(GameStateModuleIO::EGameModeType leGameMode)
 {
     CGS_ASSERT(leGameMode >= GameStateModuleIO::E_MODE_NONE,
-               CgsDev::Assert::MessageAt("leModeType >= GameStateModuleIO::E_MODE_NONE", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/RichPresenceManager/BrnGameStateRichPresenceManagerBase.cpp", 458));
+               CGS_ASSERT_MESSAGE_AT("leModeType >= GameStateModuleIO::E_MODE_NONE", CGS_ARTIST_FILE, 458));
     CGS_ASSERT(static_cast<s32>(leGameMode) <= KI_INVALID_LOBBY_TYPE,
-               CgsDev::Assert::MessageAt("leModeType <= GameStateModuleIO::E_MODE_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/RichPresenceManager/BrnGameStateRichPresenceManagerBase.cpp", 459));
+               CGS_ASSERT_MESSAGE_AT("leModeType <= GameStateModuleIO::E_MODE_COUNT", CGS_ARTIST_FILE, 459));
 
     if (leGameMode == GameStateModuleIO::E_MODE_NONE ||
         static_cast<s32>(leGameMode) == KI_INVALID_LOBBY_TYPE)
@@ -395,3 +395,5 @@ RichPresenceManagerBase::EGameModeTypeToERichPresenceState(GameStateModuleIO::EG
 }
 
 }
+
+#undef CGS_ARTIST_FILE

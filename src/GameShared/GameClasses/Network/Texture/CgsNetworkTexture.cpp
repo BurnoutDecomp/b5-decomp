@@ -168,7 +168,7 @@ namespace CgsNetwork
         if (mbTextureAllocatedFromHeap)
         {
             CGS_ASSERT(mpcTexture,
-                CgsDev::Assert::MessageAt("mpcTexture", __FILE__, 144 /* ARTIST 0x8287E60C */));
+                CGS_ASSERT_MESSAGE_AT("mpcTexture", __FILE__, 144 /* ARTIST 0x8287E60C */));
             mpHeapMalloc->Free(mpcTexture);
             mpcTexture                 = 0;
             mbTextureAllocatedFromHeap = false;
@@ -188,7 +188,7 @@ namespace CgsNetwork
     // format really is DXT1. A width <= one block is a single block.
     s32 NetworkTexture::GetWidthInBlocks() const
     {
-        CGS_ASSERT(renderengine::PIXELFORMAT_DXT1 == mFormat, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(renderengine::PIXELFORMAT_DXT1 == mFormat, CGS_ASSERT_MESSAGE_AT(
             "rw::graphics::core::PIXELFORMAT_LIN_DXT1 == mFormat",
             __FILE__, 308 /* ARTIST 0x8287E7E0 */));
 
@@ -201,7 +201,7 @@ namespace CgsNetwork
     // DXT1-only: the texture height measured in 4x4 compression blocks (rounded up).
     s32 NetworkTexture::GetHeightInBlocks() const
     {
-        CGS_ASSERT(renderengine::PIXELFORMAT_DXT1 == mFormat, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(renderengine::PIXELFORMAT_DXT1 == mFormat, CGS_ASSERT_MESSAGE_AT(
             "rw::graphics::core::PIXELFORMAT_LIN_DXT1 == mFormat",
             __FILE__, 339 /* ARTIST 0x8287E858 */));
 
@@ -262,10 +262,10 @@ namespace CgsNetwork
                                        renderengine::PixelFormat lePixelFormat)
     {
         CGS_ASSERT(liDataSizeInBytes == GetTextureSize(),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "liDataSizeInBytes == GetTextureSize()", __FILE__, 369 /* ARTIST 0x8287E8E4 */));
         CGS_ASSERT(lePixelFormat == GetFormat(),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lePixelFormat == GetFormat()", __FILE__, 370 /* ARTIST 0x8287E90C */));
 
         XMemCpy(mpcTexture, lpcPixelData, static_cast<SIZE_T>(liDataSizeInBytes));

@@ -40,7 +40,7 @@ namespace SceneManagerIO
         const CgsGeometric::Triangle4* GetCache(s32 liObjectIndex) const
         {
             CGS_ASSERT(mpTriangleCacheManager != 0,
-                       CgsDev::Assert::MessageAt("mpTriangleCacheManager != NULL", CGS_SCENEMANAGERMODULEIO_H_ASSERT_FILE, 1286));
+                       CGS_ASSERT_MESSAGE_AT("mpTriangleCacheManager != NULL", CGS_SCENEMANAGERMODULEIO_H_ASSERT_FILE, 1286));
             return mpTriangleCacheManager->GetTrianglesForCachedObject(liObjectIndex);
         }
 
@@ -52,7 +52,7 @@ namespace SceneManagerIO
         s32 GetNumCachedTriangleBatches(s32 liCacheSlotIndex) const
         {
             CGS_ASSERT(mpTriangleCacheManager != 0,
-                       CgsDev::Assert::MessageAt("mpTriangleCacheManager != NULL", CGS_SCENEMANAGERMODULEIO_H_ASSERT_FILE, 1295));
+                       CGS_ASSERT_MESSAGE_AT("mpTriangleCacheManager != NULL", CGS_SCENEMANAGERMODULEIO_H_ASSERT_FILE, 1295));
             return mpTriangleCacheManager->mpaCachedObjectSlots[liCacheSlotIndex].miNumCachedTriangleBatches;
         }
 
@@ -76,7 +76,7 @@ namespace SceneManagerIO
         void SetTriangleCacheManager(TriangleCacheManager* lpTriangleCacheManager)
         {
             CGS_ASSERT(lpTriangleCacheManager != 0,
-                       CgsDev::Assert::MessageAt("lpTriangleCacheManager != NULL", CGS_SCENEMANAGERMODULEIO_H_ASSERT_FILE, 1268));
+                       CGS_ASSERT_MESSAGE_AT("lpTriangleCacheManager != NULL", CGS_SCENEMANAGERMODULEIO_H_ASSERT_FILE, 1268));
             mpTriangleCacheManager = lpTriangleCacheManager;
         }
 
@@ -89,7 +89,7 @@ namespace SceneManagerIO
         void Append(const TriangleCacheInterface* lpInterfaceToAppend)
         {
             CGS_ASSERT(lpInterfaceToAppend->mpTriangleCacheManager != 0,
-                       CgsDev::Assert::MessageAt("lpInterfaceToAppend->mpTriangleCacheManager != NULL", CGS_SCENEMANAGERMODULEIO_H_ASSERT_FILE, 1277));
+                       CGS_ASSERT_MESSAGE_AT("lpInterfaceToAppend->mpTriangleCacheManager != NULL", CGS_SCENEMANAGERMODULEIO_H_ASSERT_FILE, 1277));
             mpTriangleCacheManager = lpInterfaceToAppend->mpTriangleCacheManager;
         }
     };

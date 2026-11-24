@@ -49,11 +49,11 @@ CsisSetClassHandleCommand::CsisSetClassHandleCommand(uintptr_t luCommandCount,
     maOperands[3] = lpuCommandBuffer[4];  // stw r11, 0x10(this)
 
     CGS_ASSERT(luCommandCount == 5u,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "sizeof(*this) / sizeof(uintptr_t) == luCommandCount",
             KAC_ARTIST_ASSERT_FILE, 137 /* ARTIST 0x82681A38 */));
     CGS_ASSERT(GetCommandType() == E_CSIS_COMMAND_SET_CLASS_HANDLE,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "E_CSIS_COMMAND_SET_CLASS_HANDLE == GetCommandType()",
             KAC_ARTIST_ASSERT_FILE, 138 /* ARTIST 0x82681A60 */));
 }
@@ -71,11 +71,11 @@ CsisCreateCommand::CsisCreateCommand(uintptr_t luCommandCount,
     maOperands[2] = lpuCommandBuffer[3]; // stw r11, 0xC(this)
 
     CGS_ASSERT(luCommandCount == 4u,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "sizeof(*this) / sizeof(uintptr_t) == luCommandCount",
             KAC_ARTIST_ASSERT_FILE, 169 /* ARTIST 0x82681AE0 */));
     CGS_ASSERT(GetCommandType() == E_CSIS_COMMAND_CREATE,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "E_CSIS_COMMAND_CREATE == GetCommandType()",
             KAC_ARTIST_ASSERT_FILE, 170 /* ARTIST 0x82681B08 */));
 }
@@ -91,11 +91,11 @@ CsisReleaseCommand::CsisReleaseCommand(uintptr_t luCommandCount,
     mhClass = lpuCommandBuffer[1]; // stw r11, 4(this)
 
     CGS_ASSERT(luCommandCount == 2u,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "sizeof(*this) / sizeof(uintptr_t) == luCommandCount",
             KAC_ARTIST_ASSERT_FILE, 195 /* ARTIST 0x82681B78 */));
     CGS_ASSERT(GetCommandType() == E_CSIS_COMMAND_RELEASE,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "E_CSIS_COMMAND_RELEASE == GetCommandType()",
             KAC_ARTIST_ASSERT_FILE, 196 /* ARTIST 0x82681BA0 */));
 }
@@ -112,11 +112,11 @@ CsisUpdateCommand::CsisUpdateCommand(uintptr_t luCommandCount,
     maOperands[1] = lpuCommandBuffer[2]; // stw r11, 8(this)
 
     CGS_ASSERT(luCommandCount == 3u,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "sizeof(*this) / sizeof(uintptr_t) == luCommandCount",
             KAC_ARTIST_ASSERT_FILE, 220 /* ARTIST 0x82681C18 */));
     CGS_ASSERT(GetCommandType() == E_CSIS_COMMAND_UPDATE,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "E_CSIS_COMMAND_UPDATE == GetCommandType()",
             KAC_ARTIST_ASSERT_FILE, 221 /* ARTIST 0x82681C40 */));
 }

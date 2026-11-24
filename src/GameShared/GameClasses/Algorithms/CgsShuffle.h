@@ -24,13 +24,13 @@ namespace CgsAlgorithms
     void Shuffle(Container& lrContainer, s32 liStart, s32 liEndPlusOne, CgsNumeric::Random& lrRandom)
     {
         CGS_ASSERT(liStart <= liEndPlusOne,
-            CgsDev::Assert::MessageAt("liStart <= liEndPlusOne", KAC_SHUFFLE_ASSERT_FILE, 109));
+            CGS_ASSERT_MESSAGE_AT("liStart <= liEndPlusOne", KAC_SHUFFLE_ASSERT_FILE, 109));
 
         for (s32 li = liEndPlusOne - 1; li > 0; --li)
         {
             const s32 liSwapWith = lrRandom.RandomInt(liStart, li);
             CGS_ASSERT(liSwapWith < liEndPlusOne,
-                CgsDev::Assert::MessageAt("liSwapWith < liEndPlusOne", KAC_SHUFFLE_ASSERT_FILE, 118));
+                CGS_ASSERT_MESSAGE_AT("liSwapWith < liEndPlusOne", KAC_SHUFFLE_ASSERT_FILE, 118));
 
             if (liSwapWith != li)
             {
@@ -51,7 +51,7 @@ namespace CgsAlgorithms
     {
         const s32 liEndPlusOne = static_cast<s32>(lrContainer.GetLength());
         CGS_ASSERT(liEndPlusOne >= 0,
-            CgsDev::Assert::MessageAt("Array is too large to shuffle!", KAC_SHUFFLE_ASSERT_FILE, 156));
+            CGS_ASSERT_MESSAGE_AT("Array is too large to shuffle!", KAC_SHUFFLE_ASSERT_FILE, 156));
 
         Shuffle<Type, Container>(lrContainer, 0, liEndPlusOne, lrRandom);
         return lrContainer;

@@ -43,7 +43,7 @@ namespace BrnReplays
         void AssertTraffic(const char* text, int line)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(text, KPC_TRAFFIC_SOURCE, line);
+            CgsDev::Assert::FireAssert(text, CGS_ASSERT_LOCATION(KPC_TRAFFIC_SOURCE, line));
             CgsDev::Assert::EndAssert();
         }
         void AssertPhysicsIndex(u32 index)
@@ -54,7 +54,7 @@ namespace BrnReplays
                 CgsDev::StrStream stream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
                 stream << "invalid index : " << index << " < " << 25u;
                 CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                    "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsBitArray.h", 203);
+                    CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Containers/CgsBitArray.h", 203));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -78,7 +78,7 @@ namespace BrnReplays
             CgsDev::Assert::BeginAssert();
             CgsDev::StrStream stream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
             stream << "Unable to find old physics for original id " << static_cast<s32>(luIndex) << "\n";
-            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, KPC_TRAFFIC_SOURCE, 866);
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, CGS_ASSERT_LOCATION(KPC_TRAFFIC_SOURCE, 866));
             CgsDev::Assert::EndAssert();
         }
         if (luMask & 1)

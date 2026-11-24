@@ -1,5 +1,5 @@
 #include "GameSource/GameState/ModeManager/GameModes/BrnPursuitMode.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnPursuitMode.cpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
@@ -37,8 +37,8 @@ void PursuitMode::Start(const StartGameModeParams* lpStartGameModeParams,
     const BrnProgression::ProgressionRankData* lpProgressionRankData =
         lpStartGameModeParams->GetProgressionRankData();
 
-    CGS_ASSERT(lpProgressionRankData != NULL, CgsDev::Assert::MessageAt("lpProgressionRankData != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnPursuitMode.cpp", 53));
-    CGS_ASSERT(lpGameModeParams != NULL, CgsDev::Assert::MessageAt("lpGameModeParams != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnPursuitMode.cpp", 54));
+    CGS_ASSERT(lpProgressionRankData != NULL, CGS_ASSERT_MESSAGE_AT("lpProgressionRankData != NULL", CGS_ARTIST_FILE, 53));
+    CGS_ASSERT(lpGameModeParams != NULL, CGS_ASSERT_MESSAGE_AT("lpGameModeParams != NULL", CGS_ARTIST_FILE, 54));
 
     lpGameModeParams->Construct(GameStateModuleIO::E_MODE_PURSUIT);
 
@@ -89,3 +89,5 @@ bool PursuitMode::ShouldExit(const ScoringSystem* lpScoringSystem) const
     return false;
 }
 }
+
+#undef CGS_ARTIST_FILE

@@ -108,7 +108,7 @@ void MomentHitTraffic::Update(f32 lfTimeStep, void* lrBehaviourController,
         break;
 
     default:
-        CGS_ASSERT(false, CgsDev::Assert::MessageAt("unhandled case in switch", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentHitTraffic.cpp", 125));
+        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unhandled case in switch", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentHitTraffic.cpp", 125));
         break;
     }
 }

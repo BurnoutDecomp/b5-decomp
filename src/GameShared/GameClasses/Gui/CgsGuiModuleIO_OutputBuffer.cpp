@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\CgsGuiModuleIO.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
@@ -62,7 +62,7 @@ namespace CgsGuiModuleIO
     // ((*a1 >> 3) & 1) == write-lock bit; returns this + 4.
     OutputBuffer::GuiResourceRequestQueueStorage* OutputBuffer::GetGuiResourceRequestQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt(
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
             "Not locked for writing\n",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\CgsGuiModuleIO.cpp", 214));
         return &mResourceRequestQueue;
@@ -72,9 +72,9 @@ namespace CgsGuiModuleIO
     // read-lock bit; returns this + 2068.
     const OutputBuffer::GuiEventQueue* OutputBuffer::GetOutEventQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt(
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
             "Not locked for reading\n",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\CgsGuiModuleIO.h", 303));
+            CGS_ARTIST_FILE, 303));
         return &mOutEvents;
     }
 
@@ -100,7 +100,7 @@ namespace CgsGuiModuleIO
                                        CgsDev::Assert::giMessageBufferSize);
             lMessage << "Not locked for writing\n";
             CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\CgsGuiModuleIO.h", 285);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 285));
             CgsDev::Assert::EndAssert();
         }
         if (!lpSourceQueue)
@@ -110,7 +110,7 @@ namespace CgsGuiModuleIO
                                        CgsDev::Assert::giMessageBufferSize);
             lMessage << "Invalid event queue pointer sent to OutputBuffer::AddGuiOutEvents";
             CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\CgsGuiModuleIO.h", 286);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 286));
             CgsDev::Assert::EndAssert();
         }
         mOutEvents.Append<256, 16>(*lpSourceQueue);
@@ -127,3 +127,5 @@ namespace CgsGuiModuleIO
     }
 }
 }
+
+#undef CGS_ARTIST_FILE

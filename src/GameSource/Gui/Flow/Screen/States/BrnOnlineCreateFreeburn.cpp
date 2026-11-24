@@ -17,7 +17,7 @@
 // GetOutputEventQueue()->AddEvent with host sizeof sizes (the committed OutputGuiEvent
 // template does not use channel 40; see CgsGuiStateInterface.h). The sat-nav record goes
 // through OutputViewState / OutputInternalState, which build the console's wrapped records.
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineCreateFreeburn.cpp"
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineCreateFreeburn.h"
 
 #include <cstddef>                                                        // offsetof (wire records)
@@ -341,7 +341,7 @@ namespace BrnGui
     void OnlineCreateFreeburn::HandleInGameFailedEvent(const CgsModule::Event* lpEvent)
     {
         // The console's text names HandleInGameEvent (the same pooled string).
-        CGS_ASSERT(lpEvent != 0, CgsDev::Assert::StreamMessageAt("Invalid event sent to OnlineCreateFreeburn::HandleInGameEvent", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineCreateFreeburn.cpp", 361));
+        CGS_ASSERT(lpEvent != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event sent to OnlineCreateFreeburn::HandleInGameEvent", CGS_ARTIST_FILE, 361));
 
         SendStateEvent("GO_BACK");
     }
@@ -351,6 +351,8 @@ namespace BrnGui
     // ================================================================================
     void OnlineCreateFreeburn::HandleControllerInput(const CgsModule::Event* lpEvent)
     {
-        CGS_ASSERT(lpEvent != 0, CgsDev::Assert::StreamMessageAt("Invalid event sent to OnlineCreateFreeburn::HandleControllerInput", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineCreateFreeburn.cpp", 297));
+        CGS_ASSERT(lpEvent != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event sent to OnlineCreateFreeburn::HandleControllerInput", CGS_ARTIST_FILE, 297));
     }
 }
+
+#undef CGS_ARTIST_FILE

@@ -53,9 +53,9 @@ namespace BrnTraffic
     void StaticTrafficParam::ClearDying()
     {
         CGS_ASSERT(IsDying(),
-            CgsDev::Assert::MessageAt("IsDying()", KAC_ARTIST_ASSERT_FILE, 161 /* ARTIST 0x82706BE0 */));
+            CGS_ASSERT_MESSAGE_AT("IsDying()", KAC_ARTIST_ASSERT_FILE, 161 /* ARTIST 0x82706BE0 */));
         CGS_ASSERT(!IsAlive(),
-            CgsDev::Assert::MessageAt("!IsAlive()", KAC_ARTIST_ASSERT_FILE, 162 /* ARTIST 0x82706C0C */));
+            CGS_ASSERT_MESSAGE_AT("!IsAlive()", KAC_ARTIST_ASSERT_FILE, 162 /* ARTIST 0x82706C0C */));
         mxFlags &= static_cast<u8>(~E_FLAG_DYING);
     }
 
@@ -63,7 +63,7 @@ namespace BrnTraffic
     u16 StaticTrafficParam::GetHull() const
     {
         CGS_ASSERT(IsAlive(),
-            CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 107 /* ARTIST 0x82713DA4 */));
+            CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 107 /* ARTIST 0x82713DA4 */));
         return muHull;
     }
 
@@ -71,7 +71,7 @@ namespace BrnTraffic
     u8 StaticTrafficParam::GetIndexInHull() const
     {
         CGS_ASSERT(IsAlive(),
-            CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 114 /* ARTIST 0x82713E04 */));
+            CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 114 /* ARTIST 0x82713E04 */));
         return muStaticTrafficIndexOnHull;
     }
 
@@ -80,9 +80,9 @@ namespace BrnTraffic
     void StaticTrafficParam::SetDivorced()
     {
         CGS_ASSERT(IsAlive(),
-            CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 191 /* ARTIST 0x82706D20 */));
+            CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 191 /* ARTIST 0x82706D20 */));
         CGS_ASSERT(!ShouldBeRemoved(),
-            CgsDev::Assert::MessageAt("!ShouldBeRemoved()", KAC_ARTIST_ASSERT_FILE, 192 /* ARTIST 0x82706D4C */));
+            CGS_ASSERT_MESSAGE_AT("!ShouldBeRemoved()", KAC_ARTIST_ASSERT_FILE, 192 /* ARTIST 0x82706D4C */));
         mxFlags |= E_FLAG_DIVORCED;
     }
 
@@ -91,9 +91,9 @@ namespace BrnTraffic
     void StaticTrafficParam::SetShouldBeRemoved()
     {
         CGS_ASSERT(IsAlive(),
-            CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 200 /* ARTIST 0x82706DC0 */));
+            CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 200 /* ARTIST 0x82706DC0 */));
         CGS_ASSERT(!IsZombie(),
-            CgsDev::Assert::MessageAt("!IsZombie()", KAC_ARTIST_ASSERT_FILE, 201 /* ARTIST 0x82706DEC */));
+            CGS_ASSERT_MESSAGE_AT("!IsZombie()", KAC_ARTIST_ASSERT_FILE, 201 /* ARTIST 0x82706DEC */));
         mxFlags |= E_FLAG_SHOULD_BE_REMOVED;
     }
 
@@ -102,9 +102,9 @@ namespace BrnTraffic
     void StaticTrafficParam::SetZombie()
     {
         CGS_ASSERT(IsAlive(),
-            CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 182 /* ARTIST 0x82706C80 */));
+            CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 182 /* ARTIST 0x82706C80 */));
         CGS_ASSERT(!ShouldBeRemoved(),
-            CgsDev::Assert::MessageAt("!ShouldBeRemoved()", KAC_ARTIST_ASSERT_FILE, 183 /* ARTIST 0x82706CAC */));
+            CGS_ASSERT_MESSAGE_AT("!ShouldBeRemoved()", KAC_ARTIST_ASSERT_FILE, 183 /* ARTIST 0x82706CAC */));
         mxFlags |= E_FLAG_ZOMBIE;
     }
 }

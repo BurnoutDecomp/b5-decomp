@@ -14,7 +14,7 @@ namespace CgsNetwork
     // stream; that stream has no home in the tree, so the log line is dropped.
     void TestConnectionMessage::PrepareForSend(u16 lu16Frame)
     {
-        CGS_ASSERT(lu16Frame != KU16_INVALID_FRAME, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lu16Frame != KU16_INVALID_FRAME, CGS_ASSERT_MESSAGE_AT(
             "lu16Frame != KU16_INVALID_FRAME",
             __FILE__, 69 /* ARTIST 0x82882380 */));
         ReliableMessage::PrepareForSend(4, lu16Frame);

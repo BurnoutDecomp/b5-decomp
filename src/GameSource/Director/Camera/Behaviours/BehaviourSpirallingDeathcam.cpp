@@ -22,13 +22,13 @@
 // ============================================================================
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourSpirallingDeathcam.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourSpirallingDeathCam.cpp"
 #include "GameSource/Director/Camera/Camera.h"                     // Camera (mTransform / mState_uFlags / effects / DoF)
 #include "GameSource/Director/Camera/SharedIO/BrnPlayerInfo.h"     // VehicleInfo (mRaceCarState / mAABB)
 #include "GameSource/Director/Utils/BrnDirectorEffectTrigger.h"    // EnsureEffectIsPlaying / EffectInterface
 #include "GameSource/Director/Utils/BrnDirectorTimestep.h"         // Timestep::Get / GetVecFloat
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"              // CgsNumeric::Random (by value into the Looker)
-
+#define CGS_ARTIST_BRNBEHAVIOURSPIRALLINGDEATHCAM_FILE "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourSpirallingDeathcam.h"
 #include <cmath>   // std::sin / std::cos / std::sqrt
 
 namespace BrnDirector
@@ -149,7 +149,7 @@ bool BehaviourSpirallingDeathcam::Prepare(const BehaviourSharedPrepareReleaseInf
 // ----------------------------------------------------------------------------
 bool BehaviourSpirallingDeathcam::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo)
 {
-    CGS_ASSERT(mpParameters != 0, CgsDev::Assert::MessageAt("mpParameters != NULL", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourSpirallingDeathCam.cpp", 129));                              // cpp:129
+    CGS_ASSERT(mpParameters != 0, CGS_ASSERT_MESSAGE_AT("mpParameters != NULL", CGS_ARTIST_FILE, 129));                              // cpp:129
     const Parameters& lrParams = *mpParameters;
 
     // 1. the collision policy hangs off the same car (16-byte copy +0x2D4 -> +0x240).
@@ -257,7 +257,7 @@ bool BehaviourSpirallingDeathcam::Update(Camera& lrCamera, const BehaviourShared
     lrCamera.GetEffects().mu8BlendCurve = 1;                      // stb 1, camera +0xB5
 
     // 11. the screen hook.
-    CGS_ASSERT(lrInfo.mpEffectInterface != 0, CgsDev::Assert::MessageAt("lrSharedInfo.mpEffectInterface", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourSpirallingDeathCam.cpp", 210));    // cpp:210
+    CGS_ASSERT(lrInfo.mpEffectInterface != 0, CGS_ASSERT_MESSAGE_AT("lrSharedInfo.mpEffectInterface", CGS_ARTIST_FILE, 210));    // cpp:210
     EnsureEffectIsPlaying(lrCamera, *lrInfo.mpEffectInterface, "Player_Shutdown", 1.0f);
 
     // 12. the clock.
@@ -294,9 +294,9 @@ const char* BehaviourSpirallingDeathcam::GetName() const
 void BehaviourSpirallingDeathcam::Start()
 {
     CGS_ASSERT(!mbStarted,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "!mbStarted",
-            "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourSpirallingDeathcam.h", 99 /* ARTIST 0x821F5648 */));   // lbz 0x2F4; assert clear
+            CGS_ARTIST_BRNBEHAVIOURSPIRALLINGDEATHCAM_FILE, 99 /* ARTIST 0x821F5648 */));   // lbz 0x2F4; assert clear
     mbStarted = true;                       // stb 1, 0x2F4(this)
 }
 
@@ -314,9 +314,9 @@ void BehaviourSpirallingDeathcam::Start()
 void BehaviourSpirallingDeathcam::SetParameters(const Parameters* lpParameters)
 {
     CGS_ASSERT(lpParameters->GetType() == eBehaviourSpirallingDeathcam,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lpParameters->GetType() == eBehaviourSpirallingDeathcam",
-            "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourSpirallingDeathcam.h", 193 /* ARTIST 0x821F56B0 */));   // h:193
+            CGS_ARTIST_BRNBEHAVIOURSPIRALLINGDEATHCAM_FILE, 193 /* ARTIST 0x821F56B0 */));   // h:193
     mpParameters = lpParameters;   // stw 0x2D0(this)
 }
 
@@ -373,3 +373,6 @@ void BehaviourSpirallingDeathcam::Parameters::Construct()
 
 } // namespace Camera
 } // namespace BrnDirector
+
+#undef CGS_ARTIST_FILE
+#undef CGS_ARTIST_BRNBEHAVIOURSPIRALLINGDEATHCAM_FILE

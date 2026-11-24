@@ -119,7 +119,7 @@ namespace BrnGameState
                 lStrStream << "invalid index : " << luIndex << " < " << luCapacity;
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert(lStrStream.GetBuffer(),
-                                           "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsBitArray.h", 203);
+                                           CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Containers/CgsBitArray.h", 203));
                 CgsDev::Assert::EndAssert();
             }
 
@@ -305,7 +305,7 @@ namespace BrnGameState
                 lStrStream << "Unknown state in GameStateInviteManager::UpdatePrepareForInvite: "
                            << static_cast<s32>(mePrepareInviteSubstate) << "\n";
                 CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), KAC_INVITE_MANAGER_FILE, 296);
+                CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), CGS_ASSERT_LOCATION(KAC_INVITE_MANAGER_FILE, 296));
                 CgsDev::Assert::EndAssert();
                 break;
             }
@@ -321,7 +321,7 @@ namespace BrnGameState
     {
         const PreparedForInviteAction* lpPreparedForInviteAction =
             reinterpret_cast<const PreparedForInviteAction*>(lpAction);
-        CGS_ASSERT(lpPreparedForInviteAction, CgsDev::Assert::MessageAt("lpPreparedForInviteAction", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/InviteManager/BrnGameStateInviteManager.cpp", 505));
+        CGS_ASSERT(lpPreparedForInviteAction, CGS_ASSERT_MESSAGE_AT("lpPreparedForInviteAction", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/InviteManager/BrnGameStateInviteManager.cpp", 505));
 
         mModulePreparedBitArray.SetBit(lpPreparedForInviteAction->meModulePreparedForInvite);
     }
@@ -391,7 +391,7 @@ namespace BrnGameState
                 CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
                 lStrStream << "Unknown state in GameStateInviteManager: " << static_cast<s32>(meInviteState) << "\n";
                 CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), KAC_INVITE_MANAGER_FILE, 209);
+                CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), CGS_ASSERT_LOCATION(KAC_INVITE_MANAGER_FILE, 209));
                 CgsDev::Assert::EndAssert();
                 break;
             }

@@ -2,7 +2,7 @@
 #include "GameSource/Network/Messages/BrnCarSelectMessage.h"
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsMessage.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Messages/BrnCarSelectMessage.cpp"
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnNetwork::CarSelectMessage::GetPackedMessageSize @ 0x8257A538
 //   BrnNetwork::CarSelectMessage::PackOrUnpack         @ 0x8257A560
@@ -88,9 +88,9 @@ namespace BrnNetwork
 
         CgsNetwork::ReliableMessage::PrepareForSend(KI_CAR_SELECT_MESSAGE_TYPE, lu16Frame);
         CGS_ASSERT(IsReliable(),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "IsReliable()",
-                "..\\..\\..\\GameSource\\Network/Messages/BrnCarSelectMessage.cpp", 110 /* ARTIST 0x8257A50C */));
+                CGS_ARTIST_FILE, 110 /* ARTIST 0x8257A50C */));
     }
 
     // ---------------------------------------------------------------------------------
@@ -103,24 +103,24 @@ namespace BrnNetwork
                                     u16* lpu16CarColourIndex, u16* lpu16CarPaintFinishIndex,
                                     f32* lpfBaseDeformationAmount, bool* lpbFinalSelection)
     {
-        CGS_ASSERT(lpCarId, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpCarId, CGS_ASSERT_MESSAGE_AT(
             "lpCarId",
-            "..\\..\\..\\GameSource\\Network/Messages/BrnCarSelectMessage.cpp", 134 /* ARTIST 0x8257E034 */));
-        CGS_ASSERT(lpWheelId, CgsDev::Assert::MessageAt(
+            CGS_ARTIST_FILE, 134 /* ARTIST 0x8257E034 */));
+        CGS_ASSERT(lpWheelId, CGS_ASSERT_MESSAGE_AT(
             "lpWheelId",
-            "..\\..\\..\\GameSource\\Network/Messages/BrnCarSelectMessage.cpp", 135 /* ARTIST 0x8257E058 */));
-        CGS_ASSERT(lpbFinalSelection, CgsDev::Assert::MessageAt(
+            CGS_ARTIST_FILE, 135 /* ARTIST 0x8257E058 */));
+        CGS_ASSERT(lpbFinalSelection, CGS_ASSERT_MESSAGE_AT(
             "lpbFinalSelection",
-            "..\\..\\..\\GameSource\\Network/Messages/BrnCarSelectMessage.cpp", 136 /* ARTIST 0x8257E07C */));
-        CGS_ASSERT(lpu16CarColourIndex, CgsDev::Assert::MessageAt(
+            CGS_ARTIST_FILE, 136 /* ARTIST 0x8257E07C */));
+        CGS_ASSERT(lpu16CarColourIndex, CGS_ASSERT_MESSAGE_AT(
             "lpu16CarColourIndex",
-            "..\\..\\..\\GameSource\\Network/Messages/BrnCarSelectMessage.cpp", 137 /* ARTIST 0x8257E0A0 */));
-        CGS_ASSERT(lpu16CarPaintFinishIndex, CgsDev::Assert::MessageAt(
+            CGS_ARTIST_FILE, 137 /* ARTIST 0x8257E0A0 */));
+        CGS_ASSERT(lpu16CarPaintFinishIndex, CGS_ASSERT_MESSAGE_AT(
             "lpu16CarPaintFinishIndex",
-            "..\\..\\..\\GameSource\\Network/Messages/BrnCarSelectMessage.cpp", 138 /* ARTIST 0x8257E0C4 */));
-        CGS_ASSERT(lpfBaseDeformationAmount, CgsDev::Assert::MessageAt(
+            CGS_ARTIST_FILE, 138 /* ARTIST 0x8257E0C4 */));
+        CGS_ASSERT(lpfBaseDeformationAmount, CGS_ASSERT_MESSAGE_AT(
             "lpfBaseDeformationAmount",
-            "..\\..\\..\\GameSource\\Network/Messages/BrnCarSelectMessage.cpp", 139 /* ARTIST 0x8257E0E8 */));
+            CGS_ARTIST_FILE, 139 /* ARTIST 0x8257E0E8 */));
 
         // ARTIST 0x8257E0FC branches to a trailing `return false` (0x8257E170): the copy-out is the body
         // of the valid test.
@@ -134,11 +134,13 @@ namespace BrnNetwork
             *lpfBaseDeformationAmount  = mfBaseDeformationAmount;   // lfs +0x38
 
             mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
-            CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0, CgsDev::Assert::MessageAt(
+            CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0, CGS_ASSERT_MESSAGE_AT(
                 "!CgsNetwork::ReliableMessage::IsMessageValid()",
-                "..\\..\\..\\GameSource\\Network/Messages/BrnCarSelectMessage.cpp", 154 /* ARTIST 0x8257E15C */));
+                CGS_ARTIST_FILE, 154 /* ARTIST 0x8257E15C */));
             return true;
         }
         return false;
     }
 } // namespace BrnNetwork
+
+#undef CGS_ARTIST_FILE

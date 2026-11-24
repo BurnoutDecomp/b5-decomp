@@ -220,7 +220,7 @@ void GameStateModule::ProcessGameEvents(const GameStateModuleIO::GameEventQueue*
             CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
             lMessage << "Unexpected game event result id:" << liEventType << "\n";
             CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp", 4589);
+                CGS_ASSERT_LOCATION("d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp", 4589));
             CgsDev::Assert::EndAssert();
             break;
         }

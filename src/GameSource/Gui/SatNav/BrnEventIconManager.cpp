@@ -110,7 +110,7 @@ namespace BrnGui
     void EventIconManager::ReleaseResources(CgsGui::StateInterface* lpStateInterface,
                                             f32 lfOptionalFadeDuration)
     {
-        CGS_ASSERT(lpStateInterface != NULL, CgsDev::Assert::MessageAt("lpStateInterface", __FILE__, 173 /* ARTIST 0x825174FC */));   // cpp:173
+        CGS_ASSERT(lpStateInterface != NULL, CGS_ASSERT_MESSAGE_AT("lpStateInterface", __FILE__, 173 /* ARTIST 0x825174FC */));   // cpp:173
 
         // `*(this + 2100) = 0` -- the count only; the console leaves the table itself alone.
         miNumEventIcons = 0;
@@ -130,10 +130,10 @@ namespace BrnGui
     void EventIconManager::Update2DIcons(const EventIcon2D* lpaEventIcons, s32 liNumIcons)
     {
         CGS_ASSERT(liNumIcons <= KI_MAX_2DEVENTICONS,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "liNumIcons <= KI_MAX_2DEVENTICONS", __FILE__, 101 /* ARTIST 0x824F5968 */));
         CGS_ASSERT(lpaEventIcons != NULL,
-            CgsDev::Assert::MessageAt("lpaEventIcons", __FILE__, 102 /* ARTIST 0x824F598C */));
+            CGS_ASSERT_MESSAGE_AT("lpaEventIcons", __FILE__, 102 /* ARTIST 0x824F598C */));
 
         std::memcpy(ma2DEventIcons, lpaEventIcons, sizeof(EventIcon2D) * liNumIcons);
         miNumEventIcons = liNumIcons;
@@ -142,7 +142,7 @@ namespace BrnGui
     // @ 0x824F59C8
     void EventIconManager::GetEventIconPositions(Vector2* lv2IconPositions, s32* lpiNumIcons)
     {
-        CGS_ASSERT(lpiNumIcons != NULL, CgsDev::Assert::MessageAt("lpiNumIcons", __FILE__, 122 /* ARTIST 0x824F5A00 */));
+        CGS_ASSERT(lpiNumIcons != NULL, CGS_ASSERT_MESSAGE_AT("lpiNumIcons", __FILE__, 122 /* ARTIST 0x824F5A00 */));
 
         // One 16-byte lane store per icon: {x, y, 0, 0} (the X360 zeroes the zw pair
         // before the lvx/stvx copy -- Vector2::Set semantics).
@@ -165,9 +165,9 @@ namespace BrnGui
     u32 EventIconManager::GetEventIDForIconIndex(s32 liIconIndex) const
     {
         CGS_ASSERT(liIconIndex >= 0,
-            CgsDev::Assert::MessageAt("liIconIndex >= 0", __FILE__, 153 /* ARTIST 0x824F5AA4 */));
+            CGS_ASSERT_MESSAGE_AT("liIconIndex >= 0", __FILE__, 153 /* ARTIST 0x824F5AA4 */));
         CGS_ASSERT(liIconIndex < miNumEventIcons,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "liIconIndex < miNumEventIcons", __FILE__, 154 /* ARTIST 0x824F5ACC */));
 
         return ma2DEventIcons[liIconIndex].muEventID;

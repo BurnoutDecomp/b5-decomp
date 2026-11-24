@@ -1,5 +1,5 @@
 #include "GameSource/Gui/CustomRenderer/BrnGuiCustRendererDebugComponent.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/CustomRenderer/BrnGuiCustRendererDebugComponent.cpp"
 #include "GameSource/Gui/BrnCustomRendererManager.h"                              // BrnGui::CustomRendererManager (owning manager)
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h" // CgsDev::Debug2DImmediateRender (DrawValue)
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                                // CGS_ASSERT
@@ -259,7 +259,7 @@ void GuiCustRendererDebugComponent::ToggleBoostBarDebugScreen()
 // ================= SetBoostColourDangerCallback  @0x824FC900 =================
 void GuiCustRendererDebugComponent::SetBoostColourDangerCallback(void* lpUserData)
 {
-    CGS_ASSERT(lpUserData != 0, CgsDev::Assert::StreamMessageAt("Invalid data in the callback", "..\\..\\..\\GameSource\\Gui/CustomRenderer/BrnGuiCustRendererDebugComponent.cpp", 293));
+    CGS_ASSERT(lpUserData != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid data in the callback", CGS_ARTIST_FILE, 293));
 
     GuiCustRendererDebugComponent* lpComponent = static_cast<GuiCustRendererDebugComponent*>(lpUserData);
     lpComponent->SetBoostColour(BrnWorld::E_BOOST_TYPE_DANGER);
@@ -267,7 +267,7 @@ void GuiCustRendererDebugComponent::SetBoostColourDangerCallback(void* lpUserDat
 
 void GuiCustRendererDebugComponent::SetBoostColourAggressionCallback(void* lpUserData)
 {
-    CGS_ASSERT(lpUserData != 0, CgsDev::Assert::StreamMessageAt("Invalid data in the callback", "..\\..\\..\\GameSource\\Gui/CustomRenderer/BrnGuiCustRendererDebugComponent.cpp", 307));
+    CGS_ASSERT(lpUserData != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid data in the callback", CGS_ARTIST_FILE, 307));
 
     GuiCustRendererDebugComponent* lpComponent = static_cast<GuiCustRendererDebugComponent*>(lpUserData);
     lpComponent->SetBoostColour(BrnWorld::E_BOOST_TYPE_AGGRESSION);
@@ -275,7 +275,7 @@ void GuiCustRendererDebugComponent::SetBoostColourAggressionCallback(void* lpUse
 
 void GuiCustRendererDebugComponent::SetBoostColourStuntsCallback(void* lpUserData)
 {
-    CGS_ASSERT(lpUserData != 0, CgsDev::Assert::StreamMessageAt("Invalid data in the callback", "..\\..\\..\\GameSource\\Gui/CustomRenderer/BrnGuiCustRendererDebugComponent.cpp", 321));
+    CGS_ASSERT(lpUserData != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid data in the callback", CGS_ARTIST_FILE, 321));
 
     GuiCustRendererDebugComponent* lpComponent = static_cast<GuiCustRendererDebugComponent*>(lpUserData);
     lpComponent->SetBoostColour(BrnWorld::E_BOOST_TYPE_STUNT);
@@ -288,7 +288,7 @@ void GuiCustRendererDebugComponent::SetBoostColourStuntsCallback(void* lpUserDat
 // ================================================================================================
 void GuiCustRendererDebugComponent::SetBoostColourToCustomCallback(void* lpUserData)
 {
-    CGS_ASSERT(lpUserData != 0, CgsDev::Assert::StreamMessageAt("Invalid data in the callback", "..\\..\\..\\GameSource\\Gui/CustomRenderer/BrnGuiCustRendererDebugComponent.cpp", 335));
+    CGS_ASSERT(lpUserData != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid data in the callback", CGS_ARTIST_FILE, 335));
 
     static_cast<GuiCustRendererDebugComponent*>(lpUserData)->SetBoostColourToCustom();
 }
@@ -302,7 +302,7 @@ void GuiCustRendererDebugComponent::SetBoostColourToCustomCallback(void* lpUserD
 // ================================================================================================
 void GuiCustRendererDebugComponent::ToggleBoostBarDebugScreenCallback(void* lpUserData)
 {
-    CGS_ASSERT(lpUserData != 0, CgsDev::Assert::StreamMessageAt("Invalid data in the callback", "..\\..\\..\\GameSource\\Gui/CustomRenderer/BrnGuiCustRendererDebugComponent.cpp", 349));
+    CGS_ASSERT(lpUserData != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid data in the callback", CGS_ARTIST_FILE, 349));
 
     GuiCustRendererDebugComponent* lpComponent = static_cast<GuiCustRendererDebugComponent*>(lpUserData);
 
@@ -312,3 +312,5 @@ void GuiCustRendererDebugComponent::ToggleBoostBarDebugScreenCallback(void* lpUs
 }
 
 }
+
+#undef CGS_ARTIST_FILE

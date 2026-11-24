@@ -4,7 +4,7 @@
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Network/CgsNetworkUtils.h"   // IPAddressIntToString
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\CgsNetworkAdapterBase.cpp"
 #include <cstring>
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
@@ -70,30 +70,30 @@ void NetworkAdapterBase::Construct()
 // one-packet receive buffer.
 NetworkAdapterBase::ENetworkStatus NetworkAdapterBase::Prepare(NetworkAdapterPrepareParams* lpPrepareParams)
 {
-    CGS_ASSERT(lpPrepareParams, CgsDev::Assert::MessageAt(
+    CGS_ASSERT(lpPrepareParams, CGS_ASSERT_MESSAGE_AT(
         "lpPrepareParams",
-        "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\CgsNetworkAdapterBase.cpp", 84 /* ARTIST 0x82870F10 */));
+        CGS_ARTIST_FILE, 84 /* ARTIST 0x82870F10 */));
 
     meServerType      = static_cast<EServerType>(lpPrepareParams->meServerType);
     mpNetworkManager  = lpPrepareParams->mpNetworkManager;
     mbDuplicateLogin  = false;
     mpServerInterface = lpPrepareParams->mpServerInterface;
     mpHeapMalloc      = static_cast<CgsMemory::HeapMalloc*>(lpPrepareParams->mpHeapMalloc);
-    CGS_ASSERT(mpHeapMalloc, CgsDev::Assert::MessageAt(
+    CGS_ASSERT(mpHeapMalloc, CGS_ASSERT_MESSAGE_AT(
         "mpHeapMalloc",
-        "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\CgsNetworkAdapterBase.cpp", 92 /* ARTIST 0x82870F5C */));
+        CGS_ARTIST_FILE, 92 /* ARTIST 0x82870F5C */));
 
     mpRecvBuffer = static_cast<u8*>(mpHeapMalloc->Malloc(static_cast<s32>(sizeof(NetGamePacketT)), 4));
 
-    CGS_ASSERT(mpNetworkManager, CgsDev::Assert::MessageAt(
+    CGS_ASSERT(mpNetworkManager, CGS_ASSERT_MESSAGE_AT(
         "mpNetworkManager",
-        "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\CgsNetworkAdapterBase.cpp", 96 /* ARTIST 0x82870F98 */));
-    CGS_ASSERT(mpServerInterface, CgsDev::Assert::MessageAt(
+        CGS_ARTIST_FILE, 96 /* ARTIST 0x82870F98 */));
+    CGS_ASSERT(mpServerInterface, CGS_ASSERT_MESSAGE_AT(
         "mpServerInterface",
-        "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\CgsNetworkAdapterBase.cpp", 97 /* ARTIST 0x82870FC0 */));
-    CGS_ASSERT(mpRecvBuffer, CgsDev::Assert::MessageAt(
+        CGS_ARTIST_FILE, 97 /* ARTIST 0x82870FC0 */));
+    CGS_ASSERT(mpRecvBuffer, CGS_ASSERT_MESSAGE_AT(
         "mpRecvBuffer",
-        "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\CgsNetworkAdapterBase.cpp", 98 /* ARTIST 0x82870FE8 */));
+        CGS_ARTIST_FILE, 98 /* ARTIST 0x82870FE8 */));
     return E_NET_STATUS_READY;
 }
 
@@ -106,9 +106,9 @@ bool NetworkAdapterBase::Release()
 
     if (mpRecvBuffer != 0)
     {
-        CGS_ASSERT(mpHeapMalloc, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpHeapMalloc, CGS_ASSERT_MESSAGE_AT(
             "mpHeapMalloc",
-            "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\CgsNetworkAdapterBase.cpp", 135 /* ARTIST 0x8287105C */));
+            CGS_ARTIST_FILE, 135 /* ARTIST 0x8287105C */));
         mpHeapMalloc->Free(mpRecvBuffer);
         mpRecvBuffer = 0;
     }
@@ -122,12 +122,12 @@ bool NetworkAdapterBase::Release()
 // message-sent hook sees the data; on failure the peer's address is logged.
 bool NetworkAdapterBase::SendTo(void* lpData, s32 liLength, ConnectionData lConnectionData)
 {
-    CGS_ASSERT(lConnectionData.IsValid(), CgsDev::Assert::MessageAt(
+    CGS_ASSERT(lConnectionData.IsValid(), CGS_ASSERT_MESSAGE_AT(
         "lConnectionData.IsValid()",
         __FILE__, 206 /* ARTIST 0x828710EC */));
 
     NetGamePacketT lPacket;
-    CGS_ASSERT((liLength) <= static_cast<int32_t>( sizeof(lPacket.body.data) ), CgsDev::Assert::MessageAt(
+    CGS_ASSERT((liLength) <= static_cast<int32_t>( sizeof(lPacket.body.data) ), CGS_ASSERT_MESSAGE_AT(
         "(liLength) <= static_cast<int32_t>( sizeof(lPacket.body.data) )",
         __FILE__, 208 /* ARTIST 0x82871110 */));
 
@@ -164,9 +164,9 @@ s32 NetworkAdapterBase::ReceiveFrom(void** lppData, ConnectionData lConnectionDa
     NetGamePacketT* lpPacket = reinterpret_cast<NetGamePacketT*>(mpRecvBuffer);
 
     CGS_ASSERT(lppData,
-        CgsDev::Assert::MessageAt("lppData", __FILE__, 262 /* ARTIST 0x8287122C */));
+        CGS_ASSERT_MESSAGE_AT("lppData", __FILE__, 262 /* ARTIST 0x8287122C */));
     CGS_ASSERT(mpRecvBuffer,
-        CgsDev::Assert::MessageAt("mpRecvBuffer", __FILE__, 263 /* ARTIST 0x82871254 */));
+        CGS_ASSERT_MESSAGE_AT("mpRecvBuffer", __FILE__, 263 /* ARTIST 0x82871254 */));
 
     if (lConnectionData.mpNetGameLink == 0)
     {
@@ -182,3 +182,5 @@ s32 NetworkAdapterBase::ReceiveFrom(void** lppData, ConnectionData lConnectionDa
 }
 
 }
+
+#undef CGS_ARTIST_FILE

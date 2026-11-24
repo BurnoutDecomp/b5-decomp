@@ -63,7 +63,7 @@ DispatchCommand* DispatchBin::AllocateCommand(u32 luNumExtraQwords)
 void* DispatchBin::AllocateMemoryFast(u32 luQwords)
 {
     CGS_ASSERT(m_pPacketStart == NULL,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "m_pPacketStart == NULL",
             "..\\..\\..\\GameShared\\GameClasses\\Graphics\\Dispatch\\CgsDispatcher.h", 437 /* ARTIST 0x822A0650 */));
 
@@ -101,11 +101,11 @@ void* DispatchBin::BeginAllocateMemory(u32 luMaxQwords)
     }
 
     CGS_ASSERT(m_pActiveAllocateMemoryBlock == NULL,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "m_pActiveAllocateMemoryBlock == NULL",
             KAC_ARTIST_ASSERT_FILE, 522 /* ARTIST 0x827F92B8 */));
     CGS_ASSERT(reinterpret_cast<void*>(m_pPacketStart) == reinterpret_cast<void*>(m_pNextWord),
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "m_pPacketStart == m_pNextWord",
             KAC_ARTIST_ASSERT_FILE, 525 /* ARTIST 0x827F92E4 */));
 
@@ -118,11 +118,11 @@ void* DispatchBin::BeginAllocateMemory(u32 luMaxQwords)
 void DispatchBin::BeginPacket()
 {
     CGS_ASSERT(m_pNextWord != NULL,
-        CgsDev::Assert::MessageAt("m_pNextWord != NULL", KAC_ARTIST_ASSERT_FILE, 455 /* ARTIST 0x822A06F4 */));
+        CGS_ASSERT_MESSAGE_AT("m_pNextWord != NULL", KAC_ARTIST_ASSERT_FILE, 455 /* ARTIST 0x822A06F4 */));
     CGS_ASSERT(m_pPacketStart == NULL,
-        CgsDev::Assert::MessageAt("m_pPacketStart == NULL", KAC_ARTIST_ASSERT_FILE, 456 /* ARTIST 0x822A071C */));
+        CGS_ASSERT_MESSAGE_AT("m_pPacketStart == NULL", KAC_ARTIST_ASSERT_FILE, 456 /* ARTIST 0x822A071C */));
     CGS_ASSERT(static_cast<u32>(m_pNextWord - m_pBin) < m_uSize,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "uint32_t( m_pNextWord - m_pBin ) < m_uSize",
             KAC_ARTIST_ASSERT_FILE, 457 /* ARTIST 0x822A0754 */));
 
@@ -135,15 +135,15 @@ void DispatchBin::BeginPacket()
 void DispatchBin::EndAllocateMemory(u32 luActualQwords)
 {
     CGS_ASSERT(m_pActiveAllocateMemoryBlock != NULL,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "m_pActiveAllocateMemoryBlock != NULL",
             KAC_ARTIST_ASSERT_FILE, 535 /* ARTIST 0x827E6690 */));
     CGS_ASSERT(reinterpret_cast<void*>(m_pPacketStart) == reinterpret_cast<void*>(m_pNextWord),
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "m_pPacketStart == m_pNextWord",
             KAC_ARTIST_ASSERT_FILE, 540 /* ARTIST 0x827E66BC */));
     CGS_ASSERT(reinterpret_cast<void*>(m_pPacketStart) == m_pActiveAllocateMemoryBlock,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "m_pPacketStart == m_pActiveAllocateMemoryBlock",
             KAC_ARTIST_ASSERT_FILE, 541 /* ARTIST 0x827E66E8 */));
 

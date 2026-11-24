@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Gui/CgsSaveLoadX360.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Gui/CgsSaveLoadX360.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // CGS_ASSERT
 
 // includes folded in from the CgsSaveLoadX360_w*.cpp partfiles (2026-09-15)
@@ -35,7 +35,7 @@ namespace CgsGui
     // X360 0x8284BD88.
     s32 XenonFileInputStream::GetSize() const
     {
-        CGS_ASSERT(mhFile != INVALID_HANDLE_VALUE, CgsDev::Assert::StreamMessageAt("File open failed!", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\CgsSaveLoadX360.h", 596));
+        CGS_ASSERT(mhFile != INVALID_HANDLE_VALUE, CGS_ASSERT_STREAM_MESSAGE_AT("File open failed!", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\CgsSaveLoadX360.h", 596));
         return miSize;
     }
 
@@ -246,7 +246,7 @@ namespace CgsGui
     s32 SaveLoadSystem::SaveReady()
     {
         CGS_ASSERT(false,
-            CgsDev::Assert::MessageAt("SaveReady called.\n", KAC_ARTIST_ASSERT_FILE, 917 /* ARTIST 0x8284C7EC */));
+            CGS_ASSERT_MESSAGE_AT("SaveReady called.\n", KAC_ARTIST_ASSERT_FILE, 917 /* ARTIST 0x8284C7EC */));
         return 0;
     }
 
@@ -254,21 +254,21 @@ namespace CgsGui
     void SaveLoadSystem::FoundEntry(const void*)
     {
         CGS_ASSERT(false,
-            CgsDev::Assert::MessageAt("FoundEntry called", KAC_ARTIST_ASSERT_FILE, 1252 /* ARTIST 0x8284CB94 */));
+            CGS_ASSERT_MESSAGE_AT("FoundEntry called", KAC_ARTIST_ASSERT_FILE, 1252 /* ARTIST 0x8284CB94 */));
     }
 
     // X360 0x8284CBC0. Realmc find-entries-done callback -- never expected on X360.
     void SaveLoadSystem::FindEntriesDone(u32, u32)
     {
         CGS_ASSERT(false,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "FindEntriesDone called", KAC_ARTIST_ASSERT_FILE, 1274 /* ARTIST 0x8284CBD4 */));
     }
 
     // X360 0x8284C648. Realmc delete result callback -- streamed assert stub.
     void SaveLoadSystem::DeleteDone()
     {
-        CGS_ASSERT(false, CgsDev::Assert::StreamMessageAt("DeleteDone: not implemented.", "..\\..\\..\\GameShared\\GameClasses\\Gui/CgsSaveLoadX360.cpp", 775));
+        CGS_ASSERT(false, CGS_ASSERT_STREAM_MESSAGE_AT("DeleteDone: not implemented.", CGS_ARTIST_FILE, 775));
     }
 }
 
@@ -339,9 +339,9 @@ namespace CgsGui
     const char* SaveLoadSystem::LocaleGetStrCallback(u32 luStringID)
     {
         CGS_ASSERT(luStringID < (sizeof(maRealmemcardStringIDs) / sizeof(maRealmemcardStringIDs[0])),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "liStringID < M_ARRAY_SIZE(maRealmemcardStringIDs)",
-                "..\\..\\..\\GameShared\\GameClasses\\Gui/CgsSaveLoadX360.cpp", 309 /* ARTIST 0x8284C1D4 */));
+                CGS_ARTIST_FILE, 309 /* ARTIST 0x8284C1D4 */));
         return maRealmemcardStringIDs[luStringID];
     }
 }
@@ -670,3 +670,5 @@ namespace CgsGui
         }
     }
 }
+
+#undef CGS_ARTIST_FILE

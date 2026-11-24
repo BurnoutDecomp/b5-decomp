@@ -24,7 +24,7 @@
 // carry. The PC GuiEventBoostInfo is the X360 shape, and AddGuiEvent<T> derives
 // id/size from the type (GetEventType() == 206, sizeof == 28).
 // ============================================================================
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeWorldToGui.cpp"
 #include "GameSource/Game/BrnGameModule.hpp"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT
@@ -76,7 +76,7 @@ void BrnGameModule::BridgeWorldVehicleDataToGui(
         lacMessage[0] = '\0';
         CgsDev::StrStream lStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
         lStream << "Invalid active vehicle interface in BrnGameModule::BridgeWorldVehicleDataToGui";
-        CgsDev::Assert::FireAssert(lacMessage, KPC_ASSERT_FILE, 231);
+        CgsDev::Assert::FireAssert(lacMessage, CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 231));
         CgsDev::Assert::EndAssert();
         return;   // the console's null interface would crash on the next read; honest early-out
     }
@@ -281,7 +281,7 @@ void BrnGameModule::BridgeWorldVehicleDataToGui(
         const EGlobalRaceCarIndex lePlayerGlobalIndex =
             lpWorldOutputBuffer->GetPlayerGlobalRaceCarIndex();
         CGS_ASSERT(lePlayerGlobalIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT,
-                   CgsDev::Assert::MessageAt("lePlayerGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeWorldToGui.cpp", 319));   // :319
+                   CGS_ASSERT_MESSAGE_AT("lePlayerGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 319));   // :319
 
         BrnGui::GuiPlayerRaceCarIdEvent lIdEvent;
         lIdEvent.mePlayerActiveRaceCarIndex = static_cast<s32>(lePlayerIndex);
@@ -305,7 +305,7 @@ void BrnGameModule::BridgeWorldVehicleDataToGui(
         lacMessage[0] = '\0';
         CgsDev::StrStream lStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
         lStream << "Invalid Boost Info struct in BrnGameModule::BridgeWorldVehicleDataToGui";
-        CgsDev::Assert::FireAssert(lacMessage, KPC_ASSERT_FILE, 316);
+        CgsDev::Assert::FireAssert(lacMessage, CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 316));
         CgsDev::Assert::EndAssert();
         return;
     }
@@ -418,7 +418,7 @@ void BrnGameModule::BridgeWorldVehicleDataToGui(
             lacMessage[0] = 0;
             CgsDev::StrStream lStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
             lStream << "Invalid race car state in BrnGameModule::BridgeWorldToGui";
-            CgsDev::Assert::FireAssert(lacMessage, KPC_ASSERT_FILE, 359);
+            CgsDev::Assert::FireAssert(lacMessage, CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 359));
             CgsDev::Assert::EndAssert();
         }
         else
@@ -459,7 +459,7 @@ void BrnGameModule::BridgeWorldVehicleDataToGui(
 
         const RCEntityGlobalRaceCarOutputInterface* lpGlobalInterface =
             lpWorldOutputBuffer->GetRaceCarGlobalOutputInterface();
-        CGS_ASSERT(lpGlobalInterface != 0, CgsDev::Assert::MessageAt("lpGlobalRaceCarOutput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeWorldToGui.cpp", 410));            // :410
+        CGS_ASSERT(lpGlobalInterface != 0, CGS_ASSERT_MESSAGE_AT("lpGlobalRaceCarOutput", CGS_ARTIST_FILE, 410));            // :410
 
         if (lpGlobalInterface != 0)
         {
@@ -587,7 +587,7 @@ void BrnGameModule::BridgeWorldVehicleDataToGui(
                 else
                 {
                     CgsDev::Assert::BeginAssert();
-                    CgsDev::Assert::FireAssert("Unknown car type", KPC_ASSERT_FILE, 466);
+                    CgsDev::Assert::FireAssert("Unknown car type", CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 466));
                     CgsDev::Assert::EndAssert();
                 }
 
@@ -834,8 +834,8 @@ void BrnGameModule::BridgeWorldTrafficAndPropDataToGui(
         CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
         const BrnWorldIO::UpdateOutputBuffer* lpWorldOutput)
 {
-    CGS_ASSERT(lpGuiInput != 0, CgsDev::Assert::MessageAt("lpGuiInput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeWorldToGui.cpp", 126));         // cpp:126 (`li r5, 0x7E` @0x823E5590)
-    CGS_ASSERT(lpWorldOutput != 0, CgsDev::Assert::MessageAt("lpWorldOutput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeWorldToGui.cpp", 127));   // cpp:127 (`li r5, 0x7F` @0x823E55B4)
+    CGS_ASSERT(lpGuiInput != 0, CGS_ASSERT_MESSAGE_AT("lpGuiInput", CGS_ARTIST_FILE, 126));         // cpp:126 (`li r5, 0x7E` @0x823E5590)
+    CGS_ASSERT(lpWorldOutput != 0, CGS_ASSERT_MESSAGE_AT("lpWorldOutput", CGS_ARTIST_FILE, 127));   // cpp:127 (`li r5, 0x7F` @0x823E55B4)
 
     const CgsModule::Event* lpEvent     = 0;   // DWARF :129
     s32                     liEventSize = 0;   // DWARF :130
@@ -973,3 +973,5 @@ void BrnGameModule::BridgeWorldImpactInformationToGui(
 }
 
 } // namespace BrnGame
+
+#undef CGS_ARTIST_FILE

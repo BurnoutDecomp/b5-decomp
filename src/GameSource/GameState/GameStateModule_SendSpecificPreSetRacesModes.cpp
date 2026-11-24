@@ -85,7 +85,7 @@
 // finish-point scan is what then reads such a record at index -1 (documented on its side);
 // "fixing" either half would change which bits the online-finish-point mask carries.
 //
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp"
 #include "GameSource/GameState/BrnGameStateModule.h"
 #include "GameSource/GameState/BrnGameStateModuleIO.h"                  // OutputBuffer + the interface accessor
 #include "GameSource/GameState/BrnGameStateSharedIO.h"                  // SpecificGameModeEventInterface
@@ -162,7 +162,7 @@ namespace
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("liNumCheckpoints<=KI_MAX_LANDMARKS_IN_MODE",
-                                       KAC_GAMESTATEMODULE_CPP, 6040);
+                                       CGS_ASSERT_LOCATION(KAC_GAMESTATEMODULE_CPP, 6040));
             CgsDev::Assert::EndAssert();
         }
 
@@ -187,7 +187,7 @@ namespace
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert(
                     "liCheckpointIndex >= 0 && liCheckpointIndex < miCheckpointCount",
-                    KAC_RACE_EVENT_DATA_H, 953);
+                    CGS_ASSERT_LOCATION(KAC_RACE_EVENT_DATA_H, 953));
                 CgsDev::Assert::EndAssert();
             }
 
@@ -221,9 +221,9 @@ void GameStateModule::SendSpecificPreSetRacesModesAction(
     const BrnTraffic::TrafficData* const lpTrafficData  = mTriggerQueryManager.GetTrafficData();
     const BrnTrigger::TriggerData* const lpTriggerData  = mTriggerQueryManager.GetTriggerData();
 
-    CGS_ASSERT(lpProgressionData != 0, CgsDev::Assert::MessageAt("lpProgressionData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp", 5992));   // :5992
-    CGS_ASSERT(lpTrafficData     != 0, CgsDev::Assert::MessageAt("lpTrafficData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp", 5993));       // :5993
-    CGS_ASSERT(lpTriggerData     != 0, CgsDev::Assert::MessageAt("lpTriggerData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp", 5994));       // :5994
+    CGS_ASSERT(lpProgressionData != 0, CGS_ASSERT_MESSAGE_AT("lpProgressionData", CGS_ARTIST_FILE, 5992));   // :5992
+    CGS_ASSERT(lpTrafficData     != 0, CGS_ASSERT_MESSAGE_AT("lpTrafficData", CGS_ARTIST_FILE, 5993));       // :5993
+    CGS_ASSERT(lpTriggerData     != 0, CGS_ASSERT_MESSAGE_AT("lpTriggerData", CGS_ARTIST_FILE, 5994));       // :5994
 
     if (lpOutput == 0 || lpProgressionData == 0 || lpTrafficData == 0 || lpTriggerData == 0)
     {
@@ -264,13 +264,13 @@ void GameStateModule::SendSpecificPreSetRacesModesAction(
             if (luHull >= BrnTraffic::KU_MAX_HULLS)
             {
                 CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert("luHull < KU_MAX_HULLS", KAC_LIGHT_TRIGGER_H, 211);
+                CgsDev::Assert::FireAssert("luHull < KU_MAX_HULLS", CGS_ASSERT_LOCATION(KAC_LIGHT_TRIGGER_H, 211));
                 CgsDev::Assert::EndAssert();
             }
             if (luTrigger >= 256u)
             {
                 CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert("luLightTriggerIndex < 256", KAC_LIGHT_TRIGGER_H, 212);
+                CgsDev::Assert::FireAssert("luLightTriggerIndex < 256", CGS_ASSERT_LOCATION(KAC_LIGHT_TRIGGER_H, 212));
                 CgsDev::Assert::EndAssert();
             }
 
@@ -365,15 +365,17 @@ void GameStateModule::SendSetLandmarkRacesAction(GameStateModuleIO::GameActionQu
 {
     const LandmarkIndex lCurrentLandmarkIndex = mModeManager.GetPlayerCurrentLandmark();
     CGS_ASSERT(static_cast<s32>(lCurrentLandmarkIndex) != -1,
-               CgsDev::Assert::MessageAt("lCurrentLandmarkIndex != K_INVALID_LANDMARK", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp", 5862));
+               CGS_ASSERT_MESSAGE_AT("lCurrentLandmarkIndex != K_INVALID_LANDMARK", CGS_ARTIST_FILE, 5862));
     CGS_ASSERT(static_cast<s32>(lCurrentLandmarkIndex) != -2,
-               CgsDev::Assert::MessageAt("lCurrentLandmarkIndex != K_MULTIPLE_LANDMARKS", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp", 5863));
+               CGS_ASSERT_MESSAGE_AT("lCurrentLandmarkIndex != K_MULTIPLE_LANDMARKS", CGS_ARTIST_FILE, 5863));
     GameStateModuleIO::SetLandmarkRacesAction lSlamAction;
     lSlamAction.muNumRaces = mProgressionManager.GetRacesAtLandmark(
         lSlamAction.maRaces, 6, lCurrentLandmarkIndex, true);
-    CGS_ASSERT(lSlamAction.muNumRaces > 0, CgsDev::Assert::MessageAt("lSlamAction.muNumRaces > 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp", 5869));
+    CGS_ASSERT(lSlamAction.muNumRaces > 0, CGS_ASSERT_MESSAGE_AT("lSlamAction.muNumRaces > 0", CGS_ARTIST_FILE, 5869));
     lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lSlamAction),
                            GameStateModuleIO::E_ACTION_SET_LANDMARK_RACES, sizeof(lSlamAction));
 }
 
 } // namespace BrnGameState
+
+#undef CGS_ARTIST_FILE

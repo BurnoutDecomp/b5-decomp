@@ -10,7 +10,7 @@
 #include <cstddef>   // offsetof
 #include <cstring>   // memset
 #include <cstdio>    // sscanf
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Resource/BrnDLCManager.h"
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnResource::DLCBeatTheTeamGame::SetEnabledState           @ 0x82472CA8 (caller: BrnGui::BootLegal::Update)
 //   BrnResource::DLCFeatureAvailability::Construct             @ 0x82662C48
@@ -19,9 +19,9 @@
 //
 // Construct owns feature-state/queue initialization. Prepare starts the original
 // worker in BrnDLCManagerMonitor.cpp and uses the native async-file providers.
-
+#define CGS_ARTIST_BRNDLCMANAGER_FILE "..\\..\\..\\GameSource\\Resource/BrnDLCManager.cpp"
 // The shared debug-HUD text helper (a global function, bodied in CgsDebug2DImmediateRender.cpp).
-
+#define CGS_ARTIST_CGSSTRINGUTILS_FILE "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h"
 static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Resource/BrnDLCManager.h";
 
 namespace BrnResource
@@ -46,7 +46,7 @@ namespace BrnResource
                          << static_cast<u32>(sizeof(lrPackage.mPath))
                          << ", string length = " << luPrefixLength << "\n";
                 CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                    "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 65);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_CGSSTRINGUTILS_FILE, 65));
                 CgsDev::Assert::EndAssert();
             }
             std::strcpy(lrPackage.mPath, lpcPrefix);
@@ -55,7 +55,7 @@ namespace BrnResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("(strlen(lpcSource)+strlen(lpcDest))<luBytes - 1",
-                    "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 75);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_CGSSTRINGUTILS_FILE, 75));
                 CgsDev::Assert::EndAssert();
             }
             std::strcat(lrPackage.mPath, lpcDirectory);
@@ -232,7 +232,7 @@ namespace BrnResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("invlaid package mask in version.txt",
-                    "..\\..\\..\\GameSource\\Resource/BrnDLCManager.cpp", 495);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_BRNDLCMANAGER_FILE, 495));
                 CgsDev::Assert::EndAssert();
             }
             maPackages[miCurrentPackage].miPriority = static_cast<s32>(
@@ -272,7 +272,7 @@ namespace BrnResource
         default:
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("Invalid stage",
-                "..\\..\\..\\GameSource\\Resource/BrnDLCManager.cpp", 605);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_BRNDLCMANAGER_FILE, 605));
             CgsDev::Assert::EndAssert();
             return false;
         }
@@ -351,10 +351,10 @@ namespace BrnResource
     u32 DLCFeatureAvailability::GetPackMask(s32 liPack) const
     {
         CGS_ASSERT(liPack >= E_DLC_DATA_PACK_START,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lPack >= E_DLC_DATA_PACK_START", KAC_ARTIST_ASSERT_FILE, 351 /* ARTIST 0x82661654 */));
         CGS_ASSERT(liPack < E_DLC_DATA_PACK_COUNT,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lPack < E_DLC_DATA_PACK_COUNT", KAC_ARTIST_ASSERT_FILE, 352 /* ARTIST 0x82661678 */));
 
         return mauPackMask[liPack];
@@ -365,8 +365,8 @@ namespace BrnResource
     // clearing any real (non-zero-mask) pack zeroes the whole availability mask. Reproduced faithfully.
     void DLCFeatureAvailability::SetPackAvailabilityState(s32 liPack, bool lbAvailable)
     {
-        CGS_ASSERT(liPack >= E_DLC_DATA_PACK_START, CgsDev::Assert::MessageAt("lPack >= E_DLC_DATA_PACK_START", "..\\..\\..\\GameSource\\Resource/BrnDLCManager.h", 362));
-        CGS_ASSERT(liPack < E_DLC_DATA_PACK_COUNT,  CgsDev::Assert::MessageAt("lPack < E_DLC_DATA_PACK_COUNT", "..\\..\\..\\GameSource\\Resource/BrnDLCManager.h", 363));
+        CGS_ASSERT(liPack >= E_DLC_DATA_PACK_START, CGS_ASSERT_MESSAGE_AT("lPack >= E_DLC_DATA_PACK_START", CGS_ARTIST_FILE, 362));
+        CGS_ASSERT(liPack < E_DLC_DATA_PACK_COUNT,  CGS_ASSERT_MESSAGE_AT("lPack < E_DLC_DATA_PACK_COUNT", CGS_ARTIST_FILE, 363));
 
         const u32 luMask = GetPackMask(liPack);
         if (lbAvailable)
@@ -390,7 +390,7 @@ namespace BrnResource
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("!(mbIsEnabled && !mbIsAvailable)",
-                "..\\..\\..\\GameSource\\Resource/BrnDLCManager.h", 405);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 405));
             CgsDev::Assert::EndAssert();
         }
     }
@@ -565,8 +565,8 @@ namespace BrnResource
             lStrStream << "Package " << liPackage << " is out of range\n";
             CgsDev::Assert::FireAssert(
                 CgsDev::Assert::gpcMessageBuffer,
-                "..\\..\\..\\GameSource\\Resource/BrnDLCManager.h",
-                332); // ARTIST 0x8266160C
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                332)); // ARTIST 0x8266160C
             CgsDev::Assert::EndAssert();
         }
 
@@ -587,7 +587,7 @@ namespace BrnResource
 
         default:
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("Invalid stage", "..\\..\\..\\GameSource\\Resource/BrnDLCManager.cpp", 642);
+            CgsDev::Assert::FireAssert("Invalid stage", CGS_ASSERT_LOCATION(CGS_ARTIST_BRNDLCMANAGER_FILE, 642));
             CgsDev::Assert::EndAssert();
             return false;
         }
@@ -620,3 +620,7 @@ namespace BrnResource
 
     }
 }
+
+#undef CGS_ARTIST_FILE
+#undef CGS_ARTIST_BRNDLCMANAGER_FILE
+#undef CGS_ARTIST_CGSSTRINGUTILS_FILE

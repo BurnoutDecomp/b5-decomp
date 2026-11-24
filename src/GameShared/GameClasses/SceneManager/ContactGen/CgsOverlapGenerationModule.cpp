@@ -222,7 +222,7 @@ void OverlapGenerationModule::Destruct()
 void OverlapGenerationModule::Update(const OverlapGenerationIO::InputBuffer* lpInputBuffer)
 {
     CGS_ASSERT(lpInputBuffer != NULL,
-        CgsDev::Assert::MessageAt("lpInputBuffer != NULL", KAC_ARTIST_ASSERT_FILE, 217 /* ARTIST 0x828CB8A4 */));
+        CGS_ASSERT_MESSAGE_AT("lpInputBuffer != NULL", KAC_ARTIST_ASSERT_FILE, 217 /* ARTIST 0x828CB8A4 */));
 
     lpInputBuffer->LockForRead();
 
@@ -438,7 +438,7 @@ void OverlapGenerationModule::ProcessForceNoPaddingQueue(const OverlapGeneration
 void OverlapGenerationModule::OutputCollidingPairs(OverlapGenerationIO::OutputBuffer* lpOutputBuffer)
 {
     CGS_ASSERT(lpOutputBuffer != NULL,
-        CgsDev::Assert::MessageAt("lpOutputBuffer != NULL", KAC_ARTIST_ASSERT_FILE, 398 /* ARTIST 0x828C1F7C */));
+        CGS_ASSERT_MESSAGE_AT("lpOutputBuffer != NULL", KAC_ARTIST_ASSERT_FILE, 398 /* ARTIST 0x828C1F7C */));
 
     const s32 liNumCollidingPairs = static_cast<s32>(mSweeper.GetNumCollidingPairs());
 

@@ -39,9 +39,9 @@ Matrix44Affine LightTrigger::GetTransform() const
 // R31 = 16*luIndex + this -> &maStartingPositions[luIndex] (array at +0).
 Vector3 LightTriggerStartData::GetStartPosition(u32 luIndex) const
 {
-    CGS_ASSERT(muNumStartingPositions <= KU_MAX_START_POSITIONS, CgsDev::Assert::MessageAt("muNumStartingPositions <= KU_MAX_START_POSITIONS", KAC_BRN_TRAFFIC_LIGHT_TRIGGER_ASSERT_FILE, 280));
-    CGS_ASSERT(luIndex < muNumStartingPositions, CgsDev::Assert::MessageAt("luIndex < muNumStartingPositions", KAC_BRN_TRAFFIC_LIGHT_TRIGGER_ASSERT_FILE, 281));
-    CGS_ASSERT(rw::math::vpu::IsValid(maStartingPositions[luIndex]), CgsDev::Assert::MessageAt("RwMath::IsValid( maStartingPositions[luIndex] )", KAC_BRN_TRAFFIC_LIGHT_TRIGGER_ASSERT_FILE, 282));
+    CGS_ASSERT(muNumStartingPositions <= KU_MAX_START_POSITIONS, CGS_ASSERT_MESSAGE_AT("muNumStartingPositions <= KU_MAX_START_POSITIONS", KAC_BRN_TRAFFIC_LIGHT_TRIGGER_ASSERT_FILE, 280));
+    CGS_ASSERT(luIndex < muNumStartingPositions, CGS_ASSERT_MESSAGE_AT("luIndex < muNumStartingPositions", KAC_BRN_TRAFFIC_LIGHT_TRIGGER_ASSERT_FILE, 281));
+    CGS_ASSERT(rw::math::vpu::IsValid(maStartingPositions[luIndex]), CGS_ASSERT_MESSAGE_AT("RwMath::IsValid( maStartingPositions[luIndex] )", KAC_BRN_TRAFFIC_LIGHT_TRIGGER_ASSERT_FILE, 282));
     return maStartingPositions[luIndex];
 }
 
@@ -50,9 +50,9 @@ Vector3 LightTriggerStartData::GetStartPosition(u32 luIndex) const
 // follows the 8-entry positions array, base +128).
 Vector3 LightTriggerStartData::GetStartDirection(u32 luIndex) const
 {
-    CGS_ASSERT(muNumStartingPositions <= KU_MAX_START_POSITIONS, CgsDev::Assert::MessageAt("muNumStartingPositions <= KU_MAX_START_POSITIONS", KAC_BRN_TRAFFIC_LIGHT_TRIGGER_ASSERT_FILE, 289));
-    CGS_ASSERT(luIndex < muNumStartingPositions, CgsDev::Assert::MessageAt("luIndex < muNumStartingPositions", KAC_BRN_TRAFFIC_LIGHT_TRIGGER_ASSERT_FILE, 290));
-    CGS_ASSERT(rw::math::vpu::IsValid(maStartingDirections[luIndex]), CgsDev::Assert::MessageAt("RwMath::IsValid( maStartingDirections[luIndex] )", KAC_BRN_TRAFFIC_LIGHT_TRIGGER_ASSERT_FILE, 291));
+    CGS_ASSERT(muNumStartingPositions <= KU_MAX_START_POSITIONS, CGS_ASSERT_MESSAGE_AT("muNumStartingPositions <= KU_MAX_START_POSITIONS", KAC_BRN_TRAFFIC_LIGHT_TRIGGER_ASSERT_FILE, 289));
+    CGS_ASSERT(luIndex < muNumStartingPositions, CGS_ASSERT_MESSAGE_AT("luIndex < muNumStartingPositions", KAC_BRN_TRAFFIC_LIGHT_TRIGGER_ASSERT_FILE, 290));
+    CGS_ASSERT(rw::math::vpu::IsValid(maStartingDirections[luIndex]), CGS_ASSERT_MESSAGE_AT("RwMath::IsValid( maStartingDirections[luIndex] )", KAC_BRN_TRAFFIC_LIGHT_TRIGGER_ASSERT_FILE, 291));
     return maStartingDirections[luIndex];
 }
 

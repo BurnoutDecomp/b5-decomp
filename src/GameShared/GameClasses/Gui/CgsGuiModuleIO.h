@@ -129,7 +129,7 @@ namespace CgsGuiModuleIO
     template <class T>
     void OutputBuffer::AddGuiOutEvent(T& lEvent)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n",
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n",
             "..\\..\\..\\GameShared\\GameClasses\\Gui/CgsGuiModuleIO.h", 235));
         mOutEvents.AddGuiEvent(lEvent);
     }

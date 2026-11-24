@@ -110,7 +110,7 @@ const char* const KPC_FILE =
 void FireSatNavAssert(const char* lpcExpression, s32 liLine)
 {
     CgsDev::Assert::BeginAssert();
-    CgsDev::Assert::FireAssert(lpcExpression, KPC_FILE, liLine);
+    CgsDev::Assert::FireAssert(lpcExpression, CGS_ASSERT_LOCATION(KPC_FILE, liLine));
     CgsDev::Assert::EndAssert();
 }
 
@@ -657,7 +657,7 @@ void SatNavRenderer::RefreshSatNavIconInfo(s32 liEventId)
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("mpWorldDataController",
-                                   "..\\..\\..\\GameSource\\Gui/BrnGuiCache.h", 2324);
+                                   CGS_ASSERT_LOCATION("..\\..\\..\\GameSource\\Gui/BrnGuiCache.h", 2324));
         CgsDev::Assert::EndAssert();
     }
 

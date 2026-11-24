@@ -1,5 +1,5 @@
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourRenderMetrics.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourRenderMetrics.cpp"
 #include <string.h>                                                // _stricmp / strlen
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                 // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"            // CgsCore::SPrintf
@@ -285,9 +285,9 @@ bool BehaviourRenderMetrics::Update(Camera& lrCamera, const BehaviourSharedInfo&
 void BehaviourRenderMetrics::SetParameters(const Behaviour::Parameters* lpParameters)
 {
     CGS_ASSERT(lpParameters->GetType() == eBehaviourRenderMetrics,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lpParameters->GetType() == eBehaviourRenderMetrics",
-            "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourRenderMetrics.cpp", 434 /* ARTIST 0x821FB2B8 */));
+            CGS_ARTIST_FILE, 434 /* ARTIST 0x821FB2B8 */));
     mpParameters = static_cast<const Parameters*>(lpParameters);
 }
 
@@ -359,7 +359,7 @@ void BehaviourRenderMetrics::GameTalkMessageReceiver(EA::GameTalk::GameTalkMessa
         {
             const f32* lpfContent = static_cast<const f32*>(lpMessage->GetContent(liIndex));
             CGS_ASSERT(lpMessage->GetSize(liIndex) >= (int)(6 * sizeof(f32)),
-                       CgsDev::Assert::MessageAt("lpMessage->GetSize(luIndex) >= (int)(6 * sizeof(float32_t))", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourRenderMetrics.cpp", 132));
+                       CGS_ASSERT_MESSAGE_AT("lpMessage->GetSize(luIndex) >= (int)(6 * sizeof(float32_t))", CGS_ARTIST_FILE, 132));
 
             {
                 const Vector3 lAggregateValue(lpfContent[0], lpfContent[1], lpfContent[2]);
@@ -380,3 +380,5 @@ void BehaviourRenderMetrics::GameTalkMessageReceiver(EA::GameTalk::GameTalkMessa
 
 }
 }
+
+#undef CGS_ARTIST_FILE

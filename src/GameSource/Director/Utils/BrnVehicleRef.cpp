@@ -1,5 +1,5 @@
 #include "GameSource/Director/Utils/BrnVehicleRef.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Director/Utils/BrnVehicleRef.h"
 // Reconstructed BrnDirector::VehicleRef::Construct.
 //
 // Behaviour-faithful:
@@ -49,7 +49,7 @@ namespace BrnDirector
             break;
 
         default:
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt("unknown type", "..\\..\\..\\GameSource\\Director/Utils/BrnVehicleRef.h", 195));          // BrnVehicleRef.h:195 (non-gating)
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unknown type", CGS_ARTIST_FILE, 195));          // BrnVehicleRef.h:195 (non-gating)
             break;
         }
     }
@@ -70,9 +70,9 @@ namespace BrnDirector
         meType         = E_RACE_CAR;
         muRef          = 0;
         CGS_ASSERT(static_cast<s32>(leRaceCar) < KI_MAX_NUM_RACE_CARS,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "meRaceCarIndex < BrnPhysics::Vehicle::ku8MaxNumRaceCars",
-                "..\\..\\..\\GameSource\\Director/Utils/BrnVehicleRef.h", 222 /* ARTIST 0x821F2A0C */));   // BrnVehicleRef.h:222
+                CGS_ARTIST_FILE, 222 /* ARTIST 0x821F2A0C */));   // BrnVehicleRef.h:222
     }
 
     // @ 0x821F2A38 (class:BrnDirector::VehicleRef TU) -- memberwise inequality over
@@ -89,3 +89,5 @@ namespace BrnDirector
         return false;
     }
 }
+
+#undef CGS_ARTIST_FILE

@@ -1,6 +1,6 @@
 #ifndef GAMESOURCE_DIRECTOR_UTILS_BRN_DIRECTOR_TIMESTEP_H
 #define GAMESOURCE_DIRECTOR_UTILS_BRN_DIRECTOR_TIMESTEP_H
-
+#define CGS_ARTIST_BRNDIRECTORTIMESTEP_FILE "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorTimestep.h"
 #include "types.hpp"
 #include "rw/math/vpu/types.h"                          // rw::math::vpu (the SIMD register type vocabulary)
 #include "GameShared/GameClasses/Core/CgsAssert.h"      // CGS_ASSERT (the Get bounds assert)
@@ -81,9 +81,9 @@ private:
 inline f32
 Timestep::Get(EType leType) const
 {
-    CGS_ASSERT(leType > E_TIMESTEP_INVALID && leType < E_TIMESTEP_COUNT, CgsDev::Assert::MessageAt(
+    CGS_ASSERT(leType > E_TIMESTEP_INVALID && leType < E_TIMESTEP_COUNT, CGS_ASSERT_MESSAGE_AT(
         "leType > E_TIMESTEP_INVALID && leType < E_TIMESTEP_COUNT",
-        "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorTimestep.h", 78 /* ARTIST 0x821F2908 */));
+        CGS_ARTIST_BRNDIRECTORTIMESTEP_FILE, 78 /* ARTIST 0x821F2908 */));
     return mafTimestep[leType];
 }
 
@@ -92,9 +92,9 @@ Timestep::Get(EType leType) const
 inline VecFloat
 Timestep::GetVecFloat(EType leType) const
 {
-    CGS_ASSERT(leType > E_TIMESTEP_INVALID && leType < E_TIMESTEP_COUNT, CgsDev::Assert::MessageAt(
+    CGS_ASSERT(leType > E_TIMESTEP_INVALID && leType < E_TIMESTEP_COUNT, CGS_ASSERT_MESSAGE_AT(
         "leType > E_TIMESTEP_INVALID && leType < E_TIMESTEP_COUNT",
-        "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorTimestep.h", 88 /* ARTIST 0x821F2978 */));
+        CGS_ARTIST_BRNDIRECTORTIMESTEP_FILE, 88 /* ARTIST 0x821F2978 */));
     return maVecFloatTimestep[leType];
 }
 
@@ -120,3 +120,5 @@ Timestep::Set(
 } // namespace BrnDirector
 
 #endif // GAMESOURCE_DIRECTOR_UTILS_BRN_DIRECTOR_TIMESTEP_H
+
+#undef CGS_ARTIST_BRNDIRECTORTIMESTEP_FILE

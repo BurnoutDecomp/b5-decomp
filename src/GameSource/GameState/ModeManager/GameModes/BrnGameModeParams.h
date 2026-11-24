@@ -270,7 +270,7 @@ public:
     const OpponentData* GetOpponentData(s32 liOpponentIndex) const
     {
         CGS_ASSERT(liOpponentIndex >= 0 && liOpponentIndex < GetOpponentCount(),
-                   CgsDev::Assert::MessageAt("liOpponentIndex>=0 && liOpponentIndex<GetOpponentCount()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\ModeManager/GameModes/BrnGameModeParams.h", 1154));   // BrnGameModeParams.h:1154
+                   CGS_ASSERT_MESSAGE_AT("liOpponentIndex>=0 && liOpponentIndex<GetOpponentCount()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\ModeManager/GameModes/BrnGameModeParams.h", 1154));   // BrnGameModeParams.h:1154
         return &maOpponentData.GetItem(static_cast<u32>(liOpponentIndex));
     }
 

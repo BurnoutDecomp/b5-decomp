@@ -22,7 +22,7 @@ namespace CgsSceneManager
     EntityId::SetEntityIndex( u32 luEntityIndex )
     {
         CGS_ASSERT( luEntityIndex < (1U << KU_NUM_BITS_FOR_ENTITY_NUM),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "luEntityIndex < (1U << KU_NUM_BITS_FOR_ENTITY_NUM)",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\CgsEntityId.h", 160 /* ARTIST 0x8229FF84 */));
         mId = ( mId & ~KU_ENTITY_INDEX_MASK )

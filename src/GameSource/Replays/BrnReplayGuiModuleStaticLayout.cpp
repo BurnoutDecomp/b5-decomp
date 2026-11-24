@@ -1,6 +1,6 @@
 #include "GameSource/Replays/BrnReplayGuiModuleStaticLayout.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\BurnoutConstants.h"
 #include "GameSource/BurnoutConstants.h"   // E_ACTIVE_RACE_CAR_INDEX_COUNT (CGS_ASSERT bound)
 
 #include <cstddef>   // offsetof
@@ -69,7 +69,7 @@ namespace BrnReplays
             maCarFlagsBuffer1[liIndex][0] = 0; // stb buffer1[i]+0
 
             CGS_ASSERT(liIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                       CgsDev::Assert::MessageAt("leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT", "..\\..\\..\\GameSource\\BurnoutConstants.h", 39));
+                       CGS_ASSERT_MESSAGE_AT("leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 39));
         }
 
         return this;
@@ -103,7 +103,7 @@ namespace BrnReplays
                 maCarFlagsBuffer1[liIndex][0] = 0;
 
             CGS_ASSERT(liIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                       CgsDev::Assert::MessageAt("leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT", "..\\..\\..\\GameSource\\BurnoutConstants.h", 39));
+                       CGS_ASSERT_MESSAGE_AT("leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 39));
         }
 
         return this;
@@ -127,3 +127,5 @@ namespace BrnReplays
         return this;
     }
 }
+
+#undef CGS_ARTIST_FILE

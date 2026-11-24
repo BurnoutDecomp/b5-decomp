@@ -50,9 +50,9 @@ void HullRuntime::Construct()
 void HullRuntime::Prepare(const Hull* lpHull, u16 luHull)
 {
     CGS_ASSERT(lpHull != 0,
-        CgsDev::Assert::MessageAt("lpHull", KAC_ARTIST_ASSERT_FILE, 71 /* ARTIST 0x82751468 */));
+        CGS_ASSERT_MESSAGE_AT("lpHull", KAC_ARTIST_ASSERT_FILE, 71 /* ARTIST 0x82751468 */));
     CGS_ASSERT(mbPrepared == false,
-        CgsDev::Assert::MessageAt("mbPrepared == false", KAC_ARTIST_ASSERT_FILE, 72 /* ARTIST 0x82751490 */));
+        CGS_ASSERT_MESSAGE_AT("mbPrepared == false", KAC_ARTIST_ASSERT_FILE, 72 /* ARTIST 0x82751490 */));
 
     for (u32 luStopline = 0; luStopline < lpHull->muNumStoplines; ++luStopline)
     {
@@ -81,7 +81,7 @@ void HullRuntime::Prepare(const Hull* lpHull, u16 luHull)
 void HullRuntime::Release()
 {
     CGS_ASSERT(mbPrepared == true,
-        CgsDev::Assert::MessageAt("mbPrepared == true", KAC_ARTIST_ASSERT_FILE, 110 /* ARTIST 0x827515A0 */));
+        CGS_ASSERT_MESSAGE_AT("mbPrepared == true", KAC_ARTIST_ASSERT_FILE, 110 /* ARTIST 0x827515A0 */));
     mbPrepared = false;
 }
 

@@ -19,7 +19,7 @@
 // 0), and OnLeave records the trophy's unlock sequence as seen on the profile.
 // ===================================================================================
 #include "GameSource/Gui/Flow/PostEvent/States/Offline/BrnOfflineTrophyCarUnlock.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/PostEvent/States/Offline/BrnOfflineTrophyCarUnlock.cpp"
 #include <cstring>                                                        // strcmp
 
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                        // CGS_ASSERT
@@ -148,7 +148,7 @@ const u32 OfflineTrophyCarUnlock::muNumResourcesToLoad = 4;
 // pointer and the profile pointer.
 void OfflineTrophyCarUnlock::Construct(CgsID liId, CgsFsm::ScriptedFsm* lpFsm)
 {
-    CGS_ASSERT(lpFsm != 0, CgsDev::Assert::StreamMessageAt("Invalid ScriptedFsm ptr", "..\\..\\..\\GameSource\\Gui/Flow/PostEvent/States/Offline/BrnOfflineTrophyCarUnlock.cpp", 89));
+    CGS_ASSERT(lpFsm != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid ScriptedFsm ptr", CGS_ARTIST_FILE, 89));
 
     CgsGui::State::Construct(liId, lpFsm);
 
@@ -366,9 +366,9 @@ void OfflineTrophyCarUnlock::HandleIncomingEvents()
 void OfflineTrophyCarUnlock::AppendExpectedComponents()
 {
     CGS_ASSERT(mpGuiCache,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "mpGuiCache",
-            "..\\..\\..\\GameSource\\Gui/Flow/PostEvent/States/Offline/BrnOfflineTrophyCarUnlock.cpp", 401 /* ARTIST 0x824B9AC8 */));
+            CGS_ARTIST_FILE, 401 /* ARTIST 0x824B9AC8 */));
 
     mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mScreenAnim.GetName());
     mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mManufacturerIcon.GetName());
@@ -446,9 +446,9 @@ void OfflineTrophyCarUnlock::HandleAptTriggers(const CgsGui::GuiEventAptTriggerP
 void OfflineTrophyCarUnlock::HandleControllerInput(const CgsModule::Event* lpEvent, s32 liEventType)
 {
     CGS_ASSERT(lpEvent,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lpEvent",
-            "..\\..\\..\\GameSource\\Gui/Flow/PostEvent/States/Offline/BrnOfflineTrophyCarUnlock.cpp", 523 /* ARTIST 0x824BD188 */));
+            CGS_ARTIST_FILE, 523 /* ARTIST 0x824BD188 */));
 
     if (liEventType == KI_EVENT_CONTROLLER_INPUT_PRESSED)
     {
@@ -488,3 +488,5 @@ void OfflineTrophyCarUnlock::HandleControllerInputPressed(
     }
 }
 }
+
+#undef CGS_ARTIST_FILE

@@ -358,20 +358,20 @@ namespace BrnNetwork
     {
         BuddyManagerDebugComponent* lpBuddyDebug = static_cast<BuddyManagerDebugComponent*>(lpData);
         CGS_ASSERT(lpBuddyDebug,
-            CgsDev::Assert::MessageAt("lpBuddyDebug", __FILE__, 530 /* ARTIST 0x82591BA0 */));
+            CGS_ASSERT_MESSAGE_AT("lpBuddyDebug", __FILE__, 530 /* ARTIST 0x82591BA0 */));
 
         BuddyManagerBase* lpBuddyManager = lpBuddyDebug->mpBuddyManager;
         CGS_ASSERT(lpBuddyManager,
-            CgsDev::Assert::MessageAt("lpBuddyManager", __FILE__, 533 /* ARTIST 0x82591BC8 */));
+            CGS_ASSERT_MESSAGE_AT("lpBuddyManager", __FILE__, 533 /* ARTIST 0x82591BC8 */));
         CGS_ASSERT(lpBuddyManager->mpServerInterface->GetCustomCommandsComponent(),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpBuddyManager->mpServerInterface->GetCustomCommandsComponent()",
                 __FILE__, 535 /* ARTIST 0x82591BF4 */));
 
         ServerInterfaceCustomCommands* lpCustomCommandsComponent = static_cast<ServerInterfaceCustomCommands*>(
             lpBuddyManager->mpServerInterface->GetCustomCommandsComponent());
         CGS_ASSERT(lpCustomCommandsComponent,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpCustomCommandsComponent",
                 __FILE__, 537 /* ARTIST 0x82591C20 */));
 
@@ -381,7 +381,7 @@ namespace BrnNetwork
             const bool lbGotName = lpBuddyManager->GetBuddyName(
                 liBuddyIndex, &lpBuddyManager->maBuddyListAtUpload[lpBuddyManager->miNumBuddiesAtUpload]);
             CGS_ASSERT(lbGotName,
-                CgsDev::Assert::MessageAt(
+                CGS_ASSERT_MESSAGE_AT(
                     "lpBuddyManager->GetBuddyName( liBuddyIndex, &lpBuddyManager->maBuddyListAtUpload[lpBuddyManager->miNumBuddiesAtUpload] )",
                     __FILE__, 543 /* ARTIST 0x82591C90 */));
 

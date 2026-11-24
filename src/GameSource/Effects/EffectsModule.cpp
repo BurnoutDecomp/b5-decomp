@@ -1121,7 +1121,7 @@ bool EffectsModule::Release()
 
         default:
         {
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt("Invalid Stage\n", __FILE__, 816));
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Invalid Stage\n", __FILE__, 816));
         }
     }
     return false;
@@ -1434,7 +1434,7 @@ void EffectsModule::ProcessActiveRaceCars(const EffectsModuleParams& lrParams,
                                           bool lbBumperCam)
 {
     // ARTIST bakes EffectsModule.cpp:3252 (li r5,0xCB4 at 0x8229EB68).
-    CGS_ASSERT(lpActiveRaceCars != 0, CgsDev::Assert::MessageAt("lpActiveRaceCarInterface != NULL", __FILE__, 3252));
+    CGS_ASSERT(lpActiveRaceCars != 0, CGS_ASSERT_MESSAGE_AT("lpActiveRaceCarInterface != NULL", __FILE__, 3252));
     EActiveRaceCarIndex lePlayer = E_ACTIVE_RACE_CAR_INDEX_INVALID;
     if (lpActiveRaceCars->IsPlayerCarActive())
         lePlayer = lpActiveRaceCars->GetPlayerActiveRaceCarIndex();
@@ -3776,16 +3776,16 @@ void EffectsModule::HandleShowtimeTrafficBounce(
     CGS_ASSERT((lpJustBouncedAction != 0)
                || (lpJustBouncedAction == 0 && IsReplayPlayback(mEffectsSerialiser.GetMode())),
                "( NULL != lpJustBouncedAction ) || ( NULL == lpJustBouncedAction && mReplayEffectsSerialiser.IsPlaying() )");
-    CGS_ASSERT(lpEffectsInputBuffer != 0, CgsDev::Assert::MessageAt("NULL != lpEffectsInputBuffer", __FILE__, 2860));                   // :2860
+    CGS_ASSERT(lpEffectsInputBuffer != 0, CGS_ASSERT_MESSAGE_AT("NULL != lpEffectsInputBuffer", __FILE__, 2860));                   // :2860
 
     const CgsSystem::TimerStatus* const lpTimerStatus =
         lpEffectsInputBuffer->GetTimerStatusInterface()->GetSimTimerStatus();                  // `addi r31, r11, 0x18`
     const BrnDirector::Camera::Camera* const lpCamera = lpEffectsInputBuffer->GetCameraInput();
     const RCEntityActiveRaceCarOutputInterface* const lpActiveRaceCarInterface =
         lpEffectsInputBuffer->GetActiveRaceCarInterface();
-    CGS_ASSERT(lpTimerStatus != 0, CgsDev::Assert::MessageAt("NULL != lpTimerStatus", __FILE__, 2867));                                    // :2867
-    CGS_ASSERT(lpCamera != 0, CgsDev::Assert::MessageAt("NULL != lpCamera", __FILE__, 2868));                                              // :2868
-    CGS_ASSERT(lpActiveRaceCarInterface != 0, CgsDev::Assert::MessageAt("NULL != lpActiveRaceCarInterface", __FILE__, 2869));              // :2869
+    CGS_ASSERT(lpTimerStatus != 0, CGS_ASSERT_MESSAGE_AT("NULL != lpTimerStatus", __FILE__, 2867));                                    // :2867
+    CGS_ASSERT(lpCamera != 0, CGS_ASSERT_MESSAGE_AT("NULL != lpCamera", __FILE__, 2868));                                              // :2868
+    CGS_ASSERT(lpActiveRaceCarInterface != 0, CGS_ASSERT_MESSAGE_AT("NULL != lpActiveRaceCarInterface", __FILE__, 2869));              // :2869
 
     // (f32)seconds + fraction (`fcfid ; frsp ; fadds` 0x8229296C..0x8229297C).
     const f32 lfCurrentTime = lpTimerStatus->GetTime().GetFloatVal();
@@ -3806,7 +3806,7 @@ void EffectsModule::HandleShowtimeTrafficBounce(
     }
 
     CGS_ASSERT(lpActiveRaceCarInterface->IsPlayerCarActive() && lpActiveRaceCarInterface->IsPlayerCarCrashing(),
-               CgsDev::Assert::MessageAt("lpActiveRaceCarInterface->IsPlayerCarActive() && lpActiveRaceCarInterface->IsPlayerCarCrashing()", __FILE__, 2896));   // :2896
+               CGS_ASSERT_MESSAGE_AT("lpActiveRaceCarInterface->IsPlayerCarActive() && lpActiveRaceCarInterface->IsPlayerCarCrashing()", __FILE__, 2896));   // :2896
     const EActiveRaceCarIndex lePlayerCarIndex = lpActiveRaceCarInterface->GetPlayerActiveRaceCarIndex();       // :2696
     const RaceCarState* const lpRaceCarState   = lpActiveRaceCarInterface->GetRaceCarState(lePlayerCarIndex);   // :2697
     const Vector3& lrVelocity = lpRaceCarState->mLinearVelocity;                                                // +0x330
@@ -3930,7 +3930,7 @@ bool EffectsModule::JunkyardVfxReadLine(const char* label, char* output, s32 cap
         CgsDev::Assert::BeginAssert();
         CgsDev::StrStream stream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
         stream << "Found label \"" << label << "\" but no '='";
-        CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, __FILE__, 2484);
+        CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, CGS_ASSERT_LOCATION(__FILE__, 2484));
         CgsDev::Assert::EndAssert();
         return false;
     }
@@ -3947,7 +3947,7 @@ bool EffectsModule::JunkyardVfxReadLine(const char* label, char* output, s32 cap
             CgsDev::Assert::BeginAssert();
             CgsDev::StrStream stream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
             stream << "Parameter is too long\n" << output;
-            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, __FILE__, 2501);
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, CGS_ASSERT_LOCATION(__FILE__, 2501));
             CgsDev::Assert::EndAssert();
             return false;
         }
@@ -3959,7 +3959,7 @@ bool EffectsModule::JunkyardVfxReadLine(const char* label, char* output, s32 cap
         CgsDev::Assert::BeginAssert();
         CgsDev::StrStream stream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
         stream << "Missing parameter \"" << label << "\"";
-        CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, __FILE__, 2508);
+        CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, CGS_ASSERT_LOCATION(__FILE__, 2508));
         CgsDev::Assert::EndAssert();
         return false;
     }

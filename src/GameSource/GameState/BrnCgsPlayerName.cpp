@@ -3,7 +3,7 @@
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h" // CgsDev::StrStream (over-length assert message)
 #include <cstring>                                           // std::strlen / std::strncpy
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Network/Players/CgsPlayerName.h"
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsNetwork::PlayerName::Construct @ 0x8230E9C0
 //
@@ -20,7 +20,7 @@ namespace CgsNetwork
 
 void PlayerName::Construct(const char* lpcPlayerName)
 {
-    CGS_ASSERT(lpcPlayerName, CgsDev::Assert::MessageAt("lpcPlayerName", "..\\..\\..\\GameShared\\GameClasses\\Network/Players/CgsPlayerName.h", 86));
+    CGS_ASSERT(lpcPlayerName, CGS_ASSERT_MESSAGE_AT("lpcPlayerName", CGS_ARTIST_FILE, 86));
     if (std::strlen(lpcPlayerName) >= static_cast<u32>(KI_USERNAME_LENGTH))
     {
         CgsDev::Assert::BeginAssert();
@@ -30,8 +30,8 @@ void PlayerName::Construct(const char* lpcPlayerName)
                    << "' too long. Max length=" << static_cast<s32>(KI_USERNAME_LENGTH);
         CgsDev::Assert::FireAssert(
             lacMessageBuffer,
-            "..\\..\\..\\GameShared\\GameClasses\\Network/Players/CgsPlayerName.h",
-            87);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+            87));
         CgsDev::Assert::EndAssert();
     }
     // Inlined StrnCpy<KI_USERNAME_LENGTH>(macName, lpcPlayerName) bounds check.
@@ -43,8 +43,8 @@ void PlayerName::Construct(const char* lpcPlayerName)
         lStrStream << "String too long: " << (lpcPlayerName ? lpcPlayerName : "<NULLSTRING>");
         CgsDev::Assert::FireAssert(
             lacMessageBuffer,
-            "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h",
-            55);
+            CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h",
+            55));
         CgsDev::Assert::EndAssert();
     }
 
@@ -52,3 +52,5 @@ void PlayerName::Construct(const char* lpcPlayerName)
 }
 
 }
+
+#undef CGS_ARTIST_FILE

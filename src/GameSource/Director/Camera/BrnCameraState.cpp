@@ -9,7 +9,7 @@
 // Used by the camera behaviours to flag which camera outputs changed this frame
 // (BehaviourGameplayExternal::Update sets/clears; EffectsModule::Update queries HasChanged).
 // ============================================================================
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Director/Camera/BrnCameraState.cpp"
 #include "GameSource/Director/Camera/BrnCameraState.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/Camera/BrnCameraValidityAccount.h"   // sbFailFlagMaskSet / sFailFlagMask (Clear)
@@ -74,9 +74,9 @@ static const char* const KAAC_FLAG_NAMES[CameraState::E_FLAG_COUNT] =
 // ----------------------------------------------------------------------------
 const char* CameraState::GetDebugFlagName(EFlag leFlag)
 {
-    CGS_ASSERT(leFlag < E_FLAG_COUNT, CgsDev::Assert::MessageAt("leFlag < E_FLAG_COUNT", "..\\..\\..\\GameSource\\Director/Camera/BrnCameraState.cpp", 175));
+    CGS_ASSERT(leFlag < E_FLAG_COUNT, CGS_ASSERT_MESSAGE_AT("leFlag < E_FLAG_COUNT", CGS_ARTIST_FILE, 175));
     CGS_ASSERT(std::strcmp(KAAC_FLAG_NAMES[CONSISTENCY_TEST], "CONSISTENCY TEST") == 0,
-               CgsDev::Assert::MessageAt("!strcmp(KAAC_FLAG_NAMES[CONSISTENCY_TEST], \"CONSISTENCY TEST\")", "..\\..\\..\\GameSource\\Director/Camera/BrnCameraState.cpp", 179));
+               CGS_ASSERT_MESSAGE_AT("!strcmp(KAAC_FLAG_NAMES[CONSISTENCY_TEST], \"CONSISTENCY TEST\")", CGS_ARTIST_FILE, 179));
     return KAAC_FLAG_NAMES[leFlag];
 }
 
@@ -112,7 +112,7 @@ void CameraState::SetFlag(u32 luIndex, bool lbValue)
 // ----------------------------------------------------------------------------
 void CameraState::ClearFlag(u32 luIndex)
 {
-    CGS_ASSERT(luIndex < KU_NUM_FLAGS, CgsDev::Assert::MessageAt("luIndex < NUMBITS", "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsBitArray.h", 241));
+    CGS_ASSERT(luIndex < KU_NUM_FLAGS, CGS_ASSERT_MESSAGE_AT("luIndex < NUMBITS", "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsBitArray.h", 241));
     mCurrentFlags.UnSetBit(luIndex);                   // ldx/andc/stdx @ this+8
 }
 
@@ -155,7 +155,7 @@ void CameraState::Clear()
     mCurrentFlags.UnSetAll();     // std 0, this+0x08
     mPreviousFlags.UnSetAll();    // std 0, this+0x10
 
-    CGS_ASSERT(sbFailFlagMaskSet, CgsDev::Assert::MessageAt("sbFailFlagMaskSet", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\director\\camera\\BrnCameraValidityAccount.h", 193));   // :193 (non-gating)
+    CGS_ASSERT(sbFailFlagMaskSet, CGS_ASSERT_MESSAGE_AT("sbFailFlagMaskSet", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\director\\camera\\BrnCameraValidityAccount.h", 193));   // :193 (non-gating)
 
     // mHeadFlags &= sFailFlagMask (single-qword AND on the X360).
     for (u32 luFlag = 0; luFlag < KU_NUM_FLAGS; ++luFlag)
@@ -223,7 +223,7 @@ void CameraState::Construct()
 // ----------------------------------------------------------------------------
 CameraState CameraState::Interpolate(const CameraState& lrFrom, const CameraState& lrTo, f32 lfT)
 {
-    CGS_ASSERT(lfT >= 0.0f && lfT <= 1.0f, CgsDev::Assert::MessageAt("lfT >= 0.0f && lfT <= 1.0f", "..\\..\\..\\GameSource\\Director/Camera/BrnCameraState.cpp", 121));   // .cpp:121
+    CGS_ASSERT(lfT >= 0.0f && lfT <= 1.0f, CGS_ASSERT_MESSAGE_AT("lfT >= 0.0f && lfT <= 1.0f", CGS_ARTIST_FILE, 121));   // .cpp:121
 
     // The FAILED-range bits merged inside the `lfT < 1` arm (set OR clear).
     static const u32 KAU_MERGED_IN_ARM[2] = { 0u, 13u };
@@ -284,3 +284,5 @@ CameraState CameraState::Interpolate(const CameraState& lrFrom, const CameraStat
 
 } // namespace Camera
 } // namespace BrnDirector
+
+#undef CGS_ARTIST_FILE

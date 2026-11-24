@@ -91,8 +91,8 @@ namespace CgsDev
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 "liLogBufferSize > 0",
-                "..\\..\\..\\GameShared\\GameClasses\\Development/PerfMon/DebugComponent/CgsDebugComponentPerfMonCpu.cpp",
-                681);
+                CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Development/PerfMon/DebugComponent/CgsDebugComponentPerfMonCpu.cpp",
+                681));
             CgsDev::Assert::EndAssert();
         }
 

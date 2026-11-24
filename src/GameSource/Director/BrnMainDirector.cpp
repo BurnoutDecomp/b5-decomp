@@ -36,7 +36,7 @@
 // Each indexes a NOT-HOMED aggregate, paraphrases a VMX pipeline, or depends on un-dumped
 // rodata.
 // ============================================================================
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Director/BrnMainDirector.cpp"
 #include "GameSource/Director/BrnMainDirector.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"
@@ -308,7 +308,7 @@ namespace BrnDirector
         // ⭐ REAL (was held back for host size): the camera-behaviour manager.
         mBehaviourManager.Construct();
 
-        CGS_ASSERT(lpResourceManager != 0, CgsDev::Assert::MessageAt("lpDirectorResourceManager != NULL", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 168));
+        CGS_ASSERT(lpResourceManager != 0, CGS_ASSERT_MESSAGE_AT("lpDirectorResourceManager != NULL", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 168));
         mBehaviourManager.SetDirectorResourceManager(lpResourceManager);
 
         // ⭐ REAL (2026-09-24, FX-DIRECTOR moment tick): the moment controller -- its pool's
@@ -522,9 +522,9 @@ namespace BrnDirector
 
         default:
             CGS_ASSERT(false,
-                CgsDev::Assert::MessageAt(
+                CGS_ASSERT_MESSAGE_AT(
                     "Invalid Stage\n",
-                    "..\\..\\..\\GameSource\\Director/BrnMainDirector.cpp", 297 /* ARTIST 0x82236F54 */));
+                    CGS_ARTIST_FILE, 297 /* ARTIST 0x82236F54 */));
             return false;
         }
     }
@@ -1409,7 +1409,7 @@ namespace BrnDirector
         if (lpInput->GetPlayerTakenDown())
         {
             maGameState.mbPlayerWasTakenDown = true;                        // +0x1C3
-            CGS_ASSERT(lpInput->GetPlayerTakenDown(), CgsDev::Assert::MessageAt("mbPlayerTakenDown", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 232));
+            CGS_ASSERT(lpInput->GetPlayerTakenDown(), CGS_ASSERT_MESSAGE_AT("mbPlayerTakenDown", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 232));
             maGameState.mePlayerKillerIndex = lpInput->GetPlayerKillerCarIndex();  // +0x1C4
         }
 
@@ -3241,7 +3241,7 @@ namespace BrnDirector
         if (!maGameState.mbCanUseSlomo)
         {
             CGS_ASSERT(!(mbDebugAssertNoIllegalSlomo && lCamera.GetEffects().mfSimTimeScale != 1.0f),
-                       CgsDev::Assert::MessageAt("Trying to use slomo when not allowed", "..\\..\\..\\GameSource\\Director/BrnMainDirector.cpp", 711));
+                       CGS_ASSERT_MESSAGE_AT("Trying to use slomo when not allowed", CGS_ARTIST_FILE, 711));
             lCamera.GetEffects().mfSimTimeScale = 1.0f;
         }
 
@@ -3739,3 +3739,5 @@ namespace BrnDirector
         mICEWrapper.Update(lpIO->mpInputBuffer->GetTimerStatusInterface(), lCameraSpaces);
     }
 }
+
+#undef CGS_ARTIST_FILE

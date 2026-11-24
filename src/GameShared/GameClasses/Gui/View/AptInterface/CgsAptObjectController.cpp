@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptObjectController.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Gui/View/AptInterface/CgsAptObjectController.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"            // CGS_ASSERT, Begin/Fire/EndAssert
 #include "GameShared/GameClasses/Development/CgsStrStream.h"   // CgsDev::StrStream (dynamic assert message)
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiComponent.h"   // CgsGui::GuiComponent::GetName
@@ -53,16 +53,16 @@ namespace CgsGui
     // X360 0x8284A838. Return the controlled component's name.
     const char* ObjectController::GetName()
     {
-        CGS_ASSERT(mpControlledObject != 0, CgsDev::Assert::StreamMessageAt("Invalid component in GetName", "..\\..\\..\\GameShared\\GameClasses\\Gui/View/AptInterface/CgsAptObjectController.cpp", 104));
+        CGS_ASSERT(mpControlledObject != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid component in GetName", CGS_ARTIST_FILE, 104));
         return mpControlledObject->GetName();
     }
 
     // X360 0x8284A610. Register this object as an apt extension.
     void ObjectController::Register()
     {
-        CGS_ASSERT(mpControlledObject != 0, CgsDev::Assert::StreamMessageAt("Cannot register ourselves without knowing which GuiComponent we're attached to", "..\\..\\..\\GameShared\\GameClasses\\Gui/View/AptInterface/CgsAptObjectController.cpp", 67));
+        CGS_ASSERT(mpControlledObject != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Cannot register ourselves without knowing which GuiComponent we're attached to", CGS_ARTIST_FILE, 67));
 
-        CGS_ASSERT(!mbRegistered, CgsDev::Assert::StreamMessageAt("This object is already registered. Please UnRegister() first", "..\\..\\..\\GameShared\\GameClasses\\Gui/View/AptInterface/CgsAptObjectController.cpp", 68));
+        CGS_ASSERT(!mbRegistered, CGS_ASSERT_STREAM_MESSAGE_AT("This object is already registered. Please UnRegister() first", CGS_ARTIST_FILE, 68));
 
         AptRegisterExtension(this);
         mbRegistered = true;
@@ -71,8 +71,8 @@ namespace CgsGui
     // X360 0x8284A728. Tear down the apt-extension registration.
     void ObjectController::UnRegister()
     {
-        CGS_ASSERT(mpControlledObject != 0, CgsDev::Assert::StreamMessageAt("Not target object", "..\\..\\..\\GameShared\\GameClasses\\Gui/View/AptInterface/CgsAptObjectController.cpp", 84));
-        CGS_ASSERT(mbRegistered, CgsDev::Assert::StreamMessageAt("This object is not registered.", "..\\..\\..\\GameShared\\GameClasses\\Gui/View/AptInterface/CgsAptObjectController.cpp", 85));
+        CGS_ASSERT(mpControlledObject != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Not target object", CGS_ARTIST_FILE, 84));
+        CGS_ASSERT(mbRegistered, CGS_ASSERT_STREAM_MESSAGE_AT("This object is not registered.", CGS_ARTIST_FILE, 85));
 
         mbRegistered = false;
         AptUnRegisterExtension(this);
@@ -205,3 +205,5 @@ namespace CgsGui
         SetVariable(mpComponentReference, &lVariable, lpFloatValue);
     }
 }
+
+#undef CGS_ARTIST_FILE

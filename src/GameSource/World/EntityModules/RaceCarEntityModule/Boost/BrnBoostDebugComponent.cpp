@@ -23,8 +23,8 @@ namespace BrnWorld
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 "mpRaceCarEntityModule != NULL",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/RaceCarEntityModule/Boost/BrnBoostDebugComponent.cpp",
-                68);
+                CGS_ASSERT_LOCATION("d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/RaceCarEntityModule/Boost/BrnBoostDebugComponent.cpp",
+                68));
             CgsDev::Assert::EndAssert();
         }
         mpRaceCarEntityModule = 0;

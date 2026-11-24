@@ -1,6 +1,6 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Messages/BrnImageMessage.cpp"
 #include <xtl.h>     // XMemCpy: ARTIST Retrieve copies the photo through it (0x8257F228)
 
 #include "GameSource/Network/Messages/BrnImageMessage.h"
@@ -73,7 +73,7 @@ namespace BrnNetwork
             lStream << "We are " << GetPackedMessageSize() << " but we can only fit "
                     << KI_MAX_PACKED_IMAGE_MESSAGE_SIZE << " in a packet.";
             CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                "..\\..\\..\\GameSource\\Network/Messages/BrnImageMessage.cpp", 54); // ARTIST 0x8257C088
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 54)); // ARTIST 0x8257C088
             CgsDev::Assert::EndAssert();
         }
 
@@ -196,9 +196,9 @@ namespace BrnNetwork
         lxResult |= CgsNetwork::PackOrUnpackU16(this, &mu16NumberOfBytesOfPhotoData, 0, KI_PHOTO_SEGMENT_SIZE);
         lxResult |= CgsNetwork::Message::PackOrUnpack(&mBeatenRoadID);
 
-        CGS_ASSERT(mu16NumberOfBytesOfPhotoData <= KI_PHOTO_SEGMENT_SIZE, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mu16NumberOfBytesOfPhotoData <= KI_PHOTO_SEGMENT_SIZE, CGS_ASSERT_MESSAGE_AT(
             "mu16NumberOfBytesOfPhotoData <= KI_PHOTO_SEGMENT_SIZE",
-            "..\\..\\..\\GameSource\\Network/Messages/BrnImageMessage.cpp", 259 /* ARTIST 0x8257C208 */));
+            CGS_ARTIST_FILE, 259 /* ARTIST 0x8257C208 */));
 
         lxResult |= CgsNetwork::Message::PackOrUnpackBuffer(reinterpret_cast<char*>(macPhotoBuffer),
                                                    mu16NumberOfBytesOfPhotoData);
@@ -212,27 +212,27 @@ namespace BrnNetwork
                                 u16* lpu16TotalPacketCount, u16* lpu16NumberOfBytes,
                                 void* lpvPhotoData)
     {
-        CGS_ASSERT(lpSenderPlayerID, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpSenderPlayerID, CGS_ASSERT_MESSAGE_AT(
             "lpImageSenderPlayerID",
-            "..\\..\\..\\GameSource\\Network/Messages/BrnImageMessage.cpp", 173 /* ARTIST 0x8257F0C8 */));
-        CGS_ASSERT(lpReceiverPlayerID, CgsDev::Assert::MessageAt(
+            CGS_ARTIST_FILE, 173 /* ARTIST 0x8257F0C8 */));
+        CGS_ASSERT(lpReceiverPlayerID, CGS_ASSERT_MESSAGE_AT(
             "lpImageReceiverPlayerID",
-            "..\\..\\..\\GameSource\\Network/Messages/BrnImageMessage.cpp", 174 /* ARTIST 0x8257F0EC */));
-        CGS_ASSERT(lpu16PacketNumber, CgsDev::Assert::MessageAt(
+            CGS_ARTIST_FILE, 174 /* ARTIST 0x8257F0EC */));
+        CGS_ASSERT(lpu16PacketNumber, CGS_ASSERT_MESSAGE_AT(
             "lpu16PhotoPacketNumber",
-            "..\\..\\..\\GameSource\\Network/Messages/BrnImageMessage.cpp", 175 /* ARTIST 0x8257F110 */));
-        CGS_ASSERT(lpu16TotalPacketCount, CgsDev::Assert::MessageAt(
+            CGS_ARTIST_FILE, 175 /* ARTIST 0x8257F110 */));
+        CGS_ASSERT(lpu16TotalPacketCount, CGS_ASSERT_MESSAGE_AT(
             "lpu16TotalPhotoPacketCount",
-            "..\\..\\..\\GameSource\\Network/Messages/BrnImageMessage.cpp", 176 /* ARTIST 0x8257F134 */));
-        CGS_ASSERT(lpu16NumberOfBytes, CgsDev::Assert::MessageAt(
+            CGS_ARTIST_FILE, 176 /* ARTIST 0x8257F134 */));
+        CGS_ASSERT(lpu16NumberOfBytes, CGS_ASSERT_MESSAGE_AT(
             "lpu16NumberOfBytesOfPhotoData",
-            "..\\..\\..\\GameSource\\Network/Messages/BrnImageMessage.cpp", 177 /* ARTIST 0x8257F158 */));
-        CGS_ASSERT(lpvPhotoData, CgsDev::Assert::MessageAt(
+            CGS_ARTIST_FILE, 177 /* ARTIST 0x8257F158 */));
+        CGS_ASSERT(lpvPhotoData, CGS_ASSERT_MESSAGE_AT(
             "lpPhotoData",
-            "..\\..\\..\\GameSource\\Network/Messages/BrnImageMessage.cpp", 178 /* ARTIST 0x8257F180 */));
-        CGS_ASSERT(lpBeatenRoadID, CgsDev::Assert::MessageAt(
+            CGS_ARTIST_FILE, 178 /* ARTIST 0x8257F180 */));
+        CGS_ASSERT(lpBeatenRoadID, CGS_ASSERT_MESSAGE_AT(
             "lpBeatenRoadID",
-            "..\\..\\..\\GameSource\\Network/Messages/BrnImageMessage.cpp", 179 /* ARTIST 0x8257F1A4 */));
+            CGS_ARTIST_FILE, 179 /* ARTIST 0x8257F1A4 */));
 
         if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0)
         {
@@ -244,16 +244,16 @@ namespace BrnNetwork
             *lpu16TotalPacketCount = mu16TotalPhotoPacketCount;
             *lpu16NumberOfBytes  = mu16NumberOfBytesOfPhotoData;
 
-            CGS_ASSERT(mu16NumberOfBytesOfPhotoData <= KI_PHOTO_SEGMENT_SIZE, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(mu16NumberOfBytesOfPhotoData <= KI_PHOTO_SEGMENT_SIZE, CGS_ASSERT_MESSAGE_AT(
                 "mu16NumberOfBytesOfPhotoData <= KI_PHOTO_SEGMENT_SIZE",
-                "..\\..\\..\\GameSource\\Network/Messages/BrnImageMessage.cpp", 193 /* ARTIST 0x8257F214 */));
+                CGS_ARTIST_FILE, 193 /* ARTIST 0x8257F214 */));
 
             XMemCpy(lpvPhotoData, macPhotoBuffer, mu16NumberOfBytesOfPhotoData);
 
             mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
-            CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0, CgsDev::Assert::MessageAt(
+            CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0, CGS_ASSERT_MESSAGE_AT(
                 "!CgsNetwork::ReliableMessage::IsMessageValid()",
-                "..\\..\\..\\GameSource\\Network/Messages/BrnImageMessage.cpp", 200 /* ARTIST 0x8257F258 */));
+                CGS_ARTIST_FILE, 200 /* ARTIST 0x8257F258 */));
             return true;
         }
 
@@ -266,3 +266,5 @@ namespace BrnNetwork
         return true;
     }
 } // namespace BrnNetwork
+
+#undef CGS_ARTIST_FILE

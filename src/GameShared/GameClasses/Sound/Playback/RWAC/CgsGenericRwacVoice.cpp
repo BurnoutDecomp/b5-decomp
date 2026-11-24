@@ -35,7 +35,7 @@ GenericRwacVoice::GenericRwacVoice()
 // (whose constructor asserts the voice) and posts it.
 GenericRwacVoice::~GenericRwacVoice()
 {
-    CGS_ASSERT(MasterVoice::IsAvailable(), CgsDev::Assert::MessageAt(
+    CGS_ASSERT(MasterVoice::IsAvailable(), CGS_ASSERT_MESSAGE_AT(
         "MasterVoice::IsAvailable()", CGS_GENERIC_RWAC_VOICE_CPP_ASSERT_FILE, 57));
     RwacCommandVoiceRelease lCommand(mpVoice);
     GetRwacFactory().GetCommandQueue() << lCommand;
@@ -59,7 +59,7 @@ bool GenericRwacVoice::CreateVoiceInstance(
     mu16PluginCount = static_cast<uint16_t>(lpVoiceConfig->GetPluginCount());
     mu16FirstSendPlugin = static_cast<uint16_t>(lpVoiceConfig->GetFirstSendPlugin());
     CGS_ASSERT((E_MASTER_VOICE == lVoiceSpec.mu8VoiceType) || (mu16FirstSendPlugin > 0),
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "(E_MASTER_VOICE == lVoiceSpec.GetVoiceType()) || (mu16FirstSendPlugin > 0)",
             CGS_GENERIC_RWAC_VOICE_CPP_ASSERT_FILE, 84));
 

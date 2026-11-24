@@ -29,7 +29,7 @@
 // PushResult/PushResults cap writes at KU_MaxResults (0x4000 == 16384) from the asm.
 // ============================================================================
 #pragma once
-
+#define CGS_ARTIST_CGSCOARSEQUERYRESULTBUFFER_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\""SpatialPartitionModule/CgsCoarseQueryResultBuffer.h"
 #include "types.hpp"
 
 #include <cstring>   // std::memcpy (PushResults)
@@ -129,7 +129,7 @@ namespace CgsSceneManager
     u16* CoarseQueryResultBuffer<KU_MaxResults>::GetResultsBatch()
     {
         CGS_ASSERT(mbInABatch,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "GetResultsBatch called outside of a BeginResultsBatch/EndResultsBatch pair",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\"
                 "SpatialPartitionModule/CgsCoarseQueryResultBuffer.h", 200 /* ARTIST 0x828AD910 */));
@@ -165,7 +165,7 @@ namespace CgsSceneManager
     void CoarseQueryResultBuffer<KU_MaxResults>::EndResultsBatch()
     {
         CGS_ASSERT(mbInABatch,
-            CgsDev::Assert::MessageAt("EndResultsBatch called without a matching call to BeginResultsBatch",
+            CGS_ASSERT_MESSAGE_AT("EndResultsBatch called without a matching call to BeginResultsBatch",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\"
                 "SpatialPartitionModule/CgsCoarseQueryResultBuffer.h", 246 /* ARTIST 0x828ADA44 */));
 
@@ -221,7 +221,7 @@ namespace CgsSceneManager
     s32 CoarseQueryResultBuffer<KU_MaxResults>::GetNumResultsWritten() const
     {
         CGS_ASSERT(mbInABatch,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "GetNumResultsWritten called outside of a BeginResultsBatch/EndResultsBatch pair",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\"
                 "SpatialPartitionModule/CgsCoarseQueryResultBuffer.h", 328 /* ARTIST 0x828ADC90 */));
@@ -255,3 +255,5 @@ namespace CgsSceneManager
         return 0;
     }
 }
+
+#undef CGS_ARTIST_CGSCOARSEQUERYRESULTBUFFER_FILE

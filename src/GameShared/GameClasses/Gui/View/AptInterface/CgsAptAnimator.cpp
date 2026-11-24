@@ -78,7 +78,7 @@ namespace CgsGui
     // X360 0x82850280.
     void Animator::Destruct()
     {
-        CGS_ASSERT(mpObjectController != 0, CgsDev::Assert::StreamMessageAt("Must have valid ObjectController first", "..\\..\\..\\GameShared\\GameClasses\\Gui/View/AptInterface/CgsAptAnimator.cpp", 98));
+        CGS_ASSERT(mpObjectController != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Must have valid ObjectController first", "..\\..\\..\\GameShared\\GameClasses\\Gui/View/AptInterface/CgsAptAnimator.cpp", 98));
 
         mpObjectController->UnRegister();
         mpObjectController = 0;

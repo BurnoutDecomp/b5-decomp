@@ -43,7 +43,7 @@
 // ============================================================================
 #include "GameSource/Game/BrnGameModule.hpp"
 #include "GameSource/Game/GameBridgeGameStateToX.h"                // PushGuiEvent<T>
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                 // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                    // GuiHUDMessageSignSmashed / CrushCombo / ShowtimeMultiplier / ShowtimeModeSwitch
@@ -206,7 +206,7 @@ void BrnGameModule::TranslateShowtimeActionToGuiEvent(
     // path -- reproduced as written, no invented early-out.
     case E_ACTION_SHOWTIME_UPDATE:
     {
-        CGS_ASSERT(lpAction != 0, CgsDev::Assert::MessageAt("lpShowtimeUpdateAction", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 3976));     // :3976 (li r5, 0xF88)
+        CGS_ASSERT(lpAction != 0, CGS_ASSERT_MESSAGE_AT("lpShowtimeUpdateAction", CGS_ARTIST_FILE, 3976));     // :3976 (li r5, 0xF88)
         (void)KPC_ASSERT_FILE;
 
         const ShowtimeUpdateAction* const lpUpdateAction =
@@ -227,7 +227,7 @@ void BrnGameModule::TranslateShowtimeActionToGuiEvent(
     // `stb r11, ev+0x0C`. On a little-endian host the HIBYTE spelling would write ev+0x0F.
     case E_ACTION_SHOWTIME_MODE_SWITCH:
     {
-        CGS_ASSERT(lpAction != 0, CgsDev::Assert::MessageAt("lpShowtimeModeSwitchAction", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 3992)); // :3992 (li r5, 0xF98)
+        CGS_ASSERT(lpAction != 0, CGS_ASSERT_MESSAGE_AT("lpShowtimeModeSwitchAction", CGS_ARTIST_FILE, 3992)); // :3992 (li r5, 0xF98)
 
         const ShowtimeModeSwitchAction* const lpSwitchAction =
             reinterpret_cast<const ShowtimeModeSwitchAction*>(lpAction);
@@ -268,9 +268,11 @@ void BrnGameModule::TranslateShowtimeActionToGuiEvent(
     // the biased jump table means anything outside 127..144 never reaches this function at all
     // (the caller's switch selects the arm), so this really is the 129-138 hole.
     default:
-        CGS_ASSERT(false, CgsDev::Assert::MessageAt("Unknown Showtime action.", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 4075));            // :4075 (li r5, 0xFEB)
+        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Unknown Showtime action.", CGS_ARTIST_FILE, 4075));            // :4075 (li r5, 0xFEB)
         break;
     }
 }
 
 } // namespace BrnGame
+
+#undef CGS_ARTIST_FILE

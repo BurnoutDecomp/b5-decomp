@@ -20,7 +20,7 @@
 //
 // Callee declarations (BaseSerialiser, PropSerialiserFrame) live in their own TUs;
 // included here for the compile-only gate.
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayPropEntitySerialiser.h"
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
@@ -29,7 +29,7 @@
 // The class declaration moved to its DWARF home so other TUs (PropCellManager) can
 // call it; this TU keeps the bodies. See the header banner.
 #include "GameSource/Replays/Serialisers/BrnReplayPropEntitySerialiser.h"
-
+#define CGS_ARTIST_BRNREPLAYPROPENTITYSERIALISER_FILE "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayPropEntitySerialiser.cpp"
 namespace BrnReplays
 {
     // -------------------------------------------------------------------------
@@ -79,7 +79,7 @@ namespace BrnReplays
     s32 PropEntitySerialiser::Read(PropSerialiserStaticLayout* lpStaticLayout)
     {
         Lock();
-        CGS_ASSERT(lpStaticLayout != 0, CgsDev::Assert::MessageAt("lpStaticLayout", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayPropEntitySerialiser.cpp", 68));
+        CGS_ASSERT(lpStaticLayout != 0, CGS_ASSERT_MESSAGE_AT("lpStaticLayout", CGS_ARTIST_BRNREPLAYPROPENTITYSERIALISER_FILE, 68));
 
         // Only progress while actually playing back (mode == E_MODE_PLAYING). The asm
         // walks the playing family {4,5,6} then strips the prepare/stall/restore modes,
@@ -107,7 +107,7 @@ namespace BrnReplays
     s32 PropEntitySerialiser::Write(PropSerialiserStaticLayout* lpStaticLayout)
     {
         Lock();
-        CGS_ASSERT(lpStaticLayout != 0, CgsDev::Assert::MessageAt("lpStaticLayout", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayPropEntitySerialiser.cpp", 100));
+        CGS_ASSERT(lpStaticLayout != 0, CGS_ASSERT_MESSAGE_AT("lpStaticLayout", CGS_ARTIST_BRNREPLAYPROPENTITYSERIALISER_FILE, 100));
 
         // Only progress while recording (mode in the recording family {1,2,3}).
         if (meMode == E_MODE_RECORDING_PREPARING ||
@@ -178,9 +178,9 @@ namespace BrnReplays
         CGS_ASSERT(meMode != E_MODE_PLAYING_PREPARING &&
                    meMode != E_MODE_PLAYING &&
                    meMode != E_MODE_PLAYING_STALLED,
-                   CgsDev::Assert::MessageAt("!IsPlaying()", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayPropEntitySerialiser.h", 619));
+                   CGS_ASSERT_MESSAGE_AT("!IsPlaying()", CGS_ARTIST_FILE, 619));
 
-        CGS_ASSERT(mbPreviousFrameInitialized, CgsDev::Assert::MessageAt("mbPreviousFrameInitialized", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayPropEntitySerialiser.h", 620));
+        CGS_ASSERT(mbPreviousFrameInitialized, CGS_ASSERT_MESSAGE_AT("mbPreviousFrameInitialized", CGS_ARTIST_FILE, 620));
 
         PropSerialiserFrame* lpFrame = &GetStaticLayout()->mLiveFrame;
         PropLoadedZoneRecord* lpRecord = lpFrame->AllocateLoadedZoneRecord();
@@ -197,7 +197,7 @@ namespace BrnReplays
         CGS_ASSERT(meMode != E_MODE_PLAYING_PREPARING &&
                    meMode != E_MODE_PLAYING &&
                    meMode != E_MODE_PLAYING_STALLED,
-                   CgsDev::Assert::MessageAt("!IsPlaying()", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayPropEntitySerialiser.h", 632));
+                   CGS_ASSERT_MESSAGE_AT("!IsPlaying()", CGS_ARTIST_FILE, 632));
 
         if (!HasStaticLayout()) { return; }
         GetStaticLayout()->mLiveFrame.RemoveLoadedZone(liZoneId);
@@ -208,7 +208,7 @@ namespace BrnReplays
         CGS_ASSERT(meMode != E_MODE_PLAYING_PREPARING &&
                    meMode != E_MODE_PLAYING &&
                    meMode != E_MODE_PLAYING_STALLED,
-                   CgsDev::Assert::MessageAt("!IsPlaying()", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayPropEntitySerialiser.h", 733));
+                   CGS_ASSERT_MESSAGE_AT("!IsPlaying()", CGS_ARTIST_FILE, 733));
 
         if (!HasStaticLayout()) { return; }
         // asm: `stb 0,0x4008(staticBase)` -- the live frame's loaded-zone COUNT (frame +0x5E8).
@@ -221,9 +221,12 @@ namespace BrnReplays
         CGS_ASSERT(meMode != E_MODE_PLAYING_PREPARING &&
                    meMode != E_MODE_PLAYING &&
                    meMode != E_MODE_PLAYING_STALLED,
-                   CgsDev::Assert::MessageAt("!IsPlaying()", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayPropEntitySerialiser.h", 689));
+                   CGS_ASSERT_MESSAGE_AT("!IsPlaying()", CGS_ARTIST_FILE, 689));
 
         if (!HasStaticLayout()) { return; }
         GetStaticLayout()->mLiveFrame.SetPropAddedToScene(liArg2, luArg3, liArg4);
     }
 }
+
+#undef CGS_ARTIST_FILE
+#undef CGS_ARTIST_BRNREPLAYPROPENTITYSERIALISER_FILE

@@ -691,7 +691,7 @@ namespace BrnReplays
     // ----------------------------------------------------------------------------
     void DebugComponent::OnActivate()
     {
-        CGS_ASSERT(mpReplayModule != 0, CgsDev::Assert::StreamMessageAt("No replay module\n", "..\\..\\..\\GameSource\\Replays/BrnReplayDebugComponent.cpp", 788));
+        CGS_ASSERT(mpReplayModule != 0, CGS_ASSERT_STREAM_MESSAGE_AT("No replay module\n", "..\\..\\..\\GameSource\\Replays/BrnReplayDebugComponent.cpp", 788));
 
         RegisterVariable(&mbShowHud, "Show HUD");
         RegisterVariable(mpReplayModule->GetAutoStartFlagPtr(), "Enable auto-start");

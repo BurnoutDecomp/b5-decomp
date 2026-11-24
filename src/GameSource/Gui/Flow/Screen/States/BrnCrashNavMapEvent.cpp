@@ -223,7 +223,7 @@ namespace BrnGui
     void CrashNavMapEvent::Construct(CgsID liId, CgsFsm::ScriptedFsm* lpFsm)
     {
         CGS_ASSERT(lpFsm != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpFsm",
                 "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavMapEvent.cpp", 61 /* ARTIST 0x824B7538 */));                                   // cpp:61
 
@@ -339,7 +339,7 @@ namespace BrnGui
                                          CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
             lStrStream << "Invalid tracker pointer";
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), KAC_ASSERT_FILE, 616);
+            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), CGS_ASSERT_LOCATION(KAC_ASSERT_FILE, 616));
             CgsDev::Assert::EndAssert();
         }
 
@@ -369,7 +369,7 @@ namespace BrnGui
                                          CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
             lStrStream << "Invalid cache in CrashNavMapEvent::HandleControllerInput";
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), KAC_ASSERT_FILE, 635);
+            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), CGS_ASSERT_LOCATION(KAC_ASSERT_FILE, 635));
             CgsDev::Assert::EndAssert();
         }
 
@@ -442,7 +442,7 @@ namespace BrnGui
                                          CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
             lStrStream << "Invalid cache in CrashNavMapEvent::SetTracker";
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), KAC_ASSERT_FILE, 532);
+            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), CGS_ASSERT_LOCATION(KAC_ASSERT_FILE, 532));
             CgsDev::Assert::EndAssert();
         }
 
@@ -507,7 +507,7 @@ namespace BrnGui
                                          CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
             lStrStream << "Invalid tracker pointer";
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), KAC_ASSERT_FILE, 573);
+            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), CGS_ASSERT_LOCATION(KAC_ASSERT_FILE, 573));
             CgsDev::Assert::EndAssert();
         }
 
@@ -555,7 +555,7 @@ namespace BrnGui
                                                  &lLandmarkInfo);           // cpp:465
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("I was really hoping we weren't using this - IWL",
-                                       KAC_ASSERT_FILE, 474);
+                                       CGS_ASSERT_LOCATION(KAC_ASSERT_FILE, 474));
             CgsDev::Assert::EndAssert();
             break;
         }

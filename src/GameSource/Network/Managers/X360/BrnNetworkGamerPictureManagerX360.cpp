@@ -1,5 +1,5 @@
 #include "GameSource/Network/Managers/X360/BrnNetworkGamerPictureManagerX360.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Managers/X360/BrnNetworkGamerPictureManagerX360.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Network/Texture/CgsNetworkTexture.h"             // CgsNetwork::NetworkTexture
 #include "GameShared/GameClasses/Network/Utilities/CgsNetworkImageConverter.h"    // ConvertAndResize
@@ -64,7 +64,7 @@ namespace BrnNetwork
                                             CgsNetwork::NetworkTextureDXTCompress* lpTextureCompressor)
     {
         CGS_ASSERT(lpNetworkManager,
-            CgsDev::Assert::MessageAt("lpNetworkManager", __FILE__, 59 /* ARTIST 0x825574E8 */));
+            CGS_ASSERT_MESSAGE_AT("lpNetworkManager", __FILE__, 59 /* ARTIST 0x825574E8 */));
 
         for (s32 liPlayerIndex = 0; liPlayerIndex < KI_MAX_GAMER_PICTURES; ++liPlayerIndex)
         {
@@ -79,7 +79,7 @@ namespace BrnNetwork
         mDownloadingXuid        = 0;
 
         CGS_ASSERT(lpTextureCompressor,
-            CgsDev::Assert::MessageAt("lpTextureCompressor", __FILE__, 76 /* ARTIST 0x82557550 */));
+            CGS_ASSERT_MESSAGE_AT("lpTextureCompressor", __FILE__, 76 /* ARTIST 0x82557550 */));
         mpTextureCompressor = lpTextureCompressor;
 
         ResetGamerPictureData();
@@ -250,9 +250,9 @@ namespace BrnNetwork
     // =======================================================================
     void GamerPictureManagerX360::CopyTexture(CgsNetwork::NetworkTexture* lpTexture)
     {
-        CGS_ASSERT(lpTexture, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpTexture, CGS_ASSERT_MESSAGE_AT(
             "lpTexture",
-            "..\\..\\..\\GameSource\\Network/Managers/X360/BrnNetworkGamerPictureManagerX360.cpp", 165 /* ARTIST 0x8254C274 */));
+            CGS_ARTIST_FILE, 165 /* ARTIST 0x8254C274 */));
 
         CgsNetwork::NetworkImageConverter lConverter;
         lConverter.ConvertAndResize(&mCompressedTexture, lpTexture,
@@ -305,9 +305,9 @@ namespace BrnNetwork
     // =======================================================================
     u32 GamerPictureManagerX360::DownloadLocalGamerPicOnLiveConnect()
     {
-        CGS_ASSERT(mpNetworkManager, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpNetworkManager, CGS_ASSERT_MESSAGE_AT(
             "mpNetworkManager",
-            "..\\..\\..\\GameSource\\Network/Managers/X360/BrnNetworkGamerPictureManagerX360.cpp", 648 /* ARTIST 0x8254C670 */));
+            CGS_ARTIST_FILE, 648 /* ARTIST 0x8254C670 */));
 
         u64 lLocalXuid = 0;
         u32 luResult = XUserGetXUID(mpNetworkManager->GetLocalUserControllerPort(), &lLocalXuid);
@@ -347,7 +347,7 @@ namespace BrnNetwork
         }
 
         CgsNetwork::NetworkTexture* lpSource = &lpData->mTexture;
-        CGS_ASSERT(mpTextureCompressor, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpTextureCompressor, CGS_ASSERT_MESSAGE_AT(
             "mpTextureCompressor",
             __FILE__, 510 /* ARTIST 0x8254C41C */));
 
@@ -447,7 +447,7 @@ namespace BrnNetwork
                     }
                 }
 
-                CGS_ASSERT(maGamerPictureData[liPlayerIndex].miPlayerID == KI_INVALID_PLAYER_ID, CgsDev::Assert::MessageAt(
+                CGS_ASSERT(maGamerPictureData[liPlayerIndex].miPlayerID == KI_INVALID_PLAYER_ID, CGS_ASSERT_MESSAGE_AT(
                     "maGamerPictureData[liPlayerIndex].mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID",
                     __FILE__, 364 /* ARTIST 0x8255790C */));
             }
@@ -478,7 +478,7 @@ namespace BrnNetwork
             }
         }
 
-        CGS_ASSERT(mLocalPlayerGamerPictureData.miPlayerID == KI_INVALID_PLAYER_ID, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mLocalPlayerGamerPictureData.miPlayerID == KI_INVALID_PLAYER_ID, CGS_ASSERT_MESSAGE_AT(
             "mLocalPlayerGamerPictureData.mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID",
             __FILE__, 369 /* ARTIST 0x825579DC */));
     }
@@ -573,10 +573,10 @@ namespace BrnNetwork
             return;
         }
 
-        CGS_ASSERT(mpNetworkManager != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpNetworkManager != 0, CGS_ASSERT_MESSAGE_AT(
             "mpNetworkManager",
             __FILE__, 255 /* ARTIST 0x82561708 */));
-        CGS_ASSERT(mpNetworkManager->GetPlayerManager() != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpNetworkManager->GetPlayerManager() != 0, CGS_ASSERT_MESSAGE_AT(
             "mpNetworkManager->GetPlayerManager()",
             __FILE__, 256 /* ARTIST 0x82561730 */));
 
@@ -603,7 +603,7 @@ namespace BrnNetwork
                 }
             }
 
-            CGS_ASSERT(lpDataEntry, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(lpDataEntry, CGS_ASSERT_MESSAGE_AT(
                 "lpDataEntry",
                 __FILE__, 267 /* ARTIST 0x825617C0 */));
         }
@@ -630,7 +630,7 @@ namespace BrnNetwork
             mpNetworkManager->GetServerInterface()->GetPlayerInfoComponent()
                 ->GetLocalPlayerInfo(&lPlayerInfo);
 
-            CGS_ASSERT(lPlayerInfo.GetID() == liPlayerID, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(lPlayerInfo.GetID() == liPlayerID, CGS_ASSERT_MESSAGE_AT(
                 "Can only get local player XUID when not in a game",
                 __FILE__, 280 /* ARTIST 0x82561840 */));
 
@@ -685,3 +685,5 @@ namespace BrnNetwork
                       "mbPictureDownloaded precedes mbWasConnectedLastFrame");
     }
 }
+
+#undef CGS_ARTIST_FILE

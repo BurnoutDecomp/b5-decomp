@@ -1,5 +1,5 @@
 #include "types.hpp"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/FlybyManager/BrnGameStateFlybyManager.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Network/CgsNetworkConstants.h"   // CgsNetwork::K_INVALID_PLAYER_ID
 #include "GameSource/GameState/FlybyManager/BrnGameStateFlybyManager.h"
@@ -14,11 +14,11 @@ const char* FlybyManager::KPC_GAMERTAG_STRING_ID = "GAMERTAG";
 
 void FlybyManager::Construct(GameStateModule* lpGameStateModule, ScoringSystem* lpScoringSystem)
 {
-    CGS_ASSERT(lpGameStateModule, CgsDev::Assert::MessageAt("lpGameStateModule", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/FlybyManager/BrnGameStateFlybyManager.cpp", 123));
+    CGS_ASSERT(lpGameStateModule, CGS_ASSERT_MESSAGE_AT("lpGameStateModule", CGS_ARTIST_FILE, 123));
 
     mpGameStateModule = lpGameStateModule;
 
-    CGS_ASSERT(lpScoringSystem, CgsDev::Assert::MessageAt("lpScoringSystem", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/FlybyManager/BrnGameStateFlybyManager.cpp", 126));
+    CGS_ASSERT(lpScoringSystem, CGS_ASSERT_MESSAGE_AT("lpScoringSystem", CGS_ARTIST_FILE, 126));
 
     mpScoringSystem = lpScoringSystem;
     mRandom.Construct();
@@ -28,7 +28,7 @@ void FlybyManager::Construct(GameStateModule* lpGameStateModule, ScoringSystem* 
 GameStateModule* FlybyManager::GetGameStateModule()
 {
     CGS_ASSERT(mpGameStateModule,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "mpGameStateModule",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\flybymanager\\BrnGameStateFlybyManager.h", 204 /* ARTIST 0x82358748 */));
     return mpGameStateModule;
@@ -45,7 +45,7 @@ s32 FlybyManager::RivalRating::SortRivalsCallback(const void* lpData0, const voi
             || lpRival1->mPlayerID != CgsNetwork::K_INVALID_PLAYER_ID)
         {
             CGS_ASSERT((lpRival0->mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID) && (lpRival1->mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID),
-                       CgsDev::Assert::MessageAt("( lpRival0->mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID ) && ( lpRival1->mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID )", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/FlybyManager/BrnGameStateFlybyManager.cpp", 83));
+                       CGS_ASSERT_MESSAGE_AT("( lpRival0->mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID ) && ( lpRival1->mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID )", CGS_ARTIST_FILE, 83));
         }
 
         return 0;
@@ -124,3 +124,5 @@ const GameStateModuleIO::FlybyData* OfflineFlybyManager::CalculateFlybyRivals()
     return GetFlybyData();
 }
 }
+
+#undef CGS_ARTIST_FILE

@@ -90,15 +90,15 @@ f32 RaceBalancingRoute::ComputeRaceCompletionRatio(f32 lfDistanceToNextCheckpoin
 f32 RaceBalancingRoute::GetTime(GraphType leGraphType, s32 liTimeIndex) const
 {
     CGS_ASSERT(mbValid,
-        CgsDev::Assert::MessageAt("mbValid", __FILE__, 203 /* ARTIST 0x82765924 */));
+        CGS_ASSERT_MESSAGE_AT("mbValid", __FILE__, 203 /* ARTIST 0x82765924 */));
     CGS_ASSERT(liTimeIndex >= 0,
-        CgsDev::Assert::MessageAt("liTimeIndex >= 0", __FILE__, 204 /* ARTIST 0x82765948 */));
+        CGS_ASSERT_MESSAGE_AT("liTimeIndex >= 0", __FILE__, 204 /* ARTIST 0x82765948 */));
     CGS_ASSERT(liTimeIndex < miTimeCount,
-        CgsDev::Assert::MessageAt("liTimeIndex < miTimeCount", __FILE__, 205 /* ARTIST 0x82765970 */));
+        CGS_ASSERT_MESSAGE_AT("liTimeIndex < miTimeCount", __FILE__, 205 /* ARTIST 0x82765970 */));
     CGS_ASSERT(leGraphType >= 0,
-        CgsDev::Assert::MessageAt("leGraphType >= 0", __FILE__, 206 /* ARTIST 0x82765994 */));
+        CGS_ASSERT_MESSAGE_AT("leGraphType >= 0", __FILE__, 206 /* ARTIST 0x82765994 */));
     CGS_ASSERT(leGraphType < E_GRAPH_TYPE_COUNT,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "leGraphType < E_GRAPH_TYPE_COUNT", __FILE__, 207 /* ARTIST 0x827659B8 */));
 
     return mafTimes[leGraphType][liTimeIndex]

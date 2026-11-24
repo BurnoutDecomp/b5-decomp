@@ -99,7 +99,7 @@ void AssertSunCorona(bool lbCondition, const char* lpExpression, s32 liLine)
     if (!lbCondition)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(lpExpression, gszSourceFile, liLine);
+        CgsDev::Assert::FireAssert(lpExpression, CGS_ASSERT_LOCATION(gszSourceFile, liLine));
         CgsDev::Assert::EndAssert();
     }
 }

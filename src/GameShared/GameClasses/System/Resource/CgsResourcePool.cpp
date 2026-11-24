@@ -17,7 +17,7 @@
 // and a mirror must die with the memory it was built from, or the next track unit
 // streamed over that block would be drawn with the previous one's geometry.
 namespace renderengine { void WorldGeometry_OnResourceMemoryFreed(const void* lpBase, size_t luSize); }
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourcePool.cpp"
 // CgsResource::Pool method bodies, decompiled from the X360 ARTIST IDA (addresses noted
 // per method). This file is built up incrementally: the lookup + reference/accessor slice
 // first, then the create/allocate/fixup load path, with the defrag/scratch/relocator
@@ -167,7 +167,7 @@ namespace CgsResource
     // resource was found in via lppOutPool.
     Entry* Pool::FindResourceWithDependencies(ID lID, Pool** lppOutPool, bool lbCheckRefCount, u16 luStatusMask, s32* lpiOutIndex)
     {
-        CGS_ASSERT(mbIsValid, CgsDev::Assert::StreamMessageAt("Pool is not valid\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourcePool.cpp", 848));   // :848
+        CGS_ASSERT(mbIsValid, CGS_ASSERT_STREAM_MESSAGE_AT("Pool is not valid\n", CGS_ARTIST_FILE, 848));   // :848
 
         Entry* lpEntry = FindResource(lID, lbCheckRefCount, luStatusMask, lpiOutIndex);
         if (lpEntry != 0)
@@ -352,7 +352,7 @@ namespace CgsResource
     // then mark the pool valid.
     bool Pool::Validate()
     {
-        CGS_ASSERT(!mbIsValid, CgsDev::Assert::StreamMessageAt("Pool is not invalid\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourcePool.cpp", 456));
+        CGS_ASSERT(!mbIsValid, CGS_ASSERT_STREAM_MESSAGE_AT("Pool is not invalid\n", CGS_ARTIST_FILE, 456));
 
         InitManagementData();
         for (s32 liHeap = 0; liHeap < 3; ++liHeap)
@@ -1458,3 +1458,5 @@ namespace CgsResource
     }
 
 }
+
+#undef CGS_ARTIST_FILE

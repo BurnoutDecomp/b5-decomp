@@ -40,7 +40,7 @@ namespace CgsGui
                           GuiKeyboardListener& lListener)
     {
         // X360: assert no dialog already active (mpListener at +0x41C is null), at :205.
-        CGS_ASSERT(mpListener == 0, CgsDev::Assert::StreamMessageAt("GuiKeyboard::Show: already being shown.", "..\\..\\..\\GameShared\\GameClasses\\Gui/CgsGuiKeyboard.cpp", 205));
+        CGS_ASSERT(mpListener == 0, CGS_ASSERT_STREAM_MESSAGE_AT("GuiKeyboard::Show: already being shown.", "..\\..\\..\\GameShared\\GameClasses\\Gui/CgsGuiKeyboard.cpp", 205));
 
         mpListener = &lListener;
 

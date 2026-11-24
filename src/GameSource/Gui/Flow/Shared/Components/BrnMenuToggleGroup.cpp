@@ -164,7 +164,7 @@ namespace BrnGui
     template <s32 TI_SIZE>
     MenuToggle* MenuToggleGroupVarSize<TI_SIZE>::GetSelectable(s32 liIndex)
     {
-        CGS_ASSERT(liIndex >= 0 && liIndex < TI_SIZE, CgsDev::Assert::StreamMessageAt("MenuToggleGroup::GetSelectable() invalid index specified", "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnMenuToggleGroup.h", 241));
+        CGS_ASSERT(liIndex >= 0 && liIndex < TI_SIZE, CGS_ASSERT_STREAM_MESSAGE_AT("MenuToggleGroup::GetSelectable() invalid index specified", "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnMenuToggleGroup.h", 241));
 
         return static_cast<MenuToggle*>(SelectableGroup::GetSelectable(liIndex));
     }

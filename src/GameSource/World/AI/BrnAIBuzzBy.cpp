@@ -98,7 +98,7 @@ namespace BrnAI
     // ------------------------------------------------------------------------
     bool BuzzBy::AICarCanBuzz(const AICar* lpCar)
     {
-        CGS_ASSERT(lpCar != NULL, CgsDev::Assert::MessageAt("lpCar != NULL", __FILE__, 467));
+        CGS_ASSERT(lpCar != NULL, CGS_ASSERT_MESSAGE_AT("lpCar != NULL", __FILE__, 467));
 
         // 0x82767020: lfs f13,0x1508(lpCar); lfs f0,flt_820C4318(=200.0); blt -> 0 else 1.
         // NaN polarity (FX-AINAN2): `li r3,0 ; fcmpu ; blt 0x82767070 ; li r3,1` -- blt is not
@@ -391,7 +391,7 @@ namespace BrnAI
         AIModuleIO::ResetOnTrackRequest lRequest;
 
         CGS_ASSERT(leGlobalRaceCarToTeleport != E_GLOBAL_RACE_CAR_INDEX_INVALID,
-                   CgsDev::Assert::MessageAt("leGlobalRaceCarToTeleport != E_GLOBAL_RACE_CAR_INDEX_INVALID", __FILE__, 281));
+                   CGS_ASSERT_MESSAGE_AT("leGlobalRaceCarToTeleport != E_GLOBAL_RACE_CAR_INDEX_INVALID", __FILE__, 281));
 
         ChooseAheadOrBehind(&lRequest, lpPlayerCar->GetSpeed(), leGlobalRaceCarToTeleport);
 

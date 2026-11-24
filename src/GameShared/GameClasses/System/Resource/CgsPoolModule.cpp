@@ -160,7 +160,7 @@ namespace CgsResource
         if (lpResponse->GetResult() != CgsMemory::MemoryIO::E_RESULT_OK)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("Destroy Bank Failed", KPC_POOLMODULE_SRC, 1309);
+            CgsDev::Assert::FireAssert("Destroy Bank Failed", CGS_ASSERT_LOCATION(KPC_POOLMODULE_SRC, 1309));
             CgsDev::Assert::EndAssert();
         }
     }
@@ -172,7 +172,7 @@ namespace CgsResource
         if (lpOutput == 0)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpOutputBuffer", KPC_POOLMODULE_SRC, 1427);
+            CgsDev::Assert::FireAssert("lpOutputBuffer", CGS_ASSERT_LOCATION(KPC_POOLMODULE_SRC, 1427));
             CgsDev::Assert::EndAssert();
         }
 

@@ -120,9 +120,9 @@ namespace CgsGameTalk
     s32 GameTalk::SendMessage(const char* lpTarget, EA::GameTalk::GameTalkMessage* lpMessage)
     {
         CGS_ASSERT(lpTarget != 0,
-            CgsDev::Assert::MessageAt("lpTarget", __FILE__, 178 /* ARTIST 0x828DAF14 */));
+            CGS_ASSERT_MESSAGE_AT("lpTarget", __FILE__, 178 /* ARTIST 0x828DAF14 */));
         CGS_ASSERT(lpMessage != 0,
-            CgsDev::Assert::MessageAt("lpMessage", __FILE__, 179 /* ARTIST 0x828DAF38 */));
+            CGS_ASSERT_MESSAGE_AT("lpMessage", __FILE__, 179 /* ARTIST 0x828DAF38 */));
 
         return EA::GameTalk::GameTalkManager::SendMessage(lpTarget, lpMessage);
     }

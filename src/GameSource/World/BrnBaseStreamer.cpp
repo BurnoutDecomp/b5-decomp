@@ -770,7 +770,7 @@ bool InternalBaseStreamer::IsAssetLoaded( CgsID lId, u64 luUserData ) const
 bool InternalBaseStreamer::IsEntryReady( s32 liIndex ) const
 {
     CGS_ASSERT( liIndex < miStreamListLength,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "liIndex < miStreamListLength",
             "..\\..\\..\\GameSource\\World/BrnBaseStreamer.h", 409 /* ARTIST 0x827B0288 */));
     return mpCurrentEntryList[liIndex].meStatus == StreamerCurrentEntry::E_STATUS_READY;

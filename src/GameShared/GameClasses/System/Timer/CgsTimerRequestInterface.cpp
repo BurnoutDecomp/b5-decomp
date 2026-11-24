@@ -30,7 +30,7 @@ void TimerRequests::SetTimestepMultiplier(f32 lfMultiplier)
 // @ 0x828D73C0 -- read back the queued multiplier; asserts one was actually set.
 f32 TimerRequests::GetMultiplier() const
 {
-    CGS_ASSERT(IsMultiplierRequested(), CgsDev::Assert::StreamMessageAt("Attempt to get multiplier when it hasn't been set\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\timer\\CgsTimerRequestInterface.h", 182));
+    CGS_ASSERT(IsMultiplierRequested(), CGS_ASSERT_STREAM_MESSAGE_AT("Attempt to get multiplier when it hasn't been set\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\timer\\CgsTimerRequestInterface.h", 182));
 
     return mfMultiplier;
 }

@@ -1,7 +1,7 @@
 #include "GameSource/World/AI/Route/BrnRouteMapModuleIO.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // the header-baked lock asserts
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\World/AI/Route/BrnRouteMapModuleIO.h"
 // Out-of-line bodies of BrnAI::RouteMapModuleIO::InputBuffer's two NON-const producer-side
 // route-request-queue getters that the X360 ARTIST build emitted out-of-line. Each asserts the
 // WRITE lock (status bit 3 == IsBufferLockedForWriting) and returns the address of its embedded
@@ -17,7 +17,7 @@ namespace RouteMapModuleIO
     // non-const getter: asserts the WRITE lock (status bit 3), reproduced verbatim.
     RaceRouteRequestQueue* InputBuffer::GetRaceRouteRequestQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/AI/Route/BrnRouteMapModuleIO.h", 583));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 583));
         return &mRaceRouteRequestQueue;
     }
 
@@ -25,8 +25,10 @@ namespace RouteMapModuleIO
     // non-const getter: asserts the WRITE lock (status bit 3), reproduced verbatim.
     ExtrapolatedRouteRequestQueue* InputBuffer::GetExtrapolatedRouteRequestQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/AI/Route/BrnRouteMapModuleIO.h", 597));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 597));
         return &mExtrapolatedRouteRequestQueue;
     }
 }
 }
+
+#undef CGS_ARTIST_FILE

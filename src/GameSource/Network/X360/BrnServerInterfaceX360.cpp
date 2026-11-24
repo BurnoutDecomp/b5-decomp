@@ -1,6 +1,6 @@
 // FOLDED FROM BrnServerInterfaceX360_wL_01.cpp
 #include "GameSource/Network/X360/BrnServerInterfaceX360.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\""../Network/X360/BrnServerInterfaceX360.cpp"
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnNetwork::BrnServerInterfaceX360::Destruct @ 0x8258B3C8
 //   BrnNetwork::BrnServerInterfaceX360::Suspend  @ 0x82586618
@@ -341,7 +341,7 @@ namespace BrnNetwork
         default:
             // BrnServerInterfaceX360.cpp:181 -- expression string "0" verbatim.
             CGS_ASSERT( false,
-                CgsDev::Assert::MessageAt(
+                CGS_ASSERT_MESSAGE_AT(
                     "0",
                     "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
                     "../Network/X360/BrnServerInterfaceX360.cpp", 181 /* ARTIST 0x8258B394 */));
@@ -478,10 +478,10 @@ void BrnServerInterfaceX360::Construct()
     // The registry returns -1 when it is full or unbuilt; both brackets in
     // Update() would then be dead. (X360 BrnServerInterfaceX360.cpp lines 56/57.)
     CGS_ASSERT( miNetworkServerInterfaceX360PM1 >= 0,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "miNetworkServerInterfaceX360PM1 >= 0", __FILE__, 56 /* ARTIST 0x8258B1A4 */));
     CGS_ASSERT( miNetworkServerInterfaceX360PM2 >= 0,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "miNetworkServerInterfaceX360PM2 >= 0", __FILE__, 57 /* ARTIST 0x8258B1CC */));
 }
 
@@ -542,7 +542,7 @@ namespace BrnNetwork
         default:
             // BrnServerInterfaceX360.cpp:120 -- expression string "0" verbatim.
             CGS_ASSERT( false,
-                CgsDev::Assert::MessageAt(
+                CGS_ASSERT_MESSAGE_AT(
                     "0",
                     "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
                     "../Network/X360/BrnServerInterfaceX360.cpp", 120 /* ARTIST 0x8258B2BC */));
@@ -550,3 +550,5 @@ namespace BrnNetwork
         }
     }
 }
+
+#undef CGS_ARTIST_FILE

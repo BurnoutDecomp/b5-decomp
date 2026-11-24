@@ -107,7 +107,7 @@ namespace BrnNetwork
                                                        lPositionMin);
 
         CgsNetwork::Message::PrepareForSend(KI_UPDATE_MESSAGE_TYPE, mUpdateData.mu16SentFrame);
-        CGS_ASSERT(!IsReliable(), CgsDev::Assert::MessageAt(
+        CGS_ASSERT(!IsReliable(), CGS_ASSERT_MESSAGE_AT(
             "!IsReliable()",
             __FILE__, 151 /* ARTIST 0x8257D96C */));
     }
@@ -209,7 +209,7 @@ namespace BrnNetwork
     const UpdateData* UpdateMessage::GetUpdateData()
     {
         CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0,
-            CgsDev::Assert::MessageAt("IsMessageValid()", __FILE__, 131 /* ARTIST 0x82580BCC */));
+            CGS_ASSERT_MESSAGE_AT("IsMessageValid()", __FILE__, 131 /* ARTIST 0x82580BCC */));
         return &mUpdateData;
     }
 
@@ -219,7 +219,7 @@ namespace BrnNetwork
     u16 UpdateMessage::GetU16FramesSinceStart()
     {
         CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0,
-            CgsDev::Assert::MessageAt("IsMessageValid()", __FILE__, 138 /* ARTIST 0x82580C2C */));
+            CGS_ASSERT_MESSAGE_AT("IsMessageValid()", __FILE__, 138 /* ARTIST 0x82580C2C */));
         return mUpdateData.mu16FramesSinceStart;
     }
 

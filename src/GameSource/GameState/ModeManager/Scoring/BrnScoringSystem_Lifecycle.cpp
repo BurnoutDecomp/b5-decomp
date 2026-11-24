@@ -425,7 +425,7 @@ void ScoringSystem::WriteDataToOutput(GameStateModuleIO::ScoringOutputInterface*
     // ---- online half: drive the current online sub-scorer ----
     if (lbOnline)
     {
-        CGS_ASSERT(mpCurrentOnlineModeScoring != NULL, CgsDev::Assert::MessageAt("mpCurrentOnlineModeScoring", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 1318));
+        CGS_ASSERT(mpCurrentOnlineModeScoring != NULL, CGS_ASSERT_MESSAGE_AT("mpCurrentOnlineModeScoring", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 1318));
         mpCurrentOnlineModeScoring->Update(this, static_cast<s32>(muCarsInCurrentMode));
         mpCurrentOnlineModeScoring->WriteDataToOutput(lpOnlineOutput);
     }

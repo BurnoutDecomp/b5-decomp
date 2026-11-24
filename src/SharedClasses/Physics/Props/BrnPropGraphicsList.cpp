@@ -112,7 +112,7 @@ namespace Props
     PropPartGraphics* PropGraphicsList::GetPartGraphics(u32 luIndex)
     {
         CGS_ASSERT(luIndex < muNumberOfPropPartModels,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "luIndex < muNumberOfPropPartModels", KAC_ARTIST_ASSERT_FILE, 314 /* ARTIST 0x826756F0 */));
         return &mpaPropPartGraphics[luIndex];
     }
@@ -122,7 +122,7 @@ namespace Props
     PropGraphics* PropGraphicsList::GetPropGraphics(u32 luIndex)
     {
         CGS_ASSERT(luIndex < muNumberOfPropModels,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "luIndex < muNumberOfPropModels", KAC_ARTIST_ASSERT_FILE, 303 /* ARTIST 0x82675678 */));
         return &mpaPropGraphics[luIndex];
     }

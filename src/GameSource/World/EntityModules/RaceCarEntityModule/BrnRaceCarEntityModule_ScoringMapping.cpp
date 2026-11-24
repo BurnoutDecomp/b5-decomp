@@ -79,12 +79,12 @@ void RaceCarEntityModule::SetActiveRaceCarForPlayerScoringIndex(
 {
     CGS_ASSERT(lePlayerScoringIndex >= BrnGameState::GameStateModuleIO::E_PLAYER_SCORING_INDEX_0 &&
                    lePlayerScoringIndex < BrnGameState::GameStateModuleIO::E_PLAYER_SCORING_INDEX_COUNT,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "(lePlayerScoringIndex>=BrnGameState::GameStateModuleIO::E_PLAYER_SCORING_INDEX_0) && (lePlayerScoringIndex<BrnGameState::GameStateModuleIO::E_PLAYER_SCORING_INDEX_COUNT)",
             KAC_ARTIST_ASSERT_FILE, 1203 /* ARTIST 0x822A38C0 */));
     CGS_ASSERT(leActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID &&
                    leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex<E_ACTIVE_RACE_CAR_INDEX_COUNT)",
             KAC_ARTIST_ASSERT_FILE, 1205 /* ARTIST 0x822A38EC */));
 

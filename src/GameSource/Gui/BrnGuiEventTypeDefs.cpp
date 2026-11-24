@@ -11,7 +11,7 @@
 //
 // The X360-baked assert file/line are discarded per project convention; the stringized
 // condition matches the X360 assert message text.
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/BrnGuiEventTypeDefs.h"
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"
@@ -69,7 +69,7 @@ void GuiAudioTriggerEvent::Construct(s32 leAction, const char* lpComponentName,
                                      const char* lpLabel, const char* lpMovieName)
 {
     CGS_ASSERT(lpComponentName && lpLabel && lpMovieName,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lpComponentName && lpLabel && lpMovieName",
             "..\\..\\..\\GameSource\\Gui/Events/BrnGuiAudioEvent.cpp", 96 /* ARTIST 0x824F6390 */));
 
@@ -170,11 +170,11 @@ EActiveRaceCarIndex GuiEventUpdateSatNav::SatNavIconInfo::GetActiveRaceCarIndex(
 {
     const s8 liActiveRaceCarIndex = mi8ActiveRaceCarIndex;
     CGS_ASSERT( liActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_INVALID,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_INVALID",
             KAC_ARTIST_ASSERT_FILE, 1896 /* ARTIST 0x824B2F2C */));
     CGS_ASSERT( liActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
             KAC_ARTIST_ASSERT_FILE, 1897 /* ARTIST 0x824B2F50 */));
     return static_cast<EActiveRaceCarIndex>( liActiveRaceCarIndex );
@@ -205,9 +205,9 @@ s32 GuiEventUpdateSatNav::SatNavI(const GuiEventUpdateSatNav* lpThis)
 {
     const s32 liIconType = lpThis->maIconInfo[0].mi8IconType; // lbz;extsb -> sign-extended
     CGS_ASSERT( liIconType >= 0,
-        CgsDev::Assert::MessageAt("leIconType >= 0", KAC_ARTIST_ASSERT_FILE, 1911 /* ARTIST 0x823A6B64 */));
+        CGS_ASSERT_MESSAGE_AT("leIconType >= 0", KAC_ARTIST_ASSERT_FILE, 1911 /* ARTIST 0x823A6B64 */));
     CGS_ASSERT( liIconType < SatNavIconInfo::E_SATNAVICON_MAX,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "leIconType < E_SATNAVICON_MAX", KAC_ARTIST_ASSERT_FILE, 1912 /* ARTIST 0x823A6B88 */));
     return liIconType;
 }
@@ -315,7 +315,7 @@ void GuiEventUpdateSatNav::DoWorstCase()
 
 void GuiOverlayRequest::Construct(const char* lpcOverlayId)
 {
-    CGS_ASSERT(lpcOverlayId != 0, CgsDev::Assert::StreamMessageAt("Invalid Overlay Id", "..\\..\\..\\GameSource\\Gui/BrnGuiEventTypeDefs.h", 7404));
+    CGS_ASSERT(lpcOverlayId != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid Overlay Id", CGS_ARTIST_FILE, 7404));
     mOverlayID = CgsIDCompress(lpcOverlayId);
     miNumMessages = 0;
     mbButon1ParamUsed = false;
@@ -338,7 +338,7 @@ void GuiOverlayRequest::AddMessageParam(CgsGui::PopupParamTypes leType, const ch
         CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
         lStream << "Not enough free params in the Overlay (" << miNumMessages << "/" << KI_MAX_MESSAGES << ").";
         CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-            "..\\..\\..\\GameSource\\Gui/BrnGuiEventTypeDefs.h", 7438);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 7438));
         CgsDev::Assert::EndAssert();
     }
     CGS_ASSERT(lpcParam != 0, "lpcParam != NULL");
@@ -360,14 +360,14 @@ void GuiOverlayRequest::GetMessageParam(CgsGui::GuiPopupParameter* lpOut, s32 li
 
 void GuiOverlayRequest::GetButton1Param(CgsGui::GuiPopupParameter* lpOut) const
 {
-    CGS_ASSERT(mbButon1ParamUsed, CgsDev::Assert::StreamMessageAt("button 1 param isn't used in Overlay.", "..\\..\\..\\GameSource\\Gui/BrnGuiEventTypeDefs.h", 7528));
+    CGS_ASSERT(mbButon1ParamUsed, CGS_ASSERT_STREAM_MESSAGE_AT("button 1 param isn't used in Overlay.", CGS_ARTIST_FILE, 7528));
     CgsCore::SPrintf(lpOut->macParameter, sizeof(lpOut->macParameter), "%s", mButton1Param.macParameter);
     lpOut->meParamType = mButton1Param.meParamType;
 }
 
 void GuiOverlayRequest::GetButton2Param(CgsGui::GuiPopupParameter* lpOut) const
 {
-    CGS_ASSERT(mbButon2ParamUsed, CgsDev::Assert::StreamMessageAt("button 2 param isn't used in Overlay.", "..\\..\\..\\GameSource\\Gui/BrnGuiEventTypeDefs.h", 7547));
+    CGS_ASSERT(mbButon2ParamUsed, CGS_ASSERT_STREAM_MESSAGE_AT("button 2 param isn't used in Overlay.", CGS_ARTIST_FILE, 7547));
     CgsCore::SPrintf(lpOut->macParameter, sizeof(lpOut->macParameter), "%s", mButton2Param.macParameter);
     lpOut->meParamType = mButton2Param.meParamType;
 }
@@ -397,7 +397,7 @@ void GuiOverlayRequest::GetButton2Param(CgsGui::GuiPopupParameter* lpOut) const
 // the null pointer exactly as written.
 void GuiHudMessage::Construct(const char* lpcMessageId)
 {
-    CGS_ASSERT(lpcMessageId != NULL, CgsDev::Assert::StreamMessageAt("Invalid Message Id", "..\\..\\..\\GameSource\\Gui/BrnGuiEventTypeDefs.h", 7225));
+    CGS_ASSERT(lpcMessageId != NULL, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid Message Id", CGS_ARTIST_FILE, 7225));
 
     mMessageIdHash = CgsIDCompress( lpcMessageId );
     maiNoOfParams[0] = 0;
@@ -561,7 +561,7 @@ void GuiNetworkRemotePlayerDisconnectEvent::SetActiveRaceCarIndex(EActiveRaceCar
 {
     CGS_ASSERT( (leActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
                 (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "(leActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)",
             KAC_ARTIST_ASSERT_FILE, 7748 /* ARTIST 0x823A76DC */));
     meActiveRaceCarIndex = leActiveRaceCarIndex;
@@ -570,10 +570,12 @@ void GuiNetworkRemotePlayerDisconnectEvent::SetActiveRaceCarIndex(EActiveRaceCar
 void GuiNetworkRemotePlayerDisconnectEvent::SetNetworkPlayerID(s32 lPlayerID)
 {
     CGS_ASSERT( lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
             KAC_ARTIST_ASSERT_FILE, 7762 /* ARTIST 0x823A773C */));
     mPlayerID = lPlayerID;
 }
 
 } // namespace BrnGui
+
+#undef CGS_ARTIST_FILE

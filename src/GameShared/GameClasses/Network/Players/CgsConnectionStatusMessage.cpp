@@ -19,7 +19,7 @@ namespace CgsNetwork
                                                  u16 lu16Frame)
     {
         *CgsDev::Log::gpDebugPrint << "Preparing ConnectionStatusMessage\n";
-        CGS_ASSERT(lu16Frame != KU16_INVALID_FRAME, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lu16Frame != KU16_INVALID_FRAME, CGS_ASSERT_MESSAGE_AT(
             "lu16Frame != KU16_INVALID_FRAME",
             __FILE__, 80 /* ARTIST 0x82883194 */));
 
@@ -47,7 +47,7 @@ namespace CgsNetwork
         }
 
         SetMessageInvalid();
-        CGS_ASSERT(!IsMessageValid(), CgsDev::Assert::MessageAt(
+        CGS_ASSERT(!IsMessageValid(), CGS_ASSERT_MESSAGE_AT(
             "!IsMessageValid()",
             __FILE__, 121 /* ARTIST 0x82883294 */));
         return true;

@@ -38,7 +38,7 @@
 #if defined(_XBOX) && defined(_MSC_VER)
 #pragma auto_inline(off)
 #endif
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnCrashNavPanel.cpp"
 #include "GameSource/Gui/Flow/Screen/Components/BrnCrashNavPanel.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // ([cnav-diag])
 #include <cstdlib>   // ([cnav-diag])
@@ -53,7 +53,7 @@
 #include "GameSource/Gui/Events/BrnGuiEventRankProgressResponse.h"                // BrnGui::GuiEventRankProgressResponse
 #include "GameSource/GameState/BrnCgsPlayerName.h"                                // CgsNetwork::PlayerName
 #include "SharedClasses/Progression/BrnProgressionData.h"                         // BrnProgression::ProgressionData
-
+#define CGS_ARTIST_BRNCRASHNAVPANEL_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flow\\screen\\components\\BrnCrashNavPanel.h"
 #include <cstring>   // std::strstr / std::strcmp
 
 // Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnCrashNavPanel.cpp".
@@ -251,7 +251,7 @@ namespace BrnGui
     void CrashNavPanel::AppendExpectedAptComponents(GuiFlow leFlow, GuiCache* lpGuiCache)
     {
         CGS_ASSERT(lpGuiCache != 0,
-            CgsDev::Assert::MessageAt("lpGuiCache", __FILE__, 250 /* ARTIST 0x82425EF0 */));   // cpp:250
+            CGS_ASSERT_MESSAGE_AT("lpGuiCache", __FILE__, 250 /* ARTIST 0x82425EF0 */));   // cpp:250
 
         mFilterToggles.AppendExpectedAptComponent(leFlow, lpGuiCache, true);   // `li r6, 1`
         mEventPanel.AppendExpectedAptComponents(leFlow, lpGuiCache);
@@ -263,9 +263,9 @@ namespace BrnGui
     // @ 0x82440378 -- the one-shot component set-up, run once the GuiCache has arrived.
     void CrashNavPanel::SetupComponent()
     {
-        CGS_ASSERT(mpGuiCache != 0, CgsDev::Assert::MessageAt("mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnCrashNavPanel.cpp", 270 /* ARTIST 0x824403B0 */));                                  // cpp:270
+        CGS_ASSERT(mpGuiCache != 0, CGS_ASSERT_MESSAGE_AT("mpGuiCache", CGS_ARTIST_FILE, 270 /* ARTIST 0x824403B0 */));                                  // cpp:270
         CGS_ASSERT(mePrepareStage == E_PREPARESTAGE_CONSTRUCTED,
-                   CgsDev::Assert::MessageAt("mePrepareStage == E_PREPARESTAGE_CONSTRUCTED", "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnCrashNavPanel.cpp", 271 /* ARTIST 0x824403D8 */));                 // cpp:271
+                   CGS_ASSERT_MESSAGE_AT("mePrepareStage == E_PREPARESTAGE_CONSTRUCTED", CGS_ARTIST_FILE, 271 /* ARTIST 0x824403D8 */));                 // cpp:271
 
         // Row 0: the four top-level filters. Row 2: the empty in-event row, disabled
         // straight away (it is only switched on further down, in the in-event branch).
@@ -361,7 +361,7 @@ namespace BrnGui
     void CrashNavPanel::RestoreSettings()
     {
         CGS_ASSERT(mpGuiCache != 0,
-            CgsDev::Assert::MessageAt("mpGuiCache", __FILE__, 190 /* ARTIST 0x8244027C */));   // cpp:190
+            CGS_ASSERT_MESSAGE_AT("mpGuiCache", __FILE__, 190 /* ARTIST 0x8244027C */));   // cpp:190
 
         // The live road rule decides which of the two score types the panel comes back on:
         // rules 1/2 map to score type 0, rules 3/4 to score type 1. Any other value leaves
@@ -558,7 +558,7 @@ namespace BrnGui
                                           bool lbShowPanel)
     {
         CGS_ASSERT(mePanelType == E_PANEL_EVENT,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "E_PANEL_EVENT == mePanelType", __FILE__, 637 /* ARTIST 0x8243A8A8 */));   // cpp:637
 
         ChangeVisiblePanelState(E_PANEL_EVENT, RivalMapPanel::E_RIVAL_TYPE_COUNT);
@@ -753,7 +753,7 @@ namespace BrnGui
     void CrashNavPanel::HandleAptEvents(const CgsGui::GuiEventAptTriggerPayload* lpAptEvent)
     {
         CGS_ASSERT(lpAptEvent != 0,
-            CgsDev::Assert::MessageAt("lpAptEvent", __FILE__, 807 /* ARTIST 0x82418854 */));   // cpp:807
+            CGS_ASSERT_MESSAGE_AT("lpAptEvent", __FILE__, 807 /* ARTIST 0x82418854 */));   // cpp:807
 
         if (lpAptEvent->meEventType == CgsGui::GuiEventAptTrigger::E_APT_EVENT_ONLOAD)
         {
@@ -1008,7 +1008,7 @@ namespace BrnGui
     // @ 0x824185C8
     s32 CrashNavPanel::GetPanelActiveRoadRuleType() const
     {
-        CGS_ASSERT(mePanelType == E_PANEL_ROADSIGN, CgsDev::Assert::StreamMessageAt("Cannot get active road rules type if not showing road rules", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flow\\screen\\components\\BrnCrashNavPanel.h", 349));
+        CGS_ASSERT(mePanelType == E_PANEL_ROADSIGN, CGS_ASSERT_STREAM_MESSAGE_AT("Cannot get active road rules type if not showing road rules", CGS_ARTIST_BRNCRASHNAVPANEL_FILE, 349));
    // @0x824185C8 (beq on +0x90==2)
 
         // Inlined RoadPanel::GetCurrentRule() -- a bare `lwz` at mRoadPanel +0xD9C.
@@ -1018,10 +1018,13 @@ namespace BrnGui
     // @ 0x82418668
     s32 CrashNavPanel::GetRoadPanelScoreMode() const
     {
-        CGS_ASSERT(mePanelType == E_PANEL_ROADSIGN, CgsDev::Assert::StreamMessageAt("Cannot get active road rules scoring mode if not showing road rules", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flow\\screen\\components\\BrnCrashNavPanel.h", 366));
+        CGS_ASSERT(mePanelType == E_PANEL_ROADSIGN, CGS_ASSERT_STREAM_MESSAGE_AT("Cannot get active road rules scoring mode if not showing road rules", CGS_ARTIST_BRNCRASHNAVPANEL_FILE, 366));
    // @0x82418668 (beq on +0x90==2)
 
         // Inlined RoadPanel::GetScoringMode() -- a bare `lwz` at mRoadPanel +0xDA0.
         return mRoadPanel.GetScoringMode();
     }
 }
+
+#undef CGS_ARTIST_FILE
+#undef CGS_ARTIST_BRNCRASHNAVPANEL_FILE

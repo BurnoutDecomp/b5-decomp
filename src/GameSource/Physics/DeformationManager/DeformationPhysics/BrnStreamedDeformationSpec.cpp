@@ -193,7 +193,7 @@ namespace Deformation
     ETagPointType LocatorPointSpecList::GetLocatorTy(u32 luTag) const
     {
         CGS_ASSERT(luTag < muNumLocators,
-            CgsDev::Assert::MessageAt("luTag < muNumLocators", KAC_ARTIST_ASSERT_FILE, 94 /* ARTIST 0x82704960 */));   // BrnStreamedDeformationSpec.h:94
+            CGS_ASSERT_MESSAGE_AT("luTag < muNumLocators", KAC_ARTIST_ASSERT_FILE, 94 /* ARTIST 0x82704960 */));   // BrnStreamedDeformationSpec.h:94
         return mpaLocatorPoints[luTag].meTagPointType;
     }
 
@@ -203,7 +203,7 @@ namespace Deformation
     const Matrix44Affine* LocatorPointSpecList::GetLocatorXf(u32 luTag) const
     {
         CGS_ASSERT(luTag < muNumLocators,
-            CgsDev::Assert::MessageAt("luTag < muNumLocators", KAC_ARTIST_ASSERT_FILE, 98 /* ARTIST 0x825B3210 */));   // BrnStreamedDeformationSpec.h:98
+            CGS_ASSERT_MESSAGE_AT("luTag < muNumLocators", KAC_ARTIST_ASSERT_FILE, 98 /* ARTIST 0x825B3210 */));   // BrnStreamedDeformationSpec.h:98
         return &mpaLocatorPoints[luTag].mLocatorMatrix;
     }
 

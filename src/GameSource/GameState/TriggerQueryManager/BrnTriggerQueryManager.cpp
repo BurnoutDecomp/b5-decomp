@@ -2,10 +2,10 @@
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"
 #include "GameSource/GameState/TriggerQueryManager/BrnTriggerQueryManager.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TriggerQueryManager/BrnTriggerQueryManager.cpp"
 #include <cstddef>   // offsetof (layout asserts)
 #include <cstring>   // std::memset (the 24-byte player-trigger action record)
-
+#define CGS_ARTIST_BRNTRIGGERQUERYMANAGER_FILE "..\\..\\..\\GameSource\\GameState/TriggerQueryManager/BrnTriggerQueryManager.h"
 #include "rw/math/vpu/vector3_operation.h"  // rw::math::vpu operator-/Dot/MagnitudeSquared (refresh-gate + entry-direction maths)
 
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"            // CgsDev::Log::gpDebugPrint, CgsDev::Message::gxMessageFilterFlags
@@ -111,9 +111,9 @@ void TriggerQueryManager::Construct(BrnProgression::ProgressionManager* lpProgre
                                     RoadRulesManager*                   lpRoadRulesManager)
 {
     const char* const lpcFile = "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TriggerQueryManager/BrnTriggerQueryManager.cpp";
-    if (!lpProgressionManager) { CgsDev::Assert::BeginAssert(); CgsDev::Assert::FireAssert("lpProgressionManager != NULL", lpcFile, 77); CgsDev::Assert::EndAssert(); }
-    if (!lpTakedownManager) { CgsDev::Assert::BeginAssert(); CgsDev::Assert::FireAssert("lpTakedownManager != NULL", lpcFile, 78); CgsDev::Assert::EndAssert(); }
-    if (!lpRoadRulesManager) { CgsDev::Assert::BeginAssert(); CgsDev::Assert::FireAssert("lpRoadRulesManager != NULL", lpcFile, 79); CgsDev::Assert::EndAssert(); }
+    if (!lpProgressionManager) { CgsDev::Assert::BeginAssert(); CgsDev::Assert::FireAssert("lpProgressionManager != NULL", CGS_ASSERT_LOCATION(lpcFile, 77)); CgsDev::Assert::EndAssert(); }
+    if (!lpTakedownManager) { CgsDev::Assert::BeginAssert(); CgsDev::Assert::FireAssert("lpTakedownManager != NULL", CGS_ASSERT_LOCATION(lpcFile, 78)); CgsDev::Assert::EndAssert(); }
+    if (!lpRoadRulesManager) { CgsDev::Assert::BeginAssert(); CgsDev::Assert::FireAssert("lpRoadRulesManager != NULL", CGS_ASSERT_LOCATION(lpcFile, 79)); CgsDev::Assert::EndAssert(); }
 
     // Empty every embedded array (live-count word -> 0). The reserved-preamble arrays
     // (maSoundActions/maLastPlayerTriggers/maLastFrameTriggers) are Construct'd in the full build
@@ -233,7 +233,7 @@ void TriggerQueryManager::UpdateTriggers(
     // nothing further but set mbTriggersUpdated=true -- it does NOT rebuild even on the first
     // un-updated frame.
     CGS_ASSERT(lpActiveRaceCarInterface->GetPlayerActiveRaceCarIndex() < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-               CgsDev::Assert::MessageAt("mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", "..\\..\\..\\GameSource\\World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h", 967));
+               CGS_ASSERT_MESSAGE_AT("mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", "..\\..\\..\\GameSource\\World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h", 967));
 
     const bool lbPlayerCarActive = lpActiveRaceCarInterface->IsPlayerCarActive();
     if (lbPlayerCarActive)
@@ -473,7 +473,7 @@ void TriggerQueryManager::PreWorldUpdate(
         const u16 luRegionIndex = maLastPlayerTriggers.GetItem(luTrigger);
 
         CGS_ASSERT(static_cast<s32>(luRegionIndex) < lpTriggerData->GetRegionCount(),
-                   CgsDev::Assert::MessageAt("liRegionIndex < miRegionCount", "..\\..\\..\\SharedClasses\\Trigger/BrnTriggerData.h", 624));   // BrnTriggerData.h:624
+                   CGS_ASSERT_MESSAGE_AT("liRegionIndex < miRegionCount", "..\\..\\..\\SharedClasses\\Trigger/BrnTriggerData.h", 624));   // BrnTriggerData.h:624
 
         const BrnTrigger::TriggerRegion* lpRegion = lpTriggerData->GetRegion(luRegionIndex);
 
@@ -555,7 +555,7 @@ bool TriggerQueryManager::AddLandmarkIndexForGameMode(LandmarkIndex lLandmarkInd
 // X360 0x82355D78.
 LightTriggerId TriggerQueryManager::GetPlayerCurrentTrafficLightId() const
 {
-    CGS_ASSERT(IsPlayerInTrafficLightRegion(), CgsDev::Assert::MessageAt("IsPlayerInTrafficLightRegion()", "..\\..\\..\\GameSource\\GameState/TriggerQueryManager/BrnTriggerQueryManager.h", 318));
+    CGS_ASSERT(IsPlayerInTrafficLightRegion(), CGS_ASSERT_MESSAGE_AT("IsPlayerInTrafficLightRegion()", CGS_ARTIST_BRNTRIGGERQUERYMANAGER_FILE, 318));
     return mPlayerCurrentTrafficLightId;
 }
 
@@ -642,7 +642,7 @@ void PackedIndex::SetGlobalRaceCarIndex(EGlobalRaceCarIndex leGlobalRaceCarIndex
                (leGlobalRaceCarIndex != E_GLOBAL_RACE_CAR_INDEX_INVALID),
                "Bad Global Race Car Index Set : ");
     CGS_ASSERT((static_cast<s32>(leGlobalRaceCarIndex) & 0xff) == static_cast<s32>(leGlobalRaceCarIndex),
-               CgsDev::Assert::MessageAt("(leGlobalRaceCarIndex & 0xff) == leGlobalRaceCarIndex", "..\\..\\..\\GameSource\\GameState/TriggerQueryManager/BrnTriggerQueryManager.h", 434));
+               CGS_ASSERT_MESSAGE_AT("(leGlobalRaceCarIndex & 0xff) == leGlobalRaceCarIndex", CGS_ARTIST_BRNTRIGGERQUERYMANAGER_FILE, 434));
 
     // X360: stw (a2 & 0xff) @ this+0 (meGlobalRaceCarIndex).
     meGlobalRaceCarIndex = static_cast<EGlobalRaceCarIndex>(static_cast<s32>(leGlobalRaceCarIndex) & 0xff);
@@ -662,7 +662,7 @@ void PackedIndex::SetActiveRaceCarIndex(EActiveRaceCarIndex leActiveRaceCarIndex
                (leActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID),
                "Bad Active Race Car Index Set : ");
     CGS_ASSERT((static_cast<s32>(leActiveRaceCarIndex) & 0xff) == static_cast<s32>(leActiveRaceCarIndex),
-               CgsDev::Assert::MessageAt("(leActiveRaceCarIndex & 0xff) == leActiveRaceCarIndex", "..\\..\\..\\GameSource\\GameState/TriggerQueryManager/BrnTriggerQueryManager.h", 443));
+               CGS_ASSERT_MESSAGE_AT("(leActiveRaceCarIndex & 0xff) == leActiveRaceCarIndex", CGS_ARTIST_BRNTRIGGERQUERYMANAGER_FILE, 443));
 
     // X360: stw (a2 & 0xff) @ this+4 (meActiveRaceCarIndex).
     meActiveRaceCarIndex = static_cast<EActiveRaceCarIndex>(static_cast<s32>(leActiveRaceCarIndex) & 0xff);
@@ -676,10 +676,10 @@ void TriggerQueryManager::SubmitTriggerQueries(
     GameStateModuleIO::OutputBuffer* lpOutput,
     const RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarInterface)
 {
-    CGS_ASSERT(lpOutput != NULL, CgsDev::Assert::MessageAt("lpOutput != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TriggerQueryManager/BrnTriggerQueryManager.cpp", 795));
-    CGS_ASSERT(lpActiveRaceCarInterface != NULL, CgsDev::Assert::MessageAt("lpActiveRaceCarInterface != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TriggerQueryManager/BrnTriggerQueryManager.cpp", 796));
+    CGS_ASSERT(lpOutput != NULL, CGS_ASSERT_MESSAGE_AT("lpOutput != NULL", CGS_ARTIST_FILE, 795));
+    CGS_ASSERT(lpActiveRaceCarInterface != NULL, CGS_ASSERT_MESSAGE_AT("lpActiveRaceCarInterface != NULL", CGS_ARTIST_FILE, 796));
     GameStateModuleIO::TriggerQueryInputInterface* lpTriggerInterface = lpOutput->GetTriggerQueryInputInterface();
-    CGS_ASSERT(lpTriggerInterface != NULL, CgsDev::Assert::MessageAt("lpTriggerInterface != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TriggerQueryManager/BrnTriggerQueryManager.cpp", 800));
+    CGS_ASSERT(lpTriggerInterface != NULL, CGS_ASSERT_MESSAGE_AT("lpTriggerInterface != NULL", CGS_ARTIST_FILE, 800));
     for (s32 liCar = static_cast<s32>(lpActiveRaceCarInterface->maCarsInTheRace.GetLength()); liCar > 0; )
     {
         const BrnWorld::RaceCarEntityModuleIO::CarsInTheRaceData& lrCar = lpActiveRaceCarInterface->maCarsInTheRace[--liCar];
@@ -826,13 +826,13 @@ void TriggerQueryManager::PostWorldUpdate(
     using GameStateModuleIO::SoundTriggerAction;
     using BrnWorld::TriggerEntityModuleIO::OutLineTestResultEvent;
     CgsDev::PerfMonCpu::StartMonitor(gsiPostWorldUpdatePM);
-    CGS_ASSERT(lpInput != NULL, CgsDev::Assert::MessageAt("lpInput != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TriggerQueryManager/BrnTriggerQueryManager.cpp", 408));
+    CGS_ASSERT(lpInput != NULL, CGS_ASSERT_MESSAGE_AT("lpInput != NULL", CGS_ARTIST_FILE, 408));
     const BrnWorld::TriggerEntityModuleIO::TriggerEntityModuleOutputInterface* lpTriggerResults = lpInput->GetTriggerEntityOutputInterface();
-    CGS_ASSERT(lpTriggerResults != NULL, CgsDev::Assert::MessageAt("lpTriggerResults != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TriggerQueryManager/BrnTriggerQueryManager.cpp", 412));
+    CGS_ASSERT(lpTriggerResults != NULL, CGS_ASSERT_MESSAGE_AT("lpTriggerResults != NULL", CGS_ARTIST_FILE, 412));
     const BrnWorld::TriggerEntityModuleIO::TriggerEntityModuleOutputInterface* lpTriggerResultQueue = lpTriggerResults;
-    CGS_ASSERT(lpTriggerResultQueue != NULL, CgsDev::Assert::MessageAt("lpTriggerResultQueue != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TriggerQueryManager/BrnTriggerQueryManager.cpp", 416));
+    CGS_ASSERT(lpTriggerResultQueue != NULL, CGS_ASSERT_MESSAGE_AT("lpTriggerResultQueue != NULL", CGS_ARTIST_FILE, 416));
     const RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarInterface = lpInput->GetActiveRaceCarOutputInterface();
-    CGS_ASSERT(lpActiveRaceCarInterface != NULL, CgsDev::Assert::MessageAt("lpActiveRaceCarInterface != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TriggerQueryManager/BrnTriggerQueryManager.cpp", 419));
+    CGS_ASSERT(lpActiveRaceCarInterface != NULL, CGS_ASSERT_MESSAGE_AT("lpActiveRaceCarInterface != NULL", CGS_ARTIST_FILE, 419));
     // 82386CD8..CEC: these are results for this frame, including an empty one.
     lpModeManager->ClearModeStartRegion();
     mbPlayerInTrafficLightRegion = false;
@@ -936,3 +936,6 @@ void TriggerQueryManager::PostWorldUpdate(
 }
 
 }
+
+#undef CGS_ARTIST_FILE
+#undef CGS_ARTIST_BRNTRIGGERQUERYMANAGER_FILE

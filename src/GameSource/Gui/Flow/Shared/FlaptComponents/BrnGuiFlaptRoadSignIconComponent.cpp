@@ -19,7 +19,7 @@
 // message, matching the sibling FlaptIconComponent / FlaptTimerFieldComponent style.
 // ===================================================================================
 #include "GameSource/Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptRoadSignIconComponent.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptRoadSignIconComponent.cpp"
 #include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"            // BrnFlapt::FileRef::FindComponent
 #include "GameSource/Gui/Flapt/BrnFlaptMovieClipInstance.h"  // MovieClipInstance::ResetTimeline
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"      // CgsCore::SPrintf
@@ -132,8 +132,8 @@ namespace BrnGui
     // make the sign clip visible the first time it is displayed.
     void FlaptRoadSignIconComponent::DisplayRoad(const char* lpcRoadName, bool lbVisible)
     {
-        CGS_ASSERT(lpcRoadName != 0, CgsDev::Assert::MessageAt("NULL != lpcRoadName", "..\\..\\..\\GameSource\\Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptRoadSignIconComponent.cpp", 198 /* ARTIST 0x82427E94 */));
-        CGS_ASSERT(lpcRoadName[0] != '\0', CgsDev::Assert::MessageAt("'\\0' != lpcRoadName[0]", "..\\..\\..\\GameSource\\Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptRoadSignIconComponent.cpp", 199 /* ARTIST 0x82427EBC */));
+        CGS_ASSERT(lpcRoadName != 0, CGS_ASSERT_MESSAGE_AT("NULL != lpcRoadName", CGS_ARTIST_FILE, 198 /* ARTIST 0x82427E94 */));
+        CGS_ASSERT(lpcRoadName[0] != '\0', CGS_ASSERT_MESSAGE_AT("'\\0' != lpcRoadName[0]", CGS_ARTIST_FILE, 199 /* ARTIST 0x82427EBC */));
 
         if (mAptRef.mpMovieClipInst != 0)
         {
@@ -255,3 +255,5 @@ namespace BrnGui
         return static_cast<ERoadIcon>(liIndex);
     }
 }
+
+#undef CGS_ARTIST_FILE

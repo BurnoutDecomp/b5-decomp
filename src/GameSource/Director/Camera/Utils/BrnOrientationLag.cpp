@@ -35,7 +35,7 @@ namespace Utils
     // @ 0x82222FB8
     void OrientationLag::Update(f32 lfTimestep, const rw::math::vpu::Matrix44Affine& lrTransform)
     {
-        CGS_ASSERT(mpParameters != NULL, CgsDev::Assert::MessageAt("mpParameters != NULL", "..\\..\\..\\GameSource\\Director/Camera/Utils/BrnOrientationLag.cpp", 60));
+        CGS_ASSERT(mpParameters != NULL, CGS_ASSERT_MESSAGE_AT("mpParameters != NULL", "..\\..\\..\\GameSource\\Director/Camera/Utils/BrnOrientationLag.cpp", 60));
 
         if (mbFirstFrame)
         {

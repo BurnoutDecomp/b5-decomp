@@ -496,9 +496,9 @@ bool GameTalkProtocol::Prepare(f32 lrInactivityTimeout, f32 lrUpdateTimeStep,
                                EA::GameTalk::GameTalkManager* lpGameTalk)
 {
     CGS_ASSERT(lpGameTalk != 0,
-        CgsDev::Assert::MessageAt("lpGameTalk != NULL", __FILE__, 137 /* ARTIST 0x82839274 */));
+        CGS_ASSERT_MESSAGE_AT("lpGameTalk != NULL", __FILE__, 137 /* ARTIST 0x82839274 */));
     CGS_ASSERT(lrUpdateTimeStep > 0.0f,
-        CgsDev::Assert::MessageAt("lrUpdateTimeStep > 0.0f", __FILE__, 138 /* ARTIST 0x828392A0 */));
+        CGS_ASSERT_MESSAGE_AT("lrUpdateTimeStep > 0.0f", __FILE__, 138 /* ARTIST 0x828392A0 */));
 
     mrInactivityTimeout = lrInactivityTimeout;
     sInactivityTimer.Prepare(lrUpdateTimeStep);

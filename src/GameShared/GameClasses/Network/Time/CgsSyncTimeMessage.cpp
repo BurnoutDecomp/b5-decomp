@@ -54,7 +54,7 @@ namespace CgsNetwork
                                   CgsSystem::Time lHostTime)
     {
         CGS_ASSERT(!IsMessageValid(),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "!IsMessageValid()",
                 "..\\..\\..\\GameShared\\GameClasses\\Network\\Time\\CgsSyncTimeMessage.cpp", 79 /* ARTIST 0x8287D430 */));
 
@@ -70,16 +70,16 @@ namespace CgsNetwork
                                    MessageWithPlayerIDs::NetworkPlayerID* lpHostID,
                                    CgsSystem::Time* lpHostTime)
     {
-        CGS_ASSERT(lpClientID, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpClientID, CGS_ASSERT_MESSAGE_AT(
             "lpClientID",
             __FILE__, 105 /* ARTIST 0x8288B18C */));
-        CGS_ASSERT(lpClientTime, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpClientTime, CGS_ASSERT_MESSAGE_AT(
             "lpClientTime",
             __FILE__, 106 /* ARTIST 0x8288B1B0 */));
-        CGS_ASSERT(lpHostID, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpHostID, CGS_ASSERT_MESSAGE_AT(
             "lpHostID",
             __FILE__, 107 /* ARTIST 0x8288B1D4 */));
-        CGS_ASSERT(lpHostTime, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpHostTime, CGS_ASSERT_MESSAGE_AT(
             "lpHostTime",
             __FILE__, 108 /* ARTIST 0x8288B1F8 */));
 

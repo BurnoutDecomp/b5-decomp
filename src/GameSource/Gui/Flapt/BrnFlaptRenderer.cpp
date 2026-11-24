@@ -193,10 +193,10 @@ void FlaptRenderer::RenderMesh(const Mesh* lpMesh, const FlaptFile* lpFile)
 void FlaptRenderer::RenderTextField(const CgsGraphics::TextObject* lpTextObject)
 {
     // The original BrnFlaptRenderer.cpp lines 363-365 (ARTIST 0x82470A48 / A74 / A9C).
-    CGS_ASSERT(lpTextObject != 0, CgsDev::Assert::MessageAt("lpTextObject", __FILE__, 363));
+    CGS_ASSERT(lpTextObject != 0, CGS_ASSERT_MESSAGE_AT("lpTextObject", __FILE__, 363));
     CGS_ASSERT(mpImRenderSet->mpIm2dRenderBuffer != 0,
-               CgsDev::Assert::MessageAt("mpImRenderSet->mpIm2dRenderBuffer", __FILE__, 364));
-    CGS_ASSERT(mpTextRenderer != 0, CgsDev::Assert::MessageAt("mpTextRenderer", __FILE__, 365));
+               CGS_ASSERT_MESSAGE_AT("mpImRenderSet->mpIm2dRenderBuffer", __FILE__, 364));
+    CGS_ASSERT(mpTextRenderer != 0, CGS_ASSERT_MESSAGE_AT("mpTextRenderer", __FILE__, 365));
 
     const CgsGraphics::Im2dTransform& lrTransform = maTransformStack.Peek();
     mpImRenderSet->mpIm2dRenderBuffer->SetTransform(lrTransform);

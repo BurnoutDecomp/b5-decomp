@@ -1725,7 +1725,7 @@ namespace BrnWorld
 void BoostBurnout3::UpdateStuntBoost(const BrnGameState::GameStateModuleIO::CompletedStuntAction* lpCompletedStuntAction)
 {
     CGS_ASSERT(lpCompletedStuntAction != 0,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lpCompletedStuntAction != NULL",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
             "../World/EntityModules/RaceCarEntityModule/Boost/BrnBoostBurnout3.cpp", 330 /* ARTIST 0x822A6734 */));

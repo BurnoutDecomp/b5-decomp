@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/System/Resource/CgsPoolModuleIO.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsPoolModuleIO.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 
@@ -51,9 +51,9 @@ namespace PoolIO
     // X360 0x828E1AA8: read-lock; return this + 4.
     const OutputBuffer::PoolOutputQueue* OutputBuffer::GetPoolOutputQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt(
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
             "Not locked for reading\n",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsPoolModuleIO.h", 262));
+            CGS_ARTIST_FILE, 262));
         return &mPoolOutputQueue;
     }
 
@@ -67,19 +67,21 @@ namespace PoolIO
     // X360 0x828E1BF8: write-lock; return this + 4.
     OutputBuffer::PoolOutputQueue* OutputBuffer::GetPoolOutputQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt(
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
             "Not locked for writing\n",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsPoolModuleIO.h", 264));
+            CGS_ARTIST_FILE, 264));
         return &mPoolOutputQueue;
     }
 
     // X360 0x828E1CA0: write-lock; return this + 8212.
     OutputBuffer::PoolResourceRequestQueueStorage* OutputBuffer::GetPoolResourceRequestQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt(
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
             "Not locked for writing\n",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsPoolModuleIO.h", 265));
+            CGS_ARTIST_FILE, 265));
         return &mPoolResourceRequestQueue;
     }
 }
 }
+
+#undef CGS_ARTIST_FILE

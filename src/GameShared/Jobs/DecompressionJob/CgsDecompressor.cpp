@@ -154,11 +154,11 @@ namespace CgsResource
             lMessage << "SPU Id out of range: " << luReportedThreadId << "\n";
             const char* lpcSource =
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\jobs\\decompressionjob\\DecompressionJob.cpp";
-            CgsDev::Assert::PrintStringed(lpcSource, 0, 56, lMessage.GetBuffer());
+            CGS_JOB_ASSERT_LOG(lpcSource, 56, lMessage.GetBuffer());
             __asm { mfmsr r12 }
             __asm { ori r12, r12, 0x400 }
             __asm { mtmsr r12 }
-            CgsDev::Assert::PrintStringed(lpcSource, 0, 56, lMessage.GetBuffer());
+            CGS_JOB_ASSERT_LOG(lpcSource, 56, lMessage.GetBuffer());
             __asm { mfmsr r12 }
             __asm { ori r12, r12, 0x400 }
             __asm { mtmsr r12 }

@@ -2,7 +2,7 @@
 #include "rw/RwHash32String.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Sound/BrnResourceRegistrar.h"
 #include <cstring>   // strncpy
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint ([reg-pool] witness)
 
@@ -534,7 +534,7 @@ namespace Logic
                 {
                     CgsDev::Assert::BeginAssert();
                     CgsDev::Assert::FireAssert("lDebugId == lpData->mResourceHandle.GetResourceId()",
-                                               KAC_RR_FILE, 559);
+                                               CGS_ASSERT_LOCATION(KAC_RR_FILE, 559));
                     CgsDev::Assert::EndAssert();
                 }
                 return lpHandle;
@@ -551,7 +551,7 @@ namespace Logic
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("!DoesRequesterHaveAnyQueued( lpResourceRequester )",
-                                       KAC_RR_FILE, 367);
+                                       CGS_ASSERT_LOCATION(KAC_RR_FILE, 367));
             CgsDev::Assert::EndAssert();
         }
 
@@ -568,7 +568,7 @@ namespace Logic
                     {
                         CgsDev::Assert::BeginAssert();
                         CgsDev::Assert::FireAssert("!mapRemovalCandidates.Contains(lpNode)",
-                                                   "..\\..\\..\\GameSource\\Sound/BrnResourceRegistrar.h", 513);
+                                                   CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 513));
                         CgsDev::Assert::EndAssert();
                     }
                     mapRemovalCandidates.Append(lpNode);
@@ -625,7 +625,7 @@ namespace Logic
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("!mapRemovalCandidates.Contains(lpNode)",
-                                       "..\\..\\..\\GameSource\\Sound/BrnResourceRegistrar.h", 513);
+                                       CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 513));
             CgsDev::Assert::EndAssert();
         }
         mapRemovalCandidates.Append(lpNode);
@@ -671,7 +671,7 @@ namespace Logic
                     if (liState != 9 && liState != 5 && liState != 0 && liState != 2)
                     {
                         CgsDev::Assert::BeginAssert();
-                        CgsDev::Assert::FireAssert("State", KAC_RR_FILE, 137);
+                        CgsDev::Assert::FireAssert("State", CGS_ASSERT_LOCATION(KAC_RR_FILE, 137));
                         CgsDev::Assert::EndAssert();
                     }
 
@@ -810,7 +810,7 @@ namespace Logic
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("lpListNode->GetData()->GetNumberOfReferences() == 0",
-                                           KAC_RR_FILE, 311);
+                                           CGS_ASSERT_LOCATION(KAC_RR_FILE, 311));
                 CgsDev::Assert::EndAssert();
             }
 
@@ -823,7 +823,7 @@ namespace Logic
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("mUnLoadingQueuedResourceList.AddHead( lUnloadingItem )",
-                                           KAC_RR_FILE, 320);
+                                           CGS_ASSERT_LOCATION(KAC_RR_FILE, 320));
                 CgsDev::Assert::EndAssert();
             }
 
@@ -862,14 +862,14 @@ namespace Logic
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("mAttribSysRequestInterface.GetRequestQueue()->GetLength() == 0",
-                                       KAC_RR_FILE, 513);
+                                       CGS_ASSERT_LOCATION(KAC_RR_FILE, 513));
             CgsDev::Assert::EndAssert();
         }
         if (mResourceRequestInterface.mRequestQueue.GetLength())
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("mResourceRequestInterface.GetRequestQueue()->GetLength() == 0",
-                                       KAC_RR_FILE, 514);
+                                       CGS_ASSERT_LOCATION(KAC_RR_FILE, 514));
             CgsDev::Assert::EndAssert();
         }
 
@@ -911,7 +911,7 @@ namespace Logic
                                        ResourceRegistrar::EType leType)
     {
         CGS_ASSERT(lpcBundleName,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpFilename",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
                 "../Sound/BrnResourceRegistrar.cpp", 1086 /* ARTIST 0x826E2374 */));
@@ -941,3 +941,5 @@ namespace Logic
     }
 }
 }
+
+#undef CGS_ARTIST_FILE

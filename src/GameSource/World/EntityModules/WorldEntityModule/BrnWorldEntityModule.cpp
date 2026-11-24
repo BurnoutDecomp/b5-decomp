@@ -119,8 +119,8 @@ void WorldEntityModule::GetSurface(u8 luSurfaceId, Attrib::Gen::surface* lpOutSu
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(
             "lpOutSurface != NULL",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\EntityModules/WorldEntityModule/BrnWorldEntityModule.h",
-            634);
+            CGS_ASSERT_LOCATION("d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\EntityModules/WorldEntityModule/BrnWorldEntityModule.h",
+            634));
         CgsDev::Assert::EndAssert();
     }
     const Attrib::RefSpec* lpRef =
@@ -357,7 +357,7 @@ WorldEntityModule::Prepare( WorldEntityIO::OutputBuffer_Prepare* lpOutputBuffer 
 
         default:
         {
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
                 "Invalid Stage\n",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
                 "../World/EntityModules/WorldEntityModule/BrnWorldEntityModule.cpp", 631));  // ARTIST 0x823029DC
@@ -566,7 +566,7 @@ void
 WorldEntityModule::UpdateCollisionValidation( WorldEntityIO::OutputBuffer_PostPhysics* lpOutputBuffer )
 {
     CGS_ASSERT( lpOutputBuffer,
-        CgsDev::Assert::MessageAt("lpOutputBuffer", KAC_ARTIST_ASSERT_FILE, 1098 /* ARTIST 0x82307FE4 */));
+        CGS_ASSERT_MESSAGE_AT("lpOutputBuffer", KAC_ARTIST_ASSERT_FILE, 1098 /* ARTIST 0x82307FE4 */));
 
     lpOutputBuffer->GetStatusInterface()->SetCollisionWorldInvalid( meCollisionWorldState != E_COLWORLDSTATE_VALID );
     lpOutputBuffer->GetStatusInterface()->SetCollisionWorldInvalidating( meCollisionWorldState == E_COLWORLDSTATE_INVALIDATING );
@@ -1133,7 +1133,7 @@ WorldEntityModule::PrepareWorldCollision(
     bool lbLoadBundle )
 {
     CGS_ASSERT( lpRequestInterface && lpSceneInterface,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lpRequestInterface && lpSceneInterface",
             KAC_ARTIST_ASSERT_FILE, 2117 /* ARTIST 0x8230692C */));
 

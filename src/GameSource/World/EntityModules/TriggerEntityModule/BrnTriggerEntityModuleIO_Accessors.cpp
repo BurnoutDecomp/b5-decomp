@@ -19,7 +19,7 @@
 #include "GameSource/World/EntityModules/TriggerEntityModule/BrnTriggerEntityModuleIO.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // the header-baked lock asserts
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\triggerentitymodule\\BrnTriggerEntityModuleIO.h"
 #include <cstddef>   // offsetof
 
 namespace BrnWorld
@@ -53,7 +53,7 @@ namespace TriggerEntityModuleIO
     const OutputBuffer_PreScene::SceneInputInterface*
     OutputBuffer_PreScene::GetSceneInputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\triggerentitymodule\\BrnTriggerEntityModuleIO.h", 90));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 90));
         return &mSceneInputInterface;
     }
 
@@ -62,7 +62,7 @@ namespace TriggerEntityModuleIO
     OutputBuffer_PreScene::SceneInputInterface*
     OutputBuffer_PreScene::GetSceneInputInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\triggerentitymodule\\BrnTriggerEntityModuleIO.h", 91));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 91));
         return &mSceneInputInterface;
     }
 
@@ -71,8 +71,10 @@ namespace TriggerEntityModuleIO
     InputBuffer_PreScene::InputInterface*
     InputBuffer_PreScene::GetInputInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\triggerentitymodule\\BrnTriggerEntityModuleIO.h", 119));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 119));
         return &mInputInterface;
     }
 }
 }
+
+#undef CGS_ARTIST_FILE

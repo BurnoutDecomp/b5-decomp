@@ -1,14 +1,14 @@
 #include "GameSource/GameState/BrnGameStateSharedIO.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateSharedIO.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Network/CgsNetworkConstants.h"   // CgsNetwork::K_INVALID_PLAYER_ID
 #include "GameShared/GameClasses/Development/CgsStrStream.h"  // CgsDev::StrStream (AddMessage dynamic assert text)
 #include <cstring>  // memcpy, memset, strncpy, strlen
 #include <new>      // placement construction of the Time pairs in maStorage8C
-
+#define CGS_ARTIST_FILE_BRNGAMESTATESHAREDIO "..\\..\\..\\GameSource\\GameState/BrnGameStateSharedIO.h"
 static const char KAC_ARTIST_ASSERT_FILE[] =
     "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateSharedIO.cpp";
-
+#define CGS_ARTIST_BRNGAMESTATESHAREDIO_FILE_ABSOLUTE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateSharedIO.h"
 namespace BrnGameState
 {
 namespace GameStateModuleIO
@@ -53,9 +53,9 @@ void SpecificGameModeEventInterface::Event::Construct(
     s32            liNumLandmarks)
 {
     CGS_ASSERT(liNumLandmarks <= KI_MAX_LANDMARKS_IN_MODE,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "liNumLandmarks <= KI_MAX_LANDMARKS_IN_MODE",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateSharedIO.h", 1850 /* ARTIST 0x82354370 */));
+            CGS_ARTIST_BRNGAMESTATESHAREDIO_FILE_ABSOLUTE, 1850 /* ARTIST 0x82354370 */));
 
     miEventID              = liEventID;
     mTrafficLightTriggerId = luTrafficLightTriggerId;
@@ -99,7 +99,7 @@ SpecificGameModeEventInterface::Event* SpecificGameModeEventInterface::AddEvent(
     }
 
     CGS_ASSERT(maEvents.GetLength() < maEvents.GetSize(),
-               CgsDev::Assert::MessageAt("maEvents.GetLength() < maEvents.GetCapacity()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateSharedIO.h", 1976));
+               CGS_ASSERT_MESSAGE_AT("maEvents.GetLength() < maEvents.GetCapacity()", CGS_ARTIST_BRNGAMESTATESHAREDIO_FILE_ABSOLUTE, 1976));
 
     Event lNewEvent;
     lNewEvent.Construct(liEventID, luTrafficLightTriggerId, lpaLandmarkIndices, liNumLandmarks);
@@ -181,8 +181,8 @@ void CarCheckpointData::SetupCheckpoints(s32 liNumCheckpoints)
 // committed convention. (X360 returns `this`; void here.)
 void CarCheckpointData::MarkCheckpointAsHit(s32 liCheckpointIndex)
 {
-    CGS_ASSERT(liCheckpointIndex >= 0, CgsDev::Assert::MessageAt("liCheckpointIndex >= 0", "..\\..\\..\\GameSource\\GameState/BrnGameStateSharedIO.h", 1210));
-    CGS_ASSERT(liCheckpointIndex < KI_MAX_LANDMARKS_IN_MODE, CgsDev::Assert::MessageAt("liCheckpointIndex < KI_MAX_LANDMARKS_IN_MODE", "..\\..\\..\\GameSource\\GameState/BrnGameStateSharedIO.h", 1211));
+    CGS_ASSERT(liCheckpointIndex >= 0, CGS_ASSERT_MESSAGE_AT("liCheckpointIndex >= 0", CGS_ARTIST_FILE_BRNGAMESTATESHAREDIO, 1210));
+    CGS_ASSERT(liCheckpointIndex < KI_MAX_LANDMARKS_IN_MODE, CGS_ASSERT_MESSAGE_AT("liCheckpointIndex < KI_MAX_LANDMARKS_IN_MODE", CGS_ARTIST_FILE_BRNGAMESTATESHAREDIO, 1211));
 
     CGS_ASSERT(static_cast<u32>(liCheckpointIndex) < KI_MAX_LANDMARKS_IN_MODE, "luIndex < NUMBITS");
 
@@ -288,20 +288,20 @@ bool FlybyData::Prepare()
 void FlybyData::AddCar(EActiveRaceCarIndex leRaceCarIndex, const CgsNetwork::PlayerName* lpPlayerName)
 {
     CGS_ASSERT(miNumberOfCars >= 0,
-        CgsDev::Assert::MessageAt("miNumberOfCars >= 0", KAC_ARTIST_ASSERT_FILE, 242 /* ARTIST 0x82356F24 */));
+        CGS_ASSERT_MESSAGE_AT("miNumberOfCars >= 0", KAC_ARTIST_ASSERT_FILE, 242 /* ARTIST 0x82356F24 */));
     CGS_ASSERT(miNumberOfCars < FlybyRivalData::KI_MAX_CARS_IN_FLYBY,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "miNumberOfCars < FlybyRivalData::KI_MAX_CARS_IN_FLYBY", KAC_ARTIST_ASSERT_FILE, 243 /* ARTIST 0x82356F4C */));
     CGS_ASSERT(lpPlayerName,
-        CgsDev::Assert::MessageAt("lpPlayerName", KAC_ARTIST_ASSERT_FILE, 244 /* ARTIST 0x82356F70 */));
+        CGS_ASSERT_MESSAGE_AT("lpPlayerName", KAC_ARTIST_ASSERT_FILE, 244 /* ARTIST 0x82356F70 */));
     CGS_ASSERT(lpPlayerName,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lpPlayerName->GetPlayerName()", KAC_ARTIST_ASSERT_FILE, 245 /* ARTIST 0x82356F8C */));
     CGS_ASSERT(std::strlen(lpPlayerName->GetPlayerName()) != 0,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "strlen( lpPlayerName->GetPlayerName() ) > 0", KAC_ARTIST_ASSERT_FILE, 246 /* ARTIST 0x82356FD4 */));
     CGS_ASSERT(std::strlen(lpPlayerName->GetPlayerName()) < static_cast<u32>(CgsNetwork::PlayerName::KI_USERNAME_LENGTH),
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "strlen( lpPlayerName->GetPlayerName() ) < static_cast<uint32_t>(CgsNetwork::KI_USERNAME_LENGTH )", KAC_ARTIST_ASSERT_FILE, 247 /* ARTIST 0x8235701C */));
 
     mRivalsToShow[miNumberOfCars].meRaceCarIndex = leRaceCarIndex;
@@ -321,8 +321,8 @@ void FlybyData::AddCar(EActiveRaceCarIndex leRaceCarIndex, const CgsNetwork::Pla
 // calling-convention artifact).
 void FlybyData::AddMessage(const char* lpcMessage, const char* lpcParameter)
 {
-    CGS_ASSERT(miNumberOfCars > 0, CgsDev::Assert::MessageAt("miNumberOfCars > 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateSharedIO.cpp", 267));
-    CGS_ASSERT(miNumberOfCars <= FlybyRivalData::KI_MAX_CARS_IN_FLYBY, CgsDev::Assert::MessageAt("miNumberOfCars <= FlybyRivalData::KI_MAX_CARS_IN_FLYBY", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateSharedIO.cpp", 268));
+    CGS_ASSERT(miNumberOfCars > 0, CGS_ASSERT_MESSAGE_AT("miNumberOfCars > 0", CGS_ARTIST_FILE, 267));
+    CGS_ASSERT(miNumberOfCars <= FlybyRivalData::KI_MAX_CARS_IN_FLYBY, CGS_ASSERT_MESSAGE_AT("miNumberOfCars <= FlybyRivalData::KI_MAX_CARS_IN_FLYBY", CGS_ARTIST_FILE, 268));
     if (std::strlen(lpcMessage) >= static_cast<u32>(FlybyRivalData::KI_MAX_MESSAGE_ID_BUFFER))
     {
         char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
@@ -335,7 +335,7 @@ void FlybyData::AddMessage(const char* lpcMessage, const char* lpcParameter)
     FlybyRivalData& lRival = mRivalsToShow[liFlybyCarIndex];
     const s32 liCurrentMessageIndex = lRival.miNumberOfMessages;
 
-    CGS_ASSERT(liCurrentMessageIndex < FlybyRivalData::KI_MAX_MESSAGES, CgsDev::Assert::MessageAt("liCurrentMessageIndex < GameStateModuleIO::FlybyRivalData::KI_MAX_MESSAGES", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateSharedIO.cpp", 273));
+    CGS_ASSERT(liCurrentMessageIndex < FlybyRivalData::KI_MAX_MESSAGES, CGS_ASSERT_MESSAGE_AT("liCurrentMessageIndex < GameStateModuleIO::FlybyRivalData::KI_MAX_MESSAGES", CGS_ARTIST_FILE, 273));
 
     // Inlined StrnCpy<KI_MAX_MESSAGE_ID_BUFFER>(maacMessageIDs[idx], lpcMessage) bounds check.
     if (std::strlen(lpcMessage) >= static_cast<u32>(FlybyRivalData::KI_MAX_MESSAGE_ID_BUFFER))
@@ -369,7 +369,7 @@ void FlybyData::AddMessage(const char* lpcMessage, const char* lpcParameter)
                      FlybyRivalData::KI_MAX_PARAMTER_LENGTH);
 
         ++lRival.maiNumberOfParameters[liCurrentMessageIndex];
-        CGS_ASSERT(lRival.maiNumberOfParameters[liCurrentMessageIndex] <= FlybyRivalData::KI_MAX_PARAMETERS, CgsDev::Assert::MessageAt("mRivalsToShow[liFlybyCarIndex].maiNumberOfParameters[liCurrentMessageIndex] <= GameStateModuleIO::FlybyRivalData::KI_MAX_PARAMETERS", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateSharedIO.cpp", 287));
+        CGS_ASSERT(lRival.maiNumberOfParameters[liCurrentMessageIndex] <= FlybyRivalData::KI_MAX_PARAMETERS, CGS_ASSERT_MESSAGE_AT("mRivalsToShow[liFlybyCarIndex].maiNumberOfParameters[liCurrentMessageIndex] <= GameStateModuleIO::FlybyRivalData::KI_MAX_PARAMETERS", CGS_ARTIST_FILE, 287));
     }
 
     ++lRival.miNumberOfMessages;
@@ -549,7 +549,7 @@ void CarScoreData::GetChainableStuntMultipliers(s32 liMaxMultiplier, s32 liSuppl
     if (mbChainActive && miCurrentChainableMultiplier < liMaxMultiplier)
     {
         ChainableMultiplierInfo* lpInfo = lpaMultiplierInfo->AddNew();
-        CGS_ASSERT(lpInfo != 0, CgsDev::Assert::MessageAt("lpChainableMultiplierInfo", "..\\..\\..\\GameSource\\GameState/BrnGameStateSharedIO.h", 1547));
+        CGS_ASSERT(lpInfo != 0, CGS_ASSERT_MESSAGE_AT("lpChainableMultiplierInfo", CGS_ARTIST_FILE_BRNGAMESTATESHAREDIO, 1547));
         lpInfo->miChainableScore = miChainableScore;
         lpInfo->miChainableField = miChainableField;
         lpInfo->miSuppliedValue  = liSuppliedValue;
@@ -558,3 +558,7 @@ void CarScoreData::GetChainableStuntMultipliers(s32 liMaxMultiplier, s32 liSuppl
 }
 }
 }
+
+#undef CGS_ARTIST_FILE
+#undef CGS_ARTIST_FILE_BRNGAMESTATESHAREDIO
+#undef CGS_ARTIST_BRNGAMESTATESHAREDIO_FILE_ABSOLUTE

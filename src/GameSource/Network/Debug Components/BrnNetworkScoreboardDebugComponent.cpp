@@ -50,8 +50,8 @@ namespace
             lStrStream << (lpcHeading ? lpcHeading : "<NULLSTRING>");
             CgsDev::Assert::FireAssert(
                 lacMessage,
-                "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h",
-                55);
+                CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h",
+                55));
             CgsDev::Assert::EndAssert();
         }
     }
@@ -73,7 +73,7 @@ namespace BrnNetwork
     void ScoreboardDebugComponent::Construct(ScoreboardManager* lpScoreboardManager)
     {
         CGS_ASSERT(lpScoreboardManager != 0,
-            CgsDev::Assert::MessageAt("lpScoreboardManager", __FILE__, 45 /* ARTIST 0x82585884 */));
+            CGS_ASSERT_MESSAGE_AT("lpScoreboardManager", __FILE__, 45 /* ARTIST 0x82585884 */));
         mpScoreboardManager = lpScoreboardManager;
 
         mScoreboard.Construct();
@@ -182,15 +182,15 @@ namespace BrnNetwork
         {
             FireOriginalAssert(
                 "lpHeadingEvent",
-                "..\\..\\..\\GameSource\\Network/Debug Components/BrnNetworkScoreboardDebugComponent.cpp",
-                279);
+                CGS_ASSERT_LOCATION("..\\..\\..\\GameSource\\Network/Debug Components/BrnNetworkScoreboardDebugComponent.cpp",
+                279));
         }
         if (lpHeadingEvent->meHeadingType == IO::E_HEADING_COUNT)
         {
             FireOriginalAssert(
                 "meHeadingType != E_HEADING_COUNT",
-                "..\\..\\..\\GameSource\\Network/BrnNetworkOutEventTypeDefs.h",
-                1778);
+                CGS_ASSERT_LOCATION("..\\..\\..\\GameSource\\Network/BrnNetworkOutEventTypeDefs.h",
+                1778));
         }
 
         const s32 liCount = lpHeadingEvent->miLength;
@@ -272,8 +272,8 @@ namespace BrnNetwork
             lStrStream << "\n";
             CgsDev::Assert::FireAssert(
                 lacMessage,
-                "..\\..\\..\\GameSource\\Network/Debug Components/BrnNetworkScoreboardDebugComponent.cpp",
-                359);
+                CGS_ASSERT_LOCATION("..\\..\\..\\GameSource\\Network/Debug Components/BrnNetworkScoreboardDebugComponent.cpp",
+                359));
             CgsDev::Assert::EndAssert();
             break;
         }
@@ -285,7 +285,7 @@ namespace BrnNetwork
     void ScoreboardDebugComponent::HandleScoreboardEvent(const Scoreboard* lpScoreboard)
     {
         CGS_ASSERT(lpScoreboard != 0,
-            CgsDev::Assert::MessageAt("lpScoreboardEvent", __FILE__, 378 /* ARTIST 0x8258AE64 */));
+            CGS_ASSERT_MESSAGE_AT("lpScoreboardEvent", __FILE__, 378 /* ARTIST 0x8258AE64 */));
         mScoreboard = *lpScoreboard;   // X360: memcpy(this+0xC, src, 0xB6C) -- whole Scoreboard payload
         PrintScoreboard();             // tail call: render the freshly copied scoreboard
     }

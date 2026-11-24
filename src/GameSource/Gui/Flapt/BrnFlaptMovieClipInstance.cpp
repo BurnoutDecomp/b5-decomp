@@ -365,11 +365,11 @@ void MovieClipInstance::GotoAndPlayLabel(u32 luLabelHash,
                                          const char* lpcDEBUGName)
 {
     CGS_ASSERT(mpMovieClip != 0,
-        CgsDev::Assert::MessageAt("mpMovieClip", __FILE__, 1299 /* ARTIST 0x8246F25C */));
+        CGS_ASSERT_MESSAGE_AT("mpMovieClip", __FILE__, 1299 /* ARTIST 0x8246F25C */));
     const u32 luFrame = static_cast<u32>(
         mpMovieClip->FindLabelledFrameIndex(luLabelHash, lpcDEBUGName));
     CGS_ASSERT(luFrame < mpMovieClip->muNumFramesInTimeline,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "luFrame < mpMovieClip->muNumFramesInTimeline",
             __FILE__, 1303 /* ARTIST 0x8246F29C */));
     muLastKeyFrameApplied = static_cast<u16>(-1);
@@ -381,11 +381,11 @@ void MovieClipInstance::GotoAndStopLabel(u32 luLabelHash,
                                          const char* lpcLabel)
 {
     CGS_ASSERT(mpMovieClip != 0,
-        CgsDev::Assert::MessageAt("mpMovieClip", __FILE__, 1330 /* ARTIST 0x8246F30C */));
+        CGS_ASSERT_MESSAGE_AT("mpMovieClip", __FILE__, 1330 /* ARTIST 0x8246F30C */));
     const u32 luFrame = static_cast<u32>(
         mpMovieClip->FindLabelledFrameIndex(luLabelHash, lpcLabel));
     CGS_ASSERT(luFrame < mpMovieClip->muNumFramesInTimeline,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "luFrame < mpMovieClip->muNumFramesInTimeline",
             __FILE__, 1334 /* ARTIST 0x8246F34C */));
     muLastKeyFrameApplied = static_cast<u16>(-1);
@@ -415,21 +415,21 @@ void MovieClipInstance::SetSoundTriggerHandler(SoundTriggerCallback lpCallback,
 const TriggerParameters* MovieClipInstance::GetTriggerParameters() const
 {
     CGS_ASSERT(mpMovieClip != 0,
-        CgsDev::Assert::MessageAt("NULL != mpMovieClip", __FILE__, 1358 /* ARTIST 0x8246C644 */));
+        CGS_ASSERT_MESSAGE_AT("NULL != mpMovieClip", __FILE__, 1358 /* ARTIST 0x8246C644 */));
     CGS_ASSERT(mpMovieClip->mpFile != 0,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "NULL != mpMovieClip->mpFile",
             __FILE__, 1359 /* ARTIST 0x8246C670 */));
     CGS_ASSERT(muParameterIndex != 0xFFFFu,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "0xFFFF != muParameterIndex",
             __FILE__, 1360 /* ARTIST 0x8246C698 */));
     CGS_ASSERT(muParameterIndex < mpMovieClip->mpFile->muNumTriggerParameters,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "muParameterIndex < mpMovieClip->mpFile->muNumTriggerParameters",
             __FILE__, 1361 /* ARTIST 0x8246C6CC */));
     CGS_ASSERT(mpMovieClip->mpFile->mpaTriggerParameters != 0,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "NULL != mpMovieClip->mpFile->mpaTriggerParameters",
             __FILE__, 1362 /* ARTIST 0x8246C6FC */));
     return &mpMovieClip->mpFile->mpaTriggerParameters[muParameterIndex];

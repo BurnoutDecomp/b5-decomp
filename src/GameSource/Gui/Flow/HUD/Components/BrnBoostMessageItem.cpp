@@ -266,10 +266,10 @@ void BoostMessageItem::SetTransition(u32 luTransition, s32 leBoostType)
 void BoostMessageItem::UpdateBoostType(s32 leBoostType)
 {
     CGS_ASSERT(leBoostType >= -1,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "leBoostType >= BrnWorld::E_BOOST_TYPE_NONE", KAC_ARTIST_ASSERT_FILE, 268 /* ARTIST 0x82411BFC */));   // :268 (non-gating)
     CGS_ASSERT(leBoostType < 3,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "leBoostType < BrnWorld::E_BOOST_TYPE_COUNT", KAC_ARTIST_ASSERT_FILE, 269 /* ARTIST 0x82411C20 */));   // :269 (non-gating)
 
     if (leBoostType != -1 && leBoostType != meCurrentBoostType)

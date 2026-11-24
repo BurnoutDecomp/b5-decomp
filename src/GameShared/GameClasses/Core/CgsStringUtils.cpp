@@ -45,8 +45,8 @@ void CgsCore::SPrintf(char* buffer, u32 len, const char* fmt, ...)
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(
             "lNumBytesCopied<(int32_t)luBytes",
-            "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h",
-            119);
+            CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h",
+            119));
         CgsDev::Assert::EndAssert();
     }
 }

@@ -73,7 +73,7 @@ bool ScrapeInfo::operator==( const ScrapeInfo& lInfo ) const
 void ScrapeInfo::UpdateHistory( const ScrapeInfo& lInfo )
 {
     CGS_ASSERT( *this == lInfo,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "*this == lInfo",
             "..\\..\\..\\GameSource\\Sound/Collision/BrnCollisionDataStructures.h", 146 /* ARTIST 0x826822FC */));
 

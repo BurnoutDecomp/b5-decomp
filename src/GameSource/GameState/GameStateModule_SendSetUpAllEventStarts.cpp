@@ -160,13 +160,13 @@ void GameStateModule::SendSetUpAllEventStartsMessage(GameStateModuleIO::OutputBu
             if (luHull >= BrnTraffic::KU_MAX_HULLS)
             {
                 CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert("luHull < KU_MAX_HULLS", KAC_LIGHT_TRIGGER_H, 211);
+                CgsDev::Assert::FireAssert("luHull < KU_MAX_HULLS", CGS_ASSERT_LOCATION(KAC_LIGHT_TRIGGER_H, 211));
                 CgsDev::Assert::EndAssert();
             }
             if (luTrigger >= 256u)
             {
                 CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert("luLightTriggerIndex < 256", KAC_LIGHT_TRIGGER_H, 212);
+                CgsDev::Assert::FireAssert("luLightTriggerIndex < 256", CGS_ASSERT_LOCATION(KAC_LIGHT_TRIGGER_H, 212));
                 CgsDev::Assert::EndAssert();
             }
 
@@ -219,7 +219,7 @@ void GameStateModule::SendSetUpAllEventStartsMessage(GameStateModuleIO::OutputBu
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert(
                     "luMapValue != CgsWorld::KU_INVALID_WORLD_MAP_VALUE",
-                    KAC_GAMESTATEMODULE_CPP, 5764);
+                    CGS_ASSERT_LOCATION(KAC_GAMESTATEMODULE_CPP, 5764));
                 CgsDev::Assert::EndAssert();
             }
             // The console passes the raw sample straight through, INCLUDING the 255 it just

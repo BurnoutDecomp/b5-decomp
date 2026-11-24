@@ -325,8 +325,8 @@ namespace CgsInput
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert(
                     lacMessage,
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\input\\Devices/X360/CgsInputDeviceX360Pad.cpp",
-                    699);
+                    CGS_ASSERT_LOCATION("d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\input\\Devices/X360/CgsInputDeviceX360Pad.cpp",
+                    699));
                 CgsDev::Assert::EndAssert();
             }
         }

@@ -22,7 +22,7 @@
 // external ("chase") gameplay-camera block from the vehicle's attribute-system source block
 // before installing it.
 // ============================================================================
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BehaviourGameplayExternal.cpp"
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourGameplayExternal.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
@@ -207,8 +207,8 @@ void BehaviourGameplayExternal::Parameters::Set(const Source* lpSource)
     mfTiltAroundCarScale  = lpfSrc[0x10 / 4];                 // <- source[+0x10]
     mfZDistanceScale  = lpfSrc[0x00 / 4];                 // <- source[+0x00]
 
-    CGS_ASSERT(mfBoostFOV > 0.0f, CgsDev::Assert::MessageAt("mfBoostFOV > 0.0f", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BehaviourGameplayExternal.cpp", 239));
-    CGS_ASSERT(mrFOV > 0.0f, CgsDev::Assert::MessageAt("mrFOV > 0.0f", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BehaviourGameplayExternal.cpp", 240));
+    CGS_ASSERT(mfBoostFOV > 0.0f, CGS_ASSERT_MESSAGE_AT("mfBoostFOV > 0.0f", CGS_ARTIST_FILE, 239));
+    CGS_ASSERT(mrFOV > 0.0f, CGS_ASSERT_MESSAGE_AT("mrFOV > 0.0f", CGS_ARTIST_FILE, 240));
 
     mfSlideYScaleJump = -1.0f;                             // stfs flt_820037C8, 0xA0  (final override)
 }
@@ -367,7 +367,7 @@ bool BehaviourGameplayExternal::Prepare(const BehaviourSharedPrepareReleaseInfo&
 // ============================================================================
 CollisionPolicy* BehaviourGameplayExternal::GetCollisionPolicy()
 {
-    CGS_ASSERT(mpParameters != 0, CgsDev::Assert::MessageAt("calling GetCollisionPolicy() with no parameters", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BehaviourGameplayExternal.cpp", 120));
+    CGS_ASSERT(mpParameters != 0, CGS_ASSERT_MESSAGE_AT("calling GetCollisionPolicy() with no parameters", CGS_ARTIST_FILE, 120));
 
     if (!mpParameters->mbIsValid)
         return 0;
@@ -394,9 +394,9 @@ CollisionPolicy* BehaviourGameplayExternal::GetCollisionPolicy()
 // ============================================================================
 void BehaviourGameplayExternal::SetParameters(const Behaviour::Parameters* lpParameters)
 {
-    CGS_ASSERT(lpParameters->GetType() == static_cast<u32>(eBehaviourGameplayExternal), CgsDev::Assert::MessageAt(
+    CGS_ASSERT(lpParameters->GetType() == static_cast<u32>(eBehaviourGameplayExternal), CGS_ASSERT_MESSAGE_AT(
                "lpParameters->GetType() == eBehaviourGameplayExternal",
-               "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BehaviourGameplayExternal.cpp", 138));
+               CGS_ARTIST_FILE, 138));
 
     SetDebugParametersName(lpParameters->GetDebugName());          // v3[4]   = a2[1]
     mpParameters = static_cast<const Parameters*>(lpParameters);   // v3[704] = a2
@@ -703,7 +703,7 @@ void BehaviourGameplayExternal::InterpolateLastPlayerTransform(Matrix44Affine lP
                            rw::math::vpu::Normalize(mLastPlayerTransform.zAxis)),
         -1.0f, 1.0f);
     const f32 lfOutAngle = std::acos(lfCos);
-    CGS_ASSERT(rw::math::fpu::IsValid(lfOutAngle), CgsDev::Assert::MessageAt("IsValid( lvfOutAngle )", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BehaviourGameplayExternal.cpp", 654));   // .cpp:580
+    CGS_ASSERT(rw::math::fpu::IsValid(lfOutAngle), CGS_ASSERT_MESSAGE_AT("IsValid( lvfOutAngle )", CGS_ARTIST_FILE, 654));   // .cpp:580
 
     // .cpp:584 -- how much of the gap to close this frame, as a fraction. Below 3 m/s the
     // camera does not chase the car's heading at all; the response then grows with the SQUARE
@@ -712,7 +712,7 @@ void BehaviourGameplayExternal::InterpolateLastPlayerTransform(Matrix44Affine lP
         VecFloatMax(lvfCarSpeed.GetFloat() - KVF_LAST_PLAYER_TRANSFORM_SPEED_TO_INTERP_MPS, 0.0f);
     f32 lfSpeedMod = (lfExcessSpeed * lfExcessSpeed)
                    * KVF_LAST_PLAYER_TRANSFORM_CAR_SPEED_FACTOR * lvfTimestep.GetFloat();
-    CGS_ASSERT(rw::math::fpu::IsValid(lfSpeedMod), CgsDev::Assert::MessageAt("IsValid( lvfSpeedMod )", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BehaviourGameplayExternal.cpp", 659));   // .cpp:585
+    CGS_ASSERT(rw::math::fpu::IsValid(lfSpeedMod), CGS_ASSERT_MESSAGE_AT("IsValid( lvfSpeedMod )", CGS_ARTIST_FILE, 659));   // .cpp:585
 
     // .cpp:589 / :590 -- turn that fraction into an ANGLE, then rate-limit the angle into
     // [0.01, 0.05] radians per frame (0.57 to 2.9 degrees).
@@ -1499,9 +1499,9 @@ void BehaviourGameplayExternal::UpdateLooking(f32& lfFOVInOut,
     f32 lfLength = lrAABBox.mMax.GetZ().GetFloat() - lrAABBox.mMin.GetZ().GetFloat();
     f32 lfWidth  = lrAABBox.mMax.GetX().GetFloat() - lrAABBox.mMin.GetX().GetFloat();
     CGS_ASSERT(!rw::math::fpu::IsZero(lfLength),
-               CgsDev::Assert::MessageAt("!rw::math::fpu::IsZero(lfLength)", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BehaviourGameplayExternal.cpp", 795));                               // .cpp:721
+               CGS_ASSERT_MESSAGE_AT("!rw::math::fpu::IsZero(lfLength)", CGS_ARTIST_FILE, 795));                               // .cpp:721
     CGS_ASSERT(!rw::math::fpu::IsZero(lfWidth),
-               CgsDev::Assert::MessageAt("!rw::math::fpu::IsZero(lfWidth)", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BehaviourGameplayExternal.cpp", 796));                                // .cpp:722
+               CGS_ASSERT_MESSAGE_AT("!rw::math::fpu::IsZero(lfWidth)", CGS_ARTIST_FILE, 796));                                // .cpp:722
     lfWidth /= lfLength;   // a WIDTH-TO-LENGTH RATIO from here on (DWARF: lrSideScale)
 
     CGS_ASSERT(!rw::math::vpu::IsZero(lPivot, rw::math::fpu::KF_IS_ZERO_TOLERANCE),
@@ -1725,7 +1725,7 @@ bool BehaviourGameplayExternal::Update(Camera& lCamera, const BehaviourSharedInf
 {
     // .cpp:190 -- NON-GATING: the console asserts and then dereferences anyway (X360
     // 0x82240884 re-loads mpParameters immediately after EndAssert).
-    CGS_ASSERT(mpParameters != 0, CgsDev::Assert::MessageAt("Updating with no parameters", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BehaviourGameplayExternal.cpp", 251));
+    CGS_ASSERT(mpParameters != 0, CGS_ASSERT_MESSAGE_AT("Updating with no parameters", CGS_ARTIST_FILE, 251));
 
     // .cpp:192 -- THE WHOLE BODY sits inside this test (`lbz r11, 0xAC(params)`).
     if (mpParameters->mbIsValid)
@@ -2141,3 +2141,5 @@ bool BehaviourGameplayExternal::Update(Camera& lCamera, const BehaviourSharedInf
 
 } // namespace Camera
 } // namespace BrnDirector
+
+#undef CGS_ARTIST_FILE

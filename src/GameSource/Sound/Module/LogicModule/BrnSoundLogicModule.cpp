@@ -6,7 +6,7 @@
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\""../Sound/Module/LogicModule/BrnSoundLogicModule.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT (attached-buffer guard)
 #include <cstdlib>   // std::getenv (the [music] GUI-33 witness)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // CgsDev::Log / Message filter
@@ -1487,7 +1487,7 @@ void SoundLogicModule::CreateStateManagers()
             // The X360 asserts this returns true (it always does); AddStateManager itself
             // fires the real registration asserts.
             CGS_ASSERT(lEnvironment.AddStateManager(mapStateManagers[i]),
-                CgsDev::Assert::MessageAt(
+                CGS_ASSERT_MESSAGE_AT(
                     "lEnvironment.AddStateManager( mapStateManagers[ i ] )",
                     "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
                     "../Sound/Module/LogicModule/BrnSoundLogicModule.cpp", 753 /* ARTIST 0x826AFF5C */));
@@ -1555,7 +1555,7 @@ bool SoundLogicModule::PrepareStateManagersOnBoot(s32 liSkipBitfield)
 void SoundLogicModule::PreUpdate(Io::LogicPreUpdateOutputBuffer* apLogicPreUpdateOutput)
 {
     CGS_ASSERT(apLogicPreUpdateOutput != 0,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lpLogicPreUpdateOutput",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
             "../Sound/Module/LogicModule/BrnSoundLogicModule.cpp", 495 /* ARTIST 0x826E1F3C */));
@@ -1566,3 +1566,5 @@ void SoundLogicModule::PreUpdate(Io::LogicPreUpdateOutputBuffer* apLogicPreUpdat
 
 } // namespace Module
 } // namespace BrnSound
+
+#undef CGS_ARTIST_FILE

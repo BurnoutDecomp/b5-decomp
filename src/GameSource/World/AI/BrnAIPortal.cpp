@@ -17,7 +17,7 @@ namespace BrnAI
     const BoundaryLine* Portal::GetBoundaryLine(u8 lu8BoundryIndex) const
     {
         CGS_ASSERT(lu8BoundryIndex < mu8NumBoundaryLines,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lu8BoundryIndex < mu8NumBoundaryLines",
                 "..\\..\\..\\SharedClasses\\AI/AISectionsData.h", 811 /* ARTIST 0x827644B0 */));
         return &mpaBoundaryLines[lu8BoundryIndex];

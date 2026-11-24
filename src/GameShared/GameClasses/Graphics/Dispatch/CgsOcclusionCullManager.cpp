@@ -255,11 +255,11 @@ namespace CgsGraphics
     void OcclusionCullManager::EndQueries()
     {
         CGS_ASSERT(meOcclusionMode == OCCLUSIONMODE_QUERY,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "meOcclusionMode == OCCLUSIONMODE_QUERY",
                 KAC_ARTIST_ASSERT_SOURCE, 371 /* ARTIST 0x827EDF84 */));
         CGS_ASSERT(mbOcclusionEnabled,
-            CgsDev::Assert::MessageAt("mbOcclusionEnabled", KAC_ARTIST_ASSERT_SOURCE, 372 /* ARTIST 0x827EDFAC */));
+            CGS_ASSERT_MESSAGE_AT("mbOcclusionEnabled", KAC_ARTIST_ASSERT_SOURCE, 372 /* ARTIST 0x827EDFAC */));
 
         meOcclusionMode = OCCLUSIONMODE_NONE;
         if (mbImmediateMode && !mbOcclusionCheapShader)
@@ -274,11 +274,11 @@ namespace CgsGraphics
     void OcclusionCullManager::BeginConditionalRender()
     {
         CGS_ASSERT(meOcclusionMode == OCCLUSIONMODE_NONE,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "meOcclusionMode == OCCLUSIONMODE_NONE",
                 KAC_ARTIST_ASSERT_SOURCE, 440 /* ARTIST 0x827E91DC */));
         CGS_ASSERT(mbOcclusionEnabled,
-            CgsDev::Assert::MessageAt("mbOcclusionEnabled", KAC_ARTIST_ASSERT_SOURCE, 441 /* ARTIST 0x827E9204 */));
+            CGS_ASSERT_MESSAGE_AT("mbOcclusionEnabled", KAC_ARTIST_ASSERT_SOURCE, 441 /* ARTIST 0x827E9204 */));
 
         if (mbConditionalRendering)
             meOcclusionMode = OCCLUSIONMODE_RENDER;
@@ -291,11 +291,11 @@ namespace CgsGraphics
     void OcclusionCullManager::EndConditionalRender()
     {
         CGS_ASSERT(meOcclusionMode == OCCLUSIONMODE_RENDER || !mbConditionalRendering,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "meOcclusionMode == OCCLUSIONMODE_RENDER || !mbConditionalRendering",
                 KAC_ARTIST_ASSERT_SOURCE, 463 /* ARTIST 0x827E9290 */));
         CGS_ASSERT(mbOcclusionEnabled,
-            CgsDev::Assert::MessageAt("mbOcclusionEnabled", KAC_ARTIST_ASSERT_SOURCE, 464 /* ARTIST 0x827E92B8 */));
+            CGS_ASSERT_MESSAGE_AT("mbOcclusionEnabled", KAC_ARTIST_ASSERT_SOURCE, 464 /* ARTIST 0x827E92B8 */));
 
         meOcclusionMode = OCCLUSIONMODE_NONE;
         shadow::Device::ResetShadowing();
@@ -304,16 +304,16 @@ namespace CgsGraphics
     void OcclusionCullManager::BeginMeshConditionalRender()
     {
         CGS_ASSERT(meOcclusionMode == OCCLUSIONMODE_RENDER,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "meOcclusionMode == OCCLUSIONMODE_RENDER", KAC_ARTIST_ASSERT_FILE, 282 /* ARTIST 0x827E8F4C */));
         CGS_ASSERT(mbOcclusionEnabled,
-            CgsDev::Assert::MessageAt("mbOcclusionEnabled", KAC_ARTIST_ASSERT_FILE, 283 /* ARTIST 0x827E8F74 */));
+            CGS_ASSERT_MESSAGE_AT("mbOcclusionEnabled", KAC_ARTIST_ASSERT_FILE, 283 /* ARTIST 0x827E8F74 */));
         CGS_ASSERT(!mbRenderingMesh,
-            CgsDev::Assert::MessageAt("!mbRenderingMesh", KAC_ARTIST_ASSERT_FILE, 286 /* ARTIST 0x827E8F9C */));
+            CGS_ASSERT_MESSAGE_AT("!mbRenderingMesh", KAC_ARTIST_ASSERT_FILE, 286 /* ARTIST 0x827E8F9C */));
 
         mbRenderingMesh = 1;
         CGS_ASSERT(miOccludeeIndex < KI_MAX_NUM_QUERIES,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "miOccludeeIndex < KI_MAX_NUM_QUERIES", KAC_ARTIST_ASSERT_FILE, 291 /* ARTIST 0x827E8FCC */));
 
         const s16 li16QueryId = static_cast<s16>(maQueryIds[miOccludeeIndex]);
@@ -326,16 +326,16 @@ namespace CgsGraphics
     void OcclusionCullManager::EndMeshConditionalRender()
     {
         CGS_ASSERT(meOcclusionMode == OCCLUSIONMODE_RENDER,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "meOcclusionMode == OCCLUSIONMODE_RENDER", KAC_ARTIST_ASSERT_FILE, 328 /* ARTIST 0x827E9054 */));
         CGS_ASSERT(mbOcclusionEnabled,
-            CgsDev::Assert::MessageAt("mbOcclusionEnabled", KAC_ARTIST_ASSERT_FILE, 329 /* ARTIST 0x827E907C */));
+            CGS_ASSERT_MESSAGE_AT("mbOcclusionEnabled", KAC_ARTIST_ASSERT_FILE, 329 /* ARTIST 0x827E907C */));
         CGS_ASSERT(mbRenderingMesh,
-            CgsDev::Assert::MessageAt("mbRenderingMesh", KAC_ARTIST_ASSERT_FILE, 332 /* ARTIST 0x827E90A4 */));
+            CGS_ASSERT_MESSAGE_AT("mbRenderingMesh", KAC_ARTIST_ASSERT_FILE, 332 /* ARTIST 0x827E90A4 */));
 
         mbRenderingMesh = 0;
         CGS_ASSERT(miOccludeeIndex < KI_MAX_NUM_QUERIES,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "miOccludeeIndex < KI_MAX_NUM_QUERIES", KAC_ARTIST_ASSERT_FILE, 337 /* ARTIST 0x827E90D4 */));
 
         if (maQueryIds[miOccludeeIndex] != 0xFFFF)
@@ -348,7 +348,7 @@ namespace CgsGraphics
     void OcclusionCullManager::TrivialAcceptOccludeeBoundingBox()
     {
         CGS_ASSERT(miOccludeeIndex < KI_MAX_NUM_QUERIES,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "miOccludeeIndex < KI_MAX_NUM_QUERIES", KAC_ARTIST_ASSERT_FILE, 377 /* ARTIST 0x827E9158 */));
 
         maQueryIds[miOccludeeIndex] = static_cast<u16>(0xFFFF);

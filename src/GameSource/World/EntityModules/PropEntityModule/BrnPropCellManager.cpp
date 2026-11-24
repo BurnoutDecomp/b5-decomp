@@ -1120,9 +1120,9 @@ namespace BrnWorld
         // Copied once, up front, exactly where the asm copies it (before the first tripwire).
         const Matrix44Affine lTransform = lpProp->mWorldTransform;
 
-        CGS_ASSERT(!lpProp->IsAddedToContactGen(), CgsDev::Assert::MessageAt("!lpProp->IsAddedToContactGen()", __FILE__, 280));    // :280
+        CGS_ASSERT(!lpProp->IsAddedToContactGen(), CGS_ASSERT_MESSAGE_AT("!lpProp->IsAddedToContactGen()", __FILE__, 280));    // :280
         CGS_ASSERT(mu16NumberOfPropVolumesInScene <= KU_MAX_PROP_VOLUMES_IN_SCENE,
-                   CgsDev::Assert::MessageAt("mu16NumberOfPropVolumesInScene <= BrnPhysics::Props::KU_MAX_PROP_COLLISION_VOLUMES_IN_SCENE", __FILE__, 282)); // :282
+                   CGS_ASSERT_MESSAGE_AT("mu16NumberOfPropVolumesInScene <= BrnPhysics::Props::KU_MAX_PROP_COLLISION_VOLUMES_IN_SCENE", __FILE__, 282)); // :282
 
         const u32 luNumberOfVolumes = lpType->GetNumberOfVolumes();
 
@@ -1298,7 +1298,7 @@ namespace BrnWorld
                                                           PropVolumeInstanceID lVolumeInstanceID,
                                                           InSceneUpdateInterface* lpScene)
     {
-        CGS_ASSERT(lpProp->IsAddedToContactGen(), CgsDev::Assert::MessageAt("lpProp->IsAddedToContactGen()", __FILE__, 435));   // :435
+        CGS_ASSERT(lpProp->IsAddedToContactGen(), CGS_ASSERT_MESSAGE_AT("lpProp->IsAddedToContactGen()", __FILE__, 435));   // :435
 
         lpProp->mu8Flags &= static_cast<u8>(~KU_ADDED_TO_CONTACT_GEN_BIT);
 

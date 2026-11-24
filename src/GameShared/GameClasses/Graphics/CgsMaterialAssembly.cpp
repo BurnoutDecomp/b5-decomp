@@ -57,7 +57,7 @@ namespace CgsGraphics
     MaterialTechnique* MaterialAssembly::GetMaterial(u32 luIndex) const
     {
         CGS_ASSERT(luIndex < mu8NumMaterials,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "Material technique index out of range.",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\CgsMaterialAssembly.h", 174 /* ARTIST 0x827E6750 */)); // CgsMaterialAssembly.h:174
         return mappMaterials[luIndex];

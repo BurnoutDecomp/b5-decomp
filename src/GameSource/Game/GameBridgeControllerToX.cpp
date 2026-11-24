@@ -41,7 +41,7 @@
 // (0x823CDB80..0x823CDBCC) is reconstructed -- it was a comment -- and the controls record is the
 // real BrnWorld::PlayerVehicleControls (the bridge-local WorldVehicleControlsImage is retired).
 // ============================================================================
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeControllerToX.cpp"
 #include "GameSource/Game/BrnGameModule.hpp"
 #include "GameSource/Game/GameBridgeControllerToX.h"
 
@@ -488,10 +488,10 @@ namespace BrnGame
         BrnGameState::GameStateModuleIO::ControllerToGameStateInterface::UnBindResultQueue* const
             lpGameStateInputUnbindResultQueue =
                 lpGameStateInput->GetControllerToGameStateInterface()->GetUnBindResultsQueue();
-        CGS_ASSERT(lpInputBindResultQueue != 0, CgsDev::Assert::MessageAt("lpInputBindResultQueue", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeControllerToX.cpp", 797));
-        CGS_ASSERT(lpInputUnbindResultQueue != 0, CgsDev::Assert::MessageAt("lpInputUnbindResultQueue", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeControllerToX.cpp", 798));
-        CGS_ASSERT(lpGameStateInputBindResultQueue != 0, CgsDev::Assert::MessageAt("lpGameStateInputBindResultQueue", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeControllerToX.cpp", 799));
-        CGS_ASSERT(lpGameStateInputUnbindResultQueue != 0, CgsDev::Assert::MessageAt("lpGameStateInputUnbindResultQueue", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeControllerToX.cpp", 800));
+        CGS_ASSERT(lpInputBindResultQueue != 0, CGS_ASSERT_MESSAGE_AT("lpInputBindResultQueue", CGS_ARTIST_FILE, 797));
+        CGS_ASSERT(lpInputUnbindResultQueue != 0, CGS_ASSERT_MESSAGE_AT("lpInputUnbindResultQueue", CGS_ARTIST_FILE, 798));
+        CGS_ASSERT(lpGameStateInputBindResultQueue != 0, CGS_ASSERT_MESSAGE_AT("lpGameStateInputBindResultQueue", CGS_ARTIST_FILE, 799));
+        CGS_ASSERT(lpGameStateInputUnbindResultQueue != 0, CGS_ASSERT_MESSAGE_AT("lpGameStateInputUnbindResultQueue", CGS_ARTIST_FILE, 800));
         lpGameStateInputBindResultQueue->Append(*lpInputBindResultQueue);
         lpGameStateInputUnbindResultQueue->Append(*lpInputUnbindResultQueue);
 
@@ -787,3 +787,5 @@ namespace BrnGame
         }
     }
 }
+
+#undef CGS_ARTIST_FILE

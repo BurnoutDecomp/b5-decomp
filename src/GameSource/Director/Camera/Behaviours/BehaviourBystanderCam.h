@@ -107,7 +107,7 @@ public:
     void SetParameters(const Parameters* lpParameters)
     {
         CGS_ASSERT(lpParameters->GetType() == eBehaviourBystanderCam,
-                   CgsDev::Assert::MessageAt("lpParameters->GetType() == eBehaviourBystanderCam", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BehaviourBystanderCam.h", 215));   // h:215
+                   CGS_ASSERT_MESSAGE_AT("lpParameters->GetType() == eBehaviourBystanderCam", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BehaviourBystanderCam.h", 215));   // h:215
         SetDebugParametersName(lpParameters->GetDebugName());              // lwz 4(lp) ; stw 0x10(this)
         mpParameters = lpParameters;                                        // stw r31, 0x350(r30)
     }

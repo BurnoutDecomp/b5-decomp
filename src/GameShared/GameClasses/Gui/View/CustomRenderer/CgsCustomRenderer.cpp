@@ -42,14 +42,14 @@ namespace CgsGui
         s32 /*liTextureIndex*/, s32* lpiShaderProgram, ImRendererSet* /*lpRendererSet*/)
     {
         CGS_ASSERT(lpiShaderProgram != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpiShaderProgram != NULL",
                 KAC_ARTIST_ASSERT_FILE, 114 /* ARTIST 0x828476F0 */));
 
         *lpiShaderProgram = 0;
 
         CGS_ASSERT(false,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "attempting to get a texture for a component which does not render to texture",
                 KAC_ARTIST_ASSERT_FILE, 118 /* ARTIST 0x82847714 */));
         return 0;

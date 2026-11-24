@@ -26,7 +26,7 @@ namespace BrnAI
         const f32 lfDelta = lfTarget - lfCurrent;
         const f32 lfAbsDelta = std::fabs(lfDelta);                  // fabs f28, f13 @0x82766BD8
 
-        CGS_ASSERT(!(lfStep < 0.0f), CgsDev::Assert::MessageAt("Negative Step", __FILE__, 176));   // ARTIST 0x82766BE8
+        CGS_ASSERT(!(lfStep < 0.0f), CGS_ASSERT_MESSAGE_AT("Negative Step", __FILE__, 176));   // ARTIST 0x82766BE8
 
         if (lfStep > lfAbsDelta)
             return lfTarget;

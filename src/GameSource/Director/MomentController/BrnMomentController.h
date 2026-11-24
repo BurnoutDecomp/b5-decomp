@@ -1,5 +1,5 @@
 #pragma once
-
+#define CGS_ARTIST_BRNMOMENTCONTROLLER_FILE "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentController.h"
 // Home for the BrnDirector::MomentController nested helper types that the
 // "director-moment" group needs as complete types:
 //   * BrnDirector::MomentController::MomentHandle  -- a 24-byte slot describing one
@@ -147,14 +147,16 @@ namespace BrnDirector
     // (0x821F5740) and ActualDebugRender the const one (0x821F5798) out of line.
     inline Moment& MomentController::MomentHandle::GetMoment()
     {
-        CGS_ASSERT(mbIsAllocated, CgsDev::Assert::MessageAt("mbIsAllocated", "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentController.h", 141));
+        CGS_ASSERT(mbIsAllocated, CGS_ASSERT_MESSAGE_AT("mbIsAllocated", CGS_ARTIST_BRNMOMENTCONTROLLER_FILE, 141));
         return *static_cast<Moment*>(mMomentPoolHandle.Get());
     }
 
     inline const Moment& MomentController::MomentHandle::GetMoment() const
     {
-        CGS_ASSERT(mbIsAllocated, CgsDev::Assert::MessageAt("mbIsAllocated", "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentController.h", 150));
+        CGS_ASSERT(mbIsAllocated, CGS_ASSERT_MESSAGE_AT("mbIsAllocated", CGS_ARTIST_BRNMOMENTCONTROLLER_FILE, 150));
         return *static_cast<const Moment*>(mMomentPoolHandle.Get());
     }
 
 } // namespace BrnDirector
+
+#undef CGS_ARTIST_BRNMOMENTCONTROLLER_FILE

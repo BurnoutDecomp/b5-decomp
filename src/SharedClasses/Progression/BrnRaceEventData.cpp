@@ -26,7 +26,7 @@ void EventRacerPersonality::Construct()
 const CheckpointData* RaceEventData::GetCheckpointData(s32 liCheckpointIndex) const
 {
     CGS_ASSERT(liCheckpointIndex >= 0 && liCheckpointIndex < miCheckpointCount,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "liCheckpointIndex >= 0 && liCheckpointIndex < miCheckpointCount",
             "..\\..\\..\\SharedClasses\\Progression/BrnRaceEventData.h", 953 /* ARTIST 0x8230F840 */));
     // CheckpointData is a complete 40-byte type (static_assert in the header), so the console's

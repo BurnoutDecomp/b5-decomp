@@ -830,7 +830,7 @@ void CrashNavDriverDetails::ShowMenu()
 void CrashNavDriverDetails::HandleTriggers(const CgsModule::Event* lpAptTrigger)
 {
     CGS_ASSERT(lpAptTrigger != 0,
-        CgsDev::Assert::StreamMessageAt("Invalid event in CrashNavDriverDetails::::HandleTriggers", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavDriverDetails.cpp", 1023)); // cpp:1023
+        CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event in CrashNavDriverDetails::::HandleTriggers", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavDriverDetails.cpp", 1023)); // cpp:1023
 
     const CgsGui::GuiEventAptTriggerPayload* lpPayload =
         reinterpret_cast<const CgsGui::GuiEventAptTriggerPayload*>(lpAptTrigger);
@@ -1001,9 +1001,9 @@ void CrashNavDriverDetails::HandleStatData(const GuiEventStatsResponse* lpStatsE
     static const char KAC_ASSERT_FILE[] =
         "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavDriverDetails.cpp"; // ARTIST 0x82067DE8
     CGS_ASSERT(lpStatsEvent != 0,
-        CgsDev::Assert::MessageAt("lpStatsEvent", KAC_ASSERT_FILE, 1050)); // ARTIST 0x824B8644
+        CGS_ASSERT_MESSAGE_AT("lpStatsEvent", KAC_ASSERT_FILE, 1050)); // ARTIST 0x824B8644
     CGS_ASSERT(mpGuiCache != 0,
-        CgsDev::Assert::MessageAt("mpGuiCache", KAC_ASSERT_FILE, 1051));   // ARTIST 0x824B866C
+        CGS_ASSERT_MESSAGE_AT("mpGuiCache", KAC_ASSERT_FILE, 1051));   // ARTIST 0x824B866C
 
     typedef CgsLanguage::LanguageManager LM;
     const LM* lpLanguageManager = mpStateInterface->GetLanguageManager();

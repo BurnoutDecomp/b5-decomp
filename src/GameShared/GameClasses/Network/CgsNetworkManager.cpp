@@ -1,7 +1,7 @@
 #include "GameShared/GameClasses/Network/CgsNetworkManager.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"   // CgsDev::PerfMonCpu
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Network\\CgsNetworkManager.cpp"
 // CgsNetwork::NetworkManager -- the platform-independent core of the online hub. See the
 // header for the layout.
 //
@@ -28,12 +28,12 @@ namespace CgsNetwork
     // staged state machines and register the per-sub-manager CPU monitors.
     void NetworkManager::Construct(NetworkManagerConstructParams* lpConstructParams)
     {
-        CGS_ASSERT(lpConstructParams, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpConstructParams, CGS_ASSERT_MESSAGE_AT(
             "lpConstructParams",
-            "..\\..\\..\\GameShared\\GameClasses\\Network\\CgsNetworkManager.cpp", 47 /* ARTIST 0x8289B37C */));
-        CGS_ASSERT(lpConstructParams->GetPlayerManagerConstructParams(), CgsDev::Assert::MessageAt(
+            CGS_ARTIST_FILE, 47 /* ARTIST 0x8289B37C */));
+        CGS_ASSERT(lpConstructParams->GetPlayerManagerConstructParams(), CGS_ASSERT_MESSAGE_AT(
             "lpConstructParams->GetPlayerManagerConstructParams()",
-            "..\\..\\..\\GameShared\\GameClasses\\Network\\CgsNetworkManager.cpp", 48 /* ARTIST 0x8289B3A4 */));
+            CGS_ARTIST_FILE, 48 /* ARTIST 0x8289B3A4 */));
 
         // FLAG: the adapter's declared parameter is not a console argument (the call passes
         // none); 0 is inert until that declaration drops it.
@@ -121,7 +121,7 @@ namespace CgsNetwork
             lPrepareParams.mpConnectionFinalisedUserData    = lpPrepareParams->mPlayerManager.mpConnectionFinalisedUserData;
             lPrepareParams.mpNetworkHeapAllocator           = lpPrepareParams->mPlayerManager.mpNetworkHeapAllocator;
 
-            CGS_ASSERT(lPrepareParams.meLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ || lPrepareParams.meLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(lPrepareParams.meLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ || lPrepareParams.meLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ, CGS_ASSERT_MESSAGE_AT(
                 "lPrepareParams.meLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ || lPrepareParams.meLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ",
                 __FILE__, 184 /* ARTIST 0x8289C9B8 */));
 
@@ -155,7 +155,7 @@ namespace CgsNetwork
             return E_MANAGER_STATUS_READY;
 
         default:
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
                 "unknown prepare stage",
                 __FILE__, 228 /* ARTIST 0x8289CA6C */));
             return E_MANAGER_STATUS_BUSY;
@@ -220,9 +220,9 @@ namespace CgsNetwork
 
         default:
             CGS_ASSERT(false,
-                CgsDev::Assert::MessageAt(
+                CGS_ASSERT_MESSAGE_AT(
                     "unknown release stage",
-                    "..\\..\\..\\GameShared\\GameClasses\\Network\\CgsNetworkManager.cpp", 323 /* ARTIST 0x8289B638 */));
+                    CGS_ARTIST_FILE, 323 /* ARTIST 0x8289B638 */));
             return false;
         }
     }
@@ -303,3 +303,5 @@ namespace CgsNetwork
     {
     }
 }
+
+#undef CGS_ARTIST_FILE

@@ -1,5 +1,5 @@
 #include "GameSource/Gui/Flapt/BrnFlaptFileInstance.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptFileInstance.cpp"
 #include "GameSource/Gui/Flapt/BrnFlaptMovieClipInstance.h"   // BrnFlapt::MovieClipInstance (Update/Render forward targets)
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"    // gpDebugPrint / gxMessageFilterFlags (SetData usage print)
@@ -111,9 +111,9 @@ void FlaptFileInstance::SetData(CgsResource::ResourceHandle lHandle,
 // root clip tree by the time step.
 void FlaptFileInstance::Update(f32 lfTimeStep)
 {
-    CGS_ASSERT(mbIsActive, CgsDev::Assert::MessageAt("IsActive()", "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptFileInstance.cpp", 144 /* ARTIST 0x82471868 */));
-    CGS_ASSERT(mpFile->muNumMovieClips > 0, CgsDev::Assert::MessageAt("mpFile->muNumMovieClips > 0", "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptFileInstance.cpp", 145 /* ARTIST 0x82471898 */));
-    CGS_ASSERT(mpRootMovieClipInstance != 0, CgsDev::Assert::MessageAt("mpRootMovieClipInstance", "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptFileInstance.cpp", 146 /* ARTIST 0x824718C0 */));
+    CGS_ASSERT(mbIsActive, CGS_ASSERT_MESSAGE_AT("IsActive()", CGS_ARTIST_FILE, 144 /* ARTIST 0x82471868 */));
+    CGS_ASSERT(mpFile->muNumMovieClips > 0, CGS_ASSERT_MESSAGE_AT("mpFile->muNumMovieClips > 0", CGS_ARTIST_FILE, 145 /* ARTIST 0x82471898 */));
+    CGS_ASSERT(mpRootMovieClipInstance != 0, CGS_ASSERT_MESSAGE_AT("mpRootMovieClipInstance", CGS_ARTIST_FILE, 146 /* ARTIST 0x824718C0 */));
 
     mpRootMovieClipInstance->Update(lfTimeStep);
 }
@@ -123,9 +123,9 @@ void FlaptFileInstance::Update(f32 lfTimeStep)
 // manager's renderer.
 void FlaptFileInstance::Render(FlaptRenderer* lpRenderer)
 {
-    CGS_ASSERT(mbIsActive, CgsDev::Assert::MessageAt("IsActive()", "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptFileInstance.cpp", 162 /* ARTIST 0x824724BC */));
-    CGS_ASSERT(mpFile->muNumMovieClips > 0, CgsDev::Assert::MessageAt("mpFile->muNumMovieClips > 0", "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptFileInstance.cpp", 163 /* ARTIST 0x824724EC */));
-    CGS_ASSERT(mpRootMovieClipInstance != 0, CgsDev::Assert::MessageAt("mpRootMovieClipInstance", "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptFileInstance.cpp", 164 /* ARTIST 0x82472514 */));
+    CGS_ASSERT(mbIsActive, CGS_ASSERT_MESSAGE_AT("IsActive()", CGS_ARTIST_FILE, 162 /* ARTIST 0x824724BC */));
+    CGS_ASSERT(mpFile->muNumMovieClips > 0, CGS_ASSERT_MESSAGE_AT("mpFile->muNumMovieClips > 0", CGS_ARTIST_FILE, 163 /* ARTIST 0x824724EC */));
+    CGS_ASSERT(mpRootMovieClipInstance != 0, CGS_ASSERT_MESSAGE_AT("mpRootMovieClipInstance", CGS_ARTIST_FILE, 164 /* ARTIST 0x82472514 */));
 
     mpRootMovieClipInstance->Render(lpRenderer);
 }
@@ -185,3 +185,5 @@ MovieClipRef* FlaptFileInstance::FindComponent(u32 luHash, MovieClipRef* lpOutRe
 }
 
 }
+
+#undef CGS_ARTIST_FILE

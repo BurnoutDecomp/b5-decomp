@@ -14,7 +14,7 @@
 // XMVectorACos, the dots are vmsum3fp128 (Utils::ConsoleVpu::Dot3) and the matrix products and
 // point/vector transforms are the fused vmaddfp cascades of Utils::ConsoleVpu.
 // ============================================================================
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourFailsafe.cpp"
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourFailsafe.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
@@ -160,20 +160,20 @@ void BehaviourFailsafe::Construct()
 // ----------------------------------------------------------------------------
 bool BehaviourFailsafe::Prepare(const BehaviourSharedPrepareReleaseInfo& lSharedInfo)
 {
-    CGS_ASSERT(lSharedInfo.mpDirectorResourceManager != 0, CgsDev::Assert::MessageAt("lSharedInfo.mpDirectorResourceManager", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourFailsafe.cpp", 73));   // :73
+    CGS_ASSERT(lSharedInfo.mpDirectorResourceManager != 0, CGS_ASSERT_MESSAGE_AT("lSharedInfo.mpDirectorResourceManager", CGS_ARTIST_FILE, 73));   // :73
     const DirectorResourceManager& lrResources = *lSharedInfo.GetDirectorResourceManager();
 
     CGS_ASSERT(lrResources.GetFailsafe().Num_ShotList() > 0,
-               CgsDev::Assert::MessageAt("lSharedInfo.mpDirectorResourceManager->GetFailsafe().Num_ShotList() > 0", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourFailsafe.cpp", 74));              // :74
+               CGS_ASSERT_MESSAGE_AT("lSharedInfo.mpDirectorResourceManager->GetFailsafe().Num_ShotList() > 0", CGS_ARTIST_FILE, 74));              // :74
     const Attrib::Gen::iceanim lShot(*lrResources.GetFailsafe().ShotList(0), 0);
 
     const bool lbControllerPrepared = mKeyAnimController.Prepare(lrResources, lShot.GetAnimGuid());
     CGS_ASSERT(lbControllerPrepared,
-               CgsDev::Assert::MessageAt("mKeyAnimController.Prepare(*lSharedInfo.mpDirectorResourceManager, lShot.Guid())", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourFailsafe.cpp", 76));     // :76
+               CGS_ASSERT_MESSAGE_AT("mKeyAnimController.Prepare(*lSharedInfo.mpDirectorResourceManager, lShot.Guid())", CGS_ARTIST_FILE, 76));     // :76
     (void)lbControllerPrepared;
 
     const ICE::ICETakeData* lpTakeData = lrResources.GetKeyAnimFromGuid(lShot.GetAnimGuid());
-    CGS_ASSERT(lpTakeData != 0, CgsDev::Assert::MessageAt("lpTakeData != NULL", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourFailsafe.cpp", 80));                                                 // :80
+    CGS_ASSERT(lpTakeData != 0, CGS_ASSERT_MESSAGE_AT("lpTakeData != NULL", CGS_ARTIST_FILE, 80));                                                 // :80
     SetDebugParametersName(lpTakeData->GetName());
 
     mOrientationLag.SetParameters(&mOrientationLagParams);
@@ -199,7 +199,7 @@ bool BehaviourFailsafe::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSh
 {
     static f32 sfRotationRate = 10.0f;   // degrees per second
 
-    CGS_ASSERT(mpParameters != 0, CgsDev::Assert::MessageAt("mpParameters != NULL", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourFailsafe.cpp", 102));                                             // :102
+    CGS_ASSERT(mpParameters != 0, CGS_ASSERT_MESSAGE_AT("mpParameters != NULL", CGS_ARTIST_FILE, 102));                                             // :102
 
     lrCamera.GetState().SetFlag(CameraState::E_FLAG_VALID, true);
 
@@ -271,3 +271,5 @@ const char* BehaviourFailsafe::GetName() const
 
 } // namespace Camera
 } // namespace BrnDirector
+
+#undef CGS_ARTIST_FILE

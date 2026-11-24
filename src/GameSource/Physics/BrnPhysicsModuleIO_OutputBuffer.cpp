@@ -1,8 +1,8 @@
 #include "GameSource/Physics/BrnPhysicsModuleIO.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Physics/BrnPhysicsModuleIO.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // the header-baked lock asserts
-
+#define CGS_ARTIST_FILE_BRNPHYSICSMODULEIO "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\BrnPhysicsModuleIO.h"
 #include <cstddef>   // offsetof
 
 // BrnPhysics::PhysicsModuleIO::OutputBuffer member functions, reconstructed from
@@ -155,7 +155,7 @@ namespace PhysicsModuleIO
     // this + 41952.
     const Vehicle::VehicleManagerOutputInterface* OutputBuffer::GetVehicleManagerOutputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Physics/BrnPhysicsModuleIO.h", 351));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 351));
         return &mVehicleManagerOutputInterface;
     }
 
@@ -173,28 +173,28 @@ namespace PhysicsModuleIO
     OutputBuffer::DeformationOutputInterfaceForEntityModulesStorage*
     OutputBuffer::GetDeformationOutputInterfaceForEntityModules()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\BrnPhysicsModuleIO.h", 364));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE_BRNPHYSICSMODULEIO, 364));
         return &mDeformationOutputInterfaceForEntityModules;
     }
 
     // X360 0x8259FF30: write-lock; return this + 16.
     OutputBuffer::VehicleOutputRequestInterfaceStorage* OutputBuffer::GetVehicleOutputRequestInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\BrnPhysicsModuleIO.h", 349));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE_BRNPHYSICSMODULEIO, 349));
         return &mVehicleOutputRequestInterface;
     }
 
     // X360 0x8279F598: read-lock; return this + 44128.
     const OutputBuffer::VehicleOutputInterfaceStorage* OutputBuffer::GetVehicleOutputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Physics/BrnPhysicsModuleIO.h", 354));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 354));
         return &mVehicleOutputInterface;
     }
 
     // X360 0x825A0080: write-lock; return this + 44128.
     OutputBuffer::VehicleOutputInterfaceStorage* OutputBuffer::GetVehicleOutputInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\BrnPhysicsModuleIO.h", 355));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE_BRNPHYSICSMODULEIO, 355));
         return &mVehicleOutputInterface;
     }
 
@@ -204,21 +204,21 @@ namespace PhysicsModuleIO
     // interface and the callers' reinterpret_cast seams retire. Signature text unchanged.)
     const OutputBuffer::PropOutputInterfaceStorage* OutputBuffer::GetPropManagerOutputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Physics/BrnPhysicsModuleIO.h", 357));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 357));
         return &mPropManagerOutputInterface;
     }
 
     // X360 0x825C0DC8: write-lock; return this + 71792.
     OutputBuffer::PropOutputInterfaceStorage* OutputBuffer::GetPropManagerOutputInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Physics/BrnPhysicsModuleIO.h", 358));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 358));
         return &mPropManagerOutputInterface;
     }
 
     // X360 0x825A0128: write-lock; return this + 148656.
     OutputBuffer::DeformationOutputInterfaceStorage* OutputBuffer::GetDeformationOutputInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\BrnPhysicsModuleIO.h", 361));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE_BRNPHYSICSMODULEIO, 361));
         return &mDeformationOutputInterface;
     }
 
@@ -226,7 +226,7 @@ namespace PhysicsModuleIO
     // (Return RETYPED 2026-08-06 with the member promotion to the real ContactSpyInterface.)
     ContactSpy::ContactSpyInterface* OutputBuffer::GetContactSpyInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\BrnPhysicsModuleIO.h", 370));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE_BRNPHYSICSMODULEIO, 370));
         return &mContactSpyInterface;
     }
 
@@ -249,14 +249,14 @@ namespace PhysicsModuleIO
     // X360 0x8279F448 (DWARF :298): read-lock; return this + 16.
     const OutputBuffer::VehicleOutputRequestInterfaceStorage* OutputBuffer::GetVehicleOutputRequestInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Physics/BrnPhysicsModuleIO.h", 348));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 348));
         return &mVehicleOutputRequestInterface;
     }
 
     // X360 0x8279F6E8 (DWARF :322): read-lock; return this + 148656.
     const OutputBuffer::DeformationOutputInterfaceStorage* OutputBuffer::GetDeformationOutputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Physics/BrnPhysicsModuleIO.h", 360));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 360));
         return &mDeformationOutputInterface;
     }
 
@@ -266,21 +266,21 @@ namespace PhysicsModuleIO
     const OutputBuffer::DeformationOutputInterfaceForEntityModulesStorage*
     OutputBuffer::GetDeformationOutputInterfaceForEntityModules() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Physics/BrnPhysicsModuleIO.h", 363));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 363));
         return &mDeformationOutputInterfaceForEntityModules;
     }
 
     // X360 0x8279F838 (DWARF :366): read-lock; return this + 179424.
     const OutputBuffer::SceneInputInterfaceStorage* OutputBuffer::GetSceneInputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Physics/BrnPhysicsModuleIO.h", 366));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 366));
         return &mSceneInputInterface;
     }
 
     // X360 0x825A0278 (DWARF :337): write-lock; return this + 179424.
     OutputBuffer::SceneInputInterfaceStorage* OutputBuffer::GetSceneInputInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\BrnPhysicsModuleIO.h", 367));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE_BRNPHYSICSMODULEIO, 367));
         return &mSceneInputInterface;
     }
 }
@@ -293,3 +293,6 @@ void BrnPhysics::PhysicsModuleIO::OutputBuffer::Destruct()
 {
     CgsModule::IOBuffer::Destruct();
 }
+
+#undef CGS_ARTIST_FILE
+#undef CGS_ARTIST_FILE_BRNPHYSICSMODULEIO

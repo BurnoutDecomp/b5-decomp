@@ -6,7 +6,7 @@
 #include "rw/math/vpu/types.h"
 #include "rw/math/vpu/vector3_operation.h"
 #include <xtl.h>     // XMemCpy (PrepareForSend, Retrieve 0x8257E268)
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Messages/BrnCrashingTrafficMessage.cpp"
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnNetwork::CrashingTrafficMessage::GetPackedMessageSize @ 0x8257A7C8
 //   BrnNetwork::CrashingTrafficMessage::PackOrUnpack         @ 0x8257A650
@@ -122,9 +122,9 @@ namespace BrnNetwork
         CgsNetwork::Message::PrepareForSend(KI_CRASHING_TRAFFIC_MESSAGE_TYPE, lu16Frame);
 
         // This is an unreliable message: the X360 build asserts it never went reliable.
-        CGS_ASSERT(!IsReliable(), CgsDev::Assert::MessageAt(
+        CGS_ASSERT(!IsReliable(), CGS_ASSERT_MESSAGE_AT(
             "!IsReliable()",
-            "..\\..\\..\\GameSource\\Network/Messages/BrnCrashingTrafficMessage.cpp", 92 /* ARTIST 0x8257E20C */));
+            CGS_ARTIST_FILE, 92 /* ARTIST 0x8257E20C */));
     }
 
     bool CrashingTrafficMessage::Retrieve(s32* lpiCount, CrashingTrafficData* lpData)
@@ -143,9 +143,9 @@ namespace BrnNetwork
 
             // Consume the slot: clear VALID, then assert it is now invalid.
             mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
-            CGS_ASSERT(!IsMessageValid(), CgsDev::Assert::MessageAt(
+            CGS_ASSERT(!IsMessageValid(), CGS_ASSERT_MESSAGE_AT(
                 "!CgsNetwork::Message::IsMessageValid()",
-                "..\\..\\..\\GameSource\\Network/Messages/BrnCrashingTrafficMessage.cpp", 122 /* ARTIST 0x8257E29C */));
+                CGS_ARTIST_FILE, 122 /* ARTIST 0x8257E29C */));
             return true;
         }
         return false;
@@ -158,3 +158,5 @@ namespace BrnNetwork
         CgsNetwork::Message::Construct();
     }
 } // namespace BrnNetwork
+
+#undef CGS_ARTIST_FILE

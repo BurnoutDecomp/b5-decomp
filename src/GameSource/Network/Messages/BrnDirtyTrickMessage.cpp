@@ -1,5 +1,5 @@
 #include "types.hpp"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Messages/BrnDirtyTrickMessage.cpp"
 #include "GameSource/Network/Messages/BrnDirtyTrickMessage.h"
 #include "GameSource/Network/BrnNetworkManager.h"        // BrnNetworkManager::PackOrUnpack (player-id field helper)
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"       // CGS_ASSERT
@@ -83,9 +83,9 @@ namespace BrnNetwork
         mu8DirtyTrickStatus       = lu8DirtyTrickStatus;    // stb, +0x31
         CgsNetwork::ReliableMessage::PrepareForSend(KI_DIRTY_TRICK_MESSAGE_TYPE, lu16Frame);
         CGS_ASSERT(IsReliable(),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "IsReliable()",
-                "..\\..\\..\\GameSource\\Network/Messages/BrnDirtyTrickMessage.cpp", 106 /* ARTIST 0x8257AC2C */));
+                CGS_ARTIST_FILE, 106 /* ARTIST 0x8257AC2C */));
     }
 
     s32 DirtyTrickMessage::GetPackedMessageSize()
@@ -119,18 +119,18 @@ namespace BrnNetwork
     bool DirtyTrickMessage::Retrieve(NetworkPlayerID* lpAggressorPlayerID, NetworkPlayerID* lpVictimPlayerID,
                                      u8* lpu8DirtyTrickType, u8* lpu8DirtyTrickStatus)
     {
-        CGS_ASSERT(lpAggressorPlayerID != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpAggressorPlayerID != 0, CGS_ASSERT_MESSAGE_AT(
             "lpAggressorNetworkPlayerID",
-            "..\\..\\..\\GameSource\\Network/Messages/BrnDirtyTrickMessage.cpp", 131 /* ARTIST 0x8257E52C */));
-        CGS_ASSERT(lpVictimPlayerID    != 0, CgsDev::Assert::MessageAt(
+            CGS_ARTIST_FILE, 131 /* ARTIST 0x8257E52C */));
+        CGS_ASSERT(lpVictimPlayerID    != 0, CGS_ASSERT_MESSAGE_AT(
             "lpVictimNetworkPlayerID",
-            "..\\..\\..\\GameSource\\Network/Messages/BrnDirtyTrickMessage.cpp", 132 /* ARTIST 0x8257E550 */));
-        CGS_ASSERT(lpu8DirtyTrickType  != 0, CgsDev::Assert::MessageAt(
+            CGS_ARTIST_FILE, 132 /* ARTIST 0x8257E550 */));
+        CGS_ASSERT(lpu8DirtyTrickType  != 0, CGS_ASSERT_MESSAGE_AT(
             "lpu8DirtyTrickType",
-            "..\\..\\..\\GameSource\\Network/Messages/BrnDirtyTrickMessage.cpp", 133 /* ARTIST 0x8257E574 */));
-        CGS_ASSERT(lpu8DirtyTrickStatus != 0, CgsDev::Assert::MessageAt(
+            CGS_ARTIST_FILE, 133 /* ARTIST 0x8257E574 */));
+        CGS_ASSERT(lpu8DirtyTrickStatus != 0, CGS_ASSERT_MESSAGE_AT(
             "lpu8DirtyTrickStatus",
-            "..\\..\\..\\GameSource\\Network/Messages/BrnDirtyTrickMessage.cpp", 134 /* ARTIST 0x8257E598 */));
+            CGS_ARTIST_FILE, 134 /* ARTIST 0x8257E598 */));
 
         // ARTIST 0x8257E5AC branches to a trailing `return false` (0x8257E610): the copy-out is the body
         // of the valid test.
@@ -141,11 +141,13 @@ namespace BrnNetwork
             *lpu8DirtyTrickType   = mu8DirtyTrickType;
             *lpu8DirtyTrickStatus = mu8DirtyTrickStatus;
             mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
-            CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0, CgsDev::Assert::MessageAt(
+            CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0, CGS_ASSERT_MESSAGE_AT(
                 "!CgsNetwork::ReliableMessage::IsMessageValid()",
-                "..\\..\\..\\GameSource\\Network/Messages/BrnDirtyTrickMessage.cpp", 146 /* ARTIST 0x8257E5FC */));
+                CGS_ARTIST_FILE, 146 /* ARTIST 0x8257E5FC */));
             return true;
         }
         return false;
     }
 } // namespace BrnNetwork
+
+#undef CGS_ARTIST_FILE

@@ -108,7 +108,7 @@ bool TriggerQueryManager::Prepare(GameStateModuleIO::OutputBuffer* lpOutput,
     if (lpOutput == 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpOutput", KAC_TQM_FILE, 137);
+        CgsDev::Assert::FireAssert("lpOutput", CGS_ASSERT_LOCATION(KAC_TQM_FILE, 137));
         CgsDev::Assert::EndAssert();
         return false;
     }
@@ -159,7 +159,7 @@ bool TriggerQueryManager::Prepare(GameStateModuleIO::OutputBuffer* lpOutput,
             if (lpEvent == 0)
             {
                 CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert("lpAcquire", KAC_TQM_FILE, 188);
+                CgsDev::Assert::FireAssert("lpAcquire", CGS_ASSERT_LOCATION(KAC_TQM_FILE, 188));
                 CgsDev::Assert::EndAssert();
             }
 
@@ -216,7 +216,7 @@ bool TriggerQueryManager::Prepare(GameStateModuleIO::OutputBuffer* lpOutput,
             if (lpReceiverQueue->GetCount() > 1)
             {
                 CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert("lpReceiverQueue->GetLength() < 1", KAC_TQM_FILE, 243);
+                CgsDev::Assert::FireAssert("lpReceiverQueue->GetLength() < 1", CGS_ASSERT_LOCATION(KAC_TQM_FILE, 243));
                 CgsDev::Assert::EndAssert();
             }
             return false;
@@ -231,7 +231,7 @@ bool TriggerQueryManager::Prepare(GameStateModuleIO::OutputBuffer* lpOutput,
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 "TriggerQueryManager::Prepare has received a resource with an ID that wasn't requested",
-                KAC_TQM_FILE, 233);
+                CGS_ASSERT_LOCATION(KAC_TQM_FILE, 233));
             CgsDev::Assert::EndAssert();
         }
 
@@ -241,7 +241,7 @@ bool TriggerQueryManager::Prepare(GameStateModuleIO::OutputBuffer* lpOutput,
         if (lpAcquire->miEventId != KI_TRAFFIC_EVENT_ID)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpAcquire->GetEventId() == 2", KAC_TQM_FILE, 237);
+            CgsDev::Assert::FireAssert("lpAcquire->GetEventId() == 2", CGS_ASSERT_LOCATION(KAC_TQM_FILE, 237));
             CgsDev::Assert::EndAssert();
         }
 
@@ -304,7 +304,7 @@ bool TriggerQueryManager::Prepare(GameStateModuleIO::OutputBuffer* lpOutput,
     default:
         // The console's own copy-paste: this TU's default case carries the AIModule message.
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("AIModule::LoadMapData in a weird state", KAC_TQM_FILE, 261);
+        CgsDev::Assert::FireAssert("AIModule::LoadMapData in a weird state", CGS_ASSERT_LOCATION(KAC_TQM_FILE, 261));
         CgsDev::Assert::EndAssert();
         return false;
     }

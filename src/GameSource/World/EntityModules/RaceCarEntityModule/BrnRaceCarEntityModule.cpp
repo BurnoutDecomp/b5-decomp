@@ -133,11 +133,11 @@ static const CgsID KU_CGSID_NULL = 0;
 void RaceCarEntityModule::AddTrainingRequest(BrnProgression::ETrainingType leTrainingType)
 {
     CGS_ASSERT(miPendingRequestCount < KI_TRAINING_REQUEST_QUEUE_SIZE,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "miPendingRequestCount < KI_TRAINING_REQUEST_QUEUE_SIZE",
             KAC_ARTIST_ASSERT_FILE, 8445 /* ARTIST 0x822A47E0 */));
     CGS_ASSERT(leTrainingType >= 0 && leTrainingType < BrnProgression::E_TRAINING_TYPE_COUNT,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "leTrainingType >= 0 && leTrainingType < BrnProgression::E_TRAINING_TYPE_COUNT",
             KAC_ARTIST_ASSERT_FILE, 8446 /* ARTIST 0x822A480C */));
 
@@ -161,7 +161,7 @@ void RaceCarEntityModule::HandleCarTypeTrainingMessage(u32 luCarType)
     static const s32 KAI_CARTYPE_TRAINING_TIP[3] = { 6, 7, 5 };   // dword_82CDB4A4
 
     CGS_ASSERT(luCarType <= 2u,
-               CgsDev::Assert::MessageAt("leCarType >= BrnResource::E_CARTYPE_DANGER && leCarType < BrnResource::E_CARTYPE_COUNT", __FILE__, 8430)); // :8430
+               CGS_ASSERT_MESSAGE_AT("leCarType >= BrnResource::E_CARTYPE_DANGER && leCarType < BrnResource::E_CARTYPE_COUNT", __FILE__, 8430)); // :8430
     if (luCarType > 2u)
     {
         return;   // the console falls through into the table read; bail instead of faulting
@@ -175,7 +175,7 @@ void RaceCarEntityModule::HandleCarTypeTrainingMessage(u32 luCarType)
 // (module 1, slot-zero car model id), then drain training requests in LIFO order.
 void RaceCarEntityModule::SendGameEvents(RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpOutput)
 {
-    CGS_ASSERT(lpOutput != 0, CgsDev::Assert::MessageAt("lpOutput != NULL", __FILE__, 5114));   // :5114
+    CGS_ASSERT(lpOutput != 0, CGS_ASSERT_MESSAGE_AT("lpOutput != NULL", __FILE__, 5114));   // :5114
     if (lpOutput == 0)
     {
         return;
@@ -477,7 +477,7 @@ void RaceCarEntityModule::Construct()
 //
 bool RaceCarEntityModule::LoadGlobalResources( RaceCarEntityModuleIO::OutputBuffer_Prepare* lpOutput )
 {
-    CGS_ASSERT(lpOutput != 0, CgsDev::Assert::MessageAt("lpOutput != NULL", __FILE__, 6324));   // X360 :6324
+    CGS_ASSERT(lpOutput != 0, CGS_ASSERT_MESSAGE_AT("lpOutput != NULL", __FILE__, 6324));   // X360 :6324
     if( lpOutput == 0 )
         return false;
 
@@ -624,7 +624,7 @@ bool RaceCarEntityModule::Prepare( RaceCarEntityModuleIO::OutputBuffer_Prepare* 
     if( lpOutput == 0 )
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert( "lpOutput != NULL", lpcSourceFile, 663 );
+        CgsDev::Assert::FireAssert( "lpOutput != NULL", CGS_ASSERT_LOCATION(lpcSourceFile, 663) );
         CgsDev::Assert::EndAssert();
     }
 
@@ -637,13 +637,13 @@ bool RaceCarEntityModule::Prepare( RaceCarEntityModuleIO::OutputBuffer_Prepare* 
             if( lpResource == 0 )
             {
                 CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert( "lDistrictMapResourceHandle.GetResource() != NULL", lpcSourceFile, 671 );
+                CgsDev::Assert::FireAssert( "lDistrictMapResourceHandle.GetResource() != NULL", CGS_ASSERT_LOCATION(lpcSourceFile, 671) );
                 CgsDev::Assert::EndAssert();
             }
             if( lpResource->m_baseResources[CgsResource::E_MEMTYPE_MAINMEMORY] == 0 )
             {
                 CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert( "lDistrictMapResourceHandle.GetResource()->GetMemoryResource() != NULL", lpcSourceFile, 672 );
+                CgsDev::Assert::FireAssert( "lDistrictMapResourceHandle.GetResource()->GetMemoryResource() != NULL", CGS_ASSERT_LOCATION(lpcSourceFile, 672) );
                 CgsDev::Assert::EndAssert();
             }
 
@@ -721,7 +721,7 @@ bool RaceCarEntityModule::Prepare( RaceCarEntityModuleIO::OutputBuffer_Prepare* 
 
     default:
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert( "Invalid Stage\n", lpcSourceFile, 776 );
+        CgsDev::Assert::FireAssert( "Invalid Stage\n", CGS_ASSERT_LOCATION(lpcSourceFile, 776) );
         CgsDev::Assert::EndAssert();
         return false;
     }
@@ -754,7 +754,7 @@ void RaceCarEntityModule::UpdateStreaming(
         const RaceCarEntityModuleIO::InputBuffer_PreScene* lpInput,
         RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput )
 {
-    CGS_ASSERT(lpOutput != 0, CgsDev::Assert::MessageAt("lpOutput != NULL", __FILE__, 4241));   // X360 :4241
+    CGS_ASSERT(lpOutput != 0, CGS_ASSERT_MESSAGE_AT("lpOutput != NULL", __FILE__, 4241));   // X360 :4241
 
     // ⭐ THE BRING-UP SPAWN IS GONE (2026-08-01). SpawnFirstUnlockedCarBringUp used to be pulled
     // here; the player's car is now placed by the console's own chain --
@@ -882,18 +882,18 @@ void RaceCarEntityModule::OnRaceCarResourcesLoaded(
     ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar( leActiveRaceCarIndex );
 
     CGS_ASSERT( lpActiveRaceCar->IsWaitingForLoad(),
-                CgsDev::Assert::MessageAt("lpActiveRaceCar->IsWaitingForLoad()", __FILE__, 2201));                       // X360 :2201
+                CGS_ASSERT_MESSAGE_AT("lpActiveRaceCar->IsWaitingForLoad()", __FILE__, 2201));                       // X360 :2201
     CGS_ASSERT( lpActiveRaceCar->IsAttached(), "IsAttached()" );               // BrnActiveRaceCar.h:1089
 
     RaceCar* lpRaceCar = lpActiveRaceCar->GetGlobalRaceCar();
-    CGS_ASSERT(lpRaceCar != 0, CgsDev::Assert::MessageAt("lpRaceCar", __FILE__, 2204));                                 // X360 :2204
+    CGS_ASSERT(lpRaceCar != 0, CGS_ASSERT_MESSAGE_AT("lpRaceCar", __FILE__, 2204));                                 // X360 :2204
 
     const s32 liModelIndex = mpVehicleList->GetVehicleIndex( lpRaceCar->GetModelId() );
-    CGS_ASSERT(liModelIndex >= 0, CgsDev::Assert::MessageAt("liModelIndex >= 0", __FILE__, 2213));                      // X360 :2213
+    CGS_ASSERT(liModelIndex >= 0, CGS_ASSERT_MESSAGE_AT("liModelIndex >= 0", __FILE__, 2213));                      // X360 :2213
 
     const BrnResource::VehicleListEntry* lpListEntry =
         mpVehicleList->GetVehicleData( liModelIndex );
-    CGS_ASSERT(lpListEntry != 0, CgsDev::Assert::MessageAt("lpListEntry != NULL", __FILE__, 2217));                     // X360 :2217
+    CGS_ASSERT(lpListEntry != 0, CGS_ASSERT_MESSAGE_AT("lpListEntry != NULL", __FILE__, 2217));                     // X360 :2217
 
     const u64 luCarAssetAttribKey = lpListEntry->GetAttribCollectionKeyHash();
     Vector3 lInitialVelocity;
@@ -1296,7 +1296,7 @@ void RaceCarEntityModule::PlaceRaceCarOnLoad( RaceCar* lpRaceCar )
     // GetGlobalRaceCar`) twice, once for the assert and once for the read; both resolve to
     // lpRaceCar, which is what this reaches by name.
     CGS_ASSERT( lpRaceCar->GetOpponentIndex() != -1,
-                CgsDev::Assert::MessageAt("lpActiveRaceCar->GetGlobalRaceCar()->GetOpponentIndex() != -1", __FILE__, 2351));    // X360 :2351
+                CGS_ASSERT_MESSAGE_AT("lpActiveRaceCar->GetGlobalRaceCar()->GetOpponentIndex() != -1", __FILE__, 2351));    // X360 :2351
 
     // 0x822CE8F4..0x822CE918: `lwz r11, 0x9C(r3) ; extsw ; fcfid ; frsp ; fmuls` -- the
     // opponent index widened to f32 and scaled by flt_820148AC == 14.0.
@@ -1692,7 +1692,7 @@ void RaceCarEntityModule::ResetActiveRaceCar(
     const s32   liModelIndex = mpVehicleList->GetVehicleIndex( lModelId );
     const BrnResource::VehicleListEntry* lpVehicleListEntry =
         mpVehicleList->GetVehicleData( lModelId );
-    CGS_ASSERT(lpVehicleListEntry != 0, CgsDev::Assert::MessageAt("lpVehicleListEntry", __FILE__, 1934));       // X360 :1934
+    CGS_ASSERT(lpVehicleListEntry != 0, CGS_ASSERT_MESSAGE_AT("lpVehicleListEntry", __FILE__, 1934));       // X360 :1934
 
     CGS_ASSERT( mRaceCarStreamer.GetCarModelId(
                     static_cast<s32>( lpActiveRaceCar->GetActiveRaceCarIndex() ) ) == lModelId,
@@ -1755,10 +1755,10 @@ void RaceCarEntityModule::ResetActiveRaceCar(
 EActiveRaceCarIndex RaceCarEntityModule::AttachActiveRaceCar(
         RaceCar* lpRaceCar, EActiveRaceCarIndex leActiveRaceCarIndex )
 {
-    CGS_ASSERT(lpRaceCar != 0, CgsDev::Assert::MessageAt("lpRaceCar != NULL", __FILE__, 2112));                       // X360 :2112
+    CGS_ASSERT(lpRaceCar != 0, CGS_ASSERT_MESSAGE_AT("lpRaceCar != NULL", __FILE__, 2112));                       // X360 :2112
     CGS_ASSERT( lpRaceCar->GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT" );
-    CGS_ASSERT(lpRaceCar->IsInWorld(), CgsDev::Assert::MessageAt("lpRaceCar->IsInWorld()", __FILE__, 2113));          // X360 :2113
-    CGS_ASSERT(!lpRaceCar->HasActiveRaceCar(), CgsDev::Assert::MessageAt("!lpRaceCar->HasActiveRaceCar()", __FILE__, 2114));  // X360 :2114
+    CGS_ASSERT(lpRaceCar->IsInWorld(), CGS_ASSERT_MESSAGE_AT("lpRaceCar->IsInWorld()", __FILE__, 2113));          // X360 :2113
+    CGS_ASSERT(!lpRaceCar->HasActiveRaceCar(), CGS_ASSERT_MESSAGE_AT("!lpRaceCar->HasActiveRaceCar()", __FILE__, 2114));  // X360 :2114
 
     EActiveRaceCarIndex leSlot = leActiveRaceCarIndex;
 
@@ -1787,13 +1787,13 @@ EActiveRaceCarIndex RaceCarEntityModule::AttachActiveRaceCar(
     else
     {
         CGS_ASSERT( !GetActiveRaceCar( leSlot )->IsAttached(),
-                    CgsDev::Assert::MessageAt("!GetActiveRaceCar(leActiveRaceCarIndex)->IsAttached()", __FILE__, 2144));        // X360 :2144
+                    CGS_ASSERT_MESSAGE_AT("!GetActiveRaceCar(leActiveRaceCarIndex)->IsAttached()", __FILE__, 2144));        // X360 :2144
     }
 
     CGS_ASSERT( leSlot >= E_ACTIVE_RACE_CAR_INDEX_0,
                 "No active race cars available to make race car active" );   // X360 :2147
     CGS_ASSERT( leSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                CgsDev::Assert::MessageAt("leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", __FILE__, 2148));    // X360 :2148
+                CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", __FILE__, 2148));    // X360 :2148
 
     ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar( leSlot );
 
@@ -1880,10 +1880,10 @@ void RaceCarEntityModule::DetachActiveRaceCar(
         BrnAI::AIModuleIO::RaceCarAIInterface* lpRaceCarAIInterface,
         CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInputInterface )
 {
-    CGS_ASSERT(lpRaceCar != 0, CgsDev::Assert::MessageAt("lpRaceCar != NULL", __FILE__, 2468));                               // X360 :2468
-    CGS_ASSERT(lpVehicleInputInterface != 0, CgsDev::Assert::MessageAt("lpVehicleInputInterface != NULL", __FILE__, 2469));    // :2469
-    CGS_ASSERT(lpRaceCarAIInterface != 0, CgsDev::Assert::MessageAt("lpRaceCarAIInterface != NULL", __FILE__, 2470));          // :2470
-    CGS_ASSERT(lpSceneInputInterface != 0, CgsDev::Assert::MessageAt("lpSceneInputInterface != NULL", __FILE__, 2471));        // :2471
+    CGS_ASSERT(lpRaceCar != 0, CGS_ASSERT_MESSAGE_AT("lpRaceCar != NULL", __FILE__, 2468));                               // X360 :2468
+    CGS_ASSERT(lpVehicleInputInterface != 0, CGS_ASSERT_MESSAGE_AT("lpVehicleInputInterface != NULL", __FILE__, 2469));    // :2469
+    CGS_ASSERT(lpRaceCarAIInterface != 0, CGS_ASSERT_MESSAGE_AT("lpRaceCarAIInterface != NULL", __FILE__, 2470));          // :2470
+    CGS_ASSERT(lpSceneInputInterface != 0, CGS_ASSERT_MESSAGE_AT("lpSceneInputInterface != NULL", __FILE__, 2471));        // :2471
 
     // PC deviation, narrowed (verify F3): the console has no null tests here. A null car
     // cannot proceed; a null AI interface must NOT skip the streamer release and the state
@@ -1894,7 +1894,7 @@ void RaceCarEntityModule::DetachActiveRaceCar(
     }
 
     ActiveRaceCar* lpActiveRaceCar = lpRaceCar->GetActiveRaceCar();
-    CGS_ASSERT(lpActiveRaceCar != 0, CgsDev::Assert::MessageAt("lpActiveRaceCar != NULL", __FILE__, 2474));                    // :2474
+    CGS_ASSERT(lpActiveRaceCar != 0, CGS_ASSERT_MESSAGE_AT("lpActiveRaceCar != NULL", __FILE__, 2474));                    // :2474
     if( lpActiveRaceCar == 0 )
     {
         return;
@@ -1902,13 +1902,13 @@ void RaceCarEntityModule::DetachActiveRaceCar(
 
     CGS_ASSERT( lpActiveRaceCar->IsAttached(), "IsAttached()" );                      // BrnActiveRaceCar.h:1089
     CGS_ASSERT( lpActiveRaceCar->GetGlobalRaceCar() == lpRaceCar,
-                CgsDev::Assert::MessageAt("lpActiveRaceCar->GetGlobalRaceCar() == lpRaceCar", __FILE__, 2475));                 // :2475
+                CGS_ASSERT_MESSAGE_AT("lpActiveRaceCar->GetGlobalRaceCar() == lpRaceCar", __FILE__, 2475));                 // :2475
 
     const EActiveRaceCarIndex leActiveRaceCarIndex = lpActiveRaceCar->GetActiveRaceCarIndex();
     CGS_ASSERT( leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-                CgsDev::Assert::MessageAt("leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", __FILE__, 2478));                // :2478
+                CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", __FILE__, 2478));                // :2478
     CGS_ASSERT( leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                CgsDev::Assert::MessageAt("leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", __FILE__, 2479));             // :2479
+                CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", __FILE__, 2479));             // :2479
 
     mRaceCarStreamer.RemoveVehicleData( static_cast<s32>( leActiveRaceCarIndex ) );
 
@@ -1989,7 +1989,7 @@ void RaceCarEntityModule::RemoveRaceCar(
     RaceCar* lpRaceCar = GetGlobalRaceCar( leGlobalRaceCarIndex );
     CGS_ASSERT( lpRaceCar->GetType() < E_RACE_CAR_TYPE_COUNT,
                 "muType < E_RACE_CAR_TYPE_COUNT" );                       // BrnRaceCar.h:547
-    CGS_ASSERT(lpRaceCar->IsInWorld(), CgsDev::Assert::MessageAt("lpRaceCar->IsInWorld()", __FILE__, 2046));       // X360 :2046
+    CGS_ASSERT(lpRaceCar->IsInWorld(), CGS_ASSERT_MESSAGE_AT("lpRaceCar->IsInWorld()", __FILE__, 2046));       // X360 :2046
 
     // PC deviation (verify F3): the console never null-tests the buffer (r27 is dereferenced
     // unconditionally and RemoveFromWorld is always reached @0x82304574). Assert first so a
@@ -2004,7 +2004,7 @@ void RaceCarEntityModule::RemoveRaceCar(
     {
         if( mePlayerActiveRaceCarIndex == lpRaceCar->GetActiveRaceCar()->GetActiveRaceCarIndex() )
         {
-            CGS_ASSERT(lpRaceCar->IsPlayerDriven(), CgsDev::Assert::MessageAt("lpRaceCar->IsPlayerDriven()", __FILE__, 2056));   // :2056
+            CGS_ASSERT(lpRaceCar->IsPlayerDriven(), CGS_ASSERT_MESSAGE_AT("lpRaceCar->IsPlayerDriven()", __FILE__, 2056));   // :2056
             mePlayerActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
         }
 
@@ -2047,9 +2047,9 @@ EGlobalRaceCarIndex RaceCarEntityModule::SpawnRaceCar(
         const CgsID* lpRivalId,
         s32 liOpponentIndex )
 {
-    CGS_ASSERT(lpRaceCarAIInterface != 0, CgsDev::Assert::MessageAt("lpRaceCarAIInterface", __FILE__, 1969));            // X360 :1969
-    CGS_ASSERT(rw::math::vpu::IsValid( lrTransform ), CgsDev::Assert::MessageAt("RwMath::IsValid( lTransform )", __FILE__, 1970)); // :1970
-    CGS_ASSERT(leType < E_RACE_CAR_TYPE_COUNT, CgsDev::Assert::MessageAt("leType < E_RACE_CAR_TYPE_COUNT", __FILE__, 1971));       // :1971
+    CGS_ASSERT(lpRaceCarAIInterface != 0, CGS_ASSERT_MESSAGE_AT("lpRaceCarAIInterface", __FILE__, 1969));            // X360 :1969
+    CGS_ASSERT(rw::math::vpu::IsValid( lrTransform ), CGS_ASSERT_MESSAGE_AT("RwMath::IsValid( lTransform )", __FILE__, 1970)); // :1970
+    CGS_ASSERT(leType < E_RACE_CAR_TYPE_COUNT, CGS_ASSERT_MESSAGE_AT("leType < E_RACE_CAR_TYPE_COUNT", __FILE__, 1971));       // :1971
     CGS_ASSERT( mpVehicleList != 0 && mpVehicleList->GetVehicleIndex( lModelId ) >= 0,
                 "Vehicle with ID <id> is not in the list" );                              // :1972
 
@@ -2116,7 +2116,7 @@ EGlobalRaceCarIndex RaceCarEntityModule::SpawnRaceCar(
         CGS_ASSERT( liGlobal <= E_GLOBAL_RACE_CAR_INDEX_COUNT,
                     "leEnumIndex <= E_GLOBAL_RACE_CAR_INDEX_COUNT" );      // BurnoutConstants.h:84
     }
-    CGS_ASSERT(liGlobal < E_GLOBAL_RACE_CAR_INDEX_COUNT, CgsDev::Assert::MessageAt("Ran out of RaceCars to spawn", __FILE__, 2013)); // :2013
+    CGS_ASSERT(liGlobal < E_GLOBAL_RACE_CAR_INDEX_COUNT, CGS_ASSERT_MESSAGE_AT("Ran out of RaceCars to spawn", __FILE__, 2013)); // :2013
     if( liGlobal >= E_GLOBAL_RACE_CAR_INDEX_COUNT )
     {
         return E_GLOBAL_RACE_CAR_INDEX_INVALID;
@@ -2188,7 +2188,7 @@ void RaceCarEntityModule::HandleResetPlayerCarAction(
     if( lpAction->HasToChangeLocation() )
     {
         CGS_ASSERT( BrnMath::IsNormal( lpAction->mDirection ),
-                    CgsDev::Assert::MessageAt("BrnMath::IsNormal( lpAction->GetDirection() )", __FILE__, 7465));          // X360 :7465
+                    CGS_ASSERT_MESSAGE_AT("BrnMath::IsNormal( lpAction->GetDirection() )", __FILE__, 7465));          // X360 :7465
         // asm: v1 = action+0x00 (position), v2 = action+0x10 (direction),
         //      v3 = unk_82181510 (the world UP axis row the identity basis is built from).
         {
@@ -3478,7 +3478,7 @@ void RaceCarEntityModule::HandleGameActions(
             {
                 const EActiveRaceCarIndex leSlot = static_cast<EActiveRaceCarIndex>(liSlot);
                 ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar(leSlot);
-                CGS_ASSERT(lpActiveRaceCar != 0, CgsDev::Assert::MessageAt("lpActiveRaceCar", __FILE__, 6822));            // :6822
+                CGS_ASSERT(lpActiveRaceCar != 0, CGS_ASSERT_MESSAGE_AT("lpActiveRaceCar", __FILE__, 6822));            // :6822
                 if (!lpActiveRaceCar->IsActive()
                     || lpActiveRaceCar->GetPhysicsState()->mEntityId.muValue != luEntityId)
                 {
@@ -3630,7 +3630,7 @@ void RaceCarEntityModule::HandleGameActions(
                            "(mePlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID) && "
                            "(mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)");      // :6762
                 ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar(mePlayerActiveRaceCarIndex);
-                CGS_ASSERT(lpActiveRaceCar != 0, CgsDev::Assert::MessageAt("lpActiveRaceCar", __FILE__, 6765));                            // :6765
+                CGS_ASSERT(lpActiveRaceCar != 0, CGS_ASSERT_MESSAGE_AT("lpActiveRaceCar", __FILE__, 6765));                            // :6765
                 RaceCar* lpRaceCar = lpActiveRaceCar->GetGlobalRaceCar();
                 CGS_ASSERT(lpRaceCar != 0, "lpRaceCar");                                        // :6767
 
@@ -3692,7 +3692,7 @@ void RaceCarEntityModule::HandleGameActions(
                 reinterpret_cast<const PaintShopDriveThruActionRecord*>(lpEvent);
             CGS_ASSERT(lpPaintShopDriveThruAction != 0, "lpPaintShopDriveThruAction");        // :7018
             ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar(mePlayerActiveRaceCarIndex);
-            CGS_ASSERT(lpActiveRaceCar != 0, CgsDev::Assert::MessageAt("lpActiveRaceCar", __FILE__, 7021));                                // :7021
+            CGS_ASSERT(lpActiveRaceCar != 0, CGS_ASSERT_MESSAGE_AT("lpActiveRaceCar", __FILE__, 7021));                                // :7021
             lpActiveRaceCar->GetGlobalRaceCar()->SetColourPalette(
                 static_cast<s32>(lpPaintShopDriveThruAction->muPaletteIndex));
             lpActiveRaceCar->GetGlobalRaceCar()->SetColourIndex(
@@ -3984,7 +3984,7 @@ void RaceCarEntityModule::UpdateDisconnectedPlayers(
 void RaceCarEntityModule::SendStreamerEvents(
         RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpOutput )
 {
-    CGS_ASSERT(lpOutput != 0, CgsDev::Assert::MessageAt("lpOutput", __FILE__, 5156));   // X360 :5156
+    CGS_ASSERT(lpOutput != 0, CGS_ASSERT_MESSAGE_AT("lpOutput", __FILE__, 5156));   // X360 :5156
 
     if( lpOutput == 0 )
     {
@@ -4182,7 +4182,7 @@ void RaceCarEntityModule::UpdateActiveRaceCarColours()
 void RaceCarEntityModule::ChangePlayerCarColour( u32 luPaletteIndex, u32 luColourIndex )
 {
     CGS_ASSERT( luPaletteIndex < static_cast<u32>( E_NUM_PALETTES ),
-                CgsDev::Assert::MessageAt("Invalid Palette Index", __FILE__, 8465));                                   // X360 :8465
+                CGS_ASSERT_MESSAGE_AT("Invalid Palette Index", __FILE__, 8465));                                   // X360 :8465
 
     ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar( mePlayerActiveRaceCarIndex );
 
@@ -4192,7 +4192,7 @@ void RaceCarEntityModule::ChangePlayerCarColour( u32 luPaletteIndex, u32 luColou
     // load plus the IsAttached() assert the line above already reproduces.
     RaceCar* lpPlayerCar = lpActiveRaceCar->GetGlobalRaceCar();
 
-    CGS_ASSERT(lpPlayerCar != 0, CgsDev::Assert::MessageAt("lpPlayerCar", __FILE__, 8468));                           // X360 :8468
+    CGS_ASSERT(lpPlayerCar != 0, CGS_ASSERT_MESSAGE_AT("lpPlayerCar", __FILE__, 8468));                           // X360 :8468
 
     if( lpPlayerCar == 0 )
     {
@@ -4249,7 +4249,7 @@ void RaceCarEntityModule::ChangePlayerCarColour( u32 luPaletteIndex, u32 luColou
 // ============================================================================
 bool RaceCarEntityModule::IsCarColourInUse( s32 liPaletteIndex, s32 liColourIndex )
 {
-    CGS_ASSERT(liPaletteIndex < E_NUM_PALETTES, CgsDev::Assert::MessageAt("liPaletteIndex < BrnWorld::eNumPalettes", __FILE__, 9740));   // :9740
+    CGS_ASSERT(liPaletteIndex < E_NUM_PALETTES, CGS_ASSERT_MESSAGE_AT("liPaletteIndex < BrnWorld::eNumPalettes", __FILE__, 9740));   // :9740
     CGS_ASSERT( liColourIndex < mCarColoursResource->maPalettes[liPaletteIndex].GetNumColours(),
                 " Colour index =  Palette index = \n" );                                       // :9743
 
@@ -4324,7 +4324,7 @@ void RaceCarEntityModule::UpdateOutputInterfaces(
     lpActiveCarInterface->SetWorldMap2D( &mWorldMap2D );
     lpReplayActiveCarInterface->SetWorldMap2D( &mWorldMap2D );
 
-    CGS_ASSERT(lpGlobalCarInterface != 0, CgsDev::Assert::MessageAt("lpGlobalCarInterface != NULL", __FILE__, 4900));   // X360 :4900
+    CGS_ASSERT(lpGlobalCarInterface != 0, CGS_ASSERT_MESSAGE_AT("lpGlobalCarInterface != NULL", __FILE__, 4900));   // X360 :4900
 
     if( lpActiveCarInterface == 0 || lpGlobalCarInterface == 0 )
     {
@@ -4366,7 +4366,7 @@ void RaceCarEntityModule::UpdateOutputInterfaces(
         CGS_ASSERT( lpActiveRaceCar->IsAttached(), "IsAttached()" );   // BrnActiveRaceCar.h:1089
 
         RaceCar* lpRaceCar = lpActiveRaceCar->GetGlobalRaceCar();
-        CGS_ASSERT(lpRaceCar != 0, CgsDev::Assert::MessageAt("lpRaceCar != NULL", __FILE__, 4929));             // X360 :4929
+        CGS_ASSERT(lpRaceCar != 0, CGS_ASSERT_MESSAGE_AT("lpRaceCar != NULL", __FILE__, 4929));             // X360 :4929
         if( lpRaceCar == 0 )
         {
             continue;
@@ -4391,14 +4391,14 @@ void RaceCarEntityModule::UpdateOutputInterfaces(
             luFlags |= RaceCarEntityModuleIO::E_RACE_CAR_OUTPUT_FLAG_NETWORK;
             break;
         default:
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt("This car should be inactive", __FILE__, 4961));        // X360 :4961
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("This car should be inactive", __FILE__, 4961));        // X360 :4961
             break;
         }
 
         if( lpActiveRaceCar->GetOnlineState() == ActiveRaceCar::E_ONLINE_STATE_CONNECTING )
         {
             CGS_ASSERT( lpRaceCar->GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT" );
-            CGS_ASSERT(lpRaceCar->IsNetworkDriven(), CgsDev::Assert::MessageAt("lpRaceCar->IsNetworkDriven()", __FILE__, 4968));   // X360 :4968
+            CGS_ASSERT(lpRaceCar->IsNetworkDriven(), CGS_ASSERT_MESSAGE_AT("lpRaceCar->IsNetworkDriven()", __FILE__, 4968));   // X360 :4968
             luFlags |= RaceCarEntityModuleIO::E_RACE_CAR_OUTPUT_FLAG_CONNECTING;
         }
 
@@ -4406,14 +4406,14 @@ void RaceCarEntityModule::UpdateOutputInterfaces(
         {
             CGS_ASSERT( lpRaceCar->GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT" );
             CGS_ASSERT( lpRaceCar->IsNetworkDriven() || !lpRaceCar->IsInWorld(),
-                        CgsDev::Assert::MessageAt("lpRaceCar->IsNetworkDriven() || !lpRaceCar->IsInWorld()", __FILE__, 4973));      // X360 :4973
+                        CGS_ASSERT_MESSAGE_AT("lpRaceCar->IsNetworkDriven() || !lpRaceCar->IsInWorld()", __FILE__, 4973));      // X360 :4973
             luFlags |= RaceCarEntityModuleIO::E_RACE_CAR_OUTPUT_FLAG_DISCONNECTED;
         }
         else if( lpActiveRaceCar->IsNotSendingNetworkUpdates() )
         {
             CGS_ASSERT( lpRaceCar->GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT" );
             CGS_ASSERT( lpRaceCar->IsNetworkDriven() || !lpRaceCar->IsInWorld(),
-                        CgsDev::Assert::MessageAt("lpRaceCar->IsNetworkDriven() || !lpRaceCar->IsInWorld()", __FILE__, 4978));      // X360 :4978
+                        CGS_ASSERT_MESSAGE_AT("lpRaceCar->IsNetworkDriven() || !lpRaceCar->IsInWorld()", __FILE__, 4978));      // X360 :4978
             luFlags |= RaceCarEntityModuleIO::E_RACE_CAR_OUTPUT_FLAG_LOST_CONTACT;
         }
 
@@ -4421,7 +4421,7 @@ void RaceCarEntityModule::UpdateOutputInterfaces(
         {
             CGS_ASSERT( lpRaceCar->GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT" );
             CGS_ASSERT( lpRaceCar->IsPlayerDriven() || lpRaceCar->IsNetworkDriven(),
-                        CgsDev::Assert::MessageAt("lpRaceCar->IsPlayerDriven() || lpRaceCar->IsNetworkDriven()", __FILE__, 4984));  // X360 :4984
+                        CGS_ASSERT_MESSAGE_AT("lpRaceCar->IsPlayerDriven() || lpRaceCar->IsNetworkDriven()", __FILE__, 4984));  // X360 :4984
             luFlags |= RaceCarEntityModuleIO::E_RACE_CAR_OUTPUT_FLAG_IN_SHOWTIME;
         }
 
@@ -5521,8 +5521,8 @@ void RaceCarEntityModule::ProcessCreateVehicleEvents(
         const RaceCarEntityModuleIO::InputBuffer_PostPhysics* lpInput,
         RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpOutput )
 {
-    CGS_ASSERT(lpInput != 0, CgsDev::Assert::MessageAt("lpInput != NULL", __FILE__, 5174));      // X360 :5174
-    CGS_ASSERT(lpOutput != 0, CgsDev::Assert::MessageAt("lpOutput != NULL", __FILE__, 5175));    // X360 :5175
+    CGS_ASSERT(lpInput != 0, CGS_ASSERT_MESSAGE_AT("lpInput != NULL", __FILE__, 5174));      // X360 :5174
+    CGS_ASSERT(lpOutput != 0, CGS_ASSERT_MESSAGE_AT("lpOutput != NULL", __FILE__, 5175));    // X360 :5175
 
     if( lpInput == 0 || lpOutput == 0 )
     {
@@ -5570,9 +5570,9 @@ void RaceCarEntityModule::ProcessCreateVehicleEvents(
             static_cast<s32>( lrResult.mVolumeInstanceID.GetEntityIDEntityIndex() );
 
         CGS_ASSERT( liActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-                    CgsDev::Assert::MessageAt("leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", __FILE__, 5206));  // X360 :5206
+                    CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", __FILE__, 5206));  // X360 :5206
         CGS_ASSERT( liActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                    CgsDev::Assert::MessageAt("leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", __FILE__, 5207)); // X360 :5207
+                    CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", __FILE__, 5207)); // X360 :5207
 
         ActiveRaceCar* lpActiveRaceCar =
             GetActiveRaceCar( static_cast<EActiveRaceCarIndex>( liActiveRaceCarIndex ) );
@@ -5596,7 +5596,7 @@ void RaceCarEntityModule::ProcessCreateVehicleEvents(
                 ? mpVehicleList->GetVehicleIndex( lpActiveRaceCar->GetGlobalRaceCar()->GetModelId() )
                 : -1;
 
-        CGS_ASSERT(liModelIndex >= 0, CgsDev::Assert::MessageAt("liModelIndex >= 0", __FILE__, 5211));               // X360 :5211
+        CGS_ASSERT(liModelIndex >= 0, CGS_ASSERT_MESSAGE_AT("liModelIndex >= 0", __FILE__, 5211));               // X360 :5211
 
         // ⭐ THE LEG THE WHOLE WAVE HANGS OFF: this is the console's ONLY caller of
         // ActiveRaceCar::OnHandlingModelAdded -> AddToScene -> AddToCollision.
@@ -5675,7 +5675,7 @@ void RaceCarEntityModule::ProcessCreateVehicleEvents(
 void RaceCarEntityModule::SendRaceCarSceneUpdates(
         RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpOutput )
 {
-    CGS_ASSERT(lpOutput != 0, CgsDev::Assert::MessageAt("lpOutput != NULL", __FILE__, 5086));    // X360 :5086
+    CGS_ASSERT(lpOutput != 0, CGS_ASSERT_MESSAGE_AT("lpOutput != NULL", __FILE__, 5086));    // X360 :5086
 
     if( lpOutput == 0 )
     {
@@ -6028,7 +6028,7 @@ void RaceCarEntityModule::ProcessPropContactQueue(
 
     const BrnPhysics::ContactSpy::ContactSpyData::PropContactQueue* lpPropContactQueue =
             lpInput->GetContactSpyInterface()->GetPropContacts();
-    CGS_ASSERT(lpPropContactQueue != 0, CgsDev::Assert::MessageAt("lpPropContactQueue != NULL", __FILE__, 5999));        // :5999
+    CGS_ASSERT(lpPropContactQueue != 0, CGS_ASSERT_MESSAGE_AT("lpPropContactQueue != NULL", __FILE__, 5999));        // :5999
 
     // [DIAG] BRN_BOOST_TICKER_DIAG -- NOT IN THE X360 BINARY. Budgeted. DELETE-WHEN-STABLE.
     static s32        siPropLines = 0;
@@ -6037,7 +6037,7 @@ void RaceCarEntityModule::ProcessPropContactQueue(
     {
         const BrnPhysics::ContactSpy::PropContact* lpPropContact =
                 &lpPropContactQueue->GetEvent( liContact );
-        CGS_ASSERT(lpPropContact != 0, CgsDev::Assert::MessageAt("lpPropContact != NULL", __FILE__, 6005));              // :6005
+        CGS_ASSERT(lpPropContact != 0, CGS_ASSERT_MESSAGE_AT("lpPropContact != NULL", __FILE__, 6005));              // :6005
         const BrnPhysics::ContactSpy::PropContact& lrPropContact = *lpPropContact;
 
         const CgsSceneManager::EntityId lContactIdA( lrPropContact.mEntityIdA.muValue );
@@ -6251,7 +6251,7 @@ void RaceCarEntityModule::UpdateCurrentWorldRegion(
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(
-            "mDistrictMapResourceHandle.GetResource() != NULL", lpcSourceFile, 3075);
+            "mDistrictMapResourceHandle.GetResource() != NULL", CGS_ASSERT_LOCATION(lpcSourceFile, 3075));
         CgsDev::Assert::EndAssert();
     }
 
@@ -6261,7 +6261,7 @@ void RaceCarEntityModule::UpdateCurrentWorldRegion(
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(
-            "mDistrictMapResourceHandle.GetResource()->GetMemoryResource() != NULL", lpcSourceFile, 3076);
+            "mDistrictMapResourceHandle.GetResource()->GetMemoryResource() != NULL", CGS_ASSERT_LOCATION(lpcSourceFile, 3076));
         CgsDev::Assert::EndAssert();
     }
 
@@ -6289,8 +6289,8 @@ void RaceCarEntityModule::PostPhysicsUpdate(
         RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpOutput,
         BrnUpdateSet lUpdateSet )
 {
-    CGS_ASSERT(lpInput != 0, CgsDev::Assert::MessageAt("lpInput != NULL", __FILE__, 2640));      // X360 :2640
-    CGS_ASSERT(lpOutput != 0, CgsDev::Assert::MessageAt("lpOutput != NULL", __FILE__, 2641));    // X360 :2641
+    CGS_ASSERT(lpInput != 0, CGS_ASSERT_MESSAGE_AT("lpInput != NULL", __FILE__, 2640));      // X360 :2640
+    CGS_ASSERT(lpOutput != 0, CGS_ASSERT_MESSAGE_AT("lpOutput != NULL", __FILE__, 2641));    // X360 :2641
 
     if( lpOutput == 0 )
     {
@@ -6802,8 +6802,8 @@ void RaceCarEntityModule::PrePhysicsUpdate(
         RaceCarEntityModuleIO::OutputBuffer_PrePhysics* lpOutput,
         BrnUpdateSet lUpdateSet )
 {
-    CGS_ASSERT(lpInput != 0, CgsDev::Assert::MessageAt("lpInput != NULL", __FILE__, 1724));        // X360 :1724
-    CGS_ASSERT(lpOutput != 0, CgsDev::Assert::MessageAt("lpOutput != NULL", __FILE__, 1725));      // X360 :1725
+    CGS_ASSERT(lpInput != 0, CGS_ASSERT_MESSAGE_AT("lpInput != NULL", __FILE__, 1724));        // X360 :1724
+    CGS_ASSERT(lpOutput != 0, CGS_ASSERT_MESSAGE_AT("lpOutput != NULL", __FILE__, 1725));      // X360 :1725
 
     if( lpInput == 0 || lpOutput == 0 )
     {
@@ -6951,7 +6951,7 @@ void RaceCarEntityModule::UpdateActiveCars( f32 lfTimeStep, f32 lfTimeStepMultip
 void RaceCarEntityModule::SendAddedForCollisionStateToPhysics( BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInput )
 {
     CGS_ASSERT( lpVehicleInput != 0,
-        CgsDev::Assert::MessageAt("lpVehicleOutput != NULL", KAC_ARTIST_ASSERT_FILE, 4381 /* ARTIST 0x822BD754 */));
+        CGS_ASSERT_MESSAGE_AT("lpVehicleOutput != NULL", KAC_ARTIST_ASSERT_FILE, 4381 /* ARTIST 0x822BD754 */));
 
     for( s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar )
     {
@@ -7309,7 +7309,7 @@ void RaceCarEntityModule::ProcessPlayerVehicleInput(
     // `stw r26, 0x170+var_BC(r1)`.
     BrnPhysics::Vehicle::BrnPlayerDriverControls lControls;
 
-    CGS_ASSERT(lpInput != 0, CgsDev::Assert::MessageAt("lpInput", __FILE__, 6037));                                          // X360 :6037
+    CGS_ASSERT(lpInput != 0, CGS_ASSERT_MESSAGE_AT("lpInput", __FILE__, 6037));                                          // X360 :6037
 
     bool lbControllerActive = lpInput->GetControllerActive();
 
@@ -7333,7 +7333,7 @@ void RaceCarEntityModule::ProcessPlayerVehicleInput(
     // wrote it; on the pre-car frames the gate's log-once carries the signal instead.
     // DELETE-WHEN the gate above goes (then restore the console position).
     CGS_ASSERT( mePlayerActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-                CgsDev::Assert::MessageAt("mePlayerActiveRaceCarIndex >= 0", __FILE__, 6041));                                // X360 :6041
+                CGS_ASSERT_MESSAGE_AT("mePlayerActiveRaceCarIndex >= 0", __FILE__, 6041));                                // X360 :6041
 
     ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar( mePlayerActiveRaceCarIndex );
 
@@ -7720,7 +7720,7 @@ void RaceCarEntityModule::StorePlayerRoutePortalPositions(
         const RaceCarEntityModuleIO::InputBuffer_PostPhysics* lpInput)
 {
     CGS_ASSERT(lpInput != 0,
-        CgsDev::Assert::MessageAt("lpInput != NULL", KAC_ARTIST_ASSERT_FILE, 2832 /* ARTIST 0x822BD6C4 */));
+        CGS_ASSERT_MESSAGE_AT("lpInput != NULL", KAC_ARTIST_ASSERT_FILE, 2832 /* ARTIST 0x822BD6C4 */));
     mPlayersCurrentRouteNodePosition = lpInput->GetAIRaceCarInterface()->mCurrentNodePosition;
     mPlayersNextRouteNodePosition = lpInput->GetAIRaceCarInterface()->mNextNodePosition;
 }
@@ -8363,11 +8363,11 @@ void RaceCarEntityModule::ProcessRaceCarCrashEvents_PostPhysics(
         const s32 liActiveRaceCarIndex = static_cast<s32>( ( luEntityWord >> 10 ) & 0x3FFFu );
 
         CGS_ASSERT( liActiveRaceCarIndex >= 0,
-                    CgsDev::Assert::MessageAt("leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", __FILE__, 5251));                  // :5251
+                    CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", __FILE__, 5251));                  // :5251
         CGS_ASSERT( liActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                    CgsDev::Assert::MessageAt("leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", __FILE__, 5252));               // :5252
+                    CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", __FILE__, 5252));               // :5252
         CGS_ASSERT( static_cast<s32>( mePlayerActiveRaceCarIndex ) >= 0,
-                    CgsDev::Assert::MessageAt("mePlayerActiveRaceCarIndex >= 0", __FILE__, 5255));                                    // :5255
+                    CGS_ASSERT_MESSAGE_AT("mePlayerActiveRaceCarIndex >= 0", __FILE__, 5255));                                    // :5255
 
         if( static_cast<s32>( mePlayerActiveRaceCarIndex ) == liActiveRaceCarIndex )
         {
@@ -8483,10 +8483,10 @@ void RaceCarEntityModule::UpdateRaceCarCollisionTagging(
         s32 liActiveRaceCarIndex,
         const BrnPhysics::Vehicle::RaceCarState* lpRaceCarState )
 {
-    CGS_ASSERT(liActiveRaceCarIndex >= 0, CgsDev::Assert::MessageAt("liActiveRaceCarIndex >= 0", __FILE__, 5775));                    // :5775
+    CGS_ASSERT(liActiveRaceCarIndex >= 0, CGS_ASSERT_MESSAGE_AT("liActiveRaceCarIndex >= 0", __FILE__, 5775));                    // :5775
     CGS_ASSERT( liActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                CgsDev::Assert::MessageAt("liActiveRaceCarIndex < KI_MAX_ACTIVE_RACE_CARS", __FILE__, 5776));                          // :5776
-    CGS_ASSERT(lpRaceCarState != 0, CgsDev::Assert::MessageAt("lpRaceCarState", __FILE__, 5777));                                     // :5777
+                CGS_ASSERT_MESSAGE_AT("liActiveRaceCarIndex < KI_MAX_ACTIVE_RACE_CARS", __FILE__, 5776));                          // :5776
+    CGS_ASSERT(lpRaceCarState != 0, CGS_ASSERT_MESSAGE_AT("lpRaceCarState", __FILE__, 5777));                                     // :5777
 
     // The console's own first gate: no valid ground under the car means no tag to read, and it
     // returns WITHOUT touching the section (so the last known section survives one bad frame).
@@ -8897,11 +8897,11 @@ void RaceCarEntityModule::AddRivalCar(const BrnGameState::GameStateModuleIO::Add
     s32 liVehicleIndex = mpVehicleList->GetVehicleIndex(lrRival.GetCarId());
     if (liVehicleIndex < 0)
     {
-        CGS_ASSERT(mpVehicleList->GetVehicleCount() > 0, CgsDev::Assert::MessageAt("No vehicles available!", __FILE__, 9248));   // :9248
+        CGS_ASSERT(mpVehicleList->GetVehicleCount() > 0, CGS_ASSERT_MESSAGE_AT("No vehicles available!", __FILE__, 9248));   // :9248
         liVehicleIndex = 0;
     }
     const BrnResource::VehicleListEntry* lpVehicleData = mpVehicleList->GetVehicleData(liVehicleIndex);
-    CGS_ASSERT(lpVehicleData != 0, CgsDev::Assert::MessageAt("lpVehicleData", __FILE__, 9253));                                    // :9253
+    CGS_ASSERT(lpVehicleData != 0, CGS_ASSERT_MESSAGE_AT("lpVehicleData", __FILE__, 9253));                                    // :9253
 
     // 0x82301AF0..0x82301B08: look from the spawn position towards position + heading.
     const Matrix44Affine lSpawnTransform = BrnDirector::Camera::Utils::CreateLookAt(
@@ -8994,7 +8994,7 @@ void RaceCarEntityModule::HandleStopModeAction(const BrnGameState::GameStateModu
     lpBoostStrategy->SetInfiniteBoost(false);                                          // vtbl+128
 
     ActiveRaceCar* lpPlayerActiveRaceCar = GetActiveRaceCar(mePlayerActiveRaceCarIndex);
-    CGS_ASSERT(lpPlayerActiveRaceCar != 0, CgsDev::Assert::MessageAt("lpPlayerActiveRaceCar", __FILE__, 8511));                 // :8511
+    CGS_ASSERT(lpPlayerActiveRaceCar != 0, CGS_ASSERT_MESSAGE_AT("lpPlayerActiveRaceCar", __FILE__, 8511));                 // :8511
     CGS_ASSERT(lpPlayerActiveRaceCar->IsAttached(), "IsAttached()");                 // BrnActiveRaceCar.h:1089
     lpPlayerActiveRaceCar->GetGlobalRaceCar()->SetInCurrentGameMode(false, true);
     lpPlayerActiveRaceCar->SetInGameMode(false);                                       // stb 0, 0x777

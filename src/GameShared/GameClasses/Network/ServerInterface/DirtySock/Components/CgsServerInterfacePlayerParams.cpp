@@ -29,8 +29,8 @@ namespace
         lStrStream << "String too long: " << (lpcValue ? lpcValue : "<NULLSTRING>");
         CgsDev::Assert::FireAssert(
             lacMessageBuffer,
-            "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h",
-            55);
+            CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h",
+            55));
         CgsDev::Assert::EndAssert();
     }
 }
@@ -75,7 +75,7 @@ void ServerInterfacePlayerParamsBase::SerialiseFromPlayer(const void* lpPlayer)
 
 void ServerInterfacePlayerParamsBase::SerialiseToString(char* lpcRecord, s32 liRecLen) const
 {
-    CGS_ASSERT(std::strlen(GetPattern()) < static_cast<u32>(GetPatternLength()), CgsDev::Assert::MessageAt(
+    CGS_ASSERT(std::strlen(GetPattern()) < static_cast<u32>(GetPatternLength()), CGS_ASSERT_MESSAGE_AT(
         "strlen( GetPattern() ) < (size_t) GetPatternLength()",
         __FILE__, 108 /* ARTIST 0x8287A19C */));
 

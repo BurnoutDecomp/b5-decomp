@@ -61,7 +61,7 @@ const SlotSchema* FeatureSchema::GetSlotSchema(u32 au32Index) const
 const SlotSchema* const* FeatureSchema::GetSlotSchemaAddress(u32 au32Index) const
 {
     CGS_ASSERT(au32Index < mu32SlotSchemaCount,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lu32I < mu32SlotSchemaCount",
             "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsDataStructures.h", 1066 /* ARTIST 0x82680A60 */));
 

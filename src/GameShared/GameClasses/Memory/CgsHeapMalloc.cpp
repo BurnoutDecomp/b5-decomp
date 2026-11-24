@@ -21,9 +21,9 @@ namespace CgsMemory
     void HeapMalloc::Construct(void* lpBuffer, s32 lnBufferSize)
     {
         CGS_ASSERT(lpBuffer,
-            CgsDev::Assert::MessageAt("lpBuffer", __FILE__, 52 /* ARTIST 0x828666B0 */));           // CgsHeapMalloc.cpp:52
+            CGS_ASSERT_MESSAGE_AT("lpBuffer", __FILE__, 52 /* ARTIST 0x828666B0 */));           // CgsHeapMalloc.cpp:52
         CGS_ASSERT(lnBufferSize > 0,
-            CgsDev::Assert::MessageAt("lnBufferSize>0", __FILE__, 53 /* ARTIST 0x828666D4 */)); // CgsHeapMalloc.cpp:53
+            CGS_ASSERT_MESSAGE_AT("lnBufferSize>0", __FILE__, 53 /* ARTIST 0x828666D4 */)); // CgsHeapMalloc.cpp:53
 
         mpBuffer     = lpBuffer;
         mnBufferSize = lnBufferSize;

@@ -261,8 +261,8 @@ void AssertOnClassCheck(int liClass, int liExpectedClass, u64 luCollectionKey)
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(sacAssertMessage,
-            "..\\..\\..\\SDKs\\Packages\\AttribSys\\1.2.1.2\\AttribSys/runtime/common/attribsupport.cpp",
-            114);
+            CGS_ASSERT_LOCATION("..\\..\\..\\SDKs\\Packages\\AttribSys\\1.2.1.2\\AttribSys/runtime/common/attribsupport.cpp",
+            114));
         CgsDev::Assert::EndAssert();
     }
 }

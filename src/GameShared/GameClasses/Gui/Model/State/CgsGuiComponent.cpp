@@ -125,7 +125,7 @@ namespace CgsGui
     // an out-of-line copy. Assert the incoming state interface, store it at +0x88.
     void GuiComponent::SetStateInterface(StateInterface* lpStateInterface)
     {
-        CGS_ASSERT(lpStateInterface != 0, CgsDev::Assert::StreamMessageAt("Invalid state interface sent to GuiComponent::SetStateInterface", "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/State/CgsGuiComponent.h", 169));
+        CGS_ASSERT(lpStateInterface != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid state interface sent to GuiComponent::SetStateInterface", "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/State/CgsGuiComponent.h", 169));
 
         mpStateInterface = lpStateInterface;
     }

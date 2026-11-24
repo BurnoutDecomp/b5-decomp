@@ -6,7 +6,7 @@
 // SetGuiCachePointer runs one non-fatal CGS_ASSERT pointer guard (the X360 proceeds
 // regardless). The X360-baked assert file/line are discarded per project convention;
 // the stringized condition matches the X360 assert text.
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnFriendsList.cpp"
 #include "GameSource/Gui/Flow/HUD/Components/BrnFriendsList.h"
 #include "GameSource/Gui/Flapt/BrnFlaptMovieClipInstance.h"
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"
@@ -93,7 +93,7 @@ operator++(FriendsListComponent::EFriendListBranchState& lreEnumIndex, int)
     const FriendsListComponent::EFriendListBranchState leOld = lreEnumIndex;
     lreEnumIndex = static_cast<FriendsListComponent::EFriendListBranchState>(lreEnumIndex + 1);
     CGS_ASSERT(lreEnumIndex <= FriendsListComponent::E_FRIENDLISTBRANCH_THIRD_OF_THREE,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "leEnumIndex <= FriendsListComponent::E_FRIENDLISTBRANCH_THIRD_OF_THREE",
             KAC_ARTIST_ASSERT_FILE, 603 /* ARTIST 0x82410984 */));
     return leOld;
@@ -108,7 +108,7 @@ operator--(FriendsListComponent::EFriendListBranchState& lreEnumIndex, int)
     const FriendsListComponent::EFriendListBranchState leOld = lreEnumIndex;
     lreEnumIndex = static_cast<FriendsListComponent::EFriendListBranchState>(lreEnumIndex - 1);
     CGS_ASSERT(lreEnumIndex >= FriendsListComponent::E_FRIENDLISTBRANCH_FIRST_OF_ONE,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "leEnumIndex >= FriendsListComponent::E_FRIENDLISTBRANCH_FIRST_OF_ONE",
             KAC_ARTIST_ASSERT_FILE, 603 /* ARTIST 0x824109E4 */));
     return leOld;
@@ -202,7 +202,7 @@ void FriendsListComponent::SaveCurrentState()
 // @0x82414AA0 --------------------------------------------------------------------
 void FriendsListComponent::TransitionCompleteCallback(void* lpUserData)
 {
-    CGS_ASSERT(lpUserData != 0, CgsDev::Assert::MessageAt("lpUserData", "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnFriendsList.cpp", 3900 /* ARTIST 0x82414AD4 */));
+    CGS_ASSERT(lpUserData != 0, CGS_ASSERT_MESSAGE_AT("lpUserData", CGS_ARTIST_FILE, 3900 /* ARTIST 0x82414AD4 */));
     FriendsListComponent& lrSelf = *static_cast<FriendsListComponent*>(lpUserData);
     if (lrSelf.meCurrentState == 1)
         lrSelf.meCurrentState = 2;
@@ -1127,7 +1127,7 @@ void FriendsListComponent::UpdateAllEntryData()
     case 1: UpdateAllFriendsEntryData(); break;
     case 2: UpdateAllShortcutsEntryData(); break;
     case 3: UpdateAllChallengesEntryData(); break;
-    default: CGS_ASSERT(false, CgsDev::Assert::MessageAt("Unknown list type\n", "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnFriendsList.cpp", 2656 /* ARTIST 0x82440060 */)); break;
+    default: CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Unknown list type\n", CGS_ARTIST_FILE, 2656 /* ARTIST 0x82440060 */)); break;
     }
 }
 
@@ -1212,7 +1212,7 @@ void FriendsListComponent::HandleDPadRight()
     case 1: HandleDPadRightFriends(); break;
     case 2: HandleDPadRightShortcuts(); break;
     case 3: HandleDPadRightChallenges(); break;
-    default: CGS_ASSERT(false, CgsDev::Assert::MessageAt("unknown list type\n", "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnFriendsList.cpp", 1066 /* ARTIST 0x82442DF8 */)); break;
+    default: CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unknown list type\n", CGS_ARTIST_FILE, 1066 /* ARTIST 0x82442DF8 */)); break;
     }
 }
 
@@ -1236,8 +1236,8 @@ void FriendsListComponent::HandleTableInteraction(s32 action)
 // ARTIST 0x82443280.
 void FriendsListComponent::HandleControllerInput(const s32* input)
 {
-    CGS_ASSERT(input != 0, CgsDev::Assert::MessageAt("lpControllerInput", "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnFriendsList.cpp", 849 /* ARTIST 0x824432B8 */));
-    CGS_ASSERT(mpGuiCache != 0, CgsDev::Assert::MessageAt("mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnFriendsList.cpp", 856 /* ARTIST 0x824432E0 */));
+    CGS_ASSERT(input != 0, CGS_ASSERT_MESSAGE_AT("lpControllerInput", CGS_ARTIST_FILE, 849 /* ARTIST 0x824432B8 */));
+    CGS_ASSERT(mpGuiCache != 0, CGS_ASSERT_MESSAGE_AT("mpGuiCache", CGS_ARTIST_FILE, 856 /* ARTIST 0x824432E0 */));
     // Host diagnostic: one record per GUI press, disabled in normal play.
     if (!mpGuiCache->GetGameplayHudReady() || (meListType == 1 && meDataCollectionState != 2)) return;
     if (meCurrentState == 2 && meBranchState != 0) HandleBranchInteraction(input[1]);
@@ -1557,7 +1557,7 @@ void FriendsListComponent::SortFullList()
 // ARTIST 0x824430D0.
 void FriendsListComponent::ProcessNewEntryData(const void* data)
 {
-    CGS_ASSERT(data != 0, CgsDev::Assert::MessageAt("lpFriendInfo", "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnFriendsList.cpp", 706 /* ARTIST 0x82443104 */));
+    CGS_ASSERT(data != 0, CGS_ASSERT_MESSAGE_AT("lpFriendInfo", CGS_ARTIST_FILE, 706 /* ARTIST 0x82443104 */));
     if (meListType != 1) return;
     const GuiEventOnlineReceiveFriendInfo& event = *static_cast<const GuiEventOnlineReceiveFriendInfo*>(data);
     if (!event.mbConnected) { HandleNotConnected(); meDataCollectionState = 2; return; }
@@ -1726,3 +1726,5 @@ void FriendsListComponent::HandleDPadRightChallenges()
 }
 
 } // namespace BrnGui
+
+#undef CGS_ARTIST_FILE

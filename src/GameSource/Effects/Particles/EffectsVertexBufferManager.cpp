@@ -13,7 +13,7 @@
 renderengine::VertexBuffer* EffectsVertexBufferManager::GetVertexBuffer() const
 {
     CGS_ASSERT(!mbLocked,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "!mbLocked",
             "..\\..\\..\\GameSource\\Effects/Particles/EffectsVertexBufferManager.h", 97 /* ARTIST 0x82278348 */));
     return mapVertexBuffer[muCurrentBuffer];

@@ -30,7 +30,7 @@
 #include <xbdm.h>  // DmMapDevkitDrive
 #include "GameShared/GameClasses/Module/CgsModuleIOHelper.h"
 #include "GameShared/GameClasses/System/CgsHardwareInit.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Resource/BrnGameDataModule.cpp"
 
 // BrnResource::GameDataModule - see the header. This pass reconstructs the rw-INDEPENDENT
 // lifecycle spine (Prepare's base -> ResourceModule::Prepare core). The rw-allocator-gated
@@ -230,7 +230,7 @@ namespace BrnResource
             mePrepareStage = E_PREPARE_GAMETALK;
             if (!mGameTalk.Prepare(10.0f, 0.01666666753590107f))
                 goto Pending;
-            CGS_ASSERT(mDebugGameTalkInterface.Prepare(), CgsDev::Assert::MessageAt("mDebugGameTalkInterface.Prepare()", "..\\..\\..\\GameSource\\Resource/BrnGameDataModule.cpp", 519));
+            CGS_ASSERT(mDebugGameTalkInterface.Prepare(), CGS_ASSERT_MESSAGE_AT("mDebugGameTalkInterface.Prepare()", CGS_ARTIST_FILE, 519));
             // fall through
         case E_PREPARE_LIVE_UPDATE:
             mePrepareStage = E_PREPARE_LIVE_UPDATE;
@@ -516,7 +516,7 @@ namespace BrnResource
     bool GameDataModule::PrepareAttribSysSchemaResource(CgsModule::IOBufferStack* lpInputStack,
         CgsModule::IOBufferStack* lpOutputStack, CgsAttribSys::AttribSysIO::InputBuffer* lpAttribModuleInputBuffer)
     {
-        CGS_ASSERT(lpAttribModuleInputBuffer != 0, CgsDev::Assert::MessageAt("lpAttribModuleInputBuffer != NULL", "..\\..\\..\\GameSource\\Resource/BrnGameDataModule.cpp", 1481));
+        CGS_ASSERT(lpAttribModuleInputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpAttribModuleInputBuffer != NULL", CGS_ARTIST_FILE, 1481));
         CgsResource::ResourceIO::InputBuffer* lpResourceInput = 0;
         lpInputStack->CreateIOBuffer(&lpResourceInput, "Resource");
         lpResourceInput->LockForWrite();
@@ -543,7 +543,7 @@ namespace BrnResource
             lpInputStack->DestroyIOBuffer(&lpResourceInput);
             return true;
         default:
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt("Invalid resource prepare stage.\n", "..\\..\\..\\GameSource\\Resource/BrnGameDataModule.cpp", 1534));
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Invalid resource prepare stage.\n", CGS_ARTIST_FILE, 1534));
             break;
         }
         lpResourceInput->UnlockForWrite();
@@ -565,7 +565,7 @@ namespace BrnResource
                                        CgsDev::Assert::giMessageBufferSize);
             lMessage << "Invalid event id received\n";
             CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                KAC_GAMEDATA_PREPARE_SOURCE, liLine);
+                CGS_ASSERT_LOCATION(KAC_GAMEDATA_PREPARE_SOURCE, liLine));
             CgsDev::Assert::EndAssert();
         }
 
@@ -576,7 +576,7 @@ namespace BrnResource
                                        CgsDev::Assert::giMessageBufferSize);
             lMessage << lpcMessage;
             CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                KAC_GAMEDATA_PREPARE_SOURCE, liLine);
+                CGS_ASSERT_LOCATION(KAC_GAMEDATA_PREPARE_SOURCE, liLine));
             CgsDev::Assert::EndAssert();
         }
 
@@ -756,7 +756,7 @@ namespace BrnResource
 
         default:
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("Invalid Stage\n", KAC_GAMEDATA_PREPARE_SOURCE, liStageLine);
+            CgsDev::Assert::FireAssert("Invalid Stage\n", CGS_ASSERT_LOCATION(KAC_GAMEDATA_PREPARE_SOURCE, liStageLine));
             CgsDev::Assert::EndAssert();
             break;
         }
@@ -894,7 +894,7 @@ namespace BrnResource
             return true;
         default:
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("Invalid Stage\n", "..\\..\\..\\GameSource\\Resource/BrnGameDataModule.cpp", 1682);
+            CgsDev::Assert::FireAssert("Invalid Stage\n", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 1682));
             CgsDev::Assert::EndAssert();
             return false;
         }
@@ -1309,7 +1309,7 @@ namespace BrnResource
                 static_cast<const GameDataIO::SwapInCollisionWorldRequest*>(lpEvent));
             break;
         default:
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt("Invalid event id\n", "..\\..\\..\\GameSource\\Resource/BrnGameDataModule.cpp", 2791));   // X360 line 2791
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Invalid event id\n", CGS_ARTIST_FILE, 2791));   // X360 line 2791
             break;
         }
     }
@@ -1712,7 +1712,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
 
             const VehicleListEntry* lpVehicleListEntry =
                 mVehicleList.GetVehicleData(CgsIDCompress(lacVehicleID + 4));
-            CGS_ASSERT(lpVehicleListEntry != 0, CgsDev::Assert::MessageAt("lpVehicleListEntry", "..\\..\\..\\GameSource\\Resource/BrnGameDataModule.cpp", 3956));   // X360 line 3956
+            CGS_ASSERT(lpVehicleListEntry != 0, CGS_ASSERT_MESSAGE_AT("lpVehicleListEntry", CGS_ARTIST_FILE, 3956));   // X360 line 3956
             if (lpVehicleListEntry == 0)
                 return;   // [marked deviation] the X360 assert is non-fatal and the next
                           // load would fault on the null entry; guard the host instead.
@@ -1760,7 +1760,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         char lacResourceName[128];
         strncpy(lacResourceName, lacVehicleID + 4, 9);
         CGS_ASSERT(strlen(lacResourceName) + 10 < 0x7F,
-                   CgsDev::Assert::MessageAt("(strlen(lpcSource)+strlen(lpcDest))<luBytes - 1", "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 75));
+                   CGS_ASSERT_MESSAGE_AT("(strlen(lpcSource)+strlen(lpcDest))<luBytes - 1", "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 75));
         strcat(lacResourceName, "_AttribSys");
 
         CgsResource::Events::AcquireResourceRequest lRequest;
@@ -1801,8 +1801,8 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         {
             CGS_ASSERT(strstr(lacVehicleID, "VEH_") != 0, "strstr( lacVehicleID, \"VEH_\" )");
             lpVehicle = mVehicleList.GetVehicleData(CgsIDCompress(lacVehicleID + 4));
-            CGS_ASSERT(lpVehicle != 0, CgsDev::Assert::MessageAt("lpVehicleListEntry", "..\\..\\..\\GameSource\\Resource/BrnGameDataModule.cpp", 5031));
-            CGS_ASSERT(muLoadedSoundBundlesCount == 2, CgsDev::Assert::MessageAt("muLoadedSoundBundlesCount == 2", "..\\..\\..\\GameSource\\Resource/BrnGameDataModule.cpp", 5034));
+            CGS_ASSERT(lpVehicle != 0, CGS_ASSERT_MESSAGE_AT("lpVehicleListEntry", CGS_ARTIST_FILE, 5031));
+            CGS_ASSERT(muLoadedSoundBundlesCount == 2, CGS_ASSERT_MESSAGE_AT("muLoadedSoundBundlesCount == 2", CGS_ARTIST_FILE, 5034));
         }
         const u32 luBundleCount = lpEvent->meType == E_ASSETSET_SOUND ? 2 : 1;
         for (u32 luBundle = 0; luBundle < luBundleCount; ++luBundle)
@@ -2080,7 +2080,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
 
                 const VehicleListEntry* lpVehicleListEntry =
                     mVehicleList.GetVehicleData(CgsIDCompress(lacVehicleID + 4));
-                CGS_ASSERT(lpVehicleListEntry != 0, CgsDev::Assert::MessageAt("lpVehicleListEntry", "..\\..\\..\\GameSource\\Resource/BrnGameDataModule.cpp", 4689));   // X360 line 4689
+                CGS_ASSERT(lpVehicleListEntry != 0, CGS_ASSERT_MESSAGE_AT("lpVehicleListEntry", CGS_ARTIST_FILE, 4689));   // X360 line 4689
                 if (lpVehicleListEntry == 0)
                     return;   // [marked deviation] see ProcessLoadVehicleRequest
 
@@ -2298,17 +2298,17 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         if (strncmp(lacResourceName, "PRP_INST_", KU_STRING_INDEX_OF_ZONE_NUMBER) != 0)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("strncmp(lacResourceName, \"PRP_INST_\", KU_STRING_INDEX_OF_ZONE_NUMBER) == 0", KAC_GAMEDATA_PREPARE_SOURCE, 5295);
+            CgsDev::Assert::FireAssert("strncmp(lacResourceName, \"PRP_INST_\", KU_STRING_INDEX_OF_ZONE_NUMBER) == 0", CGS_ASSERT_LOCATION(KAC_GAMEDATA_PREPARE_SOURCE, 5295));
             CgsDev::Assert::EndAssert();
         }
         const u32 luZoneId = static_cast<u32>(atoi(&lacResourceName[KU_STRING_INDEX_OF_ZONE_NUMBER]));
         if (luZoneId >= KU_MAX_ZONES)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("luZoneId < KU_MAX_ZONES", KAC_GAMEDATA_PREPARE_SOURCE, 5297);
+            CgsDev::Assert::FireAssert("luZoneId < KU_MAX_ZONES", CGS_ASSERT_LOCATION(KAC_GAMEDATA_PREPARE_SOURCE, 5297));
             CgsDev::Assert::EndAssert();
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("luZoneId < KU_MAX_ZONES", KAC_GAMEDATA_PREPARE_SOURCE, 5300);
+            CgsDev::Assert::FireAssert("luZoneId < KU_MAX_ZONES", CGS_ASSERT_LOCATION(KAC_GAMEDATA_PREPARE_SOURCE, 5300));
             CgsDev::Assert::EndAssert();
         }
         lStream << KPC_PROP_INSTANCES_PATH << luZoneId << "_PropInstances.bundle";
@@ -2680,7 +2680,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
 
         // X360 line 4155 (message-less assert: the stringized condition is the message).
         CGS_ASSERT(strncmp(lacResourceName, "PRP_INST_", KU_STRING_INDEX_OF_ZONE_NUMBER) == 0,
-                   CgsDev::Assert::MessageAt("strncmp(lacResourceName, \"PRP_INST_\", KU_STRING_INDEX_OF_ZONE_NUMBER) == 0", "..\\..\\..\\GameSource\\Resource/BrnGameDataModule.cpp", 4155));
+                   CGS_ASSERT_MESSAGE_AT("strncmp(lacResourceName, \"PRP_INST_\", KU_STRING_INDEX_OF_ZONE_NUMBER) == 0", CGS_ARTIST_FILE, 4155));
 
         const u32 luZoneId = static_cast<u32>(atoi(&lacResourceName[KU_STRING_INDEX_OF_ZONE_NUMBER]));
         // X360 fires this guard TWICE (lines 4157 and 4160) inside one out-of-range branch;
@@ -3295,7 +3295,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
             const CgsResource::Events::AcquireResourceResponse* lpResponse,
             CgsAttribSys::AttribSysIO::InputBuffer* lpAttribModuleInputBuffer)
     {
-        CGS_ASSERT(lpAttribModuleInputBuffer != 0, CgsDev::Assert::MessageAt("lpAttribModuleInputBuffer != NULL", "..\\..\\..\\GameSource\\Resource/BrnGameDataModule.cpp", 3357));   // X360 line 3357
+        CGS_ASSERT(lpAttribModuleInputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpAttribModuleInputBuffer != NULL", CGS_ARTIST_FILE, 3357));   // X360 line 3357
         GameDataEventSlot* lpSlot = &mGameDataEventSlotPool[static_cast<s16>(lpResponse->miEventId)];
         const s32 liSlotIndex = lpResponse->miEventId;
 
@@ -3314,7 +3314,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
                    // type-5 reply routes through ProcessUnregisterVehicleAttribsResponse)
         {
             CGS_ASSERT(lpSlot->mEvent.meType == E_ASSETSET_ATTRIBS,
-                       CgsDev::Assert::MessageAt("lpSlot->mEvent.GetGameDataType() == E_ASSETSET_ATTRIBS", "..\\..\\..\\GameSource\\Resource/BrnGameDataModule.cpp", 3542));   // line 3542
+                       CGS_ASSERT_MESSAGE_AT("lpSlot->mEvent.GetGameDataType() == E_ASSETSET_ATTRIBS", CGS_ARTIST_FILE, 3542));   // line 3542
             if (lpSlot->mEvent.meType != E_ASSETSET_ATTRIBS)
                 break;
             CgsResource::ResourceHandle lHandle;
@@ -3407,7 +3407,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         }
 
         default:
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt("Invalid event type received\n", "..\\..\\..\\GameSource\\Resource/BrnGameDataModule.cpp", 3559));   // X360 line 3559
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Invalid event type received\n", CGS_ARTIST_FILE, 3559));   // X360 line 3559
             break;
         }
         lpAttribModuleInputBuffer->UnlockForWrite();
@@ -3453,7 +3453,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
 
         if (lpSlot->mEvent.meType == E_ASSETSET_SOUND)
         {
-            CGS_ASSERT(muLoadedSoundBundlesCount != 0, CgsDev::Assert::MessageAt("muLoadedSoundBundlesCount != 0", "..\\..\\..\\GameSource\\Resource/BrnGameDataModule.cpp", 3618));   // line 3618
+            CGS_ASSERT(muLoadedSoundBundlesCount != 0, CGS_ASSERT_MESSAGE_AT("muLoadedSoundBundlesCount != 0", CGS_ARTIST_FILE, 3618));   // line 3618
             if (muLoadedSoundBundlesCount-- != 1)
                 return;   // more sound bundles still unloading -- keep the slot alive
         }
@@ -3588,7 +3588,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         const s32 liResponseId = lpSlot->miResponseEventId;
         if (liResponseId != 50 && liResponseId != 66)
         {
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt("Invalid event type received\n", "..\\..\\..\\GameSource\\Resource/BrnGameDataModule.cpp", 3817));   // X360 line 3817
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Invalid event type received\n", CGS_ARTIST_FILE, 3817));   // X360 line 3817
             return;
         }
         if (lpSlot->mEvent.meType != E_ASSETSET_ATTRIBS)
@@ -3612,7 +3612,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         const s32 liSlotIndex = *reinterpret_cast<const s32*>(lpResponse);
         GameDataEventSlot* lpSlot = &mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)];
         CGS_ASSERT(lpSlot->mEvent.meType == E_ASSETSET_ATTRIBS,
-                   CgsDev::Assert::MessageAt("leBundleAssetSet == E_ASSETSET_ATTRIBS", "..\\..\\..\\GameSource\\Resource/BrnGameDataModule.cpp", 3861));   // X360 line 3861
+                   CGS_ASSERT_MESSAGE_AT("leBundleAssetSet == E_ASSETSET_ATTRIBS", CGS_ARTIST_FILE, 3861));   // X360 line 3861
         char lacVehicleID[KI_CGSID_STRING_LEN];
         CgsIDConvertToString(lpSlot->mEvent.mId, lacVehicleID);
         char lacFileName[128];
@@ -3638,3 +3638,5 @@ void BrnResource::GameDataModule::RenderDebug(const GameDataIO::InputBuffer* lpI
     mpDebug2dRenderBuffer = lpInputBuffer->GetIm2dDebugRenderBuffer();
     lpInputBuffer->UnlockForRead();
 }
+
+#undef CGS_ARTIST_FILE

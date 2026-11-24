@@ -1,5 +1,5 @@
 #include "types.hpp"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/CgsVoiceHierarchy.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsVoiceHierarchyResourceType.h"
 #include <cstring>
@@ -175,13 +175,13 @@ namespace CgsResource
             if (i >= lpHierarchy->miNumNodes)
             {
                 CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert("Requested node number out of range\n", "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/CgsVoiceHierarchy.h", 889);
+                CgsDev::Assert::FireAssert("Requested node number out of range\n", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 889));
                 CgsDev::Assert::EndAssert();
             }
             if (!lpHierarchy->mpNodes)
             {
                 CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert("mpNodes", "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/CgsVoiceHierarchy.h", 890);
+                CgsDev::Assert::FireAssert("mpNodes", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 890));
                 CgsDev::Assert::EndAssert();
             }
             const CgsSound::Logic::VoiceHierarchyNode& lrNode = lpHierarchy->mpNodes[i];
@@ -191,7 +191,7 @@ namespace CgsResource
                 if (!lrNode.mpcDebugName)
                 {
                     CgsDev::Assert::BeginAssert();
-                    CgsDev::Assert::FireAssert("Debug data not set\n", "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/CgsVoiceHierarchy.h", 728);
+                    CgsDev::Assert::FireAssert("Debug data not set\n", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 728));
                     CgsDev::Assert::EndAssert();
                 }
                 liSize += static_cast<s32>(std::strlen(lrNode.mpcDebugName)) + 1;
@@ -215,13 +215,13 @@ namespace CgsResource
             if (i >= lpHierarchy->miNumNodes)
             {
                 CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert("Requested node number out of range\n", "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/CgsVoiceHierarchy.h", 889);
+                CgsDev::Assert::FireAssert("Requested node number out of range\n", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 889));
                 CgsDev::Assert::EndAssert();
             }
             if (!lpHierarchy->mpNodes)
             {
                 CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert("mpNodes", "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/CgsVoiceHierarchy.h", 890);
+                CgsDev::Assert::FireAssert("mpNodes", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 890));
                 CgsDev::Assert::EndAssert();
             }
             const_cast<CgsSound::Logic::VoiceHierarchyNode&>(lpHierarchy->mpNodes[i]).FixUp(lrResource);
@@ -231,15 +231,17 @@ namespace CgsResource
             if (i >= lpHierarchy->miNumExternalConnections)
             {
                 CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert("Requested external connection number out of range\n", "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/CgsVoiceHierarchy.h", 943);
+                CgsDev::Assert::FireAssert("Requested external connection number out of range\n", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 943));
                 CgsDev::Assert::EndAssert();
             }
             if (!lpHierarchy->mpExternalConnections)
             {
                 CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert("mpExternalConnections", "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/CgsVoiceHierarchy.h", 944);
+                CgsDev::Assert::FireAssert("mpExternalConnections", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 944));
                 CgsDev::Assert::EndAssert();
             }
         }
     }
 }
+
+#undef CGS_ARTIST_FILE

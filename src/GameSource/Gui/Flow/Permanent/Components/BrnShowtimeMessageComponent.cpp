@@ -146,7 +146,7 @@ namespace BrnGui
     void BrnShowtimeMessageComponent::TransitionCompleteCallback(void* lpUserData, u16 /*luFrame*/)
     {
         CGS_ASSERT(lpUserData != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpUserData",
                 "..\\..\\..\\GameSource\\Gui/Flow/Permanent/Components/BrnShowtimeMessageComponent.cpp", 190 /* ARTIST 0x8241665C */));
 

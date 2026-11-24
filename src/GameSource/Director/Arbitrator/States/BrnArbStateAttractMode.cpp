@@ -156,7 +156,7 @@ namespace BrnDirector
         }
 
         default:
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt("unhandled state", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateAttractMode.cpp", 130));
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unhandled state", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateAttractMode.cpp", 130));
             break;
         }
     }

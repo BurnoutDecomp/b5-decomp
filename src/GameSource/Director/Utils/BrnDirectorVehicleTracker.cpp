@@ -6,7 +6,7 @@
 // inline in the header. Reconstructed against the X360 binary's member layout (see
 // the header's LAYOUT block).
 // ============================================================================
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorVehicleTracker.cpp"
 #include "GameSource/Director/Utils/BrnDirectorVehicleTracker.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
@@ -68,11 +68,11 @@ void VehicleTracker::Update(
     EActiveRaceCarIndex lePlayerCarIndex,
     bool lbForceNextWorldCrashToBeFastTopDown)
 {
-    CGS_ASSERT(lpGameState != NULL, CgsDev::Assert::MessageAt("lpGameState != NULL", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorVehicleTracker.cpp", 60));
-    CGS_ASSERT(lpInput != NULL, CgsDev::Assert::MessageAt("lpInput != NULL", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorVehicleTracker.cpp", 61));
-    CGS_ASSERT(miVehicleIndex != -1, CgsDev::Assert::MessageAt("miVehicleIndex != -1", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorVehicleTracker.cpp", 63));
+    CGS_ASSERT(lpGameState != NULL, CGS_ASSERT_MESSAGE_AT("lpGameState != NULL", CGS_ARTIST_FILE, 60));
+    CGS_ASSERT(lpInput != NULL, CGS_ASSERT_MESSAGE_AT("lpInput != NULL", CGS_ARTIST_FILE, 61));
+    CGS_ASSERT(miVehicleIndex != -1, CGS_ASSERT_MESSAGE_AT("miVehicleIndex != -1", CGS_ARTIST_FILE, 63));
     CGS_ASSERT(lpInput->GetUsedRaceCars()->IsBitSet(static_cast<u32>(miVehicleIndex)),
-               CgsDev::Assert::MessageAt("lpInput->GetUsedRaceCars()->IsBitSet(miVehicleIndex)", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorVehicleTracker.cpp", 64));
+               CGS_ASSERT_MESSAGE_AT("lpInput->GetUsedRaceCars()->IsBitSet(miVehicleIndex)", CGS_ARTIST_FILE, 64));
 
     // -- RE-FITTED TO THE REAL InputBuffer (2026-08-29, crash-camera wave). These three reads
     // used to go through the declaration-only slice this file used to carry in its header
@@ -196,3 +196,5 @@ void VehicleTracker::Update(
 }
 
 } // namespace BrnDirector
+
+#undef CGS_ARTIST_FILE

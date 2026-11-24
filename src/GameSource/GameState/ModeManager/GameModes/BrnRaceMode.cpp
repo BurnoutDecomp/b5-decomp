@@ -1,5 +1,5 @@
 #include "GameSource/GameState/ModeManager/GameModes/BrnRaceMode.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnRaceMode.cpp"
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
@@ -48,9 +48,9 @@ void RaceMode::Start(const StartGameModeParams* lpStartGameModeParams,
     // from BrnGameModeParams.h on the StartGameModeParams accessors); the lpGameModeParams /
     // lpProgressionRankData / lpEventData asserts fire from BrnRaceMode.cpp.
     CGS_ASSERT(lpProgressionRankData != 0, "mpProgressionRankData != NULL");
-    CGS_ASSERT(lpEventData != 0, CgsDev::Assert::MessageAt("lpEventData != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnRaceMode.cpp", 87));
-    CGS_ASSERT(lpGameModeParams != 0, CgsDev::Assert::MessageAt("lpGameModeParams != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnRaceMode.cpp", 88));
-    CGS_ASSERT(lpProgressionRankData != 0, CgsDev::Assert::MessageAt("lpProgressionRankData != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnRaceMode.cpp", 91));
+    CGS_ASSERT(lpEventData != 0, CGS_ASSERT_MESSAGE_AT("lpEventData != NULL", CGS_ARTIST_FILE, 87));
+    CGS_ASSERT(lpGameModeParams != 0, CGS_ASSERT_MESSAGE_AT("lpGameModeParams != NULL", CGS_ARTIST_FILE, 88));
+    CGS_ASSERT(lpProgressionRankData != 0, CGS_ASSERT_MESSAGE_AT("lpProgressionRankData != NULL", CGS_ARTIST_FILE, 91));
 
     // Initialise the run-time param block for this mode type, then thread through the start
     // mechanism / traffic-light trigger straight from the immutable start params.
@@ -149,3 +149,5 @@ void RaceMode::Start(const StartGameModeParams* lpStartGameModeParams,
     mfNearestPlayerDistToFinish = 10000000.0f; // flt_82CDB7D0 (value unconfirmed -- see note)
 }
 }
+
+#undef CGS_ARTIST_FILE

@@ -8,7 +8,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                                // CGS_ASSERT (VideoDefinition::Copy)
 #include "GameSource/Sound/Global/BrnMusicEffect.h"                                // MusicEffect::IsCustomSoundtrackActive (Update @0x82507A98)
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/BrnGuiMovieManager.cpp"
 #include <cstring>   // strlen / memset (X360 QueueNextMovie path construction)
 #include <xtl.h>
 #include <xmp.h>
@@ -41,8 +41,8 @@ namespace BrnGui
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert(
                     "(strlen(lpcSource)+strlen(lpcDest))<luBytes - 1",
-                    "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h",
-                    75);
+                    CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h",
+                    75));
                 CgsDev::Assert::EndAssert();
             }
 
@@ -182,7 +182,7 @@ namespace BrnGui
             lStream << "Unhandled state [" << static_cast<s32>(meState)
                     << "] in MovieManager::Prepare";
             CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                "..\\..\\..\\GameSource\\Gui/BrnGuiMovieManager.cpp", 155);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 155));
             CgsDev::Assert::EndAssert();
             return false;
         }
@@ -206,7 +206,7 @@ namespace BrnGui
     // ---- events (ARTIST RecvEvent 0x824F9688: 504 audio / 508 play / 509 stop) -----------------------
     void MovieManager::RecvEvent(const CgsModule::Event* lpEvent, s32 liEventId)
     {
-        CGS_ASSERT(lpEvent != 0, CgsDev::Assert::StreamMessageAt("invalid event passed through ", "..\\..\\..\\GameSource\\Gui/BrnGuiMovieManager.cpp", 633));
+        CGS_ASSERT(lpEvent != 0, CGS_ASSERT_STREAM_MESSAGE_AT("invalid event passed through ", CGS_ARTIST_FILE, 633));
         switch (liEventId)
         {
         case KI_GUIEVENT_AUDIO_READY:   // 504
@@ -259,7 +259,7 @@ namespace BrnGui
             lStream << "Invalid state " << static_cast<s32>(meState)
                     << " when requesting video stop";
             CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                "..\\..\\..\\GameSource\\Gui/BrnGuiMovieManager.cpp", 740);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 740));
             CgsDev::Assert::EndAssert();
             break;
         }
@@ -367,9 +367,9 @@ namespace BrnGui
     void MovieManager::DestroyMemoryResourceAndDescriptor()
     {
         CGS_ASSERT(mResourceAllocatorResource.m_baseResources[0] != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mResourceAllocatorResource.GetMemoryResource()",
-                "..\\..\\..\\GameSource\\Gui/BrnGuiMovieManager.cpp", 582 /* ARTIST 0x824F9648 */));
+                CGS_ARTIST_FILE, 582 /* ARTIST 0x824F9648 */));
         XPhysicalFree(mResourceAllocatorResource.m_baseResources[0]);
         mResourceAllocatorResource.m_baseResources[0] = 0;
     }
@@ -387,7 +387,7 @@ namespace BrnGui
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("IsMovieQueued()",
-                    "..\\..\\..\\GameSource\\Gui/BrnGuiMovieManager.cpp", 641);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 641));
                 CgsDev::Assert::EndAssert();
             }
             lId.SetHash(mQueuedMovie.mVideoResourceId);
@@ -409,8 +409,8 @@ namespace BrnGui
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 " no movie queued, but we are attempting to queue one up?",
-                "..\\..\\..\\GameSource\\Gui/BrnGuiMovieManager.cpp",
-                759);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                759));
             CgsDev::Assert::EndAssert();
         }
         if (!mMoviePlayer.IsFinished())
@@ -418,8 +418,8 @@ namespace BrnGui
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 " we're attempting to queue a movie when the current one has not finished playing!",
-                "..\\..\\..\\GameSource\\Gui/BrnGuiMovieManager.cpp",
-                760);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                760));
             CgsDev::Assert::EndAssert();
         }
 
@@ -474,8 +474,8 @@ namespace BrnGui
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 "lpVideoFile",
-                "..\\..\\..\\GameSource\\Gui/BrnGuiMovieManager.cpp",
-                liVideoFileAssertLine);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                liVideoFileAssertLine));
             CgsDev::Assert::EndAssert();
         }
 
@@ -487,8 +487,8 @@ namespace BrnGui
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 "mpcLanguageCode",
-                "..\\..\\..\\GameSource\\Gui/BrnGuiMovieManager.cpp",
-                856);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                856));
             CgsDev::Assert::EndAssert();
         }
 
@@ -631,3 +631,5 @@ namespace BrnGui
         mMoviePlayer.Render(lpIm2dRenderBuffer);
     }
 }
+
+#undef CGS_ARTIST_FILE

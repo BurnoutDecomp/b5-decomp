@@ -12,7 +12,7 @@
 #include "SharedClasses/Graphics/BrnEffectsData.h"                    // BrnEffectsFrame
 #include <cstring>                                                    // _strnicmp
 #include <cfloat>                                                     // FLT_MAX
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/PFX/BrnGuiEffectsArbitrator.cpp"
 // =============================================================================
 // BrnGui::EffectsArbitrator -- reconstructed from BURNOUT_X360_ARTIST.XEX:
 //   Construct                 @0x825175A0     ResourceUpdate            @0x825177E8
@@ -381,8 +381,8 @@ namespace BrnGui
     // ------------------------------------------------------------------------------------
     void EffectsArbitrator::StopHook(const PFXHook* lpHook)
     {
-        CGS_ASSERT(lpHook != 0, CgsDev::Assert::MessageAt("lpHook != NULL", "..\\..\\..\\GameSource\\Gui/PFX/BrnGuiEffectsArbitrator.cpp", 702 /* ARTIST 0x824FB3D0 */));                                  // :702
-        CGS_ASSERT(mpGuiCache != 0, CgsDev::Assert::MessageAt("mpGuiCache != NULL", "..\\..\\..\\GameSource\\Gui/PFX/BrnGuiEffectsArbitrator.cpp", 703 /* ARTIST 0x824FB3F8 */));                          // :703
+        CGS_ASSERT(lpHook != 0, CGS_ASSERT_MESSAGE_AT("lpHook != NULL", CGS_ARTIST_FILE, 702 /* ARTIST 0x824FB3D0 */));                                  // :702
+        CGS_ASSERT(mpGuiCache != 0, CGS_ASSERT_MESSAGE_AT("mpGuiCache != NULL", CGS_ARTIST_FILE, 703 /* ARTIST 0x824FB3F8 */));                          // :703
         if (mpCurrent->IsActive() && mpCurrent->GetHook() == lpHook)
         {
             mpCurrent->StartFadeOut(0.0f);
@@ -636,9 +636,9 @@ namespace BrnGui
     ColourCubeInfo* EffectsArbitrator::LookupColourCube(u64 luResourceId)
     {
         CGS_ASSERT(muColourCubeCount <= KU_MAX_NUM_COLOURCUBES,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "muColourCubeCount <= KU_MAX_NUM_COLOURCUBES",
-                "..\\..\\..\\GameSource\\Gui/PFX/BrnGuiEffectsArbitrator.cpp", 1214 /* ARTIST 0x824F5BC8 */));   // :1214
+                CGS_ARTIST_FILE, 1214 /* ARTIST 0x824F5BC8 */));   // :1214
         for (u32 luCube = 0; luCube < muColourCubeCount; ++luCube)
         {
             if (maColourCubes[luCube].muResourceId == luResourceId)
@@ -1035,3 +1035,5 @@ namespace BrnGui
         }
     }
 }
+
+#undef CGS_ARTIST_FILE

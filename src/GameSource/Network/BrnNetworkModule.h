@@ -1,6 +1,6 @@
 #ifndef BRN_NETWORK_MODULE_H
 #define BRN_NETWORK_MODULE_H
-
+#define CGS_ARTIST_BRNNETWORKMODULE_FILE "..\\..\\..\\GameSource\\Network/BrnNetworkModule.h"
 // ============================================================================
 // b5-decomp/src/GameSource/Network/BrnNetworkModule.h
 // ============================================================================
@@ -157,9 +157,9 @@ namespace BrnNetwork
         // never inlined: its 16 callers, every AddOutputGuiEvent<T> among them, call it).
         GuiEventQueueSmall* GetOutputGuiEventQueue()
         {
-            CGS_ASSERT(mbIsUpdating, CgsDev::Assert::StreamMessageAt(
+            CGS_ASSERT(mbIsUpdating, CGS_ASSERT_STREAM_MESSAGE_AT(
                 "Can not use this function unless module is updating\n",
-                "..\\..\\..\\GameSource\\Network/BrnNetworkModule.h", 468));
+                CGS_ARTIST_BRNNETWORKMODULE_FILE, 468));
             return &mOutputGuiEventQueue;
         }
 
@@ -170,9 +170,9 @@ namespace BrnNetwork
         template<typename TEvent>
         void AddOutputGuiEvent(TEvent& lEvent)
         {
-            CGS_ASSERT(mbIsUpdating, CgsDev::Assert::StreamMessageAt(
+            CGS_ASSERT(mbIsUpdating, CGS_ASSERT_STREAM_MESSAGE_AT(
                 "Can not use this function unless module is updating\n",
-                "..\\..\\..\\GameSource\\Network/BrnNetworkModule.h", 479));
+                CGS_ARTIST_BRNNETWORKMODULE_FILE, 479));
             GetOutputGuiEventQueue()->AddGuiEvent(lEvent);
         }
 
@@ -251,3 +251,5 @@ namespace BrnNetwork
 }
 
 #endif
+
+#undef CGS_ARTIST_BRNNETWORKMODULE_FILE

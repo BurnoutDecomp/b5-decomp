@@ -44,7 +44,7 @@ namespace BrnWorld
     void RaceCarCrash::SetSecondsBeforeCleanup(f32 lfSeconds)
     {
         CGS_ASSERT(lfSeconds > 0.0f,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lfSeconds > 0.0f",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
                 "../World/CrashModule/BrnCrashModule.cpp", 194 /* ARTIST 0x827B15D4 */));
@@ -144,7 +144,7 @@ namespace BrnWorld
         // 0x827BF0E4 `lfs f30, 0xC(this)` -- the PRE-decrement value, kept for the edge test.
         const f32 lfSecondsBefore = mfSecondsBeforeCleanup;
 
-        CGS_ASSERT(lpActiveRaceCarInterface != 0, CgsDev::Assert::MessageAt("lpActiveRaceCarInterface", __FILE__, 112));   // :112
+        CGS_ASSERT(lpActiveRaceCarInterface != 0, CGS_ASSERT_MESSAGE_AT("lpActiveRaceCarInterface", __FILE__, 112));   // :112
 
         // 0x827BF118..0x827BF124
         const f32 lfSecondsAfter = mfSecondsBeforeCleanup - lfTimeStep;

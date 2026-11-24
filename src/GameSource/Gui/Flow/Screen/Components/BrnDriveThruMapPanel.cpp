@@ -71,7 +71,7 @@ namespace BrnGui
     void DriveThruMapPanel::AppendExpectedAptComponents(GuiFlow leFlow, GuiCache* lpGuiCache)
     {
         CGS_ASSERT(lpGuiCache != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpGuiCache",
                 "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnDriveThruMapPanel.cpp", 88 /* ARTIST 0x82417588 */));   // X360 line 88
 

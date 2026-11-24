@@ -1,5 +1,5 @@
 #pragma once
-
+#define CGS_ARTIST_BRNTRAFFICHULL_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\traffic\\BrnTrafficHull.h"
 // =============================================================================
 // BrnTraffic::Hull -- the per-hull traffic-graph geometry block of the TrafficData
 // resource. Member order and names are DWARF-authoritative
@@ -147,8 +147,8 @@ CGS_STATIC_ASSERT((sizeof(Hull) == 0x50), "X360 Hull stride");
 inline const Section* Hull::GetSection(u32 luIndex) const
 {
     CGS_ASSERT(luIndex < muNumSections,
-        CgsDev::Assert::MessageAt("luIndex < muNumSections",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\traffic\\BrnTrafficHull.h", 185 /* ARTIST 0x821F5310 */));
+        CGS_ASSERT_MESSAGE_AT("luIndex < muNumSections",
+            CGS_ARTIST_BRNTRAFFICHULL_FILE, 185 /* ARTIST 0x821F5310 */));
     return &mpaSections[luIndex];
 }
 
@@ -167,11 +167,11 @@ inline const f32* Hull::GetRungLengthsForSection(const Section* lpSection) const
 inline const Neighbour* Hull::GetNeighbour(u32 luIndex) const
 {
     CGS_ASSERT(mpaNeighbourData != 0,
-        CgsDev::Assert::MessageAt("mpaNeighbourData",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\traffic\\BrnTrafficHull.h", 247 /* ARTIST 0x821F5388 */));
+        CGS_ASSERT_MESSAGE_AT("mpaNeighbourData",
+            CGS_ARTIST_BRNTRAFFICHULL_FILE, 247 /* ARTIST 0x821F5388 */));
     CGS_ASSERT(luIndex < muNumNeighbours,
-        CgsDev::Assert::MessageAt("luIndex < muNumNeighbours",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\traffic\\BrnTrafficHull.h", 248 /* ARTIST 0x821F53B0 */));
+        CGS_ASSERT_MESSAGE_AT("luIndex < muNumNeighbours",
+            CGS_ARTIST_BRNTRAFFICHULL_FILE, 248 /* ARTIST 0x821F53B0 */));
     return &mpaNeighbourData[luIndex];
 }
 
@@ -184,17 +184,19 @@ inline const Neighbour* Hull::GetNeighbours() const
 inline const StaticTrafficVehicle* Hull::GetStaticVehicle(u32 luIndex) const
 {
     CGS_ASSERT(luIndex < muNumStaticTraffic,
-        CgsDev::Assert::MessageAt("luIndex < muNumStaticTraffic",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\traffic\\BrnTrafficHull.h", 297 /* ARTIST 0x82705CC0 */));
+        CGS_ASSERT_MESSAGE_AT("luIndex < muNumStaticTraffic",
+            CGS_ARTIST_BRNTRAFFICHULL_FILE, 297 /* ARTIST 0x82705CC0 */));
     return &mpaStaticTrafficVehicles[luIndex];
 }
 
 inline const StopLine* Hull::GetStopLine(u32 luIndex) const
 {
     CGS_ASSERT(luIndex < muNumStoplines,
-        CgsDev::Assert::MessageAt("luIndex < muNumStoplines",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\traffic\\BrnTrafficHull.h", 280 /* ARTIST 0x82705C50 */));
+        CGS_ASSERT_MESSAGE_AT("luIndex < muNumStoplines",
+            CGS_ARTIST_BRNTRAFFICHULL_FILE, 280 /* ARTIST 0x82705C50 */));
     return &mpaStopLines[luIndex];
 }
 
 }
+
+#undef CGS_ARTIST_BRNTRAFFICHULL_FILE

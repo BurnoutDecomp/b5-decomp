@@ -87,7 +87,7 @@ void GuiOverlaysDirector::HandleOverlayRequest(const GuiOverlayRequest* lpEvent)
 {
     // DWARF: defined at cpp:250, the assert on cpp:252 (li r5,0xFC @0x825162F0).
     CGS_ASSERT(mpController != NULL,
-        CgsDev::Assert::MessageAt("mpController", __FILE__, 252 /* ARTIST 0x825162F0 */));
+        CGS_ASSERT_MESSAGE_AT("mpController", __FILE__, 252 /* ARTIST 0x825162F0 */));
 
     if (mbInOverlay)
     {
@@ -365,10 +365,10 @@ void GuiOverlaysDirector::BridgeOutEvents(CgsGui::ModelIO::InputBuffer* lpGuiMod
         return;
 
     CGS_ASSERT(lpGuiModelInput != NULL,
-        CgsDev::Assert::MessageAt("lpGuiModelInput", __FILE__, 229 /* ARTIST 0x82501200 */));
+        CGS_ASSERT_MESSAGE_AT("lpGuiModelInput", __FILE__, 229 /* ARTIST 0x82501200 */));
 
     CGS_ASSERT(mpModelModule != NULL,
-        CgsDev::Assert::MessageAt("mpModelModule", __FILE__, 230 /* ARTIST 0x82501228 */));
+        CGS_ASSERT_MESSAGE_AT("mpModelModule", __FILE__, 230 /* ARTIST 0x82501228 */));
 
     lpGuiModelInput->LockForWrite();
     mpModelModule->AddGuiEvents(&mOutputQueue, lpGuiModelInput);

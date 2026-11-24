@@ -144,14 +144,14 @@ namespace BrnParticle
     void BrnVFXMeshCollectionResourceType::FixDown(void* /*lpResource*/, const rw::Resource& /*lrResource*/) const
     {
         CGS_ASSERT(false,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "This code is not expected at runtime.", KAC_ARTIST_ASSERT_FILE, 394 /* ARTIST 0x8267592C */));
     }
 
     void* BrnVFXMeshCollectionResourceType::Serialise(const void* /*lpResource*/, const rw::Resource& /*lrDest*/) const
     {
         CGS_ASSERT(false,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "This code is not expected at runtime.", KAC_ARTIST_ASSERT_FILE, 85 /* ARTIST 0x826758DC */));
         return 0;
     }

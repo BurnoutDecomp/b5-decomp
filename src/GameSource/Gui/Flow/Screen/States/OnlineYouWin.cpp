@@ -157,7 +157,7 @@ void OnlineYouWin::Update()
 // leave the screen as soon as the cache is known.
 void OnlineYouWin::UpdateGetCache()
 {
-    CGS_ASSERT(mpGuiCache == 0, CgsDev::Assert::MessageAt("NULL == mpGuiCache", KAC_ONLINE_YOU_WIN_ASSERT_FILE, 218));
+    CGS_ASSERT(mpGuiCache == 0, CGS_ASSERT_MESSAGE_AT("NULL == mpGuiCache", KAC_ONLINE_YOU_WIN_ASSERT_FILE, 218));
 
 
     const CgsModule::Event* lpEvent;
@@ -169,7 +169,7 @@ void OnlineYouWin::UpdateGetCache()
         if (liEventId == KI_EVENT_GUI_CACHE)
         {
             const GuiEventCachePointer* lpCacheEvent = reinterpret_cast<const GuiEventCachePointer*>(lpEvent);
-            CGS_ASSERT(lpCacheEvent->mpCachePointer != 0, CgsDev::Assert::MessageAt("NULL != lpCacheEvent->mpCachePointer", KAC_ONLINE_YOU_WIN_ASSERT_FILE, 228));
+            CGS_ASSERT(lpCacheEvent->mpCachePointer != 0, CGS_ASSERT_MESSAGE_AT("NULL != lpCacheEvent->mpCachePointer", KAC_ONLINE_YOU_WIN_ASSERT_FILE, 228));
             mpGuiCache = lpCacheEvent->mpCachePointer;
             if (IsStuntRunGameMode(mpGuiCache->GetGameMode()))
             {
@@ -179,7 +179,7 @@ void OnlineYouWin::UpdateGetCache()
         }
     }
 
-    CGS_ASSERT(mpGuiCache != 0, CgsDev::Assert::MessageAt("NULL != mpGuiCache", KAC_ONLINE_YOU_WIN_ASSERT_FILE, 243));
+    CGS_ASSERT(mpGuiCache != 0, CGS_ASSERT_MESSAGE_AT("NULL != mpGuiCache", KAC_ONLINE_YOU_WIN_ASSERT_FILE, 243));
 }
 
 // ---- UpdateWFWinResult ---------------------------------------------------------
@@ -244,7 +244,7 @@ bool OnlineYouWin::UpdateLoadResources()
 // the photo finish.
 bool OnlineYouWin::UpdateWFInit()
 {
-    CGS_ASSERT(mpGuiCache, CgsDev::Assert::MessageAt("mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/OnlineYouWin.cpp", 330 /* ARTIST 0x824A24A0 */));
+    CGS_ASSERT(mpGuiCache, CGS_ASSERT_MESSAGE_AT("mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/OnlineYouWin.cpp", 330 /* ARTIST 0x824A24A0 */));
 
     if (!mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN))
     {

@@ -15,7 +15,7 @@
 // observable effect and is folded into the CGS_ASSERT at each site.
 // ===================================================================================
 #include "GameSource/Network/Managers/BrnNetworkStandingsManager.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkStandingsManager.cpp"
 #include "GameSource/Network/BrnNetworkModule.h"                                // BrnNetworkModule::GetNetworkManager / GetGameStateToNetworkInterface
 #include "GameSource/Network/BrnNetworkManager.h"                               // BrnNetworkManager::GetPlayerManager / GetRound
 #include "GameSource/Network/BrnNetworkPlayer.h"                                 // BrnNetworkPlayer::SetEliminated (the registry stores BrnNetworkPlayer-derived peers)
@@ -129,9 +129,9 @@ namespace BrnNetwork
     StandingsData* StandingsManager::GetStandingsDataEntry(NetworkPlayerID lPlayerID)
     {
         CGS_ASSERT(lPlayerID != K_INVALID_PLAYER_ID,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
-                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkStandingsManager.cpp", 264 /* ARTIST 0x8254520C */));
+                CGS_ARTIST_FILE, 264 /* ARTIST 0x8254520C */));
 
         for (s32 liIndex = 0; liIndex < KI_MAX_PLAYERS; ++liIndex)
         {
@@ -151,7 +151,7 @@ namespace BrnNetwork
     void StandingsManager::AddPlayer(NetworkPlayerID lPlayerID)
     {
         CgsNetwork::PlayerManager* lpPlayerManager = mpNetworkManager->GetPlayerManager();
-        CGS_ASSERT(lpPlayerManager != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpPlayerManager != 0, CGS_ASSERT_MESSAGE_AT(
             "mpNetworkManager->GetPlayerManager()",
             __FILE__, 165 /* ARTIST 0x825509C0 */));
 
@@ -167,7 +167,7 @@ namespace BrnNetwork
                 break;
             }
         }
-        CGS_ASSERT(liIndex < KI_MAX_PLAYERS, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(liIndex < KI_MAX_PLAYERS, CGS_ASSERT_MESSAGE_AT(
             "liIndex < KI_MAX_PLAYERS",
             __FILE__, 178 /* ARTIST 0x82550A30 */));
 
@@ -193,7 +193,7 @@ namespace BrnNetwork
     void StandingsManager::RemovePlayer(NetworkPlayerID lPlayerID)
     {
         CgsNetwork::PlayerManager* lpPlayerManager = mpNetworkManager->GetPlayerManager();
-        CGS_ASSERT(lpPlayerManager != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpPlayerManager != 0, CGS_ASSERT_MESSAGE_AT(
             "mpNetworkManager->GetPlayerManager()",
             __FILE__, 211 /* ARTIST 0x82550AC4 */));
 
@@ -204,7 +204,7 @@ namespace BrnNetwork
         }
 
         StandingsData* lpDataEntry = GetStandingsDataEntry(lPlayerID);
-        CGS_ASSERT(lpDataEntry != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpDataEntry != 0, CGS_ASSERT_MESSAGE_AT(
             "lpDataEntry",
             __FILE__, 222 /* ARTIST 0x82550B18 */));
 
@@ -224,9 +224,9 @@ namespace BrnNetwork
             {
                 RemovePlayer(maStandingsData[liPlayerIndex].mPlayerID);
                 CGS_ASSERT(maStandingsData[liPlayerIndex].mPlayerID == K_INVALID_PLAYER_ID,
-                    CgsDev::Assert::MessageAt(
+                    CGS_ASSERT_MESSAGE_AT(
                         "maStandingsData[liPlayerIndex].mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID",
-                        "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkStandingsManager.cpp", 246 /* ARTIST 0x82550B8C */));
+                        CGS_ARTIST_FILE, 246 /* ARTIST 0x82550B8C */));
             }
         }
     }
@@ -337,23 +337,23 @@ namespace BrnNetwork
                                                                 void* lpUserData)
     {
         StandingsManager* lpStandingsManager = static_cast<StandingsManager*>(lpUserData);
-        CGS_ASSERT(lpStandingsManager != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpStandingsManager != 0, CGS_ASSERT_MESSAGE_AT(
             "lpStandingsManager",
             __FILE__, 463 /* ARTIST 0x8254556C */));
 
         PlayerFinishedRoundMessage* lpPlayerFinishedRoundMessage =
             static_cast<PlayerFinishedRoundMessage*>(lpMessage);
-        CGS_ASSERT(lpPlayerFinishedRoundMessage != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpPlayerFinishedRoundMessage != 0, CGS_ASSERT_MESSAGE_AT(
             "lpPlayerFinishedRoundMessage",
             __FILE__, 464 /* ARTIST 0x82545590 */));
 
         CgsNetwork::PlayerManager* lpPlayerManager = lpStandingsManager->mpNetworkManager->GetPlayerManager();
-        CGS_ASSERT(lpPlayerManager != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpPlayerManager != 0, CGS_ASSERT_MESSAGE_AT(
             "lpPlayerManager",
             __FILE__, 467 /* ARTIST 0x825455BC */));
 
         StandingsData* lpStandings = lpStandingsManager->GetStandingsDataEntry(lSendingPlayerID);
-        CGS_ASSERT(lpStandings != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpStandings != 0, CGS_ASSERT_MESSAGE_AT(
             "lpStandings",
             __FILE__, 471 /* ARTIST 0x825455F0 */));
         if (lpStandings == 0)
@@ -425,12 +425,12 @@ namespace BrnNetwork
     void StandingsManager::FillOutResultsData(BrnNetworkModuleIO::PlayerResultsData* lpResultsData,
                                               NetworkPlayerID lPlayerID)
     {
-        CGS_ASSERT(lpResultsData != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpResultsData != 0, CGS_ASSERT_MESSAGE_AT(
             "lpResultsData",
             __FILE__, 566 /* ARTIST 0x825457CC */));
 
         StandingsData* lpStandingsData = GetStandingsDataEntry(lPlayerID);
-        CGS_ASSERT(lpStandingsData != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpStandingsData != 0, CGS_ASSERT_MESSAGE_AT(
             "lpStandingsData",
             __FILE__, 569 /* ARTIST 0x82545800 */));
 
@@ -445,7 +445,7 @@ namespace BrnNetwork
         lpResultsData->mbValid              = false;
         lpResultsData->mbEliminated         = false;
 
-        CGS_ASSERT(ArePlayersResultsValid(lPlayerID), CgsDev::Assert::MessageAt(
+        CGS_ASSERT(ArePlayersResultsValid(lPlayerID), CGS_ASSERT_MESSAGE_AT(
             "ArePlayersResultsValid( lPlayerID )",
             __FILE__, 573 /* ARTIST 0x8254587C */));
 
@@ -517,3 +517,5 @@ namespace BrnNetwork
         }
     }
 } // namespace BrnNetwork
+
+#undef CGS_ARTIST_FILE

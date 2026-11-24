@@ -1,6 +1,6 @@
 #include "GameSource/GameState/ModeManager/GameModes/BrnOnlineFreeBurnMode.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnOnlineFreeBurnMode.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 
 namespace BrnGameState
@@ -30,7 +30,7 @@ void OnlineFreeBurnMode::Start(const StartGameModeParams* /*lpStartGameModeParam
                                GameModeParams* /*lpGameModeParams*/,
                                ScoringSystem* /*lpScoringSystem*/)
 {
-    CGS_ASSERT(false, CgsDev::Assert::StreamMessageAt("Trying to start online freeburn mode when it doesn't exist!\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnOnlineFreeBurnMode.cpp", 52));
+    CGS_ASSERT(false, CGS_ASSERT_STREAM_MESSAGE_AT("Trying to start online freeburn mode when it doesn't exist!\n", CGS_ARTIST_FILE, 52));
 }
 
 // X360: BrnGameState::OnlineFreeBurnMode::SendEvent (0x82331460). The online-freeburn state
@@ -85,7 +85,7 @@ void OnlineFreeBurnMode::SendEvent(EGameModeEvent leEvent)
             }
             break;
         default:
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt("Should not be in this state in Showtime mode!", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnOnlineFreeBurnMode.cpp", 175));
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Should not be in this state in Showtime mode!", CGS_ARTIST_FILE, 175));
             break;
     }
 }
@@ -98,3 +98,5 @@ bool OnlineFreeBurnMode::RequiresStreaming() const
     return false;
 }
 }
+
+#undef CGS_ARTIST_FILE

@@ -5,7 +5,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                     // gpDebugPrint / gxMessageFilterFlags (HIDE_ONLINE lines)
 #include "GameSource/GameState/BrnGameActions.h"                               // Prepare/StartPlaying/DriveThruJunkYard action payloads
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverInputInterface.h" // UpdateNetworkCatchup's driver queue
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\VehicleManager/BrnVehicleManager.h"
 #include <cstddef>  // offsetof (layout asserts)
 #include <cstring>  // std::memcpy (asm reinterprets a stat word's bit pattern as int / float)
 
@@ -220,10 +220,10 @@ namespace Vehicle
     bool VehicleManager::HasRaceCarHadRecentImpact(s32 liActiveRaceCarIndex)
     {
         CGS_ASSERT(liActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_HEADER, 1840 /* ARTIST 0x825B4EE4 */));
         CGS_ASSERT(liActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_HEADER, 1841 /* ARTIST 0x825B4F08 */));
 
         return mafNoImpactTimeSeconds[liActiveRaceCarIndex] > 0.0f;
@@ -265,9 +265,9 @@ namespace Vehicle
     {
         const s32 liIndex = static_cast<s32>(lePlayerActiveRaceCarIndex);
         CGS_ASSERT(liIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT && liIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "( lePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT ) && ( lePlayerActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID )",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\VehicleManager/BrnVehicleManager.h", 1667 /* ARTIST 0x8259C05C */));
+                CGS_ARTIST_FILE, 1667 /* ARTIST 0x8259C05C */));
 
         mePlayerActiveRaceCarIndex = lePlayerActiveRaceCarIndex;   // asm: stwx @ +172204
     }
@@ -282,9 +282,9 @@ namespace Vehicle
     void VehicleManager::SetShowtimeBehaviour(BrnGameState::EShowtimeBehaviour leShowtimeBehaviour)
     {
         CGS_ASSERT(leShowtimeBehaviour >= 0 && leShowtimeBehaviour < BrnGameState::E_SHOWTIME_MODE_COUNT,
-                   CgsDev::Assert::MessageAt(
+                   CGS_ASSERT_MESSAGE_AT(
                        "leShowtimeBehaviour >= 0 && leShowtimeBehaviour < BrnGameState::E_SHOWTIME_MODE_COUNT",
-                       "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\VehicleManager/BrnVehicleManager.h", 1691));
+                       CGS_ARTIST_FILE, 1691));
 
         meShowtimeBehaviour = leShowtimeBehaviour;   // asm: stwx @ +172456
     }
@@ -524,7 +524,7 @@ namespace Vehicle
             const BrnGameState::GameStateModuleIO::StartPlayingModeAction* lpStartModeAction)
     {
         CGS_ASSERT(lpStartModeAction != NULL,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpStartModeAction != NULL", KAC_ARTIST_ASSERT_FILE, 10038 /* ARTIST 0x825B5864 */));                // :10038
 
         const BrnGameState::GameStateModuleIO::EGameModeType leGameModeType =
@@ -558,7 +558,7 @@ namespace Vehicle
             const BrnGameState::GameStateModuleIO::DriveThruJunkYardAction* lpJunkYardAction)
     {
         CGS_ASSERT(lpJunkYardAction != NULL,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpJunkYardAction != NULL", KAC_ARTIST_ASSERT_FILE, 10066 /* ARTIST 0x825EB07C */));                  // :10066
 
         if (lpJunkYardAction->mbIsInJunkYard)                                              // lbz 0(r31)
@@ -712,3 +712,5 @@ namespace Vehicle
     }
 }
 }
+
+#undef CGS_ARTIST_FILE

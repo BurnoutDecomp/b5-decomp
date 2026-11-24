@@ -82,7 +82,7 @@ void BrnShaderConstantsFrame::SetCameraTransform(Matrix44Affine lM)
 void BrnShaderConstantsFrame::SetEnvMapViewPosition(Vector3 lV)
 {
     CGS_ASSERT(true == mbLockedForWriting,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "true == mbLockedForWriting", KAC_ARTIST_ASSERT_FILE, 298 /* ARTIST 0x827B021C */));
     mEnvMapViewPosition = lV;
 }
@@ -93,7 +93,7 @@ void BrnShaderConstantsFrame::SetEnvMapViewPosition(Vector3 lV)
 Matrix44 BrnShaderConstantsFrame::GetViewProjectionMatrix() const
 {
     CGS_ASSERT(!mbLockedForWriting,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "false == mbLockedForWriting", KAC_ARTIST_ASSERT_FILE, 238 /* ARTIST 0x823F49B0 */));
     return mViewProjection;
 }
@@ -102,10 +102,10 @@ Matrix44 BrnShaderConstantsFrame::GetViewProjectionMatrix() const
 Matrix44 BrnShaderConstantsFrame::GetEnvMapViewProjectionMatrix(BrnGraphics::EEnvironmentMapFace leFace) const
 {
     CGS_ASSERT(!mbLockedForWriting,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "false == mbLockedForWriting", KAC_ARTIST_ASSERT_FILE, 257 /* ARTIST 0x823F4A44 */));
     CGS_ASSERT(leFace < BrnGraphics::E_FACE_NUM,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "leEnvMapFace < BrnGraphics::E_FACE_NUM", KAC_ARTIST_ASSERT_FILE, 258 /* ARTIST 0x823F4A68 */));
     return maEnvMapViewProjectionMatrices[leFace];
 }
@@ -114,7 +114,7 @@ Matrix44 BrnShaderConstantsFrame::GetEnvMapViewProjectionMatrix(BrnGraphics::EEn
 Vector3 BrnShaderConstantsFrame::GetViewPosition() const
 {
     CGS_ASSERT(!mbLockedForWriting,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "false == mbLockedForWriting", KAC_ARTIST_ASSERT_FILE, 273 /* ARTIST 0x823F4AF0 */));
     return mViewPosition;
 }
@@ -123,7 +123,7 @@ Vector3 BrnShaderConstantsFrame::GetViewPosition() const
 Vector3 BrnShaderConstantsFrame::GetEnvMapViewPosition() const
 {
     CGS_ASSERT(!mbLockedForWriting,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "false == mbLockedForWriting", KAC_ARTIST_ASSERT_FILE, 305 /* ARTIST 0x823F4B60 */));
     return mEnvMapViewPosition;
 }
@@ -132,7 +132,7 @@ Vector3 BrnShaderConstantsFrame::GetEnvMapViewPosition() const
 Vector3 BrnShaderConstantsFrame::GetKeyLightDirection() const
 {
     CGS_ASSERT(!mbLockedForWriting,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "false == mbLockedForWriting", KAC_ARTIST_ASSERT_FILE, 320 /* ARTIST 0x823F4BD0 */));
     return mKeyLightDirection;
 }
@@ -141,7 +141,7 @@ Vector3 BrnShaderConstantsFrame::GetKeyLightDirection() const
 Vector3 BrnShaderConstantsFrame::GetKeyLightColour() const
 {
     CGS_ASSERT(!mbLockedForWriting,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "false == mbLockedForWriting", KAC_ARTIST_ASSERT_FILE, 334 /* ARTIST 0x823F4C40 */));
     return mKeyLightColour;
 }
@@ -150,7 +150,7 @@ Vector3 BrnShaderConstantsFrame::GetKeyLightColour() const
 Vector4 BrnShaderConstantsFrame::GetCloudDarkColour0() const
 {
     CGS_ASSERT(!mbLockedForWriting,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "false == mbLockedForWriting", KAC_ARTIST_ASSERT_FILE, 349 /* ARTIST 0x823F4CB0 */));
     return mCloudDarkColour0;
 }
@@ -159,7 +159,7 @@ Vector4 BrnShaderConstantsFrame::GetCloudDarkColour0() const
 Vector4 BrnShaderConstantsFrame::GetCloudLiteColour0() const
 {
     CGS_ASSERT(!mbLockedForWriting,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "false == mbLockedForWriting", KAC_ARTIST_ASSERT_FILE, 363 /* ARTIST 0x823F4D20 */));
     return mCloudLiteColour0;
 }
@@ -168,7 +168,7 @@ Vector4 BrnShaderConstantsFrame::GetCloudLiteColour0() const
 Vector4 BrnShaderConstantsFrame::GetCloudTextureScaleAndOffsets0() const
 {
     CGS_ASSERT(!mbLockedForWriting,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "false == mbLockedForWriting", KAC_ARTIST_ASSERT_FILE, 377 /* ARTIST 0x823F4D90 */));
     return mCloudTextureScaleAndOffsets0;
 }
@@ -177,7 +177,7 @@ Vector4 BrnShaderConstantsFrame::GetCloudTextureScaleAndOffsets0() const
 Vector4 BrnShaderConstantsFrame::GetCloudLayerDensity() const
 {
     CGS_ASSERT(!mbLockedForWriting,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "false == mbLockedForWriting", KAC_ARTIST_ASSERT_FILE, 391 /* ARTIST 0x823F4E00 */));
     return mCloudLayerDensity;
 }
@@ -186,7 +186,7 @@ Vector4 BrnShaderConstantsFrame::GetCloudLayerDensity() const
 Vector4 BrnShaderConstantsFrame::GetCloudLayerInvFeather() const
 {
     CGS_ASSERT(!mbLockedForWriting,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "false == mbLockedForWriting", KAC_ARTIST_ASSERT_FILE, 405 /* ARTIST 0x823F4E70 */));
     return mCloudLayerInvFeather;
 }
@@ -195,7 +195,7 @@ Vector4 BrnShaderConstantsFrame::GetCloudLayerInvFeather() const
 Vector4 BrnShaderConstantsFrame::GetCloudLayerOpacity() const
 {
     CGS_ASSERT(!mbLockedForWriting,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "false == mbLockedForWriting", KAC_ARTIST_ASSERT_FILE, 419 /* ARTIST 0x823F4EE0 */));
     return mCloudLayerOpacity;
 }
@@ -204,7 +204,7 @@ Vector4 BrnShaderConstantsFrame::GetCloudLayerOpacity() const
 Vector4 BrnShaderConstantsFrame::GetFogScattering() const
 {
     CGS_ASSERT(!mbLockedForWriting,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "false == mbLockedForWriting", KAC_ARTIST_ASSERT_FILE, 433 /* ARTIST 0x823F4F50 */));
     return mFogScattering;
 }
@@ -213,7 +213,7 @@ Vector4 BrnShaderConstantsFrame::GetFogScattering() const
 f32 BrnShaderConstantsFrame::GetCloudDistanceCurve() const
 {
     CGS_ASSERT(!mbLockedForWriting,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "false == mbLockedForWriting", KAC_ARTIST_ASSERT_FILE, 447 /* ARTIST 0x823F4FB8 */));
     return mfCloudDistanceCurve;
 }
@@ -222,7 +222,7 @@ f32 BrnShaderConstantsFrame::GetCloudDistanceCurve() const
 Vector4 BrnShaderConstantsFrame::GetTopColourDrk() const
 {
     CGS_ASSERT(!mbLockedForWriting,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "false == mbLockedForWriting", KAC_ARTIST_ASSERT_FILE, 482 /* ARTIST 0x823F5018 */));
     return mTopColourDrk;
 }
@@ -231,7 +231,7 @@ Vector4 BrnShaderConstantsFrame::GetTopColourDrk() const
 Vector4 BrnShaderConstantsFrame::GetHorColourPow() const
 {
     CGS_ASSERT(!mbLockedForWriting,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "false == mbLockedForWriting", KAC_ARTIST_ASSERT_FILE, 489 /* ARTIST 0x823F5088 */));
     return mHorColourPow;
 }
@@ -240,7 +240,7 @@ Vector4 BrnShaderConstantsFrame::GetHorColourPow() const
 Vector4 BrnShaderConstantsFrame::GetSunColourPow() const
 {
     CGS_ASSERT(!mbLockedForWriting,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "false == mbLockedForWriting", KAC_ARTIST_ASSERT_FILE, 496 /* ARTIST 0x823F50F8 */));
     return mSunColourPow;
 }
@@ -249,7 +249,7 @@ Vector4 BrnShaderConstantsFrame::GetSunColourPow() const
 Vector3 BrnShaderConstantsFrame::GetHorBleedSclPow() const
 {
     CGS_ASSERT(!mbLockedForWriting,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "false == mbLockedForWriting", KAC_ARTIST_ASSERT_FILE, 503 /* ARTIST 0x823F5168 */));
     return mHorBleedSclPow;
 }

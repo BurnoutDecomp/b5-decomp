@@ -27,8 +27,8 @@ void SplicerFactory::SplicerAssertFunc(char* lpExpression)
     lStrStream << lpExpression;
     CgsDev::Assert::FireAssert(
         CgsDev::Assert::gpcMessageBuffer,
-        "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/Splicer/CgsSplicerFactory.cpp",
-        140);
+        CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/Splicer/CgsSplicerFactory.cpp",
+        140));
     CgsDev::Assert::EndAssert();
 }
 

@@ -74,7 +74,7 @@ void Race::AddLandmark(LandmarkIndex lIndex, u16 luAiSectionIndex)
 LandmarkIndex Race::GetStartLandmarkIndex() const
 {
     CGS_ASSERT(muNumLandmarks >= 2,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "Need at least two landmarks for a race", KAC_ARTIST_ASSERT_FILE, 144 /* ARTIST 0x82354620 */));
     return maLandmarkIndices[0];
 }
@@ -85,7 +85,7 @@ LandmarkIndex Race::GetStartLandmarkIndex() const
 LandmarkIndex Race::GetFinishLandmarkIndex() const
 {
     CGS_ASSERT(muNumLandmarks >= 2,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "Need at least two landmarks for a race", KAC_ARTIST_ASSERT_FILE, 152 /* ARTIST 0x824EA9B8 */));
     return maLandmarkIndices[muNumLandmarks - 1];
 }

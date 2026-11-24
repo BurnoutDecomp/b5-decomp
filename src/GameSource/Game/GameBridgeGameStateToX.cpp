@@ -1,7 +1,7 @@
 // GameState-to-X bridges. ARTIST 0x823EE880 is recovered below with its direct
 // output builders in EventStatusGuiEvents/EventStartsGuiEvents. The network
 // wrapper remains deferred; the action translator has its separately owned TU.
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp"
 #include "GameSource/Game/BrnGameModule.hpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Game/GameBridgeGameStateToX.h"
@@ -41,16 +41,16 @@ namespace BrnGame
         CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
         const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput)
     {
-        CGS_ASSERT(lpGuiInput != 0, CgsDev::Assert::MessageAt("lpGuiInput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 423));
-        CGS_ASSERT(lpGameStateOutput != 0, CgsDev::Assert::MessageAt("lpGameStateOutput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 424));
+        CGS_ASSERT(lpGuiInput != 0, CGS_ASSERT_MESSAGE_AT("lpGuiInput", CGS_ARTIST_FILE, 423));
+        CGS_ASSERT(lpGameStateOutput != 0, CGS_ASSERT_MESSAGE_AT("lpGameStateOutput", CGS_ARTIST_FILE, 424));
         const BrnGameState::GameStateModuleIO::ScoringOutputInterface* lpScoringOutputInterface =
             lpGameStateOutput->GetScoringOutputInterface();
         const BrnGameState::GameStateModuleIO::OnlineScoringOutputInterface* lpOnlScoringOutputInterface =
             lpGameStateOutput->GetOnlineScoringOutputInterface();
-        CGS_ASSERT(lpScoringOutputInterface != 0, CgsDev::Assert::MessageAt("lpScoringOutputInterface", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 431));
-        CGS_ASSERT(lpOnlScoringOutputInterface != 0, CgsDev::Assert::MessageAt("lpOnlScoringOutputInterface", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 432));
-        CGS_ASSERT(lpGuiInput->GetGuiEvents() != 0, CgsDev::Assert::MessageAt("lpGuiInput->GetGuiEvents()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 434));
-        CGS_ASSERT(lpGameStateOutput->GetGuiEventQueue() != 0, CgsDev::Assert::MessageAt("lpGameStateOutput->GetGuiEventQueue()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 435));
+        CGS_ASSERT(lpScoringOutputInterface != 0, CGS_ASSERT_MESSAGE_AT("lpScoringOutputInterface", CGS_ARTIST_FILE, 431));
+        CGS_ASSERT(lpOnlScoringOutputInterface != 0, CGS_ASSERT_MESSAGE_AT("lpOnlScoringOutputInterface", CGS_ARTIST_FILE, 432));
+        CGS_ASSERT(lpGuiInput->GetGuiEvents() != 0, CGS_ASSERT_MESSAGE_AT("lpGuiInput->GetGuiEvents()", CGS_ARTIST_FILE, 434));
+        CGS_ASSERT(lpGameStateOutput->GetGuiEventQueue() != 0, CGS_ASSERT_MESSAGE_AT("lpGameStateOutput->GetGuiEventQueue()", CGS_ARTIST_FILE, 435));
 
         // 823EE9C4: the Append result is ignored. It neither clears nor retires its source.
         lpGuiInput->GetGuiEvents()->Append(*lpGameStateOutput->GetGuiEventQueue());
@@ -328,8 +328,8 @@ namespace BrnGame
         const CgsInput::InputIO::PostWorldInputBuffer::UnBindRequestQueue* lpUnbindQueue =
             lpGameStateOutput->GetGameStateToControllerInterface()->GetUnBindRequestQueue();
 
-        CGS_ASSERT(lpBindQueue   != 0, CgsDev::Assert::MessageAt("lpGameStateInputBindRequestQueue", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 5055));
-        CGS_ASSERT(lpUnbindQueue != 0, CgsDev::Assert::MessageAt("lpGameStateInputUnbindRequestQueue", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 5056));
+        CGS_ASSERT(lpBindQueue   != 0, CGS_ASSERT_MESSAGE_AT("lpGameStateInputBindRequestQueue", CGS_ARTIST_FILE, 5055));
+        CGS_ASSERT(lpUnbindQueue != 0, CGS_ASSERT_MESSAGE_AT("lpGameStateInputUnbindRequestQueue", CGS_ARTIST_FILE, 5056));
 
         // Bind requests: element i carries {word0, word1} (asm ld 8 bytes then split r4/r5).
         const s32 liNumBind = lpBindQueue->GetLength();
@@ -2140,7 +2140,7 @@ void BridgeGameStateToGui_EventStatus(
     PushGuiEvent(lDistanceToCheckpoint, lpGuiInput); // 240 / 4
 
     const CgsSystem::TimerStatus* lpGameTimerStatus = lpTimerStatusInterface->GetGameTimerStatus();
-    CGS_ASSERT(lpGameTimerStatus != 0, CgsDev::Assert::MessageAt("mTimerStatusInterface.GetGameTimerStatus()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 481));
+    CGS_ASSERT(lpGameTimerStatus != 0, CGS_ASSERT_MESSAGE_AT("mTimerStatusInterface.GetGameTimerStatus()", CGS_ARTIST_FILE, 481));
     const EGameModeType leGameMode = lpScoringOutputInterface->meGameModeType;
     BrnGui::GuiEventCurrentStatus lCurrentStatus;
     const CgsSystem::Time lGameTime = lpGameTimerStatus->GetTime();
@@ -2162,8 +2162,8 @@ void BridgeGameStateToGui_EventStatus(
         lCurrentStatus.miNumRemainingCheckpoints = 0;
     else
     {
-        CGS_ASSERT(E_ACTIVE_RACE_CAR_INDEX_COUNT > leRunner, CgsDev::Assert::MessageAt("E_ACTIVE_RACE_CAR_INDEX_COUNT > leRunnerActiveRaceCarIndex", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 505));
-        CGS_ASSERT(E_ACTIVE_RACE_CAR_INDEX_0 <= leRunner, CgsDev::Assert::MessageAt("E_ACTIVE_RACE_CAR_INDEX_0 <= leRunnerActiveRaceCarIndex", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 506));
+        CGS_ASSERT(E_ACTIVE_RACE_CAR_INDEX_COUNT > leRunner, CGS_ASSERT_MESSAGE_AT("E_ACTIVE_RACE_CAR_INDEX_COUNT > leRunnerActiveRaceCarIndex", CGS_ARTIST_FILE, 505));
+        CGS_ASSERT(E_ACTIVE_RACE_CAR_INDEX_0 <= leRunner, CGS_ASSERT_MESSAGE_AT("E_ACTIVE_RACE_CAR_INDEX_0 <= leRunnerActiveRaceCarIndex", CGS_ARTIST_FILE, 506));
         lCurrentStatus.miNumRemainingCheckpoints = lpScoringOutputInterface->maCarCheckpointData[leRunner]
             .GetAllRemainingCheckpointIndexes(lCurrentStatus.maiRemainingCheckpointIndexes);
     }
@@ -2670,8 +2670,8 @@ namespace
         CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
         const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput)
     {
-        CGS_ASSERT(lpGuiInput != 0, CgsDev::Assert::MessageAt("lpGuiInput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 754));                   // :754
-        CGS_ASSERT(lpGameStateOutput != 0, CgsDev::Assert::MessageAt("lpGameStateOutput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 755));     // :755
+        CGS_ASSERT(lpGuiInput != 0, CGS_ASSERT_MESSAGE_AT("lpGuiInput", CGS_ARTIST_FILE, 754));                   // :754
+        CGS_ASSERT(lpGameStateOutput != 0, CGS_ASSERT_MESSAGE_AT("lpGameStateOutput", CGS_ARTIST_FILE, 755));     // :755
         if (lpGuiInput == 0 || lpGameStateOutput == 0)
         {
             return;
@@ -2990,8 +2990,8 @@ namespace
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert(
                     "Part of offline custom events - no longer exist, and certainly not handled by GUI",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp",
-                    2284);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                    2284));
                 CgsDev::Assert::EndAssert();
                 break;
 
@@ -3282,8 +3282,8 @@ namespace
                     CgsDev::Assert::BeginAssert();
                     CgsDev::Assert::FireAssert(
                         "lpTraitorousTDAction",
-                        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp",
-                        2219);
+                        CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                        2219));
                     CgsDev::Assert::EndAssert();
                 }
                 const BrnGameState::GameStateModuleIO::TraitorousTakedownAction& lrAction = *reinterpret_cast<const
@@ -3303,8 +3303,8 @@ namespace
                     CgsDev::Assert::BeginAssert();
                     CgsDev::Assert::FireAssert(
                         "lpBurnoutSkillzAction",
-                        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp",
-                        3503);
+                        CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                        3503));
                     CgsDev::Assert::EndAssert();
                 }
                 typedef BrnGameState::GameStateModuleIO::BurnoutSkillzAction BurnoutSkillzAction;
@@ -3338,8 +3338,8 @@ namespace
                     CgsDev::Assert::BeginAssert();
                     CgsDev::Assert::FireAssert(
                         "lpRoadRulesSkillzAction",
-                        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp",
-                        3526);
+                        CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                        3526));
                     CgsDev::Assert::EndAssert();
                 }
                 struct NewBurnoutHudMessageActionView
@@ -4674,8 +4674,8 @@ namespace
                     CgsDev::Assert::BeginAssert();
                     CgsDev::Assert::FireAssert(
                         "BrnGui::GuiEventRivalryFullInfoResponse::KI_MAX_NUM_RIVALS_IN_EVENT >= lpRivalOverview->miRivalsReturned",
-                        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp",
-                        3047);
+                        CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                        3047));
                     CgsDev::Assert::EndAssert();
                 }
 
@@ -4713,8 +4713,8 @@ namespace
                         }
                         CgsDev::Assert::FireAssert(
                             CgsDev::Assert::gpcMessageBuffer,
-                            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp",
-                            3099);
+                            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                            3099));
                         CgsDev::Assert::EndAssert();
                         lbGuiStatusWasWritten = false;
                         break;
@@ -4751,8 +4751,8 @@ namespace
                     }
                     CgsDev::Assert::FireAssert(
                         CgsDev::Assert::gpcMessageBuffer,
-                        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp",
-                        3120);
+                        CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                        3120));
                     CgsDev::Assert::EndAssert();
                 }
 
@@ -5279,7 +5279,7 @@ namespace BrnGame
         const int liType = static_cast<int>(leTrainingType);
 
         CGS_ASSERT(liType >= 0 && liType < BrnProgression::E_TRAINING_TYPE_COUNT,
-                   CgsDev::Assert::MessageAt("leTrainingType >= 0 && leTrainingType < BrnProgression::E_TRAINING_TYPE_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 160));
+                   CGS_ASSERT_MESSAGE_AT("leTrainingType >= 0 && leTrainingType < BrnProgression::E_TRAINING_TYPE_COUNT", CGS_ARTIST_FILE, 160));
 
         if (liType < 128)
         {
@@ -5295,7 +5295,7 @@ namespace BrnGame
         const int liIndex = liType - 128;
         if (liIndex >= 128)
         {
-            CGS_ASSERT(liIndex < 128, CgsDev::Assert::MessageAt("liIndex < ciNumGeneralTrainingStringIDs", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 169));
+            CGS_ASSERT(liIndex < 128, CGS_ASSERT_MESSAGE_AT("liIndex < ciNumGeneralTrainingStringIDs", CGS_ARTIST_FILE, 169));
             return "ERROR - UNKNOWN TRAINING TYPE";
         }
         return KAC_GENERAL_TRAINING_TEXT[liIndex];
@@ -5366,8 +5366,8 @@ namespace BrnGame
 
         const GsmIO::GameActionQueue* lpInQueue  = lpGameStateOutput->GetGameActionQueue();
         GsmIO::GameActionQueue*       lpOutQueue = lpNetworkInput->GetGameActionQueue();
-        CGS_ASSERT(lpInQueue, CgsDev::Assert::MessageAt("lpInQueue", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 4284));
-        CGS_ASSERT(lpOutQueue, CgsDev::Assert::MessageAt("lpOutQueue", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 4285));
+        CGS_ASSERT(lpInQueue, CGS_ASSERT_MESSAGE_AT("lpInQueue", CGS_ARTIST_FILE, 4284));
+        CGS_ASSERT(lpOutQueue, CGS_ASSERT_MESSAGE_AT("lpOutQueue", CGS_ARTIST_FILE, 4285));
 
         const CgsModule::Event* lpAction = 0;
         s32 liActionSize = 0;
@@ -5550,7 +5550,7 @@ namespace BrnGame
                 {
                     const GsmIO::RaceCarReachedCheckpointAction* lpCheckpointAction =
                         reinterpret_cast<const GsmIO::RaceCarReachedCheckpointAction*>(lpAction);
-                    CGS_ASSERT(lpCheckpointAction, CgsDev::Assert::MessageAt("lpCheckpointAction", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 4880));
+                    CGS_ASSERT(lpCheckpointAction, CGS_ASSERT_MESSAGE_AT("lpCheckpointAction", CGS_ARTIST_FILE, 4880));
 
                     if (lpCheckpointAction->mbIsLocalPlayer)
                     {
@@ -5565,7 +5565,7 @@ namespace BrnGame
                 {
                     const GsmIO::ShowtimeUpdateAction* lpShowtimeUpdateAction =
                         reinterpret_cast<const GsmIO::ShowtimeUpdateAction*>(lpAction);
-                    CGS_ASSERT(lpShowtimeUpdateAction, CgsDev::Assert::MessageAt("lpShowtimeUpdateAction", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 3976));
+                    CGS_ASSERT(lpShowtimeUpdateAction, CGS_ASSERT_MESSAGE_AT("lpShowtimeUpdateAction", CGS_ARTIST_FILE, 3976));
 
                     NetIO::NetworkInShowtimeUpdateEvent lNetworkShowtimeUpdateEvent;
                     lNetworkShowtimeUpdateEvent.mPlayerID       = lpShowtimeUpdateAction->mNetworkPlayerID;
@@ -5579,7 +5579,7 @@ namespace BrnGame
                 {
                     const GsmIO::ShowtimeModeSwitchAction* lpShowtimeModeSwitchAction =
                         reinterpret_cast<const GsmIO::ShowtimeModeSwitchAction*>(lpAction);
-                    CGS_ASSERT(lpShowtimeModeSwitchAction, CgsDev::Assert::MessageAt("lpShowtimeModeSwitchAction", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 3992));
+                    CGS_ASSERT(lpShowtimeModeSwitchAction, CGS_ASSERT_MESSAGE_AT("lpShowtimeModeSwitchAction", CGS_ARTIST_FILE, 3992));
 
                     NetIO::NetworkInShowtimeSwitchEvent lNetworkShowtimeModeSwitchEvent;
                     lNetworkShowtimeModeSwitchEvent.mPlayerID             = lpShowtimeModeSwitchAction->mNetworkPlayerID;
@@ -5938,7 +5938,7 @@ namespace BrnGame
                 {
                     const GsmIO::ModeScoreLeaderboardAction* lpModeScoreLeaderboardAction =
                         reinterpret_cast<const GsmIO::ModeScoreLeaderboardAction*>(lpAction);
-                    CGS_ASSERT(lpModeScoreLeaderboardAction, CgsDev::Assert::MessageAt("lpModeScoreLeaderboardAction", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 4939));
+                    CGS_ASSERT(lpModeScoreLeaderboardAction, CGS_ASSERT_MESSAGE_AT("lpModeScoreLeaderboardAction", CGS_ARTIST_FILE, 4939));
 
                     NetIO::NetworkInScoreLeaderboardEvent lScoreLeaderboardEvent;
                     lScoreLeaderboardEvent.mEventID       = lpModeScoreLeaderboardAction->mEventID;
@@ -5953,7 +5953,7 @@ namespace BrnGame
                 {
                     const GsmIO::NonUploadedModeScoresAction* lpNonUploadedModeScoresAction =
                         reinterpret_cast<const GsmIO::NonUploadedModeScoresAction*>(lpAction);
-                    CGS_ASSERT(lpNonUploadedModeScoresAction, CgsDev::Assert::MessageAt("lpNonUploadedModeScoresAction", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 4959));
+                    CGS_ASSERT(lpNonUploadedModeScoresAction, CGS_ASSERT_MESSAGE_AT("lpNonUploadedModeScoresAction", CGS_ARTIST_FILE, 4959));
 
                     NetIO::NetworkInNonUploadedScoresEvent lNonUploadedScoresEvent;
                     lNonUploadedScoresEvent.mpNonUploadedScores = lpNonUploadedModeScoresAction->mpNonUploadedScores;
@@ -6020,3 +6020,5 @@ namespace BrnGame
         lpNetworkInput->AppendGameStateToNetworkInterface(lpGameStateOutput->GetGameStateToNetworkInterface());
     }
 }
+
+#undef CGS_ARTIST_FILE

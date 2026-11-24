@@ -74,7 +74,7 @@ AICar* AIModule::GetAICar(EGlobalRaceCarIndex leGlobalRaceCarIndex)
         CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
         lMessage << "Invalid AI car index: " << static_cast<s32>(leGlobalRaceCarIndex);
         CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                                  "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\BrnAIModule.h", 445);
+                                  CGS_ASSERT_LOCATION("d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\BrnAIModule.h", 445));
         CgsDev::Assert::EndAssert();
     }
     return &maAICars[static_cast<s32>(leGlobalRaceCarIndex)];
@@ -268,10 +268,10 @@ void AIModule::Update(CgsModule::IOBufferStack* lpInputBufferStack,
         return;
     }
 
-    CGS_ASSERT(lpInputBufferStack  != 0, CgsDev::Assert::MessageAt("lpInputBufferStack != NULL", __FILE__, 611));    // X360 :611
-    CGS_ASSERT(lpOutputBufferStack != 0, CgsDev::Assert::MessageAt("lpOutputBufferStack != NULL", __FILE__, 612));   // X360 :612
-    CGS_ASSERT(lpInputBuffer       != 0, CgsDev::Assert::MessageAt("lpInputBuffer != NULL", __FILE__, 613));         // X360 :613
-    CGS_ASSERT(lpOutputBuffer      != 0, CgsDev::Assert::MessageAt("lpOutputBuffer != NULL", __FILE__, 614));        // X360 :614
+    CGS_ASSERT(lpInputBufferStack  != 0, CGS_ASSERT_MESSAGE_AT("lpInputBufferStack != NULL", __FILE__, 611));    // X360 :611
+    CGS_ASSERT(lpOutputBufferStack != 0, CGS_ASSERT_MESSAGE_AT("lpOutputBufferStack != NULL", __FILE__, 612));   // X360 :612
+    CGS_ASSERT(lpInputBuffer       != 0, CGS_ASSERT_MESSAGE_AT("lpInputBuffer != NULL", __FILE__, 613));         // X360 :613
+    CGS_ASSERT(lpOutputBuffer      != 0, CGS_ASSERT_MESSAGE_AT("lpOutputBuffer != NULL", __FILE__, 614));        // X360 :614
 
     (void)lpInputBufferStack;    // used only by the parked "Route" IO-buffer pair
     (void)lpOutputBufferStack;
@@ -442,10 +442,10 @@ void AIModule::PausedUpdate( CgsModule::IOBufferStack* lpInputBufferStack,
                              AIModuleIO::OutputBuffer* lpOutputBuffer,
                              BrnUpdateSet lUpdateSet )
 {
-    CGS_ASSERT(lpInputBufferStack  != 0, CgsDev::Assert::MessageAt("lpInputBufferStack != NULL", __FILE__, 767));    // X360 :767 (0x2FF)
-    CGS_ASSERT(lpOutputBufferStack != 0, CgsDev::Assert::MessageAt("lpOutputBufferStack != NULL", __FILE__, 768));   // X360 :768 (0x300)
-    CGS_ASSERT(lpInputBuffer       != 0, CgsDev::Assert::MessageAt("lpInputBuffer != NULL", __FILE__, 769));         // X360 :769 (0x301)
-    CGS_ASSERT(lpOutputBuffer      != 0, CgsDev::Assert::MessageAt("lpOutputBuffer != NULL", __FILE__, 770));        // X360 :770 (0x302)
+    CGS_ASSERT(lpInputBufferStack  != 0, CGS_ASSERT_MESSAGE_AT("lpInputBufferStack != NULL", __FILE__, 767));    // X360 :767 (0x2FF)
+    CGS_ASSERT(lpOutputBufferStack != 0, CGS_ASSERT_MESSAGE_AT("lpOutputBufferStack != NULL", __FILE__, 768));   // X360 :768 (0x300)
+    CGS_ASSERT(lpInputBuffer       != 0, CGS_ASSERT_MESSAGE_AT("lpInputBuffer != NULL", __FILE__, 769));         // X360 :769 (0x301)
+    CGS_ASSERT(lpOutputBuffer      != 0, CGS_ASSERT_MESSAGE_AT("lpOutputBuffer != NULL", __FILE__, 770));        // X360 :770 (0x302)
 
 
     CgsModule::IOHelper<RouteMapModuleIO::InputBuffer> lRouteIn(lpInputBufferStack, "Route");   // 0x8279A2B4

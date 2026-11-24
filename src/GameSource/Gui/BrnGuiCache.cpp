@@ -17,7 +17,7 @@
 #include "GameSource/Network/SharedIO/BrnNetworkModuleOnlineLobbyPlayerStatusInterface.h" // LobbyPlayerStatusData (GetOnlinePlayerColourFromARCI)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] the satnav-diag one-shots
 // (GuiCache::GetNumEventStarts is homed in the partfile BrnGuiCache_wJ_01.cpp.)
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsArray.h"
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCommunicator.h"
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptObjectController.h"
 #include "GameShared/GameClasses/Gui/Model/CgsModelModuleIO.h"
@@ -28,9 +28,9 @@
 // header: it and BrnGuiOptionsDataProfile.h both define BrnGui::GuiEventAudioTraxUpdate.)
 // (GuiEventChangeDistrict now lives in BrnGuiEventTypeDefs.h, already included via BrnGuiCache.h)
 #include "SharedClasses/World/BrnWorldRegion.h"        // BrnWorld::WorldRegion::DistrictToCounty (Construct's marker seed)
-
+#define CGS_ARTIST_BRNGUICACHE_FILE "..\\..\\..\\GameSource\\Gui/BrnGuiCache.h"
 #include <cstring>   // std::memset (the ctor's zero-init of the unmodelled interior) / std::strlen
-
+#define CGS_ARTIST_BRNGUICACHE_FILE_RELATIVE "..\\..\\..\\GameSource\\Gui/BrnGuiCache.cpp"
 // includes folded in from the BrnGuiCache_w*.cpp partfiles (2026-09-15)
 #include "GameSource/Gui/BrnGuiWorldDataController.h"   // complete WorldDataController (GetFreeburnChallengeList callee)
 #include "GameSource/GameState/BrnGameStateSharedIO.h" // SpecificGameModeEventInterface::Event (GetOnlineLandmarkIndex) + BrnGameState::LandmarkIndex
@@ -1337,7 +1337,7 @@ namespace BrnGui
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("lpEnumeration != NULL",
-                    "..\\..\\..\\GameSource\\Gui/BrnGuiCache.cpp", 2694);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_BRNGUICACHE_FILE_RELATIVE, 2694));
                 CgsDev::Assert::EndAssert();
             }
             std::memcpy(&mPFXHookEnumeration, lpEvent, sizeof(mPFXHookEnumeration));
@@ -2806,7 +2806,7 @@ namespace BrnGui
     f32 GuiCache::GetCurrentTimeInEvent() const
     {
         CGS_ASSERT(0.0f <= mfEventTime,
-            CgsDev::Assert::MessageAt("0.0f <= mfEventTime", KAC_ARTIST_ASSERT_FILE, 2962 /* ARTIST 0x8240F2FC */));
+            CGS_ASSERT_MESSAGE_AT("0.0f <= mfEventTime", KAC_ARTIST_ASSERT_FILE, 2962 /* ARTIST 0x8240F2FC */));
         return mfEventTime;
     }
 
@@ -2814,14 +2814,14 @@ namespace BrnGui
     f32 GuiCache::GetTargetTimeInEvent() const
     {
         CGS_ASSERT(0.0f <= mfTargetTime,
-            CgsDev::Assert::MessageAt("0.0f <= mfTargetTime", KAC_ARTIST_ASSERT_FILE, 2979 /* ARTIST 0x8240F364 */));
+            CGS_ASSERT_MESSAGE_AT("0.0f <= mfTargetTime", KAC_ARTIST_ASSERT_FILE, 2979 /* ARTIST 0x8240F364 */));
         return mfTargetTime;
     }
 
     // @ 0x8240F450
     s8 GuiCache::GetOpponentsInEvent() const
     {
-        CGS_ASSERT(-1 < miOpponentsInEvent, CgsDev::Assert::MessageAt("-1 < miOpponentsInEvent", KAC_ARTIST_ASSERT_FILE, 3030 /* ARTIST 0x8240F490 */));
+        CGS_ASSERT(-1 < miOpponentsInEvent, CGS_ASSERT_MESSAGE_AT("-1 < miOpponentsInEvent", KAC_ARTIST_ASSERT_FILE, 3030 /* ARTIST 0x8240F490 */));
         return miOpponentsInEvent;
     }
 
@@ -2836,14 +2836,14 @@ namespace BrnGui
         CGS_ASSERT(
             (meGameModeType == 0) || (meGameModeType == 1) || (meGameModeType == 10)
                 || (meGameModeType == 6) || (meGameModeType == 8) || (meGameModeType == 5),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "( meGameModeType == GsmIO::E_MODE_OFFLINE_RACE ) || ( meGameModeType == GsmIO::E_MODE_FACE_OFF ) || "
                 "( meGameModeType == GsmIO::E_MODE_ONLINE_RACE ) || ( meGameModeType == GsmIO::E_MODE_ELIMINATOR ) || "
                 "( meGameModeType == GsmIO::E_MODE_MARKED_MAN ) || ( meGameModeType == GsmIO::E_MODE_BURNING_ROUTE )",
                 KAC_ARTIST_ASSERT_FILE, 4078 /* ARTIST 0x82472E14 */));
         // BrnWorld::E_DISTRICT_INVALID == 18 (asm immediate).
         CGS_ASSERT(mEventDestinationDistrict != 18,
-                   CgsDev::Assert::MessageAt("mEventDestinationDistrict != BrnWorld::E_DISTRICT_INVALID",
+                   CGS_ASSERT_MESSAGE_AT("mEventDestinationDistrict != BrnWorld::E_DISTRICT_INVALID",
                                              KAC_ARTIST_ASSERT_FILE, 4080 /* ARTIST 0x82472E44 */));
         return mEventDestinationDistrict;
     }
@@ -2852,7 +2852,7 @@ namespace BrnGui
     s32 GuiCache::GetCheckpointReached() const
     {
         CGS_ASSERT(0 <= miCheckpointReached,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "0 <= miCheckpointReached", KAC_ARTIST_ASSERT_FILE, 2927 /* ARTIST 0x824EC494 */));
         return miCheckpointReached;
     }
@@ -2861,10 +2861,10 @@ namespace BrnGui
     s32 GuiCache::GetCurrentTakedownsInEvent() const
     {
         CGS_ASSERT(meGameModeType == 3,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "BrnGameState::GsmIO::E_MODE_ROAD_RAGE == meGameModeType", KAC_ARTIST_ASSERT_FILE, 3047 /* ARTIST 0x8240F4EC */));
         CGS_ASSERT(-1 < miTakedownsCurrent,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "-1 < miTakedownsCurrent", KAC_ARTIST_ASSERT_FILE, 3048 /* ARTIST 0x8240F51C */));
         return miTakedownsCurrent;
     }
@@ -2873,10 +2873,10 @@ namespace BrnGui
     s32 GuiCache::GetTargetTakedownsInEvent() const
     {
         CGS_ASSERT(meGameModeType == 3,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "BrnGameState::GsmIO::E_MODE_ROAD_RAGE == meGameModeType", KAC_ARTIST_ASSERT_FILE, 3065 /* ARTIST 0x8240F58C */));
         CGS_ASSERT(-1 < miTakedownTarget,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "-1 < miTakedownTarget", KAC_ARTIST_ASSERT_FILE, 3066 /* ARTIST 0x8240F5BC */));
         return miTakedownTarget;
     }
@@ -2885,7 +2885,7 @@ namespace BrnGui
     s32 GuiCache::GetCurrentScoreInEvent() const
     {
         CGS_ASSERT(-1 < miScoreCurrent,
-            CgsDev::Assert::MessageAt("-1 < miScoreCurrent", KAC_ARTIST_ASSERT_FILE, 3083 /* ARTIST 0x8240F61C */));
+            CGS_ASSERT_MESSAGE_AT("-1 < miScoreCurrent", KAC_ARTIST_ASSERT_FILE, 3083 /* ARTIST 0x8240F61C */));
         return miScoreCurrent;
     }
 
@@ -2893,7 +2893,7 @@ namespace BrnGui
     s32 GuiCache::GetTargetScoreInEvent() const
     {
         CGS_ASSERT(-1 < miScoreTarget,
-            CgsDev::Assert::MessageAt("-1 < miScoreTarget", KAC_ARTIST_ASSERT_FILE, 3099 /* ARTIST 0x8240F67C */));
+            CGS_ASSERT_MESSAGE_AT("-1 < miScoreTarget", KAC_ARTIST_ASSERT_FILE, 3099 /* ARTIST 0x8240F67C */));
         return miScoreTarget;
     }
 
@@ -2901,7 +2901,7 @@ namespace BrnGui
     s32 GuiCache::GetCurrentComboInEvent() const
     {
         CGS_ASSERT(-1 < miScoreCombo,
-            CgsDev::Assert::MessageAt("-1 < miScoreCombo", KAC_ARTIST_ASSERT_FILE, 3115 /* ARTIST 0x8240F6DC */));
+            CGS_ASSERT_MESSAGE_AT("-1 < miScoreCombo", KAC_ARTIST_ASSERT_FILE, 3115 /* ARTIST 0x8240F6DC */));
         return miScoreCombo;
     }
 
@@ -2909,7 +2909,7 @@ namespace BrnGui
     s32 GuiCache::GetMultiplierInEvent() const
     {
         CGS_ASSERT(-1 < miComboMultiplier,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "-1 < miComboMultiplier", KAC_ARTIST_ASSERT_FILE, 3130 /* ARTIST 0x8240F73C */));
         return miComboMultiplier;
     }
@@ -2919,10 +2919,10 @@ namespace BrnGui
     CgsID GuiCache::GetPursuitCarID() const
     {
         CGS_ASSERT(meGameModeType == 4,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "BrnGameState::GsmIO::E_MODE_PURSUIT == meGameModeType", KAC_ARTIST_ASSERT_FILE, 3319 /* ARTIST 0x8240F82C */));
         CGS_ASSERT(mPursuedCarID != static_cast<CgsID>(0),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "kCGSID_NULL != mPursuedCarID", KAC_ARTIST_ASSERT_FILE, 3320 /* ARTIST 0x8240F85C */));
         return mPursuedCarID;
     }
@@ -2931,7 +2931,7 @@ namespace BrnGui
     CgsID GuiCache::GetShutdownCarID() const
     {
         CGS_ASSERT(mShutdownCarID != static_cast<CgsID>(0),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "kCGSID_NULL != mShutdownCarID", KAC_ARTIST_ASSERT_FILE, 3337 /* ARTIST 0x824B308C */));
         return mShutdownCarID;
     }
@@ -2940,7 +2940,7 @@ namespace BrnGui
     s32 GuiCache::GetTrophyCarUnlockType() const
     {
         CGS_ASSERT(meTrophyCarUnlockType != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "BrnProgression::TrophyUnlockData::E_UNLOCKTYPE_NONE != meTrophyCarUnlockType",
                 KAC_ARTIST_ASSERT_FILE, 3354 /* ARTIST 0x824B30EC */));
         return meTrophyCarUnlockType;
@@ -2973,7 +2973,7 @@ namespace BrnGui
     const FreeburnChallengeManager* GuiCache::GetFreeburnChallengeManager() const
     {
         CGS_ASSERT(mpChallengeManager != 0,
-            CgsDev::Assert::MessageAt("mpChallengeManager", KAC_ARTIST_ASSERT_FILE, 2390 /* ARTIST 0x8240F190 */));
+            CGS_ASSERT_MESSAGE_AT("mpChallengeManager", KAC_ARTIST_ASSERT_FILE, 2390 /* ARTIST 0x8240F190 */));
         return mpChallengeManager;
     }
 
@@ -2991,7 +2991,7 @@ namespace BrnGui
     const BrnResource::HudMessageController* GuiCache::GetHudMessageController() const
     {
         CGS_ASSERT(mpHudMessageController != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpHudMessageController", KAC_ARTIST_ASSERT_FILE, 2418 /* ARTIST 0x82472D28 */));
         return mpHudMessageController;
     }
@@ -3000,7 +3000,7 @@ namespace BrnGui
     const HudMessageDirector* GuiCache::GetHudMessageDirector() const
     {
         CGS_ASSERT(mpHudMessageDirector != 0,
-            CgsDev::Assert::MessageAt("mpHudMessageDirector", KAC_ARTIST_ASSERT_FILE, 2446 /* ARTIST 0x82472D80 */));
+            CGS_ASSERT_MESSAGE_AT("mpHudMessageDirector", KAC_ARTIST_ASSERT_FILE, 2446 /* ARTIST 0x82472D80 */));
         return mpHudMessageDirector;
     }
 
@@ -3008,7 +3008,7 @@ namespace BrnGui
     f32 GuiCache::GetTime() const
     {
         CGS_ASSERT(mfTimeNow != -FLT_MAX,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mfTimeNow!=-FLT_MAX",
                 "..\\..\\..\\GameShared\\GameClasses\\Gui/CgsGuiEventTypeDefs.h", 250 /* ARTIST 0x8240F0E0 */));
         return mfTimeNow;
@@ -3018,7 +3018,7 @@ namespace BrnGui
     WorldDataController* GuiCache::GetWorldDataController() const
     {
         CGS_ASSERT(mpWorldDataController != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpWorldDataController", KAC_ARTIST_ASSERT_FILE, 2324 /* ARTIST 0x8240F138 */));
         // The X360 stores the controller as a non-const pointer the GUI mutates through;
         // the cache member is declared const, so cast away for the (non-const) accessor.
@@ -3147,12 +3147,12 @@ namespace BrnGui
     const BrnResource::ChallengeList* GuiCache::GetFreeburnChallengeList() const
     {
         CGS_ASSERT(mpWorldDataController != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpWorldDataController", KAC_ARTIST_ASSERT_FILE, 2133 /* ARTIST 0x8240F04C */));
         const BrnResource::ChallengeList* lpChallengeList =
             mpWorldDataController->GetFreeburnChallengeList();
         CGS_ASSERT(lpChallengeList != 0,
-            CgsDev::Assert::MessageAt("lpChallengeList", KAC_ARTIST_ASSERT_FILE, 2136 /* ARTIST 0x8240F07C */));
+            CGS_ASSERT_MESSAGE_AT("lpChallengeList", KAC_ARTIST_ASSERT_FILE, 2136 /* ARTIST 0x8240F07C */));
         return lpChallengeList;
     }
 
@@ -3216,7 +3216,7 @@ namespace BrnGui
         while (liNumberOfStuntsToDisplay < 1);
 
         CGS_ASSERT(liIndex < liNumberOfStuntsToDisplay,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "liIndex < GetNumberOfStuntsToDisplay()", KAC_ARTIST_ASSERT_FILE, 3224 /* ARTIST 0x8240F7C0 */));
 
         return &maStuntToDisplay[liIndex];
@@ -3226,8 +3226,8 @@ namespace BrnGui
     const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData*
         GuiCache::GetOnlinePlayerInfoByIndex(s32 liPlayerInfoIndex)
     {
-        CGS_ASSERT(liPlayerInfoIndex >= 0, CgsDev::Assert::MessageAt("liPlayerInfoIndex >= 0", KAC_ARTIST_ASSERT_FILE, 3645 /* ARTIST 0x8240F8C8 */));
-        CGS_ASSERT(liPlayerInfoIndex < 8, CgsDev::Assert::MessageAt("liPlayerInfoIndex < KI_MAX_PLAYERS", KAC_ARTIST_ASSERT_FILE, 3646 /* ARTIST 0x8240F8EC */));
+        CGS_ASSERT(liPlayerInfoIndex >= 0, CGS_ASSERT_MESSAGE_AT("liPlayerInfoIndex >= 0", KAC_ARTIST_ASSERT_FILE, 3645 /* ARTIST 0x8240F8C8 */));
+        CGS_ASSERT(liPlayerInfoIndex < 8, CGS_ASSERT_MESSAGE_AT("liPlayerInfoIndex < KI_MAX_PLAYERS", KAC_ARTIST_ASSERT_FILE, 3646 /* ARTIST 0x8240F8EC */));
 
         return &maPlayerInfo[liPlayerInfoIndex];
     }
@@ -3236,11 +3236,11 @@ namespace BrnGui
     s32 GuiCache::GetCurrentOnlinePlayerTeam(EActiveRaceCarIndex leActiveRaceCarIndex) const
     {
         CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lePlayerActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0",
                 KAC_ARTIST_ASSERT_FILE, 3664 /* ARTIST 0x8240F93C */));
         CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
                 KAC_ARTIST_ASSERT_FILE, 3665 /* ARTIST 0x8240F960 */));
 
@@ -3337,11 +3337,11 @@ namespace BrnGui
     bool GuiCache::GetOnlinePlayerDisconnected(EActiveRaceCarIndex leActiveRaceCarIndex) const
     {
         CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lePlayerActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0",
                 KAC_ARTIST_ASSERT_FILE, 3684 /* ARTIST 0x8240F9B4 */));
         CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
                 KAC_ARTIST_ASSERT_FILE, 3685 /* ARTIST 0x8240F9D8 */));
 
@@ -3352,11 +3352,11 @@ namespace BrnGui
     bool GuiCache::IsOnlinePlayerEliminated(EActiveRaceCarIndex leActiveRaceCarIndex) const
     {
         CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "leCurrentPlayer >= E_ACTIVE_RACE_CAR_INDEX_0",
                 KAC_ARTIST_ASSERT_FILE, 3724 /* ARTIST 0x8240FA34 */));
         CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "leCurrentPlayer < E_ACTIVE_RACE_CAR_INDEX_COUNT",
                 KAC_ARTIST_ASSERT_FILE, 3725 /* ARTIST 0x8240FA58 */));
 
@@ -3467,11 +3467,11 @@ namespace BrnGui
     bool GuiCache::GetOnlinePlayerInCarSelect(EActiveRaceCarIndex leActiveRaceCarIndex) const
     {
         CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0",
                 KAC_ARTIST_ASSERT_FILE, 3704 /* ARTIST 0x824436FC */));
         CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
                 KAC_ARTIST_ASSERT_FILE, 3705 /* ARTIST 0x82443720 */));
 
@@ -3536,7 +3536,7 @@ namespace BrnGui
     const PresetRace* GuiCache::GetPresetRace(s32 liPresetRaceIndex) const
     {
         CGS_ASSERT(liPresetRaceIndex >= 0 && liPresetRaceIndex < miNumPresetRaces,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "liPresetRaceIndex >= 0 && liPresetRaceIndex < miNumPresetRaces",
                 KAC_ARTIST_ASSERT_FILE, 2211 /* ARTIST 0x824B3020 */));
         return &maPresetRaces[liPresetRaceIndex];
@@ -3546,7 +3546,7 @@ namespace BrnGui
     // mpMapIconManager @0x4060). Asserts the incoming pointer is non-null.
     void GuiCache::SetMapIconManager(MapIconManager* lpMapIconManager)
     {
-        CGS_ASSERT(lpMapIconManager != 0, CgsDev::Assert::StreamMessageAt("Invalid map icon manager", "..\\..\\..\\GameSource\\Gui/BrnGuiCache.h", 2102));
+        CGS_ASSERT(lpMapIconManager != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid map icon manager", CGS_ARTIST_BRNGUICACHE_FILE, 2102));
         mpMapIconManager = lpMapIconManager;
     }
 
@@ -3665,11 +3665,11 @@ namespace BrnGui
     bool GuiCache::IsReplayARCRendered(EActiveRaceCarIndex leActiveRaceCarIndex) const
     {
         CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "leARCI >= E_ACTIVE_RACE_CAR_INDEX_0",
                 KAC_ARTIST_ASSERT_SOURCE, 4443 /* ARTIST 0x824EEDD4 */));
         CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "leARCI < E_ACTIVE_RACE_CAR_INDEX_COUNT",
                 KAC_ARTIST_ASSERT_SOURCE, 4444 /* ARTIST 0x824EEDF8 */));
         return maReplayARCRendered[leActiveRaceCarIndex];
@@ -4206,12 +4206,12 @@ namespace BrnGui
         CGS_ASSERT(
             (meGameModeType == 0) || (meGameModeType == 1) || (meGameModeType == 10)
                 || (meGameModeType == 6) || (meGameModeType == 8) || (meGameModeType == 5),
-            CgsDev::Assert::MessageAt("( meGameModeType == GsmIO::E_MODE_OFFLINE_RACE ) || ( meGameModeType == GsmIO::E_MODE_FACE_OFF ) || ( meGameModeType == GsmIO::E_MODE_ONLINE_RACE ) || ( meGameModeType == GsmIO::E_MODE_ELIMINATOR ) || ( meGameModeType == GsmIO::E_MODE_MARKED_MAN ) || ( meGameModeType == GsmIO::E_MODE_BURNING_ROUTE )", KAC_ARTIST_ASSERT_FILE, 4055 /* ARTIST 0x8240FAF4 */)
+            CGS_ASSERT_MESSAGE_AT("( meGameModeType == GsmIO::E_MODE_OFFLINE_RACE ) || ( meGameModeType == GsmIO::E_MODE_FACE_OFF ) || ( meGameModeType == GsmIO::E_MODE_ONLINE_RACE ) || ( meGameModeType == GsmIO::E_MODE_ELIMINATOR ) || ( meGameModeType == GsmIO::E_MODE_MARKED_MAN ) || ( meGameModeType == GsmIO::E_MODE_BURNING_ROUTE )", KAC_ARTIST_ASSERT_FILE, 4055 /* ARTIST 0x8240FAF4 */)
 
 
 );
         CGS_ASSERT(mEventDestinationLandmarkIndex != 0xFFFFu,
-                   CgsDev::Assert::MessageAt("mEventDestinationLandmarkIndex != BrnGameState::K_INVALID_LANDMARK", KAC_ARTIST_ASSERT_FILE, 4057 /* ARTIST 0x8240FB34 */));
+                   CGS_ASSERT_MESSAGE_AT("mEventDestinationLandmarkIndex != BrnGameState::K_INVALID_LANDMARK", KAC_ARTIST_ASSERT_FILE, 4057 /* ARTIST 0x8240FB34 */));
         return BrnGameState::LandmarkIndex(mEventDestinationLandmarkIndex);
     }
 
@@ -4232,7 +4232,7 @@ namespace BrnGui
     {
         CGS_ASSERT(lpActiveLandmarksEvent->muNumLandmarks
                        <= GuiEventSetActiveLandmarks::KU_MAX_LANDMARKS_IN_GAME,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpActiveLandmarksEvent->muNumLandmarks <= static_cast<uint32_t>( KI_MAX_LANDMARKS_IN_GAME )",
                 KAC_ARTIST_ASSERT_SOURCE, 4067 /* ARTIST 0x824EE800 */));                           // cpp:4067
 
@@ -4826,7 +4826,7 @@ BrnGameState::LandmarkIndex GuiCache::GetEventFinishLandmark() const
 {
     const u8 luCount = GetCheckpointsInEvent();
     CGS_ASSERT(luCount > 0,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lu8NumCheckpointsInEvent > 0", KAC_ARTIST_ASSERT_FILE, 4108 /* ARTIST 0x824EC640 */));
     return BrnGameState::LandmarkIndex(maCheckpointLandmarks[luCount - 1]);
 }
@@ -5016,7 +5016,7 @@ namespace BrnGui
     {
         // Header-inline on the console: the assert carries BrnGuiCache.h line 4020 (li r5 @0x82450778).
         CGS_ASSERT(luIndex < mTrafficCarInfo.mScoreTargets.GetLength(),
-                   CgsDev::Assert::MessageAt("liIndex >= 0 && liIndex < mTrafficCarInfo.mScoreTargets.GetLength()",
+                   CGS_ASSERT_MESSAGE_AT("liIndex >= 0 && liIndex < mTrafficCarInfo.mScoreTargets.GetLength()",
                                              KAC_ARTIST_ASSERT_FILE, 4020 /* ARTIST 0x82450778 */));
         return &mTrafficCarInfo.mScoreTargets.GetItem(luIndex);
     }
@@ -5108,9 +5108,9 @@ namespace BrnGui
     const PreEventInfo* GuiCache::GetPreEventInfo(s32 liIndex) const
     {
         CGS_ASSERT(liIndex >= 0,
-            CgsDev::Assert::MessageAt("liIndex >= 0", KAC_ARTIST_ASSERT_FILE, 4589 /* ARTIST 0x82482804 */));
+            CGS_ASSERT_MESSAGE_AT("liIndex >= 0", KAC_ARTIST_ASSERT_FILE, 4589 /* ARTIST 0x82482804 */));
         CGS_ASSERT(liIndex < mPreRaceData.miNumMessages,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "liIndex < mPreRaceData.miNumMessages", KAC_ARTIST_ASSERT_FILE, 4590 /* ARTIST 0x82482834 */));
         return &mPreRaceData.mMessages[liIndex];
     }
@@ -5132,8 +5132,8 @@ namespace BrnGui
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert(
                     "Array used before Construct/Clear was called",
-                    "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsArray.h",
-                    336);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                    336));
                 CgsDev::Assert::EndAssert();
             }
 
@@ -5147,8 +5147,8 @@ namespace BrnGui
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert(
                     "Array used before Construct/Clear was called",
-                    "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsArray.h",
-                    336);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                    336));
                 CgsDev::Assert::EndAssert();
             }
             if (luIndex >= static_cast<u32>(mEventsCtorSentinel))
@@ -5156,8 +5156,8 @@ namespace BrnGui
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert(
                     "luEventIndex < maEvents.GetLength()",
-                    "..\\..\\..\\GameSource\\GameState/BrnGameStateSharedIO.h",
-                    2014);
+                    CGS_ASSERT_LOCATION("..\\..\\..\\GameSource\\GameState/BrnGameStateSharedIO.h",
+                    2014));
                 CgsDev::Assert::EndAssert();
             }
 
@@ -5167,8 +5167,8 @@ namespace BrnGui
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert(
                     "Array used before Construct/Clear was called",
-                    "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsArray.h",
-                    538);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                    538));
                 CgsDev::Assert::EndAssert();
             }
             if (luIndex >= static_cast<u32>(mEventsCtorSentinel))
@@ -5180,8 +5180,8 @@ namespace BrnGui
                                << ", length: " << static_cast<u32>(mEventsCtorSentinel);
                 CgsDev::Assert::FireAssert(
                     CgsDev::Assert::gpcMessageBuffer,
-                    "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsArray.h",
-                    539);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                    539));
                 CgsDev::Assert::EndAssert();
             }
 
@@ -5192,8 +5192,8 @@ namespace BrnGui
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert(
                     "lpEvent",
-                    "..\\..\\..\\GameSource\\Gui/BrnGuiCache.h",
-                    4664);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_BRNGUICACHE_FILE,
+                    4664));
                 CgsDev::Assert::EndAssert();
             }
 
@@ -5209,8 +5209,8 @@ namespace BrnGui
         lMessage << "Couldn't find preset event with ID " << liEventID << "\n";
         CgsDev::Assert::FireAssert(
             CgsDev::Assert::gpcMessageBuffer,
-            "..\\..\\..\\GameSource\\Gui/BrnGuiCache.h",
-            4672);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_BRNGUICACHE_FILE,
+            4672));
         CgsDev::Assert::EndAssert();
         return 0;
     }
@@ -5298,10 +5298,10 @@ namespace BrnGui
     const ReplayPlayerActive* GuiCache::GetSortedReplayPlayerActive(u32 luIndex) const
     {
         CGS_ASSERT(mbReplayHasBeenSorted == true,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mbReplayHasBeenSorted == true", __FILE__, 4516 /* ARTIST 0x824EEFD8 */));
         CGS_ASSERT(luIndex < 16,
-            CgsDev::Assert::MessageAt("luIndex < 16", __FILE__, 4517 /* ARTIST 0x824EEFFC */));
+            CGS_ASSERT_MESSAGE_AT("luIndex < 16", __FILE__, 4517 /* ARTIST 0x824EEFFC */));
         return &maReplayPlayersActive[luIndex];
     }
 }
@@ -5349,9 +5349,9 @@ namespace BrnGui
     void GuiCache::SortReplayPlayersActive()
     {
         CGS_ASSERT(!mbReplayHasBeenSorted,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mbReplayHasBeenSorted == false",
-                "..\\..\\..\\GameSource\\Gui/BrnGuiCache.cpp", 4501 /* ARTIST 0x824F8C8C */));
+                CGS_ARTIST_BRNGUICACHE_FILE_RELATIVE, 4501 /* ARTIST 0x824F8C8C */));
         mbReplayHasBeenSorted = true;
         qsort(maReplayPlayersActive, 16, 32, _SortReplayPlayersActiveByCount);
     }
@@ -5359,3 +5359,7 @@ namespace BrnGui
     // GuiCache::GuiCache @0x827E05B8 is homed in mounted BrnGuiCache.cpp.
 
 }
+
+#undef CGS_ARTIST_FILE
+#undef CGS_ARTIST_BRNGUICACHE_FILE
+#undef CGS_ARTIST_BRNGUICACHE_FILE_RELATIVE

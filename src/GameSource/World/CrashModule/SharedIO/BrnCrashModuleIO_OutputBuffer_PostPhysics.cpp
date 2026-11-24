@@ -1,7 +1,7 @@
 #include "GameSource/World/CrashModule/SharedIO/BrnCrashModuleIO.h"   // OutputBuffer_PostPhysics
 #include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // the header-baked lock asserts
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\crashmodule\\BrnCrashModuleIO.h"
 #include <cstddef>   // offsetof
 
 // BrnWorld::CrashIO::OutputBuffer_PostPhysics::GetNetworkOutputInterface() @ 0x827BB9C0.
@@ -20,7 +20,7 @@ namespace CrashIO
     // ARTIST sub_827BBA68: bit3 write-lock assertion, return member at console+0x7A0.
     OutputBuffer_PostPhysics::GameEventQueue* OutputBuffer_PostPhysics::GetGameEventQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\crashmodule\\BrnCrashModuleIO.h", 211));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 211));
         return &mGameEventQueue;
     }
 
@@ -30,10 +30,12 @@ namespace CrashIO
         // Pinned from inside the member so offsetof can see the private member.
         CGS_STATIC_ASSERT((offsetof(OutputBuffer_PostPhysics, mNetworkOutputInterface) == 0x10),
                       "mNetworkOutputInterface @0x10");
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt(
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
             "Not locked for writing\n",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\crashmodule\\BrnCrashModuleIO.h", 208));
+            CGS_ARTIST_FILE, 208));
         return &mNetworkOutputInterface;
     }
 }
 }
+
+#undef CGS_ARTIST_FILE

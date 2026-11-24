@@ -1,5 +1,5 @@
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIOOutputBuffer.hpp"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // the header-baked lock asserts
 
@@ -75,42 +75,42 @@ namespace DirectorIO
     // X360 0x823B33B0: return &mResourceInterface (this+0x2E0), read-lock asserted.
     const BrnResource::GameDataIO::RequestInterface<512>* OutputBuffer::Get() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 978));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 978));
         return &mResourceInterface;
     }
 
     // X360 0x823B23F8: return &mDirectorInterface (this+0x720), read-lock asserted.
     u8* OutputBuffer::GetDir()
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 463));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 463));
         return mDirectorInterface;
     }
 
     // DecFIGS 0x33E0D0 / ARTIST 0x823B3458: typed const read getter; assert the read lock.
     const BrnDirector::DirectorOutputInterface* OutputBuffer::GetDirectorOutputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 987));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 987));
         return &mDirectorOutputInterface;
     }
 
     // X360 0x823B3458 legacy byte view, retained for existing callers.
     u8* OutputBuffer::GetDirectorOu()
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 987));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 987));
         return reinterpret_cast<u8*>(&mDirectorOutputInterface);
     }
 
     // X360 0x823B2548: return &mReplayRequestInterface (this+0x724), read-lock asserted.
     u8* OutputBuffer::GetReplayRe()
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 472));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 472));
         return reinterpret_cast<u8*>(&mReplayRequestInterface);
     }
 
     // X360 0x823B3500: return &mTimerRequestInterface (this+0x500), read-lock asserted.
     const CgsSystem::TimerRequestInterface* OutputBuffer::GetTimerRequestIn() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 1005));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 1005));
         return &mTimerRequestInterface;
     }
 
@@ -139,21 +139,21 @@ namespace DirectorIO
     // X360 0x822077A0: return &mResourceInterface (this+0x2E0). Tests the WRITE lock (bit 3).
     BrnResource::GameDataIO::RequestInterface<512>* OutputBuffer::GetResour()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 969));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 969));
         return &mResourceInterface;
     }
 
     // ARTIST 0x82207848: typed mutable view of mDirectorOutputInterface under the WRITE lock.
     BrnDirector::DirectorOutputInterface* OutputBuffer::GetDirectorOutputInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 996));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 996));
         return &mDirectorOutputInterface;
     }
 
     // X360 0x82207848 legacy byte view, retained for existing callers.
     u8* OutputBuffer::GetDirectorOutputIn()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 996));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 996));
         return reinterpret_cast<u8*>(&mDirectorOutputInterface);
     }
 
@@ -173,14 +173,14 @@ namespace DirectorIO
     // X360 0x82206A58: return &mReplayRequestInterface (this+0x724). Tests the WRITE lock (bit 3).
     u8* OutputBuffer::GetReplayRequestI()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 473));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 473));
         return reinterpret_cast<u8*>(&mReplayRequestInterface);
     }
 
     // X360 0x822078F0: return &mTimerRequestInterface (this+0x500). Tests the WRITE lock (bit 3).
     CgsSystem::TimerRequestInterface* OutputBuffer::GetTimerRequestInterfac()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 1014));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 1014));
         return &mTimerRequestInterface;
     }
 
@@ -194,14 +194,14 @@ namespace DirectorIO
     const CgsAttribSys::AttribSysIO::AttribSysRequestInterface<512>*
         OutputBuffer::GetVaultRequestInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 469));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 469));
         return &mVaultRequestInterface;
     }
 
     // X360 0x822069B0 (BrnDirectorModuleIO.h:470): write-lock; return this+0x510.
     CgsAttribSys::AttribSysIO::AttribSysRequestInterface<512>* OutputBuffer::GetVaultRequestInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 470));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 470));
         return &mVaultRequestInterface;
     }
 
@@ -211,7 +211,7 @@ namespace DirectorIO
     // CgsGraphics::Camera::operator= and returning its result.
     CgsGraphics::Camera& OutputBuffer::SetCgsCamera(const CgsGraphics::Camera& lrCamera)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 960));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 960));
         return mCgsCamera = lrCamera;
     }
 
@@ -219,7 +219,7 @@ namespace DirectorIO
     // BrnDirector::Camera::Camera::operator= and returning its result.
     BrnDirector::Camera::Camera& OutputBuffer::SetCameraOutput(const BrnDirector::Camera::Camera& lrCamera)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 941));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 941));
         return mCameraOutput = lrCamera;
     }
 
@@ -230,8 +230,10 @@ namespace DirectorIO
     // Same read-lock assert as every other read-side getter in this TU.
     const BrnDirector::Camera::Camera* OutputBuffer::GetCameraOutput() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 931));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 931));
         return &mCameraOutput;
     }
 }
 }
+
+#undef CGS_ARTIST_FILE

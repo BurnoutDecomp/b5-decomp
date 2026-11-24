@@ -43,13 +43,20 @@ namespace Assert
 // passed to FireAssert as it is: ARTIST passes a plain message string straight in r3 wherever
 // the original message is one literal (e.g. "Array used before Construct/Clear was called" in
 // CgsContainers::Array<int,20>::Append @0x821FBCD0).
-#define CGS_ASSERT(condition, msg)                              \
+#if defined(CGS_MATCH_ASSERT_LOCATIONS) && CGS_MATCH_ASSERT_LOCATIONS
+#define CGS_ASSERT_LOCATION(artistFile, artistLine) artistFile, artistLine
+#else
+#define CGS_ASSERT_LOCATION(artistFile, artistLine) __FILE__, __LINE__
+#endif
+
+#define CGS_ASSERT(condition, msg) CGS_ASSERT_AT(condition, msg, __FILE__, __LINE__)
+#define CGS_ASSERT_AT(condition, msg, artistFile, artistLine)    \
     do                                                          \
     {                                                           \
         if (!(condition))                                       \
         {                                                       \
             CgsDev::Assert::BeginAssert();                      \
-            CgsDev::Assert::FireAssert((msg), __FILE__, __LINE__); \
+            CgsDev::Assert::FireAssert((msg), CGS_ASSERT_LOCATION(artistFile, artistLine)); \
             CgsDev::Assert::EndAssert();                        \
         }                                                       \
     } while (0)
@@ -61,7 +68,8 @@ namespace Assert
 // @0x821FF680: BeginAssert; the StrStream over gpcMessageBuffer / giMessageBufferSize; the
 // streamed pieces; FireAssert(gpcMessageBuffer, file, line); EndAssert. The same sequence
 // written out by hand is exact in CgsVariableEventQueue.h. A caller includes CgsStrStream.h.
-#define CGS_ASSERT_STREAM(condition, stream)                                                   \
+#define CGS_ASSERT_STREAM(condition, stream) CGS_ASSERT_STREAM_AT(condition, stream, __FILE__, __LINE__)
+#define CGS_ASSERT_STREAM_AT(condition, stream, artistFile, artistLine)                         \
     do                                                                                         \
     {                                                                                          \
         if (!(condition))                                                                      \
@@ -70,7 +78,7 @@ namespace Assert
             CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer,                     \
                                          CgsDev::Assert::giMessageBufferSize);                 \
             lStrStream << stream;                                                              \
-            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, __FILE__, __LINE__);  \
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, CGS_ASSERT_LOCATION(artistFile, artistLine)); \
             CgsDev::Assert::EndAssert();                                                       \
         }                                                                                      \
     } while (0)

@@ -7,7 +7,7 @@
 //   CheckForCompletedLoads                     load ON_RIVAL, then wait for its components
 //   HandleGuiCacheEvent                        adopt the first cache offered
 //   HandleControllerInput(+SelectParams)       the back button leaves the screen
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineRivals.cpp"
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineRivals.h"
 
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                        // CGS_ASSERT
@@ -145,9 +145,9 @@ namespace BrnGui
     void OnlineRivals::CheckForCompletedLoads()
     {
         CGS_ASSERT(mpGuiCache != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpGuiCache",
-                "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineRivals.cpp", 180 /* ARTIST 0x824A0618 */));
+                CGS_ARTIST_FILE, 180 /* ARTIST 0x824A0618 */));
 
         if (meSubState == E_SUBSTATE_LOADING_SCREEN)
         {
@@ -174,7 +174,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineRivals::HandleControllerInput(const CgsModule::Event* lpEvent)
     {
-        CGS_ASSERT(lpEvent != 0, CgsDev::Assert::StreamMessageAt("Invalid event sent to OnlineRivals::HandleControllerInput", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineRivals.cpp", 217));
+        CGS_ASSERT(lpEvent != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event sent to OnlineRivals::HandleControllerInput", CGS_ARTIST_FILE, 217));
 
         if (meSubState == E_SUBSTATE_SELECTING_PARAMS)
         {
@@ -187,7 +187,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineRivals::HandleControllerInputSelectParams(const CgsModule::Event* lpEvent)
     {
-        CGS_ASSERT(lpEvent != 0, CgsDev::Assert::StreamMessageAt("Invalid event sent to OnlineRivals::HandleControllerInputSelectParams", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineRivals.cpp", 247));
+        CGS_ASSERT(lpEvent != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event sent to OnlineRivals::HandleControllerInputSelectParams", CGS_ARTIST_FILE, 247));
 
 
         const ControllerButtonPayload* lpInput =
@@ -205,7 +205,7 @@ namespace BrnGui
     {
         const GuiCachePayload* lpPayload = static_cast<const GuiCachePayload*>(lpEvent);
 
-        CGS_ASSERT(lpPayload->mpCache != 0, CgsDev::Assert::StreamMessageAt("Invalid cache in HandleGuiCacheEvent::Update", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineRivals.cpp", 291));
+        CGS_ASSERT(lpPayload->mpCache != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid cache in HandleGuiCacheEvent::Update", CGS_ARTIST_FILE, 291));
 
         if (mpGuiCache == 0)
         {
@@ -213,3 +213,5 @@ namespace BrnGui
         }
     }
 }
+
+#undef CGS_ARTIST_FILE

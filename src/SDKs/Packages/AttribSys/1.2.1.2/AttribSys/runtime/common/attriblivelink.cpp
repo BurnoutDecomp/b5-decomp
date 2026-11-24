@@ -405,7 +405,7 @@ namespace Attrib
             return;
 
         // ARTIST 0x8280DAF4 loads the original assertion location.
-        CGS_ASSERT(mOriginalImage != NULL, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mOriginalImage != NULL, CGS_ASSERT_MESSAGE_AT(
             "RevertReplace with no original image.",
             "..\\..\\..\\SDKs\\Packages\\AttribSys\\1.2.1.2\\AttribSys/runtime/common/attriblivelink.cpp", 1088));
         XMemCpy(lpData, mOriginalImage, mTypeSize);

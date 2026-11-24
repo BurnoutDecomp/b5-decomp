@@ -13,9 +13,9 @@
 // lookup, then hull-array read) are preserved as separate dereferences, matching the asm.
 // The X360 CalcTransformAtParameter (the unnamed sub_82219030, asserting at
 // BrnTrafficSection.h:675) is the LaneRung* overload -- it computes position + direction + up.
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorWorldMap.cpp"
 #include "GameSource/Director/Utils/BrnDirectorWorldMap.h"
-
+#define CGS_ARTIST_FILE_BRNTRAFFICHULL "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\traffic\\BrnTrafficHull.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"    // CgsDev::Log (diagnostics)
@@ -270,7 +270,7 @@ namespace BrnDirector
             return true;
 
         default:
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt("unhandled case", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorWorldMap.cpp", 190));
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unhandled case", CGS_ARTIST_FILE, 190));
             return false;
         }
     }
@@ -415,7 +415,7 @@ namespace BrnDirector
     const BrnTraffic::TrafficData* WorldMap::GetTrafficData() const
     {
         CGS_ASSERT(meLoadingState == E_LOADING_STATE_LOADED,
-                   CgsDev::Assert::MessageAt("meLoadingState == E_LOADING_STATE_LOADED", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorWorldMap.h", 90));
+                   CGS_ASSERT_MESSAGE_AT("meLoadingState == E_LOADING_STATE_LOADED", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorWorldMap.h", 90));
         return mpTrafficData.GetMemoryResource();
     }
 
@@ -454,8 +454,8 @@ namespace BrnDirector
             if (luNeighbour == 0xFFFFu)
                 break;
 
-            CGS_ASSERT(lpHull->mpaNeighbourData != 0, CgsDev::Assert::MessageAt("mpaNeighbourData", "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\traffic\\BrnTrafficHull.h", 247));
-            CGS_ASSERT(luNeighbour < lpHull->muNumNeighbours, CgsDev::Assert::MessageAt("luIndex < muNumNeighbours", "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\traffic\\BrnTrafficHull.h", 248));
+            CGS_ASSERT(lpHull->mpaNeighbourData != 0, CGS_ASSERT_MESSAGE_AT("mpaNeighbourData", CGS_ARTIST_FILE_BRNTRAFFICHULL, 247));
+            CGS_ASSERT(luNeighbour < lpHull->muNumNeighbours, CGS_ASSERT_MESSAGE_AT("luIndex < muNumNeighbours", CGS_ARTIST_FILE_BRNTRAFFICHULL, 248));
             const BrnTraffic::Neighbour* lpNeighbour = &lpHull->mpaNeighbourData[luNeighbour];
 
             // Cross into the neighbour section (GetSection asserts luIndex < muNumSections).
@@ -466,7 +466,7 @@ namespace BrnDirector
             *lpu8Rung = static_cast<u8>(*lpu8Rung - lpNeighbour->muOurStartRung);
             *lpu8Rung = static_cast<u8>(lpNeighbour->muTheirStartRung + *lpu8Rung);
             CGS_ASSERT(*lpu8Rung <= lpSection->muNumRungs,
-                       CgsDev::Assert::MessageAt("*lpu8Rung <= lpSection->muNumRungs", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorWorldMap.cpp", 500));
+                       CGS_ASSERT_MESSAGE_AT("*lpu8Rung <= lpSection->muNumRungs", CGS_ARTIST_FILE, 500));
 
             // Parameter, likewise (two stfs).
             *lpfParameterOnSection = *lpfParameterOnSection
@@ -474,7 +474,7 @@ namespace BrnDirector
             *lpfParameterOnSection = static_cast<f32>(lpNeighbour->muTheirStartRung)
                                    + *lpfParameterOnSection;
             CGS_ASSERT(*lpfParameterOnSection <= static_cast<f32>(lpSection->muNumRungs),
-                       CgsDev::Assert::MessageAt("*lpfParameterOnSection <= (float32_t)lpSection->muNumRungs", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorWorldMap.cpp", 504));
+                       CGS_ASSERT_MESSAGE_AT("*lpfParameterOnSection <= (float32_t)lpSection->muNumRungs", CGS_ARTIST_FILE, 504));
         }
     }
 
@@ -486,8 +486,8 @@ namespace BrnDirector
                                            Vector3* lpExtentsOut,
                                            Matrix44Affine* lpTransformOut) const
     {
-        CGS_ASSERT(lpExtentsOut  != 0, CgsDev::Assert::MessageAt("lpExtentsOut != NULL", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorWorldMap.cpp", 451));
-        CGS_ASSERT(lpTransformOut != 0, CgsDev::Assert::MessageAt("lpTransformOut != NULL", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorWorldMap.cpp", 452));
+        CGS_ASSERT(lpExtentsOut  != 0, CGS_ASSERT_MESSAGE_AT("lpExtentsOut != NULL", CGS_ARTIST_FILE, 451));
+        CGS_ASSERT(lpTransformOut != 0, CGS_ASSERT_MESSAGE_AT("lpTransformOut != NULL", CGS_ARTIST_FILE, 452));
 
         const s32 liGenericRegionCount =
             mpTriggerData.operator->()->GetGenericRegionCount();
@@ -523,7 +523,7 @@ namespace BrnDirector
     bool WorldMap::GetSafePositionNearest(Vector3 lPosition, Vector3& lOut) const
     {
         CGS_ASSERT(meLoadingState == E_LOADING_STATE_LOADED,
-                   CgsDev::Assert::MessageAt("meLoadingState == E_LOADING_STATE_LOADED", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorWorldMap.cpp", 205));
+                   CGS_ASSERT_MESSAGE_AT("meLoadingState == E_LOADING_STATE_LOADED", CGS_ARTIST_FILE, 205));
 
         lOut = lPosition;   // stvx128 v127 -> lOut (initial store, overwritten below)
 
@@ -601,7 +601,7 @@ namespace BrnDirector
                                                                Vector3& lOut) const
     {
         CGS_ASSERT(meLoadingState == E_LOADING_STATE_LOADED,
-                   CgsDev::Assert::MessageAt("meLoadingState == E_LOADING_STATE_LOADED", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorWorldMap.cpp", 278));
+                   CGS_ASSERT_MESSAGE_AT("meLoadingState == E_LOADING_STATE_LOADED", CGS_ARTIST_FILE, 278));
 
         lOut = lPosition;   // stvx128 v126 -> lOut (initial store)
 
@@ -676,3 +676,6 @@ namespace BrnDirector
         return lNearest.mbValid;
     }
 }
+
+#undef CGS_ARTIST_FILE
+#undef CGS_ARTIST_FILE_BRNTRAFFICHULL

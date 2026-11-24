@@ -22,7 +22,7 @@ namespace CgsNetwork
         HostMigrationDebugComponent* lpHostMigrationDebugComponent =
             static_cast<HostMigrationDebugComponent*>(lpData);
         CGS_ASSERT(lpHostMigrationDebugComponent != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpHostMigrationDebugComponent",
                 "..\\..\\..\\GameShared\\GameClasses\\Network/Debug Components/CgsNetworkHostMigrationDebugComponent.cpp", 107 /* ARTIST 0x8287F3BC */));
 
@@ -55,15 +55,15 @@ namespace CgsNetwork
     {
         HostMigrationDebugComponent* lpDebugComponent =
             static_cast<HostMigrationDebugComponent*>(lpData);
-        CGS_ASSERT(lpDebugComponent != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpDebugComponent != 0, CGS_ASSERT_MESSAGE_AT(
             "lpDebugComponent",
             __FILE__, 129 /* ARTIST 0x8287F43C */));
 
         lpDebugComponent->mLocalPlayerID = -1;
-        CGS_ASSERT(lpDebugComponent->mpHostMigrationManager != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpDebugComponent->mpHostMigrationManager != 0, CGS_ASSERT_MESSAGE_AT(
             "lpDebugComponent->mpHostMigrationManager",
             __FILE__, 134 /* ARTIST 0x8287F46C */));
-        CGS_ASSERT(lpDebugComponent->mpHostMigrationManager->mpPlayerManager != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpDebugComponent->mpHostMigrationManager->mpPlayerManager != 0, CGS_ASSERT_MESSAGE_AT(
             "lpDebugComponent->mpHostMigrationManager->mpPlayerManager",
             __FILE__, 135 /* ARTIST 0x8287F498 */));
 

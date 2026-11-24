@@ -207,7 +207,7 @@ namespace BrnGui
     {
         // cpp:119 -- the X360 streams this message through StrStream; the call site passes
         // a plain string, so CGS_ASSERT forwards it directly.
-        CGS_ASSERT(lpFsm != 0, CgsDev::Assert::StreamMessageAt("Invalid ScriptedFsm ptr", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCarSelectVehicle.cpp", 119));
+        CGS_ASSERT(lpFsm != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid ScriptedFsm ptr", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCarSelectVehicle.cpp", 119));
 
         CarSelectMain::Construct(liId, lpFsm);
 

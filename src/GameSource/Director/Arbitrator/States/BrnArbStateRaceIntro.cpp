@@ -1,5 +1,5 @@
 #include "GameSource/Director/Arbitrator/States/BrnArbStateRaceIntro.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateRaceIntro.cpp"
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT (intro asserts)
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
@@ -150,7 +150,7 @@ namespace BrnDirector
                 }
 
                 CGS_ASSERT(mpRaceStartShotGroup->Num_ShotList() > 0,
-                           CgsDev::Assert::MessageAt("mpRaceStartShotGroup->Num_ShotList()>0", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateRaceIntro.cpp", 84));
+                           CGS_ASSERT_MESSAGE_AT("mpRaceStartShotGroup->Num_ShotList()>0", CGS_ARTIST_FILE, 84));
 
                 // ---- allocate + configure the ICE-anim behaviour --------------------------
                 lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourIceAnim>(
@@ -277,7 +277,7 @@ namespace BrnDirector
             if (mRaceIntroBehaviourHandle.GetBehaviour()->HasFinishedOrFailed())
             {
                 const bool lbReleased = mRaceIntroBehaviourHandle.Release();
-                CGS_ASSERT(lbReleased, CgsDev::Assert::MessageAt("mRaceIntroBehaviourHandle.Release()", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateRaceIntro.cpp", 192));
+                CGS_ASSERT(lbReleased, CGS_ASSERT_MESSAGE_AT("mRaceIntroBehaviourHandle.Release()", CGS_ARTIST_FILE, 192));
 
                 ArbUtils::ChangeToState<EState>(
                     this, lrSharedInfo, ArbitratorStateContainer::E_STATE_ROAMING,
@@ -298,7 +298,7 @@ namespace BrnDirector
         }
 
         default:
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt("unhandled state", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateRaceIntro.cpp", 213));
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unhandled state", CGS_ARTIST_FILE, 213));
             break;
         }
 
@@ -330,3 +330,5 @@ namespace BrnDirector
         return true;
     }
 }
+
+#undef CGS_ARTIST_FILE

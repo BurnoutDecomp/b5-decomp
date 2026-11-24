@@ -263,7 +263,7 @@ void MomentPlayerStunt::Update(f32 /*lfTimeStep*/, void* lrBehaviourController,
         break;
 
     default:
-        CGS_ASSERT(false, CgsDev::Assert::MessageAt("unhandled case in switch", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentPlayerStunt.cpp", 275));   //  (non-gating)
+        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unhandled case in switch", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentPlayerStunt.cpp", 275));   //  (non-gating)
         return;
     }
 

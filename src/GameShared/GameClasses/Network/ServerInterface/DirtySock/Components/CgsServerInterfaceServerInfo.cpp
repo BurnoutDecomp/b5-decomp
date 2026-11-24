@@ -106,7 +106,7 @@ void ServerInterfaceServerInfo::Resume()
 
 void ServerInterfaceServerInfo::FindUrl(const char* lpcUrlKey, char* lpcOut, s32 liOutLen)
 {
-    CGS_ASSERT(mpServerInterface->GetLobbyAPIRef() != 0, CgsDev::Assert::MessageAt(
+    CGS_ASSERT(mpServerInterface->GetLobbyAPIRef() != 0, CGS_ASSERT_MESSAGE_AT(
         "NULL != mpServerInterface->GetLobbyAPIRef()",
         "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceServerInfo.cpp", 363 /* ARTIST 0x8287A5EC */));
 
@@ -158,7 +158,7 @@ void ServerInterfaceServerInfo::GetNewsUrl(char* lpcOut, s32 liOutLen)
 
 void ServerInterfaceServerInfo::GetTelemetryAuthString(char* lpcOut, s32 liOutLen)
 {
-    CGS_ASSERT(mpServerInterface->GetLobbyAPIRef() != 0, CgsDev::Assert::MessageAt(
+    CGS_ASSERT(mpServerInterface->GetLobbyAPIRef() != 0, CGS_ASSERT_MESSAGE_AT(
         "NULL != mpServerInterface->GetLobbyAPIRef()",
         __FILE__, 524 /* ARTIST 0x8287A710 */));
 
@@ -172,7 +172,7 @@ void ServerInterfaceServerInfo::GetTelemetryAuthString(char* lpcOut, s32 liOutLe
 void ServerInterfaceServerInfo::GetStringFromClientConfig(const char* lpcKey,
                                                           char* lpcOut, s32 liOutLen)
 {
-    CGS_ASSERT(mpServerInterface->GetLobbyAPIRef() != 0, CgsDev::Assert::MessageAt(
+    CGS_ASSERT(mpServerInterface->GetLobbyAPIRef() != 0, CGS_ASSERT_MESSAGE_AT(
         "NULL != mpServerInterface->GetLobbyAPIRef()",
         __FILE__, 572 /* ARTIST 0x8287A83C */));
 

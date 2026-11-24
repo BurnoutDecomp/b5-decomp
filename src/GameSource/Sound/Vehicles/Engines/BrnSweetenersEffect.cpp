@@ -253,7 +253,7 @@ bool SweetenersEffect::SelectSampleIndex(eSweetenerBankElement aeElement,
                                          s32& ariSampleIndex)
 {
     CGS_ASSERT(aeElement < E_SWEETENER_BANK_ELEMENT_COUNT,
-        CgsDev::Assert::MessageAt("E_SWEETENER_BANK_ELEMENT_COUNT > leElement",
+        CGS_ASSERT_MESSAGE_AT("E_SWEETENER_BANK_ELEMENT_COUNT > leElement",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Vehicles/Engines/BrnSweetenersEffect.cpp", 798));
 
     const SweetenerInfo& lrInfo = maSweetenerInfo[aeElement];

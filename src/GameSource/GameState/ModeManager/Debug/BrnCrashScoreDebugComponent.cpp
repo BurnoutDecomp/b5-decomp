@@ -1,5 +1,5 @@
 #include "GameSource/GameState/ModeManager/Debug/BrnCrashScoreDebugComponent.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Debug/BrnCrashScoreDebugComponent.cpp"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"  // CgsDev::Debug2DImmediateRender, RGBA, Vector2
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                                       // CgsCore::SPrintf
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                                            // CGS_ASSERT
@@ -39,8 +39,8 @@ namespace BrnGameState
     void CrashScoreDebugComponent::Update()
     {
         CGS_ASSERT(mpCrashScoring != 0,
-            CgsDev::Assert::MessageAt(
-                "mpCrashScoring != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Debug/BrnCrashScoreDebugComponent.cpp", 100 /* ARTIST 0x82312188 */));
+            CGS_ASSERT_MESSAGE_AT(
+                "mpCrashScoring != NULL", CGS_ARTIST_FILE, 100 /* ARTIST 0x82312188 */));
     }
 
     // @ 0x823121B0
@@ -100,8 +100,10 @@ namespace BrnGameState
     void CrashScoreDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpRender)
     {
         CGS_ASSERT(mpCrashScoring != 0,
-            CgsDev::Assert::MessageAt("mpCrashScoring != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Debug/BrnCrashScoreDebugComponent.cpp", 82 /* ARTIST 0x8231EBC0 */));
+            CGS_ASSERT_MESSAGE_AT("mpCrashScoring != NULL", CGS_ARTIST_FILE, 82 /* ARTIST 0x8231EBC0 */));
         if (mbShowScoring)
             DisplayScores(lpRender);
     }
 }
+
+#undef CGS_ARTIST_FILE

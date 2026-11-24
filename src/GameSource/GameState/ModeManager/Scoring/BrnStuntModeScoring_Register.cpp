@@ -1,5 +1,5 @@
 #include "GameSource/GameState/ModeManager/Scoring/BrnStuntModeScoring.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp"
 #include "GameSource/GameState/BrnGameActions.h"        // WorldStuntAction / PowerParkResultAction (the action types these bodies deref)
 #include "GameSource/GameState/BrnGameStateTypes.h"      // EStuntType, StuntElementType
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"       // CGS_ASSERT
@@ -173,14 +173,14 @@ void StuntModeScoring::DealWithStunt(const GameStateModuleIO::WorldStuntAction* 
                 break;
 
             default:  // >= E_STUNT_ELEMENT_TYPE_COUNT (3)
-                CGS_ASSERT(false, CgsDev::Assert::MessageAt("Unknown world stunt type.", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 1247));
+                CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Unknown world stunt type.", CGS_ARTIST_FILE, 1247));
                 break;
         }
 
         if (lbScored)
         {
             CGS_ASSERT(mRecentStuntElementSet.GetLength() < mRecentStuntElementSet.GetCapacity(),
-                       CgsDev::Assert::MessageAt("mRecentStuntElementSet.GetLength() < mRecentStuntElementSet.GetCapacity()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 1254));
+                       CGS_ASSERT_MESSAGE_AT("mRecentStuntElementSet.GetLength() < mRecentStuntElementSet.GetCapacity()", CGS_ARTIST_FILE, 1254));
             mRecentStuntElementSet.Insert(lElementId);
         }
     }
@@ -306,7 +306,7 @@ void StuntModeScoring::UpdateStuntRepetition(f32 lfDelta)
 void StuntModeScoring::UpdateStuntRating(EStuntType leStuntType, f32 lfA, f32 lfB, f32 lfC)
 {
     CGS_ASSERT(mbStuntInProgress && mbComboInProgress,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "mbStuntInProgress && mbComboInProgress",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
             "../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 1010 /* ARTIST 0x8231311C */));
@@ -421,3 +421,5 @@ void StuntModeScoring::DealWithInProgressStunt(const GameStateModuleIO::OnStuntE
 }
 
 }   // namespace BrnGameState
+
+#undef CGS_ARTIST_FILE

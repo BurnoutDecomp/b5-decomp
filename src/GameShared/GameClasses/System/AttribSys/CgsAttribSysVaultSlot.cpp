@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysVaultSlot.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\attribsys\\CgsAttribSysVaultSlot.h"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                  // CGS_ASSERT
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h" // CgsResource::ResourceHandle::GetResourceId
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysModuleIO.h" // AttribSysIO::RegisterVaultRequest
@@ -79,7 +79,7 @@ s32 VaultSlot::RegisterVault(const AttribSysIO::RegisterVaultRequest* lpRegister
 // @ 0x82802288 -- release one reference; the slot must currently be loaded.
 void VaultSlot::DecreaseRefCount()
 {
-    CGS_ASSERT(miRefCount > 0, CgsDev::Assert::StreamMessageAt("Trying to decrease the ref count on a vault that isn't loaded", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\attribsys\\CgsAttribSysVaultSlot.h", 208));
+    CGS_ASSERT(miRefCount > 0, CGS_ASSERT_STREAM_MESSAGE_AT("Trying to decrease the ref count on a vault that isn't loaded", CGS_ARTIST_FILE, 208));
 
     --miRefCount;
 }
@@ -88,10 +88,12 @@ void VaultSlot::DecreaseRefCount()
 void VaultSlot::IncreaseRefCount()
 {
     CGS_ASSERT(miRefCount >= 0,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "miRefCount >= 0",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\attribsys\\CgsAttribSysVaultSlot.h", 222 /* ARTIST 0x82802358 */));
+            CGS_ARTIST_FILE, 222 /* ARTIST 0x82802358 */));
     ++miRefCount;
 }
 
 } // namespace CgsAttribSys
+
+#undef CGS_ARTIST_FILE

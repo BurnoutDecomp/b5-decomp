@@ -181,7 +181,7 @@ namespace BrnNetwork
 
             // Consume the slot: clear VALID, then assert it is now invalid.
             mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
-            CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0, CgsDev::Assert::MessageAt(
+            CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0, CGS_ASSERT_MESSAGE_AT(
                 "!CgsNetwork::ReliableMessage::IsMessageValid()",
                 "..\\..\\..\\GameSource\\Network/Messages/BrnRoadRulesMessage.cpp", 115 /* ARTIST 0x8257EA84 */));
             return true;

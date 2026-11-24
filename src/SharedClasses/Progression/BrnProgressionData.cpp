@@ -43,7 +43,7 @@ const EventJunction* ProgressionData::GetEventJunction(u32 luIndex) const
 TrophyUnlockData* ProgressionData::GetTrophyUnlock(u32 luIndex) const
 {
     CGS_ASSERT(luIndex < muTrophyUnlockCount,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "luIndex < muTrophyUnlockCount",
             "..\\..\\..\\SharedClasses\\Progression/BrnProgressionData.h", 302 /* ARTIST 0x82356A20 */));
     return &GetTrophyUnlocks()[luIndex];

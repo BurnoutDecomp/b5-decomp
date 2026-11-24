@@ -2,7 +2,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceLoadBase.h" // CgsResource::GetLoadBase64 (rw::Resource load base)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CgsDev::Assert Begin/Fire/End + KI_MESSAGEBUFFERSIZE
 #include "GameShared/GameClasses/Development/CgsStrStream.h"             // CgsDev::StrStream (runtime-formatted assert message)
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Memory/MemoryMap/CgsMemoryMap.h"
 // Reconstructed from the DecFIGS DWARF (CgsMemoryMap.h/.cpp) + the X360 pseudocode
 //   CgsMemory::MemoryMap::FixUp @ 0x8286C8B8
 //
@@ -34,8 +34,8 @@ void MemoryMap::FixUp(const rw::Resource& lrResource)
                    << ", current version is " << KI_MEMORY_MAP_VERSION << "\n";
         CgsDev::Assert::FireAssert(
             lacMessageBuffer,
-            "..\\..\\..\\GameShared\\GameClasses\\Memory\\MemoryMap\\CgsMemoryMap.cpp",
-            43);
+            CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Memory\\MemoryMap\\CgsMemoryMap.cpp",
+            43));
         CgsDev::Assert::EndAssert();
     }
 
@@ -74,8 +74,8 @@ const MemoryMapBank* MemoryMap::GetBank(s32 liIndex) const
         lStrStream << "Bank index " << liIndex << " is out of range\n";
         CgsDev::Assert::FireAssert(
             CgsDev::Assert::gpcMessageBuffer,
-            "..\\..\\..\\GameShared\\GameClasses\\Memory/MemoryMap/CgsMemoryMap.h",
-            175); // ARTIST 0x82663D40
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+            175)); // ARTIST 0x82663D40
         CgsDev::Assert::EndAssert();
     }
 
@@ -95,8 +95,8 @@ const MemoryMapPool* MemoryMap::GetPool(s32 liIndex) const
         lStrStream << "Pool index " << liIndex << " is out of range\n";
         CgsDev::Assert::FireAssert(
             CgsDev::Assert::gpcMessageBuffer,
-            "..\\..\\..\\GameShared\\GameClasses\\Memory/MemoryMap/CgsMemoryMap.h",
-            188); // ARTIST 0x82663E14
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+            188)); // ARTIST 0x82663E14
         CgsDev::Assert::EndAssert();
     }
 
@@ -125,3 +125,5 @@ const MemoryMapRWLinearAllocator* MemoryMap::GetRWLinearAllocator(s32 liIndex) c
 const MemoryMapRWGeneralAllocator* MemoryMap::GetRWGeneralAllocator(s32 liIndex) const { return mpRWGeneralAllocators + liIndex; }
 
 }
+
+#undef CGS_ARTIST_FILE

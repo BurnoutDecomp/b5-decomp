@@ -62,7 +62,7 @@ namespace BrnParticle
         // 128-byte-aligned block holding the whole bucket budget.
         mpData = static_cast<u8*>(lpHeapMalloc->Malloc(static_cast<s32>(luTotalSize), 128));
         CGS_ASSERT(mpData != NULL,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpData != NULL",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
                 "../Effects/Particles/Native/FXBuckets.cpp", 76 /* ARTIST 0x8227B1B8 */));

@@ -103,7 +103,7 @@ namespace BrnNetwork
         mRequestTimer.SetFloatVal(0.0f);
         miRequestedPlayerID = KI_INVALID_PLAYER_ID;
 
-        CGS_ASSERT(lpTextureCompressor, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpTextureCompressor, CGS_ASSERT_MESSAGE_AT(
             "lpTextureCompressor",
             __FILE__, 87 /* ARTIST 0x8258B4EC */));
         mpTextureCompressor = lpTextureCompressor;
@@ -466,7 +466,7 @@ namespace BrnNetwork
         if (XCamCreateStreamEngine(&lParams, &mpStreamEngine) != ERROR_SUCCESS)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("Unable to create XVID Streaming Engine!\n", KAC_CAMERA_FILE, 137);
+            CgsDev::Assert::FireAssert("Unable to create XVID Streaming Engine!\n", CGS_ASSERT_LOCATION(KAC_CAMERA_FILE, 137));
             CgsDev::Assert::EndAssert();
         }
         OpenSocket();
@@ -492,7 +492,7 @@ namespace BrnNetwork
         if (mVDPSocket == KI_INVALID_SOCKET)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("socket failed\n", KAC_CAMERA_FILE, 1021);
+            CgsDev::Assert::FireAssert("socket failed\n", CGS_ASSERT_LOCATION(KAC_CAMERA_FILE, 1021));
             CgsDev::Assert::EndAssert();
         }
         if (bind(static_cast<SOCKET>(mVDPSocket), reinterpret_cast<const sockaddr*>(&lAddress),
@@ -502,7 +502,7 @@ namespace BrnNetwork
             CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
             lMessage << "sendsock bind failed, error ";
             lMessage << WSAGetLastError() << "\n";
-            CgsDev::Assert::FireAssert(lMessage.GetBuffer(), KAC_CAMERA_FILE, 1028);
+            CgsDev::Assert::FireAssert(lMessage.GetBuffer(), CGS_ASSERT_LOCATION(KAC_CAMERA_FILE, 1028));
             CgsDev::Assert::EndAssert();
         }
         u_long luNonBlocking = 1;
@@ -515,7 +515,7 @@ namespace BrnNetwork
         if (mVDPSocket == KI_INVALID_SOCKET)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("mVDPSocket != INVALID_SOCKET", KAC_CAMERA_FILE, 1049);
+            CgsDev::Assert::FireAssert("mVDPSocket != INVALID_SOCKET", CGS_ASSERT_LOCATION(KAC_CAMERA_FILE, 1049));
             CgsDev::Assert::EndAssert();
         }
         if (closesocket(static_cast<SOCKET>(mVDPSocket)) != 0)
@@ -524,7 +524,7 @@ namespace BrnNetwork
             CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
             lMessage << "close socket bind failed, error ";
             lMessage << WSAGetLastError() << "\n";
-            CgsDev::Assert::FireAssert(lMessage.GetBuffer(), KAC_CAMERA_FILE, 1051);
+            CgsDev::Assert::FireAssert(lMessage.GetBuffer(), CGS_ASSERT_LOCATION(KAC_CAMERA_FILE, 1051));
             CgsDev::Assert::EndAssert();
         }
         mVDPSocket = KI_INVALID_SOCKET;

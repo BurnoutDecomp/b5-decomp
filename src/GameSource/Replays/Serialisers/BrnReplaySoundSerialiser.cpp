@@ -4,10 +4,10 @@
 // BaseSerialiser stream primitives. Every branch, offset and constant below is taken from the
 // X360 ASM; the static-layout sub-records are reached by their X360-attested byte offsets (the
 // layout's field TYPES are not attested). See BrnReplaySoundSerialiser.h for the address map.
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplaySoundSerialiser.h"
 #include "GameSource/Replays/Serialisers/BrnReplaySoundSerialiser.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
-
+#define CGS_ARTIST_BRNREPLAYSOUNDSERIALISER_FILE "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplaySoundSerialiser.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"
 #include "GameSource/Replays/BrnReplayQuantisedQuatPos.h"
@@ -31,7 +31,7 @@ namespace BrnReplays
     // SoundSerialiser static layout (asserting the buffer is large enough).
     SoundSerialiserStaticLayout* SoundSerialiser::GetStaticLayout()
     {
-        CGS_ASSERT(GetStaticBufferSize() >= SoundSerialiserStaticLayout::KI_MIN_STATIC_BUFFER_SIZE, CgsDev::Assert::StreamMessageAt("Static buffer size is too small\n", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplaySoundSerialiser.h", 294));
+        CGS_ASSERT(GetStaticBufferSize() >= SoundSerialiserStaticLayout::KI_MIN_STATIC_BUFFER_SIZE, CGS_ASSERT_STREAM_MESSAGE_AT("Static buffer size is too small\n", CGS_ARTIST_FILE, 294));
 
         return reinterpret_cast<SoundSerialiserStaticLayout*>(GetStaticBuffer());
     }
@@ -41,13 +41,13 @@ namespace BrnReplays
     SoundSerialiserStaticLayout* SoundSerialiser::AddCollision(const void* lpCollision)
     {
         CGS_ASSERT(GetNumCollisions() >= 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "GetNumCollisions() >= 0",
-                "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplaySoundSerialiser.h", 375 /* ARTIST 0x82695AFC */));
+                CGS_ARTIST_FILE, 375 /* ARTIST 0x82695AFC */));
         CGS_ASSERT(GetNumCollisions() < SoundSerialiserStaticLayout::KI_MAX_COLLISIONS,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "GetNumCollisions() < SoundSerialiserStaticLayout::KI_MAX_COLLISIONS",
-                "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplaySoundSerialiser.h", 376 /* ARTIST 0x82695B2C */));
+                CGS_ARTIST_FILE, 376 /* ARTIST 0x82695B2C */));
 
         const s32 liIndex = GetStaticLayout()->GetNumCollisions();
 
@@ -65,9 +65,9 @@ namespace BrnReplays
     // the parallel scrape-vector array (base +0x7D0, stride 16), then bump the count.
     SoundSerialiserStaticLayout* SoundSerialiser::AddScrape(const void* lpScrape, SoundVec128 lvPosition)
     {
-        CGS_ASSERT(GetNumScrapes() >= 0, CgsDev::Assert::MessageAt("GetNumScrapes() >= 0", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplaySoundSerialiser.h", 317));
+        CGS_ASSERT(GetNumScrapes() >= 0, CGS_ASSERT_MESSAGE_AT("GetNumScrapes() >= 0", CGS_ARTIST_FILE, 317));
         CGS_ASSERT(GetNumScrapes() < SoundSerialiserStaticLayout::KI_MAX_SCRAPES,
-                   CgsDev::Assert::MessageAt("GetNumScrapes() < SoundSerialiserStaticLayout::KI_MAX_SCRAPES", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplaySoundSerialiser.h", 318));
+                   CGS_ASSERT_MESSAGE_AT("GetNumScrapes() < SoundSerialiserStaticLayout::KI_MAX_SCRAPES", CGS_ARTIST_FILE, 318));
 
         const s32 liIndex = GetStaticLayout()->GetNumScrapes();
 
@@ -91,9 +91,9 @@ namespace BrnReplays
     // 0.0, then bump the count.
     SoundSerialiserStaticLayout* SoundSerialiser::AddTrafficEntity(const void* lpEntity)
     {
-        CGS_ASSERT(GetNumTrafficEntities() >= 0, CgsDev::Assert::MessageAt("GetNumTrafficEntities() >= 0", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplaySoundSerialiser.h", 411));
+        CGS_ASSERT(GetNumTrafficEntities() >= 0, CGS_ASSERT_MESSAGE_AT("GetNumTrafficEntities() >= 0", CGS_ARTIST_FILE, 411));
         CGS_ASSERT(static_cast<u32>(GetNumTrafficEntities()) < KU_MAX_TRAFFIC_ENTITIES,
-                   CgsDev::Assert::MessageAt("GetNumTrafficEntities() < SoundSerialiserFrame::KI_MAX_TRAFFIC_ENTITIES", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplaySoundSerialiser.h", 412));
+                   CGS_ASSERT_MESSAGE_AT("GetNumTrafficEntities() < SoundSerialiserFrame::KI_MAX_TRAFFIC_ENTITIES", CGS_ARTIST_FILE, 412));
 
         const s32 liIndex = GetStaticLayout()->GetNumTrafficEntities();
 
@@ -283,7 +283,7 @@ namespace BrnReplays
 
         // *(lpPrevious+0x228): the previous FRAME's traffic-entity count (frame base).
         CGS_ASSERT(*reinterpret_cast<const u32*>(lpPrevious + 0x228) <= KU_MAX_TRAFFIC_ENTITIES,
-                   CgsDev::Assert::MessageAt("SoundSerialiser: Invalid number of traffic entities last key frame when decompressing replay data.", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplaySoundSerialiser.cpp", 425));
+                   CGS_ASSERT_MESSAGE_AT("SoundSerialiser: Invalid number of traffic entities last key frame when decompressing replay data.", CGS_ARTIST_BRNREPLAYSOUNDSERIALISER_FILE, 425));
 
         u8 luFlags = 0;
         BaseSerialiser::ReadByte(&luFlags);
@@ -348,7 +348,7 @@ namespace BrnReplays
         // lwz 0x228(a4) -> the key frame's recorded traffic-entity count.
         const s32 liKeyCount = *reinterpret_cast<const s32*>(lpKeyBase + 0x228);
         CGS_ASSERT(static_cast<u32>(liKeyCount) <= 6u,
-                   CgsDev::Assert::MessageAt("SoundSerialiser: Invalid number of traffic entities last key frame when compressing replay data.", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplaySoundSerialiser.cpp", 384));
+                   CGS_ASSERT_MESSAGE_AT("SoundSerialiser: Invalid number of traffic entities last key frame when compressing replay data.", CGS_ARTIST_BRNREPLAYSOUNDSERIALISER_FILE, 384));
 
         // Changed vs. key frame: this record did not exist in the key frame (liEntity >= count),
         // or its identity word (+0x40) differs, or its 2-byte field (+0x48) differs.
@@ -392,7 +392,7 @@ namespace BrnReplays
     s32 SoundSerialiser::Read(SoundSerialiserStaticLayout* lpStatic)
     {
         Lock();
-        CGS_ASSERT(lpStatic != 0, CgsDev::Assert::MessageAt("lpStatic", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplaySoundSerialiser.cpp", 71));
+        CGS_ASSERT(lpStatic != 0, CGS_ASSERT_MESSAGE_AT("lpStatic", CGS_ARTIST_BRNREPLAYSOUNDSERIALISER_FILE, 71));
 
         u8* lpBase = reinterpret_cast<u8*>(lpStatic);
 
@@ -565,7 +565,7 @@ namespace BrnReplays
                 // --- collisions ---
                 s32 liCount = *reinterpret_cast<const s32*>(lpBase + 0x700);
                 CGS_ASSERT(static_cast<u32>(liCount) <= static_cast<u32>(SoundSerialiserStaticLayout::KI_MAX_COLLISIONS),
-                           CgsDev::Assert::MessageAt("SoundSerialiser: Invalid number of collisions when compressing replay data.", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplaySoundSerialiser.cpp", 238));
+                           CGS_ASSERT_MESSAGE_AT("SoundSerialiser: Invalid number of collisions when compressing replay data.", CGS_ARTIST_BRNREPLAYSOUNDSERIALISER_FILE, 238));
                 BaseSerialiser::Write(&liCount, 4);
                 {
                     u8* lpRec = lpBase + 0x1C;
@@ -588,7 +588,7 @@ namespace BrnReplays
                 // --- scrapes ---
                 liCount = *reinterpret_cast<const s32*>(lpBase + 0x810);
                 CGS_ASSERT(static_cast<u32>(liCount) <= static_cast<u32>(SoundSerialiserStaticLayout::KI_MAX_SCRAPES),
-                           CgsDev::Assert::MessageAt("SoundSerialiser: Invalid number of scrapes when compressing replay data.", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplaySoundSerialiser.cpp", 261));
+                           CGS_ASSERT_MESSAGE_AT("SoundSerialiser: Invalid number of scrapes when compressing replay data.", CGS_ARTIST_BRNREPLAYSOUNDSERIALISER_FILE, 261));
                 BaseSerialiser::Write(&liCount, 4);
                 {
                     u8* lpPayload = lpBase + 0x7D0;
@@ -607,7 +607,7 @@ namespace BrnReplays
                 // --- traffic entities ---
                 liCount = *reinterpret_cast<const s32*>(lpBase + 0xC58);
                 CGS_ASSERT(static_cast<u32>(liCount) <= KU_MAX_TRAFFIC_ENTITIES,
-                           CgsDev::Assert::MessageAt("SoundSerialiser: Invalid number of traffic entities when compressing replay data.", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplaySoundSerialiser.cpp", 279));
+                           CGS_ASSERT_MESSAGE_AT("SoundSerialiser: Invalid number of traffic entities when compressing replay data.", CGS_ARTIST_BRNREPLAYSOUNDSERIALISER_FILE, 279));
                 BaseSerialiser::Write(&liCount, 4);
 
                 if (mbIsKeyFrame)
@@ -660,3 +660,6 @@ namespace BrnReplays
         return Unlock() ? 1 : 0;
     }
 }
+
+#undef CGS_ARTIST_FILE
+#undef CGS_ARTIST_BRNREPLAYSOUNDSERIALISER_FILE

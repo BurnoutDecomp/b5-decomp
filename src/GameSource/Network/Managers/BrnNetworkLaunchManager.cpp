@@ -88,7 +88,7 @@ namespace BrnNetwork
 
         // Every sub-state must have a handler (X360 fires this assert once per slot).
         for (s32 liIndex = 0; liIndex < E_SUBSTATE_COUNT; ++liIndex)
-            CGS_ASSERT(maUpdateFunctions[liIndex] != 0, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(maUpdateFunctions[liIndex] != 0, CGS_ASSERT_MESSAGE_AT(
                 "No update function supplied for this substate",
                 __FILE__, 72 /* ARTIST 0x8257115C */));
 
@@ -127,7 +127,7 @@ namespace BrnNetwork
 
     void LaunchManager::Start()
     {
-        CGS_ASSERT(meSubState == E_SUBSTATE_NONE, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(meSubState == E_SUBSTATE_NONE, CGS_ASSERT_MESSAGE_AT(
             "Already managing pre-launch!",
             __FILE__, 580 /* ARTIST 0x82544244 */));
 
@@ -172,7 +172,7 @@ namespace BrnNetwork
     LaunchManager::EStatus LaunchManager::Update()
     {
         CGS_ASSERT(maUpdateFunctions[meSubState] != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "No update function supplied for the current substate",
                 __FILE__, 144 /* ARTIST 0x82543ED8 */));
 
@@ -208,7 +208,7 @@ namespace BrnNetwork
         if (leStatus < BrnServerInterface::E_STATUS_COUNT)   // E_STATUS_IDLE
             return true;
 
-        CGS_ASSERT(false, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
             "Invalid state returned by mpNetworkManager->GetServerInterface()->GetStatus() in LaunchManager::ServerInterfaceIdle",
             __FILE__, 662 /* ARTIST 0x825443BC */));
         return false;
@@ -373,7 +373,7 @@ namespace BrnNetwork
     {
         CgsNetwork::ServerInterfaceGames* lpGames =
             mpNetworkManager->GetServerInterface()->GetGameComponent();
-        CGS_ASSERT(lpGames != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpGames != 0, CGS_ASSERT_MESSAGE_AT(
             "lpGames",
             __FILE__, 364 /* ARTIST 0x82566740 */));
 
@@ -477,10 +477,10 @@ namespace BrnNetwork
                 return E_STATUS_LAUNCHING;
             }
 
-            CGS_ASSERT(mpNetworkManager != 0, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(mpNetworkManager != 0, CGS_ASSERT_MESSAGE_AT(
                 "mpNetworkManager",
                 __FILE__, 537 /* ARTIST 0x82558C68 */));
-            CGS_ASSERT(mpNetworkManager->GetTimerStatus() != 0, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(mpNetworkManager->GetTimerStatus() != 0, CGS_ASSERT_MESSAGE_AT(
                 "mpNetworkManager->GetTimerStatus()",
                 __FILE__, 538 /* ARTIST 0x82558C9C */));
 
@@ -498,9 +498,9 @@ namespace BrnNetwork
     LaunchManager::EStatus LaunchManager::UpdateWaiting()
     {
         CGS_ASSERT(mpNetworkManager != 0,
-            CgsDev::Assert::MessageAt("mpNetworkManager", __FILE__, 484 /* ARTIST 0x825440C4 */));
+            CGS_ASSERT_MESSAGE_AT("mpNetworkManager", __FILE__, 484 /* ARTIST 0x825440C4 */));
         CGS_ASSERT(mpNetworkManager->GetTimerStatus() != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpNetworkManager->GetTimerStatus()",
                 __FILE__, 485 /* ARTIST 0x825440F8 */));
 

@@ -40,7 +40,7 @@ namespace MapFile
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 "map file is not the correct version. make sure you have the latest tools / code",
-                "..\\..\\..\\GameShared\\GameClasses\\Development/MapFile/CgsMapFile.h", 144);
+                CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Development/MapFile/CgsMapFile.h", 144));
             CgsDev::Assert::EndAssert();
         }
         static_cast<StackUnpick*>(mpCallstack)->ComputeAdjustedStack(lpHeader[2]);
@@ -101,7 +101,7 @@ namespace MapFile
                         lStream << "String " << lpRecord->macName << " is too long. Buffer size = "
                                 << static_cast<u32>(KI_NAME_LENGTH) << ", string length = " << luLength << "\n";
                         CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                            "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 65);
+                            CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 65));
                         CgsDev::Assert::EndAssert();
                     }
                     // The original continues its complete NUL-terminated copy
@@ -127,7 +127,7 @@ namespace MapFile
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("liIndex >= 0",
-                "..\\..\\..\\GameShared\\GameClasses\\Development/MapFile/Reader/CgsMapFileReaderMinimalMemory.cpp", 135);
+                CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Development/MapFile/Reader/CgsMapFileReaderMinimalMemory.cpp", 135));
             CgsDev::Assert::EndAssert();
         }
         if (liIndex >= KI_MAX_STACK_RESULTS || maacStackNames[liIndex][0] == '\0')

@@ -66,10 +66,10 @@ namespace CgsNetwork
     void ReliableMessage::PrepareForSend(s32 leType, u16 lu16Frame)
     {
         CGS_ASSERT((mx8Flags & KX8_FLAGS_VALID) == 0,
-            CgsDev::Assert::MessageAt("!IsMessageValid()", __FILE__, 940 /* ARTIST 0x82882138 */));
+            CGS_ASSERT_MESSAGE_AT("!IsMessageValid()", __FILE__, 940 /* ARTIST 0x82882138 */));
         mx8Flags |= KX8_FLAGS_RELIABLE;
         CGS_ASSERT(lu16Frame != KU16_INVALID_FRAME,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lu16Frame != KU16_INVALID_FRAME", __FILE__, 594 /* ARTIST 0x8288216C */));
         SetType(leType);
         mu16Frame = lu16Frame;

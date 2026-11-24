@@ -35,7 +35,7 @@
 //   - the EA::Jobs::Job blocks in Construct (asm-sized placeholders)
 //   - (LoadFXBundle's PropCollisions stages 14 / 17 / 18 run now -- 2026-09-25, FX-CRASHVFX item 6b)
 // ============================================================================
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Effects/Particles/ParticleModule.cpp"
 #include "GameSource/Effects/Particles/ParticleModule.h"
 #include "GameSource/Effects/Particles/LionPerfMon.h"
 #include "GameSource/Effects/Particles/ParticleModuleIO.h"      // ParticleIO::PrepareOutputBuffer
@@ -113,7 +113,7 @@ namespace
         stream << "ParticleModule: Couldn't locate lion effect description " << name
                << "Does the Particles Bundle need rebuilding ?\r\n";
         CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Effects/Particles/ParticleModule.cpp", 1777);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 1777));
         CgsDev::Assert::EndAssert();
     }
 
@@ -123,7 +123,7 @@ namespace
         CgsDev::StrStream stream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
         stream << "ParticleModule: No free effect instances available to play effect: " << name << "\r\n";
         CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Effects/Particles/ParticleModule.cpp", 1821);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 1821));
         CgsDev::Assert::EndAssert();
     }
     const f32 KF_SLOWMO_LOWER               = 0.03333333507180214f;  // flt_8200DB9C (1/30)
@@ -1099,3 +1099,5 @@ void ParticleModule::ResetSparkFrameData(f32 lfTimeStamp)
 }
 
 }   // namespace BrnParticle
+
+#undef CGS_ARTIST_FILE

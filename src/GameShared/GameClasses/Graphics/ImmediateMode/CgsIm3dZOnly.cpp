@@ -192,7 +192,7 @@ template <typename V>
 void ImRenderer<V>::EndRendering()
 {
     CGS_ASSERT(mgpActiveRenderer == static_cast<ImRendererBase*>(this),
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "mgpActiveRenderer == this",
             "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/CgsImRenderer.h", 645 /* ARTIST 0x827EB128 */));
     mgpActiveRenderer = 0;

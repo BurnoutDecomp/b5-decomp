@@ -115,7 +115,7 @@ namespace CgsResource
     // ARTIST 828D7E50; native ScratchEntry widens its three pointers.
     ScratchEntry* ScratchPool::GetEntry(u32 luIndex)
     {
-        CGS_ASSERT(luIndex < muNumEntries, CgsDev::Assert::StreamMessageAt("Entry out of range\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceScratchPool.h", 254));
+        CGS_ASSERT(luIndex < muNumEntries, CGS_ASSERT_STREAM_MESSAGE_AT("Entry out of range\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceScratchPool.h", 254));
         return &mpEntries[luIndex];
     }
 

@@ -15,7 +15,7 @@
 //     BoostBurnout2_wP_06.cpp
 //     BoostBurnout2_wP_11.cpp
 //     BoostBurnout2_wP_16.cpp
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\""../World/EntityModules/RaceCarEntityModule/Boost/BrnBoostBurnout2.cpp"
 // the union of the BoostBurnout2_w*.cpp partfiles' #include lines, first occurrence wins, mount order (2026-09-15)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/Boost/BrnBoostBurnout2.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT (the X360 Begin/Fire/EndAssert triple)
@@ -178,7 +178,7 @@ BoostBurnout2::GetIsChainNotifyPending(u32* lpOutNumChained)
     // BrnBoostBurnout2.cpp:811 on the console (the assert's line immediate is
     // 0x32B); reported, then execution continues into the store below.
     CGS_ASSERT(lpOutNumChained != 0,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lpOutNumChained",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
             "../World/EntityModules/RaceCarEntityModule/Boost/BrnBoostBurnout2.cpp", 811 /* ARTIST 0x822A65CC */));
@@ -1666,7 +1666,7 @@ void
 BoostBurnout2::UpdateStuntBoost(const BrnGameState::GameStateModuleIO::CompletedStuntAction* lpCompletedStuntAction)
 {
     CGS_ASSERT(lpCompletedStuntAction != NULL,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lpCompletedStuntAction != NULL",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
             "../World/EntityModules/RaceCarEntityModule/Boost/BrnBoostBurnout2.cpp", 772 /* ARTIST 0x822A64A4 */));
@@ -1693,3 +1693,5 @@ BoostBurnout2::UpdateStuntBoost(const BrnGameState::GameStateModuleIO::Completed
 }
 
 }   // namespace BrnWorld
+
+#undef CGS_ARTIST_FILE

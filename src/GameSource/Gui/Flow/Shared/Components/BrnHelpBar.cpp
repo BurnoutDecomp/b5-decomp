@@ -10,7 +10,7 @@
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                           // CgsCore::SPrintf
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptObjectController.h" // ObjectController
 #include "GameSource/Gui/BrnGuiCache.h"                                           // GuiCache
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flow\\shared\\components\\BrnHelpBar.h"
 // Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnHelpBar.cpp".
 
 namespace BrnGui
@@ -70,11 +70,11 @@ namespace BrnGui
     {
         Animator* lpAnimator = &maAnimators[0];
         CGS_ASSERT(lpAnimator != 0,
-            CgsDev::Assert::MessageAt("lpAnimator", __FILE__, 104 /* ARTIST 0x824E259C */));
+            CGS_ASSERT_MESSAGE_AT("lpAnimator", __FILE__, 104 /* ARTIST 0x824E259C */));
 
         CgsGui::ObjectController* lpObjectController = lpAnimator->GetObjectController();
         CGS_ASSERT(lpObjectController != 0,
-            CgsDev::Assert::MessageAt("lpObjectController", __FILE__, 107 /* ARTIST 0x824E25C4 */));
+            CGS_ASSERT_MESSAGE_AT("lpObjectController", __FILE__, 107 /* ARTIST 0x824E25C4 */));
 
         mBasePosition = lpObjectController->GetPos();
     }
@@ -101,7 +101,7 @@ namespace BrnGui
     // ------------------------------------------------------------ GetItemNameHash
     s32 HelpBar::GetItemNameHash(s32 liItem) const
     {
-        CGS_ASSERT(liItem >= 0 && liItem < KI_MAX_HELPITEMS, CgsDev::Assert::StreamMessageAt("Invalid item index", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flow\\shared\\components\\BrnHelpBar.h", 197));
+        CGS_ASSERT(liItem >= 0 && liItem < KI_MAX_HELPITEMS, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid item index", CGS_ARTIST_FILE, 197));
 
         return static_cast<s32>(maItems[liItem].GetNameHash());
     }
@@ -109,7 +109,7 @@ namespace BrnGui
     // ------------------------------------------------------------ GetAnimator
     Animator* HelpBar::GetAnimator(s32 liItem)
     {
-        CGS_ASSERT(liItem >= 0 && liItem < KI_MAX_HELPITEMS, CgsDev::Assert::StreamMessageAt("Invalid item index", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flow\\shared\\components\\BrnHelpBar.h", 241));
+        CGS_ASSERT(liItem >= 0 && liItem < KI_MAX_HELPITEMS, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid item index", CGS_ARTIST_FILE, 241));
 
         return &maAnimators[liItem];
     }
@@ -207,7 +207,7 @@ namespace BrnGui
     void HelpBar::InvalidateItemInfo(s32 liItem)
     {
         CgsGui::ObjectController* lpObjectController = maAnimators[liItem].GetObjectController();
-        CGS_ASSERT(lpObjectController != 0, CgsDev::Assert::StreamMessageAt("Invalid ObjectController", "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnHelpBar.cpp", 411));
+        CGS_ASSERT(lpObjectController != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid ObjectController", "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnHelpBar.cpp", 411));
 
         mafItemWidths[liItem] = KF_ITEMWIDTH_INVALID;
         lpObjectController->SetObjectVariableFloat(KAC_WIDTHVAR_NAME, KF_ITEMWIDTH_INVALID);
@@ -243,3 +243,5 @@ namespace BrnGui
             SnapIn(E_ALIGNMENT_RIGHT);
     }
 }
+
+#undef CGS_ARTIST_FILE

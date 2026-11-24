@@ -1,5 +1,5 @@
 #include "types.hpp"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Messages/BrnSelectedRoutesMessage.cpp"
 #include "GameSource/Network/Messages/BrnSelectedRoutesMessage.h"
 #include "GameSource/GameState/BrnGameStateTypes.h"       // BrnGameState::LandmarkIndex
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"         // CGS_ASSERT
@@ -108,12 +108,12 @@ namespace BrnNetwork
             return;
 
         CGS_ASSERT(lpEvent != 0,
-            CgsDev::Assert::MessageAt("lpEvent", __FILE__, 95 /* ARTIST 0x8257AFC4 */));
+            CGS_ASSERT_MESSAGE_AT("lpEvent", __FILE__, 95 /* ARTIST 0x8257AFC4 */));
         CGS_ASSERT(liRoundNumber >= KI_MIN_ROUND_NUM,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "liRoundNumber>=KI_MIN_ROUND_NUM", __FILE__, 96 /* ARTIST 0x8257AFE8 */));
         CGS_ASSERT(liRoundNumber <= KI_MAX_ROUND_NUM,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "liRoundNumber<=KI_MAX_ROUND_NUM", __FILE__, 97 /* ARTIST 0x8257B00C */));
 
         miRoundNumber = liRoundNumber;          // stw, +0x54
@@ -121,7 +121,7 @@ namespace BrnNetwork
 
         CgsNetwork::ReliableMessage::PrepareForSend(KI_SELECTED_ROUTES_MESSAGE_TYPE, lu16Frame);
         CGS_ASSERT(IsReliable(),
-            CgsDev::Assert::MessageAt("IsReliable()", __FILE__, 103 /* ARTIST 0x8257B06C */));
+            CGS_ASSERT_MESSAGE_AT("IsReliable()", __FILE__, 103 /* ARTIST 0x8257B06C */));
     }
 
     // ---------------------------------------------------------------------------------
@@ -132,12 +132,12 @@ namespace BrnNetwork
     // ---------------------------------------------------------------------------------
     bool SelectedRoutesMessage::Retrieve(s32* lpiRoundNumber, Event* lpEvent)
     {
-        CGS_ASSERT(lpiRoundNumber != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpiRoundNumber != 0, CGS_ASSERT_MESSAGE_AT(
             "lpiRoundNumber",
-            "..\\..\\..\\GameSource\\Network/Messages/BrnSelectedRoutesMessage.cpp", 123 /* ARTIST 0x8257E7AC */));
-        CGS_ASSERT(lpEvent != 0, CgsDev::Assert::MessageAt(
+            CGS_ARTIST_FILE, 123 /* ARTIST 0x8257E7AC */));
+        CGS_ASSERT(lpEvent != 0, CGS_ASSERT_MESSAGE_AT(
             "lpEvent",
-            "..\\..\\..\\GameSource\\Network/Messages/BrnSelectedRoutesMessage.cpp", 124 /* ARTIST 0x8257E7D0 */));
+            CGS_ARTIST_FILE, 124 /* ARTIST 0x8257E7D0 */));
 
         // ARTIST 0x8257E7E4 branches to a trailing `return false` (0x8257E840): the copy-out is the body
         // of the valid test.
@@ -147,9 +147,9 @@ namespace BrnNetwork
             *lpEvent        = mEvent;               // 44-byte payload copy out (memcpy +0x28, 0x2C)
 
             mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
-            CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0, CgsDev::Assert::MessageAt(
+            CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0, CGS_ASSERT_MESSAGE_AT(
                 "!CgsNetwork::ReliableMessage::IsMessageValid()",
-                "..\\..\\..\\GameSource\\Network/Messages/BrnSelectedRoutesMessage.cpp", 135 /* ARTIST 0x8257E82C */));
+                CGS_ARTIST_FILE, 135 /* ARTIST 0x8257E82C */));
             return true;
         }
         return false;
@@ -254,3 +254,5 @@ namespace BrnNetwork
         return true;
     }
 } // namespace BrnNetwork
+
+#undef CGS_ARTIST_FILE

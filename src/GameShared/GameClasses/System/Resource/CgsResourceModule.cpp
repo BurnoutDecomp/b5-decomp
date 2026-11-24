@@ -13,7 +13,7 @@
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include <cstddef>
 #include <cstring>                                    // memset (InitOptions zero-init)
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp"
 // CgsResource::ResourceModule: native module lifetime and staged request shuttles.
 // Update preserves the loader -> pool -> memory order and delayed pool replies.
 namespace CgsResource
@@ -154,7 +154,7 @@ namespace CgsResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("CgsResource::ResourceModule::_miResourceUpdatePerfMon >= 0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 100);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 100));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -165,7 +165,7 @@ namespace CgsResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("CgsResource::ResourceModule::_miProcessResourceRequestsPerfMon >= 0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 101);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 101));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -176,7 +176,7 @@ namespace CgsResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("CgsResource::ResourceModule::_miUpdateBundleLoaderPerfMon >= 0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 102);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 102));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -187,7 +187,7 @@ namespace CgsResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("CgsResource::ResourceModule::_miUpdatePoolPerfMon >= 0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 103);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 103));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -198,7 +198,7 @@ namespace CgsResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("CgsResource::ResourceModule::_miUpdateMemoryPerfMon >= 0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 104);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 104));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -209,7 +209,7 @@ namespace CgsResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("CgsResource::ResourceModule::_miUpdateFileSystemPerfMon >= 0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 105);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 105));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -220,7 +220,7 @@ namespace CgsResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("CgsResource::ResourceModule::_miUpdateOutputPerfMon >= 0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 106);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 106));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -231,7 +231,7 @@ namespace CgsResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolModuleStatePerfMon >= 0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 108);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 108));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -242,7 +242,7 @@ namespace CgsResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolModuleIdle >= 0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 109);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 109));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -253,7 +253,7 @@ namespace CgsResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolModuleAllocating >= 0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 110);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 110));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -264,7 +264,7 @@ namespace CgsResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolModuleDeallocating >= 0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 111);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 111));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -275,7 +275,7 @@ namespace CgsResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolModuleLiveupdate >= 0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 112);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 112));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -286,7 +286,7 @@ namespace CgsResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolModuleIntellifrag >= 0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 113);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 113));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -297,7 +297,7 @@ namespace CgsResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolModuleEmergencyFrag >= 0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 114);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 114));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -308,7 +308,7 @@ namespace CgsResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("CgsMemory::Relocator::_miExecutePerfMon >= 0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 115);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 115));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -319,7 +319,7 @@ namespace CgsResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("CgsMemory::Relocator::_miGPUCopyPerfMon >= 0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 116);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 116));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -330,7 +330,7 @@ namespace CgsResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("CgsMemory::Relocator::_miUpdatePerfMon >= 0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 117);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 117));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -341,7 +341,7 @@ namespace CgsResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolUpdatePerfMon >= 0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 119);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 119));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -352,7 +352,7 @@ namespace CgsResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolDeleteHashEntryPerfMon >= 0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 120);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 120));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -363,7 +363,7 @@ namespace CgsResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolDeleteMemoryPerfMon >= 0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 121);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 121));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -374,7 +374,7 @@ namespace CgsResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolDeleteResourcePerfMon >= 0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 122);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 122));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -385,7 +385,7 @@ namespace CgsResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolAllocateResourceListPerfMon >= 0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 124);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 124));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -396,7 +396,7 @@ namespace CgsResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolFixupPerfMon >= 0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 138);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 138));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -407,7 +407,7 @@ namespace CgsResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolFindByIndexPerfMon >= 0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 139);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 139));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -418,7 +418,7 @@ namespace CgsResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolFixupResourcePerfMon >= 0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 140);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 140));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -429,7 +429,7 @@ namespace CgsResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolFindTypePerfMon >= 0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 141);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 141));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -440,7 +440,7 @@ namespace CgsResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolDefragPerfMon >= 0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 143);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 143));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -451,7 +451,7 @@ namespace CgsResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolDefragWFInitialDeathsPerfMon >= 0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 144);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 144));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -462,7 +462,7 @@ namespace CgsResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolDefragMakeTempPerfMon >= 0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 145);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 145));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -473,7 +473,7 @@ namespace CgsResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolDefragMoveToTempPerfMon >= 0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 146);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 146));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -484,7 +484,7 @@ namespace CgsResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolDefragResolveTempPerfMon >= 0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 147);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 147));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -495,7 +495,7 @@ namespace CgsResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolDefragWFSourceDeathsPerfMon >= 0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 148);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 148));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -506,7 +506,7 @@ namespace CgsResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolDefragMakeDestPerfMon >= 0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 149);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 149));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -517,7 +517,7 @@ namespace CgsResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolDefragMoveToDestPerfMon >= 0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 150);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 150));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -528,7 +528,7 @@ namespace CgsResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolDefragMoveDestRebasePerfMon >= 0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 151);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 151));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -539,7 +539,7 @@ namespace CgsResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolDefragResolveDestPerfMon >= 0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 152);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 152));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -550,7 +550,7 @@ namespace CgsResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolDefragWFTempDeathsPerfMon >= 0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 153);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 153));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -561,7 +561,7 @@ namespace CgsResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("CgsResource::Pool::_miPoolDefragWFDonePerfMon >= 0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 154);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 154));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -572,7 +572,7 @@ namespace CgsResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("CgsResource::BundleLoaderModule::_miUpdatePerfMon >= 0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 156);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 156));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -583,7 +583,7 @@ namespace CgsResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("CgsResource::BundleLoaderModule::_miStreamUpdate >= 0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 157);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 157));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -594,7 +594,7 @@ namespace CgsResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("CgsResource::BundleLoaderModule::_miStreamEntryCopy >= 0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 158);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 158));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -605,7 +605,7 @@ namespace CgsResource
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("CgsResource::BundleLoaderModule::_miStreamDataCopy >= 0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.cpp", 159);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 159));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -793,7 +793,7 @@ namespace CgsResource
                                       CgsDev::Assert::giMessageBufferSize);
             lMessage << "Can only add 1 patch at a time\n";
             CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.h", 1028);
+                CGS_ASSERT_LOCATION("d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModule.h", 1028));
             CgsDev::Assert::EndAssert();
         }
         mFileSystem.GetPatchManager()->AddPatch(lpRequest->macFileName, lpRequest->miPriority);
@@ -1205,3 +1205,5 @@ namespace CgsResource
         }
     }
 }
+
+#undef CGS_ARTIST_FILE

@@ -1,5 +1,5 @@
 #include "GameSource/GameState/BrnGameEvents.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameEvents.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Network/CgsNetworkConstants.h"   // CgsNetwork::K_INVALID_PLAYER_ID
 
@@ -11,8 +11,8 @@ namespace GameStateModuleIO
 void ChangeNetworkCarEvent::SetNetworkPlayerID(BrnNetwork::NetworkPlayerID lNetworkPlayerID)
 {
     CGS_ASSERT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
-        CgsDev::Assert::MessageAt(
-            "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameEvents.h", 3362 /* ARTIST 0x823A791C */));
+        CGS_ASSERT_MESSAGE_AT(
+            "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", CGS_ARTIST_FILE, 3362 /* ARTIST 0x823A791C */));
     mNetworkPlayerID = lNetworkPlayerID;
 }
 
@@ -20,8 +20,8 @@ void ChangeNetworkCarEvent::SetNetworkPlayerID(BrnNetwork::NetworkPlayerID lNetw
 void OnlinePlayerAddedEvent::SetNetworkPlayerID(BrnNetwork::NetworkPlayerID lNetworkPlayerID)
 {
     CGS_ASSERT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
-        CgsDev::Assert::MessageAt(
-            "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameEvents.h", 3207 /* ARTIST 0x823A77FC */));
+        CGS_ASSERT_MESSAGE_AT(
+            "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", CGS_ARTIST_FILE, 3207 /* ARTIST 0x823A77FC */));
     mNetworkPlayerID = lNetworkPlayerID;
 }
 
@@ -29,9 +29,9 @@ void OnlinePlayerAddedEvent::SetNetworkPlayerID(BrnNetwork::NetworkPlayerID lNet
 void OnlinePlayerFinalisedEvent::SetNetworkPlayerID(BrnNetwork::NetworkPlayerID lNetworkPlayerID)
 {
     CGS_ASSERT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameEvents.h", 3221 /* ARTIST 0x823A785C */));
+            CGS_ARTIST_FILE, 3221 /* ARTIST 0x823A785C */));
     mNetworkPlayerID = lNetworkPlayerID;
 }
 
@@ -39,8 +39,8 @@ void OnlinePlayerFinalisedEvent::SetNetworkPlayerID(BrnNetwork::NetworkPlayerID 
 void OnlinePlayerRemovedEvent::SetNetworkPlayerID(BrnNetwork::NetworkPlayerID lNetworkPlayerID)
 {
     CGS_ASSERT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
-        CgsDev::Assert::MessageAt(
-            "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameEvents.h", 3331 /* ARTIST 0x823A78BC */));
+        CGS_ASSERT_MESSAGE_AT(
+            "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", CGS_ARTIST_FILE, 3331 /* ARTIST 0x823A78BC */));
     mNetworkPlayerID = lNetworkPlayerID;
 }
 
@@ -48,8 +48,8 @@ void OnlinePlayerRemovedEvent::SetNetworkPlayerID(BrnNetwork::NetworkPlayerID lN
 void RemotePlayerDisconnectedEvent::SetNetworkPlayerID(BrnNetwork::NetworkPlayerID lNetworkPlayerID)
 {
     CGS_ASSERT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
-        CgsDev::Assert::MessageAt(
-            "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameEvents.h", 3189 /* ARTIST 0x823A779C */));
+        CGS_ASSERT_MESSAGE_AT(
+            "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", CGS_ARTIST_FILE, 3189 /* ARTIST 0x823A779C */));
     mNetworkPlayerID = lNetworkPlayerID;
 }
 
@@ -88,9 +88,9 @@ void StartNetworkGameEvent::SetPlayerData(s32                         liPlayerIn
     (void)lWheelId;
 
     CGS_ASSERT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameEvents.h", 3447 /* ARTIST 0x82542104 */));
+            CGS_ARTIST_FILE, 3447 /* ARTIST 0x82542104 */));
 
     maNetworkPlayerID[liPlayerIndex]        = lNetworkPlayerID;
     maCarIds[liPlayerIndex]                 = lCarId;
@@ -107,3 +107,5 @@ void StartNetworkGameEvent::SetPlayerData(s32                         liPlayerIn
 }
 }
 }
+
+#undef CGS_ARTIST_FILE

@@ -25,3 +25,9 @@ namespace Assert
     }
 }
 }
+
+#if defined(CGS_MATCH_ASSERT_LOCATIONS) && CGS_MATCH_ASSERT_LOCATIONS
+#define CGS_ASSERT_MESSAGE_AT(msg, artistFile, artistLine) CgsDev::Assert::MessageAt(msg, artistFile, artistLine)
+#else
+#define CGS_ASSERT_MESSAGE_AT(msg, artistFile, artistLine) (msg)
+#endif

@@ -586,8 +586,8 @@ void SerialiseBehaviourParameters(const char* lpcName, Behaviour::Parameters& lr
         lStrStream << (lpcDebugName ? lpcDebugName : "<NULLSTRING>");
         CgsDev::Assert::FireAssert(
             lacMessage,
-            "..\\..\\..\\GameSource\\Director/Camera/Behaviours/Serialisation.h",
-            958);
+            CGS_ASSERT_LOCATION("..\\..\\..\\GameSource\\Director/Camera/Behaviours/Serialisation.h",
+            958));
         CgsDev::Assert::EndAssert();
         break;
     }

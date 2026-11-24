@@ -18,7 +18,7 @@
 // SetInput/SetAzimuth/GetOutputs overrides are their own (not-yet-done) TUs and
 // resolve at consolidation against this shared home.
 // ============================================================================
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/AEMS/CgsAemsInterfaceImplementation.cpp"
 #include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsInterfaceImplementation.h"
 #include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsPlayerVoice.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsEnvironment.h"
@@ -461,8 +461,8 @@ namespace Playback
     void AemsRWSamplePlayer::Pause()
     {
         CGS_ASSERT(mPauseState == PAUSESTATE_UNPAUSED,
-            CgsDev::Assert::MessageAt("mPauseState == PAUSESTATE_UNPAUSED",
-                "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/AEMS/CgsAemsInterfaceImplementation.cpp",
+            CGS_ASSERT_MESSAGE_AT("mPauseState == PAUSESTATE_UNPAUSED",
+                CGS_ARTIST_FILE,
                 355 /* ARTIST 0x8268A99C */));
         rw::audio::core::PlugIn::SetAttribute(mpGain, 0, 0.0f);
         if (mpSendWet)
@@ -476,8 +476,8 @@ namespace Playback
         // ARTIST 0x8268AA30 tests UNPAUSED here too (`cmpwi 0`, message 0x820AD98C): the
         // original asserts the same condition as Pause, kept as the console has it.
         CGS_ASSERT(mPauseState == PAUSESTATE_UNPAUSED,
-            CgsDev::Assert::MessageAt("mPauseState == PAUSESTATE_UNPAUSED",
-                "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/AEMS/CgsAemsInterfaceImplementation.cpp",
+            CGS_ASSERT_MESSAGE_AT("mPauseState == PAUSESTATE_UNPAUSED",
+                CGS_ARTIST_FILE,
                 371 /* ARTIST 0x8268AA40 */));
         rw::audio::core::PlugIn::SetAttribute(mpGain, 0, mDryLevel * mVol);
         if (mpSendWet)
@@ -567,3 +567,5 @@ namespace Playback
     }
 }
 }
+
+#undef CGS_ARTIST_FILE

@@ -10,7 +10,7 @@
 // Driven by BrnDirector::Camera::VisibilityCollisionPolicy::GenerateSceneQueries /
 // ::ProcessSceneQueryResults. Mounted 2026-09-25 (it held two bodies nothing linked).
 // ============================================================================
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Director/Camera/BrnCollisionPolicy.h"
 #include "GameSource/Director/Camera/BrnCollisionPolicy.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/Camera/Camera.h"                   // Camera (the transform, mfFOV)
@@ -33,7 +33,7 @@ namespace Camera
 f32 VisibilityTest::GetOffscreenTime() const
 {
     CGS_ASSERT(mbTestLookingAt,
-        CgsDev::Assert::MessageAt("mbTestLookingAt", "..\\..\\..\\GameSource\\Director/Camera/BrnCollisionPolicy.h", 248 /* ARTIST 0x821F3740 */));   // lbz 0xB0; assert set
+        CGS_ASSERT_MESSAGE_AT("mbTestLookingAt", CGS_ARTIST_FILE, 248 /* ARTIST 0x821F3740 */));   // lbz 0xB0; assert set
     return mfOffscreenTime;                           // lfs f1, 0xA4(this)
 }
 
@@ -48,7 +48,7 @@ f32 VisibilityTest::GetOffscreenTime() const
 bool VisibilityTest::IsOnScreen() const
 {
     CGS_ASSERT(mbTestLookingAt,
-        CgsDev::Assert::MessageAt("mbTestLookingAt", "..\\..\\..\\GameSource\\Director/Camera/BrnCollisionPolicy.h", 269 /* ARTIST 0x821F3798 */));   // lbz 0xB0; assert set
+        CGS_ASSERT_MESSAGE_AT("mbTestLookingAt", CGS_ARTIST_FILE, 269 /* ARTIST 0x821F3798 */));   // lbz 0xB0; assert set
     return mbIsOnScreen;                              // lbz r3, 0xB2(this)
 }
 
@@ -158,3 +158,5 @@ void VisibilityTest::ProcessSceneQueryResults(f32 lfTimestep)
 
 } // namespace Camera
 } // namespace BrnDirector
+
+#undef CGS_ARTIST_FILE

@@ -45,7 +45,7 @@ s32 ICEFileHandler::FilePrintf(const char* lpcFormat, ...)
         "..\\..\\..\\SDKs\\Packages\\ICE\\ICEFile.cpp";
 
     CGS_ASSERT(static_cast<u32>(rw::core::stdc::StringLength(lpcFormat)) < KU_NORMAL_BUFFER,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "static_cast<uint32_t> ( ICEMath::StrLen( lpFormat ) ) < KU_NORMAL_BUFFER",
             lpcAssertFile, 99 /* ARTIST 0x8252CA3C */));
 
@@ -54,9 +54,9 @@ s32 ICEFileHandler::FilePrintf(const char* lpcFormat, ...)
     va_end(lArgList);
 
     CGS_ASSERT(liStrLength >= 0,
-        CgsDev::Assert::MessageAt("lStrLength >= 0", lpcAssertFile, 106 /* ARTIST 0x8252CA80 */));
+        CGS_ASSERT_MESSAGE_AT("lStrLength >= 0", lpcAssertFile, 106 /* ARTIST 0x8252CA80 */));
     CGS_ASSERT(liStrLength < static_cast<s32>(KU_NORMAL_BUFFER - 1),
-        CgsDev::Assert::MessageAt("lStrLength < static_cast<int32_t>(KU_NORMAL_BUFFER-1)",
+        CGS_ASSERT_MESSAGE_AT("lStrLength < static_cast<int32_t>(KU_NORMAL_BUFFER-1)",
             lpcAssertFile, 107 /* ARTIST 0x8252CAA4 */));
 
     // Append the formatted text onto the accumulation buffer (`this`).

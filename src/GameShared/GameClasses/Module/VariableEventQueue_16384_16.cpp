@@ -27,7 +27,7 @@ template <>
 bool CgsModule::VariableEventQueue<16384, 16>::AddStringEventSafe(const char* lpacString, s32 liType)
 {
     if (!mbIsConstructed)
-        detail::AssertQueueNotConstructed(665);  // ARTIST 0x828273C4
+        detail::AssertQueueNotConstructed(CGS_ASSERT_LOCATION(detail::KAC_VEQ_FILE, 665));  // ARTIST 0x828273C4
     return AddEventSafe(reinterpret_cast<const Event*>(lpacString), liType, static_cast<s32>(strlen(lpacString)) + 1);
 }
 template void   CgsModule::VariableEventQueue<16384, 16>::OutputQueueContents() const;

@@ -2,7 +2,7 @@
 #include "GameSource/World/AI/BrnAICar.h"
 #include "GameSource/World/AI/BrnAICar_Constants.h"    // the .bss tunables, recovered from their start-up initialisers
 #include "GameSource/World/AI/BrnAIUtils.h"                 // BrnAI::StepTo (step-toward helper)
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\""../World/AI/BrnAIAggression.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"          // CGS_ASSERT
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"       // CgsNumeric::Random (mRandom.RandomFloat)
 #include "rw/math/vpu/vector3_operation.h"                  // rw::math::vpu vector ops
@@ -150,7 +150,7 @@ const f32 KF_SPURT_PASSING_SPEED_SCALE = 0.44704f; // .data 0x82F31928 == 0x3EE4
     Vector3 AIAggression::GetTargetPos()
     {
         CGS_ASSERT(mbTargetPosValid,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mbTargetPosValid",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\BrnAIAggression.h", 442 /* ARTIST 0x82765700 */));
         return mTargetPos;
@@ -309,7 +309,7 @@ bool AIAggression::CanSlam()
 bool AIAggression::CarIsTooSlow(const AICar* lpCar)
 {
     CGS_ASSERT(lpCar != 0,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lpCar",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
             "../World/AI/BrnAIAggression.cpp", 1179 /* ARTIST 0x8276696C */));
@@ -525,7 +525,7 @@ f32 AIAggression::GetAcrossSeparation(const AICar* lpThisCar, const AICar* lpOth
 f32 AIAggression::GetAheadness(const AICar* lpPlayerCar, Vector3 lPosition)
 {
     CGS_ASSERT(lpPlayerCar != NULL,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lpPlayerCar != NULL",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
             "../World/AI/BrnAIAggression.cpp", 1715 /* ARTIST 0x82771050 */));
@@ -654,12 +654,12 @@ Vector3 AIAggression::GetPositionNextToTarget(const AICar* lpTargetCar, const AI
 f32 AIAggression::GetSeparation(const AICar* lpThisCar, const AICar* lpOtherCar)
 {
     CGS_ASSERT(lpThisCar != NULL,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lpThisCar != NULL",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
             "../World/AI/BrnAIAggression.cpp", 1660 /* ARTIST 0x82770F5C */));
     CGS_ASSERT(lpOtherCar != NULL,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lpOtherCar != NULL",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
             "../World/AI/BrnAIAggression.cpp", 1661 /* ARTIST 0x82770F80 */));
@@ -1856,3 +1856,5 @@ void AIAggression::Prepare(AICar* lpCar)
     mfRecentHitTimer         = 0.0f;                              // +7244 == +0x4C
 }
 }
+
+#undef CGS_ARTIST_FILE

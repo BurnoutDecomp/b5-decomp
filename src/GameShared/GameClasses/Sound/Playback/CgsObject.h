@@ -33,7 +33,7 @@ public:
     // (0x826916F0) as a COMDAT.
     virtual ~Object()
     {
-        CGS_ASSERT(mu32RefCount == 0, CgsDev::Assert::MessageAt("0 == mu32RefCount",
+        CGS_ASSERT(mu32RefCount == 0, CGS_ASSERT_MESSAGE_AT("0 == mu32RefCount",
             "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsObject.h", 104));
     }
 

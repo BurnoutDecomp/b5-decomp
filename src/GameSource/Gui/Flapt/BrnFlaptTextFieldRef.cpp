@@ -1,5 +1,5 @@
 #include "GameSource/Gui/Flapt/BrnFlaptTextFieldRef.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flapt\\BrnFlaptTextFieldRef.h"
 #include "GameSource/Gui/Flapt/BrnFlaptTextFieldInstance.h"       // BrnFlapt::TextFieldInstance (SetText)
 #include "GameShared/GameClasses/Language/CgsLanguageManager.h"   // CgsLanguage::LanguageManager (FormatText / Obsolete_FormatTextByArray)
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                // CGS_ASSERT
@@ -38,9 +38,9 @@ void TextFieldRef::Construct(void* lpTextFieldInstance,
                                       void* lpParentMovie,
                                       void* lpTransform)
 {
-    CGS_ASSERT(lpTextFieldInstance != 0, CgsDev::Assert::MessageAt("lpTextFieldInst", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flapt\\BrnFlaptTextFieldRef.h", 210 /* ARTIST 0x8246B030 */));
-    CGS_ASSERT(lpParentMovie != 0, CgsDev::Assert::MessageAt("lpParentMovie", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flapt\\BrnFlaptTextFieldRef.h", 211 /* ARTIST 0x8246B054 */));
-    CGS_ASSERT(lpTransform != 0, CgsDev::Assert::MessageAt("lpTransform", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flapt\\BrnFlaptTextFieldRef.h", 212 /* ARTIST 0x8246B078 */));
+    CGS_ASSERT(lpTextFieldInstance != 0, CGS_ASSERT_MESSAGE_AT("lpTextFieldInst", CGS_ARTIST_FILE, 210 /* ARTIST 0x8246B030 */));
+    CGS_ASSERT(lpParentMovie != 0, CGS_ASSERT_MESSAGE_AT("lpParentMovie", CGS_ARTIST_FILE, 211 /* ARTIST 0x8246B054 */));
+    CGS_ASSERT(lpTransform != 0, CGS_ASSERT_MESSAGE_AT("lpTransform", CGS_ARTIST_FILE, 212 /* ARTIST 0x8246B078 */));
 
     mpTextFieldInstance = lpTextFieldInstance;
     mpParentMovie       = lpParentMovie;
@@ -56,9 +56,9 @@ void TextFieldRef::Construct(void* lpTextFieldInstance,
 void TextFieldRef::SetText(const char* lpacNewText, bool lbAlreadyLocalised)
 {
     CGS_ASSERT(lpacNewText != 0,
-        CgsDev::Assert::MessageAt("lpacNewText", __FILE__, 76 /* ARTIST 0x8246CC84 */));
+        CGS_ASSERT_MESSAGE_AT("lpacNewText", __FILE__, 76 /* ARTIST 0x8246CC84 */));
     CGS_ASSERT(mpTextFieldInstance != 0,
-        CgsDev::Assert::MessageAt("mpTextFieldInst", __FILE__, 77 /* ARTIST 0x8246CCAC */));
+        CGS_ASSERT_MESSAGE_AT("mpTextFieldInst", __FILE__, 77 /* ARTIST 0x8246CCAC */));
 
     static_cast<TextFieldInstance*>(mpTextFieldInstance)->ChangeText(
         reinterpret_cast<const CgsUnicode::CgsUtf8*>(lpacNewText), lbAlreadyLocalised);
@@ -81,7 +81,7 @@ void TextFieldRef::SetAutoSize(bool lbAutoSize)
 void TextFieldRef::ClearText()
 {
     CGS_ASSERT(mpTextFieldInstance != 0,
-        CgsDev::Assert::MessageAt("mpTextFieldInst", __FILE__, 61 /* ARTIST 0x8246CC00 */));
+        CGS_ASSERT_MESSAGE_AT("mpTextFieldInst", __FILE__, 61 /* ARTIST 0x8246CC00 */));
     static_cast<TextFieldInstance*>(mpTextFieldInstance)->ChangeText(
         reinterpret_cast<const CgsUnicode::CgsUtf8*>(""), false);
 }
@@ -298,10 +298,12 @@ void TextFieldRef::SetColour(Vector4 lv4Colour)
 const char* TextFieldRef::GetText() const
 {
     CGS_ASSERT(mpTextFieldInstance != 0,
-        CgsDev::Assert::MessageAt("mpTextFieldInst", __FILE__, 408 /* ARTIST 0x8246E0E8 */));   // cpp:408 (non-gating)
+        CGS_ASSERT_MESSAGE_AT("mpTextFieldInst", __FILE__, 408 /* ARTIST 0x8246E0E8 */));   // cpp:408 (non-gating)
 
     return reinterpret_cast<const char*>(
         static_cast<const TextFieldInstance*>(mpTextFieldInstance)->GetAptString().GetText());
 }
 
 }
+
+#undef CGS_ARTIST_FILE

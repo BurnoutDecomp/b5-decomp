@@ -30,7 +30,7 @@ namespace BrnNetwork
     CgsNetwork::PackOrUnpackResult CheckpointTriggeredMessage::PackOrUnpack()
     {
         CGS_ASSERT(miCheckpointIndex != -1,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "miCheckpointIndex != -1",
                 "..\\..\\..\\GameSource\\Network/Messages/BrnCheckpointTriggeredMessage.cpp", 91 /* ARTIST 0x8257CE78 */));
 
@@ -41,15 +41,15 @@ namespace BrnNetwork
     void CheckpointTriggeredMessage::PrepareForSend(u16 lu16FrameCount, s32 liCheckpointIndex)
     {
         CGS_ASSERT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lu16FrameCount != KU16_INVALID_FRAME",
                 __FILE__, 141 /* ARTIST 0x8257CF0C */));
         CGS_ASSERT(liCheckpointIndex != -1,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "liCheckpointIndex != -1",
                 __FILE__, 142 /* ARTIST 0x8257CF30 */));
         CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "!CgsNetwork::ReliableMessage::IsMessageValid()",
                 __FILE__, 145 /* ARTIST 0x8257CF5C */));
 

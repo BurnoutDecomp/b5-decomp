@@ -35,7 +35,7 @@ namespace CgsGui
 {
     bool AptDataHandler::Prepare(CgsMemory::HeapMalloc* lpAllocator)
     {
-        CGS_ASSERT(lpAllocator != 0, CgsDev::Assert::StreamMessageAt("Passed in allocator to AptDataHandler::Prepare is null", "..\\..\\..\\GameShared\\GameClasses\\Gui/View/AptInterface/CgsAptDataHandler.cpp", 63));
+        CGS_ASSERT(lpAllocator != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Passed in allocator to AptDataHandler::Prepare is null", "..\\..\\..\\GameShared\\GameClasses\\Gui/View/AptInterface/CgsAptDataHandler.cpp", 63));
 
         mpAllocator = lpAllocator;
         return true;
@@ -55,7 +55,7 @@ namespace CgsGui
             CgsDev::Assert::BeginAssert();
             CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
             lStrStream << "Apts data allocator is invalid in AptDataHandler::AptAlloc";
-            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, KAC_APT_ALLOCATOR_ASSERT_FILE, 130);
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, CGS_ASSERT_LOCATION(KAC_APT_ALLOCATOR_ASSERT_FILE, 130));
             CgsDev::Assert::EndAssert();
         }
 
@@ -66,7 +66,7 @@ namespace CgsGui
             CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
             lStrStream << "AptDataHandler::AptAlloc Failed to allocate memory! Allocating "
                        << static_cast<u32>(lnSize) << " bytes";
-            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, KAC_APT_ALLOCATOR_ASSERT_FILE, 140);
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, CGS_ASSERT_LOCATION(KAC_APT_ALLOCATOR_ASSERT_FILE, 140));
             CgsDev::Assert::EndAssert();
         }
         return lpBlock;
@@ -80,7 +80,7 @@ namespace CgsGui
             CgsDev::Assert::BeginAssert();
             CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
             lStrStream << "Apts data allocator is invalid in AptDataHandler::AptFree";
-            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, KAC_APT_ALLOCATOR_ASSERT_FILE, 156);
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, CGS_ASSERT_LOCATION(KAC_APT_ALLOCATOR_ASSERT_FILE, 156));
             CgsDev::Assert::EndAssert();
         }
         if (lpBlock == 0)
@@ -88,7 +88,7 @@ namespace CgsGui
             CgsDev::Assert::BeginAssert();
             CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
             lStrStream << "AptDataHandler::AptFree passed a null pointer to free";
-            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, KAC_APT_ALLOCATOR_ASSERT_FILE, 157);
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, CGS_ASSERT_LOCATION(KAC_APT_ALLOCATOR_ASSERT_FILE, 157));
             CgsDev::Assert::EndAssert();
         }
 

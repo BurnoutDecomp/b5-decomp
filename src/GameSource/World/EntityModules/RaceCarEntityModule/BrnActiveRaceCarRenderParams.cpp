@@ -1,5 +1,5 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnActiveRaceCar.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\racecarentitymodule\\BrnActiveRaceCar.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnVehicleLocatorData.h" // VehicleLocatorData (SetLightLocators' source)
 
@@ -91,7 +91,7 @@ namespace BrnWorld
 const Matrix44Affine& ActiveRaceCar::RenderParams::GetWheelTransform(u32 luWheel) const
 {
     CGS_ASSERT(luWheel < 6,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "luWheelIndex < BrnPhysics::Deformation::KU_DEFORMATION_MODEL_DATA_MAX_WHEELS", KAC_ARTIST_ASSERT_FILE, 2050 /* ARTIST 0x822A324C */));
     return mWheelTransforms[luWheel];
 }
@@ -113,7 +113,7 @@ const Vector3* ActiveRaceCar::RenderParams::GetAxlePosition(u32 luWheel) const
 const Matrix44Affine& ActiveRaceCar::RenderParams::GetWheelScaleMatrix(u32 luWheel) const
 {
     CGS_ASSERT(luWheel < 6,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "luWheelIndex < BrnPhysics::Deformation::KU_DEFORMATION_MODEL_DATA_MAX_WHEELS", KAC_ARTIST_ASSERT_FILE, 1917 /* ARTIST 0x822A31E4 */));
     return mWheelScaleTransforms[luWheel];
 }
@@ -199,28 +199,28 @@ void ActiveRaceCar::RenderParams::MakeAllPartsVisible()
 // X360 0x822A1E30: 4*(n+1286)+this == byte 5144 + 4n == &mafCrackedGlassFractureAmount[n].
 f32 ActiveRaceCar::RenderParams::GetCrackedGlassFractureAmountN(s32 n) const
 {
-    CGS_ASSERT(n >= 0 && n < 8, CgsDev::Assert::MessageAt("( 0 <= n ) && ( KI_MAX_ACTIVE_RACE_CARS > n )", BRN_ACTIVERACECAR_H_ASSERT_FILE, 379));
+    CGS_ASSERT(n >= 0 && n < 8, CGS_ASSERT_MESSAGE_AT("( 0 <= n ) && ( KI_MAX_ACTIVE_RACE_CARS > n )", BRN_ACTIVERACECAR_H_ASSERT_FILE, 379));
     return mafCrackedGlassFractureAmount[n];
 }
 
 // X360 0x822A1D30: store at 4*(n+1286)+this.
 void ActiveRaceCar::RenderParams::SetCrackedGlassFractureAmountN(s32 n, f32 lfValue)
 {
-    CGS_ASSERT(n >= 0 && n < 8, CgsDev::Assert::MessageAt("( 0 <= n ) && ( KI_MAX_ACTIVE_RACE_CARS > n )", BRN_ACTIVERACECAR_H_ASSERT_FILE, 358));
+    CGS_ASSERT(n >= 0 && n < 8, CGS_ASSERT_MESSAGE_AT("( 0 <= n ) && ( KI_MAX_ACTIVE_RACE_CARS > n )", BRN_ACTIVERACECAR_H_ASSERT_FILE, 358));
     mafCrackedGlassFractureAmount[n] = lfValue;
 }
 
 // X360 0x822A1EA0: 4*(n+1294)+this == byte 5176 + 4n == &mafCrackedGlassEqualisationFactor[n].
 f32 ActiveRaceCar::RenderParams::GetCrackedGlassEqualisationFactorN(s32 n) const
 {
-    CGS_ASSERT(n >= 0 && n < 8, CgsDev::Assert::MessageAt("( 0 <= n ) && ( KI_MAX_ACTIVE_RACE_CARS > n )", BRN_ACTIVERACECAR_H_ASSERT_FILE, 386));
+    CGS_ASSERT(n >= 0 && n < 8, CGS_ASSERT_MESSAGE_AT("( 0 <= n ) && ( KI_MAX_ACTIVE_RACE_CARS > n )", BRN_ACTIVERACECAR_H_ASSERT_FILE, 386));
     return mafCrackedGlassEqualisationFactor[n];
 }
 
 // X360 0x822A1DB0: store at 4*(n+1294)+this.
 void ActiveRaceCar::RenderParams::SetCrackedGlassEqualisationFactorN(s32 n, f32 lfValue)
 {
-    CGS_ASSERT(n >= 0 && n < 8, CgsDev::Assert::MessageAt("( 0 <= n ) && ( KI_MAX_ACTIVE_RACE_CARS > n )", BRN_ACTIVERACECAR_H_ASSERT_FILE, 365));
+    CGS_ASSERT(n >= 0 && n < 8, CGS_ASSERT_MESSAGE_AT("( 0 <= n ) && ( KI_MAX_ACTIVE_RACE_CARS > n )", BRN_ACTIVERACECAR_H_ASSERT_FILE, 365));
     mafCrackedGlassEqualisationFactor[n] = lfValue;
 }
 
@@ -232,7 +232,7 @@ ActiveRaceCar::RenderParams::GetCrackedGlassScaleFactorsN(s32 n) const
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("( 0 <= n ) && ( KI_MAX_ACTIVE_RACE_CARS > n )",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\racecarentitymodule\\BrnActiveRaceCar.h", 393);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 393));
         CgsDev::Assert::EndAssert();
     }
     return rw::math::fpu::Vector2Template<float>(mavCrackedGlassScaleFactors[n].x,
@@ -247,7 +247,7 @@ void ActiveRaceCar::RenderParams::SetCrackedGlassScaleFactorsN(
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("( 0 <= n ) && ( KI_MAX_ACTIVE_RACE_CARS > n )",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\racecarentitymodule\\BrnActiveRaceCar.h", 372);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 372));
         CgsDev::Assert::EndAssert();
     }
     mavCrackedGlassScaleFactors[n].x = lrScale.X();
@@ -559,3 +559,5 @@ ActiveRaceCar::RenderParams& ActiveRaceCar::RenderParams::operator=(const Render
 }
 
 } // namespace BrnWorld
+
+#undef CGS_ARTIST_FILE

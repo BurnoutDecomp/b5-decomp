@@ -11,7 +11,7 @@ extern f32 gfBloomThresholdScale;
 namespace CgsDev { namespace Assert { struct AssertData; } }
 namespace BrnEffects { class EffectsModule; }
 namespace BrnGame { struct BrnCpuMonitors; }
-
+#define CGS_ARTIST_BRNRENDERERMODULE_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\graphics\\BrnRendererModule.h"
 // Real loading-screen-path member types (Option B: these are reconstructed for real; the
 // off-path gameplay-render subsystems below remain opaque storage until reached).
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2d.h"   // CgsGraphics::Im2d
@@ -773,7 +773,7 @@ inline BrnRendererModule::ERendererPrepareStage operator++(
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("leEnumIndex <= BrnRendererModule::eRendererPrepareDone",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\graphics\\BrnRendererModule.h", 818);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_BRNRENDERERMODULE_FILE, 818));
         CgsDev::Assert::EndAssert();
     }
     return old;
@@ -790,7 +790,7 @@ inline BrnRendererModule::ERendererReleaseStage operator++(
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("leEnumIndex <= BrnRendererModule::eRendererReleaseDone",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\graphics\\BrnRendererModule.h", 819);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_BRNRENDERERMODULE_FILE, 819));
         CgsDev::Assert::EndAssert();
     }
     return old;
@@ -851,3 +851,5 @@ inline void BrnRendererModule::ConstructRenderSwitches()
 // KU_NUM_SHADOWMAP_DISPATCH_JOBS / KU_NUM_ENVMAP_SORT_JOBS), then one call per standalone sort
 // job. The jobs are NAMED later, by the setup paths that give them their code and data.
 // Job has no default constructor, so each member is listed here in declaration order.
+
+#undef CGS_ARTIST_BRNRENDERERMODULE_FILE

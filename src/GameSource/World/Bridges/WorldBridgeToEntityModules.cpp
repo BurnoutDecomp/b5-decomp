@@ -45,8 +45,8 @@ void WorldModule::BridgeActionsToPhysicsModule(
         reinterpret_cast<CgsModule::VariableEventQueue<13312, 16>*>(
             lpPhysicsModuleInputBuffer->GetGameActionQueue());
 
-    CGS_ASSERT(lpInQueue != 0, CgsDev::Assert::MessageAt("lpInQueue", __FILE__, 226));     // :226 (non-gating)
-    CGS_ASSERT(lpOutQueue != 0, CgsDev::Assert::MessageAt("lpOutQueue", __FILE__, 227));   // :227 (non-gating)
+    CGS_ASSERT(lpInQueue != 0, CGS_ASSERT_MESSAGE_AT("lpInQueue", __FILE__, 226));     // :226 (non-gating)
+    CGS_ASSERT(lpOutQueue != 0, CGS_ASSERT_MESSAGE_AT("lpOutQueue", __FILE__, 227));   // :227 (non-gating)
 
     const CgsModule::Event* lpEvent = 0;
     s32 liSize = 0;
@@ -101,8 +101,8 @@ void WorldModule::BridgeActionsToTrafficModule(
         reinterpret_cast<CgsModule::VariableEventQueue<13312, 16>*>(
             lpTrafficModuleInputBuffer->GetGameActionQueue());
 
-    CGS_ASSERT(lpInQueue != 0, CgsDev::Assert::MessageAt("lpInQueue", __FILE__, 111));     // :111 (non-gating)
-    CGS_ASSERT(lpOutQueue != 0, CgsDev::Assert::MessageAt("lpOutQueue", __FILE__, 112));   // :112 (non-gating)
+    CGS_ASSERT(lpInQueue != 0, CGS_ASSERT_MESSAGE_AT("lpInQueue", __FILE__, 111));     // :111 (non-gating)
+    CGS_ASSERT(lpOutQueue != 0, CGS_ASSERT_MESSAGE_AT("lpOutQueue", __FILE__, 112));   // :112 (non-gating)
 
     const CgsModule::Event* lpEvent = 0;
     s32 liSize = 0;
@@ -172,8 +172,8 @@ void WorldModule::BridgeActionsToRaceCarModule(
     BrnWorld::RaceCarEntityModuleIO::InputBuffer_PreScene::GameActionQueue* lpOutQueue =
         lpRaceCarModuleInputBuffer->GetGameActionQueue();
 
-    CGS_ASSERT(lpInQueue != 0, CgsDev::Assert::MessageAt("lpInQueue", __FILE__, 86));     // :86 (non-gating)
-    CGS_ASSERT(lpOutQueue != 0, CgsDev::Assert::MessageAt("lpOutQueue", __FILE__, 87));   // :87 (non-gating)
+    CGS_ASSERT(lpInQueue != 0, CGS_ASSERT_MESSAGE_AT("lpInQueue", __FILE__, 86));     // :86 (non-gating)
+    CGS_ASSERT(lpOutQueue != 0, CGS_ASSERT_MESSAGE_AT("lpOutQueue", __FILE__, 87));   // :87 (non-gating)
 
     if (lpInQueue != 0 && lpOutQueue != 0)
     {
@@ -213,8 +213,8 @@ void WorldModule::BridgeActionsToWorldModule(
     BrnWorld::WorldEntityIO::InputBuffer_PostPhysics::GameActionQueue* lpOutQueue =
         lpWorldEntityInputBuffer_PostPhysics->GetGameActionQueue();
 
-    CGS_ASSERT(lpInQueue != 0, CgsDev::Assert::MessageAt("lpInQueue", __FILE__, 178));     // :178 (non-gating)
-    CGS_ASSERT(lpOutQueue != 0, CgsDev::Assert::MessageAt("lpOutQueue", __FILE__, 179));   // :179 (non-gating)
+    CGS_ASSERT(lpInQueue != 0, CGS_ASSERT_MESSAGE_AT("lpInQueue", __FILE__, 178));     // :178 (non-gating)
+    CGS_ASSERT(lpOutQueue != 0, CGS_ASSERT_MESSAGE_AT("lpOutQueue", __FILE__, 179));   // :179 (non-gating)
 
     lpOutQueue->Clear();
 

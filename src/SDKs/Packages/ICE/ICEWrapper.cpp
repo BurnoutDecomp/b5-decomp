@@ -244,7 +244,7 @@ void ICEWrapper::PlayMovie(CgsResource::ID lTakeId, f32 lfStartPosition,
                            VehicleRef::EType leVehicleRefType, EActiveRaceCarIndex leRaceCar)
 {
     ICE::ICETakeData* lpTakeData = mpResourceManager->GetKeyAnim(lTakeId);
-    CGS_ASSERT(lpTakeData != 0, CgsDev::Assert::MessageAt("Invalid ICE Movie Requested", "..\\..\\..\\SDKs\\Packages\\ICE\\ICEWrapper.cpp", 342));
+    CGS_ASSERT(lpTakeData != 0, CGS_ASSERT_MESSAGE_AT("Invalid ICE Movie Requested", "..\\..\\..\\SDKs\\Packages\\ICE\\ICEWrapper.cpp", 342));
 
     // Bind + start the manager's playback take at the requested position (sets the
     // manager's playback-active flag).

@@ -241,7 +241,7 @@ inline void
 BehaviourAftertouchCam::SetParameters(const Parameters* lpParameters)
 {
     CGS_ASSERT(lpParameters->GetType() == eBehaviourAftertouchCam,
-               CgsDev::Assert::MessageAt("lpParameters->GetType() == eBehaviourAftertouchCam", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourAftertouchCam.h", 198));
+               CGS_ASSERT_MESSAGE_AT("lpParameters->GetType() == eBehaviourAftertouchCam", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourAftertouchCam.h", 198));
     SetDebugParametersName(lpParameters->GetDebugName());
     mpParameters = lpParameters;
 }

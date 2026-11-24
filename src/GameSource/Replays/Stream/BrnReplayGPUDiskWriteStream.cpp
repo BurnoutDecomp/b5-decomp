@@ -1,8 +1,8 @@
 #include "GameSource/Replays/Stream/BrnReplayGPUDiskWriteStream.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Replays/Stream/BrnReplayGPUDiskWriteStream.cpp"
 #include <cstring> // memcpy / memset
 #include <xtl.h> // native ntdll critical-section storage contract
-
+#define CGS_ARTIST_BRNREPLAYGPUDISKWRITESTREAM_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\replays\\stream\\BrnReplayGPUDiskWriteStream.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/System/FileSystem/CgsDeviceManager.h" // DeviceManager, GetDeviceManager
@@ -61,7 +61,7 @@ namespace BrnReplays
     // =====================================================================================
     s32 GPUDiskWriteStream::AllocateGlobalBlock()
     {
-        CGS_ASSERT(miGlobalBlocksFree > 0, CgsDev::Assert::MessageAt("miGlobalBlocksFree > 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\replays\\stream\\BrnReplayGPUDiskWriteStream.h", 252));
+        CGS_ASSERT(miGlobalBlocksFree > 0, CGS_ASSERT_MESSAGE_AT("miGlobalBlocksFree > 0", CGS_ARTIST_BRNREPLAYGPUDISKWRITESTREAM_FILE, 252));
         --miGlobalBlocksFree;
         ++miGlobalBlocksUsed;
         return maGlobalBlockFreeList[miGlobalBlocksFree];
@@ -72,7 +72,7 @@ namespace BrnReplays
     // =====================================================================================
     void GPUDiskWriteStream::FreeGlobalBlock(s32 liGlobalBlock)
     {
-        CGS_ASSERT(miGlobalBlocksUsed > 0, CgsDev::Assert::MessageAt("miGlobalBlocksUsed > 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\replays\\stream\\BrnReplayGPUDiskWriteStream.h", 270));
+        CGS_ASSERT(miGlobalBlocksUsed > 0, CGS_ASSERT_MESSAGE_AT("miGlobalBlocksUsed > 0", CGS_ARTIST_BRNREPLAYGPUDISKWRITESTREAM_FILE, 270));
         maGlobalBlockFreeList[miGlobalBlocksFree] = liGlobalBlock;
         ++miGlobalBlocksFree;
         --miGlobalBlocksUsed;
@@ -114,7 +114,7 @@ namespace BrnReplays
             LocalBlock&  lLocalBlock   = maPrimaryBlocks[miPrimaryWriteIndex];
 
             CGS_ASSERT(lLocalBlock.miGlobalBlockIndex == KI_INVALID_BLOCK,
-                       CgsDev::Assert::MessageAt("lLocalBlock.miGlobalBlockIndex == -1", "..\\..\\..\\GameSource\\Replays/Stream/BrnReplayGPUDiskWriteStream.cpp", 235));
+                       CGS_ASSERT_MESSAGE_AT("lLocalBlock.miGlobalBlockIndex == -1", CGS_ARTIST_FILE, 235));
 
             lGlobal.miOffset            = liOffset;
             lGlobal.miStatus            = KI_STATUS_PRIMARY;
@@ -184,7 +184,7 @@ namespace BrnReplays
             return 0;
 
         LocalBlock& lLocalBlock = maTertiaryBlocks[miWriteSubmitIndex];
-        CGS_ASSERT(lLocalBlock.miGlobalBlockIndex >= 0, CgsDev::Assert::MessageAt("lLocalBlock.miGlobalBlockIndex >= 0", "..\\..\\..\\GameSource\\Replays/Stream/BrnReplayGPUDiskWriteStream.cpp", 597));
+        CGS_ASSERT(lLocalBlock.miGlobalBlockIndex >= 0, CGS_ASSERT_MESSAGE_AT("lLocalBlock.miGlobalBlockIndex >= 0", CGS_ARTIST_FILE, 597));
 
         GlobalBlock& lGlobal = maGlobalBlocks[lLocalBlock.miGlobalBlockIndex];
         CGS_ASSERT(miState == KI_STATE_OPEN, "Attempting to service a none-open stream");
@@ -302,7 +302,7 @@ namespace BrnReplays
 
                     LocalBlock& lSecondary = maSecondaryBlocks[miTertiaryReadIndex];
                     CGS_ASSERT(lSecondary.miGlobalBlockIndex >= 0,
-                               CgsDev::Assert::MessageAt("lSecondary.miGlobalBlockIndex >= 0", "..\\..\\..\\GameSource\\Replays/Stream/BrnReplayGPUDiskWriteStream.cpp", 381));
+                               CGS_ASSERT_MESSAGE_AT("lSecondary.miGlobalBlockIndex >= 0", CGS_ARTIST_FILE, 381));
 
                     GlobalBlock& lGlobal = maGlobalBlocks[lSecondary.miGlobalBlockIndex];
                     if (lGlobal.miStatus != KI_STATUS_SEC_DONE)
@@ -310,7 +310,7 @@ namespace BrnReplays
 
                     LocalBlock& lTertiary = maTertiaryBlocks[miTertiaryWriteIndex];
                     CGS_ASSERT(lTertiary.miGlobalBlockIndex == KI_INVALID_BLOCK,
-                               CgsDev::Assert::MessageAt("lTertiary.miGlobalBlockIndex == -1", "..\\..\\..\\GameSource\\Replays/Stream/BrnReplayGPUDiskWriteStream.cpp", 392));
+                               CGS_ASSERT_MESSAGE_AT("lTertiary.miGlobalBlockIndex == -1", CGS_ARTIST_FILE, 392));
 
                     CgsMemory::RelocateOp& lOp = lpOps[mRelocatorParams.miNumOps];
                     lOp.mpSource      = mpSecondaryData + lSecondary.miOffset;
@@ -511,3 +511,6 @@ namespace BrnReplays
     }
 
 }
+
+#undef CGS_ARTIST_FILE
+#undef CGS_ARTIST_BRNREPLAYGPUDISKWRITESTREAM_FILE

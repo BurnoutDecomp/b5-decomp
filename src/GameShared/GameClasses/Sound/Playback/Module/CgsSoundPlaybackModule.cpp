@@ -1034,7 +1034,7 @@ void Module::UpdateStreamBuffers(Io::OutputBuffer::FreedBuffersArray& arFreedBuf
 s32 Module::FindStreamBuffer(const CgsFileSystem::ReadStream* lpReadStream)
 {
     // ARTIST assertion at 0x82689D0C.
-    CGS_ASSERT(lpReadStream != 0, CgsDev::Assert::MessageAt(
+    CGS_ASSERT(lpReadStream != 0, CGS_ASSERT_MESSAGE_AT(
         "0 != lpReadStream",
         "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/Module/CgsSoundPlaybackModule.cpp", 1426));
 
@@ -1202,7 +1202,7 @@ Module::EPrepareStage operator++(Module::EPrepareStage& leEnumIndex, int)
     leEnumIndex = static_cast<Module::EPrepareStage>(static_cast<s32>(leEnumIndex) + 1);
 
     CGS_ASSERT(leEnumIndex <= Module::E_PREPARESTAGE_DONE,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "leEnumIndex <= Module::E_PREPARESTAGE_DONE",
             "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/Module/CgsSoundPlaybackModule.h", 500 /* ARTIST 0x82681C9C */));
 

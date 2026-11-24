@@ -109,7 +109,7 @@ namespace CgsResource
     void MaterialTechniqueResourceType::GetImportPointer(const void*, uint32_t, uint32_t*, const void**) const
     {
         CGS_ASSERT(false,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "This function should not be called at runtime",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\renderware\\cross/CgsMaterialTechniqueResourceType.cpp", 371 /* ARTIST 0x828A80BC */));
     }

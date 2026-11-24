@@ -304,7 +304,7 @@ void State::Attach(void* apvAttachment)
 {
     CGS_ASSERT(meUpdateState.GetCurrent() == E_UPDATE_UNATTACHED ||
                meUpdateState.GetCurrent() == E_UPDATE_DETATCHING,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "meUpdateState == E_UPDATE_UNATTACHED || meUpdateState == E_UPDATE_DETATCHING",
             KAC_ARTIST_ASSERT_FILE, 798 /* ARTIST 0x826C4BC0 */));
     mpvAttachment = apvAttachment;
@@ -317,7 +317,7 @@ void State::Attach(void* apvAttachment)
 bool State::AttachEffect()
 {
     CGS_ASSERT(mePrepareState == E_PREPARE_STATE_DONE,
-        CgsDev::Assert::MessageAt("E_PREPARE_STATE_DONE == mePrepareState",
+        CGS_ASSERT_MESSAGE_AT("E_PREPARE_STATE_DONE == mePrepareState",
             KAC_ARTIST_ASSERT_FILE, 833 /* ARTIST 0x8268D654 */));
     // No null test of mpCurrentEffect: ARTIST (0x8268D668) and the PS3 build read its
     // attach state straight away. WAITING_FOR_DATA (jump-table slot 1 -> 0x8268D708) returns
@@ -332,7 +332,7 @@ bool State::AttachEffect()
                        EffectBase::E_ATTACH_STATE_WAITING_FOR_DATA ||
                    mpCurrentEffect->GetAttachState() ==
                        EffectBase::E_ATTACH_STATE_PREPARING,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpCurrentEffect->GetAttachState() == EffectBase::E_ATTACH_STATE_WAITING_FOR_DATA ||mpCurrentEffect->GetAttachState() == EffectBase::E_ATTACH_STATE_PREPARING",
                 KAC_ARTIST_ASSERT_FILE, 841 /* ARTIST 0x8268D6E4 */));
         if (mpCurrentEffect->GetAttachState() ==
@@ -352,7 +352,7 @@ bool State::AttachEffect()
     case EffectBase::E_ATTACH_STATE_WAITING_FOR_DATA:
         return false;
     default:
-        CGS_ASSERT(false, CgsDev::Assert::MessageAt("Invalid State",
+        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Invalid State",
             KAC_ARTIST_ASSERT_FILE, 865 /* ARTIST 0x8268D764 */));
         break;
     }

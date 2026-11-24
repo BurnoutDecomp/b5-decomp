@@ -12,7 +12,7 @@
 // (and, for the GET, also re-arm their step). AddStats / RemoveStats register and unregister a
 // per-player group of the 12 NetworkPlayerStats values (one menu variable each), grouped under the
 // player's name.
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Debug Components/BrnNetworkStatsDebugComponent.cpp"
 #include "GameSource/Network/Debug Components/BrnNetworkStatsDebugComponent.h"
 
 #include "GameSource/Network/Managers/BrnNetworkPlayerStats.h"            // NetworkPlayerStats (12-value record)
@@ -78,11 +78,11 @@ namespace BrnNetwork
                                       NetworkPlayerStatsManager* lpStatsManager)
     {
         CGS_ASSERT(lpServerInterface != 0,
-            CgsDev::Assert::MessageAt("lpServerInterface", __FILE__, 91 /* ARTIST 0x82585260 */));
+            CGS_ASSERT_MESSAGE_AT("lpServerInterface", __FILE__, 91 /* ARTIST 0x82585260 */));
         mpServerInterface = lpServerInterface;
 
         CGS_ASSERT(lpStatsManager != 0,
-            CgsDev::Assert::MessageAt("lpStatsManager", __FILE__, 95 /* ARTIST 0x82585288 */));
+            CGS_ASSERT_MESSAGE_AT("lpStatsManager", __FILE__, 95 /* ARTIST 0x82585288 */));
         mpStatsManager = lpStatsManager;
 
         miRaceElo           = 0;
@@ -181,17 +181,17 @@ namespace BrnNetwork
     void StatsDebugComponent::GetELOFromServer(void* lpData)
     {
         CGS_ASSERT(lpData != 0,
-            CgsDev::Assert::MessageAt("lpData", __FILE__, 258 /* ARTIST 0x82591490 */));
+            CGS_ASSERT_MESSAGE_AT("lpData", __FILE__, 258 /* ARTIST 0x82591490 */));
         StatsDebugComponent* lpStatsDebugComponent = static_cast<StatsDebugComponent*>(lpData);
 
         CGS_ASSERT(lpStatsDebugComponent->mpServerInterface != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpStatsDebugComponent->mpServerInterface",
                 __FILE__, 261 /* ARTIST 0x825914B8 */));
         ServerInterfaceCustomCommands* lpCustomCommandsComponent =
             GetCustomCommands(lpStatsDebugComponent->mpServerInterface);
         CGS_ASSERT(lpCustomCommandsComponent != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpCustomCommandsComponent",
                 __FILE__, 264 /* ARTIST 0x825914E4 */));
 
@@ -213,17 +213,17 @@ namespace BrnNetwork
     void StatsDebugComponent::SetELOOnServer(void* lpData)
     {
         CGS_ASSERT(lpData != 0,
-            CgsDev::Assert::MessageAt("lpData", __FILE__, 293 /* ARTIST 0x82591588 */));
+            CGS_ASSERT_MESSAGE_AT("lpData", __FILE__, 293 /* ARTIST 0x82591588 */));
         StatsDebugComponent* lpStatsDebugComponent = static_cast<StatsDebugComponent*>(lpData);
 
         CGS_ASSERT(lpStatsDebugComponent->mpServerInterface != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpStatsDebugComponent->mpServerInterface",
                 __FILE__, 296 /* ARTIST 0x825915B0 */));
         ServerInterfaceCustomCommands* lpCustomCommandsComponent =
             GetCustomCommands(lpStatsDebugComponent->mpServerInterface);
         CGS_ASSERT(lpCustomCommandsComponent != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpCustomCommandsComponent",
                 __FILE__, 299 /* ARTIST 0x825915DC */));
 
@@ -243,13 +243,13 @@ namespace BrnNetwork
     // the read-only locks, and on failure clear the custom-commands component's error status.
     void StatsDebugComponent::_GetEloCallbackFunction(void* lpData, void* /*lpResult*/, bool lbSuccess)
     {
-        CGS_ASSERT(lpData != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpData != 0, CGS_ASSERT_MESSAGE_AT(
             "lpData",
-            "..\\..\\..\\GameSource\\Network/Debug Components/BrnNetworkStatsDebugComponent.cpp", 330 /* ARTIST 0x82585440 */));
+            CGS_ARTIST_FILE, 330 /* ARTIST 0x82585440 */));
         StatsDebugComponent* lpStatsDebugComponent = static_cast<StatsDebugComponent*>(lpData);
-        CGS_ASSERT(lpStatsDebugComponent != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpStatsDebugComponent != 0, CGS_ASSERT_MESSAGE_AT(
             "lpStatsDebugComponent",
-            "..\\..\\..\\GameSource\\Network/Debug Components/BrnNetworkStatsDebugComponent.cpp", 332 /* ARTIST 0x8258545C */));
+            CGS_ARTIST_FILE, 332 /* ARTIST 0x8258545C */));
 
         *CgsDev::Log::gpDebugPrint << "Got stat debug get callback\n";
 
@@ -263,9 +263,9 @@ namespace BrnNetwork
 
         if (!lbSuccess)
         {
-            CGS_ASSERT(lpStatsDebugComponent->mpServerInterface != 0, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(lpStatsDebugComponent->mpServerInterface != 0, CGS_ASSERT_MESSAGE_AT(
                 "lpStatsDebugComponent->mpServerInterface",
-                "..\\..\\..\\GameSource\\Network/Debug Components/BrnNetworkStatsDebugComponent.cpp", 346 /* ARTIST 0x8258551C */));
+                CGS_ARTIST_FILE, 346 /* ARTIST 0x8258551C */));
             ServerInterfaceCustomCommands* lpCustomCommandsComponent =
                 GetCustomCommands(lpStatsDebugComponent->mpServerInterface);
             if (lpCustomCommandsComponent->GetStatus() ==
@@ -281,13 +281,13 @@ namespace BrnNetwork
     // re-arm the step.)
     void StatsDebugComponent::_SetEloCallbackFunction(void* lpData, void* /*lpResult*/, bool lbSuccess)
     {
-        CGS_ASSERT(lpData != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpData != 0, CGS_ASSERT_MESSAGE_AT(
             "lpData",
-            "..\\..\\..\\GameSource\\Network/Debug Components/BrnNetworkStatsDebugComponent.cpp", 372 /* ARTIST 0x82585580 */));
+            CGS_ARTIST_FILE, 372 /* ARTIST 0x82585580 */));
         StatsDebugComponent* lpStatsDebugComponent = static_cast<StatsDebugComponent*>(lpData);
-        CGS_ASSERT(lpStatsDebugComponent != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpStatsDebugComponent != 0, CGS_ASSERT_MESSAGE_AT(
             "lpStatsDebugComponent",
-            "..\\..\\..\\GameSource\\Network/Debug Components/BrnNetworkStatsDebugComponent.cpp", 374 /* ARTIST 0x8258559C */));
+            CGS_ARTIST_FILE, 374 /* ARTIST 0x8258559C */));
 
         *CgsDev::Log::gpDebugPrint << "Got stat debug set callback\n";
 
@@ -297,9 +297,9 @@ namespace BrnNetwork
 
         if (!lbSuccess)
         {
-            CGS_ASSERT(lpStatsDebugComponent->mpServerInterface != 0, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(lpStatsDebugComponent->mpServerInterface != 0, CGS_ASSERT_MESSAGE_AT(
                 "lpStatsDebugComponent->mpServerInterface",
-                "..\\..\\..\\GameSource\\Network/Debug Components/BrnNetworkStatsDebugComponent.cpp", 383 /* ARTIST 0x82585620 */));
+                CGS_ARTIST_FILE, 383 /* ARTIST 0x82585620 */));
             ServerInterfaceCustomCommands* lpCustomCommandsComponent =
                 GetCustomCommands(lpStatsDebugComponent->mpServerInterface);
             if (lpCustomCommandsComponent->GetStatus() ==
@@ -310,3 +310,5 @@ namespace BrnNetwork
         }
     }
 }
+
+#undef CGS_ARTIST_FILE

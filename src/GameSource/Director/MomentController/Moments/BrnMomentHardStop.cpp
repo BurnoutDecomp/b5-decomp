@@ -1,5 +1,5 @@
 #include "GameSource/Director/MomentController/Moments/BrnMomentHardStop.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentHardStop.cpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/Camera/Behaviours/BehaviourRig.h"        // Camera::Behaviour (the candidates' base accessors)
@@ -226,7 +226,7 @@ void MomentHardStop::Update(f32 lfTimeStep, void* lrBehaviourController,
     DebugLog* lpDebugLog = MomentSharedInfo_GetDebugLog(lSharedInfo);
     char lacLine[64];   // the console build's three 64-byte stack print buffers
 
-    CGS_ASSERT(mpParameters != 0, CgsDev::Assert::MessageAt("mpParameters != NULL", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentHardStop.cpp", 92));   //  (non-gating)
+    CGS_ASSERT(mpParameters != 0, CGS_ASSERT_MESSAGE_AT("mpParameters != NULL", CGS_ARTIST_FILE, 92));   //  (non-gating)
 
     switch (GetState())
     {
@@ -483,7 +483,7 @@ void MomentHardStop::Update(f32 lfTimeStep, void* lrBehaviourController,
     }
 
     default:
-        CGS_ASSERT(false, CgsDev::Assert::MessageAt("unhandled case in switch", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentHardStop.cpp", 384));   //  (non-gating)
+        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unhandled case in switch", CGS_ARTIST_FILE, 384));   //  (non-gating)
         break;
     }
 
@@ -511,3 +511,5 @@ Moment::EType MomentHardStop::GetInstanceType()
     return E_MOMENT_HARD_STOP;   // li r3, 0
 }
 }
+
+#undef CGS_ARTIST_FILE

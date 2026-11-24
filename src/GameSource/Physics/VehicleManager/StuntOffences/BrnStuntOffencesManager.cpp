@@ -56,7 +56,7 @@ namespace
     inline void FireAssert(const char* lpcExpr, s32 liLine)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(lpcExpr, KPC_SRC, liLine);
+        CgsDev::Assert::FireAssert(lpcExpr, CGS_ASSERT_LOCATION(KPC_SRC, liLine));
         CgsDev::Assert::EndAssert();
     }
 

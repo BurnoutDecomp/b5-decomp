@@ -73,7 +73,7 @@ bool SoundWorldScene::Prepare(BrnSound::Module::SoundLogicModule* lpLogicModule,
                               const char* lpcResourceExt)
 {
     CGS_ASSERT(lpLogicModule && lpcResourceExt,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "( lpLogicModule ) && ( lpcResourceExt )",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
             "../Sound/World/BrnSoundWorldScene.cpp", 145 /* ARTIST 0x82686560 */));

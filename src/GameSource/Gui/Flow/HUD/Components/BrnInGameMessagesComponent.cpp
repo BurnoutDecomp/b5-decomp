@@ -1,8 +1,8 @@
 #include "GameSource/Gui/Flow/HUD/Components/BrnInGameMessagesComponent.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnInGameMessagesComponent.cpp"
 #include <cstring>   // std::memcpy (models the Xbox XMemCpy block-copy intrinsic)
 #include <stdlib.h>  // [gateui r5] getenv (the BRN_PROP_DIAG probe in RefreshString)
-
+#define CGS_ARTIST_BRNINGAMEMESSAGESCOMPONENT_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flow\\hud\\components\\BrnInGameMessagesComponent.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"      // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsID.h"           // [gateui r3] CgsIDUnCompress (StartMessage's log line)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h" // [gateui r3] gpDebugPrint / gxMessageFilterFlags
@@ -172,7 +172,7 @@ namespace
     u8 InGameMessagesComponent::GetCurrentIndex() const
     {
         CGS_ASSERT(mpInGameMessagesQueue != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpInGameMessagesQueue != NULL", KAC_ARTIST_ASSERT_FILE, 397 /* ARTIST 0x8240EAA8 */));
         return mpInGameMessagesQueue->muCurrentMessageIndex;
     }
@@ -181,7 +181,7 @@ namespace
     u8 InGameMessagesComponent::GetNextIndex() const
     {
         CGS_ASSERT(mpInGameMessagesQueue != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpInGameMessagesQueue != NULL", KAC_ARTIST_ASSERT_FILE, 413 /* ARTIST 0x8240EB08 */));
         return static_cast<u8>(1 - mpInGameMessagesQueue->muCurrentMessageIndex);
     }
@@ -193,7 +193,7 @@ namespace
     void InGameMessagesComponent::SwitchCurrentIndex()
     {
         CGS_ASSERT(mpInGameMessagesQueue != NULL,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpInGameMessagesQueue != NULL", KAC_ARTIST_ASSERT_FILE, 429 /* ARTIST 0x8240EB70 */));
 
         mpInGameMessagesQueue->muCurrentMessageIndex =
@@ -204,7 +204,7 @@ namespace
     void InGameMessagesComponent::SetController(const BrnResource::HudMessageController* lpController)
     {
         CGS_ASSERT(lpController != 0,
-            CgsDev::Assert::MessageAt("lpController", KAC_ARTIST_ASSERT_HEADER, 487 /* ARTIST 0x82472C14 */));
+            CGS_ASSERT_MESSAGE_AT("lpController", KAC_ARTIST_ASSERT_HEADER, 487 /* ARTIST 0x82472C14 */));
         mpMessageController = lpController;
     }
 
@@ -212,7 +212,7 @@ namespace
     void InGameMessagesComponent::SetDirector(const HudMessageDirector* lpDirector)
     {
         CGS_ASSERT(lpDirector != 0,
-            CgsDev::Assert::MessageAt("lpDirector", KAC_ARTIST_ASSERT_HEADER, 504 /* ARTIST 0x82472C74 */));
+            CGS_ASSERT_MESSAGE_AT("lpDirector", KAC_ARTIST_ASSERT_HEADER, 504 /* ARTIST 0x82472C74 */));
         mpDirector = lpDirector;
     }
 
@@ -223,7 +223,7 @@ namespace
     void InGameMessagesComponent::SetGameMode(BrnGameState::GameStateModuleIO::EGameModeType leCurrentGameMode)
     {
         CGS_ASSERT((BrnGameState::GameStateModuleIO::E_MODE_NONE <= leCurrentGameMode) && (leCurrentGameMode < 18),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "(GsmIO::E_MODE_NONE <= leCurrentGameMode) && (GsmIO::E_MODE_COUNT > leCurrentGameMode)",
                 KAC_ARTIST_ASSERT_HEADER, 469 /* ARTIST 0x82472BB4 */));
         meCurrentGameMode = leCurrentGameMode;
@@ -236,7 +236,7 @@ namespace
     // &maeMessageState[idx]).
     void InGameMessagesComponent::SetInGameMessagesQueue(InGameMessagesQueue* lInGameInMessagesQueue)
     {
-        CGS_ASSERT(lInGameInMessagesQueue != 0, CgsDev::Assert::MessageAt("lInGameInMessagesQueue != NULL", "..\\..\\..\\GameSource\\Gui/Flow/Hud/Components/BrnInGameMessagesComponent.h", 356 /* ARTIST 0x82475BBC */));
+        CGS_ASSERT(lInGameInMessagesQueue != 0, CGS_ASSERT_MESSAGE_AT("lInGameInMessagesQueue != NULL", "..\\..\\..\\GameSource\\Gui/Flow/Hud/Components/BrnInGameMessagesComponent.h", 356 /* ARTIST 0x82475BBC */));
 
         mpInGameMessagesQueue = lInGameInMessagesQueue;
 
@@ -294,13 +294,13 @@ namespace
     // a VISIBLE one is ended once the current base time reaches its latched end-time.
     void InGameMessagesComponent::Update()
     {
-        CGS_ASSERT(mpInGameMessagesQueue != NULL, CgsDev::Assert::MessageAt("mpInGameMessagesQueue != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flow\\hud\\components\\BrnInGameMessagesComponent.h", 397 /* ARTIST 0x8243DE1C */));
+        CGS_ASSERT(mpInGameMessagesQueue != NULL, CGS_ASSERT_MESSAGE_AT("mpInGameMessagesQueue != NULL", CGS_ARTIST_BRNINGAMEMESSAGESCOMPONENT_FILE, 397 /* ARTIST 0x8243DE1C */));
 
         const MessageState leState =
             mpInGameMessagesQueue->maeMessageState[mpInGameMessagesQueue->muCurrentMessageIndex];
         if (leState == E_MESSAGESTATE_WAITING)
         {
-            CGS_ASSERT(mpInGameMessagesQueue != NULL, CgsDev::Assert::MessageAt("mpInGameMessagesQueue != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flow\\hud\\components\\BrnInGameMessagesComponent.h", 397 /* ARTIST 0x8243DE88 */));
+            CGS_ASSERT(mpInGameMessagesQueue != NULL, CGS_ASSERT_MESSAGE_AT("mpInGameMessagesQueue != NULL", CGS_ARTIST_BRNINGAMEMESSAGESCOMPONENT_FILE, 397 /* ARTIST 0x8243DE88 */));
             StartMessage(&mpInGameMessagesQueue->maMessages[mpInGameMessagesQueue->muCurrentMessageIndex]);
         }
         else if (leState == E_MESSAGESTATE_VISIBLE)
@@ -377,9 +377,9 @@ namespace
     void InGameMessagesComponent::TransitionCompleteCallback(void* lpUserData, u16 /*luArg*/)
     {
         CGS_ASSERT(lpUserData != NULL,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpUserData",
-                "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnInGameMessagesComponent.cpp", 789 /* ARTIST 0x82411384 */));
+                CGS_ARTIST_FILE, 789 /* ARTIST 0x82411384 */));
         static_cast<InGameMessagesComponent*>(lpUserData)->EndTransition();
     }
 
@@ -580,7 +580,7 @@ namespace
     // KAPC_GAME_MODE_ICONS.
     void InGameMessagesComponent::SetIcon(const char* lacIconTypeName)
     {
-        CGS_ASSERT(lacIconTypeName != NULL, CgsDev::Assert::MessageAt("NULL != lacIconTypeName", "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnInGameMessagesComponent.cpp", 438 /* ARTIST 0x82410E68 */));   // cpp:438
+        CGS_ASSERT(lacIconTypeName != NULL, CGS_ASSERT_MESSAGE_AT("NULL != lacIconTypeName", CGS_ARTIST_FILE, 438 /* ARTIST 0x82410E68 */));   // cpp:438
 
         if (std::strcmp(lacIconTypeName, "EventSpecific") != 0)
         {
@@ -590,7 +590,7 @@ namespace
 
         CGS_ASSERT(static_cast<s32>(meCurrentGameMode) >= KI_GAME_MODE_NONE &&
                        static_cast<s32>(meCurrentGameMode) < KI_GAME_MODE_COUNT,
-                   CgsDev::Assert::MessageAt("(GsmIO::E_MODE_NONE <= meCurrentGameMode) && (GsmIO::E_MODE_COUNT > meCurrentGameMode)", "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnInGameMessagesComponent.cpp", 444 /* ARTIST 0x82410ED0 */)
+                   CGS_ASSERT_MESSAGE_AT("(GsmIO::E_MODE_NONE <= meCurrentGameMode) && (GsmIO::E_MODE_COUNT > meCurrentGameMode)", CGS_ARTIST_FILE, 444 /* ARTIST 0x82410ED0 */)
 );          // cpp:444
 
         mIconRef.GotoAndPlayLabel(
@@ -825,3 +825,6 @@ namespace
             lpStaticLayout->EndMessage();     // replay mirror parked -- FLAG at the helper
     }
 }
+
+#undef CGS_ARTIST_FILE
+#undef CGS_ARTIST_BRNINGAMEMESSAGESCOMPONENT_FILE

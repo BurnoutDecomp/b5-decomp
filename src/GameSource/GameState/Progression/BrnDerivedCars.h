@@ -1,5 +1,5 @@
 #pragma once
-
+#define CGS_ARTIST_BRNDERIVEDCARS_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\Progression/BrnDerivedCars.h"
 // ===================================================================================
 // BrnProgression::DerivedCarArray
 //   b5-decomp/src/GameSource/GameState/Progression/BrnDerivedCars.h
@@ -95,8 +95,8 @@ namespace BrnProgression
         void ConstructColourLiveryList(const BrnResource::VehicleList* lpVehicleList,
                                        const CgsID& lParentOrSiblingCarId)
         {
-            CGS_ASSERT(lpVehicleList != 0, CgsDev::Assert::MessageAt("lpVehicleList", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\Progression/BrnDerivedCars.h", 93));                          // h:93
-            CGS_ASSERT(lParentOrSiblingCarId != 0, CgsDev::Assert::MessageAt("lParentOrSiblingCarId != kCGSID_NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\Progression/BrnDerivedCars.h", 94));   // h:94
+            CGS_ASSERT(lpVehicleList != 0, CGS_ASSERT_MESSAGE_AT("lpVehicleList", CGS_ARTIST_BRNDERIVEDCARS_FILE, 93));                          // h:93
+            CGS_ASSERT(lParentOrSiblingCarId != 0, CGS_ASSERT_MESSAGE_AT("lParentOrSiblingCarId != kCGSID_NULL", CGS_ARTIST_BRNDERIVEDCARS_FILE, 94));   // h:94
 
             // Resolve the seed entry (index < 0 and a null row both fire h:97).
             const s32 liSeedIndex = lpVehicleList->GetVehicleIndex(lParentOrSiblingCarId);
@@ -108,7 +108,7 @@ namespace BrnProgression
             const CgsID lParentCarId = lpVehicleListEntry->IsLiveryColour()
                                            ? lpVehicleListEntry->GetParentId()
                                            : lParentOrSiblingCarId;
-            CGS_ASSERT(lParentCarId != 0, CgsDev::Assert::MessageAt("lParentCarId != kCGSID_NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\Progression/BrnDerivedCars.h", 112));             // h:112
+            CGS_ASSERT(lParentCarId != 0, CGS_ASSERT_MESSAGE_AT("lParentCarId != kCGSID_NULL", CGS_ARTIST_BRNDERIVEDCARS_FILE, 112));             // h:112
 
             Clear();                 // the CgsID array count   (X360 `*(this+64)=0`)
             maLiveryTypes.Clear();   // the parallel kind array (X360 `*(this+104)=0`)
@@ -153,7 +153,7 @@ namespace BrnProgression
                 (liSeedIndex >= 0) ? lpVehicleList->GetVehicleData(liSeedIndex) : 0;
             CGS_ASSERT(lpVehicleListEntry != 0, "lpVehicleListEntry");                // h:163
             CGS_ASSERT(!lpVehicleListEntry->IsLiveryColour(),
-                       CgsDev::Assert::MessageAt("!lpVehicleListEntry->IsLiveryColour()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\Progression/BrnDerivedCars.h", 164));                      // h:164
+                       CGS_ASSERT_MESSAGE_AT("!lpVehicleListEntry->IsLiveryColour()", CGS_ARTIST_BRNDERIVEDCARS_FILE, 164));                      // h:164
 
             const CgsID lParentCarId =
                 (lpVehicleListEntry->GetLiveryType() ==
@@ -208,7 +208,7 @@ namespace BrnProgression
         BrnResource::VehicleListEntry::ELiveryType GetLiveryType(u32 luIndex) const
         {
             CGS_ASSERT(luIndex < KU_MAX_AMOUNT_OF_DERIVED_CARS,
-                       CgsDev::Assert::MessageAt("luIndex < KU_MAX_AMOUNT_OF_DERIVED_CARS", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\Progression/BrnDerivedCars.h", 232));
+                       CGS_ASSERT_MESSAGE_AT("luIndex < KU_MAX_AMOUNT_OF_DERIVED_CARS", CGS_ARTIST_BRNDERIVEDCARS_FILE, 232));
             return maLiveryTypes.GetItem(luIndex);
         }
 
@@ -230,7 +230,7 @@ namespace BrnProgression
         // mode, so they are used directly rather than re-implementing the radix latch.
         void DEBUG_PrintArray() const
         {
-            CGS_ASSERT(GetLength() != 0, CgsDev::Assert::MessageAt("GetLength() != 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\Progression/BrnDerivedCars.h", 248));                          // h:248
+            CGS_ASSERT(GetLength() != 0, CGS_ASSERT_MESSAGE_AT("GetLength() != 0", CGS_ARTIST_BRNDERIVEDCARS_FILE, 248));                          // h:248
 
             const bool lbLog = ((CgsDev::Message::gxMessageFilterFlags & 1) != 0) &&
                                (CgsDev::Log::gpDebugPrint != 0);
@@ -290,3 +290,5 @@ namespace BrnProgression
 // colour set behind IsLiveryColour(), 2 = pattern, 4 = the AddCar "silver" arm) with the
 // evidence table in its own banner.)
 // ---------------------------------------------------------------------------------------
+
+#undef CGS_ARTIST_BRNDERIVEDCARS_FILE

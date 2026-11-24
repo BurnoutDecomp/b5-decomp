@@ -440,7 +440,7 @@ namespace CgsFileSystem
 
     bool DeviceMemFileSystem::FindNext(void*, FindData*)
     {
-        CGS_ASSERT(false, CgsDev::Assert::StreamMessageAt("Mem device does not support searches\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\Drivers/CgsDeviceMemFileSystem.cpp", 443));
+        CGS_ASSERT(false, CGS_ASSERT_STREAM_MESSAGE_AT("Mem device does not support searches\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\Drivers/CgsDeviceMemFileSystem.cpp", 443));
         return false;
     }
 

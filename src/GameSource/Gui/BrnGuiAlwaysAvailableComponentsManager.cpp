@@ -37,7 +37,7 @@
 // ===================================================================================
 #include "SDKs/RenderEngineClub/MAIN/components/src/pixelformat.h"
 #include "GameSource/Gui/BrnGuiAlwaysAvailableComponentsManager.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/BrnGuiAlwaysAvailableComponentsManager.cpp"
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // StateInterface::RegisterForEvents
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"                     // CgsGui::GuiAccessPointers
 #include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"                        // BrnFlapt::FileRef
@@ -125,9 +125,9 @@ namespace BrnGui
             // Prepare the EventObserver base (its StateInterface) with the access pointers
             // and a null resource allocator (X360 passes 0 for the allocator).
             CGS_ASSERT(CgsGui::EventObserver::Prepare(lpGuiAccessPointers, 0),
-                CgsDev::Assert::MessageAt(
+                CGS_ASSERT_MESSAGE_AT(
                     "CgsGui::EventObserver::Prepare(lpGuiAccessPointers)",
-                    "..\\..\\..\\GameSource\\Gui/BrnGuiAlwaysAvailableComponentsManager.cpp", 140 /* ARTIST 0x824F37DC */));
+                    CGS_ARTIST_FILE, 140 /* ARTIST 0x824F37DC */));
             // fall through
 
         case E_PREPARE_REGISTERFOREVENTS:
@@ -198,7 +198,7 @@ namespace BrnGui
             lMessage << "String " << lpSource << " is too long. Buffer size = " << 48
                 << ", string length = " << luLength << "\n";
             CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 65);
+                CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 65));
             CgsDev::Assert::EndAssert();
         }
         while ((*lpDestination++ = *lpSource++) != '\0') {}
@@ -424,7 +424,7 @@ namespace BrnGui
                                             CgsDev::Assert::giMessageBufferSize);
                 lMessage << "Invalid buddy notification type : " << liNotification << "\n";
                 CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                    "..\\..\\..\\GameSource\\Gui/BrnGuiAlwaysAvailableComponentsManager.cpp", 426);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 426));
                 CgsDev::Assert::EndAssert();
                 if (mbContainerMovieClipPlaying)
                     mOnlineNotificationMessageComponent.ShowMessage(
@@ -484,3 +484,5 @@ namespace BrnGui
 
     }
 }
+
+#undef CGS_ARTIST_FILE

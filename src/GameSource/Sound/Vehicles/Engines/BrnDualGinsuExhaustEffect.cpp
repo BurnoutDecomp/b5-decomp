@@ -3,7 +3,7 @@
 #include "GameSource/Sound/Vehicles/Engines/BrnHybridExhaustControl.h"
 #include "GameSource/Sound/Vehicles/Engines/BrnPhysicsControl.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Vehicles/Engines/BrnDualGinsuEffect.cpp"
 #include <algorithm>
 
 // =============================================================================
@@ -151,8 +151,8 @@ bool DualGinsuExhaustEffect::Attach()
         return true;
     default:
         // ARTIST 0x826F27A0: BrnDualGinsuEffect.cpp line 1375 in the original.
-        CGS_ASSERT(false, CgsDev::Assert::MessageAt("Unhandled state",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Vehicles/Engines/BrnDualGinsuEffect.cpp",
+        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Unhandled state",
+            CGS_ARTIST_FILE,
             1375));
         return false;
     }
@@ -176,8 +176,8 @@ bool DualGinsuExhaustEffect::Detach()
         return true;
     default:
         // ARTIST 0x826F2804: this effect lives in BrnDualGinsuEffect.cpp in the original (line 1421).
-        CGS_ASSERT(false, CgsDev::Assert::MessageAt("Unhandled state",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Vehicles/Engines/BrnDualGinsuEffect.cpp",
+        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Unhandled state",
+            CGS_ARTIST_FILE,
             1421));
         return false;
     }
@@ -216,3 +216,5 @@ void DualGinsuExhaustEffect::ProcessUpdate()
 } // namespace Engines
 } // namespace Vehicles
 } // namespace BrnSound
+
+#undef CGS_ARTIST_FILE

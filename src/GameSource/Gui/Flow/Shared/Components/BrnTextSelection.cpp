@@ -146,7 +146,7 @@ namespace BrnGui
         {
             Selectable* lpCurrentlySelected = GetHighlighted();
             CGS_ASSERT(lpCurrentlySelected != 0,
-                CgsDev::Assert::MessageAt(
+                CGS_ASSERT_MESSAGE_AT(
                     "lpCurrentlySelected",
                     "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnTextSelection.cpp", 153 /* ARTIST 0x824E83F8 */));   // cpp:153
 

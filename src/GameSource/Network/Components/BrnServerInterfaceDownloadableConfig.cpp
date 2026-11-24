@@ -158,7 +158,7 @@ namespace BrnNetwork
             offsetof(BrnServerInterfaceDownloadableConfig, mfTimeBetweenOfflineProgressionUpload));
 
         CGS_ASSERT(miSizeOfMemLookupTable == KI_MAX_ELEMENTS_IN_MEMADDR_LOOKUP,
-                   CgsDev::Assert::MessageAt(
+                   CGS_ASSERT_MESSAGE_AT(
                        "miSizeOfMemLookupTable == KI_MAX_ELEMENTS_IN_MEMADDR_LOOKUP",
                        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
                        "../Network/Components/BrnServerInterfaceDownloadableConfig.cpp", 145));  // 0x8258341C

@@ -259,9 +259,9 @@ namespace BrnGui
     void LicenseComponent::AppendExpectedAptComponent(GuiFlow leFlow)
     {
         CGS_ASSERT(mpGuiCache != 0,
-            CgsDev::Assert::MessageAt("NULL != mpGuiCache", KAC_ARTIST_ASSERT_FILE, 145 /* ARTIST 0x8241A7C0 */));                         // cpp:145
+            CGS_ASSERT_MESSAGE_AT("NULL != mpGuiCache", KAC_ARTIST_ASSERT_FILE, 145 /* ARTIST 0x8241A7C0 */));                         // cpp:145
         CGS_ASSERT((E_GUIFLOW_FIRST <= leFlow) && (E_GUIFLOW_COUNT > leFlow),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "(E_GUIFLOW_FIRST <= leFlow) && (E_GUIFLOW_COUNT > leFlow)",
                 KAC_ARTIST_ASSERT_FILE, 147 /* ARTIST 0x8241A7EC */));   // cpp:147
 
@@ -925,7 +925,7 @@ namespace BrnGui
     void LicenseComponent::SetCachePointer(GuiCache* lpGuiCache)
     {
         CGS_ASSERT(lpGuiCache != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "NULL != lpGuiCache",
                 "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnLicenseComponent.h", 366 /* ARTIST 0x824B3214 */));   // h:366
         mpGuiCache = lpGuiCache;
@@ -1022,9 +1022,9 @@ namespace BrnGui
     bool LicenseComponent::EnsureResourcesAreUnloaded()
     {
         CGS_ASSERT(mpGuiCache != 0,
-            CgsDev::Assert::MessageAt("NULL != mpGuiCache", KAC_ARTIST_ASSERT_HEADER, 448 /* ARTIST 0x824B342C */));   // h:448
+            CGS_ASSERT_MESSAGE_AT("NULL != mpGuiCache", KAC_ARTIST_ASSERT_HEADER, 448 /* ARTIST 0x824B342C */));   // h:448
         CGS_ASSERT(meCurrentLicenseState == E_LICENSE_RESOURCES_UNLOADED,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "E_LICENSE_RESOURCES_UNLOADED == meCurrentLicenseState",
                 KAC_ARTIST_ASSERT_HEADER, 449 /* ARTIST 0x824B3454 */));   // h:449
 
@@ -1046,7 +1046,7 @@ namespace BrnGui
             return;
 
         CGS_ASSERT(miWinsInCurrentRank >= 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "miWinsInCurrentRank >= 0",
                 "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnLicenseComponent.cpp", 1167 /* ARTIST 0x8242D8DC */));   // cpp:1167
 
@@ -1078,8 +1078,8 @@ namespace BrnGui
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 lStrStream.GetBuffer(),
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flow\\screen\\components\\BrnLicenseComponent.h",
-                343);
+                CGS_ASSERT_LOCATION("d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flow\\screen\\components\\BrnLicenseComponent.h",
+                343));
             CgsDev::Assert::EndAssert();
         }
 
@@ -1093,8 +1093,8 @@ namespace BrnGui
     // ================================================================================
     void LicenseComponent::StartOutputtingGamerpic()
     {
-        CGS_ASSERT(mpProfile != 0, CgsDev::Assert::MessageAt("mpProfile", KAC_ARTIST_ASSERT_FILE, 1231));
-        CGS_ASSERT(mbShowingProfilePicture == false, CgsDev::Assert::MessageAt("mbShowingProfilePicture == false", KAC_ARTIST_ASSERT_FILE, 1232));
+        CGS_ASSERT(mpProfile != 0, CGS_ASSERT_MESSAGE_AT("mpProfile", KAC_ARTIST_ASSERT_FILE, 1231));
+        CGS_ASSERT(mbShowingProfilePicture == false, CGS_ASSERT_MESSAGE_AT("mbShowingProfilePicture == false", KAC_ARTIST_ASSERT_FILE, 1232));
 
         PostPlayerTextureEvent(mpStateInterface, E_PLAYERTEXTURE_LICENCE_GAMERPIC);
     }

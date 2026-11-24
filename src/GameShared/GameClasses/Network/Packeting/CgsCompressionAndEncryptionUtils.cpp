@@ -90,10 +90,10 @@ void CompressionAndEncryptionUtils::ResetBandwidthUsed(const CgsSystem::TimerSta
 // Copy the current period into the history ring and advance the ring cursor.
 void CompressionAndEncryptionUtils::UpdateBandwidthHistory()
 {
-    CGS_ASSERT(miHistoricalIndex >= 0, CgsDev::Assert::MessageAt(
+    CGS_ASSERT(miHistoricalIndex >= 0, CGS_ASSERT_MESSAGE_AT(
         "miHistoricalIndex >= 0",
         __FILE__, 668 /* ARTIST 0x8286FEC8 */));
-    CGS_ASSERT(miHistoricalIndex < KI_MAX_BANDWIDTH_HISTORY, CgsDev::Assert::MessageAt(
+    CGS_ASSERT(miHistoricalIndex < KI_MAX_BANDWIDTH_HISTORY, CGS_ASSERT_MESSAGE_AT(
         "miHistoricalIndex < KI_MAX_BANDWIDTH_HISTORY",
         __FILE__, 669 /* ARTIST 0x8286FEF0 */));
 
@@ -209,9 +209,9 @@ void CompressionAndEncryptionUtils::RecordBitsTransmitted(ESendRecv leSendRecv,
 {
     const s32 liEntryIndex = GetEntryIndex(liPlayerID);
     CGS_ASSERT(liEntryIndex >= 0,
-        CgsDev::Assert::MessageAt("liEntryIndex >= 0", __FILE__, 647 /* ARTIST 0x828805F4 */));
+        CGS_ASSERT_MESSAGE_AT("liEntryIndex >= 0", __FILE__, 647 /* ARTIST 0x828805F4 */));
     CGS_ASSERT(liEntryIndex < KI_MAX_PLAYERS,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "liEntryIndex < KI_MAX_PLAYERS", __FILE__, 648 /* ARTIST 0x82880618 */));
 
     maaaiBitsTransmitted[leSendRecv][liEntryIndex][leMessageType]          += liBits;
@@ -537,18 +537,18 @@ NetworkPlayerID CompressionAndEncryptionUtils::ExtractSendingPlayerID(u8* lpacBu
                                                                       s32 liBufferSize)
 {
     CGS_ASSERT(static_cast<u32>(liBufferSize) >= sizeof(PackedPacketHeader),
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "(uint32_t)liBufferSize >= sizeof(PackedPacketHeader)",
             __FILE__, 581 /* ARTIST 0x8286FD64 */));
     CGS_ASSERT(lpacBufferToUnPackFrom,
-        CgsDev::Assert::MessageAt("lpacBufferToUnPackFrom", __FILE__, 582 /* ARTIST 0x8286FD88 */));
+        CGS_ASSERT_MESSAGE_AT("lpacBufferToUnPackFrom", __FILE__, 582 /* ARTIST 0x8286FD88 */));
 
     const PackedPacketHeader* lpHeader =
         reinterpret_cast<const PackedPacketHeader*>(lpacBufferToUnPackFrom);
     if ((lpHeader->mx8Flags & KX8_FLAGS_RELIABLE) == KX8_FLAGS_RELIABLE)
     {
         CGS_ASSERT(static_cast<u32>(liBufferSize) > sizeof(ReliablePackedPacketHeader),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "(uint32_t)liBufferSize > sizeof(ReliablePackedPacketHeader)",
                 __FILE__, 590 /* ARTIST 0x8286FDBC */));
         const ReliablePackedPacketHeader* lpReliableHeader =

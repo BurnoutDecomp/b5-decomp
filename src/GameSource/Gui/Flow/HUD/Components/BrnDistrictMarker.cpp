@@ -303,7 +303,7 @@ namespace BrnGui
     void DistrictMarkerComponent::CountyTransitionCompleteCallback(void* lpUserData, u16 /*luArg*/)
     {
         CGS_ASSERT(lpUserData != 0,
-            CgsDev::Assert::MessageAt("lpUserData", __FILE__, 471 /* ARTIST 0x82412B64 */));
+            CGS_ASSERT_MESSAGE_AT("lpUserData", __FILE__, 471 /* ARTIST 0x82412B64 */));
 
         DistrictMarkerComponent* const lpThis = static_cast<DistrictMarkerComponent*>(lpUserData);
         lpThis->ProcessCountyTransitionComplete(0);
@@ -313,7 +313,7 @@ namespace BrnGui
     void DistrictMarkerComponent::DistrictTransitionCompleteCallback(void* lpUserData, u16 /*luArg*/)
     {
         CGS_ASSERT(lpUserData != 0,
-            CgsDev::Assert::MessageAt("lpUserData", __FILE__, 492 /* ARTIST 0x82412BC4 */));
+            CGS_ASSERT_MESSAGE_AT("lpUserData", __FILE__, 492 /* ARTIST 0x82412BC4 */));
 
         DistrictMarkerComponent* const lpThis = static_cast<DistrictMarkerComponent*>(lpUserData);
         lpThis->ProcessDistrictTransitionComplete(0);

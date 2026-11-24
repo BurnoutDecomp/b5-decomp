@@ -21,7 +21,7 @@
 // chain this screen closes.
 // ===================================================================================
 #include "GameSource/Gui/Flow/Screen/States/BrnCarSelectLivery.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCarSelectLivery.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N>
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface (register / play-apt / out-queue)
@@ -185,7 +185,7 @@ namespace BrnGui
     void CarSelectLivery::Construct(CgsID liId, CgsFsm::ScriptedFsm* lpFsm)
     {
         // cpp:107 -- streamed on the console; the call site passes a plain string.
-        CGS_ASSERT(lpFsm != 0, CgsDev::Assert::StreamMessageAt("Invalid ScriptedFsm ptr", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCarSelectLivery.cpp", 107));
+        CGS_ASSERT(lpFsm != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid ScriptedFsm ptr", CGS_ARTIST_FILE, 107));
 
         CarSelectMain::Construct(liId, lpFsm);
     }
@@ -407,8 +407,8 @@ namespace BrnGui
     // site is the reason its FLAG can now record a second attested role.
     bool CarSelectLivery::CanCarBePainted(const BrnResource::VehicleListEntry* lpVehicleListEntry) const
     {
-        CGS_ASSERT(lpVehicleListEntry != 0, CgsDev::Assert::MessageAt("lpVehicleListEntryGamePlayData", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCarSelectLivery.cpp", 1225 /* ARTIST 0x824B5318 */));   // cpp:1225
-        CGS_ASSERT(mpGuiCache != 0, CgsDev::Assert::MessageAt("lpGameParams", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCarSelectLivery.cpp", 1228 /* ARTIST 0x824B5348 */));                             // cpp:1228
+        CGS_ASSERT(lpVehicleListEntry != 0, CGS_ASSERT_MESSAGE_AT("lpVehicleListEntryGamePlayData", CGS_ARTIST_FILE, 1225 /* ARTIST 0x824B5318 */));   // cpp:1225
+        CGS_ASSERT(mpGuiCache != 0, CGS_ASSERT_MESSAGE_AT("lpGameParams", CGS_ARTIST_FILE, 1228 /* ARTIST 0x824B5348 */));                             // cpp:1228
 
         // ⚠️ ENTRY guard, not in the X360 body. The console dereferences the entry
         // unconditionally because the game state always publishes a live drop-in car id
@@ -1229,7 +1229,7 @@ namespace BrnGui
     // ---- HandleControllerInput @ 0x824D6D10 ----------------------------------------
     void CarSelectLivery::HandleControllerInput(const CgsModule::Event* lpEvent, s32 liEventKind)
     {
-        CGS_ASSERT(lpEvent != 0, CgsDev::Assert::MessageAt("lpEvent", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCarSelectLivery.cpp", 674 /* ARTIST 0x824D6D48 */));   // cpp:674
+        CGS_ASSERT(lpEvent != 0, CGS_ASSERT_MESSAGE_AT("lpEvent", CGS_ARTIST_FILE, 674 /* ARTIST 0x824D6D48 */));   // cpp:674
 
         CarSelectMain::HandleControllerInput(lpEvent, liEventKind);
 
@@ -1538,9 +1538,9 @@ namespace BrnGui
                                                              s32 liEventType)
     {
         CGS_ASSERT(lpEvent != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpEvent",
-                "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCarSelectLivery.cpp", 1068 /* ARTIST 0x824C0E40 */));   // cpp:1068
+                CGS_ARTIST_FILE, 1068 /* ARTIST 0x824C0E40 */));   // cpp:1068
 
         if (liEventType != 414 || mbDisableCarModifyInteraction)
         {
@@ -1561,3 +1561,5 @@ namespace BrnGui
     }
 
 }
+
+#undef CGS_ARTIST_FILE

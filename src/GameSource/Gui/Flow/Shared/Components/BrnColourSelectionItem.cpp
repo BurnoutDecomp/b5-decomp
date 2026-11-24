@@ -30,13 +30,13 @@ namespace BrnGui
                                           const rw::math::vpu::Vector4** lppv4OutColour2) const
     {
         CGS_ASSERT(lppv4OutColour1 != 0,
-            CgsDev::Assert::MessageAt("lppv4OutColour1", __FILE__, 118 /* ARTIST 0x824E5530 */));   // @0x824E551C
+            CGS_ASSERT_MESSAGE_AT("lppv4OutColour1", __FILE__, 118 /* ARTIST 0x824E5530 */));   // @0x824E551C
         CGS_ASSERT(lppv4OutColour2 != 0,
-            CgsDev::Assert::MessageAt("lppv4OutColour2", __FILE__, 119 /* ARTIST 0x824E5554 */));   // @0x824E5544
+            CGS_ASSERT_MESSAGE_AT("lppv4OutColour2", __FILE__, 119 /* ARTIST 0x824E5554 */));   // @0x824E5544
         CGS_ASSERT(mpcSelectionColour1 != 0,
-            CgsDev::Assert::MessageAt("mpcSelectionColour1", __FILE__, 120 /* ARTIST 0x824E557C */));   // @0x824E5568
+            CGS_ASSERT_MESSAGE_AT("mpcSelectionColour1", __FILE__, 120 /* ARTIST 0x824E557C */));   // @0x824E5568
         CGS_ASSERT(mpcSelectionColour2 != 0,
-            CgsDev::Assert::MessageAt("mpcSelectionColour2", __FILE__, 121 /* ARTIST 0x824E55A4 */));   // @0x824E5590
+            CGS_ASSERT_MESSAGE_AT("mpcSelectionColour2", __FILE__, 121 /* ARTIST 0x824E55A4 */));   // @0x824E5590
 
         *lppv4OutColour1 = mpcSelectionColour1;   // stw @0x824E55BC
         *lppv4OutColour2 = mpcSelectionColour2;   // stw @0x824E55C4

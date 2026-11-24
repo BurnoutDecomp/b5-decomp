@@ -24,7 +24,7 @@ namespace CgsResource
                         << " is too long. Buffer size = " << static_cast<s32>(N)
                         << ", string length = " << length << "\n";
                 CgsDev::Assert::FireAssert(message.GetBuffer(),
-                    "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 65);
+                    CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 65));
                 CgsDev::Assert::EndAssert();
             }
             std::strcpy(destination, source);
@@ -69,7 +69,7 @@ namespace CgsResource
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("Too many heaps in pool window\n",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsDebugPoolWindow.cpp", 63);
+                CGS_ASSERT_LOCATION("d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsDebugPoolWindow.cpp", 63));
             CgsDev::Assert::EndAssert();
         }
         HeapDisplayInfo& lrInfo = maHeaps[miNumHeaps++];

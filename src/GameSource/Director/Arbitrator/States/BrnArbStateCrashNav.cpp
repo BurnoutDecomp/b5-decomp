@@ -545,7 +545,7 @@ namespace BrnDirector
         }
 
         default:
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt("unhandled state", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateCrashNav.cpp", 274));
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unhandled state", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateCrashNav.cpp", 274));
             break;
         }
 

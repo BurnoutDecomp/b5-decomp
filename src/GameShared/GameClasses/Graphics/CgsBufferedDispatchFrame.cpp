@@ -123,7 +123,7 @@ void BufferedDispatchFrame::Swap()
 DispatchList& BufferedDispatchFrame::GetDispatchListForWrite(u32 luListId)
 {
     CGS_ASSERT(muNumDispatchFrames > muCurrentFrameForWrite,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "muNumDispatchFrames > muCurrentFrameForWrite",
             KAC_ARTIST_ASSERT_FILE, 171 /* ARTIST 0x827E77DC */));
 
@@ -135,7 +135,7 @@ DispatchList& BufferedDispatchFrame::GetDispatchListForWrite(u32 luListId)
 DispatchBin& BufferedDispatchFrame::GetDispatchBinForWrite()
 {
     CGS_ASSERT(muNumDispatchFrames > muCurrentFrameForWrite,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "muNumDispatchFrames > muCurrentFrameForWrite",
             KAC_ARTIST_ASSERT_FILE, 189 /* ARTIST 0x827E7854 */));
 
@@ -147,7 +147,7 @@ DispatchBin& BufferedDispatchFrame::GetDispatchBinForWrite()
 DispatchFrame& BufferedDispatchFrame::GetDispatchFrameForWrite()
 {
     CGS_ASSERT(muNumDispatchFrames > muCurrentFrameForWrite,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "muNumDispatchFrames > muCurrentFrameForWrite",
             KAC_ARTIST_ASSERT_FILE, 207 /* ARTIST 0x827E78C4 */));
 
@@ -159,7 +159,7 @@ DispatchFrame& BufferedDispatchFrame::GetDispatchFrameForWrite()
 DispatchFrame& BufferedDispatchFrame::GetDispatchFrameForRead()
 {
     CGS_ASSERT(muNumDispatchFrames > muCurrentFrameForRead,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "muNumDispatchFrames > muCurrentFrameForRead",
             KAC_ARTIST_ASSERT_FILE, 226 /* ARTIST 0x827E792C */));
 

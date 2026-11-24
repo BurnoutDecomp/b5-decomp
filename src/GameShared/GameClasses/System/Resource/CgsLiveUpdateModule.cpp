@@ -28,7 +28,7 @@ namespace CgsResource
     {
         // Only one live-update module may exist at a time.
         CGS_ASSERT(spInstance == 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "spInstance==NULL",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsLiveUpdateModule.cpp", 52 /* ARTIST 0x828E6574 */));
 

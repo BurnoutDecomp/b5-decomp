@@ -27,12 +27,12 @@ namespace BrnNetwork
         miNumEncodes   = 0;
         mbRenderImage  = false;
 
-        CGS_ASSERT(lpImageManager != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpImageManager != 0, CGS_ASSERT_MESSAGE_AT(
             "lpImageManager",
             __FILE__, 59 /* ARTIST 0x82586488 */));
         mpImageManager = lpImageManager;
 
-        CGS_ASSERT(lpTextureCompressor != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpTextureCompressor != 0, CGS_ASSERT_MESSAGE_AT(
             "lpTextureCompressor",
             __FILE__, 62 /* ARTIST 0x825864B0 */));
         mpTextureCompressor = lpTextureCompressor;

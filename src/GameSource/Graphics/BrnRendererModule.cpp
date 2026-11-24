@@ -26,7 +26,7 @@
 #include <cstring>
 #include <cstdio>
 #include <xgraphics.h>
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Graphics/BrnRendererModule.cpp"
 namespace CgsGraphics
 {
     extern OcclusionCullManager* spOcclusionCullManager;
@@ -44,7 +44,7 @@ void BrnRendererModule::DeviceInitialise()
     if (!shadow::Device::Initialize())
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("RenderClub Graphics device intialise failed.\n", lpcFile, 488);
+        CgsDev::Assert::FireAssert("RenderClub Graphics device intialise failed.\n", CGS_ASSERT_LOCATION(lpcFile, 488));
         CgsDev::Assert::EndAssert();
     }
     renderengine::Device::Parameters lParameters;
@@ -57,7 +57,7 @@ void BrnRendererModule::DeviceInitialise()
     if (!renderengine::Device::Start(lParameters))
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("Cannot start Graphics device.\n", lpcFile, 580);
+        CgsDev::Assert::FireAssert("Cannot start Graphics device.\n", CGS_ASSERT_LOCATION(lpcFile, 580));
         CgsDev::Assert::EndAssert();
     }
 }
@@ -506,7 +506,7 @@ bool BrnRendererModule::Prepare(const BrnResource::GameDataIO::AllocatorList* al
     default:
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("Invalid Render Module Prepare State",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Graphics/BrnRendererModule.cpp", 1439);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 1439));
         CgsDev::Assert::EndAssert();
         break;
     }
@@ -518,49 +518,49 @@ bool BrnRendererModule::Prepare(const BrnResource::GameDataIO::AllocatorList* al
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("mIm2dRenderBuffer.Prepare( KI_IM2D_RENDER_BUFFER_COMMAND_BUFFER_SIZE, KI_IM2D_RENDER_BUFFER_VERTEX_BUFFER_SIZE, lpAllocator )",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Graphics/BrnRendererModule.cpp", 1456);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 1456));
         CgsDev::Assert::EndAssert();
     }
     if (!mIm3dRenderBuffer.Prepare(1024, 32768, allocator, false))
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("mIm3dRenderBuffer.Prepare( KI_IM3D_RENDER_BUFFER_COMMAND_BUFFER_SIZE, KI_IM3D_RENDER_BUFFER_VERTEX_BUFFER_SIZE, lpAllocator )",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Graphics/BrnRendererModule.cpp", 1466);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 1466));
         CgsDev::Assert::EndAssert();
     }
     if (!mIm3dRenderBufferUntex.Prepare(16384, 524288, allocator, false))
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("mIm3dRenderBufferUntex.Prepare( KI_IM3D_RENDER_BUFFER_UNTEX_COMMAND_BUFFER_SIZE, KI_IM3D_RENDER_BUFFER_UNTEX_VERTEX_BUFFER_SIZE, lpAllocator )",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Graphics/BrnRendererModule.cpp", 1470);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 1470));
         CgsDev::Assert::EndAssert();
     }
     if (!mIm3dDebugRenderBuffer.Prepare(1048576, 1048576, BrnResource::GetDebugAllocator(), true))
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("mIm3dDebugRenderBuffer.Prepare( KI_IM3D_DEBUG_RENDER_BUFFER_COMMAND_BUFFER_SIZE, KI_IM3D_DEBUG_RENDER_BUFFER_VERTEX_BUFFER_SIZE, BrnResource::GetDebugAllocator(), true )",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Graphics/BrnRendererModule.cpp", 1477);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 1477));
         CgsDev::Assert::EndAssert();
     }
     if (!mIm2dDebugRenderBuffer.Prepare(81920, 2097152, BrnResource::GetDebugAllocator(), true))
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("mIm2dDebugRenderBuffer.Prepare( KI_IM2D_DEBUG_RENDER_BUFFER_COMMAND_BUFFER_SIZE, KI_IM2D_DEBUG_RENDER_BUFFER_VERTEX_BUFFER_SIZE, BrnResource::GetDebugAllocator(), true )",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Graphics/BrnRendererModule.cpp", 1482);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 1482));
         CgsDev::Assert::EndAssert();
     }
     if (!mIm3dBufferRacePosition.Prepare(131072, 131072, allocator, false))
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("mIm3dBufferRacePosition.Prepare( KI_IM3D_RENDER_BUFFER_RACEPOSITIONS_COMMANDBUFFER_SIZE, KI_IM3D_RENDER_BUFFER_RACEPOSITIONS_VERTEXBUFFER_SIZE, lpAllocator )",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Graphics/BrnRendererModule.cpp", 1488);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 1488));
         CgsDev::Assert::EndAssert();
     }
     if (!mIm3dBufferMenusAndHud.Prepare(512, 4, allocator, false))
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("mIm3dBufferMenusAndHud.Prepare( KI_IM3D_RENDER_BUFFER_MENUSANDHUD_COMMANDBUFFER_SIZE, KI_IM3D_RENDER_BUFFER_MENUSANDHUD_VERTEXBUFFER_SIZE, lpAllocator )",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Graphics/BrnRendererModule.cpp", 1492);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 1492));
         CgsDev::Assert::EndAssert();
     }
     mSkyDome.Prepare(&mIm3dRendererSkyDome, BrnResource::GetGraphicsAllocator());
@@ -633,7 +633,7 @@ bool BrnRendererModule::Release()
     default:
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("Invalid Render Module Release State",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Graphics/BrnRendererModule.cpp", 1608);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 1608));
         CgsDev::Assert::EndAssert();
         return false;
     }
@@ -753,13 +753,13 @@ void BrnRendererModule::EndRenderEnvironmentMapFace(u32 face)
     if (!mAllocatedRenderTargets.GetEnvMapBuffer())
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("mAllocatedRenderTargets.GetEnvMapBuffer()", file, 4204);
+        CgsDev::Assert::FireAssert("mAllocatedRenderTargets.GetEnvMapBuffer()", CGS_ASSERT_LOCATION(file, 4204));
         CgsDev::Assert::EndAssert();
     }
     if (!mAllocatedRenderTargets.GetEnvMapBuffer()->GetRenderTarget())
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("mAllocatedRenderTargets.GetEnvMapBuffer()->GetRenderTarget()", file, 4205);
+        CgsDev::Assert::FireAssert("mAllocatedRenderTargets.GetEnvMapBuffer()->GetRenderTarget()", CGS_ASSERT_LOCATION(file, 4205));
         CgsDev::Assert::EndAssert();
     }
     mAllocatedRenderTargets.GetEnvMapBuffer()->GetRenderTarget()->maColourTargets[0].Resolve(face);
@@ -787,13 +787,13 @@ void FillInObjectToMeshJobData(EA::Jobs::Job* job, ObjectToMeshJobInfo* outData,
     if (!outData)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpOutJobData", kRendererSource, 1734);
+        CgsDev::Assert::FireAssert("lpOutJobData", CGS_ASSERT_LOCATION(kRendererSource, 1734));
         CgsDev::Assert::EndAssert();
     }
     if (!job)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpOutJob", kRendererSource, 1735);
+        CgsDev::Assert::FireAssert("lpOutJob", CGS_ASSERT_LOCATION(kRendererSource, 1735));
         CgsDev::Assert::EndAssert();
     }
     std::memcpy(outData, &data, sizeof(data));
@@ -832,7 +832,7 @@ void BrnRendererModule::CreateObjectToMeshJob(ERendererModelOnlyDispatchJob jobI
     if (groupIndex < 0 || static_cast<u32>(groupIndex) >= static_cast<u32>(groupSize))
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("0 <= luGroupIndex && luGroupIndex < luGroupSize", kRendererSource, 1794);
+        CgsDev::Assert::FireAssert("0 <= luGroupIndex && luGroupIndex < luGroupSize", CGS_ASSERT_LOCATION(kRendererSource, 1794));
         CgsDev::Assert::EndAssert();
     }
 
@@ -904,7 +904,7 @@ void BrnRendererModule::ConvertObjectsToMeshes(CgsGraphics::BufferedDispatchFram
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("Object-to-mesh conversion jobs failed due to insufficient memory.",
-                kRendererSource, 2001);
+                CGS_ASSERT_LOCATION(kRendererSource, 2001));
             CgsDev::Assert::EndAssert();
             blocksUsed = guSharedMemoryBlockMax;
         }
@@ -956,13 +956,13 @@ void PrepareRadixSortJob(EA::Jobs::Job* job, SortInfo* data, CgsGraphics::Dispat
     if (!data)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpOutJobData", file, 3573);
+        CgsDev::Assert::FireAssert("lpOutJobData", CGS_ASSERT_LOCATION(file, 3573));
         CgsDev::Assert::EndAssert();
     }
     if (!job)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpOutJob", file, 3574);
+        CgsDev::Assert::FireAssert("lpOutJob", CGS_ASSERT_LOCATION(file, 3574));
         CgsDev::Assert::EndAssert();
     }
 
@@ -1133,13 +1133,13 @@ void BrnRendererModule::BeginRenderEnvironmentMapFace(u32 face, f32 whiteLevel)
     if (!mAllocatedRenderTargets.GetEnvMapBuffer())
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("mAllocatedRenderTargets.GetEnvMapBuffer()", file, 4163);
+        CgsDev::Assert::FireAssert("mAllocatedRenderTargets.GetEnvMapBuffer()", CGS_ASSERT_LOCATION(file, 4163));
         CgsDev::Assert::EndAssert();
     }
     if (!mAllocatedRenderTargets.GetEnvMapBuffer()->GetRenderTarget())
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("mAllocatedRenderTargets.GetEnvMapBuffer()->GetRenderTarget()", file, 4164);
+        CgsDev::Assert::FireAssert("mAllocatedRenderTargets.GetEnvMapBuffer()->GetRenderTarget()", CGS_ASSERT_LOCATION(file, 4164));
         CgsDev::Assert::EndAssert();
     }
     mAllocatedRenderTargets.GetEnvMapBuffer()->SetRenderTargetStateInvertDepth(face);
@@ -1162,13 +1162,13 @@ void BrnRendererModule::BeginQuarterResBuffer()
     if (!mAllocatedRenderTargets.GetParticleBuffer())
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("mAllocatedRenderTargets.GetParticleBuffer() != NULL", file, 4302);
+        CgsDev::Assert::FireAssert("mAllocatedRenderTargets.GetParticleBuffer() != NULL", CGS_ASSERT_LOCATION(file, 4302));
         CgsDev::Assert::EndAssert();
     }
     if (!mAllocatedRenderTargets.GetParticleBuffer()->GetRenderTarget())
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("mAllocatedRenderTargets.GetParticleBuffer()->GetRenderTarget() != NULL", file, 4303);
+        CgsDev::Assert::FireAssert("mAllocatedRenderTargets.GetParticleBuffer()->GetRenderTarget() != NULL", CGS_ASSERT_LOCATION(file, 4303));
         CgsDev::Assert::EndAssert();
     }
     mAllocatedRenderTargets.GetParticleBuffer()->SetRenderTargetState(0);
@@ -1221,7 +1221,7 @@ void BrnRendererModule::TakeScreenshot()
                 {
                     CgsDev::Assert::BeginAssert();
                     CgsDev::Assert::FireAssert("lLockedFrontBuffer.pitch <= kiMaxRowSize",
-                        kRendererSource, 4752);
+                        CGS_ASSERT_LOCATION(kRendererSource, 4752));
                     CgsDev::Assert::EndAssert();
                 }
                 const RECT source = { 0, y, frontBuffer.width, y + 1 };
@@ -1353,7 +1353,7 @@ void BrnRendererModule::RenderThreeThreadMonitors(bool thread0, bool thread1, bo
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("mgpActiveRenderer == this",
-            "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/CgsImRenderer.h", 645);
+            CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/CgsImRenderer.h", 645));
         CgsDev::Assert::EndAssert();
     }
     ImRendererBase::mgpActiveRenderer = 0;
@@ -1364,8 +1364,8 @@ void BrnRendererModule::Update(CgsModule::IOBufferStack*, CgsModule::IOBufferSta
                                RendererIO::InputBuffer* lpInput, RendererIO::OutputBuffer* lpOutput)
 {
     const char* const file = "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Graphics/BrnRendererModule.cpp";
-    if (!lpOutput) { CgsDev::Assert::BeginAssert(); CgsDev::Assert::FireAssert("lpOutput", file, 4519); CgsDev::Assert::EndAssert(); }
-    if (!lpInput) { CgsDev::Assert::BeginAssert(); CgsDev::Assert::FireAssert("lpInput", file, 4520); CgsDev::Assert::EndAssert(); }
+    if (!lpOutput) { CgsDev::Assert::BeginAssert(); CgsDev::Assert::FireAssert("lpOutput", CGS_ASSERT_LOCATION(file, 4519)); CgsDev::Assert::EndAssert(); }
+    if (!lpInput) { CgsDev::Assert::BeginAssert(); CgsDev::Assert::FireAssert("lpInput", CGS_ASSERT_LOCATION(file, 4520)); CgsDev::Assert::EndAssert(); }
     lpInput->LockForRead();
     lpOutput->LockForWrite();
     lpOutput->SetBrnCamera(lpInput->GetBrnCamera());
@@ -1467,7 +1467,7 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* effects,
     if (!shadow::Device::FrameBegin())
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("shadow::Device::FrameBegin()", kRendererSource, 2185);
+        CgsDev::Assert::FireAssert("shadow::Device::FrameBegin()", CGS_ASSERT_LOCATION(kRendererSource, 2185));
         CgsDev::Assert::EndAssert();
     }
     PerfMonCpu::StartMonitor(mCpuMonitors.miWholeDispatchThread);
@@ -1495,7 +1495,7 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* effects,
     if (input->IsWriteBuffer())
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(readBuffer, kRendererSource, 2223);
+        CgsDev::Assert::FireAssert(readBuffer, CGS_ASSERT_LOCATION(kRendererSource, 2223));
         CgsDev::Assert::EndAssert();
     }
     input->LockForRead();
@@ -1527,7 +1527,7 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* effects,
     if (input->IsWriteBuffer())
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(readBuffer, kRendererSource, 2274);
+        CgsDev::Assert::FireAssert(readBuffer, CGS_ASSERT_LOCATION(kRendererSource, 2274));
         CgsDev::Assert::EndAssert();
     }
     input->LockForRead();
@@ -2096,7 +2096,7 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* effects,
     if (input->IsWriteBuffer())
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(readBuffer, kRendererSource, 3557);
+        CgsDev::Assert::FireAssert(readBuffer, CGS_ASSERT_LOCATION(kRendererSource, 3557));
         CgsDev::Assert::EndAssert();
     }
     input->UnlockForRead();
@@ -2135,3 +2135,5 @@ void BrnRendererModule::DEBUGTriggerScreenShot(const char* lpcScreenShotText)
 }
 
 // MemoryUsage is defined in BrnRendererModule.cpp (ARTIST823FBDE0).
+
+#undef CGS_ARTIST_FILE

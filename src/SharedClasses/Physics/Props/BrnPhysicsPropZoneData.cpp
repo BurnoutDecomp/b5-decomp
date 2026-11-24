@@ -48,25 +48,25 @@ namespace Props
         if (!(lfX > -KI_WORLD_X_HALF_EXTENT))
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lfX > -KI_WORLD_X_HALF_EXTENT", lpFile, 515);
+            CgsDev::Assert::FireAssert("lfX > -KI_WORLD_X_HALF_EXTENT", CGS_ASSERT_LOCATION(lpFile, 515));
             CgsDev::Assert::EndAssert();
         }
         if (!(lfX < KI_WORLD_X_HALF_EXTENT + KI_WORLD_X_EXTENSION))
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lfX < KI_WORLD_X_HALF_EXTENT + KI_WORLD_X_EXTENSION", lpFile, 516);
+            CgsDev::Assert::FireAssert("lfX < KI_WORLD_X_HALF_EXTENT + KI_WORLD_X_EXTENSION", CGS_ASSERT_LOCATION(lpFile, 516));
             CgsDev::Assert::EndAssert();
         }
         if (!(lfZ > -KI_WORLD_Z_HALF_EXTENT))
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lfZ > -KI_WORLD_Z_HALF_EXTENT", lpFile, 517);
+            CgsDev::Assert::FireAssert("lfZ > -KI_WORLD_Z_HALF_EXTENT", CGS_ASSERT_LOCATION(lpFile, 517));
             CgsDev::Assert::EndAssert();
         }
         if (!(lfZ < KI_WORLD_Z_HALF_EXTENT))
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lfZ < KI_WORLD_Z_HALF_EXTENT", lpFile, 518);
+            CgsDev::Assert::FireAssert("lfZ < KI_WORLD_Z_HALF_EXTENT", CGS_ASSERT_LOCATION(lpFile, 518));
             CgsDev::Assert::EndAssert();
         }
 

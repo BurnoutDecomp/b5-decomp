@@ -1,5 +1,5 @@
 #include "GameSource/Gui/Flow/HUD/Components/BrnJunctionInfoComponent.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnJunctionInfoComponent.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                                 // CGS_ASSERT + CgsDev::Assert::{Begin,Fire,End}Assert
 #include "GameShared/GameClasses/Core/CgsID.h"                                     // CgsIDConvertToString
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                            // CgsCore::SnPrintf
@@ -185,9 +185,9 @@ namespace BrnGui
                                                      CgsID lCurrentCarId)
     {
         CGS_ASSERT(lpEvent != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpEvent",
-                "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnJunctionInfoComponent.cpp", 152 /* ARTIST 0x824400E0 */));
+                CGS_ARTIST_FILE, 152 /* ARTIST 0x824400E0 */));
 
         mJunctionInfo = *lpEvent;
         mJunctionInfo.mi8Difficulty = 0;
@@ -298,9 +298,9 @@ namespace BrnGui
     void JunctionInfoComponent::Refresh(const char* lpComponentName)
     {
         CGS_ASSERT(lpComponentName != NULL,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpComponentName != NULL",
-                "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnJunctionInfoComponent.cpp", 289 /* ARTIST 0x82414D74 */));
+                CGS_ARTIST_FILE, 289 /* ARTIST 0x82414D74 */));
     }
 
     // @0x82423F40 -- play the named animation on the panel's own apt clip (base mAptRef)
@@ -327,9 +327,9 @@ namespace BrnGui
             return "Bronze";
         default:
             CGS_ASSERT(false,
-                CgsDev::Assert::MessageAt(
+                CGS_ASSERT_MESSAGE_AT(
                     "Unhandled medal index in JunctionInfoComponent::GetMedalFrameNameFromMedal\n",
-                    "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnJunctionInfoComponent.cpp", 362 /* ARTIST 0x82414E34 */));
+                    CGS_ARTIST_FILE, 362 /* ARTIST 0x82414E34 */));
             return 0;
         }
     }
@@ -414,11 +414,13 @@ namespace BrnGui
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 lacMessage,
-                "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnJunctionInfoComponent.cpp",
-                429);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                429));
             CgsDev::Assert::EndAssert();
 
             mEventNameTextfield.SetText("LOCKED EVENT", 0);
         }
     }
 }
+
+#undef CGS_ARTIST_FILE

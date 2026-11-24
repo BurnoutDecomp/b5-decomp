@@ -271,7 +271,7 @@ void MomentNewCarJoined::Update(f32 /*lfTimeStep -- dead arg, see the banner*/,
         break;
 
     default:
-        CGS_ASSERT(false, CgsDev::Assert::MessageAt("unhandled case in switch", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentNewCarJoined.cpp", 187));   //  (non-gating)
+        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unhandled case in switch", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentNewCarJoined.cpp", 187));   //  (non-gating)
         return;
     }
 

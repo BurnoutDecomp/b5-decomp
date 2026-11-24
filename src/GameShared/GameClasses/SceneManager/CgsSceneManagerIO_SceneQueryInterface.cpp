@@ -131,37 +131,37 @@ void CgsSceneManager::SceneManagerIO::SceneQueryInterface::Append(const SceneQue
         "..\\..\\..\\GameShared\\GameClasses\\SceneManager/CgsSceneManagerModuleIO.h";
 
     CGS_ASSERT(mpFineLineTestQueue || !lOther.mpFineLineTestQueue,
-        CgsDev::Assert::MessageAt("mpFineLineTestQueue || !lOther.mpFineLineTestQueue",
+        CGS_ASSERT_MESSAGE_AT("mpFineLineTestQueue || !lOther.mpFineLineTestQueue",
             lpcAssertFile, 1138 /* ARTIST 0x823C5034 */));
     if (lOther.mpFineLineTestQueue)
         mpFineLineTestQueue->Append(*lOther.mpFineLineTestQueue);
 
     CGS_ASSERT(mpFineVolumeTestQueue || !lOther.mpFineVolumeTestQueue,
-        CgsDev::Assert::MessageAt("mpFineVolumeTestQueue || !lOther.mpFineVolumeTestQueue",
+        CGS_ASSERT_MESSAGE_AT("mpFineVolumeTestQueue || !lOther.mpFineVolumeTestQueue",
             lpcAssertFile, 1144 /* ARTIST 0x823C507C */));
     if (lOther.mpFineVolumeTestQueue)
         mpFineVolumeTestQueue->Append(*lOther.mpFineVolumeTestQueue);
 
     CGS_ASSERT(mpFineLineTestFastDoubleSidedQueue || !lOther.mpFineLineTestFastDoubleSidedQueue,
-        CgsDev::Assert::MessageAt("mpFineLineTestFastDoubleSidedQueue || !lOther.mpFineLineTestFastDoubleSidedQueue",
+        CGS_ASSERT_MESSAGE_AT("mpFineLineTestFastDoubleSidedQueue || !lOther.mpFineLineTestFastDoubleSidedQueue",
             lpcAssertFile, 1150 /* ARTIST 0x823C50C4 */));
     if (lOther.mpFineLineTestFastDoubleSidedQueue)
         mpFineLineTestFastDoubleSidedQueue->Append(*lOther.mpFineLineTestFastDoubleSidedQueue);
 
     CGS_ASSERT(mpFineSphereTestFastQueue || !lOther.mpFineSphereTestFastQueue,
-        CgsDev::Assert::MessageAt("mpFineSphereTestFastQueue || !lOther.mpFineSphereTestFastQueue",
+        CGS_ASSERT_MESSAGE_AT("mpFineSphereTestFastQueue || !lOther.mpFineSphereTestFastQueue",
             lpcAssertFile, 1156 /* ARTIST 0x823C510C */));
     if (lOther.mpFineSphereTestFastQueue)
         mpFineSphereTestFastQueue->Append(*lOther.mpFineSphereTestFastQueue);
 
     CGS_ASSERT(mpFineLineTestNearestQueue || !lOther.mpFineLineTestNearestQueue,
-        CgsDev::Assert::MessageAt("mpFineLineTestNearestQueue || !lOther.mpFineLineTestNearestQueue",
+        CGS_ASSERT_MESSAGE_AT("mpFineLineTestNearestQueue || !lOther.mpFineLineTestNearestQueue",
             lpcAssertFile, 1162 /* ARTIST 0x823C5154 */));
     if (lOther.mpFineLineTestNearestQueue)
         mpFineLineTestNearestQueue->Append(*lOther.mpFineLineTestNearestQueue);
 
     CGS_ASSERT(mpFineVolumeTestDeepestQueue || !lOther.mpFineVolumeTestDeepestQueue,
-        CgsDev::Assert::MessageAt("mpFineVolumeTestDeepestQueue || !lOther.mpFineVolumeTestDeepestQueue",
+        CGS_ASSERT_MESSAGE_AT("mpFineVolumeTestDeepestQueue || !lOther.mpFineVolumeTestDeepestQueue",
             lpcAssertFile, 1168 /* ARTIST 0x823C519C */));
     if (lOther.mpFineVolumeTestDeepestQueue)
         mpFineVolumeTestDeepestQueue->Append(*lOther.mpFineVolumeTestDeepestQueue);

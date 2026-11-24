@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\CgsLinearMalloc.cpp"
 // CgsMemory::LinearMalloc - bump allocator over a caller-supplied region. Recovered
 // Construct resets the region and owned slot without touching the last allocation.
 // Create borrows [buffer, buffer+size); it does not claim ownership of that buffer.
@@ -30,8 +30,8 @@ namespace CgsMemory
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 "mpAlloc==NULL",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\CgsLinearMalloc.cpp",
-                164);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                164));
             CgsDev::Assert::EndAssert();
         }
         if (mbCreated)
@@ -39,8 +39,8 @@ namespace CgsMemory
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 "mbCreated==false",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\CgsLinearMalloc.cpp",
-                165);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                165));
             CgsDev::Assert::EndAssert();
         }
         if (lpBuffer == 0)
@@ -48,8 +48,8 @@ namespace CgsMemory
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 "lpBuffer",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\CgsLinearMalloc.cpp",
-                166);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                166));
             CgsDev::Assert::EndAssert();
         }
 
@@ -108,14 +108,14 @@ namespace CgsMemory
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("liAlignment> 0",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\CgsLinearMalloc.cpp", 267);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 267));
             CgsDev::Assert::EndAssert();
         }
         if (((lnAlignment - 1) | lnAlignment) + 1 != lnAlignment * 2)
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("( ( ( liAlignment- 1 ) | liAlignment) + 1 ) == ( liAlignment* 2 )",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\CgsLinearMalloc.cpp", 269);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 269));
             CgsDev::Assert::EndAssert();
         }
         mnAlignment = lnAlignment;
@@ -128,7 +128,7 @@ namespace CgsMemory
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("mbCreated==true",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\CgsLinearMalloc.cpp", 301);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 301));
             CgsDev::Assert::EndAssert();
         }
         return mnEndAddress - mnStartAddress;
@@ -163,8 +163,8 @@ namespace CgsMemory
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 "IsRWAllocator()",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\CgsLinearMalloc.cpp",
-                245);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                245));
             CgsDev::Assert::EndAssert();
         }
 
@@ -172,3 +172,5 @@ namespace CgsMemory
         ::rwMemoryFunctions = mCachedMemoryFuncs;
     }
 }
+
+#undef CGS_ARTIST_FILE

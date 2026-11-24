@@ -58,7 +58,7 @@ bool BehaviourHeliCam::Prepare(const BehaviourSharedPrepareReleaseInfo& /*lrInfo
 // ----------------------------------------------------------------------------
 bool BehaviourHeliCam::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo)
 {
-    CGS_ASSERT(mpParameters, CgsDev::Assert::MessageAt("mpParameters", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BehaviourHeliCam.cpp", 105));
+    CGS_ASSERT(mpParameters, CGS_ASSERT_MESSAGE_AT("mpParameters", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BehaviourHeliCam.cpp", 105));
 
     lrCamera.mState_uFlags |= (1 << CameraState::E_FLAG_VALID);
 

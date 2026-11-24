@@ -315,13 +315,13 @@ namespace CgsGui
             CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer,
                                        CgsDev::Assert::giMessageBufferSize);
             lMessage << "Invalid pointer to AptMatrix in AptCallbackRender::SetVertexMatrix";
-            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, lpcFile, 368);
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, CGS_ASSERT_LOCATION(lpcFile, 368));
             CgsDev::Assert::EndAssert();
         }
         if (!(lpAptMatrix->a == lpAptMatrix->a))
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("RwMath::IsValid(lpAptMatrix->a)", lpcFile, 370);
+            CgsDev::Assert::FireAssert("RwMath::IsValid(lpAptMatrix->a)", CGS_ASSERT_LOCATION(lpcFile, 370));
             CgsDev::Assert::EndAssert();
         }
         AptRenderHandler* lpHandler = &AptAuxPointer::mpAptAuxInst->mRenderHandler;
@@ -331,7 +331,7 @@ namespace CgsGui
             CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer,
                                        CgsDev::Assert::giMessageBufferSize);
             lMessage << "Invalid pointer to apt render handler in AptCallbackRender::SetVertexMatrix";
-            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, lpcFile, 378);
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, CGS_ASSERT_LOCATION(lpcFile, 378));
             CgsDev::Assert::EndAssert();
         }
         AptRenderHandler& lrHandler = *lpHandler;
@@ -357,7 +357,7 @@ namespace CgsGui
             CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer,
                                        CgsDev::Assert::giMessageBufferSize);
             lMessage << "Invalid pointer to AptColourTransform in AptCallbackRender::SetColourTransform";
-            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, lpcFile, 411);
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, CGS_ASSERT_LOCATION(lpcFile, 411));
             CgsDev::Assert::EndAssert();
         }
         AptRenderHandler* lpHandler = &AptAuxPointer::mpAptAuxInst->mRenderHandler;
@@ -367,7 +367,7 @@ namespace CgsGui
             CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer,
                                        CgsDev::Assert::giMessageBufferSize);
             lMessage << "Invalid pointer to apt render handler in AptCallbackRender::SetColourTransform";
-            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, lpcFile, 414);
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, CGS_ASSERT_LOCATION(lpcFile, 414));
             CgsDev::Assert::EndAssert();
         }
         CgsGraphics::Im2dTransform& lrTransform = lpHandler->GetVertexTransform();

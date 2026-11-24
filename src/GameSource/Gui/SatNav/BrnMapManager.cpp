@@ -273,10 +273,10 @@ namespace BrnGui
     void MapManager::RemoveTileFromSet(SatNavTile* lpTile)
     {
         CGS_ASSERT(lpTile != NULL,
-            CgsDev::Assert::MessageAt("lpTile != NULL", __FILE__, 979 /* ARTIST 0x8244884C */));
+            CGS_ASSERT_MESSAGE_AT("lpTile != NULL", __FILE__, 979 /* ARTIST 0x8244884C */));
 
         CGS_ASSERT(GetTileState(lpTile->muID) == SatNavTile::E_STATE_LOADED,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "GetTileState( lpTile->muID) == SatNavTile::E_STATE_LOADED",
                 __FILE__, 980 /* ARTIST 0x8244887C */));
     }
@@ -319,7 +319,7 @@ namespace BrnGui
                         continue;
                     }
 
-                    CGS_ASSERT(lTile.mpTile != NULL, CgsDev::Assert::MessageAt(
+                    CGS_ASSERT(lTile.mpTile != NULL, CGS_ASSERT_MESSAGE_AT(
                         "lTile.mpTile != NULL",
                         "..\\..\\..\\GameSource\\Gui/SatNav/BrnMapManager.cpp", 229));  // 0x8244F810
 

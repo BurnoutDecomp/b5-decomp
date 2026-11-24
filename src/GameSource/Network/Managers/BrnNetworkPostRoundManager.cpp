@@ -46,7 +46,7 @@ namespace BrnNetwork
 
         for (s32 liIndex = 0; liIndex < E_SUBSTATE_COUNT; ++liIndex)
         {
-            CGS_ASSERT(maUpdateFunctions[liIndex] != 0, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(maUpdateFunctions[liIndex] != 0, CGS_ASSERT_MESSAGE_AT(
                 "No update function supplied for this sub state",
                 __FILE__, 89 /* ARTIST 0x82573E58 */));
         }
@@ -77,7 +77,7 @@ namespace BrnNetwork
 
         for (s32 liActionIndex = 0; liActionIndex < E_ACTION_COUNT; ++liActionIndex)
         {
-            CGS_ASSERT(maActionFunctions[liActionIndex] != 0, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(maActionFunctions[liActionIndex] != 0, CGS_ASSERT_MESSAGE_AT(
                 "No update function supplied for this substate",
                 __FILE__, 123 /* ARTIST 0x825714DC */));
         }
@@ -143,7 +143,7 @@ namespace BrnNetwork
         {
             if (liProcessIndex != E_PROCESS_END_ROUND)
             {
-                CGS_ASSERT(maProcessActions[liProcessIndex].maeAction[0] != E_ACTION_COUNT, CgsDev::Assert::MessageAt(
+                CGS_ASSERT(maProcessActions[liProcessIndex].maeAction[0] != E_ACTION_COUNT, CGS_ASSERT_MESSAGE_AT(
                     "No actions supplied for this process",
                     __FILE__, 176 /* ARTIST 0x825715AC */));
             }
@@ -233,7 +233,7 @@ namespace BrnNetwork
     void PostRoundManager::Update()
     {
         const UpdateFunction lpfUpdate = maUpdateFunctions[meSubState];
-        CGS_ASSERT(lpfUpdate != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpfUpdate != 0, CGS_ASSERT_MESSAGE_AT(
             "No update function supplied for the current substate",
             __FILE__, 265 /* ARTIST 0x82544E1C */));
         (this->*lpfUpdate)();
@@ -327,7 +327,7 @@ namespace BrnNetwork
             return true;
 
         default:
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
                 "Invalid state returned by mpNetworkManager->GetServerInterface()->GetStatus() in PostRoundManager::ServerInterfaceIdle",
                 __FILE__, 407 /* ARTIST 0x8256D408 */));
             return false;
@@ -413,13 +413,13 @@ namespace BrnNetwork
     {
         mbDidTheUserQuit = lbQuit;
 
-        CGS_ASSERT(mpNetworkManager != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpNetworkManager != 0, CGS_ASSERT_MESSAGE_AT(
             "mpNetworkManager",
             __FILE__, 562 /* ARTIST 0x82567710 */));
-        CGS_ASSERT(mpNetworkManager->GetServerInterface() != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpNetworkManager->GetServerInterface() != 0, CGS_ASSERT_MESSAGE_AT(
             "mpNetworkManager->GetServerInterface()",
             __FILE__, 563 /* ARTIST 0x82567738 */));
-        CGS_ASSERT(mpNetworkManager->GetServerInterface()->GetConnectionComponent() != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpNetworkManager->GetServerInterface()->GetConnectionComponent() != 0, CGS_ASSERT_MESSAGE_AT(
             "mpNetworkManager->GetServerInterface()->GetConnectionComponent()",
             __FILE__, 564 /* ARTIST 0x82567764 */));
 
@@ -451,17 +451,17 @@ namespace BrnNetwork
     // -----------------------------------------------------------------------
     void PostRoundManager::ProcessComplete(bool lbSuccess)
     {
-        CGS_ASSERT(mCallback != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mCallback != 0, CGS_ASSERT_MESSAGE_AT(
             "mCallback",
             __FILE__, 460 /* ARTIST 0x825674B8 */));
 
         BrnServerInterface* lpServerInterface = mpNetworkManager->GetServerInterface();
-        CGS_ASSERT(lpServerInterface != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpServerInterface != 0, CGS_ASSERT_MESSAGE_AT(
             "lpServerInterface",
             __FILE__, 465 /* ARTIST 0x82567558 */));
 
         CgsNetwork::ServerInterfaceGames* lpServerInterfaceGames = lpServerInterface->GetGameComponent();
-        CGS_ASSERT(lpServerInterfaceGames != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpServerInterfaceGames != 0, CGS_ASSERT_MESSAGE_AT(
             "lpServerInterfaceGames",
             __FILE__, 468 /* ARTIST 0x82567580 */));
 
@@ -499,10 +499,10 @@ namespace BrnNetwork
             return;
         }
 
-        CGS_ASSERT(lpPostRoundManager->mpNetworkManager != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpPostRoundManager->mpNetworkManager != 0, CGS_ASSERT_MESSAGE_AT(
             "lpPostRoundManager->mpNetworkManager",
             __FILE__, 885 /* ARTIST 0x82567CCC */));
-        CGS_ASSERT(lpPostRoundManager->mpNetworkManager->GetServerInterface() != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpPostRoundManager->mpNetworkManager->GetServerInterface() != 0, CGS_ASSERT_MESSAGE_AT(
             "lpPostRoundManager->mpNetworkManager->GetServerInterface()",
             __FILE__, 886 /* ARTIST 0x82567CF4 */));
 
@@ -515,7 +515,7 @@ namespace BrnNetwork
         // below preserve the contract).
         lpServerInterface->GetStatus(12);
 
-        CGS_ASSERT(lpServerInterface->GetConnectionComponent() != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpServerInterface->GetConnectionComponent() != 0, CGS_ASSERT_MESSAGE_AT(
             "lpPostRoundManager->mpNetworkManager->GetServerInterface()->GetConnectionComponent()",
             __FILE__, 900 /* ARTIST 0x82567D7C */));
 
@@ -545,12 +545,12 @@ namespace BrnNetwork
     bool PostRoundManager::ActionSendResults()
     {
         BrnServerInterface* lpServerInterface = mpNetworkManager->GetServerInterface();
-        CGS_ASSERT(lpServerInterface != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpServerInterface != 0, CGS_ASSERT_MESSAGE_AT(
             "lpServerInterface",
             __FILE__, 665 /* ARTIST 0x825450D8 */));
 
         CgsNetwork::ServerInterfaceGames* lpServerInterfaceGames = lpServerInterface->GetGameComponent();
-        CGS_ASSERT(lpServerInterfaceGames != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpServerInterfaceGames != 0, CGS_ASSERT_MESSAGE_AT(
             "lpServerInterfaceGames",
             __FILE__, 668 /* ARTIST 0x82545100 */));
 
@@ -634,12 +634,12 @@ namespace BrnNetwork
     bool PostRoundManager::ActionChangePlayerParams()
     {
         BrnServerInterface* lpServerInterface = mpNetworkManager->GetServerInterface();
-        CGS_ASSERT(lpServerInterface != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpServerInterface != 0, CGS_ASSERT_MESSAGE_AT(
             "lpServerInterface",
             __FILE__, 698 /* ARTIST 0x825678B4 */));
 
         CgsNetwork::ServerInterfaceGames* lpServerInterfaceGames = lpServerInterface->GetGameComponent();
-        CGS_ASSERT(lpServerInterfaceGames != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpServerInterfaceGames != 0, CGS_ASSERT_MESSAGE_AT(
             "lpServerInterfaceGames",
             __FILE__, 701 /* ARTIST 0x825678DC */));
 
@@ -666,12 +666,12 @@ namespace BrnNetwork
     bool PostRoundManager::ActionChangeGameParams()
     {
         BrnServerInterface* lpServerInterface = mpNetworkManager->GetServerInterface();
-        CGS_ASSERT(lpServerInterface != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpServerInterface != 0, CGS_ASSERT_MESSAGE_AT(
             "lpServerInterface",
             __FILE__, 750 /* ARTIST 0x82567A40 */));
 
         CgsNetwork::ServerInterfaceGames* lpServerInterfaceGames = lpServerInterface->GetGameComponent();
-        CGS_ASSERT(lpServerInterfaceGames != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpServerInterfaceGames != 0, CGS_ASSERT_MESSAGE_AT(
             "lpServerInterfaceGames",
             __FILE__, 753 /* ARTIST 0x82567A68 */));
 

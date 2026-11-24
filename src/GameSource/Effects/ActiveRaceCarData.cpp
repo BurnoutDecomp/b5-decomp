@@ -33,10 +33,10 @@ namespace BrnEffects
 void BurstAccumulator::Construct(f32 lfMinBurstSize, f32 lfMaxBurstSize, f32 lfBurstTimeout)
 {
     CGS_ASSERT(lfMaxBurstSize > lfMinBurstSize,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lfMaxBurstSize > lfMinBurstSize", KAC_ARTIST_ASSERT_FILE, 51 /* ARTIST 0x82278574 */));
     CGS_ASSERT(lfBurstTimeout > 0.0f,
-        CgsDev::Assert::MessageAt("lfBurstTimeout > 0.0f", KAC_ARTIST_ASSERT_FILE, 52 /* ARTIST 0x822785A0 */));
+        CGS_ASSERT_MESSAGE_AT("lfBurstTimeout > 0.0f", KAC_ARTIST_ASSERT_FILE, 52 /* ARTIST 0x822785A0 */));
 
     mfMinBurstSize       = lfMinBurstSize;
     mfMaxBurstSize       = lfMaxBurstSize;

@@ -26,7 +26,7 @@
 // RenderDebug @0x824BAF00 is reconstructed below; it remains diagnostic-only.
 // ===================================================================================
 #include "GameSource/Gui/Flow/PostEvent/States/Offline/BrnOfflineInstantResults.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/PostEvent/States/Offline/BrnOfflineInstantResults.cpp"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
 
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
@@ -284,7 +284,7 @@ namespace BrnGui
     InstantResultsState::EResultsActiveSubStates InstantResultsState::GetNextSubstate()
     {
         CGS_ASSERT(meActiveSubState < E_ACTIVE_SUBSTATE_EVENT_COUNT,
-                   CgsDev::Assert::MessageAt("meActiveSubState < E_ACTIVE_SUBSTATE_EVENT_COUNT", "..\\..\\..\\GameSource\\Gui/Flow/PostEvent/States/Offline/BrnOfflineInstantResults.h", 603 /* ARTIST 0x824B3858 */));
+                   CGS_ASSERT_MESSAGE_AT("meActiveSubState < E_ACTIVE_SUBSTATE_EVENT_COUNT", "..\\..\\..\\GameSource\\Gui/Flow/PostEvent/States/Offline/BrnOfflineInstantResults.h", 603 /* ARTIST 0x824B3858 */));
 
         for (s32 liNext = meActiveSubState + 1; liNext < E_ACTIVE_SUBSTATE_EVENT_COUNT; ++liNext)
         {
@@ -720,9 +720,9 @@ namespace BrnGui
     void InstantResultsState::AppendExpectedScreenComponents()
     {
         CGS_ASSERT(mpGuiCache,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpGuiCache",
-                "..\\..\\..\\GameSource\\Gui/Flow/PostEvent/States/Offline/BrnOfflineInstantResults.cpp", 774 /* ARTIST 0x824B3CD4 */));     // cpp:774
+                CGS_ARTIST_FILE, 774 /* ARTIST 0x824B3CD4 */));     // cpp:774
 
         const GuiFlow leFlow = static_cast<GuiFlow>(0);
 
@@ -751,9 +751,9 @@ namespace BrnGui
     void InstantResultsState::AppendAllExpectedComponents()
     {
         CGS_ASSERT(mpGuiCache,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpGuiCache",
-                "..\\..\\..\\GameSource\\Gui/Flow/PostEvent/States/Offline/BrnOfflineInstantResults.cpp", 755 /* ARTIST 0x824BB480 */));     // cpp:755
+                CGS_ARTIST_FILE, 755 /* ARTIST 0x824BB480 */));     // cpp:755
 
         AppendExpectedScreenComponents();
 
@@ -2661,3 +2661,5 @@ namespace BrnGui
         lpDisplay->DrawText(lacText, 80.0f, lfY, 15.0f, KU_RED);
     }
 }
+
+#undef CGS_ARTIST_FILE

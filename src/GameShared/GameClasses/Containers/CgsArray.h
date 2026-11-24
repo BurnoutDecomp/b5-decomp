@@ -5,7 +5,7 @@
 #include "GameShared/GameClasses/Development/CgsStrStream.h"   // the streamed assert messages
 
 #include <cstdlib>   // std::qsort (Array<T,N>::QSort)
-#line 9 "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsArray.h"
+#define CGS_ARTIST_CGSARRAY_FILE "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsArray.h"
 // CgsContainers::Array<T, N> - the fixed-capacity inline array of the Cgs containers.
 // Namespace, member set, names and lines from the DecFIGS DWARF
 // (references/DecFIGS/dwarfdump/GameShared/GameClasses/Containers/CgsArray.h); the shape of
@@ -222,8 +222,8 @@ Array<T, N>::Append(const T& lrElement)
     //
     //
     //
-    CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
-    CGS_ASSERT_STREAM(static_cast<u32>(miCount) < N, "Array container out of space, Length: " << static_cast<u32>(miCount) << ", Capacity: " << N);
+    CGS_ASSERT_AT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called", CGS_ARTIST_CGSARRAY_FILE, 225);
+    CGS_ASSERT_STREAM_AT(static_cast<u32>(miCount) < N, "Array container out of space, Length: " << static_cast<u32>(miCount) << ", Capacity: " << N, CGS_ARTIST_CGSARRAY_FILE, 226);
     maElements[miCount] = lrElement;
     ++miCount;
 }
@@ -242,8 +242,8 @@ Array<T, N>::AppendArray(const Array<T, N>& lrSource)
     // candidates back into the map. lrSource's own constructed check is the GetLength inside
     // the capacity assert (336); the loop re-reads GetLength on every pass.
     //
-    CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
-    CGS_ASSERT((lrSource.GetLength() + static_cast<u32>(miCount)) <= N, "Array container out of space appending an array");
+    CGS_ASSERT_AT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called", CGS_ARTIST_CGSARRAY_FILE, 245);
+    CGS_ASSERT_AT((lrSource.GetLength() + static_cast<u32>(miCount)) <= N, "Array container out of space appending an array", CGS_ARTIST_CGSARRAY_FILE, 246);
     for (luIndex = 0; luIndex < lrSource.GetLength(); ++luIndex)
     {
         Append(lrSource.GetItem(luIndex));
@@ -265,8 +265,8 @@ Array<T, N>::AppendSet(const Set<T, M>& lSet)
     //
     //
     //
-    CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
-    CGS_ASSERT(lSet.GetLength() + static_cast<u32>(miCount) <= N, "Array container out of space appending a set");
+    CGS_ASSERT_AT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called", CGS_ARTIST_CGSARRAY_FILE, 268);
+    CGS_ASSERT_AT(lSet.GetLength() + static_cast<u32>(miCount) <= N, "Array container out of space appending a set", CGS_ARTIST_CGSARRAY_FILE, 269);
     for (luIndex = 0; luIndex < lSet.GetLength(); ++luIndex)
     {
         Append(lSet.GetItem(luIndex));
@@ -286,8 +286,8 @@ Array<T, N>::Grow()
     //
     //
     //
-    CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
-    CGS_ASSERT_STREAM(static_cast<u32>(miCount) < N, "Array container out of space, Length: " << static_cast<u32>(miCount) << ", Capacity: " << N);
+    CGS_ASSERT_AT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called", CGS_ARTIST_CGSARRAY_FILE, 289);
+    CGS_ASSERT_STREAM_AT(static_cast<u32>(miCount) < N, "Array container out of space, Length: " << static_cast<u32>(miCount) << ", Capacity: " << N, CGS_ARTIST_CGSARRAY_FILE, 290);
     T* lpNewElement = &maElements[miCount];
     ++miCount;
     return lpNewElement;
@@ -309,9 +309,9 @@ Array<T, N>::InsertBefore(u32 luIndex, const T& lrElement)
     //
     //
     //
-    CGS_ASSERT_STREAM(luIndex <= GetLength(), "trying to insert before an invalid index: " << luIndex);
-    CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
-    CGS_ASSERT(static_cast<u32>(miCount) < N, "Array container out of space");
+    CGS_ASSERT_STREAM_AT(luIndex <= GetLength(), "trying to insert before an invalid index: " << luIndex, CGS_ARTIST_CGSARRAY_FILE, 312);
+    CGS_ASSERT_AT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called", CGS_ARTIST_CGSARRAY_FILE, 313);
+    CGS_ASSERT_AT(static_cast<u32>(miCount) < N, "Array container out of space", CGS_ARTIST_CGSARRAY_FILE, 314);
     for (u32 luShift = GetLength(); luShift > luIndex; --luShift)
     {
         maElements[luShift] = maElements[luShift - 1];
@@ -333,7 +333,7 @@ Array<T, N>::GetLength() const
     //
     //
     //
-    CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+    CGS_ASSERT_AT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called", CGS_ARTIST_CGSARRAY_FILE, 336);
     return static_cast<u32>(miCount);
 }
 template <typename T, u32 N>
@@ -377,8 +377,8 @@ Array<T, N>::Erase(u32 luIndex)
     //
     //
     //
-    CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
-    CGS_ASSERT(luIndex < static_cast<u32>(miCount), "Trying to erase an unused element");
+    CGS_ASSERT_AT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called", CGS_ARTIST_CGSARRAY_FILE, 380);
+    CGS_ASSERT_AT(luIndex < static_cast<u32>(miCount), "Trying to erase an unused element", CGS_ARTIST_CGSARRAY_FILE, 381);
     --miCount;
     for (; luIndex < static_cast<u32>(miCount); ++luIndex)
     {
@@ -402,8 +402,8 @@ Array<T, N>::EraseFast(u32 luIndex)
     //
     //
     //
-    CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
-    CGS_ASSERT(luIndex < static_cast<u32>(miCount), "Trying to erase an unused element");
+    CGS_ASSERT_AT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called", CGS_ARTIST_CGSARRAY_FILE, 405);
+    CGS_ASSERT_AT(luIndex < static_cast<u32>(miCount), "Trying to erase an unused element", CGS_ARTIST_CGSARRAY_FILE, 406);
     maElements[luIndex] = maElements[miCount - 1];
     --miCount;
 }
@@ -423,7 +423,7 @@ Array<T, N>::EraseInstancesOf(const T& lrElement)
     //
     //
     //
-    CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+    CGS_ASSERT_AT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called", CGS_ARTIST_CGSARRAY_FILE, 426);
     for (u32 luIndex = 0; luIndex < static_cast<u32>(miCount); ++luIndex)
     {
         while ((lrElement == maElements[luIndex]) && (luIndex < static_cast<u32>(miCount)))
@@ -450,7 +450,7 @@ Array<T, N>::CountInstancesOf(const T& lrElement) const
     //
     //
     //
-    CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+    CGS_ASSERT_AT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called", CGS_ARTIST_CGSARRAY_FILE, 453);
     u32 luMatches = 0;
     for (u32 luIndex = 0; luIndex < static_cast<u32>(miCount); ++luIndex)
     {
@@ -477,7 +477,7 @@ Array<T, N>::FindFirstInstanceOf(const T& lrElement) const
     //
     //
     //
-    CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+    CGS_ASSERT_AT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called", CGS_ARTIST_CGSARRAY_FILE, 480);
     for (u32 luIndex = 0; luIndex < static_cast<u32>(miCount); ++luIndex)
     {
         if (lrElement == maElements[luIndex])
@@ -503,7 +503,7 @@ Array<T, N>::Contains(const T& lrElement) const
     //
     //
     //
-    CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+    CGS_ASSERT_AT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called", CGS_ARTIST_CGSARRAY_FILE, 506);
     return (FindFirstInstanceOf(lrElement) != KI_UNCONSTRUCTED);
 }
 
@@ -535,8 +535,8 @@ Array<T, N>::GetItem(u32 luIndex) const
     //
     //
     //
-    CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
-    CGS_ASSERT_STREAM(luIndex < static_cast<u32>(miCount), "Array index out of bounds. Index: " << luIndex << ", length: " << static_cast<u32>(miCount));
+    CGS_ASSERT_AT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called", CGS_ARTIST_CGSARRAY_FILE, 538);
+    CGS_ASSERT_STREAM_AT(luIndex < static_cast<u32>(miCount), "Array index out of bounds. Index: " << luIndex << ", length: " << static_cast<u32>(miCount), CGS_ARTIST_CGSARRAY_FILE, 539);
     return maElements[luIndex];
 }
 
@@ -553,8 +553,8 @@ Array<T, N>::GetItem(u32 luIndex)
     //
     //
     //
-    CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
-    CGS_ASSERT_STREAM(luIndex < static_cast<u32>(miCount), "Array index out of bounds. Index: " << luIndex << ", length: " << static_cast<u32>(miCount));
+    CGS_ASSERT_AT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called", CGS_ARTIST_CGSARRAY_FILE, 556);
+    CGS_ASSERT_STREAM_AT(luIndex < static_cast<u32>(miCount), "Array index out of bounds. Index: " << luIndex << ", length: " << static_cast<u32>(miCount), CGS_ARTIST_CGSARRAY_FILE, 557);
     return maElements[luIndex];
 }
 
@@ -600,7 +600,7 @@ Array<T, N>::Begin()
     //
     //
     //
-    CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+    CGS_ASSERT_AT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called", CGS_ARTIST_CGSARRAY_FILE, 603);
     return &maElements[0];
 }
 
@@ -617,7 +617,7 @@ Array<T, N>::End()
     //
     //
     //
-    CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+    CGS_ASSERT_AT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called", CGS_ARTIST_CGSARRAY_FILE, 620);
     return &maElements[miCount];
 }
 
@@ -633,7 +633,7 @@ Array<T, N>::QSort(int (*lpfComparator)(const void* lpA, const void* lpB))
     //
     //
     //
-    CGS_ASSERT_STREAM(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+    CGS_ASSERT_STREAM_AT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called", CGS_ARTIST_CGSARRAY_FILE, 636);
     const u32 luCount = static_cast<u32>(miCount);
     if (luCount > 1)
     {
@@ -643,3 +643,5 @@ Array<T, N>::QSort(int (*lpfComparator)(const void* lpA, const void* lpB))
 }
 
 } // namespace CgsContainers
+
+#undef CGS_ARTIST_CGSARRAY_FILE

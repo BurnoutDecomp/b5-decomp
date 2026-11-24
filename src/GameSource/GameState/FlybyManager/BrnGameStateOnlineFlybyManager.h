@@ -1,5 +1,5 @@
 #pragma once
-
+#define CGS_ARTIST_BRNGAMESTATEONLINEFLYBYMANAGER_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\FlybyManager/BrnGameStateOnlineFlybyManager.h"
 #include "types.hpp"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT
@@ -152,7 +152,7 @@ inline OnlineFlybyManager::ENoRivalryCompare operator++(OnlineFlybyManager::ENoR
     const OnlineFlybyManager::ENoRivalryCompare leOldEnumIndex = leEnumIndex;
     leEnumIndex = static_cast<OnlineFlybyManager::ENoRivalryCompare>(static_cast<s32>(leEnumIndex) + 1);
     CGS_ASSERT(leEnumIndex <= OnlineFlybyManager::E_NO_RIVALRY_COUNT,
-               CgsDev::Assert::MessageAt("leEnumIndex <= OnlineFlybyManager::E_NO_RIVALRY_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\FlybyManager/BrnGameStateOnlineFlybyManager.h", 291));
+               CGS_ASSERT_MESSAGE_AT("leEnumIndex <= OnlineFlybyManager::E_NO_RIVALRY_COUNT", CGS_ARTIST_BRNGAMESTATEONLINEFLYBYMANAGER_FILE, 291));
     return leOldEnumIndex;
 }
 
@@ -161,7 +161,7 @@ inline OnlineFlybyManager::EOngoingRivalryCompare operator++(OnlineFlybyManager:
     const OnlineFlybyManager::EOngoingRivalryCompare leOldEnumIndex = leEnumIndex;
     leEnumIndex = static_cast<OnlineFlybyManager::EOngoingRivalryCompare>(static_cast<s32>(leEnumIndex) + 1);
     CGS_ASSERT(leEnumIndex <= OnlineFlybyManager::E_ONGOING_RIVALRY_COUNT,
-               CgsDev::Assert::MessageAt("leEnumIndex <= OnlineFlybyManager::E_ONGOING_RIVALRY_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\FlybyManager/BrnGameStateOnlineFlybyManager.h", 292));
+               CGS_ASSERT_MESSAGE_AT("leEnumIndex <= OnlineFlybyManager::E_ONGOING_RIVALRY_COUNT", CGS_ARTIST_BRNGAMESTATEONLINEFLYBYMANAGER_FILE, 292));
     return leOldEnumIndex;
 }
 
@@ -170,7 +170,9 @@ inline OnlineFlybyManager::ENewRivalryCompare operator++(OnlineFlybyManager::ENe
     const OnlineFlybyManager::ENewRivalryCompare leOldEnumIndex = leEnumIndex;
     leEnumIndex = static_cast<OnlineFlybyManager::ENewRivalryCompare>(static_cast<s32>(leEnumIndex) + 1);
     CGS_ASSERT(leEnumIndex <= OnlineFlybyManager::E_NEW_RIVALRY_COUNT,
-               CgsDev::Assert::MessageAt("leEnumIndex <= OnlineFlybyManager::E_NEW_RIVALRY_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\FlybyManager/BrnGameStateOnlineFlybyManager.h", 293));
+               CGS_ASSERT_MESSAGE_AT("leEnumIndex <= OnlineFlybyManager::E_NEW_RIVALRY_COUNT", CGS_ARTIST_BRNGAMESTATEONLINEFLYBYMANAGER_FILE, 293));
     return leOldEnumIndex;
 }
 }
+
+#undef CGS_ARTIST_BRNGAMESTATEONLINEFLYBYMANAGER_FILE

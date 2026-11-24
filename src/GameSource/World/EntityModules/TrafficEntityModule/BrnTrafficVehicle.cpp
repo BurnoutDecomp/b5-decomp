@@ -202,9 +202,9 @@ Vector3 Vehicle::CalcTowBarPos(Matrix44Affine lTransform, const VehicleTypeRunti
 void VehicleAxles::UpdateRearAxleForRoadCollision(const Param* lpParam, Hull** lpapHulls)
 {
     CGS_ASSERT(lpParam != 0,
-        CgsDev::Assert::MessageAt("lpParam", KAC_ARTIST_ASSERT_SOURCE, 284 /* ARTIST 0x8275F300 */));
+        CGS_ASSERT_MESSAGE_AT("lpParam", KAC_ARTIST_ASSERT_SOURCE, 284 /* ARTIST 0x8275F300 */));
     CGS_ASSERT(lpapHulls != 0,
-        CgsDev::Assert::MessageAt("lpapHulls", KAC_ARTIST_ASSERT_SOURCE, 285 /* ARTIST 0x8275F324 */));
+        CGS_ASSERT_MESSAGE_AT("lpapHulls", KAC_ARTIST_ASSERT_SOURCE, 285 /* ARTIST 0x8275F324 */));
 
     for (u32 luHistoryIndex = 0;
          luHistoryIndex < KU_PARAM_NUM_SEGMENTS_TO_REMEMBER - 1;
@@ -704,7 +704,7 @@ void Vehicle::UpdateEffects(f32 lfTimeDelta, s32 liBulbWarmthDelta, CgsNumeric::
 VecFloat Vehicle::GetSpeed() const
 {
     CGS_ASSERT(IsAlive(),
-        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 619 /* ARTIST 0x8270DCAC */));
+        CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 619 /* ARTIST 0x8270DCAC */));
     return mSpeed_DistAcrossLane_SwerveAmount_W.GetX();
 }
 
@@ -717,42 +717,42 @@ VecFloat Vehicle::GetDistAcrossLane() const
 VecFloat Vehicle::GetSwerveAmount() const
 {
     CGS_ASSERT(IsAlive(),
-        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 633 /* ARTIST 0x827533E4 */));
+        CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 633 /* ARTIST 0x827533E4 */));
     return mSpeed_DistAcrossLane_SwerveAmount_W.GetZ();
 }
 
 VecFloat Vehicle::GetSteering() const
 {
     CGS_ASSERT(IsAlive(),
-        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 654 /* ARTIST 0x8270DD24 */));
+        CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 654 /* ARTIST 0x8270DD24 */));
     return mPitch_Roll_Steering_WheelRot.GetZ();
 }
 
 VecFloat Vehicle::GetWheelRot() const
 {
     CGS_ASSERT(IsAlive(),
-        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 661 /* ARTIST 0x8270DD9C */));
+        CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 661 /* ARTIST 0x8270DD9C */));
     return mPitch_Roll_Steering_WheelRot.GetW();
 }
 
 Vector4 Vehicle::GetPitch_Roll_Steering_WheelRot() const
 {
     CGS_ASSERT(IsAlive(),
-        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 717 /* ARTIST 0x8270E054 */));
+        CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 717 /* ARTIST 0x8270E054 */));
     return mPitch_Roll_Steering_WheelRot;
 }
 
 Vector3 Vehicle::GetTargetPos() const
 {
     CGS_ASSERT(IsAlive(),
-        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 743 /* ARTIST 0x8270E234 */));
+        CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 743 /* ARTIST 0x8270E234 */));
     return mTargetPos;
 }
 
 Vector3 Vehicle::GetLinearVelocity() const
 {
-    CGS_ASSERT(IsAlive(), CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 761));
-    CGS_ASSERT(rw::math::vpu::IsValid(mLinearVelocity), CgsDev::Assert::MessageAt("IsValid( mLinearVelocity )", KAC_ARTIST_ASSERT_FILE, 762));
+    CGS_ASSERT(IsAlive(), CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 761));
+    CGS_ASSERT(rw::math::vpu::IsValid(mLinearVelocity), CGS_ASSERT_MESSAGE_AT("IsValid( mLinearVelocity )", KAC_ARTIST_ASSERT_FILE, 762));
     return mLinearVelocity;
 }
 
@@ -765,7 +765,7 @@ f32 Vehicle::GetSwerveTime() const
 f32 Vehicle::GetRandomVal() const
 {
     CGS_ASSERT(IsAlive(),
-        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 725 /* ARTIST 0x8270E0C4 */));
+        CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 725 /* ARTIST 0x8270E0C4 */));
     return mfRandomVal;
 }
 
@@ -802,16 +802,16 @@ void Vehicle::ResetManoeuvreTime(f32 lfTime)
 s32 Vehicle::GetPhysicalReason() const
 {
     CGS_ASSERT(IsAlive(),
-        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1806 /* ARTIST 0x8270556C */));
+        CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1806 /* ARTIST 0x8270556C */));
     return miPhysicalReason;
 }
 
 EntityId Vehicle::GetSympatheticCrashTarget() const
 {
     CGS_ASSERT(IsAlive(),
-        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1788 /* ARTIST 0x82705484 */));
+        CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1788 /* ARTIST 0x82705484 */));
     CGS_ASSERT(mSympCrashTarget.muValue != 0xFFFFFFFF,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "mSympCrashTarget.IsValid()", KAC_ARTIST_ASSERT_FILE, 1789 /* ARTIST 0x827054AC */));
     return mSympCrashTarget;
 }
@@ -820,14 +820,14 @@ EntityId Vehicle::GetSympatheticCrashTarget() const
 f32 Vehicle::GetHeadlightWarmth() const
 {
     CGS_ASSERT(IsAlive(),
-        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1814 /* ARTIST 0x827055CC */));
+        CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1814 /* ARTIST 0x827055CC */));
     return muHeadlightWarmth * (1.0f / 255.0f);
 }
 
 f32 Vehicle::GetIndicatorBulbWarmth() const
 {
     CGS_ASSERT(IsAlive(),
-        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1822 /* ARTIST 0x82705644 */));
+        CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1822 /* ARTIST 0x82705644 */));
     return muIndicatorBulbWarmth * (1.0f / 255.0f);
 }
 
@@ -837,56 +837,56 @@ f32 Vehicle::GetIndicatorBulbWarmth() const
 bool Vehicle::IsHornOn() const
 {
     CGS_ASSERT(IsAlive(),
-        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1715 /* ARTIST 0x8270514C */));
+        CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1715 /* ARTIST 0x8270514C */));
     return (mxEffectState & 0x01) != 0;
 }
 
 bool Vehicle::IsAlarmOn() const
 {
     CGS_ASSERT(IsAlive(),
-        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1722 /* ARTIST 0x827051AC */));
+        CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1722 /* ARTIST 0x827051AC */));
     return ((mxEffectState >> 4) & 1) != 0;
 }
 
 bool Vehicle::IsRightIndicatorOn() const
 {
     CGS_ASSERT(IsAlive(),
-        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1736 /* ARTIST 0x8270526C */));
+        CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1736 /* ARTIST 0x8270526C */));
     return ((mxEffectState >> 2) & 1) != 0;
 }
 
 bool Vehicle::IsIndicatingLeft() const
 {
     CGS_ASSERT(IsAlive(),
-        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1764 /* ARTIST 0x82705344 */));
+        CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1764 /* ARTIST 0x82705344 */));
     return ((mxEffectState >> 5) & 1) != 0;
 }
 
 bool Vehicle::IsIndicatingRight() const
 {
     CGS_ASSERT(IsAlive(),
-        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1771 /* ARTIST 0x827053A4 */));
+        CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1771 /* ARTIST 0x827053A4 */));
     return ((mxEffectState >> 6) & 1) != 0;
 }
 
 bool Vehicle::IsFlashingHeadlights() const
 {
     CGS_ASSERT(IsAlive(),
-        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1757 /* ARTIST 0x8274F394 */));
+        CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1757 /* ARTIST 0x8274F394 */));
     return ((mxEffectState >> 7) & 1) != 0;
 }
 
 bool Vehicle::AreHeadlightsFlashed() const
 {
     CGS_ASSERT(IsAlive(),
-        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1743 /* ARTIST 0x8274F334 */));
+        CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1743 /* ARTIST 0x8274F334 */));
     return ((mxEffectState >> 3) & 1) != 0;
 }
 
 bool Vehicle::AreBrakelightsOn() const
 {
     CGS_ASSERT(IsAlive(),
-        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1750 /* ARTIST 0x827052CC */));
+        CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1750 /* ARTIST 0x827052CC */));
     return miBrakelightState > 0;
 }
 
@@ -952,13 +952,13 @@ bool Vehicle::IsSympatheticallyCrashing() const
     // Same shape as IsExtremeSwerving below: `if (x == v) { asserts; return true; } return false;`
     // with the header's lines baked in (ARTIST 0x82704B50/0x82704B88/0x82704BB0).
     CGS_ASSERT(IsAlive(),
-        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1202 /* ARTIST 0x82704B50 */));
+        CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1202 /* ARTIST 0x82704B50 */));
     if (miPhysicalReason == 3)   // E_PHYSICALREASON_SYMPATHETIC_CRASHING
     {
         CGS_ASSERT(IsPhysical(),
-            CgsDev::Assert::MessageAt("IsPhysical()", KAC_ARTIST_ASSERT_FILE, 1205 /* ARTIST 0x82704B88 */));
+            CGS_ASSERT_MESSAGE_AT("IsPhysical()", KAC_ARTIST_ASSERT_FILE, 1205 /* ARTIST 0x82704B88 */));
         CGS_ASSERT(mSympCrashTarget.muValue != 0xFFFFFFFFu,
-            CgsDev::Assert::MessageAt("mSympCrashTarget.IsValid()", KAC_ARTIST_ASSERT_FILE, 1206 /* ARTIST 0x82704BB0 */));
+            CGS_ASSERT_MESSAGE_AT("mSympCrashTarget.IsValid()", KAC_ARTIST_ASSERT_FILE, 1206 /* ARTIST 0x82704BB0 */));
         return true;
     }
     return false;
@@ -967,11 +967,11 @@ bool Vehicle::IsSympatheticallyCrashing() const
 bool Vehicle::IsCrashing() const
 {
     CGS_ASSERT(IsAlive(),
-        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1183 /* ARTIST 0x82704AA8 */));
+        CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1183 /* ARTIST 0x82704AA8 */));
     if (muCrashTrafficType == 0)
     {
         CGS_ASSERT(IsPhysical(),
-            CgsDev::Assert::MessageAt("IsPhysical()", KAC_ARTIST_ASSERT_FILE, 1186 /* ARTIST 0x82704AE0 */));
+            CGS_ASSERT_MESSAGE_AT("IsPhysical()", KAC_ARTIST_ASSERT_FILE, 1186 /* ARTIST 0x82704AE0 */));
         return true;
     }
     return false;
@@ -982,7 +982,7 @@ bool Vehicle::IsRecoveringFromSlam() const
     if (muCrashTrafficType == 3)
     {
         CGS_ASSERT(IsPhysical(),
-            CgsDev::Assert::MessageAt("IsPhysical()", KAC_ARTIST_ASSERT_FILE, 1243 /* ARTIST 0x82704CC4 */));
+            CGS_ASSERT_MESSAGE_AT("IsPhysical()", KAC_ARTIST_ASSERT_FILE, 1243 /* ARTIST 0x82704CC4 */));
         return true;
     }
     return false;
@@ -991,11 +991,11 @@ bool Vehicle::IsRecoveringFromSlam() const
 bool Vehicle::IsExtremeSwerving() const
 {
     CGS_ASSERT(IsAlive(),
-        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1222 /* ARTIST 0x82704C20 */));
+        CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1222 /* ARTIST 0x82704C20 */));
     if (miPhysicalReason == 4)
     {
         CGS_ASSERT(IsPhysical(),
-            CgsDev::Assert::MessageAt("IsPhysical()", KAC_ARTIST_ASSERT_FILE, 1225 /* ARTIST 0x82704C58 */));
+            CGS_ASSERT_MESSAGE_AT("IsPhysical()", KAC_ARTIST_ASSERT_FILE, 1225 /* ARTIST 0x82704C58 */));
         return true;
     }
     return false;
@@ -1004,11 +1004,11 @@ bool Vehicle::IsExtremeSwerving() const
 bool Vehicle::IsBeingChecked() const
 {
     CGS_ASSERT(IsAlive(),
-        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1258 /* ARTIST 0x82704D38 */));
+        CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1258 /* ARTIST 0x82704D38 */));
     if (muCrashTrafficType == 1)
     {
         CGS_ASSERT(IsPhysical(),
-            CgsDev::Assert::MessageAt("IsPhysical()", KAC_ARTIST_ASSERT_FILE, 1261 /* ARTIST 0x82704D70 */));
+            CGS_ASSERT_MESSAGE_AT("IsPhysical()", KAC_ARTIST_ASSERT_FILE, 1261 /* ARTIST 0x82704D70 */));
         return true;
     }
     return false;
@@ -1017,11 +1017,11 @@ bool Vehicle::IsBeingChecked() const
 bool Vehicle::IsNormalPhysical() const
 {
     CGS_ASSERT(IsAlive(),
-        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1288 /* ARTIST 0x82704DE0 */));
+        CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1288 /* ARTIST 0x82704DE0 */));
     if (miPhysicalReason == 5)
     {
         CGS_ASSERT(IsPhysical(),
-            CgsDev::Assert::MessageAt("IsPhysical()", KAC_ARTIST_ASSERT_FILE, 1291 /* ARTIST 0x82704E18 */));
+            CGS_ASSERT_MESSAGE_AT("IsPhysical()", KAC_ARTIST_ASSERT_FILE, 1291 /* ARTIST 0x82704E18 */));
         return true;
     }
     return false;
@@ -1030,12 +1030,12 @@ bool Vehicle::IsNormalPhysical() const
 s32 Vehicle::GetCurrentManoeuvrePhase() const
 {
     CGS_ASSERT(IsAlive(),
-        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 879 /* ARTIST 0x8270E740 */));
+        CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 879 /* ARTIST 0x8270E740 */));
     CGS_ASSERT(miManoeuvre >= E_MANOEUVRE_NONE,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "miManoeuvre >= E_MANOEUVRE_NONE", KAC_ARTIST_ASSERT_FILE, 880 /* ARTIST 0x8270E768 */));
     CGS_ASSERT(miManoeuvre < E_MANOEUVRE_COUNT,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "miManoeuvre < E_MANOEUVRE_COUNT", KAC_ARTIST_ASSERT_FILE, 881 /* ARTIST 0x8270E794 */));
     // X360 returns the phase byte zero-extended (lbz with no extsb @0x8270E7A8).
     return static_cast<u8>(miManoeuvrePhase);
@@ -1057,10 +1057,10 @@ void Vehicle::SetSteering(f32 lfValue)
 void Vehicle::SetWheelRot(VecFloat lfValue)
 {
     CGS_ASSERT(IsAlive(),
-        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 700));
+        CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 700));
     // ARTIST @0x8270DFBC: rw::math::vpu::IsValid (vcmpeqfp128. lfValue,lfValue, all-true bit).
     CGS_ASSERT(rw::math::vpu::IsValid(lfValue),
-        CgsDev::Assert::MessageAt("RwMath::IsValid( lfValue )", KAC_ARTIST_ASSERT_FILE, 701));
+        CGS_ASSERT_MESSAGE_AT("RwMath::IsValid( lfValue )", KAC_ARTIST_ASSERT_FILE, 701));
     mPitch_Roll_Steering_WheelRot.mV =
         __vrlimi(mPitch_Roll_Steering_WheelRot.mV, lfValue.mV, 1, 0);
 }
@@ -1080,15 +1080,15 @@ void Vehicle::SetSwerveTime(f32 lfValue)
 
 void Vehicle::SetTargetPos(Vector3 lTargetPos)
 {
-    CGS_ASSERT(IsAlive(), CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 734));
-    CGS_ASSERT(rw::math::vpu::IsValid(lTargetPos), CgsDev::Assert::MessageAt("IsValid( lTargetPos )", KAC_ARTIST_ASSERT_FILE, 735));
+    CGS_ASSERT(IsAlive(), CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 734));
+    CGS_ASSERT(rw::math::vpu::IsValid(lTargetPos), CGS_ASSERT_MESSAGE_AT("IsValid( lTargetPos )", KAC_ARTIST_ASSERT_FILE, 735));
     mTargetPos = lTargetPos;
 }
 
 void Vehicle::SetLinearVelocity(Vector3 lLinearVelocity)
 {
-    CGS_ASSERT(IsAlive(), CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 752));
-    CGS_ASSERT(rw::math::vpu::IsValid(lLinearVelocity), CgsDev::Assert::MessageAt("IsValid( lLinearVelocity )", KAC_ARTIST_ASSERT_FILE, 753));
+    CGS_ASSERT(IsAlive(), CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 752));
+    CGS_ASSERT(rw::math::vpu::IsValid(lLinearVelocity), CGS_ASSERT_MESSAGE_AT("IsValid( lLinearVelocity )", KAC_ARTIST_ASSERT_FILE, 753));
     mLinearVelocity = lLinearVelocity;
 }
 
@@ -1105,7 +1105,7 @@ void Vehicle::SetPitch_Roll_Steering_WheelRot(Vector4 lValues)
 void Vehicle::SetHornOn(bool lbOn)
 {
     CGS_ASSERT(IsAlive(),
-        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1483 /* ARTIST 0x82704F34 */));
+        CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1483 /* ARTIST 0x82704F34 */));
     if (lbOn)
     {
         mxEffectState |= 0x01;
@@ -1142,7 +1142,7 @@ void Vehicle::SetAlarmOn(bool lbOn)
 void Vehicle::SetHeadlightsFlashed(bool lbOn)
 {
     CGS_ASSERT(IsAlive(),
-        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1581 /* ARTIST 0x827050CC */));
+        CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1581 /* ARTIST 0x827050CC */));
     if (lbOn)
     {
         mxEffectState |= 0x08;
@@ -1156,7 +1156,7 @@ void Vehicle::SetHeadlightsFlashed(bool lbOn)
 void Vehicle::SetLeftIndicatorOn(bool lbOn)
 {
     CGS_ASSERT(IsAlive(),
-        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1533 /* ARTIST 0x82704FBC */));
+        CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1533 /* ARTIST 0x82704FBC */));
     if (lbOn)
     {
         mxEffectState |= 0x02;
@@ -1170,7 +1170,7 @@ void Vehicle::SetLeftIndicatorOn(bool lbOn)
 void Vehicle::SetRightIndicatorOn(bool lbOn)
 {
     CGS_ASSERT(IsAlive(),
-        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1557 /* ARTIST 0x82705044 */));
+        CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1557 /* ARTIST 0x82705044 */));
     if (lbOn)
     {
         mxEffectState |= 0x04;
@@ -1184,14 +1184,14 @@ void Vehicle::SetRightIndicatorOn(bool lbOn)
 void Vehicle::ToggleLeftIndicatorOn()
 {
     CGS_ASSERT(IsAlive(),
-        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1548 /* ARTIST 0x8274F264 */));
+        CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1548 /* ARTIST 0x8274F264 */));
     mxEffectState ^= 0x02;
 }
 
 void Vehicle::ToggleRightIndicatorOn()
 {
     CGS_ASSERT(IsAlive(),
-        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1572 /* ARTIST 0x8274F2CC */));
+        CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1572 /* ARTIST 0x8274F2CC */));
     mxEffectState ^= 0x04;
 }
 
@@ -1262,32 +1262,32 @@ void Vehicle::SetIndicatingRight(bool lbOn)
 void Vehicle::SetPhysicalReason(s8 liReason)
 {
     CGS_ASSERT(IsAlive(),
-        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1798 /* ARTIST 0x8270550C */));
+        CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1798 /* ARTIST 0x8270550C */));
     miPhysicalReason = liReason;
 }
 
 void Vehicle::SetSympatheticCrashTarget(EntityId lEntityId)
 {
     CGS_ASSERT(IsAlive(),
-        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1779 /* ARTIST 0x8270540C */));
+        CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1779 /* ARTIST 0x8270540C */));
     CGS_ASSERT(lEntityId.muValue != 0xFFFFFFFF,
-        CgsDev::Assert::MessageAt("lEntityId.IsValid()", KAC_ARTIST_ASSERT_FILE, 1780 /* ARTIST 0x82705430 */));
+        CGS_ASSERT_MESSAGE_AT("lEntityId.IsValid()", KAC_ARTIST_ASSERT_FILE, 1780 /* ARTIST 0x82705430 */));
     mSympCrashTarget = lEntityId;
 }
 
 void Vehicle::SetOrphan()
 {
     CGS_ASSERT(IsAlive(),
-        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 968 /* ARTIST 0x8270EAFC */));
+        CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 968 /* ARTIST 0x8270EAFC */));
     mxFlags |= E_FLAG_ORPHAN;
 }
 
 void Vehicle::SetFrozen(bool lbFrozen)
 {
     CGS_ASSERT(IsAlive(),
-        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1061 /* ARTIST 0x8270F654 */));
+        CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1061 /* ARTIST 0x8270F654 */));
     CGS_ASSERT(IsPhysical(),
-        CgsDev::Assert::MessageAt("IsPhysical()", KAC_ARTIST_ASSERT_FILE, 1062 /* ARTIST 0x8270F680 */));
+        CGS_ASSERT_MESSAGE_AT("IsPhysical()", KAC_ARTIST_ASSERT_FILE, 1062 /* ARTIST 0x8270F680 */));
     if (lbFrozen)
     {
         mxFlags |= E_FLAG_FROZEN;
@@ -1316,12 +1316,12 @@ void Vehicle::SetCurrentManoeuvre(Manoeuvre leManoeuvre)
 void Vehicle::SetCurrentManoeuvrePhase(s8 liPhase)
 {
     CGS_ASSERT(IsAlive(),
-        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 890 /* ARTIST 0x8270E7FC */));
+        CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 890 /* ARTIST 0x8270E7FC */));
     CGS_ASSERT(miManoeuvre >= E_MANOEUVRE_NONE,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "miManoeuvre >= E_MANOEUVRE_NONE", KAC_ARTIST_ASSERT_FILE, 891 /* ARTIST 0x8270E824 */));
     CGS_ASSERT(miManoeuvre < E_MANOEUVRE_COUNT,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "miManoeuvre < E_MANOEUVRE_COUNT", KAC_ARTIST_ASSERT_FILE, 892 /* ARTIST 0x8270E850 */));
     miManoeuvrePhase = liPhase;
 }
@@ -1349,7 +1349,7 @@ void Vehicle::SetWantsToExtremeSwerve(bool lbWants)
 void Vehicle::StartGiveUpManoeuvre()
 {
     CGS_ASSERT(IsAlive(),
-        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 860 /* ARTIST 0x8271BAAC */));
+        CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 860 /* ARTIST 0x8271BAAC */));
     if (miManoeuvre != E_MANOEUVRE_GIVE_UP)
     {
         miManoeuvrePhase = 0;
@@ -1497,7 +1497,7 @@ void Vehicle::SetHasEntity(bool lbHasEntity, u32 luVehicle, VehicleSoaData& lSoa
 u16 Vehicle::GetCabIndex() const
 {
     CGS_ASSERT(IsOfTrailerSpecies(),
-        CgsDev::Assert::MessageAt("IsOfTrailerSpecies()", KAC_ARTIST_ASSERT_FILE, 778 /* ARTIST 0x8270E4F4 */));   // BrnTrafficVehicle.h:778
+        CGS_ASSERT_MESSAGE_AT("IsOfTrailerSpecies()", KAC_ARTIST_ASSERT_FILE, 778 /* ARTIST 0x8270E4F4 */));   // BrnTrafficVehicle.h:778
     return muOtherHalfIndex;
 }
 
@@ -1528,7 +1528,7 @@ void Vehicle::DetachArticulation(u32 luVehicle, VehicleSoaData& lSoaData)
 u16 Vehicle::GetTrailerIndex() const
 {
     CGS_ASSERT(IsOfStandardSpecies(),
-        CgsDev::Assert::MessageAt("IsOfStandardSpecies()", KAC_ARTIST_ASSERT_FILE, 770 /* ARTIST 0x8270E494 */));  // BrnTrafficVehicle.h:770
+        CGS_ASSERT_MESSAGE_AT("IsOfStandardSpecies()", KAC_ARTIST_ASSERT_FILE, 770 /* ARTIST 0x8270E494 */));  // BrnTrafficVehicle.h:770
     return muOtherHalfIndex;
 }
 
@@ -1564,11 +1564,11 @@ void Vehicle::SetFlashingHeadlights(bool lbOn, CgsNumeric::Random* lpRand)
 void Vehicle::CopyEffectsFromCab(const Vehicle* lpCab)
 {
     CGS_ASSERT(IsAlive(),
-        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1419 /* ARTIST 0x82704E84 */));
+        CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1419 /* ARTIST 0x82704E84 */));
     CGS_ASSERT(IsOfTrailerSpecies(),
-        CgsDev::Assert::MessageAt("IsOfTrailerSpecies()", KAC_ARTIST_ASSERT_FILE, 1420 /* ARTIST 0x82704EB0 */));
+        CGS_ASSERT_MESSAGE_AT("IsOfTrailerSpecies()", KAC_ARTIST_ASSERT_FILE, 1420 /* ARTIST 0x82704EB0 */));
     CGS_ASSERT(lpCab != 0,
-        CgsDev::Assert::MessageAt("lpCab", KAC_ARTIST_ASSERT_FILE, 1421 /* ARTIST 0x82704ED4 */));
+        CGS_ASSERT_MESSAGE_AT("lpCab", KAC_ARTIST_ASSERT_FILE, 1421 /* ARTIST 0x82704ED4 */));
 
     mxEffectState = lpCab->mxEffectState;
     miBrakelightState = lpCab->miBrakelightState;

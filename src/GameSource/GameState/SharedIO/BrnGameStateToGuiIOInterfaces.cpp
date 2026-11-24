@@ -289,7 +289,7 @@ void GameStateToGuiInterface::AppendRaceCarCrashes(
     const CgsModule::EventQueue<BrnPhysics::Vehicle::RaceCarCrashEvent, 8>* lpRaceCarCrashEventQueue)
 {
     CGS_ASSERT(lpRaceCarCrashEventQueue != 0,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lpRaceCarCrashEventQueue",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
             "../GameState/SharedIO/BrnGameStateToGuiIOInterfaces.cpp", 247 /* ARTIST 0x823799AC */));   // line 247

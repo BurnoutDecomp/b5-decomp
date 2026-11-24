@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Network/Buddies/DirtySock/X360/CgsBuddyManagerDirtySockX360.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Network\\Buddies\\DirtySock\\X360\\CgsBuddyManagerDirtySockX360.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Network/CgsNetworkManager.h"   // NetworkManager::GetActiveControllerPort
 #include "GameShared/GameClasses/Network/ServerInterface/CgsServerInterface.h"   // GetGameComponent / GetConnAPIRef
@@ -183,9 +183,9 @@ namespace CgsNetwork
     // =========================================================================
     u32 BuddyManagerX360::ShowProfile(const PlayerName* lpBuddyName)
     {
-        CGS_ASSERT(lpBuddyName && lpBuddyName->GetPlayerName()[0] != '\0', CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpBuddyName && lpBuddyName->GetPlayerName()[0] != '\0', CGS_ASSERT_MESSAGE_AT(
             "!lpBuddyName->IsEmpty()",
-            "..\\..\\..\\GameShared\\GameClasses\\Network\\Buddies\\DirtySock\\X360\\CgsBuddyManagerDirtySockX360.cpp", 862 /* ARTIST 0x82880058 */));
+            CGS_ARTIST_FILE, 862 /* ARTIST 0x82880058 */));
 
         const u32 luUserIndex = mpNetworkManager->GetActiveControllerPort();
 
@@ -219,14 +219,14 @@ namespace CgsNetwork
     u64 BuddyManagerX360::GetBuddyXUID(const PlayerName* lpBuddyName)
     {
         CGS_ASSERT(mpBuddies,
-            CgsDev::Assert::MessageAt("mpBuddies", __FILE__, 222 /* ARTIST 0x8287F9E0 */));
+            CGS_ASSERT_MESSAGE_AT("mpBuddies", __FILE__, 222 /* ARTIST 0x8287F9E0 */));
         CGS_ASSERT(lpBuddyName,
-            CgsDev::Assert::MessageAt("lpBuddyName", __FILE__, 223 /* ARTIST 0x8287FA04 */));
+            CGS_ASSERT_MESSAGE_AT("lpBuddyName", __FILE__, 223 /* ARTIST 0x8287FA04 */));
 
         DirtySock::HLBBudT* lpBuddy =
             DirtySock::HLBListGetBuddyByName(mpBuddies, lpBuddyName->GetPlayerName());
         CGS_ASSERT(lpBuddy,
-            CgsDev::Assert::MessageAt("lpBuddy", __FILE__, 226 /* ARTIST 0x8287FA38 */));
+            CGS_ASSERT_MESSAGE_AT("lpBuddy", __FILE__, 226 /* ARTIST 0x8287FA38 */));
 
         return DirtySock::HLBBudGetXenonXUID(lpBuddy);
     }
@@ -256,12 +256,12 @@ namespace CgsNetwork
     bool BuddyManagerX360::HaveIInvitedMyBuddy(const PlayerName* lpPlayerName)
     {
         CGS_ASSERT(lpPlayerName,
-            CgsDev::Assert::MessageAt("lpPlayerName", __FILE__, 616 /* ARTIST 0x8287FD8C */));
+            CGS_ASSERT_MESSAGE_AT("lpPlayerName", __FILE__, 616 /* ARTIST 0x8287FD8C */));
 
         DirtySock::HLBBudT* lpBuddy =
             DirtySock::HLBListGetBuddyByName(mpBuddies, lpPlayerName->GetPlayerName());
         CGS_ASSERT(lpBuddy,
-            CgsDev::Assert::MessageAt("lpBuddy", __FILE__, 619 /* ARTIST 0x8287FDC0 */));
+            CGS_ASSERT_MESSAGE_AT("lpBuddy", __FILE__, 619 /* ARTIST 0x8287FDC0 */));
 
         // The "I have invited this buddy" flag is bit 26 of the buddy record's flag
         // word (+0x18).
@@ -285,7 +285,7 @@ namespace CgsNetwork
             }
 
             DirtySock::HLBBudT* lpBuddy = DirtySock::HLBListGetBuddyByIndex(mpBuddies, liIndex);
-            CGS_ASSERT(lpBuddy, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(lpBuddy, CGS_ASSERT_MESSAGE_AT(
                 "lpBuddy",
                 __FILE__, 649 /* ARTIST 0x8287FFDC */));
 
@@ -317,9 +317,9 @@ namespace CgsNetwork
     // =========================================================================
     void BuddyManagerX360::SendInvite(const PlayerName* lpBuddyName)
     {
-        CGS_ASSERT(lpBuddyName && lpBuddyName->GetPlayerName()[0] != '\0', CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpBuddyName && lpBuddyName->GetPlayerName()[0] != '\0', CGS_ASSERT_MESSAGE_AT(
             "!lpBuddyName->IsEmpty()",
-            "..\\..\\..\\GameShared\\GameClasses\\Network\\Buddies\\DirtySock\\X360\\CgsBuddyManagerDirtySockX360.cpp", 676 /* ARTIST 0x8287FE24 */));
+            CGS_ARTIST_FILE, 676 /* ARTIST 0x8287FE24 */));
 
         if (HasBuddyInvitedMe(lpBuddyName))
         {
@@ -328,12 +328,12 @@ namespace CgsNetwork
 
         const u64 luXuid = GetBuddyXUID(lpBuddyName);
 
-        CGS_ASSERT(miNumberOfInvitesToBeSent >= 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(miNumberOfInvitesToBeSent >= 0, CGS_ASSERT_MESSAGE_AT(
             "miNumberOfInvitesToBeSent >= 0",
-            "..\\..\\..\\GameShared\\GameClasses\\Network\\Buddies\\DirtySock\\X360\\CgsBuddyManagerDirtySockX360.cpp", 687 /* ARTIST 0x8287FE88 */));
-        CGS_ASSERT(miNumberOfInvitesToBeSent < KI_MAX_INVITES_TO_BUFFER, CgsDev::Assert::MessageAt(
+            CGS_ARTIST_FILE, 687 /* ARTIST 0x8287FE88 */));
+        CGS_ASSERT(miNumberOfInvitesToBeSent < KI_MAX_INVITES_TO_BUFFER, CGS_ASSERT_MESSAGE_AT(
             "miNumberOfInvitesToBeSent < KI_MAX_INVITES_TO_BUFFER",
-            "..\\..\\..\\GameShared\\GameClasses\\Network\\Buddies\\DirtySock\\X360\\CgsBuddyManagerDirtySockX360.cpp", 688 /* ARTIST 0x8287FEB0 */));
+            CGS_ARTIST_FILE, 688 /* ARTIST 0x8287FEB0 */));
 
         // Dedupe: skip if the XUID is already queued.
         for (s32 liIndex = 0; liIndex < miNumberOfInvitesToBeSent; ++liIndex)
@@ -485,7 +485,7 @@ namespace CgsNetwork
             &luResultsSize,
             &muProfileResultsSettingsLen,    // pResults (+0x28)
             mGamerPicOverlapped);
-        CGS_ASSERT(luResult == ERROR_IO_PENDING, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(luResult == ERROR_IO_PENDING, CGS_ASSERT_MESSAGE_AT(
             "dwRet == ERROR_IO_PENDING",
             __FILE__, 426 /* ARTIST 0x8288CCD8 */));
 
@@ -587,9 +587,9 @@ namespace CgsNetwork
 
         const u32 luResult = XUserReadGamerPictureByKey(
             lpPictureKey, 0, lpPixels, luPitch, luHeight, mGamerPicOverlapped);
-        CGS_ASSERT(luResult == ERROR_IO_PENDING, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(luResult == ERROR_IO_PENDING, CGS_ASSERT_MESSAGE_AT(
             "lDwErr == ERROR_IO_PENDING",
-            "..\\..\\..\\GameShared\\GameClasses\\Network\\Buddies\\DirtySock\\X360\\CgsBuddyManagerDirtySockX360.cpp", 481 /* ARTIST 0x8288CE20 */));
+            CGS_ARTIST_FILE, 481 /* ARTIST 0x8288CE20 */));
     }
 
     // =========================================================================
@@ -605,7 +605,7 @@ namespace CgsNetwork
             meCurrentStatus = E_BUDDY_ACTION_IDLE;
             const u32 luResult = XCancelOverlapped(mGamerPicOverlapped);
             CGS_ASSERT(luResult == 0,
-                CgsDev::Assert::MessageAt(
+                CGS_ASSERT_MESSAGE_AT(
                     "mGamerPicOverlapped.CancelXOverlapped()", __FILE__, 316 /* ARTIST 0x8287FAA0 */));
         }
     }
@@ -700,3 +700,5 @@ namespace CgsNetwork
                       "mbSendingInvite follows miNumberOfInvitesToBeSent");
     }
 }
+
+#undef CGS_ARTIST_FILE

@@ -10,7 +10,7 @@
 // Each issue routes through CgsFileSystem::GetDeviceManager() and registers CompletionCallback +
 // this as the continuation; the device worker thread runs the op and posts the semaphore that Wait()
 // blocks on. mbOperating enforces a single op in flight.
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsDeviceAsyncOp.cpp"
 #include "GameShared/GameClasses/System/FileSystem/CgsDeviceAsyncOp.h"
 
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // CGS_ASSERT
@@ -22,7 +22,7 @@ namespace CgsFileSystem
     // @ 0x828F2300.
     void AsyncOp::Open(const char* lpcFileName, u32 luFlags, s32 liPriority)
     {
-        CGS_ASSERT(!mbOperating, CgsDev::Assert::StreamMessageAt("Last operation has not been waited before\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsDeviceAsyncOp.cpp", 56));
+        CGS_ASSERT(!mbOperating, CGS_ASSERT_STREAM_MESSAGE_AT("Last operation has not been waited before\n", CGS_ARTIST_FILE, 56));
         mbOperating = true;
         GetDeviceManager()->Open(lpcFileName, luFlags, &AsyncOp::CompletionCallback, this, liPriority);
     }
@@ -30,7 +30,7 @@ namespace CgsFileSystem
     // @ 0x828F23D8.
     void AsyncOp::Read(Handle lHandle, u64 luPosition, void* lpBuffer, u32 luBufferSize, s32 liPriority)
     {
-        CGS_ASSERT(!mbOperating, CgsDev::Assert::StreamMessageAt("Last operation has not been waited before\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsDeviceAsyncOp.cpp", 69));
+        CGS_ASSERT(!mbOperating, CGS_ASSERT_STREAM_MESSAGE_AT("Last operation has not been waited before\n", CGS_ARTIST_FILE, 69));
         mbOperating = true;
         GetDeviceManager()->Read(lHandle, luPosition, lpBuffer, luBufferSize, &AsyncOp::CompletionCallback, this, liPriority);
     }
@@ -38,7 +38,7 @@ namespace CgsFileSystem
     // @ 0x828F24C0.
     void AsyncOp::Close(Handle lHandle, s32 liPriority)
     {
-        CGS_ASSERT(!mbOperating, CgsDev::Assert::StreamMessageAt("Last operation has not been waited before\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsDeviceAsyncOp.cpp", 92));
+        CGS_ASSERT(!mbOperating, CGS_ASSERT_STREAM_MESSAGE_AT("Last operation has not been waited before\n", CGS_ARTIST_FILE, 92));
         mbOperating = true;
         GetDeviceManager()->Close(lHandle, &AsyncOp::CompletionCallback, this, liPriority);
     }
@@ -55,8 +55,8 @@ namespace CgsFileSystem
             lAssertMessage << "No operation\n";
             CgsDev::Assert::FireAssert(
                 CgsDev::Assert::gpcMessageBuffer,
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsDeviceAsyncOp.cpp",
-                173);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                173));
             CgsDev::Assert::EndAssert();
         }
         return mSemaphore.GetCount() > 0;
@@ -74,8 +74,8 @@ namespace CgsFileSystem
             lAssertMessage << "No operation\n";
             CgsDev::Assert::FireAssert(
                 CgsDev::Assert::gpcMessageBuffer,
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsDeviceAsyncOp.cpp",
-                145);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                145));
             CgsDev::Assert::EndAssert();
         }
         mSemaphore.Wait(&EA::Thread::kTimeoutNone);
@@ -93,3 +93,5 @@ namespace CgsFileSystem
         lpOp->mSemaphore.Post(1);
     }
 }
+
+#undef CGS_ARTIST_FILE

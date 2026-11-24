@@ -36,7 +36,7 @@
 // Newly bodied this wave: Construct (PS3 0x241DE0), Update (0x823937D0), RequestTraining,
 // IsTipAllowedInGameMode, PlayNewAtomikaFreeburnVO (0x82365FC8), and the DriveThruManager
 // accessor quartet (IsTipPending / GetProfile / GetTimeSinceLastTip / RequestTip).
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TrainingManager/BrnTrainingManager.cpp"
 #include "GameSource/GameState/TrainingManager/BrnTrainingManager.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/GameState/BrnGameStateModule.h"
@@ -148,7 +148,7 @@ void TrainingManager::OnVoiceoverFinished()
         {
             CGS_ASSERT(meTrainingState == E_TRAINING_STATE_PLAYING_MESSAGE ||
                        meTrainingState == E_TRAINING_STATE_WAITINGFORUNPAUSE,
-                CgsDev::Assert::MessageAt(
+                CGS_ASSERT_MESSAGE_AT(
                     "meTrainingState == E_TRAINING_STATE_PLAYING_MESSAGE || meTrainingState == E_TRAINING_STATE_WAITINGFORUNPAUSE",
                     "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
                     "../GameState/TrainingManager/BrnTrainingManager.cpp", 582 /* ARTIST 0x8235906C */));
@@ -287,7 +287,7 @@ void TrainingManager::SendTrainingTickerMessage(GameStateModuleIO::GameActionQue
         KI_GAME_ACTION_TRAINING_TICKER, (s32)sizeof(leTrainingType));
 
     BrnProgression::Profile* lpProfile = mpProgressionManager->GetProfile();
-    CGS_ASSERT(lpProfile, CgsDev::Assert::MessageAt("lpProfile", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TrainingManager/BrnTrainingManager.cpp", 794));   // BrnTrainingManager.cpp:794
+    CGS_ASSERT(lpProfile, CGS_ASSERT_MESSAGE_AT("lpProfile", CGS_ARTIST_FILE, 794));   // BrnTrainingManager.cpp:794
     lpProfile->SetTrainingAlreadySeen(meCurrentTrainingType);
 }
 
@@ -301,7 +301,7 @@ void TrainingManager::SendTrainingTickerMessage(GameStateModuleIO::GameActionQue
 void TrainingManager::DEBUG_ClearTrainingFlags()
 {
     BrnProgression::Profile* lpProfile = mpProgressionManager->GetProfile();
-    CGS_ASSERT(lpProfile, CgsDev::Assert::MessageAt("lpProfile", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TrainingManager/BrnTrainingManager.cpp", 975));
+    CGS_ASSERT(lpProfile, CGS_ASSERT_MESSAGE_AT("lpProfile", CGS_ARTIST_FILE, 975));
     lpProfile->ClearTrainingFlags();
 }
 
@@ -520,7 +520,7 @@ void TrainingManager::RequestTraining(BrnProgression::ETrainingType leTrainingTy
     if (luType >= 0x100u)
     {
         CGS_ASSERT(false,
-                   CgsDev::Assert::MessageAt("leTrainingType >= 0 && leTrainingType < BrnProgression::E_TRAINING_TYPE_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TrainingManager/BrnTrainingManager.cpp", 355)); // :355
+                   CGS_ASSERT_MESSAGE_AT("leTrainingType >= 0 && leTrainingType < BrnProgression::E_TRAINING_TYPE_COUNT", CGS_ARTIST_FILE, 355)); // :355
     }
 
     // `if (!*v3 && !*(v3+20) && (v2 != 8 || *(gsm+42300) >= 30.0))`
@@ -540,7 +540,7 @@ void TrainingManager::RequestTraining(BrnProgression::ETrainingType leTrainingTy
     }
 
     BrnProgression::Profile* lpProfile = mpProgressionManager->GetProfile();
-    CGS_ASSERT(lpProfile, CgsDev::Assert::MessageAt("lpProfile", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TrainingManager/BrnTrainingManager.cpp", 382));   // :382
+    CGS_ASSERT(lpProfile, CGS_ASSERT_MESSAGE_AT("lpProfile", CGS_ARTIST_FILE, 382));   // :382
 
     u32 luResolvedType = luType;
     if (luType == 50u)
@@ -588,7 +588,7 @@ void TrainingManager::RequestTraining(BrnProgression::ETrainingType leTrainingTy
         {
             const BrnWorld::RaceCarEntityModuleIO::BoostOutputInfo*
                 lpcBoostInfo = lpcIface->GetBoostOutputInfoN(lpcIface->GetPlayerActiveRaceCarIndex());
-            CGS_ASSERT(lpcBoostInfo, CgsDev::Assert::MessageAt("lpBoostInfo", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TrainingManager/BrnTrainingManager.cpp", 412));   // :412
+            CGS_ASSERT(lpcBoostInfo, CGS_ASSERT_MESSAGE_AT("lpBoostInfo", CGS_ARTIST_FILE, 412));   // :412
             if (!lpcBoostInfo->mbBoostIsFull)          // `*(v11+28)`
             {
                 return;
@@ -837,3 +837,5 @@ void TrainingManager::RequestTip(BrnProgression::ETrainingType leType)
     meCurrentTrainingType = leType;                            // `*(this+4) = type`
 }
 }
+
+#undef CGS_ARTIST_FILE

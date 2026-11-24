@@ -182,7 +182,7 @@ namespace CgsFileSystem
             lMessage << "String " << lpcSource << " is too long. Buffer size = " << luDestSize
                      << ", string length = " << static_cast<u32>(std::strlen(lpcSource)) << "\n";
             CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 65);
+                CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 65));
             CgsDev::Assert::EndAssert();
         }
         std::strcpy(lpcDest, lpcSource);

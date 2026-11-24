@@ -10,7 +10,7 @@
 // The game-mode string table has eight rows in this build (modes 10..17); SetInfo's
 // search is bounded by the table's end.
 // ===================================================================================
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnGuiNetworkRouteInfo.cpp"
 #include "GameSource/Gui/Flow/Screen/Components/BrnGuiNetworkRouteInfo.h"
 
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
@@ -536,9 +536,9 @@ namespace BrnGui
     void GuiNetworkRouteInfo::SetupMap()
     {
         CGS_ASSERT(mpIconManager != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpIconManager",
-                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnGuiNetworkRouteInfo.cpp", 679 /* ARTIST 0x824302F4 */));
+                CGS_ARTIST_FILE, 679 /* ARTIST 0x824302F4 */));
 
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
         {
@@ -628,7 +628,7 @@ namespace BrnGui
     // Show each option row the mode's mapping table places, hide the rest.
     void GuiNetworkRouteInfo::ShowAppropiateOptions(const s32* lpiMappingTable)
     {
-        CGS_ASSERT(lpiMappingTable != 0, CgsDev::Assert::MessageAt("lpiMappingTable", "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnGuiNetworkRouteInfo.cpp", 829 /* ARTIST 0x8241744C */));
+        CGS_ASSERT(lpiMappingTable != 0, CGS_ASSERT_MESSAGE_AT("lpiMappingTable", CGS_ARTIST_FILE, 829 /* ARTIST 0x8241744C */));
 
         for (s32 liComponent = 0; liComponent < E_OPTION_COMPONENT_COUNT; ++liComponent)
         {
@@ -646,3 +646,5 @@ namespace BrnGui
         }
     }
 }
+
+#undef CGS_ARTIST_FILE

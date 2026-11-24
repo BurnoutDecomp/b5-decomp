@@ -468,7 +468,7 @@ inline void
 BehaviourAftertouchCrash::SetParameters(const Parameters* lpParameters)
 {
     CGS_ASSERT(lpParameters->GetType() == eBehaviourAftertouchCrash,
-               CgsDev::Assert::MessageAt("lpParameters->GetType() == eBehaviourAftertouchCrash", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourAftertouchCrash.h", 252));
+               CGS_ASSERT_MESSAGE_AT("lpParameters->GetType() == eBehaviourAftertouchCrash", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourAftertouchCrash.h", 252));
     SetDebugParametersName(lpParameters->GetDebugName());
     mpParameters = lpParameters;                   // stw r4, +0x3D8(this)
 }

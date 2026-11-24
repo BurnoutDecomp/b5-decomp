@@ -1,6 +1,6 @@
 // BrnGuiGuiCacheDebugComponent.cpp
 // BrnGui::GuiCacheDebugComponent -- Construct and Update.
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/BrnGuiGuiCacheDebugComponent.cpp"
 #include "GameSource/Gui/BrnGuiGuiCacheDebugComponent.h"
 
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"          // CGS_ASSERT
@@ -34,7 +34,7 @@ namespace BrnGui
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("mpGuiModule != NULL",
-                "..\\..\\..\\GameSource\\Gui/BrnGuiGuiCacheDebugComponent.cpp", 80);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 80));
             CgsDev::Assert::EndAssert();
         }
         mpGuiModule = 0;
@@ -81,7 +81,7 @@ namespace BrnGui
     // ARTIST 0x824ED368; the original callback asserts, then toggles this+0x14.
     void GuiCacheDebugComponent::ShowGuiCacheStatusCallback(void* lpData)
     {
-        CGS_ASSERT(lpData != 0, CgsDev::Assert::StreamMessageAt("ShowGuiCacheStatusCallback: Invalid data in the callback", "..\\..\\..\\GameSource\\Gui/BrnGuiGuiCacheDebugComponent.cpp", 433));
+        CGS_ASSERT(lpData != 0, CGS_ASSERT_STREAM_MESSAGE_AT("ShowGuiCacheStatusCallback: Invalid data in the callback", CGS_ARTIST_FILE, 433));
         GuiCacheDebugComponent* lpThis = static_cast<GuiCacheDebugComponent*>(lpData);
         lpThis->mbShowGuiCacheStatus = !lpThis->mbShowGuiCacheStatus;
     }
@@ -89,7 +89,7 @@ namespace BrnGui
     // ARTIST 0x824ED410; the original callback asserts, then toggles this+0x15.
     void GuiCacheDebugComponent::ShowAptComponentGuiCacheStatusCallback(void* lpData)
     {
-        CGS_ASSERT(lpData != 0, CgsDev::Assert::StreamMessageAt("ShowAptComponentGuiCacheStatusCallback: Invalid data in the callback", "..\\..\\..\\GameSource\\Gui/BrnGuiGuiCacheDebugComponent.cpp", 446));
+        CGS_ASSERT(lpData != 0, CGS_ASSERT_STREAM_MESSAGE_AT("ShowAptComponentGuiCacheStatusCallback: Invalid data in the callback", CGS_ARTIST_FILE, 446));
 
         GuiCacheDebugComponent* lpThis = static_cast<GuiCacheDebugComponent*>(lpData);
         lpThis->mbShowAptComponentGuiCacheStatus = !lpThis->mbShowAptComponentGuiCacheStatus;
@@ -288,3 +288,5 @@ namespace BrnGui
         mInputQueue.Clear();
     }
 }
+
+#undef CGS_ARTIST_FILE

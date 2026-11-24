@@ -90,9 +90,9 @@ const SubRegionDescriptor* StaticSoundMap::GetSubRegionDescrip(const rw::math::f
 const StaticSoundEntity& StaticSoundMap::GetEntity(s32 liEntityIndex) const
 {
     CGS_ASSERT(mpEntities != 0,
-        CgsDev::Assert::MessageAt("mpEntities", KAC_ARTIST_ASSERT_FILE, 222 /* ARTIST 0x826755A8 */));
+        CGS_ASSERT_MESSAGE_AT("mpEntities", KAC_ARTIST_ASSERT_FILE, 222 /* ARTIST 0x826755A8 */));
     CGS_ASSERT(liEntityIndex < miNumEntities,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "liEntityIndex < miNumEntities", KAC_ARTIST_ASSERT_FILE, 223 /* ARTIST 0x826755D0 */));
 
     return mpEntities[liEntityIndex];

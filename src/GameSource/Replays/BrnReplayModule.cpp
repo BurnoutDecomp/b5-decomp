@@ -18,7 +18,7 @@
 #include <cstring>
 #include "types.hpp"
 #include <cstdio>   // snprintf
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Replays/BrnReplayModule.cpp"
 // ============================================================================
 // GameSource/Replays/BrnReplayModule.cpp
 //
@@ -72,13 +72,13 @@ namespace BrnReplays
             if (lpDestBuffer == 0)
             {
                 CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert("lpInputBuffer", KACgsModuleUtilsPath, liDestLine);
+                CgsDev::Assert::FireAssert("lpInputBuffer", CGS_ASSERT_LOCATION(KACgsModuleUtilsPath, liDestLine));
                 CgsDev::Assert::EndAssert();
             }
             if (lpSourceBuffer == 0)
             {
                 CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert("lpOutputBuffer0", KACgsModuleUtilsPath, liSourceLine);
+                CgsDev::Assert::FireAssert("lpOutputBuffer0", CGS_ASSERT_LOCATION(KACgsModuleUtilsPath, liSourceLine));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -431,7 +431,7 @@ namespace BrnReplays
                     CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
                     lMessage << "String too long: " << lpName->macName;
                     CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                        "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h",55);
+                        CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h",55));
                     CgsDev::Assert::EndAssert();
                 }
                 // Original has no additional reel-index guard or forced terminator.
@@ -597,7 +597,7 @@ namespace BrnReplays
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 "Invalid update state for replay module\n",
-                "..\\..\\..\\GameSource\\Replays/BrnReplayModule.cpp", 355);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 355));
             CgsDev::Assert::EndAssert();
             break;
         }
@@ -650,7 +650,7 @@ namespace BrnReplays
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 "Should never have closed streams while recording (only ever opening, open or closing\n",
-                "..\\..\\..\\GameSource\\Replays/BrnReplayModule.cpp", 1035);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 1035));
             CgsDev::Assert::EndAssert();
             break;
 
@@ -740,7 +740,7 @@ namespace BrnReplays
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 "Should never have closed streams while playing (only ever opening, open or closing\n",
-                "..\\..\\..\\GameSource\\Replays/BrnReplayModule.cpp", 1155);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 1155));
             CgsDev::Assert::EndAssert();
             return;
 
@@ -866,7 +866,7 @@ namespace BrnReplays
                     CgsDev::Assert::BeginAssert();
                     CgsDev::Assert::FireAssert(
                         "mReadStream.ReadCurrentFrunk( &lReadResult )",
-                        "..\\..\\..\\GameSource\\Replays/BrnReplayModule.cpp", 1226);
+                        CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 1226));
                     CgsDev::Assert::EndAssert();
                 }
                 if ((lReadResult.mxFlags & KU_FLAG_VOID) != 0)
@@ -874,7 +874,7 @@ namespace BrnReplays
                     CgsDev::Assert::BeginAssert();
                     CgsDev::Assert::FireAssert(
                         "First frame should never be VOID\n",
-                        "..\\..\\..\\GameSource\\Replays/BrnReplayModule.cpp", 1229);
+                        CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 1229));
                     CgsDev::Assert::EndAssert();
                 }
                 if ((lReadResult.mxFlags & KU_FLAG_KEYFRAME) == 0)
@@ -882,7 +882,7 @@ namespace BrnReplays
                     CgsDev::Assert::BeginAssert();
                     CgsDev::Assert::FireAssert(
                         "First frame should always be key frame\n",
-                        "..\\..\\..\\GameSource\\Replays/BrnReplayModule.cpp", 1230);
+                        CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 1230));
                     CgsDev::Assert::EndAssert();
                 }
 
@@ -977,7 +977,7 @@ namespace BrnReplays
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 "Can only stop recording from recording state\n",
-                "..\\..\\..\\GameSource\\Replays/BrnReplayModule.cpp", 1556);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 1556));
             CgsDev::Assert::EndAssert();
         }
 
@@ -997,7 +997,7 @@ namespace BrnReplays
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 "Can only stop playing from playing state\n",
-                "..\\..\\..\\GameSource\\Replays/BrnReplayModule.cpp", 1581);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 1581));
             CgsDev::Assert::EndAssert();
         }
 
@@ -1146,3 +1146,5 @@ namespace BrnReplays
     }
 
 }
+
+#undef CGS_ARTIST_FILE

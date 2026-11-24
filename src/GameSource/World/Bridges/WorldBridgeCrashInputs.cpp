@@ -168,8 +168,8 @@ void BridgeTrafficToCrashModule_PostPhysics(
 {
     (void)lpWorldModule;
 
-    CGS_ASSERT(lpCrashInputBuffer_PostPhysics != 0, CgsDev::Assert::MessageAt("lpCrashInputBuffer_PostPhysics", __FILE__, 55));          // :55
-    CGS_ASSERT(lpTrafficOutputBuffer_PostPhysics != 0, CgsDev::Assert::MessageAt("lpTrafficOutputBuffer_PostPhysics", __FILE__, 56));    // :56
+    CGS_ASSERT(lpCrashInputBuffer_PostPhysics != 0, CGS_ASSERT_MESSAGE_AT("lpCrashInputBuffer_PostPhysics", __FILE__, 55));          // :55
+    CGS_ASSERT(lpTrafficOutputBuffer_PostPhysics != 0, CGS_ASSERT_MESSAGE_AT("lpTrafficOutputBuffer_PostPhysics", __FILE__, 56));    // :56
 
     lpCrashInputBuffer_PostPhysics->SetTrafficInputInterface(
         lpTrafficOutputBuffer_PostPhysics->GetCrashTrafficInputInterface() );

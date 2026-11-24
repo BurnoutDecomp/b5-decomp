@@ -14,7 +14,7 @@
 #include "GameShared/GameClasses/Development/MapFile/Reader/CgsMapFileReader.h"     // MapFile::Reader::GetStackEntryName (call-stack names)
 #include "rw/core/debug/DebugCriticalSection.h"                                     // gDebugManagerSection (ThreadSafeAquire/Release lock)
 #include "rw/rwcore_structs.h"                                                       // rw::ResourceAllocatorRegistry / rw::core::debug::Manager / rw::BaseResourceDescriptors
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Development/DebugSystem/Core/CgsDebugManager.cpp"
 #include <cstring>   // strlen (the fps stack-string asserts)
 #include <cstdlib>
 #include <xtl.h>
@@ -252,8 +252,8 @@ namespace CgsDev
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 "lbGetTimeSuccess",
-                "..\\..\\..\\GameShared\\GameClasses\\Development/DebugSystem/Core/CgsDebugManager.cpp",
-                1143);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                1143));
             CgsDev::Assert::EndAssert();
         }
 
@@ -384,8 +384,8 @@ namespace CgsDev
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 "!IsComponentRegistered(lpDebugComponent)",
-                "..\\..\\..\\GameShared\\GameClasses\\Development/DebugSystem/Core/CgsDebugManager.cpp",
-                809);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                809));
             CgsDev::Assert::EndAssert();
         }
 
@@ -407,8 +407,8 @@ namespace CgsDev
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 "!IsComponentRegistered(lpDebugComponent)",
-                "..\\..\\..\\GameShared\\GameClasses\\Development/DebugSystem/Core/CgsDebugManager.cpp",
-                844);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                844));
             CgsDev::Assert::EndAssert();
         }
         if (!lpcName)
@@ -416,8 +416,8 @@ namespace CgsDev
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 "lpcName",
-                "..\\..\\..\\GameShared\\GameClasses\\Development/DebugSystem/Core/CgsDebugManager.cpp",
-                847);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                847));
             CgsDev::Assert::EndAssert();
         }
 
@@ -672,3 +672,5 @@ namespace CgsDev
     // it is now a real DebugManager member, so the body is back at its console home
     // (CgsDebugInterface.cpp, X360 @0x82822750).
 }
+
+#undef CGS_ARTIST_FILE

@@ -5,7 +5,7 @@
 // presence-thread design). The context and property ids are the title's own presence schema;
 // the four value tables were read out of the image. XUserSetContext / XUserSetProperty go
 // through the native XDK declarations in xtl.h.
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/RichPresenceManager/X360/BrnGameStateRichPresenceManagerX360.cpp"
 #include "GameSource/GameState/RichPresenceManager/X360/BrnGameStateRichPresenceManagerX360.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                          // CGS_ASSERT
@@ -124,8 +124,8 @@ void RichPresenceManagerX360::SetContext(u32 luUserIndex, u32 luContextId, u32 l
 // vtable +0x00: the presence mode.
 void RichPresenceManagerX360::SetRichPresenceState(ERichPresenceStates leNewState)
 {
-    CGS_ASSERT(leNewState >= 0, CgsDev::Assert::MessageAt("leNewState >= 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/RichPresenceManager/X360/BrnGameStateRichPresenceManagerX360.cpp", 205));
-    CGS_ASSERT(leNewState < E_PRESENCE_STATE_COUNT, CgsDev::Assert::MessageAt("leNewState < E_PRESENCE_STATE_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/RichPresenceManager/X360/BrnGameStateRichPresenceManagerX360.cpp", 206));
+    CGS_ASSERT(leNewState >= 0, CGS_ASSERT_MESSAGE_AT("leNewState >= 0", CGS_ARTIST_FILE, 205));
+    CGS_ASSERT(leNewState < E_PRESENCE_STATE_COUNT, CGS_ASSERT_MESSAGE_AT("leNewState < E_PRESENCE_STATE_COUNT", CGS_ARTIST_FILE, 206));
 
     SetContext(static_cast<u32>(GetUserID()), KU_CONTEXT_PRESENCE, KAU_PRESENCE_STATE_CONTEXT_VALUES[leNewState]);
 }
@@ -145,9 +145,9 @@ void RichPresenceManagerX360::SetTotalRounds(s32 liTotalRounds)
 // vtable +0x0C: the finish position, 1-based.
 void RichPresenceManagerX360::SetCurrentPosition(s32 liFinishPosition)
 {
-    CGS_ASSERT(liFinishPosition >= 0, CgsDev::Assert::MessageAt("liFinishPosition >= 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/RichPresenceManager/X360/BrnGameStateRichPresenceManagerX360.cpp", 224));
+    CGS_ASSERT(liFinishPosition >= 0, CGS_ASSERT_MESSAGE_AT("liFinishPosition >= 0", CGS_ARTIST_FILE, 224));
     CGS_ASSERT(liFinishPosition <= KI_NUM_FINISH_POSITIONS,
-               CgsDev::Assert::MessageAt("liFinishPosition <= BrnWorld::KI_MAX_ACTIVE_RACE_CARS", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/RichPresenceManager/X360/BrnGameStateRichPresenceManagerX360.cpp", 225));
+               CGS_ASSERT_MESSAGE_AT("liFinishPosition <= BrnWorld::KI_MAX_ACTIVE_RACE_CARS", CGS_ARTIST_FILE, 225));
 
     SetContext(static_cast<u32>(GetUserID()), KU_CONTEXT_FINISH_POSITION,
                KAU_FINISH_POSITION_CONTEXT_VALUES[liFinishPosition - 1]);
@@ -192,8 +192,8 @@ void RichPresenceManagerX360::SetRankedStatus(EGameRankedType leRanked)
 // vtable +0x18: the district.
 void RichPresenceManagerX360::SetDistrict(BrnWorld::EDistrict leDistrict)
 {
-    CGS_ASSERT(leDistrict >= 0, CgsDev::Assert::MessageAt("leDistrict >= 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/RichPresenceManager/X360/BrnGameStateRichPresenceManagerX360.cpp", 332));
-    CGS_ASSERT(leDistrict < BrnWorld::E_DISTRICT_VALID_COUNT, CgsDev::Assert::MessageAt("leDistrict < BrnWorld::E_DISTRICT_VALID_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/RichPresenceManager/X360/BrnGameStateRichPresenceManagerX360.cpp", 333));
+    CGS_ASSERT(leDistrict >= 0, CGS_ASSERT_MESSAGE_AT("leDistrict >= 0", CGS_ARTIST_FILE, 332));
+    CGS_ASSERT(leDistrict < BrnWorld::E_DISTRICT_VALID_COUNT, CGS_ASSERT_MESSAGE_AT("leDistrict < BrnWorld::E_DISTRICT_VALID_COUNT", CGS_ARTIST_FILE, 333));
 
     SetContext(static_cast<u32>(GetUserID()), KU_CONTEXT_DISTRICT, KAU_DISTRICT_CONTEXT_VALUES[leDistrict]);
 }
@@ -212,3 +212,5 @@ void RichPresenceManagerX360::SetNumberPlayers(s32 liNumberPlayers)
 }
 
 }
+
+#undef CGS_ARTIST_FILE

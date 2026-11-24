@@ -4,7 +4,7 @@
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"
 #include "BrnOnlineInviteMessageComponent.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Permanent/Components/BrnOnlineInviteMessageComponent.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h" // CGS_ASSERT
 #include "GameSource/Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptComponentUtils.h"
 
@@ -201,7 +201,7 @@ void OnlineInviteMessageComponent::Update()
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("meMessagesAvailable == E_MESSAGING_AVAILABLE_STATE_AVAILABLE",
-            "..\\..\\..\\GameSource\\Gui/Flow/Permanent/Components/BrnOnlineInviteMessageComponent.cpp", 225);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 225));
         CgsDev::Assert::EndAssert();
     }
     if (meShowingState == E_SHOWINGSTATE_SHOWING &&
@@ -252,7 +252,7 @@ void OnlineInviteMessageComponent::ShowMessage(const char* lpcName,
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("mpGuiCache",
-            "..\\..\\..\\GameSource\\Gui/Flow/Permanent/Components/BrnOnlineInviteMessageComponent.cpp", 252);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 252));
         CgsDev::Assert::EndAssert();
     }
     if (meMessagesAvailable == E_MESSAGING_AVAILABLE_STATE_AVAILABLE)
@@ -341,7 +341,7 @@ void OnlineInviteMessageComponent::ShowMessage(s32 liCount,
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("mpGuiCache",
-            "..\\..\\..\\GameSource\\Gui/Flow/Permanent/Components/BrnOnlineInviteMessageComponent.cpp", 341);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 341));
         CgsDev::Assert::EndAssert();
     }
     if (meMessagesAvailable == E_MESSAGING_AVAILABLE_STATE_AVAILABLE)
@@ -480,7 +480,7 @@ bool OnlineInviteMessageComponent::IsMessageAllowed() const
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("mpGuiCache",
-            "..\\..\\..\\GameSource\\Gui/Flow/Permanent/Components/BrnOnlineInviteMessageComponent.cpp", 481);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 481));
         CgsDev::Assert::EndAssert();
     }
     return !mpGuiCache->IsFriendsListOpen() && mpGuiCache->IsEasyDriveGateActive() == true &&
@@ -561,7 +561,7 @@ void OnlineInviteMessageComponent::DisallowMessages()
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("meMessagesAvailable == E_MESSAGING_AVAILABLE_STATE_AVAILABLE",
-            "..\\..\\..\\GameSource\\Gui/Flow/Permanent/Components/BrnOnlineInviteMessageComponent.cpp", 563);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 563));
         CgsDev::Assert::EndAssert();
     }
     meMessagesAvailable = E_MESSAGING_AVAILABLE_STATE_UNAVAILABLE;
@@ -584,7 +584,7 @@ void OnlineInviteMessageComponent::RemoveMessage()
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("meShowingState == E_SHOWINGSTATE_SHOWING",
-            "..\\..\\..\\GameSource\\Gui/Flow/Permanent/Components/BrnOnlineInviteMessageComponent.cpp", 586);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 586));
         CgsDev::Assert::EndAssert();
     }
     if (KAE_TYPE_SIZE_CONVERSION[meShowingType] == E_ONLINE_NOTIFICATION_CHYRON_SIZE_SMALL) mAptRef.GotoAndPlayLabel("smallTransout");
@@ -620,9 +620,9 @@ void OnlineInviteMessageComponent::DoTransitionComplete()
 {
     // Guest: lwz r11, 0x30(this); cmpwi r11, 2 -- must be transitioning out.
     CGS_ASSERT(meShowingState == E_SHOWINGSTATE_TRANSITIONING_OUT,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "meShowingState == E_SHOWINGSTATE_TRANSITIONING_OUT",
-            "..\\..\\..\\GameSource\\Gui/Flow/Permanent/Components/BrnOnlineInviteMessageComponent.cpp", 624 /* ARTIST 0x82416308 */));
+            CGS_ARTIST_FILE, 624 /* ARTIST 0x82416308 */));
 
     // Guest: lwz r10, 0x34(this) -- snapshot the secondary state BEFORE clearing +0x30.
     const EOnlineNotificationChyronType leShowingType = meShowingType;
@@ -647,9 +647,9 @@ void OnlineInviteMessageComponent::TransitionCompleteCallback(void* lpUserData,
 {
     (void)luFrame;
     CGS_ASSERT(lpUserData != 0,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lpUserData",
-            "..\\..\\..\\GameSource\\Gui/Flow/Permanent/Components/BrnOnlineInviteMessageComponent.cpp", 650 /* ARTIST 0x82416374 */));
+            CGS_ARTIST_FILE, 650 /* ARTIST 0x82416374 */));
     static_cast<OnlineInviteMessageComponent*>(lpUserData)->DoTransitionComplete();
 }
 
@@ -695,3 +695,5 @@ const char* OnlineInviteMessageComponent::KAPC_TEXT_FIELDS_STINGS_1[E_ONLINENOTI
     "NEW_NEWS_DESC",
 };
 }
+
+#undef CGS_ARTIST_FILE

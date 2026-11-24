@@ -3,7 +3,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // BrnCrashModule.cpp assert lines
 #include <cstdlib>
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/CrashModule/BrnCrashModule.cpp"
 namespace BrnWorld
 {
     // ARTIST827C6BB0, DWARF const search. First matching record wins.
@@ -104,7 +104,7 @@ namespace BrnWorld
     void CrashModule::HandleNewCrashingTraffic(const CrashIO::InputBuffer_PostPhysics* lpInput)
     {
         // BrnCrashModule.cpp:1027 (li r5,0x403 at 0x827D0FA4).
-        CGS_ASSERT(lpInput, CgsDev::Assert::MessageAt("lpInput != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/CrashModule/BrnCrashModule.cpp", 1027));
+        CGS_ASSERT(lpInput, CGS_ASSERT_MESSAGE_AT("lpInput != NULL", CGS_ARTIST_FILE, 1027));
         const CrashIO::TrafficInputInterface::AddCrashingTrafficEventQueue& events = lpInput->GetTrafficInputInterface()->GetAddCrashingTrafficEventQueue();
         for (s32 i = 0; i < events.GetLength(); ++i)
         {
@@ -165,12 +165,12 @@ namespace BrnWorld
     void CrashModule::HandleRecoveredSlammedTraffic(const CrashIO::InputBuffer_PostPhysics* lpInput)
     {
         // BrnCrashModule.cpp:1260 / :1270 (li r5,0x4EC at 0x827BF41C, li r5,0x4F6 at 0x827BF478).
-        CGS_ASSERT(lpInput, CgsDev::Assert::MessageAt("lpInput != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/CrashModule/BrnCrashModule.cpp", 1260));
+        CGS_ASSERT(lpInput, CGS_ASSERT_MESSAGE_AT("lpInput != NULL", CGS_ARTIST_FILE, 1260));
         const CrashIO::TrafficInputInterface::RemoveSlammedTrafficEventQueue* events = lpInput->GetTrafficInputInterface()->GetRemoveSlammedTrafficEventQueue();
         for (s32 i = 0; i < events->GetLength(); ++i)
         {
             const u32 vehicle = events->GetEvent(i).muVehicleId;
-            CGS_ASSERT(vehicle < 600, CgsDev::Assert::MessageAt("luVehicle < BrnTraffic::KU_MAX_TOTAL_TRAFFIC", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/CrashModule/BrnCrashModule.cpp", 1270));
+            CGS_ASSERT(vehicle < 600, CGS_ASSERT_MESSAGE_AT("luVehicle < BrnTraffic::KU_MAX_TOTAL_TRAFFIC", CGS_ARTIST_FILE, 1270));
             maiSlammedTrafficOwners[vehicle] = -1;
         }
     }
@@ -229,3 +229,5 @@ namespace BrnWorld
         }
     }
 }
+
+#undef CGS_ARTIST_FILE

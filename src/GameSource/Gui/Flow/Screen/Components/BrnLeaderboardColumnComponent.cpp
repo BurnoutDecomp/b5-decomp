@@ -66,7 +66,7 @@ namespace BrnGui
     void LeaderboardColumnComponent::SetCell(const char* lpcCellText)
     {
         CGS_ASSERT(miCellCount < KI_MAX_CELLS,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "miCellCount < KI_MAX_CELLS",
                 "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnLeaderboardColumnComponent.cpp", 113 /* ARTIST 0x8241961C */));
 

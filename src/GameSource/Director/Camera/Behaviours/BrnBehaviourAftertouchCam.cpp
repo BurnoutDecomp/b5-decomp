@@ -11,7 +11,7 @@
 // cosine from the XDK's XMVectorSinCos. The console's vector IsZero counts a NaN lane as zero; so
 // does the file-local IsZeroVmx.
 // ============================================================================
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourAftertouchCam.cpp"
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourAftertouchCam.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
@@ -142,9 +142,9 @@ bool BehaviourAftertouchCam::Prepare(const BehaviourSharedPrepareReleaseInfo& /*
     SetNotPrepared();
 
     CGS_ASSERT(mpParameters != 0,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "mpParameters != NULL",
-            "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourAftertouchCam.cpp", 99 /* ARTIST 0x821FA348 */));                                              // :99
+            CGS_ARTIST_FILE, 99 /* ARTIST 0x821FA348 */));                                              // :99
 
     mfBlendFactor = mpParameters->mfMinimumBlendFactor;
     mfHeight      = mpParameters->mfMaxHeight;
@@ -323,8 +323,8 @@ Vector3 BehaviourAftertouchCam::CalculateDesiredTargetPos(const BehaviourSharedI
 // ----------------------------------------------------------------------------
 bool BehaviourAftertouchCam::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSharedInfo)
 {
-    CGS_ASSERT(mpParameters != 0, CgsDev::Assert::MessageAt("mpParameters != NULL", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourAftertouchCam.cpp", 310));                                              // :310
-    CGS_ASSERT(mSourceShot.IsValid(), CgsDev::Assert::MessageAt("mParameters.IsValid()", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourAftertouchCam.cpp", 311));                                         // :311
+    CGS_ASSERT(mpParameters != 0, CGS_ASSERT_MESSAGE_AT("mpParameters != NULL", CGS_ARTIST_FILE, 310));                                              // :310
+    CGS_ASSERT(mSourceShot.IsValid(), CGS_ASSERT_MESSAGE_AT("mParameters.IsValid()", CGS_ARTIST_FILE, 311));                                         // :311
 
     const BrnPhysics::Vehicle::RaceCarState& lrCarState = lrSharedInfo.mPlayerInfo.mRaceCarState;
     const f32 lfTimestep = lrSharedInfo.GetTimestep(BrnDirector::Timestep::E_WORLD);
@@ -367,7 +367,7 @@ bool BehaviourAftertouchCam::Update(Camera& lrCamera, const BehaviourSharedInfo&
         mDesiredWorldSpaceNormalizedVectorFromCar = -Scale(lDesiredVector,
             RefinedReciprocalSqrt(Utils::ConsoleVpu::Dot3(lDesiredVector, lDesiredVector)));
         CGS_ASSERT(!IsZeroVmx(mDesiredWorldSpaceNormalizedVectorFromCar, KF_EPSILON),
-                   CgsDev::Assert::MessageAt("!IsZero(mDesiredWorldSpaceNormalizedVectorFromCar)", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourAftertouchCam.cpp", 348));                                // :348
+                   CGS_ASSERT_MESSAGE_AT("!IsZero(mDesiredWorldSpaceNormalizedVectorFromCar)", CGS_ARTIST_FILE, 348));                                // :348
     }
 
     if (lfPlayerSpeed < mpParameters->mfHeightDistanceVelocityRange)
@@ -425,7 +425,7 @@ bool BehaviourAftertouchCam::Update(Camera& lrCamera, const BehaviourSharedInfo&
             {
                 const f32 lfAgreement = (lfControlAgreementWithCamera > 1.0f) ? 1.0f : lfControlAgreementWithCamera;
 
-                CGS_ASSERT(!IsZeroVmx(lNormalisedPlayerVel, KF_EPSILON), CgsDev::Assert::MessageAt("!IsZero(lNormalisedPlayerVel)", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourAftertouchCam.cpp", 404));     // :404
+                CGS_ASSERT(!IsZeroVmx(lNormalisedPlayerVel, KF_EPSILON), CGS_ASSERT_MESSAGE_AT("!IsZero(lNormalisedPlayerVel)", CGS_ARTIST_FILE, 404));     // :404
                 mWorldSpaceNormalizedVectorFromCar = Utils::SafeSLerp(
                     mWorldSpaceNormalizedVectorFromCar, -lNormalisedPlayerVel, VecFloat(lfT * lfAgreement));
                 mWorldSpaceNormalizedVectorFromCar = Utils::SafeSLerp(
@@ -451,9 +451,9 @@ bool BehaviourAftertouchCam::Update(Camera& lrCamera, const BehaviourSharedInfo&
     CGS_ASSERT(!IsZeroVmx(mWorldSpaceNormalizedVectorFromCar, KF_EPSILON),
                "!IsZero(mWorldSpaceNormalizedVectorFromCar)");                                           // :432
     // `fcmpu d, eps ; bgt` then `fcmpu d, -eps ; bge`: a NaN distance fires it, as on the console.
-    CGS_ASSERT(mfDistance > KF_EPSILON || mfDistance < -KF_EPSILON, CgsDev::Assert::MessageAt("!rw::math::fpu::IsZero(mfDistance)", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourAftertouchCam.cpp", 433)); // :433
+    CGS_ASSERT(mfDistance > KF_EPSILON || mfDistance < -KF_EPSILON, CGS_ASSERT_MESSAGE_AT("!rw::math::fpu::IsZero(mfDistance)", CGS_ARTIST_FILE, 433)); // :433
     CGS_ASSERT(!IsZeroVmx(Scale(mWorldSpaceNormalizedVectorFromCar, mfDistance), KF_EPSILON),
-               CgsDev::Assert::MessageAt("!IsZero(mWorldSpaceNormalizedVectorFromCar * mfDistance)", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourAftertouchCam.cpp", 434));                             // :434
+               CGS_ASSERT_MESSAGE_AT("!IsZero(mWorldSpaceNormalizedVectorFromCar * mfDistance)", CGS_ARTIST_FILE, 434));                             // :434
 
     Matrix44Affine lTransform = Utils::CreateLookAt(
         Utils::ConsoleVpu::MultiplyAdd(mWorldSpaceNormalizedVectorFromCar, mfDistance, lCarPosition), lCarPosition);
@@ -488,3 +488,5 @@ const char* BehaviourAftertouchCam::GetName() const
 
 } // namespace Camera
 } // namespace BrnDirector
+
+#undef CGS_ARTIST_FILE

@@ -85,8 +85,8 @@ public:
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 "unhandled case",
-                "..\\..\\..\\GameSource\\Director/Camera/Behaviours/Serialisation.h",
-                311);
+                CGS_ASSERT_LOCATION("..\\..\\..\\GameSource\\Director/Camera/Behaviours/Serialisation.h",
+                311));
             CgsDev::Assert::EndAssert();
         }
     }

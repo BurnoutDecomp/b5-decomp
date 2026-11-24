@@ -39,11 +39,11 @@ f32 ChallengeListEntryAction::GetConvoyTime() const
 int32_t ChallengeListEntryAction::GetDistrict( uint8_t lu8Index ) const
 {
     CGS_ASSERT( lu8Index < KU_MAX_LOCATIONS_PER_ACTION,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "luLocationIndex < KU_MAX_LOCATIONS_PER_ACTION",
             KAC_ARTIST_ASSERT_FILE, 772 /* ARTIST 0x8230EFA4 */));
     CGS_ASSERT( (ELocationType)mauLocationType[ lu8Index ] == E_LOCATION_TYPE_DISTRICT,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "(ELocationType) mauLocationType[luLocationIndex] == E_LOCATION_TYPE_DISTRICT",
             KAC_ARTIST_ASSERT_FILE, 773 /* ARTIST 0x8230EFD0 */));
 
@@ -67,11 +67,11 @@ ChallengeListEntryAction::GetLocationType( uint8_t lu8Index ) const
 CgsID ChallengeListEntryAction::GetRoadID( uint8_t lu8Index ) const
 {
     CGS_ASSERT( lu8Index < KU_MAX_LOCATIONS_PER_ACTION,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "luLocationIndex < KU_MAX_LOCATIONS_PER_ACTION",
             KAC_ARTIST_ASSERT_FILE, 812 /* ARTIST 0x8230F0A4 */));
     CGS_ASSERT( (ELocationType)mauLocationType[ lu8Index ] == E_LOCATION_TYPE_ROAD,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "(ELocationType) mauLocationType[luLocationIndex] == E_LOCATION_TYPE_ROAD",
             KAC_ARTIST_ASSERT_FILE, 813 /* ARTIST 0x8230F0D0 */));
 
@@ -83,9 +83,9 @@ CgsID ChallengeListEntryAction::GetRoadID( uint8_t lu8Index ) const
 int32_t ChallengeListEntryAction::GetTargetValue( int32_t liTargetIndex ) const
 {
     CGS_ASSERT( liTargetIndex >= 0,
-        CgsDev::Assert::MessageAt("liTargetIndex >= 0", KAC_ARTIST_ASSERT_FILE, 694 /* ARTIST 0x8230EEC4 */));
+        CGS_ASSERT_MESSAGE_AT("liTargetIndex >= 0", KAC_ARTIST_ASSERT_FILE, 694 /* ARTIST 0x8230EEC4 */));
     CGS_ASSERT( liTargetIndex < KI_MAX_TARGETS_PER_CHALLENGE_ACTION,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "liTargetIndex < KI_MAX_TARGETS_PER_CHALLENGE_ACTION",
             KAC_ARTIST_ASSERT_FILE, 695 /* ARTIST 0x8230EEE8 */));
 

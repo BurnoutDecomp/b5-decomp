@@ -1,5 +1,5 @@
 #pragma once
-
+#define CGS_ARTIST_BRNONLINEFREEBURNLOBBYMODE_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\GameModes/BrnOnlineFreeBurnLobbyMode.h"
 #include "GameSource/GameState/ModeManager/GameModes/BrnOnlineGameMode.h"
 #include "GameSource/GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.h"   // mBurnoutSkillzManager (by value)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                // the two inline setters
@@ -85,13 +85,13 @@ public:
     // Inlined into ModeManager::Construct, each firing its own assert ahead of the manager's.
     void SetStreetManager(StreetManager* lpStreetManager)
     {
-        CGS_ASSERT(lpStreetManager, CgsDev::Assert::MessageAt("lpStreetManager", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\GameModes/BrnOnlineFreeBurnLobbyMode.h", 175));
+        CGS_ASSERT(lpStreetManager, CGS_ASSERT_MESSAGE_AT("lpStreetManager", CGS_ARTIST_BRNONLINEFREEBURNLOBBYMODE_FILE, 175));
         mBurnoutSkillzManager.SetStreetManager(lpStreetManager);
     }
 
     void SetMugshotManager(MugshotManager* lpMugshotManager)
     {
-        CGS_ASSERT(lpMugshotManager, CgsDev::Assert::MessageAt("lpMugshotManager", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\GameModes/BrnOnlineFreeBurnLobbyMode.h", 190));
+        CGS_ASSERT(lpMugshotManager, CGS_ASSERT_MESSAGE_AT("lpMugshotManager", CGS_ARTIST_BRNONLINEFREEBURNLOBBYMODE_FILE, 190));
         mBurnoutSkillzManager.SetMugshotManager(lpMugshotManager);
     }
 
@@ -122,3 +122,5 @@ CGS_STATIC_ASSERT((sizeof(static_cast<void (OnlineFreeBurnLobbyMode::*)(BrnStree
 CGS_STATIC_ASSERT((sizeof(static_cast<bool (OnlineFreeBurnLobbyMode::*)() const>(&OnlineFreeBurnLobbyMode::RequiresStreaming)) != 0),
               "OnlineFreeBurnLobbyMode::RequiresStreaming must bind GameMode vtable slot 23");
 }
+
+#undef CGS_ARTIST_BRNONLINEFREEBURNLOBBYMODE_FILE

@@ -3,7 +3,7 @@
 #include "GameSource/Network/Messages/BrnCollectableMessage.h"
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsMessage.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Messages/BrnCollectableMessage.cpp"
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnNetwork::CollectableMessage::PrepareForSend       @ 0x8257BDD0
 //   BrnNetwork::CollectableMessage::GetPackedMessageSize @ 0x8257BEF0
@@ -93,12 +93,12 @@ namespace BrnNetwork
     // ---------------------------------------------------------------------------------
     bool CollectableMessage::Retrieve(CgsID* lpCollectableID, ECollectableType* lpeType)
     {
-        CGS_ASSERT(lpCollectableID, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpCollectableID, CGS_ASSERT_MESSAGE_AT(
             "lpCollectableID",
-            "..\\..\\..\\GameSource\\Network/Messages/BrnCollectableMessage.cpp", 97 /* ARTIST 0x8257ECA4 */));
-        CGS_ASSERT(lpeType, CgsDev::Assert::MessageAt(
+            CGS_ARTIST_FILE, 97 /* ARTIST 0x8257ECA4 */));
+        CGS_ASSERT(lpeType, CGS_ASSERT_MESSAGE_AT(
             "lpeType",
-            "..\\..\\..\\GameSource\\Network/Messages/BrnCollectableMessage.cpp", 98 /* ARTIST 0x8257ECC8 */));
+            CGS_ARTIST_FILE, 98 /* ARTIST 0x8257ECC8 */));
 
         // ARTIST 0x8257ECDC branches to a trailing `return false` (0x8257ED30): the copy-out is the body
         // of the valid test.
@@ -108,9 +108,9 @@ namespace BrnNetwork
             *lpeType         = static_cast<ECollectableType>(meType); // lwz +0x30
 
             mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
-            CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0, CgsDev::Assert::MessageAt(
+            CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0, CGS_ASSERT_MESSAGE_AT(
                 "!CgsNetwork::ReliableMessage::IsMessageValid()",
-                "..\\..\\..\\GameSource\\Network/Messages/BrnCollectableMessage.cpp", 109 /* ARTIST 0x8257ED1C */));
+                CGS_ARTIST_FILE, 109 /* ARTIST 0x8257ED1C */));
             return true;
         }
         return false;
@@ -122,3 +122,5 @@ namespace BrnNetwork
         return true;
     }
 } // namespace BrnNetwork
+
+#undef CGS_ARTIST_FILE

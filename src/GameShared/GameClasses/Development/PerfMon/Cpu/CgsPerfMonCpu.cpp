@@ -55,7 +55,7 @@ namespace CgsDev
         lDescriptor.m_baseResourceDescriptors[0].m_alignment = 16;
         mpMonitorsArray = static_cast<PerfMonCpuInstance*>(lpAllocator->Allocate(lDescriptor, 0).m_baseResources[0]);
         if (!mpMonitorsArray)
-            MonitorAssert("mpMonitorsArray", gpcSource, 71);
+            MonitorAssert("mpMonitorsArray", CGS_ASSERT_LOCATION(gpcSource, 71));
         miMonitorCount = 0;
         meGameFrequency = E_PMF_60HZ;
         mbResetAllValues = true;
@@ -93,14 +93,14 @@ namespace CgsDev
                                bool lbRecordMinNotMax, f32 lfCpuBudget, bool lbScaled)
     {
         if (!(miMonitorCount < miMaxMonitorCount))
-            MonitorAssert("miMonitorCount < miMaxMonitorCount", gpcSource, 264);
+            MonitorAssert("miMonitorCount < miMaxMonitorCount", CGS_ASSERT_LOCATION(gpcSource, 264));
         if (!lpcString)
-            MonitorAssert("lpcString != NULL", gpcSource, 267);
+            MonitorAssert("lpcString != NULL", CGS_ASSERT_LOCATION(gpcSource, 267));
         if (!(std::strlen(lpcString) <= KI_PERFMONCPU_MAXSTRINGLENGTH - 1))
-            MonitorAssert("strlen(lpcString) <= (KI_PERFMONCPU_MAXSTRINGLENGTH-1)", gpcSource, 268);
+            MonitorAssert("strlen(lpcString) <= (KI_PERFMONCPU_MAXSTRINGLENGTH-1)", CGS_ASSERT_LOCATION(gpcSource, 268));
         for (s32 liCount = 0; liCount < miMonitorCount; ++liCount)
             if (std::strcmp(mpMonitorsArray[liCount].macName, lpcString) == 0)
-                MonitorAssert("strcmp(mpMonitorsArray[liCount].macName, lpcString) != 0", gpcSource, 274);
+                MonitorAssert("strcmp(mpMonitorsArray[liCount].macName, lpcString) != 0", CGS_ASSERT_LOCATION(gpcSource, 274));
         PerfMonCpuInstance& lrInstance = mpMonitorsArray[miMonitorCount];
         std::memset(&lrInstance, 0, sizeof(lrInstance));
         if (std::strlen(lpcString) >= KI_PERFMONCPU_MAXSTRINGLENGTH)
@@ -109,7 +109,7 @@ namespace CgsDev
             StrStream lMessage(Assert::gpcMessageBuffer, Assert::giMessageBufferSize);
             lMessage << "String too long: " << lpcString;
             Assert::FireAssert(Assert::gpcMessageBuffer,
-                "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 55);
+                CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 55));
             Assert::EndAssert();
         }
         std::strncpy(lrInstance.macName, lpcString, KI_PERFMONCPU_MAXSTRINGLENGTH);
@@ -127,14 +127,14 @@ namespace CgsDev
     void PerfMonCpu::StartMonitor(s32 liMonitorID)
     {
         if (!(liMonitorID >= 0 && liMonitorID < miMaxMonitorCount))
-            MonitorAssert("liMonitorID >= 0 && liMonitorID < miMaxMonitorCount", gpcX360Header, 61);
+            MonitorAssert("liMonitorID >= 0 && liMonitorID < miMaxMonitorCount", CGS_ASSERT_LOCATION(gpcX360Header, 61));
         PerfMonCpuInstance& lrInstance = mpMonitorsArray[liMonitorID];
         if (lrInstance.mbActive)
         {
             Assert::BeginAssert();
             StrStream lMessage(Assert::gpcMessageBuffer, Assert::giMessageBufferSize);
             lMessage << "Monitor already started: " << lrInstance.macName << "\n";
-            Assert::FireAssert(Assert::gpcMessageBuffer, gpcX360Header, 64);
+            Assert::FireAssert(Assert::gpcMessageBuffer, CGS_ASSERT_LOCATION(gpcX360Header, 64));
             Assert::EndAssert();
         }
         LARGE_INTEGER lNow;
@@ -149,7 +149,7 @@ namespace CgsDev
     {
         PerfMonCpuInstance& lrInstance = mpMonitorsArray[liMonitorID];
         if (!lrInstance.mbActive)
-            MonitorAssert("mpMonitorsArray[liMonitorID].mbActive == true", gpcX360Header, 97);
+            MonitorAssert("mpMonitorsArray[liMonitorID].mbActive == true", CGS_ASSERT_LOCATION(gpcX360Header, 97));
         LARGE_INTEGER lNow;
         QueryPerformanceCounter(&lNow);
         lrInstance.mbActive = false;
@@ -177,7 +177,7 @@ namespace CgsDev
         }
         LARGE_INTEGER lFrequency;
         if (!QueryPerformanceFrequency(&lFrequency))
-            MonitorAssert("QueryPerformanceFrequency(&lFrequency)", gpcX360Source, 87);
+            MonitorAssert("QueryPerformanceFrequency(&lFrequency)", CGS_ASSERT_LOCATION(gpcX360Source, 87));
         const f32 lfFrequency = static_cast<f32>(static_cast<double>(static_cast<u64>(lFrequency.QuadPart)));
         gfCounterScale = 100.0f / lfFrequency;
     }
@@ -195,7 +195,7 @@ namespace CgsDev
         case E_PMF_30HZ: lfGameFrequency = 29.97f; break;
         case E_PMF_25HZ: lfGameFrequency = 25.0f; break;
         default:
-            MonitorAssert("invalid game frequency", gpcX360Source, 137);
+            MonitorAssert("invalid game frequency", CGS_ASSERT_LOCATION(gpcX360Source, 137));
             lfGameFrequency = 59.94f;
             break;
         }
@@ -230,9 +230,9 @@ namespace CgsDev
     void PerfMonCpu::GetMonitorData(s32 liMonitorID, PerfMonCpuMonitorData* lpResult)
     {
         if (!lpResult)
-            MonitorAssert("lpResult", gpcSource, 315);
+            MonitorAssert("lpResult", CGS_ASSERT_LOCATION(gpcSource, 315));
         if (!(liMonitorID >= 0 && liMonitorID < miMonitorCount))
-            MonitorAssert("liMonitorID >= 0 && liMonitorID < miMonitorCount", gpcSource, 316);
+            MonitorAssert("liMonitorID >= 0 && liMonitorID < miMonitorCount", CGS_ASSERT_LOCATION(gpcSource, 316));
         const PerfMonCpuInstance& lrInstance = mpMonitorsArray[liMonitorID];
         lpResult->mpcName = lrInstance.macName;
         lpResult->mfCurrentValue = lrInstance.mfCurrentValue;

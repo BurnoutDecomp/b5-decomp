@@ -7,7 +7,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePool.h"            // CgsResource::PoolStats
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameShared/GameClasses/Development/PerfMon/Gpu/CgsPerfMonGpu.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnAutoTestManager.cpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include <stdio.h>
@@ -137,7 +137,7 @@ namespace BrnGame
                         if (strlen(lacLine) + strlen(macScript) >= sizeof(macScript) - 1)
                         {
                             CgsDev::Assert::BeginAssert();
-                            CgsDev::Assert::FireAssert("(strlen(lpcSource)+strlen(lpcDest))<luBytes - 1", "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 75);
+                            CgsDev::Assert::FireAssert("(strlen(lpcSource)+strlen(lpcDest))<luBytes - 1", CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 75));
                             CgsDev::Assert::EndAssert();
                         }
                         strcat(macScript, lacLine);
@@ -162,7 +162,7 @@ namespace BrnGame
                 if (!mpLuaHandle)
                 {
                     CgsDev::Assert::BeginAssert();
-                    CgsDev::Assert::FireAssert("mpLuaHandle", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnAutoTestManager.cpp", 238);
+                    CgsDev::Assert::FireAssert("mpLuaHandle", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 238));
                     CgsDev::Assert::EndAssert();
                 }
             }
@@ -182,7 +182,7 @@ namespace BrnGame
                 if (!mpLuaHandle)
                 {
                     CgsDev::Assert::BeginAssert();
-                    CgsDev::Assert::FireAssert("mpLuaHandle", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnAutoTestManager.cpp", 245);
+                    CgsDev::Assert::FireAssert("mpLuaHandle", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 245));
                     CgsDev::Assert::EndAssert();
                 }
                 lua_pushcclosure(mpLuaHandle, p->mpFunction, 0);
@@ -357,3 +357,5 @@ namespace BrnGame
         mAutoTestLogChannel << "\n------------LOG COMPLETE-------------\n";
     }
 }
+
+#undef CGS_ARTIST_FILE

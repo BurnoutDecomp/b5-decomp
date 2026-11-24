@@ -98,7 +98,7 @@ namespace BrnNetwork
                                        u32 luRequiredSlots, CgsNetwork::EFirewallSettings leFirewallSettings,
                                        BrnNetworkManager* lpNetworkManager, u32 luField29C)
     {
-        CGS_ASSERT(lpNetworkManager, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpNetworkManager, CGS_ASSERT_MESSAGE_AT(
             "lpNetworkManager",
             __FILE__, 58 /* ARTIST 0x82593778 */));
 

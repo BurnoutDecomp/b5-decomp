@@ -1,5 +1,5 @@
 #pragma once
-#line 3 "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\containers\\CgsSet.h"
+#define CGS_ARTIST_CGSSET_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\containers\\CgsSet.h"
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (Insert/Erase/Find/GetItem guards)
 
@@ -176,11 +176,11 @@ template <typename T, u32 N>
 inline void
 Set<T, N>::Insert(const T& lElement)
 {
-    CGS_ASSERT(muLength != KU_INVALID, "Set used before Construct/Clear was called");
+    CGS_ASSERT_AT(muLength != KU_INVALID, "Set used before Construct/Clear was called", CGS_ARTIST_CGSSET_FILE, 179);
 
     if (!Contains(lElement))
     {
-        CGS_ASSERT(muLength < N, "Set container out of space");
+        CGS_ASSERT_AT(muLength < N, "Set container out of space", CGS_ARTIST_CGSSET_FILE, 183);
 
         maElements[muLength] = lElement;
         ++muLength;
@@ -200,10 +200,10 @@ template <typename T, u32 N>
 inline void
 Set<T, N>::Erase(const T& lElement)
 {
-    CGS_ASSERT(muLength != KU_INVALID, "Set used before Construct/Clear was called");
+    CGS_ASSERT_AT(muLength != KU_INVALID, "Set used before Construct/Clear was called", CGS_ARTIST_CGSSET_FILE, 203);
 
     u32 luIndex = Find(lElement);
-    CGS_ASSERT(luIndex != KU_INVALID, "luIndex != KU_INVALID");
+    CGS_ASSERT_AT(luIndex != KU_INVALID, "luIndex != KU_INVALID", CGS_ARTIST_CGSSET_FILE, 206);
 
     // Unordered: the last live element fills the erased slot.
     maElements[luIndex] = maElements[muLength - 1];
@@ -224,7 +224,7 @@ template <typename T, u32 N>
 inline u32
 Set<T, N>::GetLength() const
 {
-    CGS_ASSERT(muLength != KU_INVALID, "Set used before Construct/Clear was called");
+    CGS_ASSERT_AT(muLength != KU_INVALID, "Set used before Construct/Clear was called", CGS_ARTIST_CGSSET_FILE, 227);
     return muLength;
 }
 
@@ -254,8 +254,8 @@ template <typename T, u32 N>
 inline const T&
 Set<T, N>::GetItem(u32 luIndex) const
 {
-    CGS_ASSERT(muLength != KU_INVALID, "Set used before Construct/Clear was called");
-    CGS_ASSERT(luIndex < N, "Set index out of bounds");
+    CGS_ASSERT_AT(muLength != KU_INVALID, "Set used before Construct/Clear was called", CGS_ARTIST_CGSSET_FILE, 257);
+    CGS_ASSERT_AT(luIndex < N, "Set index out of bounds", CGS_ARTIST_CGSSET_FILE, 258);
     return maElements[luIndex];
 }
 
@@ -271,8 +271,8 @@ template <typename T, u32 N>
 inline T&
 Set<T, N>::GetItem(u32 luIndex)
 {
-    CGS_ASSERT(muLength != KU_INVALID, "Set used before Construct/Clear was called");
-    CGS_ASSERT(luIndex < N, "Set index out of bounds");
+    CGS_ASSERT_AT(muLength != KU_INVALID, "Set used before Construct/Clear was called", CGS_ARTIST_CGSSET_FILE, 274);
+    CGS_ASSERT_AT(luIndex < N, "Set index out of bounds", CGS_ARTIST_CGSSET_FILE, 275);
     return maElements[luIndex];
 }
 
@@ -302,7 +302,7 @@ template <typename T, u32 N>
 inline u32
 Set<T, N>::Find(const T& lElement) const
 {
-    CGS_ASSERT(muLength != KU_INVALID, "Set used before Construct/Clear was called");
+    CGS_ASSERT_AT(muLength != KU_INVALID, "Set used before Construct/Clear was called", CGS_ARTIST_CGSSET_FILE, 305);
 
     u32 luElement;
     for (luElement = 0; luElement < muLength; ++luElement)
@@ -329,7 +329,7 @@ template <typename T, u32 N>
 inline bool
 Set<T, N>::Contains(const T& lElement) const
 {
-    CGS_ASSERT(muLength != KU_INVALID, "Set used before Construct/Clear was called");
+    CGS_ASSERT_AT(muLength != KU_INVALID, "Set used before Construct/Clear was called", CGS_ARTIST_CGSSET_FILE, 332);
     return (Find(lElement) != KU_INVALID);
 }
 
@@ -490,3 +490,5 @@ Set<T, N>::Union(const Set<T, Capacity2>& lOther)
 }
 
 } // namespace CgsContainers
+
+#undef CGS_ARTIST_CGSSET_FILE

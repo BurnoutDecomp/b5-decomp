@@ -234,7 +234,7 @@ namespace BrnParticle
     void* VFXPropCollectionResourceType::Serialise(const void* /*lpResource*/, const rw::Resource& /*lrDest*/) const
     {
         CGS_ASSERT(false,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "Didn't expect to call this function in non-tool builds.",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
                 "../../SharedClasses/Graphics/VFXPropsResourceType.cpp", 248 /* ARTIST 0x8267596C */));

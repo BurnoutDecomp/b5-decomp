@@ -130,7 +130,7 @@ void ServerInterfaceConnection::Destruct()
 bool ServerInterfaceConnection::Prepare(ServerInterfaceDirtySock* lpServerInterface)
 {
     CGS_ASSERT(miConnectCallback == -1,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "miConnectCallback == -1",
             "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceConnection.cpp", 192 /* ARTIST 0x82886330 */));
 
@@ -337,7 +337,7 @@ void ServerInterfaceConnection::AgreeShareInfo(bool lbAgreeShare1, bool lbAgreeS
 void ServerInterfaceConnection::EndAction(s32 liError)
 {
     const DSErrorToServerInterfaceErrorTable& lrEntry = KA_CONNECTION_DS_ERROR_TABLE_LOOKUP[meCurrentAction];
-    CGS_ASSERT(lrEntry.mpMappingTable, CgsDev::Assert::MessageAt(
+    CGS_ASSERT(lrEntry.mpMappingTable, CGS_ASSERT_MESSAGE_AT(
         "lpMappingTable",
         __FILE__, 421 /* ARTIST 0x82876B90 */));
     ServerInterfaceComponent::EndActionCore(

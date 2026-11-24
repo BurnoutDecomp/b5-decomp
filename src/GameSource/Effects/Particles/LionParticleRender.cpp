@@ -267,7 +267,7 @@ LionParticleRender::LionParticleRender()
 U32 LionParticleRender::HashMaterial(const cParticleMaterial* apMaterial)
 {
     CGS_ASSERT(apMaterial != 0,
-        CgsDev::Assert::MessageAt("apMaterial != NULL", __FILE__, 501 /* ARTIST 0x82279CE4 */));
+        CGS_ASSERT_MESSAGE_AT("apMaterial != NULL", __FILE__, 501 /* ARTIST 0x82279CE4 */));
 
     const u32 KU_FNV_OFFSET_BASIS = 0x811C9DC5u;
     const u32 KU_FNV_PRIME        = 0x01000193u;
@@ -289,7 +289,7 @@ U32 LionParticleRender::HashMaterial(const cParticleMaterial* apMaterial)
 U32 LionParticleRender::GetMaterialHandle(U32 auMaterialHash)
 {
     CGS_ASSERT(auMaterialHash != 0,
-        CgsDev::Assert::MessageAt("luMaterialHash != 0", __FILE__, 513 /* ARTIST 0x82279D74 */));
+        CGS_ASSERT_MESSAGE_AT("luMaterialHash != 0", __FILE__, 513 /* ARTIST 0x82279D74 */));
 
     for (s32 liIndex = 0; liIndex < siMaterialCount; ++liIndex)
     {
@@ -496,10 +496,10 @@ cMatrix LionParticleRender::GetCameraMatrix()
 U32 LionParticleRender::GetVertexStride(const cParticleMaterial& lMaterial)
 {
     CGS_ASSERT(lMaterial.GetShaderType() == cParticleMaterial::eSHADER_LION,
-               CgsDev::Assert::MessageAt("lMaterial.GetShaderType() == cParticleMaterial::eSHADER_LION", __FILE__, 722));
+               CGS_ASSERT_MESSAGE_AT("lMaterial.GetShaderType() == cParticleMaterial::eSHADER_LION", __FILE__, 722));
 
     const BrnGraphics::LionBlendRenderer* const lpShader = mpRenderer;
-    CGS_ASSERT(NULL != lpShader, CgsDev::Assert::MessageAt("NULL != lpShader", __FILE__, 725));
+    CGS_ASSERT(NULL != lpShader, CGS_ASSERT_MESSAGE_AT("NULL != lpShader", __FILE__, 725));
 
     const uint32_t luVertexStride = BrnGraphics::LionBlendVertex::GetStride();
     return luVertexStride;
@@ -531,13 +531,13 @@ void LionParticleRender::RenderGroupEndLite()
 void LionParticleRender::RenderGroupBegin(const cParticleMaterial& arMaterial)
 {
     CGS_ASSERT(arMaterial.GetShaderType() == cParticleMaterial::eSHADER_LION,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lMaterial.GetShaderType() == cParticleMaterial::eSHADER_LION",
             __FILE__, 265 /* ARTIST 0x822941C8 */));
 
     mpCurrentRenderer = mpRenderer;
     CGS_ASSERT(mpCurrentRenderer != 0,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "A valid renderer is expected here.",
             __FILE__, 269 /* ARTIST 0x822941F4 */));
 
@@ -552,13 +552,13 @@ void LionParticleRender::RenderGroupBegin(const cParticleMaterial& arMaterial)
 void LionParticleRender::RenderGroupBeginLite(const cParticleMaterial& arMaterial)
 {
     CGS_ASSERT(arMaterial.GetShaderType() == cParticleMaterial::eSHADER_LION,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lMaterial.GetShaderType() == cParticleMaterial::eSHADER_LION",
             __FILE__, 211 /* ARTIST 0x822894FC */));
 
     mpCurrentRenderer = mpRenderer;
     CGS_ASSERT(mpCurrentRenderer != 0,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "A valid renderer is expected here.",
             __FILE__, 215 /* ARTIST 0x82289528 */));
 
@@ -649,17 +649,17 @@ void LionParticleRender::SetMaterial(const cParticleMaterial* apMaterial)
 void LionParticleRender::TextureRegister(cParticleMaterial* apMaterial, char* apcTextureName)
 {
     CGS_ASSERT(apMaterial,
-        CgsDev::Assert::MessageAt("apMaterial", __FILE__, 141 /* ARTIST 0x822893C8 */));
+        CGS_ASSERT_MESSAGE_AT("apMaterial", __FILE__, 141 /* ARTIST 0x822893C8 */));
     CGS_ASSERT(apMaterial->GetShaderType() == cParticleMaterial::eSHADER_LION,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "apMaterial->GetShaderType() == cParticleMaterial::eSHADER_LION",
             __FILE__, 143 /* ARTIST 0x822893F0 */));
     CGS_ASSERT(apMaterial->mUCoordOption != cParticleMaterial::eUVOPTION_FLIPPED,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "apMaterial->mUCoordOption != cParticleMaterial::eUVOPTION_FLIPPED",
             __FILE__, 144 /* ARTIST 0x82289418 */));
     CGS_ASSERT(apMaterial->mVCoordOption != cParticleMaterial::eUVOPTION_FLIPPED,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "apMaterial->mVCoordOption != cParticleMaterial::eUVOPTION_FLIPPED",
             __FILE__, 145 /* ARTIST 0x82289440 */));
 
@@ -713,7 +713,7 @@ void LionParticleRender::Render(EffectsVertexBufferIterator& arIterator,
                                 const cTime& arTime)
 {
     CGS_ASSERT(mpCurrentRenderer != 0,
-               CgsDev::Assert::MessageAt("No renderer set up. RenderGroupBegin not called", __FILE__, 83));   // ARTIST 0x82289088
+               CGS_ASSERT_MESSAGE_AT("No renderer set up. RenderGroupBegin not called", __FILE__, 83));   // ARTIST 0x82289088
 
     if (auCount == 0)
         return;

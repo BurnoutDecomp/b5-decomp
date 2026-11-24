@@ -38,7 +38,7 @@ namespace CgsResource
         void FirePoolCreateAssert(const char* lpcMessage, int liLine)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lpcMessage, KPC_POOLMODULE_CREATE_SRC, liLine);
+            CgsDev::Assert::FireAssert(lpcMessage, CGS_ASSERT_LOCATION(KPC_POOLMODULE_CREATE_SRC, liLine));
             CgsDev::Assert::EndAssert();
         }
 
@@ -48,7 +48,7 @@ namespace CgsResource
             CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
             lStream << "Pool id " << liPoolId << " is invalid\n";
             CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                                       KPC_POOLMODULE_CREATE_SRC, 916);
+                                       CGS_ASSERT_LOCATION(KPC_POOLMODULE_CREATE_SRC, 916));
             CgsDev::Assert::EndAssert();
         }
 
@@ -58,7 +58,7 @@ namespace CgsResource
             CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
             lStream << "Pool id " << liPoolId << "is already in use\n";
             CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                                       KPC_POOLMODULE_CREATE_SRC, 922);
+                                       CGS_ASSERT_LOCATION(KPC_POOLMODULE_CREATE_SRC, 922));
             CgsDev::Assert::EndAssert();
         }
 
@@ -68,7 +68,7 @@ namespace CgsResource
             CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
             lStream << "Failed to find dependency pool with id " << liDependencyId << "\n";
             CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                                       KPC_POOLMODULE_CREATE_SRC, 1281);
+                                       CGS_ASSERT_LOCATION(KPC_POOLMODULE_CREATE_SRC, 1281));
             CgsDev::Assert::EndAssert();
         }
     }

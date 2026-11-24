@@ -64,7 +64,7 @@ void GuiEventRankProgressResponse::Construct(
 s32 GuiEventRankProgressResponse::GetPlayerRank() const
 {
     CGS_ASSERT( miCurrentRank != KI_PLAYER_HAS_FINISHED_LAST_RANK,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "miCurrentRank != KI_PLAYER_HAS_FINISHED_LAST_RANK",
             "..\\..\\..\\GameSource\\Gui/BrnGuiEventTypeDefs.h", 7841 /* ARTIST 0x8240EA50 */));
     return miCurrentRank;

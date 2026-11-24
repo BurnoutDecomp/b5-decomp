@@ -7,12 +7,12 @@
 #include "GameSource/Resource/BrnResourceAllocator.h" // console-memory markers
 #include "SDKs/EA/GameTalk/GameTalk.h"
 #include "SharedClasses/Gui/SatNav/BrnMapUtils.h"   // [H3b] MapTransform (the sat-nav view-rect install)
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp"
 #include <cstdio>                                                         // std::snprintf (log formatting)
 #include <xtl.h>                                                      // [gate] GetEnvironmentVariableA (BRN_FLAPT_AFTER_DISPATCH)
 #include <cstddef>  // offsetof for the native event-22 payload
 #include <cstring>  // std::strcmp (ARTIST GUI-audio action-name table)
-
+#define CGS_ARTIST_FILE_CGSMODULEUTILS "..\\..\\..\\GameShared\\GameClasses\\Module/CgsModuleUtils.h"
 #include "GameShared/GameClasses/Core/CgsID.h"                            // CgsIDCompress
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                // CgsDev::Log
 #include "GameShared/GameClasses/Development/MessageSystem/CgsMessage.h" // CgsDev::Message::gxMessageFilterFlags
@@ -73,7 +73,7 @@ namespace
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpcContent != NULL",
-                "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", liOriginalLine);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, liOriginalLine));
             CgsDev::Assert::EndAssert();
         }
         if (std::strlen(lpcContent) >= 32)
@@ -82,7 +82,7 @@ namespace
             CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
             lStream << "String too long: " << (lpcContent ? lpcContent : "<NULLSTRING>");
             CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 55);
+                CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 55));
             CgsDev::Assert::EndAssert();
         }
         std::strncpy(gacGuiToolHookName, lpcContent, 32);
@@ -248,7 +248,7 @@ namespace BrnGui
             CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
             lStream << "Invalid allocator list passed into BrnGui::GuiModule::Prepare";
             CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 367);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 367));
             CgsDev::Assert::EndAssert();
         }
         mGuiConfig.miAptPersistentBunldePoolId = 8;
@@ -441,7 +441,7 @@ namespace BrnGui
         else if (muPrepare2State >= 3)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("Invalid prepare state", "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 658);
+            CgsDev::Assert::FireAssert("Invalid prepare state", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 658));
             CgsDev::Assert::EndAssert();
             return false;
         }
@@ -458,7 +458,7 @@ namespace BrnGui
             CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
             lStream << "Failed to create an X360 system listener";
             CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 557);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 557));
             CgsDev::Assert::EndAssert();
         }
     }
@@ -477,7 +477,7 @@ namespace BrnGui
                 CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
                 lStream << "Invite notification processed by GuiModule. This could break cross game invites\n";
                 CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                    "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 2918);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 2918));
                 CgsDev::Assert::EndAssert();
             }
             const u32 luUiVisible = luNotificationParam != 1;
@@ -485,7 +485,7 @@ namespace BrnGui
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("lpInputBuffer",
-                    "..\\..\\..\\GameShared\\GameClasses\\Module/CgsModuleUtils.h", 238);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE_CGSMODULEUTILS, 238));
                 CgsDev::Assert::EndAssert();
             }
             lpInputBuffer->LockForWrite();
@@ -495,7 +495,7 @@ namespace BrnGui
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("lpInputBuffer",
-                    "..\\..\\..\\GameShared\\GameClasses\\Module/CgsModuleUtils.h", 248);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE_CGSMODULEUTILS, 248));
                 CgsDev::Assert::EndAssert();
             }
             lpInputBuffer->UnlockForWrite();
@@ -510,7 +510,7 @@ namespace BrnGui
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("CloseHandle( mhSysListenerHandle )",
-                    "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 681);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 681));
                 CgsDev::Assert::EndAssert();
             }
             mhSysListenerHandle = 0;
@@ -1764,7 +1764,7 @@ void GuiModule::Destruct()
                         CgsDev::Assert::BeginAssert();
                         CgsDev::Assert::FireAssert(
                             "meCollisionWorldStateValidationState == E_COLLISIONWORLDSTATEVALIDATIONSTATE_IDLE",
-                            "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 1729);
+                            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 1729));
                         CgsDev::Assert::EndAssert();
                     }
                     mbCollisionWorldInvalidateForNetworking = true;
@@ -1777,7 +1777,7 @@ void GuiModule::Destruct()
                         CgsDev::Assert::BeginAssert();
                         CgsDev::Assert::FireAssert(
                             "meCollisionWorldStateValidationState == E_COLLISIONWORLDSTATEVALIDATIONSTATE_INVALID_FOR_NETWORKING",
-                            "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 1737);
+                            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 1737));
                         CgsDev::Assert::EndAssert();
                     }
                     mbCollisionWorldValidateForNetworking = true;
@@ -1787,7 +1787,7 @@ void GuiModule::Destruct()
                     CgsDev::Assert::BeginAssert();
                     CgsDev::Assert::FireAssert(
                         "Invalid collsion world request output event type",
-                        "..\\..\\..\\GameSource\\Gui/BrnGuiModule.cpp", 1745);
+                        CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 1745));
                     CgsDev::Assert::EndAssert();
                     break;
                 }
@@ -1864,3 +1864,6 @@ namespace BrnGui
     }
 
 }
+
+#undef CGS_ARTIST_FILE
+#undef CGS_ARTIST_FILE_CGSMODULEUTILS

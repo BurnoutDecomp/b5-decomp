@@ -68,7 +68,7 @@ bool Environment::AddStateManager(StateManager* apStateManager)
 StateManager* Environment::GetStateManager(s32 liStateManId) const
 {
     CGS_ASSERT(liStateManId < KI_MAX_NUMBER_OF_STATES,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "liStateManId < KI_MAX_NUMBER_OF_STATES",
             "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/CgsEnvironment.cpp", 481 /* ARTIST 0x8268D1EC */));
 

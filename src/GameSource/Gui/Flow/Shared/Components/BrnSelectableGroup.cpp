@@ -11,7 +11,7 @@
 #include "GameSource/Gui/Flow/Shared/Components/BrnSelectableGroup.h"
 #include "GameSource/Gui/Flow/Shared/Components/BrnSelectable.h"   // BrnGui::Selectable (item virtuals + accessors)
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                 // CGS_ASSERT
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnSelectableGroup.cpp"
 namespace BrnGui
 {
     using CgsGui::StateInterface;
@@ -80,7 +80,7 @@ namespace BrnGui
     // @ 0x8240FC98 -- bounds-check, set the queried flag, return the slot.
     Selectable* SelectableGroup::GetSelectable(s32 liIndex)
     {
-        CGS_ASSERT(liIndex >= 0 && liIndex < miSelectableCount, CgsDev::Assert::StreamMessageAt("Invalid index passed to SelectableGroup::GetSelectable()", "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnSelectableGroup.h", 248));
+        CGS_ASSERT(liIndex >= 0 && liIndex < miSelectableCount, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid index passed to SelectableGroup::GetSelectable()", "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnSelectableGroup.h", 248));
 
         SetDirty();
         return maSelectables[liIndex];
@@ -326,9 +326,9 @@ namespace BrnGui
     {
         Selectable* lpSel = GetSelectable(liIndex);
         CGS_ASSERT(lpSel != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpSelectable",
-                "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnSelectableGroup.cpp", 112 /* ARTIST 0x824E3208 */));
+                CGS_ARTIST_FILE, 112 /* ARTIST 0x824E3208 */));
         lpSel->SetId(luId);
         lpSel->SetDirty();
     }
@@ -339,10 +339,12 @@ namespace BrnGui
         for (s32 li = 0; li < miSelectableCount; ++li)
         {
             Selectable* lpSel = GetSelectable(li);
-            CGS_ASSERT(lpSel != 0, CgsDev::Assert::MessageAt("lpSelectable", "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnSelectableGroup.cpp", 133 /* ARTIST 0x824E32AC */));
+            CGS_ASSERT(lpSel != 0, CGS_ASSERT_MESSAGE_AT("lpSelectable", CGS_ARTIST_FILE, 133 /* ARTIST 0x824E32AC */));
             const u64 luId = (lpaIds != 0) ? lpaIds[li] : static_cast<u64>(li);
             lpSel->SetDirty();
             lpSel->SetId(luId);
         }
     }
 }
+
+#undef CGS_ARTIST_FILE

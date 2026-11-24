@@ -146,13 +146,13 @@ namespace BrnParticle
     void ParticleModule::StopLionEffect(LionEffect* lpEffect)
     {
         CGS_ASSERT(lpEffect != 0,
-            CgsDev::Assert::MessageAt("lpEffect != NULL", __FILE__, 1833 /* ARTIST 0x8228A268 */));
+            CGS_ASSERT_MESSAGE_AT("lpEffect != NULL", __FILE__, 1833 /* ARTIST 0x8228A268 */));
         CGS_ASSERT((lpEffect->muFlags & LionEffect::EPPE_FLAG_IN_USE) != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "( lpEffect->muFlags & BrnParticle::LionEffect::ePPEFlagInUse ) != 0",
                 __FILE__, 1835 /* ARTIST 0x8228A294 */));
         CGS_ASSERT((lpEffect->muFlags & LionEffect::EPPE_FLAG_KILL) == 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "( lpEffect->muFlags & BrnParticle::LionEffect::ePPEFlagKill ) == 0",
                 __FILE__, 1836 /* ARTIST 0x8228A2C0 */));
         if (lpEffect->muFlags & LionEffect::EPPE_FLAG_CREATE)
@@ -167,7 +167,7 @@ namespace BrnParticle
     {
         const u32 luArrayIndex = luHandle & LionEffect::KU_HANDLE_INDEX_MASK;
         CGS_ASSERT(luArrayIndex < KU_MAX_PLAYING_EFFECTS,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "luArrayIndex < KU_MAX_PLAYING_EFFECTS",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\effects\\Particles/ParticleModule.h", 382 /* ARTIST 0x822783A8 */));
 
@@ -599,7 +599,7 @@ namespace BrnParticle
                 if (lpData != 0)
                 {
                     CGS_ASSERT((reinterpret_cast<uintptr_t>(lpData) & 0xF) == 0,
-                               CgsDev::Assert::MessageAt("(((uint32_t)lpData) & 0xf) == 0", __FILE__, 843));                 // .cpp:843
+                               CGS_ASSERT_MESSAGE_AT("(((uint32_t)lpData) & 0xf) == 0", __FILE__, 843));                 // .cpp:843
                     memcpy(lpData, &mu16SpawnBufferCount, 16);
                     memcpy(static_cast<u8*>(lpData) + 16, mpSparkSpawnBuffer,
                            static_cast<size_t>(lu16Count) * 80);
@@ -1278,7 +1278,7 @@ namespace BrnParticle
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("Array used before Construct/Clear was called",
-                "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsArray.h", 336);
+                CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Containers/CgsArray.h", 336));
             CgsDev::Assert::EndAssert();
         }
         const u32 count = static_cast<u32>(mParticleRenderJobDataParticles.mSimpleParticleBatchArray.GetCount());

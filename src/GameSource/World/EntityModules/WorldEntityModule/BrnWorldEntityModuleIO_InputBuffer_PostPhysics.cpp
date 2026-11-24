@@ -1,5 +1,5 @@
 #include "GameSource/World/EntityModules/WorldEntityModule/BrnWorldEntityModuleIO.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\worldentitymodule\\BrnWorldEntityModuleIO.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // the header-baked lock asserts
 
@@ -35,7 +35,7 @@ namespace WorldEntityIO
     const InputBuffer_PostPhysics::GameActionQueue*
     InputBuffer_PostPhysics::GetGameActionQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\worldentitymodule\\BrnWorldEntityModuleIO.h", 223));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 223));
         return &mGameActionQueue;
     }
 
@@ -43,7 +43,7 @@ namespace WorldEntityIO
     InputBuffer_PostPhysics::GameActionQueue*
     InputBuffer_PostPhysics::GetGameActionQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\worldentitymodule\\BrnWorldEntityModuleIO.h", 224));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 224));
         return &mGameActionQueue;
     }
 }
@@ -56,3 +56,5 @@ void BrnWorld::WorldEntityIO::InputBuffer_PostPhysics::Destruct()
 {
     CgsModule::IOBuffer::Destruct();
 }
+
+#undef CGS_ARTIST_FILE

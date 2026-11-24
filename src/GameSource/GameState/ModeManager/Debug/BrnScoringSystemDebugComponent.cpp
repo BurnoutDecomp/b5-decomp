@@ -1,5 +1,5 @@
 #include "GameSource/GameState/ModeManager/Debug/BrnScoringSystemDebugComponent.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Debug/BrnScoringSystemDebugComponent.cpp"
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"                          // BrnGameState::ScoringSystem / CarData / CarScoreData
 #include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h"            // BrnNetworkModuleIO::InGamePlayerStatusInterface
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // RCEntityActiveRaceCarOutputInterface
@@ -95,8 +95,8 @@ namespace BrnGameState
                                                              char* lpcOutBuffer,
                                                              u32* lpuOutColour)
     {
-        CGS_ASSERT(mpScoringSystem != 0, CgsDev::Assert::MessageAt("mpScoringSystem", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Debug/BrnScoringSystemDebugComponent.cpp", 267));
-        CGS_ASSERT(lpPlayerStatusInterface != 0, CgsDev::Assert::MessageAt("lpPlayerStatusInterface", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Debug/BrnScoringSystemDebugComponent.cpp", 268));
+        CGS_ASSERT(mpScoringSystem != 0, CGS_ASSERT_MESSAGE_AT("mpScoringSystem", CGS_ARTIST_FILE, 267));
+        CGS_ASSERT(lpPlayerStatusInterface != 0, CGS_ASSERT_MESSAGE_AT("lpPlayerStatusInterface", CGS_ARTIST_FILE, 268));
 
         // Default: an empty cell drawn in the default (white) colour.
         *lpuOutColour = KU_CELL_DEFAULT_COLOUR;
@@ -160,7 +160,7 @@ namespace BrnGameState
 
         const BrnPhysics::Vehicle::RaceCarState* lpLocalPlayersCarState =
             lpActiveCarOutput->GetPlayerRaceCarState();
-        CGS_ASSERT(lpLocalPlayersCarState != 0, CgsDev::Assert::MessageAt("lpLocalPlayersCarState", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Debug/BrnScoringSystemDebugComponent.cpp", 339));
+        CGS_ASSERT(lpLocalPlayersCarState != 0, CGS_ASSERT_MESSAGE_AT("lpLocalPlayersCarState", CGS_ARTIST_FILE, 339));
 
         if (!lpActiveCarOutput->IsRaceCarActive(leRaceCarIndex))
             return;
@@ -205,7 +205,7 @@ namespace BrnGameState
                                                                  s32 liMaxMultiplier,
                                                                  bool lbSimTimerAt50Hz)
     {
-        CGS_ASSERT(mpScoringSystem != 0, CgsDev::Assert::MessageAt("mpScoringSystem", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Debug/BrnScoringSystemDebugComponent.cpp", 195));
+        CGS_ASSERT(mpScoringSystem != 0, CGS_ASSERT_MESSAGE_AT("mpScoringSystem", CGS_ARTIST_FILE, 195));
 
         // Only render when the toggle is on AND the mode has at least one car.
         if (!mbShowChainableStunts)
@@ -258,3 +258,5 @@ namespace BrnGameState
 
     }
 }
+
+#undef CGS_ARTIST_FILE

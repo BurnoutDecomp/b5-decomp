@@ -152,7 +152,7 @@ namespace CgsResource
                                                   AllocListSet* lpAllocListSet, bool* lpOutNeeds,
                                                   SmallResource* lpOutResources, bool lbAllowFailiure)
     {
-        CGS_ASSERT(meState == E_STATE_IDLE, CgsDev::Assert::StreamMessageAt("Can not begin allocation during none-idle state\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\PoolModuleStates/CgsAllocatePoolModuleState.cpp", 88));   // :88
+        CGS_ASSERT(meState == E_STATE_IDLE, CGS_ASSERT_STREAM_MESSAGE_AT("Can not begin allocation during none-idle state\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\PoolModuleStates/CgsAllocatePoolModuleState.cpp", 88));   // :88
 
         mpPool         = lpPool;
         mListId        = lListId;

@@ -489,7 +489,7 @@ void ArticulatedJointPool::RemoveBrokenJointsFromSimulation(ArticulatedJointCrea
             lStrStream << "Trying to remove a broken joint that isn't in use, index: " << liJointIndex;
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(lacMessage,
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/VehicleManager/VehiclePhysics/BrnArticulatedJointPool.cpp", 402);
+                CGS_ASSERT_LOCATION("d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/VehicleManager/VehiclePhysics/BrnArticulatedJointPool.cpp", 402));
             CgsDev::Assert::EndAssert();
         }
         RemoveJoint(lpJointWorkingBuffer, liJointIndex);

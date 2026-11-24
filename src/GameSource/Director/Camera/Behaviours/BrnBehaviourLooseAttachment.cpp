@@ -14,11 +14,11 @@
 // The behaviour is installed by the new-car-joined moment, by the shutdown-takedown state (its
 // lookback rig plus the three zoom beats) and by the arbitrator testbed.
 // ============================================================================
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourLooseAttachment.cpp"
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourLooseAttachment.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/Camera/Utils/BrnCameraTweaker.h"   // Utils::Tweaker::Construct (slot 6)
-
+#define CGS_ARTIST_FILE_BRNVEHICLEREF "..\\..\\..\\GameSource\\Director/Utils/BrnVehicleRef.h"
 #include <cstddef>   // offsetof
 #include "rw/math/vpu/matrix44affine_operation.h"
 
@@ -43,12 +43,12 @@ bool BehaviourLooseAttachment::Update(Camera& lrCamera, const BehaviourSharedInf
     {
         if (mTarget.mbSet)
         {
-            CGS_ASSERT(mTarget != mAttachment, CgsDev::Assert::MessageAt("mTarget != mAttachment", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourLooseAttachment.cpp", 135));
+            CGS_ASSERT(mTarget != mAttachment, CGS_ASSERT_MESSAGE_AT("mTarget != mAttachment", CGS_ARTIST_FILE, 135));
             const rw::math::vpu::Vector3 target = mTarget.Get(lrInfo.GetWorld())->mRaceCarState.mTransform.Pos();
             mWorldSpaceOffsetFromCar = attachment.mRaceCarState.mTransform.Pos() - target;
             if (mpParameters->mbLookFromTarget) mWorldSpaceOffsetFromCar = -mWorldSpaceOffsetFromCar;
             mWorldSpaceOffsetFromCar.SetY(0.0f);
-            CGS_ASSERT(!IsZero(mWorldSpaceOffsetFromCar, 1.1920929e-7f), CgsDev::Assert::MessageAt("!IsZero(mWorldSpaceOffsetFromCar)", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourLooseAttachment.cpp", 147));
+            CGS_ASSERT(!IsZero(mWorldSpaceOffsetFromCar, 1.1920929e-7f), CGS_ASSERT_MESSAGE_AT("!IsZero(mWorldSpaceOffsetFromCar)", CGS_ARTIST_FILE, 147));
             mWorldSpaceOffsetFromCar = Normalize(mWorldSpaceOffsetFromCar) * mpParameters->mfDistance;
             if (mbTargetVectorLock) SetPrepared();
         }
@@ -176,9 +176,9 @@ void BehaviourLooseAttachment::Construct()
 bool BehaviourLooseAttachment::Prepare(const BehaviourSharedPrepareReleaseInfo& /*lrInfo*/)
 {
     CGS_ASSERT(mAttachment.mbSet,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "mAttachment.HasBeenSet()",
-            "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourLooseAttachment.cpp", 88 /* ARTIST 0x821FAA18 */));
+            CGS_ARTIST_FILE, 88 /* ARTIST 0x821FAA18 */));
 
     SetNotPrepared();                                       // stb 0, +0x08
     mbFirstFrame = true;                                    // stb 1, +0x32D
@@ -257,9 +257,9 @@ void BehaviourLooseAttachment::AttachTo(s32 leRaceCarIndex)
     mAttachment.muRef          = 0;                         // stw 0,  +0x31C
 
     CGS_ASSERT(leRaceCarIndex < KU_MAX_NUM_RACE_CARS,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "meRaceCarIndex < BrnPhysics::Vehicle::ku8MaxNumRaceCars",
-            "..\\..\\..\\GameSource\\Director/Utils/BrnVehicleRef.h", 222 /* ARTIST 0x821F448C */));
+            CGS_ARTIST_FILE_BRNVEHICLEREF, 222 /* ARTIST 0x821F448C */));
 }
 
 // ----------------------------------------------------------------------------
@@ -278,9 +278,9 @@ void BehaviourLooseAttachment::SetTarget(s32 leRaceCarIndex)
     mTarget.muRef          = 0;                             // stw 0,  +0x30C
 
     CGS_ASSERT(leRaceCarIndex < KU_MAX_NUM_RACE_CARS,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "meRaceCarIndex < BrnPhysics::Vehicle::ku8MaxNumRaceCars",
-            "..\\..\\..\\GameSource\\Director/Utils/BrnVehicleRef.h", 222 /* ARTIST 0x821F44EC */));
+            CGS_ARTIST_FILE_BRNVEHICLEREF, 222 /* ARTIST 0x821F44EC */));
 }
 
 // Pin the field-walk offsets of the parameter block: the derived members start right after the
@@ -301,3 +301,6 @@ CGS_STATIC_ASSERT((offsetof(LooseAttachmentParameters, mbLookFromTarget)   - off
 
 } // namespace Camera
 } // namespace BrnDirector
+
+#undef CGS_ARTIST_FILE
+#undef CGS_ARTIST_FILE_BRNVEHICLEREF

@@ -1,5 +1,5 @@
 #include "GameSource/Director/MomentController/Moments/BrnMomentStationaryCrash.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentStationaryCrash.cpp"
 #include <cmath>                                                      // fabsf (the rotation wrap test)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
@@ -151,7 +151,7 @@ void MomentStationaryCrash::Update(f32 /*lfTimeStep*/, void* lrBehaviourControll
                 : lpResourceManager->GetAfterCrashSafe();   // rm +1464
 
             CGS_ASSERT(lrShotGroup.Num_ShotList() > 0,
-                       CgsDev::Assert::MessageAt("lpShotGroup->Num_ShotList() > 0", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentStationaryCrash.cpp", 110));   //  (non-gating)
+                       CGS_ASSERT_MESSAGE_AT("lpShotGroup->Num_ShotList() > 0", CGS_ARTIST_FILE, 110));   //  (non-gating)
 
             // The group's first ShotList block (the console build builds a stack
             // Gen::iceanim over it; the 24-byte null-element fallback is the
@@ -163,7 +163,7 @@ void MomentStationaryCrash::Update(f32 /*lfTimeStep*/, void* lrBehaviourControll
             ICE::ICETakeData* lpTakeData =
                 MomentSharedInfo_GetDirectorResourceManager(lSharedInfo)
                     ->GetKeyAnimFromGuid(IceAnimShotData_GetAnimGuid(lpShotData));
-            CGS_ASSERT(lpTakeData != 0, CgsDev::Assert::MessageAt("lpTakeData != NULL", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentStationaryCrash.cpp", 114));   //  (non-gating)
+            CGS_ASSERT(lpTakeData != 0, CGS_ASSERT_MESSAGE_AT("lpTakeData != NULL", CGS_ARTIST_FILE, 114));   //  (non-gating)
 
             if (ICETakeData_GetDuration(lpTakeData) - 0.1f
                 < MomentSharedInfo_GetTimeCrashing(lSharedInfo))
@@ -230,7 +230,7 @@ void MomentStationaryCrash::Update(f32 /*lfTimeStep*/, void* lrBehaviourControll
         break;
 
     default:
-        CGS_ASSERT(false, CgsDev::Assert::MessageAt("unhandled case in switch", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentStationaryCrash.cpp", 183));   //  (non-gating)
+        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unhandled case in switch", CGS_ARTIST_FILE, 183));   //  (non-gating)
         break;
     }
 }
@@ -261,3 +261,5 @@ Moment::EType MomentStationaryCrash::GetInstanceType()
     return E_MOMENT_STATIONARY_CRASH;   // li r3, 0xB
 }
 }
+
+#undef CGS_ARTIST_FILE

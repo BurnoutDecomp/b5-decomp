@@ -1,5 +1,5 @@
 // wave-I partfile
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavEnterOnline.cpp"
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavEnterOnline.h"
 #include <cstddef>                                                       // offsetof (wire records)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
@@ -724,9 +724,9 @@ namespace BrnGui
         {
             // cpp:220. Non-fatal in the X360 build -- the loop keeps walking the table.
             CGS_ASSERT(maShowControlsFunc[li] != 0,
-                CgsDev::Assert::MessageAt(
+                CGS_ASSERT_MESSAGE_AT(
                     "No show control function supplied for this login question",
-                    "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavEnterOnline.cpp", 220 /* ARTIST 0x824C17F0 */));
+                    CGS_ARTIST_FILE, 220 /* ARTIST 0x824C17F0 */));
         }
     }
 
@@ -1453,7 +1453,7 @@ namespace BrnGui
         // cpp:451 -- the streamed-message form of the assert in the X360 image. The test
         // is on the CACHE the event carries, not on the event pointer, and it is
         // non-fatal: the adoption below runs either way.
-        CGS_ASSERT(lpPayload->mpCache != 0, CgsDev::Assert::StreamMessageAt("Invalid cache in HandleGuiCacheEvent::Update", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavEnterOnline.cpp", 451));
+        CGS_ASSERT(lpPayload->mpCache != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid cache in HandleGuiCacheEvent::Update", CGS_ARTIST_FILE, 451));
 
         // Only the first cache offered is taken; a screen that already has one ignores
         // the event entirely (@0x824BC4C8 branches straight to the epilogue).
@@ -1937,3 +1937,5 @@ namespace BrnGui
         }
     }
 }
+
+#undef CGS_ARTIST_FILE

@@ -408,7 +408,7 @@ namespace CgsGraphics
                 const s32 index = miWriteBufferIndex;
                 message << "Oh dear we are in trouble, miWriteBufferIndex is :" << index << "\n";
                 CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                    "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBuffer.h", 572);
+                    CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBuffer.h", 572));
                 CgsDev::Assert::EndAssert();
             }
             mbInRenderBlock = false;
@@ -452,7 +452,7 @@ namespace CgsGraphics
             if (!mbInRenderBlock)
             {
                 CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert("Command called outside of a BeginRendering/EndRendering block", lpFile, 1216);
+                CgsDev::Assert::FireAssert("Command called outside of a BeginRendering/EndRendering block", CGS_ASSERT_LOCATION(lpFile, 1216));
                 CgsDev::Assert::EndAssert();
             }
             __dcbz128(static_cast<int>(mpWriteBuffer->muCommandBufferWritePos + 128u), mpWriteBuffer->mpu8CommandBuffer);
@@ -472,7 +472,7 @@ namespace CgsGraphics
                 if (!mbFailGracefully)
                 {
                     CgsDev::Assert::BeginAssert();
-                    CgsDev::Assert::FireAssert("ImRenderBuffer command buffer is full", lpFile, 1254);
+                    CgsDev::Assert::FireAssert("ImRenderBuffer command buffer is full", CGS_ASSERT_LOCATION(lpFile, 1254));
                     CgsDev::Assert::EndAssert();
                 }
             }

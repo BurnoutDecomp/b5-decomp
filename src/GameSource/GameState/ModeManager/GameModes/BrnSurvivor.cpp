@@ -7,7 +7,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnSurvivor.cpp"
 namespace BrnGameState
 {
 const f32 SurvivorMode::KF_OUTRO_TIME_SECONDS = 0.0f;
@@ -17,9 +17,9 @@ const f32 SurvivorMode::KF_OUTRO_TIME_SECONDS = 0.0f;
 void SurvivorMode::Start(const StartGameModeParams* lpStartGameModeParams,
                          GameModeParams* lpGameModeParams, ScoringSystem*)
 {
-    CGS_ASSERT(lpStartGameModeParams->GetEventData(), CgsDev::Assert::MessageAt("lpEventData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnSurvivor.cpp", 67));
+    CGS_ASSERT(lpStartGameModeParams->GetEventData(), CGS_ASSERT_MESSAGE_AT("lpEventData", CGS_ARTIST_FILE, 67));
     const BrnProgression::ProgressionRankData* lpRank = lpStartGameModeParams->GetProgressionRankData();
-    CGS_ASSERT(lpRank, CgsDev::Assert::MessageAt("lpProgressionRankData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnSurvivor.cpp", 70));
+    CGS_ASSERT(lpRank, CGS_ASSERT_MESSAGE_AT("lpProgressionRankData", CGS_ARTIST_FILE, 70));
     lpGameModeParams->Construct(lpStartGameModeParams->GetGameModeType());
 
     const f32 lfMinOpponentCount = static_cast<f32>(giMarkedManMinOpponentCount);
@@ -190,3 +190,5 @@ f32 SurvivorMode::GetOutroTimeout() const
     return KF_OUTRO_TIME_SECONDS;
 }
 }
+
+#undef CGS_ARTIST_FILE

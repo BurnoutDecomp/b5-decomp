@@ -83,7 +83,7 @@ u16 SpatialPartition::CalcEntityIndex(const SpatialPartitionEntityLink& lrEntity
 CgsGeometric::Sphere& SpatialPartition::GetEntityBoundingSphere(u16 lu16Index)
 {
     CGS_ASSERT(lu16Index < KI_MAX_NUM_ENTITIES,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lu16Index < KI_MAX_NUM_ENTITIES", KAC_ARTIST_ASSERT_FILE, 392 /* ARTIST 0x828A9F94 */));
     return maEntityBoundingSpheres[lu16Index];
 }
@@ -92,7 +92,7 @@ CgsGeometric::Sphere& SpatialPartition::GetEntityBoundingSphere(u16 lu16Index)
 const CgsGeometric::Sphere& SpatialPartition::GetEntityBoundingSphereConst(u16 lu16Index) const
 {
     CGS_ASSERT(lu16Index < KI_MAX_NUM_ENTITIES,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lu16Index < KI_MAX_NUM_ENTITIES", KAC_ARTIST_ASSERT_FILE, 400 /* ARTIST 0x828A9FFC */));
     return maEntityBoundingSpheres[lu16Index];
 }

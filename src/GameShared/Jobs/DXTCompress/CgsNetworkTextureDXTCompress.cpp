@@ -87,39 +87,39 @@ bool NetworkTextureDXTCompress::Prepare(CgsMemory::HeapMalloc* lpHeapMalloc,
                                         s32 liCompressedBufferSize)
 {
     CGS_ASSERT(lpHeapMalloc,
-        CgsDev::Assert::MessageAt("lpHeapMalloc", KAC_ARTIST_ASSERT_FILE, 134 /* ARTIST 0x8287EAAC */));
+        CGS_ASSERT_MESSAGE_AT("lpHeapMalloc", KAC_ARTIST_ASSERT_FILE, 134 /* ARTIST 0x8287EAAC */));
 
     mpHeapMalloc = lpHeapMalloc;
 
     for (s32 liBufferIndex = 0; liBufferIndex < KI_NUM_IMAGE_BUFFERS; ++liBufferIndex)
     {
         CGS_ASSERT(mpHeapMalloc->GetAllocator()->ValidateHeap(EA::Allocator::GeneralAllocator::kHeapValidationLevelFull),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpHeapMalloc->GetAllocator()->ValidateHeap(rw::core::GeneralAllocator::kHeapValidationLevelFull)",
                 KAC_ARTIST_ASSERT_FILE, 142 /* ARTIST 0x8287EB04 */));
         mapUncompressedBuffers[liBufferIndex] =
             static_cast<char*>(mpHeapMalloc->Malloc(liUncompressedBufferSize, 128));
         CGS_ASSERT(mpHeapMalloc->GetAllocator()->ValidateHeap(EA::Allocator::GeneralAllocator::kHeapValidationLevelFull),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpHeapMalloc->GetAllocator()->ValidateHeap(rw::core::GeneralAllocator::kHeapValidationLevelFull)",
                 KAC_ARTIST_ASSERT_FILE, 144 /* ARTIST 0x8287EB4C */));
         CGS_ASSERT(mapUncompressedBuffers[liBufferIndex],
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mapUncompressedBuffers[ liBufferIndex ]",
                 KAC_ARTIST_ASSERT_FILE, 145 /* ARTIST 0x8287EB70 */));
 
         CGS_ASSERT(mpHeapMalloc->GetAllocator()->ValidateHeap(EA::Allocator::GeneralAllocator::kHeapValidationLevelFull),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpHeapMalloc->GetAllocator()->ValidateHeap(rw::core::GeneralAllocator::kHeapValidationLevelFull)",
                 KAC_ARTIST_ASSERT_FILE, 147 /* ARTIST 0x8287EBA4 */));
         mapCompressedBuffers[liBufferIndex] =
             static_cast<char*>(mpHeapMalloc->Malloc(liCompressedBufferSize, 128));
         CGS_ASSERT(mpHeapMalloc->GetAllocator()->ValidateHeap(EA::Allocator::GeneralAllocator::kHeapValidationLevelFull),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpHeapMalloc->GetAllocator()->ValidateHeap(rw::core::GeneralAllocator::kHeapValidationLevelFull)",
                 KAC_ARTIST_ASSERT_FILE, 149 /* ARTIST 0x8287EBEC */));
         CGS_ASSERT(mapCompressedBuffers[liBufferIndex],
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mapCompressedBuffers[ liBufferIndex ]",
                 KAC_ARTIST_ASSERT_FILE, 150 /* ARTIST 0x8287EC10 */));
     }

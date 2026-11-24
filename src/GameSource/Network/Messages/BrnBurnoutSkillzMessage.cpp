@@ -79,9 +79,9 @@ namespace BrnNetwork
                                               bool lbInitialData)
     {
         CGS_ASSERT(lpSkillzData,
-            CgsDev::Assert::MessageAt("lpSkillzData", __FILE__, 146 /* ARTIST 0x8257F6FC */));
+            CGS_ASSERT_MESSAGE_AT("lpSkillzData", __FILE__, 146 /* ARTIST 0x8257F6FC */));
         CGS_ASSERT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lu16FrameCount != KU16_INVALID_FRAME",
                 __FILE__, 147 /* ARTIST 0x8257F724 */));
 
@@ -101,9 +101,9 @@ namespace BrnNetwork
                                         bool* lpbInitialData)
     {
         CGS_ASSERT(lpSkillzData,
-            CgsDev::Assert::MessageAt("lpSkillzData", __FILE__, 183 /* ARTIST 0x8257F7B0 */));
+            CGS_ASSERT_MESSAGE_AT("lpSkillzData", __FILE__, 183 /* ARTIST 0x8257F7B0 */));
         CGS_ASSERT(lpbInitialData,
-            CgsDev::Assert::MessageAt("lpbInitialData", __FILE__, 184 /* ARTIST 0x8257F7D4 */));
+            CGS_ASSERT_MESSAGE_AT("lpbInitialData", __FILE__, 184 /* ARTIST 0x8257F7D4 */));
 
         if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0)
         {

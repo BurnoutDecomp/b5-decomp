@@ -9,7 +9,7 @@ static const char KAC_BRN_ONLINE_GAME_ROOM_PLAYER_INFO_ASSERT_FILE[] = "..\\..\\
 // the wave-H implementation files (BrnOnlineGameRoomPlayerInfo_wH_XX.cpp) per the
 // spec's group plan.
 // ===================================================================================
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineGameRoomPlayerInfo.cpp"
 namespace BrnGui
 {
     // ---- observed-event table (X360 @0x8205E9E8; the count word 33 sits directly
@@ -709,7 +709,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineGameRoomPlayerInfo::UpdateSoundSettings()
     {
-        CGS_ASSERT(mpStateInterface != 0, CgsDev::Assert::MessageAt("mpStateInterface", KAC_BRN_ONLINE_GAME_ROOM_PLAYER_INFO_ASSERT_FILE, 4636));
+        CGS_ASSERT(mpStateInterface != 0, CGS_ASSERT_MESSAGE_AT("mpStateInterface", KAC_BRN_ONLINE_GAME_ROOM_PLAYER_INFO_ASSERT_FILE, 4636));
 
         // { 8, 463, 12, music, sfx } on channel 40, X360 record size 20. The X360 copies
         // the two adjacent option words out as one doubleword; they are the two volume
@@ -765,9 +765,9 @@ namespace BrnGui
     void OnlineGameRoomPlayerInfo::Construct(CgsID liId, CgsFsm::ScriptedFsm* lpFsm)
     {
         CGS_ASSERT(lpFsm != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpFsm",
-                "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineGameRoomPlayerInfo.cpp", 338 /* ARTIST 0x82484B58 */));   // X360 BrnOnlineGameRoomPlayerInfo.cpp:338
+                CGS_ARTIST_FILE, 338 /* ARTIST 0x82484B58 */));   // X360 BrnOnlineGameRoomPlayerInfo.cpp:338
 
         CrashNavMap::Construct(liId, lpFsm);
 
@@ -1208,7 +1208,7 @@ namespace BrnGui
     void OnlineGameRoomPlayerInfo::SetExpectedChallengesComponents()
     {
         CGS_ASSERT(mpGuiCache != 0,
-            CgsDev::Assert::MessageAt("mpGuiCache", __FILE__, 3962 /* ARTIST 0x824850AC */));   // cpp:3962
+            CGS_ASSERT_MESSAGE_AT("mpGuiCache", __FILE__, 3962 /* ARTIST 0x824850AC */));   // cpp:3962
 
         mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
 
@@ -1227,7 +1227,7 @@ namespace BrnGui
     void OnlineGameRoomPlayerInfo::SetExpectedSettingsComponents()
     {
         CGS_ASSERT(mpGuiCache != 0,
-            CgsDev::Assert::MessageAt("mpGuiCache", __FILE__, 4354 /* ARTIST 0x8248C65C */));   // cpp:4354
+            CGS_ASSERT_MESSAGE_AT("mpGuiCache", __FILE__, 4354 /* ARTIST 0x8248C65C */));   // cpp:4354
 
         mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
 
@@ -1620,7 +1620,7 @@ namespace BrnGui
     {
         typedef BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData InGamePlayerStatusData;
 
-        CGS_ASSERT(lpiNumOptions != 0, CgsDev::Assert::MessageAt("lpiNumOptions", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineGameRoomPlayerInfo.cpp", 3279 /* ARTIST 0x82484CFC */));   // cpp:3279
+        CGS_ASSERT(lpiNumOptions != 0, CGS_ASSERT_MESSAGE_AT("lpiNumOptions", CGS_ARTIST_FILE, 3279 /* ARTIST 0x82484CFC */));   // cpp:3279
 
         s32 liOptionIndex = 0;
 
@@ -1651,9 +1651,9 @@ namespace BrnGui
         }
 
         CGS_ASSERT(liOptionIndex <= KI_MAX_PLAYER_OPTIONS,
-                   CgsDev::Assert::MessageAt("liOptionIndex <= KI_MAX_PLAYER_OPTIONS", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineGameRoomPlayerInfo.cpp", 3302 /* ARTIST 0x82484DAC */));         // cpp:3302
+                   CGS_ASSERT_MESSAGE_AT("liOptionIndex <= KI_MAX_PLAYER_OPTIONS", CGS_ARTIST_FILE, 3302 /* ARTIST 0x82484DAC */));         // cpp:3302
         CGS_ASSERT(liOptionIndex <= KI_MAX_DISPLAYABLE_OPTIONS,
-                   CgsDev::Assert::MessageAt("liOptionIndex <= KI_MAX_DISPLAYABLE_OPTIONS", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineGameRoomPlayerInfo.cpp", 3303 /* ARTIST 0x82484DD0 */));    // cpp:3303
+                   CGS_ASSERT_MESSAGE_AT("liOptionIndex <= KI_MAX_DISPLAYABLE_OPTIONS", CGS_ARTIST_FILE, 3303 /* ARTIST 0x82484DD0 */));    // cpp:3303
 
         *lpiNumOptions = liOptionIndex;
     }
@@ -1754,7 +1754,7 @@ namespace BrnGui
     void OnlineGameRoomPlayerInfo::HandleControllerInputPressed(const CgsModule::Event* lpEvent)
     {
         // cpp:1294. Streamed into the assert buffer by the X360; non-fatal.
-        CGS_ASSERT(lpEvent != 0, CgsDev::Assert::StreamMessageAt("Invalid event sent to OnlineGameRoomPlayerInfo::HandleControllerInputPressed", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineGameRoomPlayerInfo.cpp", 1294));
+        CGS_ASSERT(lpEvent != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event sent to OnlineGameRoomPlayerInfo::HandleControllerInputPressed", CGS_ARTIST_FILE, 1294));
 
 
         switch (meSubState)
@@ -1796,7 +1796,7 @@ namespace BrnGui
     void OnlineGameRoomPlayerInfo::HandleControllerInputReleased(const CgsModule::Event* lpEvent)
     {
         // cpp:1373. Streamed into the assert buffer by the X360; non-fatal.
-        CGS_ASSERT(lpEvent != 0, CgsDev::Assert::StreamMessageAt("Invalid event sent to OnlineGameRoomPlayerInfo::HandleControllerInputReleased", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineGameRoomPlayerInfo.cpp", 1373));
+        CGS_ASSERT(lpEvent != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event sent to OnlineGameRoomPlayerInfo::HandleControllerInputReleased", CGS_ARTIST_FILE, 1373));
 
 
         if (meSubState == E_SUBSTATE_MAP)
@@ -2336,9 +2336,9 @@ namespace BrnGui
     void OnlineGameRoomPlayerInfo::HandleControllerInputFreeBurnSubState(const CgsModule::Event* lpControllerEvent)
     {
         CGS_ASSERT(lpControllerEvent != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpControllerEvent",
-                "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineGameRoomPlayerInfo.cpp", 1532 /* ARTIST 0x824A4A34 */));   // cpp:1532 (non-fatal)
+                CGS_ARTIST_FILE, 1532 /* ARTIST 0x824A4A34 */));   // cpp:1532 (non-fatal)
 
         if (mpGuiCache == 0 || mpGuiCache->mbFreeBurnInputDisabled)
         {
@@ -2395,12 +2395,12 @@ namespace BrnGui
                    meSubState == E_SUBSTATE_SECURITY_OPTIONS ||
                    meSubState == E_SUBSTATE_VIEW_EVENT ||
                    meSubState == E_SUBSTATE_SETTINGS,
-                   CgsDev::Assert::MessageAt(
+                   CGS_ASSERT_MESSAGE_AT(
                        "( meSubState == E_SUBSTATE_FREE_BURNING ) || ( meSubState == E_SUBSTATE_MAIN ) || "
                        "( meSubState == E_SUBSTATE_MAP ) || ( meSubState == E_SUBSTATE_CHALLENGES) || "
                        "( meSubState == E_SUBSTATE_SECURITY_OPTIONS) || ( meSubState == E_SUBSTATE_VIEW_EVENT) || "
                        "( meSubState == E_SUBSTATE_SETTINGS)",
-                       "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineGameRoomPlayerInfo.cpp",
+                       CGS_ARTIST_FILE,
                        3826 /* ARTIST 0x82484E44 */));
 
         meSubState = E_SUBSTATE_LOADING_PAUSE_SCREEN;
@@ -3903,18 +3903,18 @@ namespace BrnGui
     void OnlineGameRoomPlayerInfo::ClearSplashScreenOverlay(
         const OverlayCompleteData* lpOverlayCompleteEvent)
     {
-        CGS_ASSERT(mpGuiCache != 0, CgsDev::Assert::MessageAt("mpGuiCache", KAC_BRN_ONLINE_GAME_ROOM_PLAYER_INFO_ASSERT_FILE, 2990));
+        CGS_ASSERT(mpGuiCache != 0, CGS_ASSERT_MESSAGE_AT("mpGuiCache", KAC_BRN_ONLINE_GAME_ROOM_PLAYER_INFO_ASSERT_FILE, 2990));
 
         const s32 leGameModeType = mpGuiCache->meGameModeType;
         if (leGameModeType != BrnGameState::GameStateModuleIO::E_MODE_NONE)
         {
             // ARTIST E_MODE_COUNT (the X360 compares against 18) -- see KI_ARTIST_MODE_COUNT.
             CGS_ASSERT(leGameModeType < KI_ARTIST_MODE_COUNT,
-                CgsDev::Assert::MessageAt("leGameModeType < GsmIO::E_MODE_COUNT", KAC_BRN_ONLINE_GAME_ROOM_PLAYER_INFO_ASSERT_FILE, 2997));
+                CGS_ASSERT_MESSAGE_AT("leGameModeType < GsmIO::E_MODE_COUNT", KAC_BRN_ONLINE_GAME_ROOM_PLAYER_INFO_ASSERT_FILE, 2997));
 
             const char* lpcSplashScreenID = GetSplashScreenIDForGameMode(
                 static_cast<BrnGameState::GameStateModuleIO::EGameModeType>(leGameModeType));
-            CGS_ASSERT(lpcSplashScreenID != 0, CgsDev::Assert::MessageAt("lpcSplashScreenID != NULL", KAC_BRN_ONLINE_GAME_ROOM_PLAYER_INFO_ASSERT_FILE, 3002));
+            CGS_ASSERT(lpcSplashScreenID != 0, CGS_ASSERT_MESSAGE_AT("lpcSplashScreenID != NULL", KAC_BRN_ONLINE_GAME_ROOM_PLAYER_INFO_ASSERT_FILE, 3002));
 
             if (lpOverlayCompleteEvent->mOverlayId == CgsIDCompress(lpcSplashScreenID) &&
                 lpOverlayCompleteEvent->miLeaveMethod == 0)
@@ -4844,7 +4844,7 @@ namespace BrnGui
     void OnlineGameRoomPlayerInfo::SetExpectedLobbyComponents()
     {
         CGS_ASSERT(mpGuiCache != 0,
-            CgsDev::Assert::MessageAt("mpGuiCache", __FILE__, 3908 /* ARTIST 0x82484EA4 */));   // cpp:3908
+            CGS_ASSERT_MESSAGE_AT("mpGuiCache", __FILE__, 3908 /* ARTIST 0x82484EA4 */));   // cpp:3908
 
         mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
 
@@ -4889,7 +4889,7 @@ namespace BrnGui
     void OnlineGameRoomPlayerInfo::SetExpectedPauseComponents()
     {
         CGS_ASSERT(mpGuiCache != 0,
-            CgsDev::Assert::MessageAt("mpGuiCache", __FILE__, 3944 /* ARTIST 0x82485014 */));   // cpp:3944
+            CGS_ASSERT_MESSAGE_AT("mpGuiCache", __FILE__, 3944 /* ARTIST 0x82485014 */));   // cpp:3944
 
         mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
 
@@ -4904,7 +4904,7 @@ namespace BrnGui
     void OnlineGameRoomPlayerInfo::SetExpectedViewEventComponents()
     {
         CGS_ASSERT(mpGuiCache != 0,
-            CgsDev::Assert::MessageAt("mpGuiCache", __FILE__, 4482 /* ARTIST 0x824851DC */));   // cpp:4482
+            CGS_ASSERT_MESSAGE_AT("mpGuiCache", __FILE__, 4482 /* ARTIST 0x824851DC */));   // cpp:4482
 
         mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
 
@@ -6363,3 +6363,5 @@ namespace BrnGui
         }
     }
 }
+
+#undef CGS_ARTIST_FILE

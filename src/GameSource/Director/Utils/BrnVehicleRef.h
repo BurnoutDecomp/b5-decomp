@@ -1,6 +1,6 @@
 #ifndef GAMESOURCE_DIRECTOR_UTILS_BRN_VEHICLE_REF_H
 #define GAMESOURCE_DIRECTOR_UTILS_BRN_VEHICLE_REF_H
-
+#define CGS_ARTIST_BRNVEHICLEREF_FILE "..\\..\\..\\GameSource\\Director/Utils/BrnVehicleRef.h"
 #include "types.hpp"
 #include "GameSource/BurnoutConstants.h"   // EActiveRaceCarIndex (VehicleRef::Set race car)
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT (Get's five tripwires)
@@ -61,7 +61,7 @@ namespace BrnDirector
         // as an early return so no assert is skipped that the console does not skip.
         const Camera::VehicleInfo* Get(const void* lpWorld) const
         {
-            CGS_ASSERT(mbSet, CgsDev::Assert::MessageAt("mbSet", "..\\..\\..\\GameSource\\Director/Utils/BrnVehicleRef.h", 121));                                   // BrnVehicleRef.h:121
+            CGS_ASSERT(mbSet, CGS_ASSERT_MESSAGE_AT("mbSet", CGS_ARTIST_BRNVEHICLEREF_FILE, 121));                                   // BrnVehicleRef.h:121
 
             const AllVehicleData& lrWorld = *static_cast<const AllVehicleData*>(lpWorld);
 
@@ -85,7 +85,7 @@ namespace BrnDirector
                 break;
             }
 
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt("this shouldn't happen", "..\\..\\..\\GameSource\\Director/Utils/BrnVehicleRef.h", 155));                   // BrnVehicleRef.h:155
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("this shouldn't happen", CGS_ARTIST_BRNVEHICLEREF_FILE, 155));                   // BrnVehicleRef.h:155
             return &lrWorld.GetPlayer();
         }
 
@@ -143,11 +143,11 @@ namespace BrnDirector
                 break;
 
             case E_TRAFFIC_VEHICLE:
-                CGS_ASSERT(false, CgsDev::Assert::MessageAt("not implemented yet", "..\\..\\..\\GameSource\\Director/Utils/BrnVehicleRef.h", 301));    // non-gating
+                CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("not implemented yet", CGS_ARTIST_BRNVEHICLEREF_FILE, 301));    // non-gating
                 return false;
 
             default:
-                CGS_ASSERT(false, CgsDev::Assert::MessageAt("unknown type", "..\\..\\..\\GameSource\\Director/Utils/BrnVehicleRef.h", 307));           // non-gating
+                CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unknown type", CGS_ARTIST_BRNVEHICLEREF_FILE, 307));           // non-gating
                 return false;
             }
 
@@ -183,3 +183,5 @@ namespace BrnDirector
 }
 
 #endif // GAMESOURCE_DIRECTOR_UTILS_BRN_VEHICLE_REF_H
+
+#undef CGS_ARTIST_BRNVEHICLEREF_FILE

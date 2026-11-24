@@ -18,7 +18,7 @@
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2dTransform.h"
 #include "GameShared/GameClasses/RenderWare/Math/RwMathVectorTemplates.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/CgsIm2dTransform.h"
 namespace CgsGraphics
 {
     // ARTIST static initializer82C6C3E8..C494 constructs830112D0.
@@ -51,7 +51,7 @@ namespace CgsGraphics
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("IsValid(lAspectRatioCorrection)",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\ImmediateMode/CgsIm2dTransform.cpp", 61);
+                CGS_ASSERT_LOCATION("d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\ImmediateMode/CgsIm2dTransform.cpp", 61));
             CgsDev::Assert::EndAssert();
         }
         mgAspectRatioCorrection = correction;
@@ -61,7 +61,7 @@ namespace CgsGraphics
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("IsValid(lMatrix)",
-                "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/CgsIm2dTransform.h", 206);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 206));
             CgsDev::Assert::EndAssert();
         }
         Matrix33Template<float> source;
@@ -81,7 +81,7 @@ namespace CgsGraphics
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("IsValid(lSrc)",
-                "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/CgsIm2dTransform.h", 219);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 219));
             CgsDev::Assert::EndAssert();
         }
         mgAspectCorrected.mColourShift = mgDefault.mColourShift;
@@ -115,8 +115,8 @@ namespace CgsGraphics
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 "IsValid(lMatrix)",
-                "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/CgsIm2dTransform.h",
-                206);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                206));
             CgsDev::Assert::EndAssert();
         }
 
@@ -152,8 +152,8 @@ namespace CgsGraphics
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 "IsValid(lSrc)",
-                "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/CgsIm2dTransform.h",
-                219);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                219));
             CgsDev::Assert::EndAssert();
         }
 
@@ -171,3 +171,5 @@ namespace CgsGraphics
         mOriginXYZ.SetW(0.0f);
     }
 }
+
+#undef CGS_ARTIST_FILE

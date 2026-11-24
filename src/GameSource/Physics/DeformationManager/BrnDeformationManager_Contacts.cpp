@@ -271,7 +271,7 @@ namespace Deformation
     {
         const s32 liIndex = FindModelIndexByEntityID(lEntityId);
         CGS_ASSERT(liIndex != -1,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "liIndex != -1",
                 "..\\..\\..\\GameSource\\Physics/DeformationManager/BrnDeformationManager.h", 551 /* ARTIST 0x825E87CC */));
         mpaModels[liIndex].GetBoundingBox(lpBoxOut);

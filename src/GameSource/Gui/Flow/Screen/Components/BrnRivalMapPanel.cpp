@@ -17,7 +17,7 @@
 // comments are the proof, not the mechanism. See the header banner for the full member run.
 // ===================================================================================
 #include "GameSource/Gui/Flow/Screen/Components/BrnRivalMapPanel.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnRivalMapPanel.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SPrintf, LobbyNameCmp
 #include "GameShared/GameClasses/Core/CgsID.h"                            // CgsIDConvertToString
@@ -149,9 +149,9 @@ namespace BrnGui
     void RivalMapPanel::AppendExpectedAptComponents(GuiFlow leFlow, GuiCache* lpGuiCache)
     {
         CGS_ASSERT(lpGuiCache != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpGuiCache",
-                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnRivalMapPanel.cpp", 91 /* ARTIST 0x82417760 */));   // cpp:91
+                CGS_ARTIST_FILE, 91 /* ARTIST 0x82417760 */));   // cpp:91
 
         lpGuiCache->AppendExpectedAptComponent(leFlow, GetNameHash());            // lwz +0x84
 
@@ -390,7 +390,7 @@ namespace BrnGui
     void RivalMapPanel::TransitionIn(ERivalType leRivalType)
     {
         CGS_ASSERT(static_cast<s32>(leRivalType) >= 0 && leRivalType < E_RIVAL_TYPE_COUNT,
-                   CgsDev::Assert::MessageAt("(0 <= leRivalType) && (E_RIVAL_TYPE_COUNT > leRivalType)", "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnRivalMapPanel.cpp", 325 /* ARTIST 0x82417944 */));   // cpp:325
+                   CGS_ASSERT_MESSAGE_AT("(0 <= leRivalType) && (E_RIVAL_TYPE_COUNT > leRivalType)", CGS_ARTIST_FILE, 325 /* ARTIST 0x82417944 */));   // cpp:325
 
         // Already showing this exact rival type -> nothing to animate.
         if (mbActive && meCurrentRivalType == static_cast<s32>(leRivalType))
@@ -421,7 +421,7 @@ namespace BrnGui
     void RivalMapPanel::StorePlayerInfo(const void* lpStatsResponseEvent)
     {
         CGS_ASSERT(lpStatsResponseEvent != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "NULL != lpStatsResponseEvent",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flow\\screen\\components\\BrnRivalMapPanel.h", 153 /* ARTIST 0x824176EC */));   // @0x824176E4
 
@@ -436,3 +436,5 @@ namespace BrnGui
         IconComponent::SetState(lpacStateIdentifier);
     }
 }
+
+#undef CGS_ARTIST_FILE

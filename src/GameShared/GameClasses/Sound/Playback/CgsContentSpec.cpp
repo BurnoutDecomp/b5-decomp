@@ -10,7 +10,7 @@
 // mu8LoadTime @ +0xF, then the inline full-path buffer (GetPath()/GetPathZone read
 // `this + 16`). Every field is addressed BY NAME (no raw-offset arithmetic).
 // ============================================================================
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsDataStructures.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsContent.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsDataStructures.h" // ContentType::GetContentClass etc.
 
@@ -43,10 +43,10 @@ const ContentType& ContentSpec::GetContentType() const
 // skipped zone steps lpNext past its separator before shortening luLen (0x8269295C..0x82692970).
 bool ContentSpec::GetPathZone(u32 lu32Zone, char* lpPathOut, size_t luMaxLen) const
 {
-    CGS_ASSERT(lpPathOut, CgsDev::Assert::MessageAt("lpPathOut", "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsDataStructures.h", 1883));
+    CGS_ASSERT(lpPathOut, CGS_ASSERT_MESSAGE_AT("lpPathOut", CGS_ARTIST_FILE, 1883));
 
     const char* lpFullPath = GetPath();
-    CGS_ASSERT(lpFullPath, CgsDev::Assert::MessageAt("lpFullPath", "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsDataStructures.h", 1886));
+    CGS_ASSERT(lpFullPath, CGS_ASSERT_MESSAGE_AT("lpFullPath", CGS_ARTIST_FILE, 1886));
 
     size_t luLen = mu16PathLength;
     const char* lpNext;
@@ -78,3 +78,5 @@ bool ContentSpec::GetPathZone(u32 lu32Zone, char* lpPathOut, size_t luMaxLen) co
 
 } // namespace Playback
 } // namespace CgsSound
+
+#undef CGS_ARTIST_FILE

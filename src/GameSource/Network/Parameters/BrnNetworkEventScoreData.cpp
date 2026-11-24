@@ -55,8 +55,8 @@ namespace BrnNetwork
                     << liGameMode << "\n";
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert( lacMessageBuffer,
-                                        "..\\..\\..\\GameSource\\Network/Parameters/BrnNetworkEventScoreData.cpp",
-                                        96 );
+                                        CGS_ASSERT_LOCATION("..\\..\\..\\GameSource\\Network/Parameters/BrnNetworkEventScoreData.cpp",
+                                        96) );
             CgsDev::Assert::EndAssert();
         }
 

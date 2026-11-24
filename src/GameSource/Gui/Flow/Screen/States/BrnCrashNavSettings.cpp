@@ -44,7 +44,7 @@
 // ⭐ Each parked site logs once, so the gap is visible in BrnGame.log rather than being a
 // silent drop. The keyboard tail is restored; the remaining SKU park is separate.
 // ===================================================================================
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavSettings.cpp"
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavSettings.h"
 
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                         // CGS_ASSERT
@@ -227,7 +227,7 @@ namespace BrnGui
     // it returns nothing, so a stale close cannot be read twice.
     char* CrashNavProductCodeKeyboardListener::FillString()
     {
-        CGS_ASSERT(mbKeyboardClosed, CgsDev::Assert::MessageAt("mbKeyboardClosed", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavSettings.cpp", 1202 /* ARTIST 0x824B7A60 */));   // cpp:1202
+        CGS_ASSERT(mbKeyboardClosed, CGS_ASSERT_MESSAGE_AT("mbKeyboardClosed", CGS_ARTIST_FILE, 1202 /* ARTIST 0x824B7A60 */));   // cpp:1202
 
         const bool lbHadNewData = (mbNewData == 1);         // `lbz r10, 0x19` read BEFORE the clear
         mbKeyboardClosed = false;                           // `stb r11(0), 0x18`
@@ -309,7 +309,7 @@ namespace BrnGui
     void CrashNavSettings::HandleTriggers(const CgsModule::Event* lpAptTrigger)
     {
         CGS_ASSERT(lpAptTrigger != 0,
-            CgsDev::Assert::StreamMessageAt("Invalid event in CrashNavMapMain::HandleTriggers", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavSettings.cpp", 940)); // cpp:940
+            CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event in CrashNavMapMain::HandleTriggers", CGS_ARTIST_FILE, 940)); // cpp:940
     }
 
     // ---- ShowMenu @0x824BCDF8 ------------------------------------------------------
@@ -654,3 +654,5 @@ namespace BrnGui
         }
     }
 }
+
+#undef CGS_ARTIST_FILE

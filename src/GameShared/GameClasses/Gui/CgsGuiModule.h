@@ -130,7 +130,7 @@ namespace CgsGui
     template <class T>
     void GuiModule::AddGuiEvent(T& lEvent, CgsGuiModuleIO::InputBuffer* lpInput)
     {
-        CGS_ASSERT(lpInput, CgsDev::Assert::StreamMessageAt("Input hasn't been locked for write",
+        CGS_ASSERT(lpInput, CGS_ASSERT_STREAM_MESSAGE_AT("Input hasn't been locked for write",
             "..\\..\\..\\GameShared\\GameClasses\\Gui/CgsGuiModule.h", 286));
         lpInput->GetGuiEvents()->AddGuiEvent(lEvent);
     }

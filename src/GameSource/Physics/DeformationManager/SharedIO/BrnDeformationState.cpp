@@ -24,7 +24,7 @@ namespace Deformation
     CarSensorState& CarState::GetSensor(u8 luSensorIndex)
     {
         CGS_ASSERT(luSensorIndex < mu8NumSensors,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "luSensorIndex < mu8NumSensors",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\deformationmanager\\sharedio\\BrnDeformationState.h", 62 /* ARTIST 0x825B36A8 */));
         return maSensors[luSensorIndex];

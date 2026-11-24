@@ -1,5 +1,5 @@
 #include "GameSource/World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // the header-baked lock asserts
 
@@ -105,7 +105,7 @@ namespace PropEntityIO
     // Called by WorldModule::BridgePropResourceRequestsToOutput_Prepare.
     const OutputBuffer_Prepare::ResourceRequestInterfaceStorage* OutputBuffer_Prepare::GetResourceRequestInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 612));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 612));
         return &mResourceRequestInterface;
     }
 
@@ -113,7 +113,7 @@ namespace PropEntityIO
     // Called by WorldModule::BridgePropModuleToSceneModule_Prepare.
     const OutputBuffer_Prepare::SceneInputInterfaceStorage* OutputBuffer_Prepare::GetSceneInputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 606));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 606));
         return &mSceneInputInterface;
     }
 
@@ -121,28 +121,28 @@ namespace PropEntityIO
     // Called by BrnWorld::PropEntityModule::InitializePropPhysicsData.
     OutputBuffer_Prepare::SceneInputInterfaceStorage* OutputBuffer_Prepare::GetSceneInputInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 609));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 609));
         return &mSceneInputInterface;
     }
 
     // X360 0x822B9690: write-lock; return this + 4.
     OutputBuffer_Prepare::ResourceRequestInterfaceStorage* OutputBuffer_Prepare::GetResourceRequestInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 613));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 613));
         return &mResourceRequestInterface;
     }
 
     // X360 0x827A1778: read-lock; return this + 819824.
     const OutputBuffer_Prepare::PropInputInterfaceStorage* OutputBuffer_Prepare::GetPropInputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 607));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 607));
         return &mPropInputInterface;
     }
 
     // X360 0x822B95E8: write-lock; return this + 819824.
     OutputBuffer_Prepare::PropInputInterfaceStorage* OutputBuffer_Prepare::GetPropInputInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 610));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 610));
         return &mPropInputInterface;
     }
 }
@@ -155,3 +155,5 @@ void BrnWorld::PropEntityIO::OutputBuffer_Prepare::Destruct()
 {
     CgsModule::IOBuffer::Destruct();
 }
+
+#undef CGS_ARTIST_FILE

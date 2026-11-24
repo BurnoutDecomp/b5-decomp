@@ -1,5 +1,5 @@
 #include "GameSource/Effects/SharedIO/BrnEffectsModuleIO_DispatchInputBuffer.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\effects\\EffectsModuleIO.h"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // CGS_ASSERT
 
 // BrnEffects::EffectsIO::DispatchInputBuffer member functions, reconstructed from
@@ -50,21 +50,21 @@ void DispatchInputBuffer::Construct()
 // X360 0x8227E328: read-lock handle to the base effects frame.
 BrnEffectsFrame* DispatchInputBuffer::GetBaseEffectsFrame() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\effects\\EffectsModuleIO.h", 373));
+    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 373));
     return mpBaseEffectsFrame;
 }
 
 // X360 0x8227DE80: read-lock handle to the embedded director camera (this+0x50).
 const BrnDirector::Camera::Camera* DispatchInputBuffer::GetCameraInput() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\effects\\EffectsModuleIO.h", 244));
+    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 244));
     return &mCameraInput;
 }
 
 // X360 0x8227DF28: read-lock handle to the environment-map texture (this+0x1B0).
 const renderengine::Texture* DispatchInputBuffer::GetEnvironmentMap() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\effects\\EffectsModuleIO.h", 247));
+    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 247));
     return mpEnvironmentMap;
 }
 
@@ -72,7 +72,7 @@ const renderengine::Texture* DispatchInputBuffer::GetEnvironmentMap() const
 // tail `lfs f1,0x1B4(r28)` returns the float in f1 (Hex-Rays mistyped the fall-through).
 f32 DispatchInputBuffer::GetWhiteLevel() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\effects\\EffectsModuleIO.h", 250));
+    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 250));
     return mfWhiteLevel;
 }
 
@@ -81,7 +81,7 @@ f32 DispatchInputBuffer::GetWhiteLevel() const
 // X360 0x823BADE8: write-lock store of the base effects frame.
 void DispatchInputBuffer::SetBaseEffectsFrame(BrnEffectsFrame* lpFrame)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\effects\\EffectsModuleIO.h", 366));
+    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 366));
     mpBaseEffectsFrame = lpFrame;
 }
 
@@ -100,14 +100,14 @@ void DispatchInputBuffer::SetFXEventsEffectsFrame(u8 luSlot, BrnEffectsFrame* lp
 // Camera::operator=).
 void DispatchInputBuffer::SetCameraInput(const BrnDirector::Camera::Camera* lpCamera)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\effects\\EffectsModuleIO.h", 242));
+    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 242));
     mCameraInput = *lpCamera;
 }
 
 // X360 0x823BAA98: write-lock store of the environment-map texture (this+0x1B0).
 void DispatchInputBuffer::SetEnvironmentMap(const renderengine::Texture* lpTexture)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\effects\\EffectsModuleIO.h", 246));
+    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 246));
     mpEnvironmentMap = lpTexture;
 }
 
@@ -115,7 +115,7 @@ void DispatchInputBuffer::SetEnvironmentMap(const renderengine::Texture* lpTextu
 // spills the incoming f1 to f31 across the assert call, then stfs it.
 void DispatchInputBuffer::SetWhiteLevel(f32 lfWhiteLevel)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\effects\\EffectsModuleIO.h", 249));
+    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 249));
     mfWhiteLevel = lfWhiteLevel;
 }
 
@@ -129,3 +129,5 @@ void BrnEffects::EffectsIO::DispatchInputBuffer::Destruct()
 {
     CgsModule::IOBuffer::Destruct();
 }
+
+#undef CGS_ARTIST_FILE

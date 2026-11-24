@@ -1,7 +1,7 @@
 #pragma once
-#line 3 "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsRingBuffer.h"
+#define CGS_ARTIST_CGSRINGBUFFER_FILE "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsRingBuffer.h"
 #include "types.hpp"
-#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"      // CGS_ASSERT(_STREAM); kept for its users
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"      // CGS_ASSERT_AT(_STREAM, CGS_ARTIST_CGSRINGBUFFER_FILE, 4); kept for its users
 #include "GameShared/GameClasses/Development/CgsStrStream.h"   // Push's streamed assert
 
 // CgsContainers::RingBuffer<Type> -- a ring over a caller-supplied buffer: Push overwrites the
@@ -134,7 +134,7 @@ RingBuffer<Type>::Push(const Type* lpEntry)
     {
         miLength  = miMaxLength;
         miReadPos = (miReadPos + 1) % miMaxLength;
-        CGS_ASSERT_STREAM(miReadPos == miWritePos, "Read pos should equal write pos if buffer is full\n");
+        CGS_ASSERT_STREAM_AT(miReadPos == miWritePos, "Read pos should equal write pos if buffer is full\n", CGS_ARTIST_CGSRINGBUFFER_FILE, 137);
     }
 }
 
@@ -246,7 +246,7 @@ template <class Type>
 inline const Type&
 RingBuffer<Type>::operator[](u32 luIndex) const
 {
-    CGS_ASSERT(luIndex < static_cast<u32>(miLength), "Attempt to access element outside range");
+    CGS_ASSERT_AT(luIndex < static_cast<u32>(miLength), "Attempt to access element outside range", CGS_ARTIST_CGSRINGBUFFER_FILE, 249);
     return mpData[(miReadPos + luIndex) % miMaxLength];
 }
 
@@ -255,7 +255,7 @@ template <class Type>
 inline Type&
 RingBuffer<Type>::operator[](u32 luIndex)
 {
-    CGS_ASSERT(luIndex < static_cast<u32>(miLength), "Attempt to access element outside range");
+    CGS_ASSERT_AT(luIndex < static_cast<u32>(miLength), "Attempt to access element outside range", CGS_ARTIST_CGSRINGBUFFER_FILE, 258);
     return mpData[(miReadPos + luIndex) % miMaxLength];
 }
 
@@ -269,3 +269,5 @@ FixedRingBuffer<Type, Length>::Construct()
 
 
 } // namespace CgsContainers
+
+#undef CGS_ARTIST_CGSRINGBUFFER_FILE

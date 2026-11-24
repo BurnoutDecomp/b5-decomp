@@ -4,7 +4,7 @@
 #include "GameShared/GameClasses/Gui/View/CgsGuiViewModuleIO.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\CgsGuiModuleBridges.cpp"
 namespace CgsGui
 {
     // ARTIST8285B088; original diagnostic and assert-and-continue behavior.
@@ -18,7 +18,7 @@ namespace CgsGui
                                        CgsDev::Assert::giMessageBufferSize);
             lMessage << "Invalid input queue in GuiModule::BridgeFromInputToView";
             CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\CgsGuiModuleBridges.cpp", 42);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 42));
             CgsDev::Assert::EndAssert();
         }
         mpGuiView->AddViewState<32768, 16>(lpInput->GetGuiEvents(), lpViewInput);
@@ -34,7 +34,7 @@ namespace CgsGui
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpEventQueue != NULL",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\CgsGuiModuleBridges.cpp", 60);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 60));
             CgsDev::Assert::EndAssert();
         }
         mGuiModel.AddGuiEvents(lpEventQueue, lpModelInput);
@@ -55,14 +55,14 @@ namespace CgsGui
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpOutput != NULL",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\CgsGuiModuleBridges.cpp", 94);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 94));
             CgsDev::Assert::EndAssert();
         }
         if (!lpModelOutput->GetGuiResourceRequestQueue())
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpModelOutput->GetGuiResourceRequestQueue()",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\CgsGuiModuleBridges.cpp", 96);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 96));
             CgsDev::Assert::EndAssert();
         }
         if (lpModelOutput->GetGuiResourceRequestQueue()->GetLength() > 0)
@@ -87,3 +87,5 @@ namespace CgsGui
         mStoredGuiEvents.Append<18432, 16>(*lpOutput->GetOutEventQueue());
     }
 }
+
+#undef CGS_ARTIST_FILE

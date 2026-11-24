@@ -12,7 +12,7 @@
 // estimated host clock into lpNetworkTime, and -- every KU16_SYNC_SEND_FRAME_TIMEOUT
 // frames while connected -- sends a fresh sync-time message back to the host.
 // ===================================================================================
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Network\\Time\\CgsSyncTimeClient.cpp"
 #include "GameShared/GameClasses/Network/Time/CgsSyncTimeClient.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 
@@ -39,12 +39,12 @@ namespace CgsNetwork
     void
     SyncTimeClient::Construct(PlayerManager* lpPlayerManager, SyncTimeMessageManager* lpMessageManager)
     {
-        CGS_ASSERT(lpPlayerManager != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpPlayerManager != 0, CGS_ASSERT_MESSAGE_AT(
             "lpPlayerManager",
-            "..\\..\\..\\GameShared\\GameClasses\\Network\\Time\\CgsSyncTimeClient.cpp", 70 /* ARTIST 0x8287D1FC */));
-        CGS_ASSERT(lpMessageManager != 0, CgsDev::Assert::MessageAt(
+            CGS_ARTIST_FILE, 70 /* ARTIST 0x8287D1FC */));
+        CGS_ASSERT(lpMessageManager != 0, CGS_ASSERT_MESSAGE_AT(
             "lpMessageManager",
-            "..\\..\\..\\GameShared\\GameClasses\\Network\\Time\\CgsSyncTimeClient.cpp", 71 /* ARTIST 0x8287D220 */));
+            CGS_ARTIST_FILE, 71 /* ARTIST 0x8287D220 */));
 
         // ARTIST 0x8287D22C stores the player manager (+4) before the message manager (+0).
         mpPlayerManager          = lpPlayerManager;     // +4
@@ -122,10 +122,10 @@ namespace CgsNetwork
     bool
     SyncTimeClient::TimeIsSynchronised(CgsSystem::Time lTimeDiffTolerance, s32 liMinNumPacketsRecvd) const
     {
-        CGS_ASSERT(lTimeDiffTolerance.GetFloatVal() > 0.0f, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lTimeDiffTolerance.GetFloatVal() > 0.0f, CGS_ASSERT_MESSAGE_AT(
             "lTimeDiffTolerance.GetFloatVal() > 0.0f",
             __FILE__, 329 /* ARTIST 0x8287D2A8 */));
-        CGS_ASSERT(liMinNumPacketsRecvd >= 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(liMinNumPacketsRecvd >= 0, CGS_ASSERT_MESSAGE_AT(
             "liMinNumPacketsRecvd >= 0",
             __FILE__, 330 /* ARTIST 0x8287D2CC */));
 
@@ -252,3 +252,5 @@ namespace CgsNetwork
         }
     }
 } // namespace CgsNetwork
+
+#undef CGS_ARTIST_FILE

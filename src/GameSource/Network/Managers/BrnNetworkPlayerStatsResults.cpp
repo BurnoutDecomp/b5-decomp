@@ -44,7 +44,7 @@ namespace BrnNetwork
         // Full: evict the oldest (smallest-timestamp) record whose player is no
         // longer in the game.
         CGS_ASSERT(miCacheSize > 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "miCacheSize > 0",
                 "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkPlayerStatsResults.cpp", 237 /* ARTIST 0x82552D44 */));
 
@@ -87,16 +87,16 @@ namespace BrnNetwork
         miCacheSize = 0;
 
         CGS_ASSERT(mpNetworkManager,
-            CgsDev::Assert::MessageAt("mpNetworkManager", __FILE__, 77 /* ARTIST 0x82552C5C */));
+            CGS_ASSERT_MESSAGE_AT("mpNetworkManager", __FILE__, 77 /* ARTIST 0x82552C5C */));
         CGS_ASSERT(mpNetworkManager->GetServerInterface(),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpNetworkManager->GetServerInterface()",
                 __FILE__, 78 /* ARTIST 0x82552C84 */));
 
         CGS_ASSERT(
             mStatsDebugComponent.Prepare(mpNetworkManager->GetServerInterface(),
                                          mpNetworkManager->GetStatsManager()),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mStatsDebugComponent.Prepare( mpNetworkManager->GetServerInterface(), mpNetworkManager->GetStatsManager() )",
                 __FILE__, 80 /* ARTIST 0x82552CC4 */));
 
@@ -163,7 +163,7 @@ namespace BrnNetwork
     NetworkPlayerStatsResults::InsertPlayerStats(const NetworkPlayerStats& lNewStats)
     {
         CGS_ASSERT(lNewStats.GetStatus() != NetworkPlayerStats::E_STATS_AGE_UNPREPARED,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lNewStats.GetStatus() != NetworkPlayerStats::E_STATS_AGE_UNPREPARED",
                 __FILE__, 295 /* ARTIST 0x82552E40 */));
 
@@ -187,7 +187,7 @@ namespace BrnNetwork
         }
 
         CGS_ASSERT(lpPlaceToInsert != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpPlaceToInsert != NULL",
                 __FILE__, 324 /* ARTIST 0x82552EB8 */));
         *lpPlaceToInsert = lNewStats;

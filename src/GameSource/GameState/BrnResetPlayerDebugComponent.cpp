@@ -70,7 +70,7 @@ namespace BrnGameState
         // ARTIST 0x8235795C calls the base Construct first (folded at 0x8284CB38).
         DebugComponent::Construct();
 
-        CGS_ASSERT(lpGameStateModule != 0, CgsDev::Assert::MessageAt("lpGameStateModule != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnResetPlayerDebugComponent.cpp", 77));
+        CGS_ASSERT(lpGameStateModule != 0, CGS_ASSERT_MESSAGE_AT("lpGameStateModule != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnResetPlayerDebugComponent.cpp", 77));
 
         mpGameStateModule        = lpGameStateModule;
         miCurrentLocationIndex   = 0;

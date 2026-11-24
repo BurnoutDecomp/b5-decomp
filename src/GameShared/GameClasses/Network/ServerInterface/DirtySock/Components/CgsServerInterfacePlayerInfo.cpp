@@ -3,7 +3,7 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h"   // ServerInterfaceDirtySock (GetLobbyAPIRef/GetSettingRef/GetMessageBuffer)
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySockErrorHelpers.h" // DSErrorToServerInterfaceError(Table)
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfacePlayerInfo.cpp"
 #include "lobbyapi.h"        // LobbyApiStatus / LobbyApiRequestCB / LobbyApiSetCallback / LobbyApiClearCallback
 #include "lobbyfinduser.h"   // LobbyFindUser* family
 #include "lobbystatbook.h"   // LobbyStatbook* family
@@ -165,15 +165,15 @@ namespace CgsNetwork
     // -----------------------------------------------------------------------------------
     bool ServerInterfacePlayerInfo::Prepare(ServerInterfaceDirtySock* lpServerInterface)
     {
-        CGS_ASSERT(miEventCallback == -1, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(miEventCallback == -1, CGS_ASSERT_MESSAGE_AT(
             "miEventCallback == -1",
-            "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfacePlayerInfo.cpp", 265 /* ARTIST 0x82888444 */));
-        CGS_ASSERT(!mpFindUser, CgsDev::Assert::MessageAt(
+            CGS_ARTIST_FILE, 265 /* ARTIST 0x82888444 */));
+        CGS_ASSERT(!mpFindUser, CGS_ASSERT_MESSAGE_AT(
             "!mpFindUser",
-            "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfacePlayerInfo.cpp", 266 /* ARTIST 0x8288846C */));
-        CGS_ASSERT(!mpStatbook, CgsDev::Assert::MessageAt(
+            CGS_ARTIST_FILE, 266 /* ARTIST 0x8288846C */));
+        CGS_ASSERT(!mpStatbook, CGS_ASSERT_MESSAGE_AT(
             "!mpStatbook",
-            "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfacePlayerInfo.cpp", 267 /* ARTIST 0x82888494 */));
+            CGS_ARTIST_FILE, 267 /* ARTIST 0x82888494 */));
 
         mpServerInterface = lpServerInterface;
         mpPlayerInfo      = 0;
@@ -181,14 +181,14 @@ namespace CgsNetwork
         mpXUID = 0;                                   // +0x28 (one stw)
 
         mpFindUser = LobbyFindUserCreate(mpServerInterface->GetLobbyAPIRef());
-        CGS_ASSERT(mpFindUser, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpFindUser, CGS_ASSERT_MESSAGE_AT(
             "mpFindUser",
-            "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfacePlayerInfo.cpp", 277 /* ARTIST 0x828884DC */));
+            CGS_ARTIST_FILE, 277 /* ARTIST 0x828884DC */));
 
         mpStatbook = LobbyStatbookCreate(mpServerInterface->GetLobbyAPIRef(), 1);
-        CGS_ASSERT(mpStatbook, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpStatbook, CGS_ASSERT_MESSAGE_AT(
             "mpStatbook",
-            "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfacePlayerInfo.cpp", 280 /* ARTIST 0x82888514 */));
+            CGS_ARTIST_FILE, 280 /* ARTIST 0x82888514 */));
 
         miEventCallback = LobbyApiSetCallback(mpServerInterface->GetLobbyAPIRef(), 4,
                                               &ServerInterfacePlayerInfo::EventStatusCallback,
@@ -249,14 +249,14 @@ namespace CgsNetwork
             if (!mpFindUser)
             {
                 mpFindUser = LobbyFindUserCreate(mpServerInterface->GetLobbyAPIRef());
-                CGS_ASSERT(mpFindUser, CgsDev::Assert::MessageAt(
+                CGS_ASSERT(mpFindUser, CGS_ASSERT_MESSAGE_AT(
                     "mpFindUser",
                     __FILE__, 449 /* ARTIST 0x8288873C */));
             }
             if (!mpStatbook)
             {
                 mpStatbook = LobbyStatbookCreate(mpServerInterface->GetLobbyAPIRef(), 1);
-                CGS_ASSERT(mpStatbook, CgsDev::Assert::MessageAt(
+                CGS_ASSERT(mpStatbook, CGS_ASSERT_MESSAGE_AT(
                     "mpStatbook",
                     __FILE__, 455 /* ARTIST 0x82888780 */));
             }
@@ -358,7 +358,7 @@ namespace CgsNetwork
     {
         ServerInterfacePlayerInfo* lpComponent =
             static_cast<ServerInterfacePlayerInfo*>(lpData);
-        CGS_ASSERT(lpComponent->mpXUID, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpComponent->mpXUID, CGS_ASSERT_MESSAGE_AT(
             "lpServerInterface->mpXUID",
             __FILE__, 1234 /* ARTIST 0x828796D8 */));
 
@@ -412,7 +412,7 @@ namespace CgsNetwork
     void ServerInterfacePlayerInfo::GetLocalPlayerInfo(ServerInterfacePlayerInfoDataBase* lpPlayerInfo)
     {
         CGS_ASSERT(lpPlayerInfo,
-            CgsDev::Assert::MessageAt("lpPlayerInfo", __FILE__, 652 /* ARTIST 0x82878E5C */));
+            CGS_ASSERT_MESSAGE_AT("lpPlayerInfo", __FILE__, 652 /* ARTIST 0x82878E5C */));
 
         // Selector fourcc 0x73656C66 == 'self', buffer 0x234 (564) bytes into a local
         // scratch (recovered from the asm immediates @ 0x82878E78/0x82878E7C/0x82878E7C).
@@ -429,13 +429,13 @@ namespace CgsNetwork
     void ServerInterfacePlayerInfo::GetPlayerInfoByName(const PlayerName* lpcPlayerName,
                                                         ServerInterfacePlayerInfoDataBase* lpPlayerInfo)
     {
-        CGS_ASSERT(lpcPlayerName, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpcPlayerName, CGS_ASSERT_MESSAGE_AT(
             "lpcPlayerName",
             __FILE__, 675 /* ARTIST 0x828887DC */));
-        CGS_ASSERT(lpPlayerInfo, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpPlayerInfo, CGS_ASSERT_MESSAGE_AT(
             "lpPlayerInfo",
             __FILE__, 676 /* ARTIST 0x82888800 */));
-        CGS_ASSERT(mpFindUser, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpFindUser, CGS_ASSERT_MESSAGE_AT(
             "Prepare the component before trying to use it",
             __FILE__, 677 /* ARTIST 0x82888828 */));
 
@@ -465,7 +465,7 @@ namespace CgsNetwork
             EndAction(0x736F6F6E);   // 'soon' (too soon)
             break;
         default:
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
                 "Unexpected return code from LobbyFindUser",
                 __FILE__, 714 /* ARTIST 0x82888904 */));
             break;
@@ -477,7 +477,7 @@ namespace CgsNetwork
     // -----------------------------------------------------------------------------------
     void ServerInterfacePlayerInfo::SelectStatView(const char* lpcView)
     {
-        CGS_ASSERT(mpStatbook, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpStatbook, CGS_ASSERT_MESSAGE_AT(
             "mpStatbook",
             __FILE__, 797 /* ARTIST 0x82878FE0 */));
 
@@ -503,7 +503,7 @@ namespace CgsNetwork
     // -----------------------------------------------------------------------------------
     void ServerInterfacePlayerInfo::DownloadPlayersStats(const char* lpacStatList)
     {
-        CGS_ASSERT(mpStatbook, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpStatbook, CGS_ASSERT_MESSAGE_AT(
             "mpStatbook",
             __FILE__, 826 /* ARTIST 0x828790B0 */));
 
@@ -529,7 +529,7 @@ namespace CgsNetwork
     // -----------------------------------------------------------------------------------
     void ServerInterfacePlayerInfo::DownloadStatViews()
     {
-        CGS_ASSERT(mpStatbook, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpStatbook, CGS_ASSERT_MESSAGE_AT(
             "mpStatbook",
             __FILE__, 973 /* ARTIST 0x82879290 */));
 
@@ -556,7 +556,7 @@ namespace CgsNetwork
                                                    s32 liBufferLength)
     {
         CGS_ASSERT(lpacStatDataBuffer,
-            CgsDev::Assert::MessageAt("lpacStatDataBuffer", __FILE__, 858 /* ARTIST 0x8287916C */));
+            CGS_ASSERT_MESSAGE_AT("lpacStatDataBuffer", __FILE__, 858 /* ARTIST 0x8287916C */));
 
         return LobbyStatbookRowData(mpStatbook, 0, static_cast<u32>(liRow),
                                     lpacStatDataBuffer, liBufferLength) != 0;
@@ -569,7 +569,7 @@ namespace CgsNetwork
     bool ServerInterfacePlayerInfo::GetRowType(s32 liRow, s32* lpnType)
     {
         CGS_ASSERT(lpnType,
-            CgsDev::Assert::MessageAt("lpnType", __FILE__, 913 /* ARTIST 0x828791D8 */));
+            CGS_ASSERT_MESSAGE_AT("lpnType", __FILE__, 913 /* ARTIST 0x828791D8 */));
 
         LobbyStatbookRowInfoT* lpRowInfo =
             LobbyStatbookRowInfo(mpStatbook, static_cast<u32>(liRow));
@@ -652,13 +652,13 @@ namespace CgsNetwork
                                                        bool* lpbAgreeToShareInfoPartners,
                                                        bool* lpbTelemetryEnable)
     {
-        CGS_ASSERT(lpbAgreeToShareInfoEA, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpbAgreeToShareInfoEA, CGS_ASSERT_MESSAGE_AT(
             "lpbAgreeToShareInfoEA",
             __FILE__, 1156 /* ARTIST 0x82879568 */));
-        CGS_ASSERT(lpbAgreeToShareInfoPartners, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpbAgreeToShareInfoPartners, CGS_ASSERT_MESSAGE_AT(
             "lpbAgreeToShareInfoPartners",
             __FILE__, 1157 /* ARTIST 0x8287958C */));
-        CGS_ASSERT(lpbTelemetryEnable, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpbTelemetryEnable, CGS_ASSERT_MESSAGE_AT(
             "lpbTelemetryEnable",
             __FILE__, 1158 /* ARTIST 0x828795B0 */));
 
@@ -762,3 +762,5 @@ namespace CgsNetwork
         }
     }
 }
+
+#undef CGS_ARTIST_FILE

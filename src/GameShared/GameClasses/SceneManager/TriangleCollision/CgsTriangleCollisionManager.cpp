@@ -89,7 +89,7 @@ void TriangleCollisionManager::ProcessAddPolySoupListEvents(
         "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\"
         "TriangleCollision/CgsTriangleCollisionManager.cpp";
     CGS_ASSERT(mpaPolySoupListHandles != 0,
-        CgsDev::Assert::MessageAt("mpaPolySoupListHandles != NULL",
+        CGS_ASSERT_MESSAGE_AT("mpaPolySoupListHandles != NULL",
             lpcAssertFile, 171 /* ARTIST 0x828B3190 */));
 
     bool lbNeedToRebuild = false;
@@ -99,10 +99,10 @@ void TriangleCollisionManager::ProcessAddPolySoupListEvents(
             lAddPolySoupListQueue.GetEvent(liEventIndex);
 
         CGS_ASSERT(miNumSoupListsAdded < miMaxNumSoupLists,
-            CgsDev::Assert::MessageAt("miNumSoupListsAdded < miMaxNumSoupLists",
+            CGS_ASSERT_MESSAGE_AT("miNumSoupListsAdded < miMaxNumSoupLists",
                 lpcAssertFile, 182 /* ARTIST 0x828B31FC */));
         CGS_ASSERT(mpaPolySoupListHandles[miNumSoupListsAdded] == CgsResource::NULLResourceHandle,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpaPolySoupListHandles[miNumSoupListsAdded] == CgsResource::NULLResourceHandle",
                 lpcAssertFile, 183 /* ARTIST 0x828B3258 */));
 
@@ -118,7 +118,7 @@ void TriangleCollisionManager::ProcessAddPolySoupListEvents(
         lbNeedToRebuild = lbNeedToRebuild || lEvent.mbRebuildSpacialPartitioning;
 
         CGS_ASSERT(miNumSoupListsAdded == mPolySoupListSpacialMap.GetNumPolySoupLists(),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "miNumSoupListsAdded == mPolySoupListSpacialMap.GetNumPolySoupLists()",
                 lpcAssertFile, 198 /* ARTIST 0x828B32E8 */));
     }

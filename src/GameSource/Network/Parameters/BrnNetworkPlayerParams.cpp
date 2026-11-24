@@ -151,11 +151,11 @@ namespace BrnNetwork
     BrnGameState::GameStateModuleIO::EPlayerTeam PlayerParamsBase::GetPlayerTeam() const
     {
         CGS_ASSERT(mData.mi8PlayerTeam >= 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mData.mi8PlayerTeam >= GsmIO::E_PLAYER_TEAM_NONE",
                 __FILE__, 204 /* ARTIST 0x82541BD4 */));
         CGS_ASSERT(mData.mi8PlayerTeam < 9,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mData.mi8PlayerTeam < GsmIO::E_PLAYER_TEAM_COUNT",
                 __FILE__, 205 /* ARTIST 0x82541C00 */));
         return static_cast<BrnGameState::GameStateModuleIO::EPlayerTeam>(mData.mi8PlayerTeam);

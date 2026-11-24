@@ -1,7 +1,7 @@
 #include "GameShared/GameClasses/Core/CgsID.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CgsDev::Assert Begin/Fire/End + KI_MESSAGEBUFFERSIZE
 #include "GameShared/GameClasses/Development/CgsStrStream.h" // CgsDev::StrStream (long-string assert message)
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\core\\CgsID.cpp"
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsIDCompress        @ 0x82815A20
 //   CgsIDUnCompress      @ 0x82815C78
@@ -79,8 +79,8 @@ CgsID CgsIDCompress(const char* lpcString)
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(
             lacMessage,
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\core\\CgsID.cpp",
-            180);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+            180));
         CgsDev::Assert::EndAssert();
     }
 
@@ -95,8 +95,8 @@ CgsID CgsIDCompress(const char* lpcString)
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(
             lacMessage,
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\core\\CgsID.cpp",
-            185);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+            185));
         CgsDev::Assert::EndAssert();
     }
 
@@ -166,3 +166,5 @@ void CgsIDConvertToString(CgsID lID, char* lpcString)
             break;
     }
 }
+
+#undef CGS_ARTIST_FILE

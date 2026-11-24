@@ -1,7 +1,7 @@
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h" // VehicleManagerOutputInterface + TrafficCrashedEvent (via BrnVehicleEvents.h)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                // CgsDev::Assert Begin/Fire/End + KI_MESSAGEBUFFERSIZE
 #include "GameShared/GameClasses/Development/CgsStrStream.h"                       // CgsDev::StrStream (dynamic assert message)
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\vehiclemanager\\SharedIO/BrnVehicleOutputInterface.h"
 namespace BrnPhysics
 {
 namespace Vehicle
@@ -30,8 +30,8 @@ namespace Vehicle
                     << " crashed into itself. Other=" << static_cast<s32>(lCrasherEntityID.muValue);
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(lacMessageBuffer,
-                                       "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\vehiclemanager\\SharedIO/BrnVehicleOutputInterface.h",
-                                       445);
+                                       CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                                       445));
             CgsDev::Assert::EndAssert();
         }
 
@@ -67,8 +67,8 @@ namespace Vehicle
                     << " traffic vehicles in a single frame";
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(lacMessageBuffer,
-                                       "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\vehiclemanager\\SharedIO/BrnVehicleOutputInterface.h",
-                                       481);
+                                       CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                                       481));
             CgsDev::Assert::EndAssert();
         }
 
@@ -80,8 +80,8 @@ namespace Vehicle
             lStream << "Trying to remove non-traffic vehicle in AddTrafficRemovedEvent()";
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(lacMessageBuffer,
-                                       "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\vehiclemanager\\SharedIO/BrnVehicleOutputInterface.h",
-                                       482);
+                                       CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                                       482));
             CgsDev::Assert::EndAssert();
         }
 
@@ -197,3 +197,5 @@ void VehicleManagerOutputInterface::AddRaceCarCrashEvent(EntityId lVictimEntityI
 }
 }
 }
+
+#undef CGS_ARTIST_FILE

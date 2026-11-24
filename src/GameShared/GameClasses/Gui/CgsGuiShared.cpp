@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Gui/CgsGuiShared.h"
 // Reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x8240E388.
 
 namespace CgsGui
@@ -11,9 +11,9 @@ namespace CgsGui
     BrnGui::GuiCache* GuiAccessPointers::GetGuiCache()
     {
         CGS_ASSERT(mpGuiCache != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpGuiCache",
-                "..\\..\\..\\GameShared\\GameClasses\\Gui/CgsGuiShared.h", 201 /* ARTIST 0x8240E3B0 */));
+                CGS_ARTIST_FILE, 201 /* ARTIST 0x8240E3B0 */));
         return mpGuiCache;
     }
 
@@ -41,7 +41,7 @@ namespace CgsGui
         if (lpGuiCache == 0)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpGuiCache", "..\\..\\..\\GameShared\\GameClasses\\Gui/CgsGuiShared.h", 209);
+            CgsDev::Assert::FireAssert("lpGuiCache", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 209));
             CgsDev::Assert::EndAssert();
         }
         mpGuiCache = lpGuiCache;
@@ -54,7 +54,7 @@ namespace CgsGui
         if (lpSerialiser == 0)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpSerialiser", "..\\..\\..\\GameShared\\GameClasses\\Gui/CgsGuiShared.h", 224);
+            CgsDev::Assert::FireAssert("lpSerialiser", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 224));
             CgsDev::Assert::EndAssert();
         }
         mpSerialiser = lpSerialiser;
@@ -67,7 +67,7 @@ namespace CgsGui
         if (mpSerialiser == 0)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("mpSerialiser", "..\\..\\..\\GameShared\\GameClasses\\Gui/CgsGuiShared.h", 216);
+            CgsDev::Assert::FireAssert("mpSerialiser", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 216));
             CgsDev::Assert::EndAssert();
         }
         return mpSerialiser;
@@ -160,3 +160,5 @@ namespace CgsGui
         mpGDMReceiverQueue = 0;
     }
 }
+
+#undef CGS_ARTIST_FILE

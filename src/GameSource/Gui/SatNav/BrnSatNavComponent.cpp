@@ -364,14 +364,14 @@ void SatNavComponent::Update()
     if (!mpGuiCache)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("mpGuiCache", lpcSourceFile, 228);
+        CgsDev::Assert::FireAssert("mpGuiCache", CGS_ASSERT_LOCATION(lpcSourceFile, 228));
         CgsDev::Assert::EndAssert();
     }
     mpIconManager = mpGuiCache->GetMapIconManager();
     if (!mpIconManager)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("mpIconManager", lpcSourceFile, 231);
+        CgsDev::Assert::FireAssert("mpIconManager", CGS_ASSERT_LOCATION(lpcSourceFile, 231));
         CgsDev::Assert::EndAssert();
     }
 
@@ -413,7 +413,7 @@ void SatNavComponent::Update()
     if (!mpPlayerInfo)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("mpPlayerInfo", lpcSourceFile, 292);
+        CgsDev::Assert::FireAssert("mpPlayerInfo", CGS_ASSERT_LOCATION(lpcSourceFile, 292));
         CgsDev::Assert::EndAssert();
     }
     SetViewParamsFromPlayerCar(mpPlayerInfo);
@@ -449,7 +449,7 @@ void SatNavComponent::Update()
         CgsDev::Assert::BeginAssert();
         CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
         lStream << " state interface is invalid ";
-        CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, lpcSourceFile, 333);
+        CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, CGS_ASSERT_LOCATION(lpcSourceFile, 333));
         CgsDev::Assert::EndAssert();
     }
 
@@ -582,7 +582,7 @@ void SatNavComponent::SetViewParamsFromPlayerCar(const GuiPlayerInfo* lpPlayerIn
 void SatNavComponent::SetCachePointer(GuiCache* lpGuiCache)
 {
     CGS_ASSERT(lpGuiCache != 0,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lpCache",
             "..\\..\\..\\GameSource\\Gui/SatNav/BrnSatNav.h", 342 /* ARTIST 0x82473664 */));   // BrnSatNav.h:342 (non-gating)
     mpGuiCache = lpGuiCache;

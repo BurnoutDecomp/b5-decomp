@@ -121,9 +121,9 @@ namespace BrnNetwork
         mpServerInterface  = lpServerInterface;
 
         CGS_ASSERT( mpNetworkModule != 0,
-            CgsDev::Assert::MessageAt("mpNetworkModule", __FILE__, 67 /* ARTIST 0x82556AF4 */));
+            CGS_ASSERT_MESSAGE_AT("mpNetworkModule", __FILE__, 67 /* ARTIST 0x82556AF4 */));
         CGS_ASSERT( mpServerInterface != 0,
-            CgsDev::Assert::MessageAt("mpServerInterface", __FILE__, 68 /* ARTIST 0x82556B1C */));
+            CGS_ASSERT_MESSAGE_AT("mpServerInterface", __FILE__, 68 /* ARTIST 0x82556B1C */));
 
         maPendingUploads.Clear();          // stw 0 -> +0x310 (live count word)
         miUploadCount = 0;                 // stw 0 -> +0x320
@@ -229,7 +229,7 @@ namespace BrnNetwork
     void EventScoresManager::ProcessAfterSimulation( const BrnNetworkModuleIO::PostSimulationInputBuffer* lpInput )
     {
         CGS_ASSERT( lpInput != 0,
-            CgsDev::Assert::MessageAt("lpInput", __FILE__, 287 /* ARTIST 0x8256545C */));
+            CGS_ASSERT_MESSAGE_AT("lpInput", __FILE__, 287 /* ARTIST 0x8256545C */));
         ProcessNetworkEvents( lpInput->GetNetworkEventQueue() );
     }
 

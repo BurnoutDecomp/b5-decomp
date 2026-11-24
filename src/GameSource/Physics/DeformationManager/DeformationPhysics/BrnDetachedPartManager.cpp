@@ -220,7 +220,7 @@ namespace Deformation
         CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput,
         BrnPhysics::PhysicsModuleIO::OutputBuffer* lpPhysicsModuleOutputBuffer)
     {
-        CGS_ASSERT(mPartPool.IsPartIndexUsed(liPoolIndex), CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mPartPool.IsPartIndexUsed(liPoolIndex), CGS_ASSERT_MESSAGE_AT(
             "IsPartIndexUsed( liPoolIndex )",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/DeformationManager/DeformationPhysics/BrnDetachedPartManager.cpp",
             207));

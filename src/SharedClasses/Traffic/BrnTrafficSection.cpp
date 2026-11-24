@@ -72,7 +72,7 @@ namespace BrnTraffic
     u32 Section::GetNumSegments() const
     {
         CGS_ASSERT(muNumRungs > 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "muNumRungs > 0",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\traffic\\BrnTrafficSection.h", 368 /* ARTIST 0x821F4BA0 */));
         return static_cast<u32>(muNumRungs) - 1;

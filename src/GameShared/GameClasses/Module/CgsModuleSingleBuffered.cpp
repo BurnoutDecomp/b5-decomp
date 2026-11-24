@@ -78,7 +78,7 @@ bool CgsModule::ModuleSingleBuffered::Prepare()
             this->mePrepareStage = EManagerPrepareStage::E_MANAGERPREPARESTAGE_DONE;
             return true;
         default:
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt("Unknown prepare stage", KAC_CGS_MODULE_SINGLE_BUFFERED_ASSERT_FILE, 176));
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Unknown prepare stage", KAC_CGS_MODULE_SINGLE_BUFFERED_ASSERT_FILE, 176));
 
             return false;
     }
@@ -142,7 +142,7 @@ bool CgsModule::ModuleSingleBuffered::Release()
             meReleaseStage = EManagerReleaseStage::E_MANAGERRELEASESTAGE_DONE;
             return true;
         default:
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt("Unknown release stage", KAC_CGS_MODULE_SINGLE_BUFFERED_ASSERT_FILE, 308));
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Unknown release stage", KAC_CGS_MODULE_SINGLE_BUFFERED_ASSERT_FILE, 308));
 
             return false;
     }

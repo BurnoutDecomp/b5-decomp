@@ -10,7 +10,7 @@
 // The family's other bridges (BridgeSoundToResource :41 / BridgeSoundToGuiPreUpdate
 // :134 / ...) are their own ledger functions, reconstructed later into this TU.
 // ============================================================================
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeSoundToX.cpp"
 #include "GameSource/Game/BrnGameModule.hpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
@@ -69,11 +69,13 @@ namespace BrnGame
         BrnWorldIO::UpdateInputBuffer* lpWorldInputBuffer,
         BrnSound::Module::Io::RootPreUpdateOutputBuffer* lpSoundOutputBuffer)
     {
-        CGS_ASSERT(lpWorldInputBuffer != 0, CgsDev::Assert::MessageAt("lpWorldInput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeSoundToX.cpp", 83));
-        CGS_ASSERT(lpSoundOutputBuffer != 0, CgsDev::Assert::MessageAt("lpSoundOutputBuffer", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeSoundToX.cpp", 84));
+        CGS_ASSERT(lpWorldInputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpWorldInput", CGS_ARTIST_FILE, 83));
+        CGS_ASSERT(lpSoundOutputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpSoundOutputBuffer", CGS_ARTIST_FILE, 84));
 
         lpWorldInputBuffer->GetAudioCarDataLoadedQueue()->Append(
             lpSoundOutputBuffer->GetPreUpdateOutput().GetCarDataLoadedQueue());
     }
 
 }
+
+#undef CGS_ARTIST_FILE

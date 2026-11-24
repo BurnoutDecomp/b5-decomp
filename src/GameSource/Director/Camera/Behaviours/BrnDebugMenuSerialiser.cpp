@@ -54,8 +54,8 @@ void DebugMenuSerialiser::Process(const char* lpcName, T& lrValue)
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(
             "unhandled case",
-            "..\\..\\..\\GameSource\\Director/Camera/Behaviours/Serialisation.h",
-            283);
+            CGS_ASSERT_LOCATION("..\\..\\..\\GameSource\\Director/Camera/Behaviours/Serialisation.h",
+            283));
         CgsDev::Assert::EndAssert();
     }
 }

@@ -139,7 +139,7 @@ namespace CgsNetwork
         const char* const lpcSource =
             "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\"
             "CgsServerInterfaceGameParams.cpp";
-        CGS_ASSERT(lpcString, CgsDev::Assert::MessageAt("lpcString", lpcSource, 92));
+        CGS_ASSERT(lpcString, CGS_ASSERT_MESSAGE_AT("lpcString", lpcSource, 92));
 
         if (macName[0] != 0)
         {
@@ -154,7 +154,7 @@ namespace CgsNetwork
         if (GetData() != 0 && GetDataSize() != 0)
         {
             CGS_ASSERT(strlen(GetPattern()) < static_cast<size_t>(GetPatternLength()),
-                CgsDev::Assert::MessageAt("strlen( GetPattern()) < (size_t) GetPatternLength()", lpcSource, 110));
+                CGS_ASSERT_MESSAGE_AT("strlen( GetPattern()) < (size_t) GetPatternLength()", lpcSource, 110));
             TagFieldSetStructure(lpcString, liLength, "PARAMS",
                                  GetData(), static_cast<s32>(GetDataSize()), GetPattern());
         }

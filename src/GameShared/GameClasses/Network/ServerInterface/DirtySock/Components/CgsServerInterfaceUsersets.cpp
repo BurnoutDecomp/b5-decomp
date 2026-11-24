@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceUsersets.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceUsersets.cpp"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceUsersetParams.h"
 #include "GameShared/GameClasses/Network/ServerInterface/CgsServerInterfaceErrors.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceEvents.h"
@@ -233,7 +233,7 @@ namespace CgsNetwork
             mpUsersInUsersetList = LobbyApiListAlloc(mpServerInterface->GetLobbyAPIRef(),
                                                      KI_LOBBY_LIST_USERSET_USERS, 0, 0);
             CGS_ASSERT(mpUsersInUsersetList != 0,
-                CgsDev::Assert::MessageAt(
+                CGS_ASSERT_MESSAGE_AT(
                     "Failed to create users in userset list", __FILE__, 451 /* ARTIST 0x8287C42C */));
         }
     }
@@ -254,7 +254,7 @@ namespace CgsNetwork
     bool ServerInterfaceUsersets::GetUserSetParams(ServerInterfaceUsersetParamsBase* lpParams) const
     {
         CGS_ASSERT(lpParams != 0,
-            CgsDev::Assert::MessageAt("lpUsersetParams", __FILE__, 602 /* ARTIST 0x8287C4FC */));
+            CGS_ASSERT_MESSAGE_AT("lpUsersetParams", __FILE__, 602 /* ARTIST 0x8287C4FC */));
 
         lpParams->Prepare();
 
@@ -420,9 +420,9 @@ namespace CgsNetwork
 
     void ServerInterfaceUsersets::KickPlayerByID(s32 lPlayerID, EKickReason leReason)
     {
-        CGS_ASSERT(mpUsersInUsersetList != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpUsersInUsersetList != 0, CGS_ASSERT_MESSAGE_AT(
             "Trying to kick a player without a user list",
-            "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceUsersets.cpp", 850 /* ARTIST 0x82889948 */));
+            CGS_ARTIST_FILE, 850 /* ARTIST 0x82889948 */));
 
         for (s32 liMember = 0; liMember < DispListCount(mpUsersInUsersetList); ++liMember)
         {
@@ -435,8 +435,10 @@ namespace CgsNetwork
         }
 
         const bool lbFoundPlayer = false;
-        CGS_ASSERT(lbFoundPlayer, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lbFoundPlayer, CGS_ASSERT_MESSAGE_AT(
             "Failed to find player to kick",
-            "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceUsersets.cpp", 863 /* ARTIST 0x828899A4 */));
+            CGS_ARTIST_FILE, 863 /* ARTIST 0x828899A4 */));
     }
 }
+
+#undef CGS_ARTIST_FILE

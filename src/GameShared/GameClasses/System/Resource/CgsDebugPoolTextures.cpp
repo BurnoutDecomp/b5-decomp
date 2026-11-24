@@ -24,7 +24,7 @@
         if (!(condition))                                         \
         {                                                         \
             CgsDev::Assert::BeginAssert();                        \
-            CgsDev::Assert::FireAssert((msg), (file), (line));    \
+            CgsDev::Assert::FireAssert((msg), CGS_ASSERT_LOCATION(file, line));    \
             CgsDev::Assert::EndAssert();                          \
         }                                                         \
     } while (0)

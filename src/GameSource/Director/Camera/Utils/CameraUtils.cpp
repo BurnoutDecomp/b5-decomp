@@ -1,11 +1,11 @@
 #include "GameSource/Director/Camera/Utils/CameraUtils.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Director/Camera/Utils/CameraUtils.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "rw/math/fpu/scalar_operation.h"            // Tan / IsZero
 #include "rw/math/vpu/vector3_operation.h"           // Subtract / Normalize / IsZero
 #include "rw/math/vpu/matrix44affine_operation.h"    // Mult / TransformPoint /
                                                      //   InverseOfMatrixWithOrthonormal3x3
-
+#define CGS_ARTIST_CAMERAUTILS_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\director\\camera\\Utils/CameraUtils.h"
 #include "GameSource/Director/Utils/BrnDirectorPostOfficeTypes.h"   // LineTestNearestPostBox (ResolveLineTestNearest...)
 #include "SDKs/XboxMath/XMVectorSinCos.h"                        // XboxMath::XMVectorSinCos (ApplyPitchAboutPointRads)
 #include "GameSource/Director/Camera/Utils/BrnConsoleVpu.h"       // ConsoleVpu::Dot3 / fused lanes (PointsWillPassEachOther)
@@ -205,17 +205,17 @@ void TransitionSmoother::Set(f32 lfValue, f32 lfLerpAmount0to1,
     mfTarget = lfValue;
 
     CGS_ASSERT(lfLerpAmount0to1 >= 0.0f && lfLerpAmount0to1 <= 1.0f,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lfLerpAmount0to1 >= 0.0f && lfLerpAmount0to1 <= 1.0f",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\director\\camera\\Utils/CameraUtils.h", 157 /* ARTIST 0x821F2304 */));   // :157
+            CGS_ARTIST_CAMERAUTILS_FILE, 157 /* ARTIST 0x821F2304 */));   // :157
 
     mfIdealLerpAmount = lfLerpAmount0to1;
     mfLerpAmount      = 0.0f;
 
     CGS_ASSERT(lfLerpAmountLerpAmount0to1 >= 0.0f && lfLerpAmountLerpAmount0to1 <= 1.0f,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lfLerpAmountLerpAmount0to1 >= 0.0f && lfLerpAmountLerpAmount0to1 <= 1.0f",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\director\\camera\\Utils/CameraUtils.h", 160 /* ARTIST 0x821F2338 */));   // :160
+            CGS_ARTIST_CAMERAUTILS_FILE, 160 /* ARTIST 0x821F2338 */));   // :160
 
     mfLerpAmountLerpAmount     = lfLerpAmountLerpAmount0to1;
     mfSimilarityToleranceScale = lfSimilarityToleranceScale;
@@ -238,9 +238,9 @@ void TransitionSmoother::SetTarget(f32 lfTarget)
 u32 Cycle(u32 luValue, u32 luInclusiveLowerBound, u32 luExclusiveUpperBound, u32 luStep)
 {
     CGS_ASSERT(luInclusiveLowerBound < luExclusiveUpperBound,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "luInclusiveLowerBound < luExclusiveUpperBound",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\director\\camera\\Utils/CameraUtils.h", 340 /* ARTIST 0x821F23A4 */));
+            CGS_ARTIST_CAMERAUTILS_FILE, 340 /* ARTIST 0x821F23A4 */));
 
     return (luValue - luInclusiveLowerBound + luStep)
                % (luExclusiveUpperBound - luInclusiveLowerBound)
@@ -693,9 +693,9 @@ f32 GetSmallestDifferenceBetweenDegsAngles(f32 lfFromDegs, f32 lfToDegs)
     }
 
     CGS_ASSERT(lfAngle < KF_FULL_TURN_DEGS && lfAngle > KF_NEG_FULL_TURN_DEGS,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "(lrAngle < 360.0f) && (lrAngle > -360.0f)",
-            "..\\..\\..\\GameSource\\Director/Camera/Utils/CameraUtils.cpp", 535 /* ARTIST 0x821F88F8 */));            // .cpp:535
+            CGS_ARTIST_FILE, 535 /* ARTIST 0x821F88F8 */));            // .cpp:535
 
     if (lfAngle > KF_HALF_TURN_DEGS)
     {
@@ -707,9 +707,9 @@ f32 GetSmallestDifferenceBetweenDegsAngles(f32 lfFromDegs, f32 lfToDegs)
     }
 
     CGS_ASSERT(lfAngle <= KF_HALF_TURN_DEGS && lfAngle >= KF_NEG_HALF_TURN_DEGS,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "(lrAngle <= 180.0f) && (lrAngle >= -180.0f)",
-            "..\\..\\..\\GameSource\\Director/Camera/Utils/CameraUtils.cpp", 546 /* ARTIST 0x821F8950 */));          // .cpp:546
+            CGS_ARTIST_FILE, 546 /* ARTIST 0x821F8950 */));          // .cpp:546
 
     return lfAngle;
 }
@@ -778,7 +778,7 @@ f32 GetSmallestDifferenceBetweenRadAngles(f32 lfFromRads, f32 lfToRads)
     }
 
     CGS_ASSERT(lfAngle <= KF_PI && lfAngle >= KF_NEG_PI,
-               CgsDev::Assert::MessageAt("(lrAngle <= rw::math::PI) && (lrAngle >= -rw::math::PI)", "..\\..\\..\\GameSource\\Director/Camera/Utils/CameraUtils.cpp", 589));   // .cpp:589
+               CGS_ASSERT_MESSAGE_AT("(lrAngle <= rw::math::PI) && (lrAngle >= -rw::math::PI)", CGS_ARTIST_FILE, 589));   // .cpp:589
 
     return lfAngle;
 }
@@ -837,14 +837,14 @@ Vector3 GetSmallestDifferenceBetweenRadAngles(Vector3 lFromRads, Vector3 lToRads
 // ----------------------------------------------------------------------------
 f32 PositiveValueTendToLimit(f32 lrValueIn, f32 lrValueForHalfway, f32 lrLimit)
 {
-    CGS_ASSERT(lrValueIn >= 0.0f, CgsDev::Assert::MessageAt("lrValueIn >= 0.0f", "..\\..\\..\\GameSource\\Director/Camera/Utils/CameraUtils.cpp", 618));                    // .cpp:618
-    CGS_ASSERT(lrValueForHalfway > 0.0f, CgsDev::Assert::MessageAt("lrValueForHalfway > 0.0f", "..\\..\\..\\GameSource\\Director/Camera/Utils/CameraUtils.cpp", 643));      // .cpp:643
+    CGS_ASSERT(lrValueIn >= 0.0f, CGS_ASSERT_MESSAGE_AT("lrValueIn >= 0.0f", CGS_ARTIST_FILE, 618));                    // .cpp:618
+    CGS_ASSERT(lrValueForHalfway > 0.0f, CGS_ASSERT_MESSAGE_AT("lrValueForHalfway > 0.0f", CGS_ARTIST_FILE, 643));      // .cpp:643
 
     const f32 lrX = lrValueIn / lrValueForHalfway;
 
-    CGS_ASSERT(!rw::math::fpu::IsZero(lrX + 1.0f), CgsDev::Assert::MessageAt(  // .cpp:645
+    CGS_ASSERT(!rw::math::fpu::IsZero(lrX + 1.0f), CGS_ASSERT_MESSAGE_AT(  // .cpp:645
                "!rw::math::fpu::IsZero(lrX+1.0f)",
-               "..\\..\\..\\GameSource\\Director/Camera/Utils/CameraUtils.cpp", 645));
+               CGS_ARTIST_FILE, 645));
 
     return (lrX / (lrX + 1.0f)) * lrLimit;
 }
@@ -910,8 +910,8 @@ f32 SineLerp(f32 lfFrom, f32 lfTo, f32 lfParameter)
     const f32 KF_PI = 3.1415927f;   // flt_8200174C == rw::math::PI
 
     CGS_ASSERT(lfParameter >= 0.0f && lfParameter <= 1.0f,
-        CgsDev::Assert::MessageAt("lfParameter >= 0.0f && lfParameter <= 1.0f",
-            "..\\..\\..\\GameSource\\Director/Camera/Utils/CameraUtils.cpp", 810 /* ARTIST 0x8220CCF8 */));               // .cpp:810
+        CGS_ASSERT_MESSAGE_AT("lfParameter >= 0.0f && lfParameter <= 1.0f",
+            CGS_ARTIST_FILE, 810 /* ARTIST 0x8220CCF8 */));               // .cpp:810
 
     const f32 lfEased = 1.0f - (std::cos(lfParameter * KF_PI) + 1.0f) * 0.5f;
 
@@ -1860,3 +1860,6 @@ bool BrnDirector::Camera::Utils::ProjectWorldSpacePointToScreen(
     lv2OutScreenSpacePosition.mV = __vrlimi(lvOut, lvY, 4, 0);
     return true;
 }
+
+#undef CGS_ARTIST_FILE
+#undef CGS_ARTIST_CAMERAUTILS_FILE

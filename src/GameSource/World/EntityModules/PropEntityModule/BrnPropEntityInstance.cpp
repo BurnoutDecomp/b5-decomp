@@ -160,7 +160,7 @@ namespace BrnWorld
     bool PropEntityInstance::IsSmashed() const
     {
         CGS_ASSERT(mu8State < E_STATE_COUNT,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mu8State < E_STATE_COUNT", KAC_ARTIST_ASSERT_FILE, 653 /* ARTIST 0x822B82F0 */));
         return mu8State >= E_SMASHED;
     }
@@ -169,7 +169,7 @@ namespace BrnWorld
     bool PropEntityInstance::IsPhysical() const
     {
         CGS_ASSERT(mu8State < E_STATE_COUNT,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mu8State < E_STATE_COUNT", KAC_ARTIST_ASSERT_FILE, 653 /* ARTIST 0x822B8360 */));
         return mu8State == E_PHYSICAL;
     }
@@ -236,7 +236,7 @@ namespace BrnWorld
     EPropState PropEntityInstance::GetState() const
     {
         CGS_ASSERT(mu8State < E_STATE_COUNT,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mu8State < E_STATE_COUNT", KAC_ARTIST_ASSERT_FILE, 653 /* ARTIST 0x822A1B90 */));
         return static_cast<EPropState>(mu8State);
     }
@@ -245,7 +245,7 @@ namespace BrnWorld
     void PropEntityInstance::SetState(EPropState leState)
     {
         CGS_ASSERT(leState < E_STATE_COUNT,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "leState < E_STATE_COUNT", KAC_ARTIST_ASSERT_FILE, 666 /* ARTIST 0x822A1BEC */));
         mu8State = static_cast<u8>(leState);   // +77
     }
@@ -336,9 +336,9 @@ namespace BrnWorld
     void PropEntityInstance::SetPhysicsIndex(s32 liPhysicsIndex)
     {
         CGS_ASSERT(liPhysicsIndex >= 0,
-            CgsDev::Assert::MessageAt("liPhysicsIndex >= 0", KAC_ARTIST_ASSERT_FILE, 725 /* ARTIST 0x822A1C4C */));
+            CGS_ASSERT_MESSAGE_AT("liPhysicsIndex >= 0", KAC_ARTIST_ASSERT_FILE, 725 /* ARTIST 0x822A1C4C */));
         CGS_ASSERT(liPhysicsIndex < 15,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "liPhysicsIndex < static_cast< int32_t > ( BrnPhysics::Props::KU_MAX_PHYSICAL_PROPS )",
                 KAC_ARTIST_ASSERT_FILE, 726 /* ARTIST 0x822A1C70 */));
         mu8PhysicsIndex = static_cast<u8>(liPhysicsIndex);   // +76

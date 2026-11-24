@@ -4,7 +4,7 @@
 // renderengine::ProgramBufferData / ProgramVariableHandle / ProgramBuffer::GetVariableHandleByName
 // -- the program-side half of ShaderConstantsExternal::FixUp(const ProgramBuffer*).
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Graphics\\CgsShaderConstants.h"
 // CgsShaderConstants.cpp - functions of the CGS shader-constant subsystem:
 //   * ShaderConstantsExternal::FixUp / HasShaderConstant  (on-disk External block)
 //   * ShaderConstantsInternal::FixUp                      (on-disk Internal block)
@@ -23,7 +23,7 @@
 // constructor (the engine's eight constants). Every consumer (BrnRendererModule /
 // BrnWorldModule / BrnShadowMap / CgsDispatcherCommands) declares it extern.
 namespace CgsGraphics { ShaderConstantTable mShaderConstantTable; }
-
+#define CGS_ARTIST_CGSSHADERCONSTANTS_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\CgsShaderConstants.cpp"
 // CgsShaderConstants.cpp:54-56
 // File-static shadowing-policy flags. The X360 build compiles these as constant globals
 // in this TU (used by the dispatch helpers reconstructed in other TUs).
@@ -153,8 +153,8 @@ u32 ShaderConstantsExternal::FixUp(const renderengine::ProgramBuffer* lpVertexPr
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert(
                     "luIndex < mu8NumUsedConstants",
-                    "..\\..\\..\\GameShared\\GameClasses\\Graphics\\CgsShaderConstants.h",
-                    0x244);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                    0x244));
                 CgsDev::Assert::EndAssert();
             }
 
@@ -165,8 +165,8 @@ u32 ShaderConstantsExternal::FixUp(const renderengine::ProgramBuffer* lpVertexPr
                     CgsDev::Assert::BeginAssert();
                     CgsDev::Assert::FireAssert(
                         "luIndex < mu8NumUsedConstants",
-                        "..\\..\\..\\GameShared\\GameClasses\\Graphics\\CgsShaderConstants.h",
-                        0x244);
+                        CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                        0x244));
                     CgsDev::Assert::EndAssert();
                 }
                 if (renderengine::ProgramBuffer::GetVariableHandleByName(
@@ -201,8 +201,8 @@ u32 ShaderConstantsExternal::FixUp(const renderengine::ProgramBuffer* lpVertexPr
                     << (lpcOwnName != 0 ? lpcOwnName : "<NULLSTRING>") << "\n";
             CgsDev::Assert::FireAssert(
                 lStream.GetBuffer(),
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\CgsShaderConstants.cpp",
-                0x3FE);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_CGSSHADERCONSTANTS_FILE,
+                0x3FE));
             CgsDev::Assert::EndAssert();
         }
     }
@@ -219,8 +219,8 @@ u32 ShaderConstantsExternal::FixUp(const renderengine::ProgramBuffer* lpVertexPr
             lStream << "NULL shader constant name <NULLSTRING>\n";
             CgsDev::Assert::FireAssert(
                 lStream.GetBuffer(),
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\CgsShaderConstants.cpp",
-                0x40C);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_CGSSHADERCONSTANTS_FILE,
+                0x40C));
             CgsDev::Assert::EndAssert();
             continue;
         }
@@ -583,3 +583,6 @@ bool ShaderConstantsCPU::ShouldSerialise() const
 
     return true;
 }
+
+#undef CGS_ARTIST_FILE
+#undef CGS_ARTIST_CGSSHADERCONSTANTS_FILE

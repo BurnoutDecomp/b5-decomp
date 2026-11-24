@@ -1,7 +1,7 @@
 #include "GameSource/Resource/BrnGameDataModuleIO.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Resource/BrnGameDataModuleIO.h"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // CGS_ASSERT
-
+#define CGS_ARTIST_BRNGAMEDATAMODULEIO_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\resource\\BrnGameDataModuleIO.h"
 // BrnResource::GameDataIO::InputBuffer / OutputBuffer -- the lock-guarded IO-buffer accessors:
 //   InputBuffer::GetRequestInterface() const/non-const     @ 0x82663F90 / 0x823B1788  -> &mRequestInterface
 //   InputBuffer::GetAttribSysRequestInterface() non/const  @ 0x823B1830 / 0x82664038  -> &mAttribSysRequestInterface
@@ -84,9 +84,9 @@ namespace GameDataIO
     // @ 0x823B1788 -- write-locked accessor (asserts at DWARF h:218).
     RequestInterface<InputBuffer::knRequestInterfaceQueueSize>* InputBuffer::GetRequestInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt(
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
             "Not locked for writing\n",
-            "..\\..\\..\\GameSource\\Resource/BrnGameDataModuleIO.h", 218));
+            CGS_ARTIST_FILE, 218));
         return &mRequestInterface;
     }
 
@@ -114,9 +114,9 @@ namespace GameDataIO
     // there, right after the 4-byte CgsModule::IOBuffer status base).
     const AllocatorList* OutputBuffer::GetAllocatorList() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt(
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
             "Not locked for reading\n",
-            "..\\..\\..\\GameSource\\Resource/BrnGameDataModuleIO.h", 258));
+            CGS_ARTIST_FILE, 258));
         return mpAllocatorList;
     }
 
@@ -124,7 +124,7 @@ namespace GameDataIO
     // the assert. Stores the list pointer into mpAllocatorList (this+4; asm `stw r27,4(r28)`).
     void OutputBuffer::SetAllocatorList(const AllocatorList* lpAllocatorList)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\resource\\BrnGameDataModuleIO.h", 265));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_BRNGAMEDATAMODULEIO_FILE, 265));
         mpAllocatorList = lpAllocatorList;
     }
 
@@ -134,9 +134,9 @@ namespace GameDataIO
     // FileSystemStatusInterface (h:189) -- we follow the X360 asm/symbol.
     u8* OutputBuffer::GetLiveUpdateStatus()
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt(
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
             "Not locked for reading\n",
-            "..\\..\\..\\GameSource\\Resource/BrnGameDataModuleIO.h", 174));
+            CGS_ARTIST_FILE, 174));
         return &mbLiveUpdateStatus;
     }
 
@@ -151,7 +151,7 @@ namespace GameDataIO
     // `lbz r11,0(r27); stb r11,8(r28)`). X360 symbol SetLiveUpdateStatus.
     void OutputBuffer::SetLiveUpdateStatus(const u8* lpStatus)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\resource\\BrnGameDataModuleIO.h", 175));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_BRNGAMEDATAMODULEIO_FILE, 175));
         mbLiveUpdateStatus = *lpStatus;
     }
 
@@ -168,3 +168,6 @@ namespace GameDataIO
     template bool InputBuffer::AppendRequestInterface<4096>(const RequestInterface<4096>&);
 }
 }
+
+#undef CGS_ARTIST_FILE
+#undef CGS_ARTIST_BRNGAMEDATAMODULEIO_FILE

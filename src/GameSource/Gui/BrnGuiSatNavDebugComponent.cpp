@@ -31,7 +31,7 @@ namespace BrnGui
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("mpGuiModule != NULL",
-                "..\\..\\..\\GameSource\\Gui/BrnGuiSatNavDebugComponent.cpp", 84);
+                CGS_ASSERT_LOCATION("..\\..\\..\\GameSource\\Gui/BrnGuiSatNavDebugComponent.cpp", 84));
             CgsDev::Assert::EndAssert();
         }
         mpGuiModule = 0;
@@ -220,7 +220,7 @@ namespace BrnGui
     void SatNavDebugComponent::SatNavStateCallback(void* /*lpValue*/, void* lpUserData)
     {
         CGS_ASSERT(lpUserData != 0,
-            CgsDev::Assert::MessageAt("lpUserData", __FILE__, 247 /* ARTIST 0x8250D9EC */));   // BrnGuiSatNavDebugComponent.cpp:247
+            CGS_ASSERT_MESSAGE_AT("lpUserData", __FILE__, 247 /* ARTIST 0x8250D9EC */));   // BrnGuiSatNavDebugComponent.cpp:247
 
         SatNavDebugComponent* lpThis = static_cast<SatNavDebugComponent*>(lpUserData);
 
@@ -245,7 +245,7 @@ namespace BrnGui
     void SatNavDebugComponent::SatNavPositionCallback(void* /*lpValue*/, void* lpUserData)
     {
         CGS_ASSERT( lpUserData != 0,
-            CgsDev::Assert::MessageAt("lpUserData", __FILE__, 281 /* ARTIST 0x8250DB64 */));   // BrnGuiSatNavDebugComponent.cpp:281
+            CGS_ASSERT_MESSAGE_AT("lpUserData", __FILE__, 281 /* ARTIST 0x8250DB64 */));   // BrnGuiSatNavDebugComponent.cpp:281
 
         static_cast<SatNavDebugComponent*>(lpUserData)->TriggerSatNavPositionUpdate();
     }

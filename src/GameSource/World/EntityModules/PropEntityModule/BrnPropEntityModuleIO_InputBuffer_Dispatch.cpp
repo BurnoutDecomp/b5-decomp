@@ -12,7 +12,7 @@
 #include "GameSource/World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // the header-baked lock asserts
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h"
 #include <cstddef>   // offsetof
 
 namespace BrnWorld
@@ -67,28 +67,28 @@ namespace PropEntityIO
     // X360 0x822B8EA8 (R, :295) -- read-lock; return the dispatch frame (console word @this+4).
     CgsGraphics::DispatchFrame* InputBuffer_Dispatch::GetDispatchFrame() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 295));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 295));
         return mpDispatchFrame;
     }
 
     // X360 0x827A1180 (W, :296) -- write-lock; set the dispatch frame (console word @this+4).
     void InputBuffer_Dispatch::SetDispatchFrame(CgsGraphics::DispatchFrame* lpDispatchFrame)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 296));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 296));
         mpDispatchFrame = lpDispatchFrame;
     }
 
     // X360 0x822B8F50 (R, :301) -- read-lock; return the shadow map (console word @this+8).
     ShadowMap* InputBuffer_Dispatch::GetShadowMap() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 301));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 301));
         return mpShadowMap;
     }
 
     // X360 0x827A1228 (W, :302) -- write-lock; set the shadow map (console word @this+8).
     void InputBuffer_Dispatch::SetShadowMap(ShadowMap* lpShadowMap)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 302));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 302));
         mpShadowMap = lpShadowMap;
     }
 
@@ -97,7 +97,7 @@ namespace PropEntityIO
     // GenerateShadowMapDispatchLists (WorldModule::GenerateDispatchLists path).
     InputBuffer_Dispatch::SceneResultQueueStorage* InputBuffer_Dispatch::GetSceneResultQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 299));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 299));
         return &mSceneResultQueue;
     }
 
@@ -105,7 +105,7 @@ namespace PropEntityIO
     // (this+0x801C).
     BrnCoronaManager::BrnSubmissionInterface* InputBuffer_Dispatch::GetCoronaSubmissionInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 304));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 304));
         return mpCoronaSubmissionInterface;
     }
 
@@ -114,8 +114,10 @@ namespace PropEntityIO
     void InputBuffer_Dispatch::SetCoronaSubmissionInterface(
             BrnCoronaManager::BrnSubmissionInterface* lpCoronaSubmissionInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 305));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 305));
         mpCoronaSubmissionInterface = lpCoronaSubmissionInterface;
     }
 }
 }
+
+#undef CGS_ARTIST_FILE

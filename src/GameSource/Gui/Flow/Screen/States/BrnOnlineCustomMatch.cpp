@@ -626,7 +626,7 @@ namespace BrnGui
         // Non-fatal (BeginAssert / FireAssert / EndAssert, no early-out) -- the X360 falls
         // straight through into the dispatch even with a null event.
         CGS_ASSERT(lpEvent != 0,
-            CgsDev::Assert::StreamMessageAt("Invalid event sent to OnlineCustomMatch::HandleControllerInput", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineCustomMatch.cpp", 503)); // cpp:503
+            CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event sent to OnlineCustomMatch::HandleControllerInput", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineCustomMatch.cpp", 503)); // cpp:503
 
         switch (meSubState)   // X360 this+0x38
         {

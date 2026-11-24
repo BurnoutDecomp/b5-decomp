@@ -19,7 +19,7 @@
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineSelectRoute.cpp"
 #include <cmath>                                                          // route-time rounding / map-icon distance
 #include <cstring>                                                        // tracker and event payloads
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // route invariants
@@ -502,7 +502,7 @@ namespace
 
     void OnlineSelectRoute::HandleInGameFailedEvent(const CgsModule::Event* lpEvent)
     {
-        CGS_ASSERT(lpEvent != 0, CgsDev::Assert::StreamMessageAt("Invalid event sent to OnlineSelectRoute::HandleInGameEvent", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineSelectRoute.cpp", 1384));
+        CGS_ASSERT(lpEvent != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event sent to OnlineSelectRoute::HandleInGameEvent", CGS_ARTIST_FILE, 1384));
 
         SendStateEvent("GO_BACK");
     }
@@ -540,7 +540,7 @@ namespace
 
     void OnlineSelectRoute::HandleControllerInput(const CgsModule::Event* lpEvent)
     {
-        CGS_ASSERT(lpEvent != 0, CgsDev::Assert::StreamMessageAt("Invalid event sent to OnlineSelectRoute::HandleControllerInput", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineSelectRoute.cpp", 517));
+        CGS_ASSERT(lpEvent != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event sent to OnlineSelectRoute::HandleControllerInput", CGS_ARTIST_FILE, 517));
 
 
         switch (meSubState)
@@ -854,7 +854,7 @@ namespace
             mSelectRoutes.Show();
 
         meSubState = E_SUBSTATE_SELECTING_CHECKPOINT;
-        CGS_ASSERT(mpGuiCache != 0, CgsDev::Assert::MessageAt("mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineSelectRoute.cpp", 1830 /* ARTIST 0x824931F8 */));
+        CGS_ASSERT(mpGuiCache != 0, CGS_ASSERT_MESSAGE_AT("mpGuiCache", CGS_ARTIST_FILE, 1830 /* ARTIST 0x824931F8 */));
         mMenuOptions.Clear();
         mCursor.SetActive();
         mbEditingNewCheckpoint = false;
@@ -891,7 +891,7 @@ namespace
     void OnlineSelectRoute::ShowPresetEvents()
     {
         meSubState = E_SUBSTATE_SELECTING_PRESET_EVENT;
-        CGS_ASSERT(mpGuiCache != 0, CgsDev::Assert::MessageAt("mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineSelectRoute.cpp", 1872 /* ARTIST 0x82493344 */));
+        CGS_ASSERT(mpGuiCache != 0, CGS_ASSERT_MESSAGE_AT("mpGuiCache", CGS_ARTIST_FILE, 1872 /* ARTIST 0x82493344 */));
 
         mpIconManager->SetUseEventIcons(
             GuiEventDrawEventIcons::E_ICON_DISPLAY_TYPE_ONLINE_EVENT_PRESETS,
@@ -1716,3 +1716,5 @@ namespace
         mpStateInterface->OutputGuiEvent(lWire.mRequest);
     }
 }
+
+#undef CGS_ARTIST_FILE

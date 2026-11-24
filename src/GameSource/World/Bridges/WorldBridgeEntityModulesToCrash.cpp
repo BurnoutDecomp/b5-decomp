@@ -19,8 +19,8 @@ void BridgeEntityModulesToCrashModule_PreScene(
 {
     (void)lpWorldModule;
 
-    CGS_ASSERT(lpCrashInputBuffer_PreScene != 0, CgsDev::Assert::MessageAt("lpCrashInputBuffer_PreScene", __FILE__, 37));           // :37
-    CGS_ASSERT(lpRaceCarOutputBuffer_PreScene != 0, CgsDev::Assert::MessageAt("lpRaceCarOutputBuffer_PreScene", __FILE__, 38));     // :38
+    CGS_ASSERT(lpCrashInputBuffer_PreScene != 0, CGS_ASSERT_MESSAGE_AT("lpCrashInputBuffer_PreScene", __FILE__, 37));           // :37
+    CGS_ASSERT(lpRaceCarOutputBuffer_PreScene != 0, CGS_ASSERT_MESSAGE_AT("lpRaceCarOutputBuffer_PreScene", __FILE__, 38));     // :38
 
     lpCrashInputBuffer_PreScene->SetActiveRaceCarInterface(
         lpRaceCarOutputBuffer_PreScene->GetActiveRaceCarOutputInterface());

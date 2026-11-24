@@ -76,7 +76,7 @@ void CrashMode::SendEvent(EGameModeEvent leEvent)
             return;
         default:
             CGS_ASSERT(false,
-                CgsDev::Assert::MessageAt(
+                CGS_ASSERT_MESSAGE_AT(
                     "Should not be in this state in Showtime mode!",
                     "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
                     "../GameState/ModeManager/GameModes/BrnCrashMode.cpp", 151 /* ARTIST 0x82330B60 */));

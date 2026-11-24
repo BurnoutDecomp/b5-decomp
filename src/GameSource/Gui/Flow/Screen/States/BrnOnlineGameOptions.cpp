@@ -1,7 +1,7 @@
 // BrnGui::OnlineGameOptions -- static-member definitions (X360 rodata values, dumped in
 // wave I: scratchpad/waveI/ogo_rodata.txt / ogo_rodata2.txt).
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineGameOptions.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineGameOptions.cpp"
 namespace BrnGui
 {
     // the create-match screen and the shared
@@ -336,7 +336,7 @@ namespace BrnGui
         // cpp:1920 -- non-fatal on the X360; the cache pointer is reloaded and used either
         // way (the assert only reports it).
         CGS_ASSERT(mpGuiCache,
-            CgsDev::Assert::MessageAt("mpGuiCache", __FILE__, 1920 /* ARTIST 0x82485C44 */));
+            CGS_ASSERT_MESSAGE_AT("mpGuiCache", __FILE__, 1920 /* ARTIST 0x82485C44 */));
 
         return mpGuiCache->IsMultiplayerAllowed();
     }
@@ -400,7 +400,7 @@ namespace BrnGui
             default:
                 // cpp:1841 -- non-fatal; the X360 leaves the stored mode as it was.
                 CGS_ASSERT(false,
-                    CgsDev::Assert::MessageAt(
+                    CGS_ASSERT_MESSAGE_AT(
                         "Invalid game mode option", __FILE__, 1841 /* ARTIST 0x82490DB8 */));
                 break;
         }
@@ -907,8 +907,8 @@ namespace BrnGui
                 // ARTIST passes the filename at 0x82060B60 and line 1387.
                 // Keep the original diagnostic location after folding the source.
                 CGS_ASSERT(liNumOptions <= KI_MAX_TOGGLE_OPTIONS,
-                           CgsDev::Assert::MessageAt("Too many options specified",
-                               "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineGameOptions.cpp", 1387));
+                           CGS_ASSERT_MESSAGE_AT("Too many options specified",
+                               CGS_ARTIST_FILE, 1387));
 
                 ++liRowIndex;
                 leRowOption = maOptions.GetItem(static_cast<u32>(liRowIndex)).meOption;
@@ -984,7 +984,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineGameOptions::CheckForCompletedLoads()
     {
-        CGS_ASSERT(mpGuiCache != 0, CgsDev::Assert::MessageAt("mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineGameOptions.cpp", 413 /* ARTIST 0x824A779C */));   // cpp:413 (non-fatal)
+        CGS_ASSERT(mpGuiCache != 0, CGS_ASSERT_MESSAGE_AT("mpGuiCache", CGS_ARTIST_FILE, 413 /* ARTIST 0x824A779C */));   // cpp:413 (non-fatal)
 
         switch (meSubState)
         {
@@ -3261,3 +3261,5 @@ namespace BrnGui
         }
     }
 }
+
+#undef CGS_ARTIST_FILE

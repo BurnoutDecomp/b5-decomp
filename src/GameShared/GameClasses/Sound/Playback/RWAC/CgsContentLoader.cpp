@@ -59,11 +59,11 @@ namespace Playback
     {
         if (arSpec.mu8LoadMethod != 1)
         {
-            CGS_ASSERT(arSpec.mu8LoadMethod == 1, CgsDev::Assert::MessageAt("Invalid Content load method", KAC_CONTENT_LOADER_FILE, 68));
+            CGS_ASSERT(arSpec.mu8LoadMethod == 1, CGS_ASSERT_MESSAGE_AT("Invalid Content load method", KAC_CONTENT_LOADER_FILE, 68));
             return false;
         }
 
-        CGS_ASSERT(arContent.mpLoadService, CgsDev::Assert::MessageAt("lContent.GetLoadService()", KAC_CONTENT_LOADER_FILE, 52));
+        CGS_ASSERT(arContent.mpLoadService, CGS_ASSERT_MESSAGE_AT("lContent.GetLoadService()", KAC_CONTENT_LOADER_FILE, 52));
 
         // ARTIST 0x826DCC88: the fresh-load call is the fall-through (bne to the restart).
         if (!mpLoadData)
@@ -82,7 +82,7 @@ namespace Playback
     {
         if (arSpec.mu8LoadMethod != 1)
         {
-            CGS_ASSERT(arSpec.mu8LoadMethod == 1, CgsDev::Assert::MessageAt("Invalid Content load method", KAC_CONTENT_LOADER_FILE, 106));
+            CGS_ASSERT(arSpec.mu8LoadMethod == 1, CGS_ASSERT_MESSAGE_AT("Invalid Content load method", KAC_CONTENT_LOADER_FILE, 106));
             return false;
         }
 
@@ -110,7 +110,7 @@ namespace Playback
     bool ContentLoader<ResType>::StartResourceModuleLoading(Content& arContent,
                                                             const ContentSpec& /*arSpec*/)
     {
-        CGS_ASSERT(mpLoadData == 0, CgsDev::Assert::MessageAt("0 == mpLoadData", KAC_CONTENT_LOADER_FILE, 243));
+        CGS_ASSERT(mpLoadData == 0, CGS_ASSERT_MESSAGE_AT("0 == mpLoadData", KAC_CONTENT_LOADER_FILE, 243));
 
         // The X360 walk factory+0x0C -> +0x30 is Factory::mEnvironment ->
         // Environment::mpAllocator -- by name (2026-08-25 wave 3; the "+0x0C load
@@ -157,7 +157,7 @@ namespace Playback
     void ContentLoader<ResType>::RestartResourceModuleLoading(Content& /*arContent*/,
                                                               const ContentSpec& /*arSpec*/)
     {
-        CGS_ASSERT(mpLoadData, CgsDev::Assert::MessageAt("mpLoadData", KAC_CONTENT_LOADER_FILE, 269));
+        CGS_ASSERT(mpLoadData, CGS_ASSERT_MESSAGE_AT("mpLoadData", KAC_CONTENT_LOADER_FILE, 269));
 
         ++mpLoadData->mi16CurrentRequest;     // +0x04 (sth after lhz+1)
         mpLoadData->mu8IsCancelled = 0;        // +0x06
@@ -170,7 +170,7 @@ namespace Playback
     void ContentLoader<ResType>::CancelResourceModuleLoading(Content& /*arContent*/,
                                                             const ContentSpec& /*arSpec*/)
     {
-        CGS_ASSERT(mpLoadData, CgsDev::Assert::MessageAt("mpLoadData", KAC_CONTENT_LOADER_FILE, 360));
+        CGS_ASSERT(mpLoadData, CGS_ASSERT_MESSAGE_AT("mpLoadData", KAC_CONTENT_LOADER_FILE, 360));
         mpLoadData->mu8IsCancelled = 1;
     }
 
@@ -189,7 +189,7 @@ namespace Playback
         if (!mpLoadData)
             return;
 
-        CGS_ASSERT(arSpec.mu8LoadMethod == 1, CgsDev::Assert::MessageAt("Invalid Content load method", KAC_CONTENT_LOADER_FILE, 226));
+        CGS_ASSERT(arSpec.mu8LoadMethod == 1, CGS_ASSERT_MESSAGE_AT("Invalid Content load method", KAC_CONTENT_LOADER_FILE, 226));
 
         // Factory::mEnvironment -> Environment::mpAllocator, by name (see
         // StartResourceModuleLoading above).
@@ -215,7 +215,7 @@ namespace Playback
         case CgsSound::Playback::E_CONTENT_STATE_LOADING:   // 2
             if (arSpec.mu8LoadMethod != 1)
             {
-                CGS_ASSERT(arSpec.mu8LoadMethod == 1, CgsDev::Assert::MessageAt("Invalid Content load method", KAC_CONTENT_LOADER_FILE, 135));
+                CGS_ASSERT(arSpec.mu8LoadMethod == 1, CGS_ASSERT_MESSAGE_AT("Invalid Content load method", KAC_CONTENT_LOADER_FILE, 135));
                 return;
             }
             UpdateResourceModuleLoading(arContent, arSpec);
@@ -243,7 +243,7 @@ namespace Playback
     void ContentLoader<ResType>::UpdateResourceModuleLoading(Content& arContent,
                                                              const ContentSpec& arSpec)
     {
-        CGS_ASSERT(mpLoadData, CgsDev::Assert::MessageAt("mpLoadData", KAC_CONTENT_LOADER_FILE, 287));
+        CGS_ASSERT(mpLoadData, CGS_ASSERT_MESSAGE_AT("mpLoadData", KAC_CONTENT_LOADER_FILE, 287));
 
         ResourceModuleLoadData* lpLoadData = mpLoadData;
         switch (lpLoadData->meState)
@@ -271,7 +271,7 @@ namespace Playback
                 lpLoadData->meState = E_RMLS_LOADING; // 1
                 return;
             }
-            CGS_ASSERT(lbOk, CgsDev::Assert::MessageAt("LOAD FAILED", KAC_CONTENT_LOADER_FILE, 311));
+            CGS_ASSERT(lbOk, CGS_ASSERT_MESSAGE_AT("LOAD FAILED", KAC_CONTENT_LOADER_FILE, 311));
             return;
         }
         case E_RMLS_LOADING: // 1

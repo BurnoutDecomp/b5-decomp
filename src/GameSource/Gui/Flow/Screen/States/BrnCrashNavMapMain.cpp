@@ -245,7 +245,7 @@ namespace BrnGui
     void CrashNavMapMain::Construct(CgsID liId, CgsFsm::ScriptedFsm* lpFsm)
     {
         CGS_ASSERT(lpFsm != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpFsm",
                 "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavMapMain.cpp", 78 /* ARTIST 0x824B7600 */));                                   // cpp:78
 

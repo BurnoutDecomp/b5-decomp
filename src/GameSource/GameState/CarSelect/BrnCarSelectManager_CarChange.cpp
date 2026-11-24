@@ -70,7 +70,7 @@ const BrnProgression::CarData* CarSelectManager::GetProfileCarData(CgsID& lrCarI
     if (mpProgressionManager.Get() == 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("mpProgressionManager", KAC_CSM_FILE, 1341);
+        CgsDev::Assert::FireAssert("mpProgressionManager", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1341));
         CgsDev::Assert::EndAssert();
     }
 
@@ -78,7 +78,7 @@ const BrnProgression::CarData* CarSelectManager::GetProfileCarData(CgsID& lrCarI
     if (lpProfile == 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpProfile", KAC_CSM_FILE, 1347);
+        CgsDev::Assert::FireAssert("lpProfile", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1347));
         CgsDev::Assert::EndAssert();
     }
 
@@ -97,7 +97,7 @@ const BrnProgression::CarData* CarSelectManager::GetProfileCarData(CgsID& lrCarI
     if (lpCarData == 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpCarData", KAC_CSM_FILE, 1351);
+        CgsDev::Assert::FireAssert("lpCarData", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1351));
         CgsDev::Assert::EndAssert();
     }
     return lpCarData;
@@ -140,7 +140,7 @@ bool CarSelectManager::IsThisCarInCurrentUnlockSequence(const BrnProgression::Ca
         if (lpEntry == 0)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpVehicleListEntry != NULL", KAC_CSM_FILE, 1169);
+            CgsDev::Assert::FireAssert("lpVehicleListEntry != NULL", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1169));
             CgsDev::Assert::EndAssert();
         }
         // X360 takes &entry->mGamePlayData (entry + 0x90) and asserts it non-NULL (it never is for a
@@ -149,7 +149,7 @@ bool CarSelectManager::IsThisCarInCurrentUnlockSequence(const BrnProgression::Ca
         if (lpEntry == 0)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpVehicleListEntryGamePlayData != NULL", KAC_CSM_FILE, 1172);
+            CgsDev::Assert::FireAssert("lpVehicleListEntryGamePlayData != NULL", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1172));
             CgsDev::Assert::EndAssert();
         }
         const s32 liRequiredRank = lpEntry->GetUnlockRank();   // X360 *(entry + 0x90 + 0x09) -- FLAG
@@ -178,14 +178,14 @@ void CarSelectManager::SetupNormalUnlockList()
     if (mpProgressionManager.Get() == 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("mpProgressionManager", KAC_CSM_FILE, 1199);
+        CgsDev::Assert::FireAssert("mpProgressionManager", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1199));
         CgsDev::Assert::EndAssert();
     }
     BrnProgression::Profile* lpProfile = mpProgressionManager.Get()->GetProfile();
     if (lpProfile == 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpProfile", KAC_CSM_FILE, 1203);
+        CgsDev::Assert::FireAssert("lpProfile", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1203));
         CgsDev::Assert::EndAssert();
     }
 
@@ -202,7 +202,7 @@ void CarSelectManager::SetupNormalUnlockList()
             if (lpProfileCar == 0)
             {
                 CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert("lpProfileCar", KAC_CSM_FILE, 1217);
+                CgsDev::Assert::FireAssert("lpProfileCar", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1217));
                 CgsDev::Assert::EndAssert();
             }
             if (IsThisCarInCurrentUnlockSequence(lpProfileCar))
@@ -225,14 +225,14 @@ void CarSelectManager::SetupShutdownUnlockList()
     if (mpProgressionManager.Get() == 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("mpProgressionManager", KAC_CSM_FILE, 1239);
+        CgsDev::Assert::FireAssert("mpProgressionManager", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1239));
         CgsDev::Assert::EndAssert();
     }
     BrnProgression::Profile* lpProfile = mpProgressionManager.Get()->GetProfile();
     if (lpProfile == 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpProfile", KAC_CSM_FILE, 1243);
+        CgsDev::Assert::FireAssert("lpProfile", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1243));
         CgsDev::Assert::EndAssert();
     }
 
@@ -254,7 +254,7 @@ void CarSelectManager::SetupShutdownUnlockList()
             if (lpProfileCar == 0)
             {
                 CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert("lpProfileCar", KAC_CSM_FILE, 1258);
+                CgsDev::Assert::FireAssert("lpProfileCar", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1258));
                 CgsDev::Assert::EndAssert();
             }
             if (IsThisCarInCurrentUnlockSequence(lpProfileCar))
@@ -277,7 +277,7 @@ CgsID CarSelectManager::GetNextUnlockCarID(CgsID lCurrentID)
     if (lpProfile == 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpProfile", KAC_CSM_FILE, 1372);
+        CgsDev::Assert::FireAssert("lpProfile", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1372));
         CgsDev::Assert::EndAssert();
     }
 
@@ -295,7 +295,7 @@ CgsID CarSelectManager::GetNextUnlockCarID(CgsID lCurrentID)
                 {
                     CgsDev::Assert::BeginAssert();
                     CgsDev::Assert::FireAssert(
-                        "liCarIndex >= 0 && liCarIndex < miCarCount", KAC_BRNPROFILE_FILE, 1923);
+                        "liCarIndex >= 0 && liCarIndex < miCarCount", CGS_ASSERT_LOCATION(KAC_BRNPROFILE_FILE, 1923));
                     CgsDev::Assert::EndAssert();
                 }
                 if (lpProfile->GetCarData(liCarIndex)->GetId() == lCurrentID)
@@ -312,7 +312,7 @@ CgsID CarSelectManager::GetNextUnlockCarID(CgsID lCurrentID)
         if (liCurrentIndex < 0)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("liCurrentIndex >=0", KAC_CSM_FILE, 1386);
+            CgsDev::Assert::FireAssert("liCurrentIndex >=0", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1386));
             CgsDev::Assert::EndAssert();
         }
     }
@@ -322,7 +322,7 @@ CgsID CarSelectManager::GetNextUnlockCarID(CgsID lCurrentID)
     if (liNextIndex >= liCarCount)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("Can't find next unlock!\n", KAC_CSM_FILE, 1401);
+        CgsDev::Assert::FireAssert("Can't find next unlock!\n", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1401));
         CgsDev::Assert::EndAssert();
         return 0;
     }
@@ -333,14 +333,14 @@ CgsID CarSelectManager::GetNextUnlockCarID(CgsID lCurrentID)
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
-                "liCarIndex >= 0 && liCarIndex < miCarCount", KAC_BRNPROFILE_FILE, 1923);
+                "liCarIndex >= 0 && liCarIndex < miCarCount", CGS_ASSERT_LOCATION(KAC_BRNPROFILE_FILE, 1923));
             CgsDev::Assert::EndAssert();
         }
         const BrnProgression::CarData* lpProfileCar = lpProfile->GetCarData(liNextIndex);
         if (lpProfileCar == 0)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpProfileCar", KAC_CSM_FILE, 1393);
+            CgsDev::Assert::FireAssert("lpProfileCar", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1393));
             CgsDev::Assert::EndAssert();
         }
         if (IsThisCarInCurrentUnlockSequence(lpProfileCar))
@@ -351,7 +351,7 @@ CgsID CarSelectManager::GetNextUnlockCarID(CgsID lCurrentID)
         if (liNextIndex >= liCarCount)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("Can't find next unlock!\n", KAC_CSM_FILE, 1401);
+            CgsDev::Assert::FireAssert("Can't find next unlock!\n", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1401));
             CgsDev::Assert::EndAssert();
             return 0;
         }
@@ -372,7 +372,7 @@ void CarSelectManager::RequestChangeCar(const CgsID& lCarId)
     if (lCarId == 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lCardId != kCGSID_NULL", KAC_CSM_FILE, 569);
+        CgsDev::Assert::FireAssert("lCardId != kCGSID_NULL", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 569));
         CgsDev::Assert::EndAssert();
     }
 
@@ -387,7 +387,7 @@ void CarSelectManager::RequestChangeCar(const CgsID& lCarId)
     if (lpProfile == 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpProfile", KAC_CSM_FILE, 580);
+        CgsDev::Assert::FireAssert("lpProfile", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 580));
         CgsDev::Assert::EndAssert();
     }
 
@@ -529,7 +529,7 @@ void CarSelectManager::SpawnInStartCar(GameStateModuleIO::GameActionQueue* lpAct
     if (lpSpawnLocation == 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpSpawnLocation", KAC_CSM_FILE, 1281);
+        CgsDev::Assert::FireAssert("lpSpawnLocation", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1281));
         CgsDev::Assert::EndAssert();
     }
 
@@ -564,7 +564,7 @@ void CarSelectManager::SpawnInStartCar(GameStateModuleIO::GameActionQueue* lpAct
     if (luSpawnType >= 4u)   // E_TYPE_COUNT == 4
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("muType < E_TYPE_COUNT", KAC_SPAWNLOC_FILE, 152);
+        CgsDev::Assert::FireAssert("muType < E_TYPE_COUNT", CGS_ASSERT_LOCATION(KAC_SPAWNLOC_FILE, 152));
         CgsDev::Assert::EndAssert();
     }
     // ⛔ CORRECTED 2026-08-01 -- the committed line was `(luSpawnType != 0) ? 0 : 1`, described as
@@ -678,7 +678,7 @@ void CarSelectManager::TeleportCurrentVehicle(GameStateModuleIO::GameActionQueue
     if (lpSpawnLocation == 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpSpawnLocation", KAC_CSM_FILE, 1473);
+        CgsDev::Assert::FireAssert("lpSpawnLocation", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1473));
         CgsDev::Assert::EndAssert();
     }
 
@@ -686,7 +686,7 @@ void CarSelectManager::TeleportCurrentVehicle(GameStateModuleIO::GameActionQueue
     if (lpCarData == 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpCarData", KAC_CSM_FILE, 1478);
+        CgsDev::Assert::FireAssert("lpCarData", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1478));
         CgsDev::Assert::EndAssert();
     }
     const f32 lfDeform = lpCarData->GetUnlockDeformationAmount();   // CarData +0x0C
@@ -695,7 +695,7 @@ void CarSelectManager::TeleportCurrentVehicle(GameStateModuleIO::GameActionQueue
     if (luSpawnType >= 4u)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("muType < E_TYPE_COUNT", KAC_SPAWNLOC_FILE, 152);
+        CgsDev::Assert::FireAssert("muType < E_TYPE_COUNT", CGS_ASSERT_LOCATION(KAC_SPAWNLOC_FILE, 152));
         CgsDev::Assert::EndAssert();
     }
     // ⛔ CORRECTED 2026-08-01 -- same inverted/wrong-enumerator bit as SpawnInStartCar; see the
@@ -786,13 +786,13 @@ void CarSelectManager::SetupSpawnLocations()
     if (mJunkyardId == 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("mJunkyardId != kCGSID_NULL", KAC_CSM_FILE, 1063);
+        CgsDev::Assert::FireAssert("mJunkyardId != kCGSID_NULL", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1063));
         CgsDev::Assert::EndAssert();
     }
     if (mpTriggerQueryManager.Get() == 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("mpTriggerQueryManager", KAC_CSM_FILE, 1064);
+        CgsDev::Assert::FireAssert("mpTriggerQueryManager", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1064));
         CgsDev::Assert::EndAssert();
     }
 
@@ -803,7 +803,7 @@ void CarSelectManager::SetupSpawnLocations()
     if (lpTriggerData == 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpTriggerData", KAC_CSM_FILE, 1082);
+        CgsDev::Assert::FireAssert("lpTriggerData", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1082));
         CgsDev::Assert::EndAssert();
     }
 
@@ -814,7 +814,7 @@ void CarSelectManager::SetupSpawnLocations()
         if (lpSpawnLocation == 0)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpSpawnLocation", KAC_CSM_FILE, 1088);
+            CgsDev::Assert::FireAssert("lpSpawnLocation", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1088));
             CgsDev::Assert::EndAssert();
         }
 
@@ -824,7 +824,7 @@ void CarSelectManager::SetupSpawnLocations()
             if (luType >= 4u)   // E_TYPE_COUNT == 4
             {
                 CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert("muType < E_TYPE_COUNT", KAC_SPAWNLOC_FILE, 152);
+                CgsDev::Assert::FireAssert("muType < E_TYPE_COUNT", CGS_ASSERT_LOCATION(KAC_SPAWNLOC_FILE, 152));
                 CgsDev::Assert::EndAssert();
             }
 
@@ -836,7 +836,7 @@ void CarSelectManager::SetupSpawnLocations()
                 {
                     CgsDev::Assert::BeginAssert();
                     CgsDev::Assert::FireAssert(
-                        "maSpawnLocations[lSpawnLocationType] == NULL", KAC_CSM_FILE, 1110);
+                        "maSpawnLocations[lSpawnLocationType] == NULL", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1110));
                     CgsDev::Assert::EndAssert();
                 }
                 maSpawnLocations[luSlot].Set(lpSpawnLocation);
@@ -861,7 +861,7 @@ void CarSelectManager::SetupSpawnLocations()
     if (lpLastActiveCar == 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpLastActiveRaceCarInterface", KAC_CSM_FILE, 1119);
+        CgsDev::Assert::FireAssert("lpLastActiveRaceCarInterface", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1119));
         CgsDev::Assert::EndAssert();
     }
 
@@ -884,7 +884,7 @@ void CarSelectManager::SetupSpawnLocations()
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
-                "The junkyard does not have all of the spawn locations setup.", KAC_CSM_FILE, 1140);
+                "The junkyard does not have all of the spawn locations setup.", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1140));
             CgsDev::Assert::EndAssert();
         }
     }
@@ -913,7 +913,7 @@ void CarSelectManager::DEBUG_UnlockCarsForTesting()
     if (lpProfile == 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpProfile", KAC_CSM_FILE, 1681);
+        CgsDev::Assert::FireAssert("lpProfile", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1681));
         CgsDev::Assert::EndAssert();
     }
     if (!mbDEBUG_UnlockTrophyCarsForTesting && !mbDEBUG_UnlockShutdownCarsForTesting)
@@ -921,7 +921,7 @@ void CarSelectManager::DEBUG_UnlockCarsForTesting()
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(
             "mbDEBUG_UnlockTrophyCarsForTesting || mbDEBUG_UnlockShutdownCarsForTesting",
-            KAC_CSM_FILE, 1682);
+            CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1682));
         CgsDev::Assert::EndAssert();
     }
 

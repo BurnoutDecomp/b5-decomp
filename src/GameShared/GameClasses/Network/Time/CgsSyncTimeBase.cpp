@@ -80,7 +80,7 @@ namespace CgsNetwork
     s32 SyncTimeMessageManager::GetPlayerMessageIndex(NetworkPlayerID lPlayerID)
     {
         CGS_ASSERT(lPlayerID != KI_INVALID_PLAYER_ID,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lPlayerID != K_INVALID_PLAYER_ID", __FILE__, 246 /* ARTIST 0x8287D164 */));
 
         for (s32 liPlayerIndex = 0; liPlayerIndex < KI_MAX_SYNC_PLAYERS; ++liPlayerIndex)
@@ -204,9 +204,9 @@ namespace CgsNetwork
     void SyncTimeMessageManager::SwitchMode(EMessageMode leMessageMode)
     {
         CGS_ASSERT(leMessageMode >= 0,
-            CgsDev::Assert::MessageAt("leMessageMode >= 0", __FILE__, 305 /* ARTIST 0x8288AC44 */));
+            CGS_ASSERT_MESSAGE_AT("leMessageMode >= 0", __FILE__, 305 /* ARTIST 0x8288AC44 */));
         CGS_ASSERT(leMessageMode <= E_MESSAGE_MODE_NONE,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "leMessageMode <= E_MESSAGE_MODE_NONE", __FILE__, 306 /* ARTIST 0x8288AC68 */));
 
         meMessageMode = leMessageMode;

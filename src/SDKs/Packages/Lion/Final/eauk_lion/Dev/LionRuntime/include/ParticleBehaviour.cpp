@@ -437,7 +437,7 @@ inline u8 PackUnitChannel(f32 afUnit)
 
 void cParticleBehaviour::Build()
 {
-    CGS_ASSERT((mFlags & E_DO_WAVEALPHA) == 0, CgsDev::Assert::MessageAt(
+    CGS_ASSERT((mFlags & E_DO_WAVEALPHA) == 0, CGS_ASSERT_MESSAGE_AT(
         "( mFlags & cParticleBehaviour::eDO_WAVEALPHA ) == 0",
         __FILE__, 343 /* ARTIST 0x8290B024 */));
 

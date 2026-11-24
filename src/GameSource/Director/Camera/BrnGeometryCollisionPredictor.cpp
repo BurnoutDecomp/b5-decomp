@@ -36,7 +36,7 @@ const f32 GeometryCollisionPredictor::KF_LOOKAHEAD_TIME_FLOAT = 1.0f;
 f32 GeometryCollisionPredictor::GetTimeUntilCollision() const
 {
     CGS_ASSERT(mbWillCollide,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "mbWillCollide",
             "..\\..\\..\\GameSource\\Director/Camera/BrnCollisionPolicy.h", 206 /* ARTIST 0x821F36E8 */));   // lbz 0x64; assert set
     return mfTimeUntilCollision;                  // lfs f1, 0x60(this)
@@ -80,7 +80,7 @@ void GeometryCollisionPredictor::GenerateSceneQueries(const Camera& lrCamera, f3
 void GeometryCollisionPredictor::ProcessSceneQueryResults(f32 lfTimestep)
 {
     (void)lfTimestep;
-    CGS_ASSERT(mLineTest.HasPackage(), CgsDev::Assert::MessageAt("mLineTest.HasPackage()", "..\\..\\..\\GameSource\\Director/Camera/BrnCollisionPolicy.cpp", 538));                   // :538
+    CGS_ASSERT(mLineTest.HasPackage(), CGS_ASSERT_MESSAGE_AT("mLineTest.HasPackage()", "..\\..\\..\\GameSource\\Director/Camera/BrnCollisionPolicy.cpp", 538));                   // :538
 
     if (mLineTest.GetPackage().mbIntersection)
     {

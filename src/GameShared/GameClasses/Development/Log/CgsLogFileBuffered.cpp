@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Development/Log/CgsLogFileBuffered.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Development/Log/CgsLogFileBuffered.cpp"
 #include <cstring>
 
 // CgsDev::Log::LogFileBuffered - the buffered log-file stream ctor + sink. Reconstructed from the
@@ -44,7 +44,7 @@ namespace Log
                      << " is too long. Buffer size = " << 512
                      << ", string length = " << liLength << "\n";
             CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
-                "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 65);
+                CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 65));
             CgsDev::Assert::EndAssert();
         }
         std::strcpy(macFileName, lpcFileName);
@@ -57,7 +57,7 @@ namespace Log
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("mFileHandle != INVALID_HANDLE_VALUE",
-                "..\\..\\..\\GameShared\\GameClasses\\Development/Log/CgsLogFileBuffered.cpp", 66);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 66));
             CgsDev::Assert::EndAssert();
         }
         CloseHandle(miFile);
@@ -76,7 +76,7 @@ namespace Log
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("mFileHandle != INVALID_HANDLE_VALUE",
-                    "..\\..\\..\\GameShared\\GameClasses\\Development/Log/CgsLogFileBuffered.cpp", 156);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 156));
                 CgsDev::Assert::EndAssert();
             }
             SetFilePointer(miFile, 0, 0, FILE_END);
@@ -127,3 +127,5 @@ namespace Log
     }
 }
 }
+
+#undef CGS_ARTIST_FILE

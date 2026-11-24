@@ -50,7 +50,7 @@ void ServerInterfaceGameSearchParamsBase::SerialiseToString(char* lpcRecord, s32
     const char* const lpcSource =
         "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\"
         "CgsServerInterfaceGameSearchParams.cpp";
-    CGS_ASSERT(miNumGames > 0, CgsDev::Assert::MessageAt("Invalid number of games to search for", lpcSource, 72));
+    CGS_ASSERT(miNumGames > 0, CGS_ASSERT_MESSAGE_AT("Invalid number of games to search for", lpcSource, 72));
 
     TagFieldSetNumber(lpcRecord, liRecLen, "START", 0);
     TagFieldSetNumber(lpcRecord, liRecLen, "COUNT", miNumGames);
@@ -71,7 +71,7 @@ void ServerInterfaceGameSearchParamsBase::SerialiseToString(char* lpcRecord, s32
     if (GetData() && GetDataSize())
     {
         CGS_ASSERT(std::strlen(GetPattern()) < static_cast<u32>(GetPatternLength()),
-            CgsDev::Assert::MessageAt("strlen( GetPattern() ) < (size_t)GetPatternLength()", lpcSource, 97));
+            CGS_ASSERT_MESSAGE_AT("strlen( GetPattern() ) < (size_t)GetPatternLength()", lpcSource, 97));
 
         TagFieldSetStructure(lpcRecord, liRecLen, "CUSTOM",
                              GetData(), static_cast<s32>(GetDataSize()), GetPattern());

@@ -18,7 +18,7 @@
 // SelectAvailableChallenge @ 0x82439BA0 IS reconstructed for this TU -- its body lives in the
 // sibling part-file BrnChallengeSelector_wL_01.cpp. DO NOT add a second definition here.
 // GetAvailableChallengeData is declared-only here.
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/hud/Components/BrnChallengeSelector.cpp"
 #include "GameSource/Gui/Flow/Hud/Components/BrnChallengeSelector.h"
 
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // StateInterface::GetOutputEventQueue
@@ -80,11 +80,11 @@ void ChallengeSelector::Construct(const char* lpacName,
 s32 ChallengeSelector::GetChallengeIndex(s32 liAvailableChallengeIndex)
 {
     CGS_ASSERT(liAvailableChallengeIndex >= 0,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "liAvailableChallengeIndex >= 0",
             __FILE__, 121 /* ARTIST 0x8241598C */));
     CGS_ASSERT(liAvailableChallengeIndex < miAvailableChallenges,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "liAvailableChallengeIndex < miAvailableChallenges",
             __FILE__, 122 /* ARTIST 0x824159B4 */));
 
@@ -156,7 +156,7 @@ s32 ChallengeSelector::SetAvailableChallenges(s32 liNumPlayers)
 // select was requested, show the selector and select slot 0.
 void ChallengeSelector::SelectAvailableChallengeByID(CgsID lID, bool lbSelect)
 {
-    CGS_ASSERT(mpChallengeList, CgsDev::Assert::MessageAt("mpChallengeList", "..\\..\\..\\GameSource\\Gui/Flow/hud/Components/BrnChallengeSelector.cpp", 166 /* ARTIST 0x82440178 */));   // line 166
+    CGS_ASSERT(mpChallengeList, CGS_ASSERT_MESSAGE_AT("mpChallengeList", CGS_ARTIST_FILE, 166 /* ARTIST 0x82440178 */));   // line 166
 
     if (mpChallengeList->GetChallengeIndex(lID) < 0)
     {
@@ -190,7 +190,7 @@ void ChallengeSelector::SelectAvailableChallengeByID(CgsID lID, bool lbSelect)
         }
 
         CGS_ASSERT(liAvailableIndex < miAvailableChallenges,
-                   CgsDev::Assert::MessageAt("liAvailableIndex < miAvailableChallenges", "..\\..\\..\\GameSource\\Gui/Flow/hud/Components/BrnChallengeSelector.cpp", 184 /* ARTIST 0x82440200 */));   // line 184
+                   CGS_ASSERT_MESSAGE_AT("liAvailableIndex < miAvailableChallenges", CGS_ARTIST_FILE, 184 /* ARTIST 0x82440200 */));   // line 184
 
         SelectAvailableChallenge(liAvailableIndex, lbSelect);
     }
@@ -434,3 +434,5 @@ void ChallengeSelector::SelectAvailableChallenge(s32 liAvailableChallengeIndex, 
 }
 
 } // namespace BrnGui
+
+#undef CGS_ARTIST_FILE

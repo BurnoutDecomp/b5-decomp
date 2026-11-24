@@ -102,7 +102,7 @@ namespace BrnGui
                                                  u32* /*lpuNumberOfResources*/) const
     {
         CGS_ASSERT(false,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "Should not get here",
                 "..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnPostTitleScreenLoad.h", 63 /* ARTIST 0x825080C4 */));
     }

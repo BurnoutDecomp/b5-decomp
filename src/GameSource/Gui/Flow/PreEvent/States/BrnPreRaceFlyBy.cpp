@@ -367,7 +367,7 @@ namespace BrnGui
         char lacSatNavIconName[64];
         s32  i;
 
-        CGS_ASSERT(mpGuiCache != 0, CgsDev::Assert::MessageAt("mpGuiCache", "..\..\..\GameSource\Gui/Flow/PreEvent/States/BrnPreRaceFlyBy.cpp", 750 /* ARTIST li r5,0x2EE */));
+        CGS_ASSERT(mpGuiCache != 0, CGS_ASSERT_MESSAGE_AT("mpGuiCache", "..\..\..\GameSource\Gui/Flow/PreEvent/States/BrnPreRaceFlyBy.cpp", 750 /* ARTIST li r5,0x2EE */));
 
         mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_HUD, mEventName.GetName());
         mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_HUD, mModeType.GetName());
@@ -769,8 +769,8 @@ namespace BrnGui
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 lacMessage,
-                "..\\..\\..\\GameSource\\Gui/Flow/PreEvent/States/BrnPreRaceFlyBy.cpp",
-                600);
+                CGS_ASSERT_LOCATION("..\\..\\..\\GameSource\\Gui/Flow/PreEvent/States/BrnPreRaceFlyBy.cpp",
+                600));
             CgsDev::Assert::EndAssert();
         }
 

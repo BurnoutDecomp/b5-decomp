@@ -87,7 +87,7 @@ namespace CgsDev
                 break;
             default:
                 Assert::BeginAssert();
-                Assert::FireAssert("invalid mark type", KAC_ASSERTFILE, 0xAA);
+                Assert::FireAssert("invalid mark type", CGS_ASSERT_LOCATION(KAC_ASSERTFILE, 0xAA));
                 Assert::EndAssert();
                 break;
             }
@@ -110,7 +110,7 @@ namespace CgsDev
         if (!QueryPerformanceFrequency(&lFrequency))
         {
             Assert::BeginAssert();
-            Assert::FireAssert("QueryPerformanceFrequency(&lFrequency)", KAC_ASSERTFILE, 0xD1);
+            Assert::FireAssert("QueryPerformanceFrequency(&lFrequency)", CGS_ASSERT_LOCATION(KAC_ASSERTFILE, 0xD1));
             Assert::EndAssert();
         }
         gfCyclesToPercent = 100.0f / static_cast<f32>(static_cast<u64>(lFrequency.QuadPart));
@@ -122,7 +122,7 @@ namespace CgsDev
         if (mbProfilingRunning)
         {
             Assert::BeginAssert();
-            Assert::FireAssert("mbProfilingRunning == false", KAC_ASSERTFILE, 0xF8);
+            Assert::FireAssert("mbProfilingRunning == false", CGS_ASSERT_LOCATION(KAC_ASSERTFILE, 0xF8));
             Assert::EndAssert();
         }
         gValues.miCurrentCPUReadBuffer = (gValues.miCurrentCPUReadBuffer + 1) % KI_NUMBUFFERS;
@@ -157,13 +157,13 @@ namespace CgsDev
         if (liMonitorId < 0)
         {
             Assert::BeginAssert();
-            Assert::FireAssert("liMonitorID >= 0", KAC_ASSERTFILE, 0x151);
+            Assert::FireAssert("liMonitorID >= 0", CGS_ASSERT_LOCATION(KAC_ASSERTFILE, 0x151));
             Assert::EndAssert();
         }
         if (liMonitorId >= KI_PERFMONGPUMAXMONITORS)
         {
             Assert::BeginAssert();
-            Assert::FireAssert("liMonitorID < KI_PERFMONGPUMAXMONITORS", KAC_ASSERTFILE, 0x152);
+            Assert::FireAssert("liMonitorID < KI_PERFMONGPUMAXMONITORS", CGS_ASSERT_LOCATION(KAC_ASSERTFILE, 0x152));
             Assert::EndAssert();
         }
         if (mbActiveMonitor)
@@ -174,19 +174,19 @@ namespace CgsDev
             const char* lpcName = maMonitors[miActiveMonitorID].macName;
             lStrStream << (lpcName ? lpcName : "<NULLSTRING>");
             lStrStream << "\n";
-            Assert::FireAssert(Assert::gpcMessageBuffer, KAC_ASSERTFILE, 0x153);
+            Assert::FireAssert(Assert::gpcMessageBuffer, CGS_ASSERT_LOCATION(KAC_ASSERTFILE, 0x153));
             Assert::EndAssert();
         }
         if (gValues.mabUsedThisFrame[liMonitorId])
         {
             Assert::BeginAssert();
-            Assert::FireAssert("gValues.mabUsedThisFrame[liMonitorID] == false", KAC_ASSERTFILE, 0x154);
+            Assert::FireAssert("gValues.mabUsedThisFrame[liMonitorID] == false", CGS_ASSERT_LOCATION(KAC_ASSERTFILE, 0x154));
             Assert::EndAssert();
         }
         if (mbProfilingRunning != true)
         {
             Assert::BeginAssert();
-            Assert::FireAssert("mbProfilingRunning == true", KAC_ASSERTFILE, 0x155);
+            Assert::FireAssert("mbProfilingRunning == true", CGS_ASSERT_LOCATION(KAC_ASSERTFILE, 0x155));
             Assert::EndAssert();
         }
 
@@ -207,13 +207,13 @@ namespace CgsDev
         if (liMonitorId < 0)
         {
             Assert::BeginAssert();
-            Assert::FireAssert("liMonitorID >= 0", KAC_ASSERTFILE, 0x17E);
+            Assert::FireAssert("liMonitorID >= 0", CGS_ASSERT_LOCATION(KAC_ASSERTFILE, 0x17E));
             Assert::EndAssert();
         }
         if (liMonitorId >= KI_PERFMONGPUMAXMONITORS)
         {
             Assert::BeginAssert();
-            Assert::FireAssert("liMonitorID < KI_PERFMONGPUMAXMONITORS", KAC_ASSERTFILE, 0x17F);
+            Assert::FireAssert("liMonitorID < KI_PERFMONGPUMAXMONITORS", CGS_ASSERT_LOCATION(KAC_ASSERTFILE, 0x17F));
             Assert::EndAssert();
         }
         if (mbActiveMonitor != true)
@@ -224,13 +224,13 @@ namespace CgsDev
             const char* lpcName = maMonitors[liMonitorId].macName;
             lStrStream << (lpcName ? lpcName : "<NULLSTRING>");
             lStrStream << "\n";
-            Assert::FireAssert(Assert::gpcMessageBuffer, KAC_ASSERTFILE, 0x180);
+            Assert::FireAssert(Assert::gpcMessageBuffer, CGS_ASSERT_LOCATION(KAC_ASSERTFILE, 0x180));
             Assert::EndAssert();
         }
         if (mbProfilingRunning != true)
         {
             Assert::BeginAssert();
-            Assert::FireAssert("mbProfilingRunning == true", KAC_ASSERTFILE, 0x181);
+            Assert::FireAssert("mbProfilingRunning == true", CGS_ASSERT_LOCATION(KAC_ASSERTFILE, 0x181));
             Assert::EndAssert();
         }
 
@@ -254,7 +254,7 @@ namespace CgsDev
         case E_PMF_50HZ: lfRefreshRate = 50.0f; break;
         default:
             Assert::BeginAssert();
-            Assert::FireAssert("invalid FPS, assuming 60hz", KAC_ASSERTFILE, 0x1C8);
+            Assert::FireAssert("invalid FPS, assuming 60hz", CGS_ASSERT_LOCATION(KAC_ASSERTFILE, 0x1C8));
             Assert::EndAssert();
         case E_PMF_60HZ: lfRefreshRate = 59.94f; break;
         }

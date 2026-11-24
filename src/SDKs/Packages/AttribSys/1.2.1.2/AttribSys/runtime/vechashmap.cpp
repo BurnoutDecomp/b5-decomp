@@ -164,7 +164,7 @@ Attrib::Class* VecHashMap_Attrib_Class_TablePolicy_0_16::RemoveIndex(u32 luIndex
 // non-sentinel node), then return that node's key (Node::Key() yields 0 for a sentinel).
 u64 VecHashMap_Attrib_Class_TablePolicy_0_16::GetKeyAtIndex(u32 luIndex) const
 {
-    CGS_ASSERT(ValidIndex(luIndex), CgsDev::Assert::MessageAt("GetKeyAtIndex passed invalid index.",
+    CGS_ASSERT(ValidIndex(luIndex), CGS_ASSERT_MESSAGE_AT("GetKeyAtIndex passed invalid index.",
         "..\\..\\..\\SDKs\\Packages\\AttribSys\\1.2.1.2\\AttribSys/runtime/vechashmap.h",
         168 /* ARTIST 0x8280748C */));
 
@@ -851,7 +851,7 @@ Collection* Class::GetCollectionWithDefault(u64 luKey) const
 // Returns true iff a live bucket was actually vacated.
 bool Class::RemoveCollection(Collection* lpCollection)
 {
-    CGS_ASSERT(lpCollection != NULL, CgsDev::Assert::MessageAt("Cannot remove NULL collection.",
+    CGS_ASSERT(lpCollection != NULL, CGS_ASSERT_MESSAGE_AT("Cannot remove NULL collection.",
         "..\\..\\..\\SDKs\\Packages\\AttribSys\\1.2.1.2\\AttribSys/runtime/common/attribclass.cpp",
         136 /* ARTIST 0x8280AE04 */));
 

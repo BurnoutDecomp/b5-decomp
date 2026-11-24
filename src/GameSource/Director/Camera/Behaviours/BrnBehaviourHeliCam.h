@@ -151,7 +151,7 @@ inline void
 BehaviourHeliCam::SetParameters(const Parameters* lpParameters)
 {
     // ARTIST 0x821F3AD0 fires this at BehaviourHeliCam.h:138.
-    CGS_ASSERT(lpParameters->GetType() == eBehaviourHeliCam, CgsDev::Assert::MessageAt(
+    CGS_ASSERT(lpParameters->GetType() == eBehaviourHeliCam, CGS_ASSERT_MESSAGE_AT(
                "lpParameters->GetType() == eBehaviourHeliCam",
                "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BehaviourHeliCam.h", 138));
     SetDebugParametersName(lpParameters->GetDebugName());

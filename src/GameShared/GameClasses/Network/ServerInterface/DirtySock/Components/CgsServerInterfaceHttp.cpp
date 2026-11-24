@@ -100,7 +100,7 @@ namespace CgsNetwork
         meCurrentAction   = E_ACTION_COUNT;
         mpHttp            = ProtoHttpCreate(KI_PROTO_HTTP_BUFFER_SIZE);
         CGS_ASSERT(mpHttp != 0,
-            CgsDev::Assert::MessageAt("NULL != mpHttp", __FILE__, 143 /* ARTIST 0x8287AA9C */));
+            CGS_ASSERT_MESSAGE_AT("NULL != mpHttp", __FILE__, 143 /* ARTIST 0x8287AA9C */));
         return true;
     }
 
@@ -206,7 +206,7 @@ namespace CgsNetwork
 
     void ServerInterfaceHttp::EndAction(s32 liError)
     {
-        CGS_ASSERT(meCurrentAction != E_ACTION_COUNT, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(meCurrentAction != E_ACTION_COUNT, CGS_ASSERT_MESSAGE_AT(
             "Trying to end an action when not doing anything",
             "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceHttp.cpp", 414 /* ARTIST 0x8287AB10 */));
 
@@ -222,13 +222,13 @@ namespace CgsNetwork
     void ServerInterfaceHttp::StartHttpsDownload(const char* lpcUrl, s32 liBufferSize, s16 li16Timeout)
     {
         CGS_ASSERT(mpHttp != 0,
-            CgsDev::Assert::MessageAt("mpHttp != NULL", __FILE__, 437 /* ARTIST 0x8287ABB0 */));
+            CGS_ASSERT_MESSAGE_AT("mpHttp != NULL", __FILE__, 437 /* ARTIST 0x8287ABB0 */));
 
         miHttpBufferSize       = liBufferSize;
         miAmountHttpDownloaded = 0;
 
         CGS_ASSERT(li16Timeout > 0,
-            CgsDev::Assert::MessageAt("li16Timeout > 0", __FILE__, 442 /* ARTIST 0x8287ABE4 */));
+            CGS_ASSERT_MESSAGE_AT("li16Timeout > 0", __FILE__, 442 /* ARTIST 0x8287ABE4 */));
 
         mi16Timeout = li16Timeout;
         ProtoHttpGet(mpHttp, lpcUrl, 0);

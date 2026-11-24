@@ -210,7 +210,7 @@ void BehaviourFixedCam::SetupTweaker(Utils::Tweaker& lrTweaker)
 {
     lrTweaker.Construct();
 
-    CGS_ASSERT(mpParameters != 0, CgsDev::Assert::MessageAt("mpParameters", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourFixedCam.cpp", 180));   // cpp:180
+    CGS_ASSERT(mpParameters != 0, CGS_ASSERT_MESSAGE_AT("mpParameters", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourFixedCam.cpp", 180));   // cpp:180
 
     Parameters* lpParameters = const_cast<Parameters*>(mpParameters);
     lrTweaker.AddMapping("Roll", &lpParameters->mfMaxDutch, KF_TWEAK_SCALE,

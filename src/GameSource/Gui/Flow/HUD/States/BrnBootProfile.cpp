@@ -342,7 +342,7 @@ namespace BrnGui
                                 ProfileManager& lrProfileManager)
     {
         CGS_ASSERT(lpFsm != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpFsm",
                 "..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnBootProfile.cpp", 282 /* ARTIST 0x82474424 */));   // cpp:282
         CgsGui::State::Construct(liId, lpFsm);

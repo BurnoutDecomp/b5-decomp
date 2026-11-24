@@ -6,7 +6,7 @@
 // Out-of-line bodies for the AsyncOp result accessors. The original code checks
 // the +0x28 outstanding flag, streams the assertion message into the shared
 // assert buffer, then returns the cached handle/result on continuation.
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsDeviceAsyncOp.h"
 #include "GameShared/GameClasses/System/FileSystem/Devices/CgsDeviceAsyncOp.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
@@ -33,8 +33,8 @@ namespace CgsFileSystem
             lAssertMessage << "Last operation has not been waited before\n";
             CgsDev::Assert::FireAssert(
                 CgsDev::Assert::gpcMessageBuffer,
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsDeviceAsyncOp.h",
-                152);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                152));
             CgsDev::Assert::EndAssert();
         }
         return mHandle;
@@ -52,11 +52,13 @@ namespace CgsFileSystem
             lAssertMessage << "Last operation has not been waited before\n";
             CgsDev::Assert::FireAssert(
                 CgsDev::Assert::gpcMessageBuffer,
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsDeviceAsyncOp.h",
-                159);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                159));
             CgsDev::Assert::EndAssert();
         }
         return miResult;
     }
 
 } // namespace CgsFileSystem
+
+#undef CGS_ARTIST_FILE

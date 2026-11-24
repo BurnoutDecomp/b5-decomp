@@ -27,7 +27,7 @@ Factory::Factory(Name aName, Environment& arEnvironment)
 {
     bool lbResult = Environment::AddFactory(mEnvironment, this);
     CGS_ASSERT(lbResult,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lbResult",
             "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsFactory.h", 251 /* ARTIST 0x826AD398 */));
 }

@@ -1,6 +1,6 @@
 #include "GameSource/Replays/Stream/BrnReplayDiskReadStream.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Replays/Stream/BrnReplayDiskReadStream.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/System/FileSystem/CgsDeviceManager.h" // DeviceManager, GetDeviceManager
@@ -330,7 +330,7 @@ namespace BrnReplays
                             void* lpBlockData = 0;
                             s32   liBlockSize = 0;
                             bool  lbStarted   = StartAsyncReadInternal(&lpBlockData, &liBlockSize);
-                            CGS_ASSERT(lbStarted, CgsDev::Assert::MessageAt("Failed to read data\n", "..\\..\\..\\GameSource\\Replays/Stream/BrnReplayDiskReadStream.cpp", 209));
+                            CGS_ASSERT(lbStarted, CGS_ASSERT_MESSAGE_AT("Failed to read data\n", CGS_ARTIST_FILE, 209));
                             CGS_ASSERT(liBlockSize >= miBlockSize, "Data too small\n");
 
                             XMemCpy(lpDest, lpBlockData, static_cast<size_t>(miBlockSize));
@@ -371,7 +371,7 @@ namespace BrnReplays
     // =====================================================================================
     void DiskReadStream::CloseCallback(s32 liResult, CgsFileSystem::Handle lHandle, u64 luSize, void* lpContext)
     {
-        CGS_ASSERT(lpContext != 0, CgsDev::Assert::StreamMessageAt("Invalid stream\n", "..\\..\\..\\GameSource\\Replays/Stream/BrnReplayDiskReadStream.cpp", 962));
+        CGS_ASSERT(lpContext != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid stream\n", CGS_ARTIST_FILE, 962));
         static_cast<DiskReadStream*>(lpContext)->OnClose(liResult, lHandle, luSize, lpContext);
     }
 
@@ -525,3 +525,5 @@ namespace BrnReplays
         Service();
     }
 }
+
+#undef CGS_ARTIST_FILE

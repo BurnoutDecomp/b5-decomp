@@ -24,7 +24,7 @@
 //
 // Local variable names are the declaration's own (luMomentCount / luLoop / lMomentDescription /
 // luMomentsToNotInhibit / lMomentHandle / lDescription).
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentSelector.cpp"
 #include "GameSource/Director/MomentController/BrnMomentSelector.h"
 
 #include "types.hpp"
@@ -220,7 +220,7 @@ u32 MomentSelector::SnoopNumValidMoments()
 
 void MomentSelector::Update(f32 lfTimestep)
 {
-    CGS_ASSERT(mbPrepared, CgsDev::Assert::MessageAt("mbPrepared", "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentSelector.cpp", 117));
+    CGS_ASSERT(mbPrepared, CGS_ASSERT_MESSAGE_AT("mbPrepared", CGS_ARTIST_FILE, 117));
 
     mfTimeActive += lfTimestep;      // +0x1C4
     ++miFramesActive;                // +0x1C8
@@ -299,7 +299,7 @@ void MomentSelector::Update(f32 lfTimestep)
         {
             lpMoment->SetInhibited(false);
             CGS_ASSERT(!lpMoment->IsInhibited(),
-                       CgsDev::Assert::MessageAt("!mMomentHandleArray[liLoop].GetMoment().IsInhibited()", "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentSelector.cpp", 167));
+                       CGS_ASSERT_MESSAGE_AT("!mMomentHandleArray[liLoop].GetMoment().IsInhibited()", CGS_ARTIST_FILE, 167));
             --luUninhibited;
         }
     }
@@ -374,12 +374,12 @@ void MomentSelector::Update(f32 lfTimestep)
             }
             u32 luMomentToUninhibit = 0;
             const bool lbPickedBest = PickBestInhibitedMoment(&luMomentToUninhibit, E_PICK_BEST_FUSSY);
-            CGS_ASSERT(lbPickedBest, CgsDev::Assert::MessageAt("PickBestInhibitedMoment(&luMomentToUninhibit)", "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentSelector.cpp", 207));   // cpp:207
+            CGS_ASSERT(lbPickedBest, CGS_ASSERT_MESSAGE_AT("PickBestInhibitedMoment(&luMomentToUninhibit)", CGS_ARTIST_FILE, 207));   // cpp:207
             mMomentHandleArray[luMomentToUninhibit].GetMoment().SetInhibited(false);
 
             u32 luMomentInhibit = 0;
             const bool lbPickedWorst = PickWorstUninhibitedMoment(&luMomentInhibit, E_PICK_WORST_FUSSY);
-            CGS_ASSERT(lbPickedWorst, CgsDev::Assert::MessageAt("PickWorstUninhibitedMoment(&luMomentInhibit)", "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentSelector.cpp", 210));   // cpp:210
+            CGS_ASSERT(lbPickedWorst, CGS_ASSERT_MESSAGE_AT("PickWorstUninhibitedMoment(&luMomentInhibit)", CGS_ARTIST_FILE, 210));   // cpp:210
             mMomentHandleArray[luMomentInhibit].GetMoment().Inhibit();
    // [DIAG]
       // [DIAG]
@@ -402,7 +402,7 @@ void MomentSelector::Update(f32 lfTimestep)
 // *lpuIndex is written even when nothing is found (the seed's 0). Returns whether anything was found.
 bool MomentSelector::PickBestInhibitedMoment(u32* lpuIndex, EPickBestInhibitedOptions leOptions)
 {
-    CGS_ASSERT(mbPrepared, CgsDev::Assert::MessageAt("mbPrepared", "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentSelector.cpp", 456));   // cpp:456
+    CGS_ASSERT(mbPrepared, CGS_ASSERT_MESSAGE_AT("mbPrepared", CGS_ARTIST_FILE, 456));   // cpp:456
 
     bool lbTakeAny = false;   // r22
     if (static_cast<u32>(leOptions) == E_PICK_BEST_ANY)
@@ -458,7 +458,7 @@ bool MomentSelector::PickBestInhibitedMoment(u32* lpuIndex, EPickBestInhibitedOp
 //   Any other option streams "Unknown option: " << option (cpp:545) and runs as FUSSY.
 bool MomentSelector::PickWorstUninhibitedMoment(u32* lpuIndex, EPickWorstUninhibitedOptions leOptions)
 {
-    CGS_ASSERT(mbPrepared, CgsDev::Assert::MessageAt("mbPrepared", "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentSelector.cpp", 526));   // cpp:526
+    CGS_ASSERT(mbPrepared, CGS_ASSERT_MESSAGE_AT("mbPrepared", CGS_ARTIST_FILE, 526));   // cpp:526
 
     bool lbTakeAny = false;   // r21
     if (static_cast<u32>(leOptions) == E_PICK_WORST_ANY)
@@ -550,9 +550,9 @@ bool MomentSelector::Release()
 // handle, and a zero recency entry.
 bool MomentSelector::AddMoment(MomentDescription lMoment)
 {
-    CGS_ASSERT(!mbPrepared, CgsDev::Assert::MessageAt("!mbPrepared", "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentSelector.cpp", 282));
+    CGS_ASSERT(!mbPrepared, CGS_ASSERT_MESSAGE_AT("!mbPrepared", CGS_ARTIST_FILE, 282));
     CGS_ASSERT(mMomentDescriptionArray.GetLength() < mMomentDescriptionArray.GetCapacity(),
-               CgsDev::Assert::MessageAt("mMomentDescriptionArray.GetLength() < mMomentDescriptionArray.GetCapacity()", "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentSelector.cpp", 283));
+               CGS_ASSERT_MESSAGE_AT("mMomentDescriptionArray.GetLength() < mMomentDescriptionArray.GetCapacity()", CGS_ARTIST_FILE, 283));
 
     MomentController::MomentHandle lMomentHandle;
     lMomentHandle.Construct();                      // console: the single zero byte into the slot
@@ -614,9 +614,9 @@ bool MomentSelector::SelectBestMomentWithExclusion(CgsNumeric::Random& lRandom, 
 
         default:
             CGS_ASSERT(false,
-                CgsDev::Assert::MessageAt(
+                CGS_ASSERT_MESSAGE_AT(
                     "unhandled type",
-                    "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentSelector.cpp", 338 /* ARTIST 0x82250FEC */));
+                    CGS_ARTIST_FILE, 338 /* ARTIST 0x82250FEC */));
             return false;
     }
 }
@@ -875,3 +875,5 @@ void MomentSelector::ActualDebugRender(DebugPrinter& lrDebugPrinter) const
 }
 
 } // namespace BrnDirector
+
+#undef CGS_ARTIST_FILE

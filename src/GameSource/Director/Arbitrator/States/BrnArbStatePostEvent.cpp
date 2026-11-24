@@ -1,5 +1,5 @@
 #include "GameSource/Director/Arbitrator/States/BrnArbStatePostEvent.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStatePostEvent.cpp"
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT (post-event asserts)
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
@@ -233,7 +233,7 @@ namespace BrnDirector
             // race ladder, fires inside GetEventCompletionShots just before this line).
 
             CGS_ASSERT(lrEventCompleteShotGroup.Num_ShotList() > 0,
-                       CgsDev::Assert::MessageAt("lEventCompleteShotGroup.Num_ShotList()>0", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStatePostEvent.cpp", 54));
+                       CGS_ASSERT_MESSAGE_AT("lEventCompleteShotGroup.Num_ShotList()>0", CGS_ARTIST_FILE, 54));
 
             Camera::BehaviourIceAnim::ShotReference& lrShot =
                 PickAppropriateShot(lrEventCompleteShotGroup, lrSharedInfo);
@@ -354,7 +354,7 @@ namespace BrnDirector
             break;
 
         default:
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt("unhandled state", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStatePostEvent.cpp", 160));
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unhandled state", CGS_ARTIST_FILE, 160));
             break;
         }
     }
@@ -376,3 +376,5 @@ namespace BrnDirector
         return true;
     }
 }
+
+#undef CGS_ARTIST_FILE

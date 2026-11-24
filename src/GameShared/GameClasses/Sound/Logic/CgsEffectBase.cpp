@@ -171,7 +171,7 @@ f32 EffectBase::GetRWACMixerOutputValue(int aiSlot, int aiPreset)
 void EffectBase::SetDMixIOPtr(Nicotine::DMixIO* apDmixIO)
 {
     CGS_ASSERT(apDmixIO != 0,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lpDmixIO",
             "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/CgsEffectBase.h", 916 /* ARTIST 0x82680904 */));
     mpDynamicMixIo = apDmixIO; // stw r31,0x30(this)

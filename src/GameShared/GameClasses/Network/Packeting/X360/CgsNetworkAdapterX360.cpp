@@ -13,7 +13,7 @@
 // NetConnDisconnect / NetConnShutdown tear it down. The base NetworkAdapter handles the
 // platform-agnostic packet path; this subclass layers the X360 connection lifecycle and the
 // per-server-type network-environment selection on top.
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\X360\\CgsNetworkAdapterX360.cpp"
 #include "GameShared/GameClasses/Network/Packeting/X360/CgsNetworkAdapterX360.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -163,7 +163,7 @@ void NetworkAdapterX360::StartupNetworking()
             break;
 
         case E_SERVER_TYPE_COUNT:
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
                 "Unknown server type",
                 __FILE__, 315 /* ARTIST 0x8287F6A8 */));
             lpcEnvironment = KPC_ENVIRONMENT_SECURE;
@@ -208,9 +208,9 @@ void NetworkAdapterX360::Update()
         const s32 liUserIndex = lpNetworkManager->GetLocalUserControllerPort();
         if (liUserIndex > -1 && XUserGetSigninState(liUserIndex) == KI_SIGNIN_STATE_LIVE)
         {
-            CGS_ASSERT(mpEnvironment != 0, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(mpEnvironment != 0, CGS_ASSERT_MESSAGE_AT(
                 "Environment to use not set up",
-                "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\X360\\CgsNetworkAdapterX360.cpp", 168 /* ARTIST 0x8288BF4C */));
+                CGS_ARTIST_FILE, 168 /* ARTIST 0x8288BF4C */));
 
             const int liConnectResult = NetConnConnect(0, static_cast<const char*>(mpEnvironment));
             mbConnecting = (liConnectResult == 1);
@@ -233,12 +233,12 @@ void NetworkAdapterX360::Update()
             mbDuplicateLogin = (liStatus == KI_NETCONN_STATUS_DUPLICATE_LOGIN);
             NetConnDisconnect();
 
-            CGS_ASSERT(mpServerInterface != 0, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(mpServerInterface != 0, CGS_ASSERT_MESSAGE_AT(
                 "mpServerInterface",
-                "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\X360\\CgsNetworkAdapterX360.cpp", 192 /* ARTIST 0x8288C000 */));
-            CGS_ASSERT(mpServerInterface->GetConnectionComponent() != 0, CgsDev::Assert::MessageAt(
+                CGS_ARTIST_FILE, 192 /* ARTIST 0x8288C000 */));
+            CGS_ASSERT(mpServerInterface->GetConnectionComponent() != 0, CGS_ASSERT_MESSAGE_AT(
                 "mpServerInterface->GetConnectionComponent()",
-                "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\X360\\CgsNetworkAdapterX360.cpp", 193 /* ARTIST 0x8288C02C */));
+                CGS_ARTIST_FILE, 193 /* ARTIST 0x8288C02C */));
 
             // mpServerInterface->GetConnectionComponent()->GetServerInterface()->GetLobbyAPIRef()
             // (asm walks +0x04 -> +0x10 -> +0x78): the connection component's owning DirtySock
@@ -276,3 +276,5 @@ void NetworkAdapterX360::SetServerType(EServerType leServerType)
 }
 
 }
+
+#undef CGS_ARTIST_FILE

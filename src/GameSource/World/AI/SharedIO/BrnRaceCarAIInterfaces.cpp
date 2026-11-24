@@ -20,13 +20,13 @@ namespace AIModuleIO
                                              EActiveRaceCarIndex leActiveRaceCarIndex)
     {
         CGS_ASSERT(leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0,
-            CgsDev::Assert::MessageAt("leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 436 /* ARTIST 0x822FD640 */));
+            CGS_ASSERT_MESSAGE_AT("leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 436 /* ARTIST 0x822FD640 */));
         CGS_ASSERT(leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT,
-            CgsDev::Assert::MessageAt("leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 437 /* ARTIST 0x822FD664 */));
+            CGS_ASSERT_MESSAGE_AT("leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 437 /* ARTIST 0x822FD664 */));
         CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-            CgsDev::Assert::MessageAt("leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 438 /* ARTIST 0x822FD688 */));
+            CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 438 /* ARTIST 0x822FD688 */));
         CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-            CgsDev::Assert::MessageAt("leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 439 /* ARTIST 0x822FD6AC */));
+            CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 439 /* ARTIST 0x822FD6AC */));
 
         ActivateRaceCarEvent lEvent;
         lEvent.meGlobalRaceCarIndex = leGlobalRaceCarIndex;
@@ -38,9 +38,9 @@ namespace AIModuleIO
     void RaceCarAIInterface::DeactivateRaceCar(EGlobalRaceCarIndex leGlobalRaceCarIndex, bool lbIsInAMode)
     {
         CGS_ASSERT(leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0,
-            CgsDev::Assert::MessageAt("leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 459 /* ARTIST 0x822FD710 */));
+            CGS_ASSERT_MESSAGE_AT("leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 459 /* ARTIST 0x822FD710 */));
         CGS_ASSERT(leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT,
-            CgsDev::Assert::MessageAt("leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 460 /* ARTIST 0x822FD734 */));
+            CGS_ASSERT_MESSAGE_AT("leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 460 /* ARTIST 0x822FD734 */));
 
         DeactivateRaceCarEvent lEvent;
         lEvent.meGlobalRaceCarIndex = leGlobalRaceCarIndex;
@@ -52,9 +52,9 @@ namespace AIModuleIO
     void RaceCarAIInterface::DetachAIControl(EGlobalRaceCarIndex leGlobalRaceCarIndex)
     {
         CGS_ASSERT(leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0,
-            CgsDev::Assert::MessageAt("leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 479 /* ARTIST 0x822FD794 */));
+            CGS_ASSERT_MESSAGE_AT("leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 479 /* ARTIST 0x822FD794 */));
         CGS_ASSERT(leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT,
-            CgsDev::Assert::MessageAt("leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 480 /* ARTIST 0x822FD7B8 */));
+            CGS_ASSERT_MESSAGE_AT("leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 480 /* ARTIST 0x822FD7B8 */));
 
         DetachAIControlEvent lEvent;
         lEvent.meGlobalRaceCarIndex = leGlobalRaceCarIndex;
@@ -85,7 +85,7 @@ namespace AIModuleIO
     {
         CGS_ASSERT(leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0 &&
                        leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0 && leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT",
                 KAC_ARTIST_ASSERT_FILE, 851 /* ARTIST 0x822FD838 */));
 
@@ -103,7 +103,7 @@ namespace AIModuleIO
     Vector3 RaceCarAIInterface::GetPlayerCarPosition() const
     {
         CGS_ASSERT(mbPlayerDataSet,
-            CgsDev::Assert::MessageAt("mbPlayerDataSet", KAC_ARTIST_ASSERT_FILE, 693 /* ARTIST 0x82764FB0 */));
+            CGS_ASSERT_MESSAGE_AT("mbPlayerDataSet", KAC_ARTIST_ASSERT_FILE, 693 /* ARTIST 0x82764FB0 */));
         return mPlayerCarPosition;
     }
 
@@ -111,7 +111,7 @@ namespace AIModuleIO
     Vector3 RaceCarAIInterface::GetPlayerCarDirection() const
     {
         CGS_ASSERT(mbPlayerDataSet,
-            CgsDev::Assert::MessageAt("mbPlayerDataSet", KAC_ARTIST_ASSERT_FILE, 701 /* ARTIST 0x82765020 */));
+            CGS_ASSERT_MESSAGE_AT("mbPlayerDataSet", KAC_ARTIST_ASSERT_FILE, 701 /* ARTIST 0x82765020 */));
         return mPlayerCarDirection;
     }
 
@@ -119,7 +119,7 @@ namespace AIModuleIO
     EActiveRaceCarIndex RaceCarAIInterface::GetPlayerActiveRaceCarIndex() const
     {
         CGS_ASSERT(mbPlayerDataSet,
-            CgsDev::Assert::MessageAt("mbPlayerDataSet", KAC_ARTIST_ASSERT_FILE, 709 /* ARTIST 0x82765088 */));
+            CGS_ASSERT_MESSAGE_AT("mbPlayerDataSet", KAC_ARTIST_ASSERT_FILE, 709 /* ARTIST 0x82765088 */));
         return mePlayerActiveRaceCarIndex;
     }
 

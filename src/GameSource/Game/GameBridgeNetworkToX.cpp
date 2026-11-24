@@ -28,7 +28,7 @@
 //   * The GUI records are queued through the shared BrnGame::PushGuiEvent (the whole object
 //     at offset 0, sizeof(T) as the size), byte-for-byte what the console publisher stores.
 // ============================================================================
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp"
 #include "GameSource/Game/BrnGameModule.hpp"
 #include "GameSource/Game/GameBridgeNetworkToX.h"
 #include "GameSource/Game/GameBridgeGameStateToX.h"    // BrnGame::PushGuiEvent (the shared GUI event push)
@@ -178,7 +178,7 @@ namespace BrnGame
         namespace GsIO  = BrnGameState::GameStateModuleIO;
 
         const NetworkEventQueue* lpNetworkEventQueue = lpNetworkOutput->GetNetworkEventQueue();
-        CGS_ASSERT(lpNetworkEventQueue != 0, CgsDev::Assert::MessageAt("lpNetworkEventQueue", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 465));
+        CGS_ASSERT(lpNetworkEventQueue != 0, CGS_ASSERT_MESSAGE_AT("lpNetworkEventQueue", CGS_ARTIST_FILE, 465));
 
         const CgsModule::Event* lpEvent = 0;
         s32 liSize = 0;
@@ -202,7 +202,7 @@ namespace BrnGame
                 {
                     const NetIO::NetworkOutInstantFreeburnEvent* lpInstantFreeburnEvent =
                         reinterpret_cast<const NetIO::NetworkOutInstantFreeburnEvent*>(lpEvent);
-                    CGS_ASSERT(lpInstantFreeburnEvent != 0, CgsDev::Assert::MessageAt("lpInstantFreeburnEvent", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 1053));
+                    CGS_ASSERT(lpInstantFreeburnEvent != 0, CGS_ASSERT_MESSAGE_AT("lpInstantFreeburnEvent", CGS_ARTIST_FILE, 1053));
                     const bool lbIsDoingInstantFreeburn = lpInstantFreeburnEvent->mbIsDoingInstantFreeburn;
                     PostGameEvent(lpGameStateInput->GetGameEventQueue(), lbIsDoingInstantFreeburn, 151);
                     break;
@@ -211,7 +211,7 @@ namespace BrnGame
                 {
                     const NetIO::NetworkOutBuddyRemovedEvent* lpBuddyRemovedEvent =
                         reinterpret_cast<const NetIO::NetworkOutBuddyRemovedEvent*>(lpEvent);
-                    CGS_ASSERT(lpBuddyRemovedEvent != 0, CgsDev::Assert::MessageAt("lpBuddyRemovedEvent", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 1036));
+                    CGS_ASSERT(lpBuddyRemovedEvent != 0, CGS_ASSERT_MESSAGE_AT("lpBuddyRemovedEvent", CGS_ARTIST_FILE, 1036));
                     GsIO::BuddyRemovedEvent lBuddyRemoved;
                     lBuddyRemoved.mRemovedBuddyName = lpBuddyRemovedEvent->mRemovedBuddyName;
                     PostGameEvent(lpGameStateInput->GetGameEventQueue(), lBuddyRemoved, GsIO::E_EVENT_BUDDY_REMOVED);
@@ -225,7 +225,7 @@ namespace BrnGame
                     unsigned char lOut[8];
                     lOut[4] = lpGameParamEvent->mbRanked;
                     *reinterpret_cast<s32*>(lOut) = lpGameParamEvent->meGameMode;
-                    CGS_ASSERT(lpGameStateInput != 0, CgsDev::Assert::MessageAt("lpGameStateInput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 223));
+                    CGS_ASSERT(lpGameStateInput != 0, CGS_ASSERT_MESSAGE_AT("lpGameStateInput", CGS_ARTIST_FILE, 223));
                     CGS_ASSERT(lpGameStateInput->GetGameEventQueue() != 0,
                                "lpGameStateInput->GetGameEventQueue()");
                     lpGameStateInput->GetGameEventQueue()->AddEvent(
@@ -283,7 +283,7 @@ namespace BrnGame
                 {
                     const NetIO::NetworkOutTeamSelectionEvent* lpTeamSelectionEvent =
                         reinterpret_cast<const NetIO::NetworkOutTeamSelectionEvent*>(lpEvent);
-                    CGS_ASSERT(lpTeamSelectionEvent != 0, CgsDev::Assert::MessageAt("lpTeamSelectionEvent", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 1141));
+                    CGS_ASSERT(lpTeamSelectionEvent != 0, CGS_ASSERT_MESSAGE_AT("lpTeamSelectionEvent", CGS_ARTIST_FILE, 1141));
                     GsIO::EPlayerTeam laeTeams[8];
                     std::memcpy(laeTeams, lpTeamSelectionEvent->maePlayerTeam, sizeof(laeTeams));
                     PostGameEvent(lpGameStateInput->GetGameEventQueue(), laeTeams, 154);
@@ -327,7 +327,7 @@ namespace BrnGame
                 {
                     const NetIO::NetworkOutStuntMultiplierEvent* lpStuntMultiplierEvent =
                         reinterpret_cast<const NetIO::NetworkOutStuntMultiplierEvent*>(lpEvent);
-                    CGS_ASSERT(lpStuntMultiplierEvent != 0, CgsDev::Assert::MessageAt("lpStuntMultiplierEvent", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 1122));
+                    CGS_ASSERT(lpStuntMultiplierEvent != 0, CGS_ASSERT_MESSAGE_AT("lpStuntMultiplierEvent", CGS_ARTIST_FILE, 1122));
                     unsigned char lOut[16];
                     *reinterpret_cast<s32*>(lOut + 0xC) = lpStuntMultiplierEvent->mNetworkPlayerID;
                     *reinterpret_cast<s32*>(lOut + 0x8) = lpStuntMultiplierEvent->miStuntMultiplier;
@@ -411,7 +411,7 @@ namespace BrnGame
                 {
                     const NetIO::NetworkOutHostChangedEvent* lpNetworkNewHostEvent =
                         reinterpret_cast<const NetIO::NetworkOutHostChangedEvent*>(lpEvent);
-                    CGS_ASSERT(lpNetworkNewHostEvent != 0, CgsDev::Assert::MessageAt("lpNetworkNewHostEvent", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 878));
+                    CGS_ASSERT(lpNetworkNewHostEvent != 0, CGS_ASSERT_MESSAGE_AT("lpNetworkNewHostEvent", CGS_ARTIST_FILE, 878));
                     bool labOut[2];
                     labOut[0] = lpNetworkNewHostEvent->mbIsLocalPlayerNowHost;
                     labOut[1] = lpNetworkNewHostEvent->mbIsFirstHost;
@@ -422,7 +422,7 @@ namespace BrnGame
                 {
                     const NetIO::NetworkOutRemotePlayerHitCheckpoint* lpNetworkCheckpointEvent =
                         reinterpret_cast<const NetIO::NetworkOutRemotePlayerHitCheckpoint*>(lpEvent);
-                    CGS_ASSERT(lpNetworkCheckpointEvent != 0, CgsDev::Assert::MessageAt("lpNetworkCheckpointEvent", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 975));
+                    CGS_ASSERT(lpNetworkCheckpointEvent != 0, CGS_ASSERT_MESSAGE_AT("lpNetworkCheckpointEvent", CGS_ARTIST_FILE, 975));
                     s32 laiOut[2];
                     laiOut[1] = lpNetworkCheckpointEvent->miCheckpointIndex;
                     laiOut[0] = lpNetworkCheckpointEvent->mNetworkPlayerID;
@@ -433,7 +433,7 @@ namespace BrnGame
                 {
                     const NetIO::NetworkOutStuntScoreUpdatedEvent* lpNetworkStuntScoreUpdatedEvent =
                         reinterpret_cast<const NetIO::NetworkOutStuntScoreUpdatedEvent*>(lpEvent);
-                    CGS_ASSERT(lpNetworkStuntScoreUpdatedEvent != 0, CgsDev::Assert::MessageAt("lpNetworkStuntScoreUpdatedEvent", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 990));
+                    CGS_ASSERT(lpNetworkStuntScoreUpdatedEvent != 0, CGS_ASSERT_MESSAGE_AT("lpNetworkStuntScoreUpdatedEvent", CGS_ARTIST_FILE, 990));
                     s32 laiOut[2];
                     laiOut[1] = lpNetworkStuntScoreUpdatedEvent->miStuntScore;
                     laiOut[0] = lpNetworkStuntScoreUpdatedEvent->mNetworkPlayerID;
@@ -444,7 +444,7 @@ namespace BrnGame
                 {
                     const NetIO::NetworkOutRivalCount* lpNetworkRivalCountEvent =
                         reinterpret_cast<const NetIO::NetworkOutRivalCount*>(lpEvent);
-                    CGS_ASSERT(lpNetworkRivalCountEvent != 0, CgsDev::Assert::MessageAt("lpNetworkRivalCountEvent", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 1005));
+                    CGS_ASSERT(lpNetworkRivalCountEvent != 0, CGS_ASSERT_MESSAGE_AT("lpNetworkRivalCountEvent", CGS_ARTIST_FILE, 1005));
                     const s32 liNumberOfRivals = lpNetworkRivalCountEvent->miNumberOfRivals;
                     PostGameEvent(lpGameStateInput->GetGameEventQueue(), liNumberOfRivals, 144);
                     break;
@@ -459,7 +459,7 @@ namespace BrnGame
                 {
                     const NetIO::NetworkOutTargetScoreEvent* lpTargetScoreEvent =
                         reinterpret_cast<const NetIO::NetworkOutTargetScoreEvent*>(lpEvent);
-                    CGS_ASSERT(lpTargetScoreEvent != 0, CgsDev::Assert::MessageAt("lpTargetScoreEvent", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 1068));
+                    CGS_ASSERT(lpTargetScoreEvent != 0, CGS_ASSERT_MESSAGE_AT("lpTargetScoreEvent", CGS_ARTIST_FILE, 1068));
                     unsigned char lOut[40];
                     std::memcpy(lOut, &lpTargetScoreEvent->mPlayerID, sizeof(lpTargetScoreEvent->mPlayerID)); // +0x00 (24)
                     *reinterpret_cast<u64*>(lOut + 0x18) = lpTargetScoreEvent->mScoreboardSlot;
@@ -473,7 +473,7 @@ namespace BrnGame
                 {
                     const NetIO::NetworkOutDldChallengeableEvent* lpDldChallengeableEvent =
                         reinterpret_cast<const NetIO::NetworkOutDldChallengeableEvent*>(lpEvent);
-                    CGS_ASSERT(lpDldChallengeableEvent != 0, CgsDev::Assert::MessageAt("lpDldChallengeableEvent", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 1088));
+                    CGS_ASSERT(lpDldChallengeableEvent != 0, CGS_ASSERT_MESSAGE_AT("lpDldChallengeableEvent", CGS_ARTIST_FILE, 1088));
                     const CgsID lID = lpDldChallengeableEvent->mID;
                     PostGameEvent(lpGameStateInput->GetGameEventQueue(), lID, 153);
                     break;
@@ -520,7 +520,7 @@ namespace BrnGame
                 {
                     const NetIO::NetworkOutAbortImageCaptureEvent* lpAbortCaptureEvent =
                         reinterpret_cast<const NetIO::NetworkOutAbortImageCaptureEvent*>(lpEvent);
-                    CGS_ASSERT(lpAbortCaptureEvent != 0, CgsDev::Assert::MessageAt("lpAbortCaptureEvent", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 893));
+                    CGS_ASSERT(lpAbortCaptureEvent != 0, CGS_ASSERT_MESSAGE_AT("lpAbortCaptureEvent", CGS_ARTIST_FILE, 893));
                     const bool lbCapture = lpAbortCaptureEvent->mbCapture;
                     PostGameEvent(lpGameStateInput->GetGameEventQueue(), lbCapture, 138);
                     break;
@@ -635,7 +635,7 @@ namespace BrnGame
                 {
                     const NetIO::NetworkOutActiveFburnChallengeEvent* lpActiveFreeburnChallengeEvent =
                         reinterpret_cast<const NetIO::NetworkOutActiveFburnChallengeEvent*>(lpEvent);
-                    CGS_ASSERT(lpActiveFreeburnChallengeEvent != 0, CgsDev::Assert::MessageAt("lpActiveFreeburnChallengeEvent", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 955));
+                    CGS_ASSERT(lpActiveFreeburnChallengeEvent != 0, CGS_ASSERT_MESSAGE_AT("lpActiveFreeburnChallengeEvent", CGS_ARTIST_FILE, 955));
                     GsIO::ActiveFburnChallengeEvent lActiveChallenge;
                     lActiveChallenge.mChallengeID            = lpActiveFreeburnChallengeEvent->mChallengeID;
                     lActiveChallenge.miNumPlayersInChallenge = lpActiveFreeburnChallengeEvent->miNumPlayersInChallenge;
@@ -650,7 +650,7 @@ namespace BrnGame
                 {
                     const NetIO::NetworkOutFburnChallengeSuccessUpdateEvent* lpFburnChallengeSuccessUpdateEvent =
                         reinterpret_cast<const NetIO::NetworkOutFburnChallengeSuccessUpdateEvent*>(lpEvent);
-                    CGS_ASSERT(lpFburnChallengeSuccessUpdateEvent != 0, CgsDev::Assert::MessageAt("lpFburnChallengeSuccessUpdateEvent", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 908));
+                    CGS_ASSERT(lpFburnChallengeSuccessUpdateEvent != 0, CGS_ASSERT_MESSAGE_AT("lpFburnChallengeSuccessUpdateEvent", CGS_ARTIST_FILE, 908));
                     GsIO::FburnChallengeSuccessUpdateEvent lSuccessUpdate;
                     lSuccessUpdate.mChallengeSuccessUpdate = lpFburnChallengeSuccessUpdateEvent->mChallengeSuccessUpdate;
                     lSuccessUpdate.meActiveRaceCarIndex    = lpFburnChallengeSuccessUpdateEvent->meActiveRaceCarIndex;
@@ -682,7 +682,7 @@ namespace BrnGame
                 {
                     const NetIO::NetworkOutUploadedModeScoresEvent* lpUploadedModeScoresEvent =
                         reinterpret_cast<const NetIO::NetworkOutUploadedModeScoresEvent*>(lpEvent);
-                    CGS_ASSERT(lpUploadedModeScoresEvent != 0, CgsDev::Assert::MessageAt("lpUploadedModeScoresEvent", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 1105));
+                    CGS_ASSERT(lpUploadedModeScoresEvent != 0, CGS_ASSERT_MESSAGE_AT("lpUploadedModeScoresEvent", CGS_ARTIST_FILE, 1105));
                     unsigned char lOut[128];
                     std::memcpy(lOut, &lpUploadedModeScoresEvent->maUploadedModeScores, sizeof(lOut));
                     lpGameStateInput->GetGameEventQueue()->AddEvent(
@@ -782,7 +782,7 @@ namespace BrnGame
         namespace NetIO = BrnNetwork::BrnNetworkModuleIO;
 
         const NetworkEventQueue* lpNetworkEventQueue = lpNetworkOutput->GetNetworkEventQueue();
-        CGS_ASSERT(lpNetworkEventQueue != 0, CgsDev::Assert::MessageAt("lpNetworkEventQueue", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 1182));
+        CGS_ASSERT(lpNetworkEventQueue != 0, CGS_ASSERT_MESSAGE_AT("lpNetworkEventQueue", CGS_ARTIST_FILE, 1182));
 
         const CgsModule::Event* lpEvent = 0;
         s32 liSize = 0;
@@ -1011,7 +1011,7 @@ namespace BrnGame
                 {
                     const NetIO::NetworkOutPlayerCarSelectStatus* lpPlayerCarSelectStatus =
                         reinterpret_cast<const NetIO::NetworkOutPlayerCarSelectStatus*>(lpEvent);
-                    CGS_ASSERT(lpPlayerCarSelectStatus != 0, CgsDev::Assert::MessageAt("lpPlayerCarSelectStatus", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 429));
+                    CGS_ASSERT(lpPlayerCarSelectStatus != 0, CGS_ASSERT_MESSAGE_AT("lpPlayerCarSelectStatus", CGS_ARTIST_FILE, 429));
                     BrnGui::GuiOnlineCarStatusEvent lEvent;
                     *reinterpret_cast<s32*>(&lEvent) = lpPlayerCarSelectStatus->meActiveRaceCarIndex;
                     RecordBytes(lEvent)[4] = lpPlayerCarSelectStatus->mbInCarSelect;
@@ -1167,9 +1167,9 @@ namespace BrnGame
         const InGamePlayerStatusInterface* lpStatusInterface       = lpNetworkOutput->GetInGamePlayerStatusInterface();
 
         CGS_ASSERT(lpNetworkOutput->GetInGamePlayerStatusInterface() != 0,
-                   CgsDev::Assert::MessageAt("lpNetworkOutput->GetInGamePlayerStatusInterface()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 59));
-        CGS_ASSERT(lpNetworkToGuiInterface != 0, CgsDev::Assert::MessageAt("lpNetworkToGuiInterface", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 60));
-        CGS_ASSERT(lpNetworkOutput->GetGuiEventQueue() != 0, CgsDev::Assert::MessageAt("lpNetworkOutput->GetGuiEventQueue()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 61));
+                   CGS_ASSERT_MESSAGE_AT("lpNetworkOutput->GetInGamePlayerStatusInterface()", CGS_ARTIST_FILE, 59));
+        CGS_ASSERT(lpNetworkToGuiInterface != 0, CGS_ASSERT_MESSAGE_AT("lpNetworkToGuiInterface", CGS_ARTIST_FILE, 60));
+        CGS_ASSERT(lpNetworkOutput->GetGuiEventQueue() != 0, CGS_ASSERT_MESSAGE_AT("lpNetworkOutput->GetGuiEventQueue()", CGS_ARTIST_FILE, 61));
 
         TranslateNetworkInterfaceToGuiEvents(lpGuiInput, lpNetworkToGuiInterface);
         TranslateNetworkEventsToGuiEvents(lpGuiInput, lpNetworkOutput);
@@ -1343,3 +1343,5 @@ namespace BrnGame
         }
     }
 }
+
+#undef CGS_ARTIST_FILE

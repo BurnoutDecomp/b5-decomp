@@ -117,7 +117,7 @@ void BrnCoronaManager::BrnSubmissionInterface::AddCorona(Vector3 lvPosition, Vec
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(
             "mBufferIterator.GetNumCoronasWritten() < static_cast<uint32_t>( KI_MAX_CORONAS )",
-            gszSourceFile, 593);
+            CGS_ASSERT_LOCATION(gszSourceFile, 593));
         CgsDev::Assert::EndAssert();
     }
     union { double mFloat; s64 mInteger; } lAlpha;
@@ -147,7 +147,7 @@ void BrnCoronaManager::BrnSubmissionInterface::AddPropCorona(Vector3 lvPosition,
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(
             "mBufferIterator.GetNumCoronasWritten() < static_cast<uint32_t>( KI_MAX_CORONAS )",
-            gszSourceFile, 533);
+            CGS_ASSERT_LOCATION(gszSourceFile, 533));
         CgsDev::Assert::EndAssert();
     }
     const rw::math::fpu::Vector2Template<f32> lScale(lrSize.X(), lrSize.Y());

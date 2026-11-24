@@ -50,7 +50,7 @@ public:
     // FAKEMATCH: ARTIST inlines the checked EASTL allocator lookup in the list helpers.
     static __forceinline AttribSysPackageAllocator* GetEaStlAllocator()
     {
-        CGS_ASSERT(sbHasLinearAllocator, CgsDev::Assert::MessageAt("sbHasLinearAllocator",
+        CGS_ASSERT(sbHasLinearAllocator, CGS_ASSERT_MESSAGE_AT("sbHasLinearAllocator",
             "..\\..\\..\\GameShared\\GameClasses\\System/AttribSys/CgsAttribSysMemoryManager.h",
             173 /* ARTIST 0x828091D4 */));
         return &sEaStlAllocator;

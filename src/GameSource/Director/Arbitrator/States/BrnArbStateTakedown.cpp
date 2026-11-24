@@ -26,7 +26,7 @@
 // function set and nothing in the recovered code calls it (ArbStateTakedown::Prepare picks the
 // player straight off the game state), so it carries a one-line FLAG in the header.
 // ============================================================================
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateTakedown.cpp"
 #include "GameSource/Director/Arbitrator/States/BrnArbStateTakedown.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/Utils/BrnDirectorEffectTrigger.h"    // RequestStartEffectHook / EnsureEffectIsPlaying
@@ -539,7 +539,7 @@ namespace BrnDirector
         }
 
         default:
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt("unhandled state", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateTakedown.cpp", 544));
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unhandled state", CGS_ARTIST_FILE, 544));
             break;
         }
 
@@ -583,7 +583,7 @@ namespace BrnDirector
                 lpIceAnim->ClearBaseFirstFrameGate();
             }
 
-            CGS_ASSERT(mIceCam.IsAllocated(), CgsDev::Assert::MessageAt("mbIsAllocated", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 517));
+            CGS_ASSERT(mIceCam.IsAllocated(), CGS_ASSERT_MESSAGE_AT("mbIsAllocated", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 517));
             return mIceCam.IsReadyToPrepare();
         }
 
@@ -631,7 +631,7 @@ namespace BrnDirector
             break;
 
         default:
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt("unhandled state", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateTakedown.cpp", 667));
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unhandled state", CGS_ARTIST_FILE, 667));
             break;
         }
 
@@ -822,7 +822,7 @@ namespace BrnDirector
             break;
 
         default:
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt("unhandled state", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateTakedown.cpp", 191));
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unhandled state", CGS_ARTIST_FILE, 191));
             break;
         }
 
@@ -1015,7 +1015,7 @@ namespace BrnDirector
             break;
 
         default:
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt("unhandled state", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateTakedown.cpp", 388));
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unhandled state", CGS_ARTIST_FILE, 388));
             break;
         }
 
@@ -1097,7 +1097,7 @@ namespace BrnDirector
             mLooseAttachment.GetBehaviour()->SetParameters(&mLooseAttachmentParameters);
 
             CGS_ASSERT(lrSharedInfo.mpGameState->mbTakedownActive,
-                       CgsDev::Assert::MessageAt("lSharedInfo.mpGameState->mbTakedownActive", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateTakedown.cpp", 747));
+                       CGS_ASSERT_MESSAGE_AT("lSharedInfo.mpGameState->mbTakedownActive", CGS_ARTIST_FILE, 747));
 
             // The rig hangs off the PLAYER's car and looks at the VICTIM's.
             mLooseAttachment.GetBehaviour()->AttachTo(
@@ -1343,7 +1343,7 @@ namespace BrnDirector
             break;
 
         default:
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt("unhandled state", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateTakedown.cpp", 953));
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unhandled state", CGS_ARTIST_FILE, 953));
             break;
         }
 
@@ -1383,13 +1383,13 @@ namespace BrnDirector
             if (lrGameState.mbIsShutdown || mbAlwaysUseShutdownCam)
             {
                 CGS_ASSERT(lrSharedInfo.mpDirectorResourceManager != 0,
-                           CgsDev::Assert::MessageAt("lSharedInfo.mpDirectorResourceManager", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateTakedown.cpp", 1051));
+                           CGS_ASSERT_MESSAGE_AT("lSharedInfo.mpDirectorResourceManager", CGS_ARTIST_FILE, 1051));
 
                 const Attrib::Gen::shotgroup& lrTakedown =
                     lrSharedInfo.mpDirectorResourceManager->GetTakedown();
 
                 CGS_ASSERT(lrTakedown.Num_ShotList() > 0,
-                           CgsDev::Assert::MessageAt("lSharedInfo.mpDirectorResourceManager->GetTakedown().Num_ShotList() > 0", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateTakedown.cpp", 1052));
+                           CGS_ASSERT_MESSAGE_AT("lSharedInfo.mpDirectorResourceManager->GetTakedown().Num_ShotList() > 0", CGS_ARTIST_FILE, 1052));
 
                 // A rolling shot index: advance, then wrap on the group's shot count (the
                 // console's own twllei-guarded modulo, so a zero count traps rather than divides).
@@ -1632,7 +1632,7 @@ namespace BrnDirector
             break;
 
         default:
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt("unhandled state", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateTakedown.cpp", 1339));
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unhandled state", CGS_ARTIST_FILE, 1339));
             break;
         }
 
@@ -1725,3 +1725,5 @@ namespace BrnDirector
         }
     }
 }
+
+#undef CGS_ARTIST_FILE

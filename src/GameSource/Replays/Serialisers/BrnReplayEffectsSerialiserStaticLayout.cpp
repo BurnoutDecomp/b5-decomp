@@ -12,7 +12,7 @@
 //   SetGlassEventData@ 0x8227ED88
 //   GetCarContact    @ 0x8227EEE0
 //   GetGlassEventData@ 0x82287A48
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayEffectsSerialiser.h"
 #include "GameSource/Replays/Serialisers/BrnReplayEffectsSerialiser.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -78,14 +78,14 @@ namespace BrnReplays
                                                      f32& lrfValue, s32& lriBoostType)
     {
         CGS_ASSERT(liRaceCarIndex >= 0 && liRaceCarIndex < 8,   // signed range test (ARTIST 0x8227893C / WriteBoostData)
-                   CgsDev::Assert::MessageAt("Invalid Race Car Index in EffectsSerialiser (GetBoostData)", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayEffectsSerialiser.h", 485));
+                   CGS_ASSERT_MESSAGE_AT("Invalid Race Car Index in EffectsSerialiser (GetBoostData)", CGS_ARTIST_FILE, 485));
 
         lruActive    = maBoostActive[liRaceCarIndex];
         lriBoostType = maBoostType[liRaceCarIndex];
         lrfValue     = maBoostValue[liRaceCarIndex];
 
         CGS_ASSERT(lriBoostType >= -1 && lriBoostType < 3,
-                   CgsDev::Assert::MessageAt("Invalid Boost Type in EffectsSerialiser (GetBoostData)", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayEffectsSerialiser.h", 492));
+                   CGS_ASSERT_MESSAGE_AT("Invalid Boost Type in EffectsSerialiser (GetBoostData)", CGS_ARTIST_FILE, 492));
     }
 
     // @ 0x822789D0 -- read the recorded boost locators for a race car (index < 8).
@@ -93,14 +93,14 @@ namespace BrnReplays
                                                          Matrix44Affine* lpLocators)
     {
         CGS_ASSERT(luRaceCarIndex < 8,
-                   CgsDev::Assert::MessageAt("Invalid Race Car Index in EffectsSerialiser (GetBoostLocators)", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayEffectsSerialiser.h", 503));
+                   CGS_ASSERT_MESSAGE_AT("Invalid Race Car Index in EffectsSerialiser (GetBoostLocators)", CGS_ARTIST_FILE, 503));
 
         const u8* const lpBase = reinterpret_cast<const u8*>(this);
 
         const u8 luCount = lpBase[KI_OFF_BOOST_COUNTS + luRaceCarIndex];
         lruCount = luCount;
         CGS_ASSERT(luCount < 16u,
-                   CgsDev::Assert::MessageAt("Too many Boost Locators in EffectsSerialiser (GetBoostLocators)", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayEffectsSerialiser.h", 508));
+                   CGS_ASSERT_MESSAGE_AT("Too many Boost Locators in EffectsSerialiser (GetBoostLocators)", CGS_ARTIST_FILE, 508));
 
         const u8* const lpSrc = lpBase + KI_OFF_BOOST_LOCATORS
                               + luRaceCarIndex * KI_BOOST_LOCATOR_STRIDE;
@@ -112,9 +112,9 @@ namespace BrnReplays
                                                       f32 lfBoostValue, s32 liBoostType)
     {
         CGS_ASSERT(liRaceCarIndex >= 0 && liRaceCarIndex < 8,   // signed range test (ARTIST 0x8227893C / WriteBoostData)
-                   CgsDev::Assert::MessageAt("Invalid Race Car Index in EffectsSerialiser (SetBoostData)", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayEffectsSerialiser.h", 469));
+                   CGS_ASSERT_MESSAGE_AT("Invalid Race Car Index in EffectsSerialiser (SetBoostData)", CGS_ARTIST_FILE, 469));
         CGS_ASSERT(liBoostType >= -1 && liBoostType < 3,
-                   CgsDev::Assert::MessageAt("Invalid Boost Type in EffectsSerialiser (SetBoostData)", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayEffectsSerialiser.h", 470));
+                   CGS_ASSERT_MESSAGE_AT("Invalid Boost Type in EffectsSerialiser (SetBoostData)", CGS_ARTIST_FILE, 470));
 
         maBoostActive[liRaceCarIndex] = lu8ActiveFlag;
         maBoostType[liRaceCarIndex] = liBoostType;
@@ -126,9 +126,9 @@ namespace BrnReplays
                                                          const Matrix44Affine* lpLocators)
     {
         CGS_ASSERT(luRaceCarIndex < 8,
-                   CgsDev::Assert::MessageAt("Invalid Race Car Index in EffectsSerialiser (SetBoostLocators)", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayEffectsSerialiser.h", 525));
+                   CGS_ASSERT_MESSAGE_AT("Invalid Race Car Index in EffectsSerialiser (SetBoostLocators)", CGS_ARTIST_FILE, 525));
         CGS_ASSERT(luActiveMask < 16u,
-                   CgsDev::Assert::MessageAt("Too many Boost Locators in EffectsSerialiser (SetBoostLocators)", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayEffectsSerialiser.h", 526));
+                   CGS_ASSERT_MESSAGE_AT("Too many Boost Locators in EffectsSerialiser (SetBoostLocators)", CGS_ARTIST_FILE, 526));
 
         u8* const lpBase = reinterpret_cast<u8*>(this);
 
@@ -150,7 +150,7 @@ namespace BrnReplays
         const s32 liCount = *reinterpret_cast<const s32*>(lpBase + 0x34);
 
         CGS_ASSERT(liCount > 0,
-                   CgsDev::Assert::MessageAt("Trying to Update a non-existant RaceCar Contact in the EffectsSerialiser", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayEffectsSerialiser.h", 331));
+                   CGS_ASSERT_MESSAGE_AT("Trying to Update a non-existant RaceCar Contact in the EffectsSerialiser", CGS_ARTIST_FILE, 331));
 
         // The contact Vector4 for the current (newest) contact slot.
         u8* lpSlot = lpBase + 0x10A0 + 16 * liCount;
@@ -221,7 +221,7 @@ namespace BrnReplays
         const u8* const lpBase = reinterpret_cast<const u8*>(this);
 
         CGS_ASSERT(liContactIndex < *reinterpret_cast<const s32*>(lpBase + KI_OFF_NUM_CONTACTS),
-                   CgsDev::Assert::MessageAt("Requested Contact Number is out of range", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayEffectsSerialiser.h", 284));
+                   CGS_ASSERT_MESSAGE_AT("Requested Contact Number is out of range", CGS_ARTIST_FILE, 284));
 
         *lpuField1 = *reinterpret_cast<const u32*>(lpBase + KI_OFF_CONTACT_FIELD1 + liContactIndex * 4);
         *lpuField2 = *reinterpret_cast<const u32*>(lpBase + KI_OFF_CONTACT_FIELD2 + liContactIndex * 4);
@@ -253,7 +253,7 @@ namespace BrnReplays
         const u8* const lpBase = reinterpret_cast<const u8*>(this);
 
         CGS_ASSERT(luEventIndex < *reinterpret_cast<const u32*>(lpBase + KI_OFF_NUM_GLASS_EVENTS),
-                   CgsDev::Assert::MessageAt("Invalid Event Number in EffectsSerialiser", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayEffectsSerialiser.h", 199));
+                   CGS_ASSERT_MESSAGE_AT("Invalid Event Number in EffectsSerialiser", CGS_ARTIST_FILE, 199));
 
         const u32 luEvent = luEventIndex;
         const u8* const lpEvent  = lpBase + (luEvent << 6);
@@ -282,3 +282,5 @@ namespace BrnReplays
         std::memcpy(lpVpermPacked, lpEvent + 0x2E0, 0x10);
     }
 }
+
+#undef CGS_ARTIST_FILE

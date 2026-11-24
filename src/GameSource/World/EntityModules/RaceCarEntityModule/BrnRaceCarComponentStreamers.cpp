@@ -1,6 +1,6 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarComponentStreamers.h"
 #include "GameSource/Sound/BrnDebugComponent.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/RaceCarEntityModule/BrnRaceCarStreamer.cpp"
 extern s32 KI_PRINT_CAR_LOADING_STATES; // shared ARTIST82FFB830, owned by BrnVehicleState.cpp
 
 #include <cstring>                                                            // strstr
@@ -138,7 +138,7 @@ bool RaceCarAudioStreamer::IsVehicleAssetLoaded( CgsID lAssetId, s32 liActiveRac
     (void)lbIsPlayer;
 
     CGS_ASSERT( liActiveRaceCar >= 0 && liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "liActiveRaceCar >= 0 && liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS",
             KAC_ARTIST_ASSERT_FILE, 843 /* ARTIST 0x822A5904 */));
 
@@ -184,22 +184,22 @@ void RaceCarAudioStreamer::OnUnloadComplete( const BrnResource::GameDataIO::Unlo
     const s32 liActiveRaceCar = static_cast<s32>( GetUserId( liListIndex ) );
 
     CGS_ASSERT( liActiveRaceCar >= 0,
-        CgsDev::Assert::MessageAt("liActiveRaceCar >= 0", KAC_ARTIST_ASSERT_FILE, 392 /* ARTIST 0x822A5604 */));
+        CGS_ASSERT_MESSAGE_AT("liActiveRaceCar >= 0", KAC_ARTIST_ASSERT_FILE, 392 /* ARTIST 0x822A5604 */));
     CGS_ASSERT( liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS",
             KAC_ARTIST_ASSERT_FILE, 393 /* ARTIST 0x822A5628 */));
 
     RaceCarStreamingSound& lEntry = maEntries[liActiveRaceCar];
 
     CGS_ASSERT( lpEvent != 0,
-        CgsDev::Assert::MessageAt("lpEvent", KAC_ARTIST_ASSERT_FILE, 397 /* ARTIST 0x822A5660 */));
+        CGS_ASSERT_MESSAGE_AT("lpEvent", KAC_ARTIST_ASSERT_FILE, 397 /* ARTIST 0x822A5660 */));
     CGS_ASSERT( lEntry.mLoadedBundleId != 0,
-        CgsDev::Assert::MessageAt("lpEntry->mLoadedBundleId", KAC_ARTIST_ASSERT_FILE, 398 /* ARTIST 0x822A5688 */));
+        CGS_ASSERT_MESSAGE_AT("lpEntry->mLoadedBundleId", KAC_ARTIST_ASSERT_FILE, 398 /* ARTIST 0x822A5688 */));
     CGS_ASSERT( lEntry.mbLoadedIsPlayer,
-        CgsDev::Assert::MessageAt("lpEntry->mbLoadedIsPlayer", KAC_ARTIST_ASSERT_FILE, 399 /* ARTIST 0x822A56B0 */));
+        CGS_ASSERT_MESSAGE_AT("lpEntry->mbLoadedIsPlayer", KAC_ARTIST_ASSERT_FILE, 399 /* ARTIST 0x822A56B0 */));
     CGS_ASSERT( lEntry.mLoadedBundleId == lpEvent->GetGameDataId(),
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lpEntry->mLoadedBundleId == lpEvent->GetGameDataId()",
             KAC_ARTIST_ASSERT_FILE, 400 /* ARTIST 0x822A56DC */));
 
@@ -207,7 +207,7 @@ void RaceCarAudioStreamer::OnUnloadComplete( const BrnResource::GameDataIO::Unlo
     lEntry.mbLoadedIsPlayer = false;
 
     CGS_ASSERT( lEntry.meState == RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_UNLOADINGBUNDLES,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lpEntry->meState == RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_UNLOADINGBUNDLES",
             KAC_ARTIST_ASSERT_FILE, 405 /* ARTIST 0x822A5710 */));
 
@@ -705,8 +705,8 @@ void RaceCarStreamer::Prepare( const BrnResource::VehicleList* lpVehicleList,
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(
             "lpVehicleList != NULL",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/RaceCarEntityModule/BrnRaceCarStreamer.cpp",
-            87);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+            87));
         CgsDev::Assert::EndAssert();
     }
     (void)lpWheelList;
@@ -728,8 +728,8 @@ void RaceCarStreamer::AppendGameDataRequests(
     // ARTIST bakes BrnRaceCarStreamer.cpp:378 (li r5,0x17A at 0x82302064) and appends with no
     // null guard after the assert (the early return that stood here was a PC-side addition).
     CGS_ASSERT( lpInterface != 0,
-        CgsDev::Assert::MessageAt( "lpInterface",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/RaceCarEntityModule/BrnRaceCarStreamer.cpp",
+        CGS_ASSERT_MESSAGE_AT( "lpInterface",
+            CGS_ARTIST_FILE,
             378 ) );
 
     lpInterface->Append( *mAttributeStreamer.GetGameDataRequestInterface() );
@@ -740,3 +740,5 @@ void RaceCarStreamer::AppendGameDataRequests(
 }
 
 } // namespace BrnWorld
+
+#undef CGS_ARTIST_FILE

@@ -157,7 +157,7 @@ public:
         const IndexType liIndex = mObjectPool.AllocateObject();
         // ARTIST streams this message (AllocateVoid<BehaviourHeliCam> 0x82214864..0x822148D8:
         // StrStream over gpcMessageBuffer, FireAssert at BrnAbstractPool.h:170).
-        CGS_ASSERT(liIndex >= 0, CgsDev::Assert::StreamMessageAt("AbstractPool : out of space", "..\\..\\..\\GameSource\\Director/Utils/BrnAbstractPool.h", 170));
+        CGS_ASSERT(liIndex >= 0, CGS_ASSERT_STREAM_MESSAGE_AT("AbstractPool : out of space", "..\\..\\..\\GameSource\\Director/Utils/BrnAbstractPool.h", 170));
 
         // The handle takes the slot itself, not the new-expression's result: ARTIST passes
         // the operator[] result to Prepare in r5 and tests that same register before the

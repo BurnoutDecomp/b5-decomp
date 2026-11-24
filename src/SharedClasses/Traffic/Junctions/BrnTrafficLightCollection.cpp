@@ -121,10 +121,10 @@ namespace BrnTraffic
     Matrix44Affine TrafficLightCollection::CalcInstanceTransform(u32 luInstance) const
     {
         CGS_ASSERT(luInstance < muNumTrafficLights,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "luInstance < muNumTrafficLights", KAC_ARTIST_ASSERT_FILE, 248 /* ARTIST 0x82753944 */));
         CGS_ASSERT(mpaPosAndYRotations,
-            CgsDev::Assert::MessageAt("mpaPosAndYRotations", KAC_ARTIST_ASSERT_FILE, 249 /* ARTIST 0x8275396C */));
+            CGS_ASSERT_MESSAGE_AT("mpaPosAndYRotations", KAC_ARTIST_ASSERT_FILE, 249 /* ARTIST 0x8275396C */));
 
         return ExpandPosPlusYRotToTransform(mpaPosAndYRotations[luInstance]);
     }
@@ -183,9 +183,9 @@ namespace BrnTraffic
     // -- GetCoronaPosition @ 0x82753820 -------------------------------------------
     Vector3 TrafficLightCollection::GetCoronaPosition(u32 luCorona) const
     {
-        CGS_ASSERT(luCorona < muNumCoronas, CgsDev::Assert::MessageAt("luCorona < muNumCoronas", KAC_ARTIST_ASSERT_FILE, 230));
+        CGS_ASSERT(luCorona < muNumCoronas, CGS_ASSERT_MESSAGE_AT("luCorona < muNumCoronas", KAC_ARTIST_ASSERT_FILE, 230));
         CGS_ASSERT(rw::math::vpu::IsValid(mpaCoronaPositions[luCorona]),
-            CgsDev::Assert::MessageAt("RwMath::IsValid( mpaCoronaPositions[luCorona] )", KAC_ARTIST_ASSERT_FILE, 231));
+            CGS_ASSERT_MESSAGE_AT("RwMath::IsValid( mpaCoronaPositions[luCorona] )", KAC_ARTIST_ASSERT_FILE, 231));
 
         return mpaCoronaPositions[luCorona];
     }
@@ -221,18 +221,18 @@ namespace BrnTraffic
     {
         const u32 luHash = luInstanceID & KU_INSTANCE_ID_HASH_MASK;
         CGS_ASSERT((luHash + 1) < KU_INSTANCE_ID_HASH_TABLE_SIZE,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "(luHash + 1) < KU_INSTANCE_ID_HASH_TABLE_SIZE",
                 KAC_ARTIST_ASSERT_FILE, 288 /* ARTIST 0x8274F5C4 */));
 
         const u32 luBeginIndex = mauInstanceHashOffsets[luHash];
         const u32 luEndIndex   = mauInstanceHashOffsets[luHash + 1];
         CGS_ASSERT(luEndIndex >= luBeginIndex,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "luEndIndex >= luBeginIndex",
                 KAC_ARTIST_ASSERT_FILE, 294 /* ARTIST 0x8274F600 */));
         CGS_ASSERT(luEndIndex <= muNumTrafficLights,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "luEndIndex <= muNumTrafficLights",
                 KAC_ARTIST_ASSERT_FILE, 295 /* ARTIST 0x8274F628 */));
 
@@ -251,7 +251,7 @@ namespace BrnTraffic
     u32 TrafficLightCollection::GetInstanceType(u32 luInstance) const
     {
         CGS_ASSERT(luInstance < muNumTrafficLights,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "luInstance < muNumTrafficLights", KAC_ARTIST_ASSERT_FILE, 208 /* ARTIST 0x8274F468 */));
 
         return mpauInstanceTypes[luInstance];
@@ -261,7 +261,7 @@ namespace BrnTraffic
     const TrafficLightType* TrafficLightCollection::GetTrafficLightType(u32 luType) const
     {
         CGS_ASSERT(luType < muNumTrafficLightTypes,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "luType < muNumTrafficLightTypes", KAC_ARTIST_ASSERT_FILE, 215 /* ARTIST 0x8274F4D0 */));
 
         return &mpaTrafficLightTypes[luType];

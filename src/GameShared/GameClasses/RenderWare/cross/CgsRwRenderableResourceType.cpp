@@ -111,7 +111,7 @@ namespace CgsResource
         (void)lpResource;
         (void)lrResource;
         CGS_ASSERT(false,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "Don't call this function at runtime", KAC_ARTIST_ASSERT_FILE, 445 /* ARTIST 0x828A7D74 */));
     }
 
@@ -122,7 +122,7 @@ namespace CgsResource
         (void)lpuOffset;
         (void)lppValue;
         CGS_ASSERT(false,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "Should not be called at runtime", KAC_ARTIST_ASSERT_FILE, 1005 /* ARTIST 0x828A7DB4 */));
     }
 

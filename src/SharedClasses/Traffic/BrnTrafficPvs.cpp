@@ -118,7 +118,7 @@ u32 Pvs::GetHullIndexForIndices(s32 liX, s32 liZ) const
 const CgsContainers::Set<u16, 8>& Pvs::GetHullPvs(u32 luIndex) const
 {
     CGS_ASSERT(luIndex < muNumCells,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "luIndex < muNumCells",
             "..\\..\\..\\SharedClasses\\Traffic/BrnTrafficPvs.h", 204 /* ARTIST 0x82705FE0 */));
 

@@ -3,7 +3,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log / Message
 #include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h" // AllocatorList
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"     // CgsMemory::HeapMalloc
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\X360/BrnSystemHWX360.cpp"
 #include <cstring>   // strrchr, strlen
 
 // Case-insensitive bounded compare (console strnicmp -> MSVC _strnicmp).
@@ -57,7 +57,7 @@ namespace BrnHW
         System360HW::EPrepareStage lePrevious = reStage;
         reStage = static_cast<System360HW::EPrepareStage>(reStage + 1);
         CGS_ASSERT(reStage <= System360HW::E_PREPARESTAGE_DONE,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "leEnumIndex <= System360HW::E_PREPARESTAGE_DONE",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\game\\..\\X360\\BrnSystemHWX360.h", 132 /* ARTIST 0x823A8A44 */));
         return lePrevious;
@@ -116,7 +116,7 @@ namespace BrnHW
             return true;
         }
 
-        CGS_ASSERT(false, CgsDev::Assert::MessageAt("false", "..\\..\\..\\GameSource\\X360/BrnSystemHWX360.cpp", 119));
+        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("false", CGS_ARTIST_FILE, 119));
         return true;
     }
 
@@ -132,7 +132,7 @@ namespace BrnHW
         }
         else if (meReleaseStage != E_PREPARESTAGE_DONE)
         {
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt("false", "..\\..\\..\\GameSource\\X360/BrnSystemHWX360.cpp", 160));
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("false", CGS_ARTIST_FILE, 160));
         }
         return 1;
     }
@@ -148,7 +148,7 @@ namespace BrnHW
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("spHeapMalloc != NULL",
-                "..\\..\\..\\GameSource\\X360/BrnSystemHWX360Massive.cpp", 309);
+                CGS_ASSERT_LOCATION("..\\..\\..\\GameSource\\X360/BrnSystemHWX360Massive.cpp", 309));
             CgsDev::Assert::EndAssert();
         }
         return 1;
@@ -174,3 +174,5 @@ namespace BrnHW
         return true;
     }
 }
+
+#undef CGS_ARTIST_FILE

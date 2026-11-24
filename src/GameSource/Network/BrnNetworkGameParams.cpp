@@ -164,7 +164,7 @@ void GameParams::SetGameMode(s32 liGameMode)
                           reinterpret_cast<MatchmakingContext*>(maRankedContexts));
 
     CGS_ASSERT(GameMode() == liGameMode,
-        CgsDev::Assert::MessageAt("GameMode() == leGameMode", __FILE__, 309 /* ARTIST 0x8258A7E8 */));
+        CGS_ASSERT_MESSAGE_AT("GameMode() == leGameMode", __FILE__, 309 /* ARTIST 0x8258A7E8 */));
 }
 
 // X360 @ 0x82583EA8. Pack the 1-bit infinite-boost flag (base bit 7) into the leaf
@@ -187,9 +187,9 @@ void GameParams::SetNumRunnerCrashes(s32 liNumRunnerCrashes)
 void GameParams::SetNumberRounds(s32 liNumRounds)
 {
     CGS_ASSERT(liNumRounds > 0,
-        CgsDev::Assert::MessageAt("liNumRounds > 0", __FILE__, 272 /* ARTIST 0x82583F74 */));
+        CGS_ASSERT_MESSAGE_AT("liNumRounds > 0", __FILE__, 272 /* ARTIST 0x82583F74 */));
     CGS_ASSERT(liNumRounds < 16,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "liNumRounds < (1<<KI_GAME_PARAMS_ROUNDS_NUM_BITS)", __FILE__, 273 /* ARTIST 0x82583F98 */));
 
     mGameData.muUser1 = ((static_cast<u32>(liNumRounds) << 11) & 0x7800u)
@@ -209,9 +209,9 @@ void GameParams::SetPreviousGameMode(s32 liGameMode)
 void GameParams::SetRagerVehicleLevelLimit(s32 liLevelLimit)
 {
     CGS_ASSERT(liLevelLimit >= 0,
-        CgsDev::Assert::MessageAt("liLevelLimit >= 0", __FILE__, 194 /* ARTIST 0x82583E5C */));
+        CGS_ASSERT_MESSAGE_AT("liLevelLimit >= 0", __FILE__, 194 /* ARTIST 0x82583E5C */));
     CGS_ASSERT(liLevelLimit < 16,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "liLevelLimit < (1<<KI_GAME_PARAMS_VEHICLE_LEVEL_NUM_BITS)", __FILE__, 195 /* ARTIST 0x82583E80 */));
 
     mGameData.muUser1 = ((static_cast<u32>(liLevelLimit) << 3) & 0x78u)
@@ -232,9 +232,9 @@ void GameParams::SetVehicleChoice(s32 liVehicleChoice)
 void GameParams::SetVehicleLevelLimit(s32 liLevelLimit)
 {
     CGS_ASSERT(liLevelLimit >= 0,
-        CgsDev::Assert::MessageAt("liLevelLimit >= 0", __FILE__, 180 /* ARTIST 0x82583DE4 */));
+        CGS_ASSERT_MESSAGE_AT("liLevelLimit >= 0", __FILE__, 180 /* ARTIST 0x82583DE4 */));
     CGS_ASSERT(liLevelLimit < (1 << KU_BRN_GAMESEARCHDATA_VEC_LEVEL_NUM_BITS),
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "liLevelLimit < (1<<KU_BRN_GAMESEARCHDATA_VEC_LEVEL_NUM_BITS)",
             __FILE__, 181 /* ARTIST 0x82583E08 */));
 
@@ -278,9 +278,9 @@ void GameParams::SetTrafficCheckingOn(bool lbTrafficCheckingOn)
 void GameParams::SetTimeLimit(s32 liTimeLimit)
 {
     CGS_ASSERT(liTimeLimit >= 0,
-        CgsDev::Assert::MessageAt("liTimeLimit >= 0", __FILE__, 233 /* ARTIST 0x82583EEC */));
+        CGS_ASSERT_MESSAGE_AT("liTimeLimit >= 0", __FILE__, 233 /* ARTIST 0x82583EEC */));
     CGS_ASSERT(liTimeLimit < (1 << KI_GAME_PARAMS_TIME_LIMIT_NUM_BITS),
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "liTimeLimit < (1<<KI_GAME_PARAMS_TIME_LIMIT_NUM_BITS)",
             __FILE__, 234 /* ARTIST 0x82583F10 */));
     mGameData.muUser1 = ((static_cast<u32>(liTimeLimit) << KI_GAME_PARAMS_TIME_LIMIT_BASE_BIT) & 0xF8000u)

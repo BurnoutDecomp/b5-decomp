@@ -68,7 +68,7 @@ void BoostManager::SetBoostStrategy(BoostStrategyId leStrategy)
         break;
     default:
         CGS_ASSERT(false,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "Unknown boost strategy",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\racecarentitymodule\\Boost/BrnBoostManager.h", 431 /* ARTIST 0x822A3348 */));
         break;

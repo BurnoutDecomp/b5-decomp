@@ -252,13 +252,13 @@ private:
 
 // ARTIST 0x8271B18C uses signed bounds and an unsigned modulo of the old seed's
 // high word. The diagnostics use the CgsRandom.h filename at 0x82001F94.
-#line 318 "..\\..\\..\\GameShared\\GameClasses\\Numeric/CgsRandom.h"
+#define CGS_ARTIST_CGSRANDOM_FILE "..\\..\\..\\GameShared\\GameClasses\\Numeric/CgsRandom.h"
 __forceinline s32 Random::RandomInt(s32 liMin, s32 liMax)
 {
-    CGS_ASSERT(liMax >= liMin, "liMax >= liMin");
+    CGS_ASSERT_AT(liMax >= liMin, "liMax >= liMin", CGS_ARTIST_CGSRANDOM_FILE, 320);
 
     const u32 luMod = static_cast<u32>(liMax - liMin) + 1u;
-    CGS_ASSERT(luMod > 0u, "luMod > 0");
+    CGS_ASSERT_AT(luMod > 0u, "luMod > 0", CGS_ARTIST_CGSRANDOM_FILE, 323);
 
     return liMin + static_cast<s32>(RandomUInt() % luMod);
 }
@@ -268,3 +268,5 @@ CGS_STATIC_ASSERT((__alignof(Random) == 16),
               "CgsNumeric::Random is 16-aligned (the DWARF union's VectorIntrinsic[2] member); "
               "at align 8 an embedder can seat it at +8 and shift everything behind it");
 }
+
+#undef CGS_ARTIST_CGSRANDOM_FILE

@@ -65,11 +65,11 @@ namespace BrnNetwork
     // reconstruction retains the same event and stores for that original constant.
     void RoadRulesManagerDebugComponent::TriggerPersonalBest( void* lpData )
     {
-        CGS_ASSERT(lpData != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpData != 0, CGS_ASSERT_MESSAGE_AT(
             "lpData",
             __FILE__, 104 /* ARTIST 0x8258AEEC */));
         RoadRulesManagerDebugComponent* lpThis = static_cast<RoadRulesManagerDebugComponent*>( lpData );
-        CGS_ASSERT(lpThis != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpThis != 0, CGS_ASSERT_MESSAGE_AT(
             "lpRoadRulesManagerDebugCmpt",
             __FILE__, 106 /* ARTIST 0x8258AF08 */));
 
@@ -93,10 +93,10 @@ namespace BrnNetwork
     void RoadRulesManagerDebugComponent::RequestRoadRulesHighScores( void* lpData )
     {
         CGS_ASSERT( lpData != 0,
-            CgsDev::Assert::MessageAt("lpData", __FILE__, 141 /* ARTIST 0x825863D0 */));
+            CGS_ASSERT_MESSAGE_AT("lpData", __FILE__, 141 /* ARTIST 0x825863D0 */));
         RoadRulesManagerDebugComponent* lpThis = static_cast<RoadRulesManagerDebugComponent*>( lpData );
         CGS_ASSERT( lpThis != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpRoadRulesManagerDebugCmpt", __FILE__, 143 /* ARTIST 0x825863F4 */));
 
         lpThis->mpRoadRulesManager->StartDownloadingRoadRulesScoresFromServer();

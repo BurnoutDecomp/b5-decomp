@@ -1,8 +1,8 @@
 #include "GameShared/GameClasses/Memory/CgsMemoryModuleIO.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\CgsMemoryModuleIO.h"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"  // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"  // CgsCore::StrCpy
-
+#define CGS_ARTIST_CGSMEMORYMODULEIO_FILE "..\\..\\..\\GameShared\\GameClasses\\Memory/CgsMemoryModuleIO.h"
 #include <cstring>  // std::strncpy (models the X360 strncpy default-name fill)
 
 // CgsMemory::MemoryIO::InputBuffer accessors. Recovered from the X360 bodies
@@ -23,33 +23,33 @@ namespace MemoryIO
     // X360 0x82869248 (const): assert read-locked (status bit 4), then hand back the queue.
     const InputBuffer::MemoryRequestQueue* InputBuffer::GetMemoryRequestQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt(
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
             "Not locked for reading\n",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\CgsMemoryModuleIO.h", 753));
+            CGS_ARTIST_FILE, 753));
         return &mMemoryRequestQueue;
     }
 
     // X360 0x828E1040 (non-const): assert write-locked (status bit 3), then hand back the queue.
     InputBuffer::MemoryRequestQueue* InputBuffer::GetMemoryRequestQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameShared\\GameClasses\\Memory/CgsMemoryModuleIO.h", 754));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_CGSMEMORYMODULEIO_FILE, 754));
         return &mMemoryRequestQueue;
     }
 
     // OutputBuffer accessors -- mirror of InputBuffer (the response queue lives at this+4).
     const OutputBuffer::MemoryResponseQueue* OutputBuffer::GetMemoryResponseQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt(
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
             "Not locked for reading\n",
-            "..\\..\\..\\GameShared\\GameClasses\\Memory/CgsMemoryModuleIO.h", 785));
+            CGS_ARTIST_CGSMEMORYMODULEIO_FILE, 785));
         return &mMemoryResponseQueue;
     }
 
     OutputBuffer::MemoryResponseQueue* OutputBuffer::GetMemoryResponseQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt(
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
             "Not locked for writing\n",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\CgsMemoryModuleIO.h", 786));
+            CGS_ARTIST_FILE, 786));
         return &mMemoryResponseQueue;
     }
 
@@ -97,3 +97,6 @@ namespace MemoryIO
     void CreateAllocatorRequest::SetLinearAllocator(CgsMemory::LinearMalloc* lpAllocator) { mpLinearAllocator = lpAllocator; }
 }
 }
+
+#undef CGS_ARTIST_FILE
+#undef CGS_ARTIST_CGSMEMORYMODULEIO_FILE

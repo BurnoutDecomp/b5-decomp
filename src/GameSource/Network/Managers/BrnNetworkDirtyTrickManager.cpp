@@ -56,7 +56,7 @@ namespace BrnNetwork
         }
 
         CGS_ASSERT(lpEntry != 0,
-            CgsDev::Assert::MessageAt("lpEntry", __FILE__, 370 /* ARTIST 0x825486FC */));
+            CGS_ASSERT_MESSAGE_AT("lpEntry", __FILE__, 370 /* ARTIST 0x825486FC */));
         return lpEntry;
     }
 
@@ -108,7 +108,7 @@ namespace BrnNetwork
     void NetworkDirtyTrickManager::ProcessAfterSimulation(const BrnNetworkModuleIO::PostSimulationInputBuffer* /*lpInputBuffer*/)
     {
         CGS_ASSERT(mpNetworkModule,
-            CgsDev::Assert::MessageAt("mpNetworkModule", __FILE__, 163 /* ARTIST 0x8255BA90 */));
+            CGS_ASSERT_MESSAGE_AT("mpNetworkModule", __FILE__, 163 /* ARTIST 0x8255BA90 */));
         ProcessDirtyTrickEvents();
     }
 
@@ -116,14 +116,14 @@ namespace BrnNetwork
     void NetworkDirtyTrickManager::AddPlayer(NetworkPlayerID lNetworkPlayerID)
     {
         CGS_ASSERT(mpPlayerManager,
-            CgsDev::Assert::MessageAt("mpPlayerManager", __FILE__, 293 /* ARTIST 0x82560BA8 */));
+            CGS_ASSERT_MESSAGE_AT("mpPlayerManager", __FILE__, 293 /* ARTIST 0x82560BA8 */));
 
         CgsNetwork::NetworkPlayer* lpNetworkPlayer = mpPlayerManager->GetPlayerByID(lNetworkPlayerID);
         if (lpNetworkPlayer != 0)
         {
             DirtyTrickData* lpDataEntry = GetDirtyTrickDataEntry(-1);
             CGS_ASSERT(lpDataEntry,
-                CgsDev::Assert::MessageAt("lpDataEntry", __FILE__, 300 /* ARTIST 0x82560BF4 */));
+                CGS_ASSERT_MESSAGE_AT("lpDataEntry", __FILE__, 300 /* ARTIST 0x82560BF4 */));
 
             lpNetworkPlayer->RegisterMessageType(KI_DIRTY_TRICK_MESSAGE_TYPE,
                                                  sizeof(DirtyTrickMessage),
@@ -140,7 +140,7 @@ namespace BrnNetwork
     void NetworkDirtyTrickManager::RemovePlayer(NetworkPlayerID lNetworkPlayerID)
     {
         CGS_ASSERT(mpPlayerManager,
-            CgsDev::Assert::MessageAt("mpPlayerManager", __FILE__, 330 /* ARTIST 0x825536C8 */));
+            CGS_ASSERT_MESSAGE_AT("mpPlayerManager", __FILE__, 330 /* ARTIST 0x825536C8 */));
 
         CgsNetwork::NetworkPlayer* lpNetworkPlayer = mpPlayerManager->GetPlayerByID(lNetworkPlayerID);
         if (lpNetworkPlayer != 0)
@@ -160,7 +160,7 @@ namespace BrnNetwork
                 RemovePlayer(maDirtyTrickData[liIndex].mPlayerID);
                 // ARTIST 0x82553774 reports line 395; the path is a literal (as __FILE__ is): a
                 // named path array reorders the loop-hoisted message/file registers.
-                CGS_ASSERT(maDirtyTrickData[liIndex].mPlayerID == -1, CgsDev::Assert::MessageAt(
+                CGS_ASSERT(maDirtyTrickData[liIndex].mPlayerID == -1, CGS_ASSERT_MESSAGE_AT(
                     "maDirtyTrickData[liIndex].mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID",
                     "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkDirtyTrickManager.cpp", 395));
             }
@@ -189,7 +189,7 @@ namespace BrnNetwork
     void NetworkDirtyTrickManager::SendDirtyTrickMessage(EActiveRaceCarIndex leAggressor, EActiveRaceCarIndex leVictim,
                                                          u8 lu8DirtyTrickType, u8 lu8DirtyTrickStatus)
     {
-        CGS_ASSERT(mpPlayerManager, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpPlayerManager, CGS_ASSERT_MESSAGE_AT(
             "mpPlayerManager",
             __FILE__, 250 /* ARTIST 0x82548570 */));
 
@@ -201,14 +201,14 @@ namespace BrnNetwork
             {
                 DirtyTrickMessage* lpDirtyTrickMessage = static_cast<DirtyTrickMessage*>(
                     lpNetworkPlayer->GetRegisteredSendMessage(KI_DIRTY_TRICK_MESSAGE_TYPE));
-                CGS_ASSERT(lpDirtyTrickMessage, CgsDev::Assert::MessageAt(
+                CGS_ASSERT(lpDirtyTrickMessage, CGS_ASSERT_MESSAGE_AT(
                     "lpDirtyTrickMessage",
                     __FILE__, 260 /* ARTIST 0x825485F4 */));
 
                 const NetworkPlayerID lAggressorPlayerID = mpNetworkModule->GetNetworkPlayerID(leAggressor);
                 const NetworkPlayerID lVictimPlayerID    = mpNetworkModule->GetNetworkPlayerID(leVictim);
 
-                CGS_ASSERT(!lpDirtyTrickMessage->IsMessageValid(), CgsDev::Assert::MessageAt(
+                CGS_ASSERT(!lpDirtyTrickMessage->IsMessageValid(), CGS_ASSERT_MESSAGE_AT(
                     "!lpDirtyTrickMessage->IsMessageValid()",
                     __FILE__, 269 /* ARTIST 0x82548644 */));
 
@@ -222,10 +222,10 @@ namespace BrnNetwork
     void NetworkDirtyTrickManager::ReceiveDirtyTrickMessage(NetworkPlayerID /*lNetworkPlayerID*/,
                                                             DirtyTrickMessage* lpDirtyTrickMessageRecv)
     {
-        CGS_ASSERT(mpNetworkModule, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpNetworkModule, CGS_ASSERT_MESSAGE_AT(
             "mpNetworkModule",
             __FILE__, 419 /* ARTIST 0x8255BB04 */));
-        CGS_ASSERT(lpDirtyTrickMessageRecv, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpDirtyTrickMessageRecv, CGS_ASSERT_MESSAGE_AT(
             "lpDirtyTrickMessageRecv",
             __FILE__, 420 /* ARTIST 0x8255BB28 */));
 
@@ -249,11 +249,11 @@ namespace BrnNetwork
     {
         NetworkDirtyTrickManager* lpDirtyTrickManager = static_cast<NetworkDirtyTrickManager*>(lpContext);
         CGS_ASSERT(lpDirtyTrickManager,
-            CgsDev::Assert::MessageAt("lpDirtyTrickManager", __FILE__, 465 /* ARTIST 0x8255BBE8 */));
+            CGS_ASSERT_MESSAGE_AT("lpDirtyTrickManager", __FILE__, 465 /* ARTIST 0x8255BBE8 */));
 
         DirtyTrickMessage* lpDirtyTrickMessage = static_cast<DirtyTrickMessage*>(lpMessage);
         CGS_ASSERT(lpDirtyTrickMessage,
-            CgsDev::Assert::MessageAt("lpDirtyTrickMessage", __FILE__, 466 /* ARTIST 0x8255BC0C */));
+            CGS_ASSERT_MESSAGE_AT("lpDirtyTrickMessage", __FILE__, 466 /* ARTIST 0x8255BC0C */));
 
         lpDirtyTrickManager->ReceiveDirtyTrickMessage(lNetworkPlayerID, lpDirtyTrickMessage);
     }

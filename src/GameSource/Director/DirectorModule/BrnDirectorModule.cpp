@@ -23,7 +23,7 @@
 // reverted after fresh-eyes review, as one opaque byte buffer accessed via raw
 // reinterpret_cast offset pokes throughout; that pattern is not used here).
 // ============================================================================
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModule.cpp"
 #include "GameSource/Director/BrnDirectorModule.h"
 
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                 // CGS_ASSERT
@@ -174,7 +174,7 @@ bool DirectorModule::Release()
         return true;
 
     default:
-        CGS_ASSERT(false, CgsDev::Assert::MessageAt("Invalid Stage\n", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModule.cpp", 200));
+        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Invalid Stage\n", CGS_ARTIST_FILE, 200));
         return false;
     }
 }
@@ -270,9 +270,9 @@ bool DirectorModule::Prepare(DirectorIO::OutputBuffer* lpOutputBuffer,
 
     default:
         CGS_ASSERT(false,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "Invalid Stage\n",
-                "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModule.cpp", 140 /* ARTIST 0x82271408 */));
+                CGS_ARTIST_FILE, 140 /* ARTIST 0x82271408 */));
         break;
     }
 
@@ -363,7 +363,7 @@ void DirectorModule::ProcessSceneQueryResults(
             break;
         }
         default:
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt("Unhandled result type", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModule.cpp", 537));                           // .cpp:537
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Unhandled result type", CGS_ARTIST_FILE, 537));                           // .cpp:537
             break;
         }
     }
@@ -689,3 +689,5 @@ s32 DirectorModule::PostGuiUpdate(CgsModule::IOBufferStack* lpInputStack, CgsMod
 }
 
 }
+
+#undef CGS_ARTIST_FILE

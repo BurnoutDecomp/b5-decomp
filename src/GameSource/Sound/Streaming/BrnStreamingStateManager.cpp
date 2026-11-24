@@ -313,7 +313,7 @@ bool StreamingStateManager::Release()
 void StreamingStateManager::PostStreamRequest( const StreamRequest& lStreamRequest )
 {
     CGS_ASSERT( muPlayRequestCount < E_MAX_STREAM_REQUESTS,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "muPlayRequestCount < E_MAX_STREAM_REQUESTS",
             KAC_ARTIST_ASSERT_FILE, 257 /* ARTIST 0x82683520 */));
 
@@ -343,7 +343,7 @@ void StreamingStateManager::PostStreamRequest( const StreamRequest& lStreamReque
 void StreamingStateManager::PostStreamRequestInternal( const StreamRequest& arRequest )
 {
     CGS_ASSERT( muPlayRequestCount < E_MAX_STREAM_REQUESTS,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "muPlayRequestCount < E_MAX_STREAM_REQUESTS",
             KAC_ARTIST_ASSERT_FILE, 307 /* ARTIST 0x826836D8 */));
 
@@ -366,7 +366,7 @@ void StreamingStateManager::PostStreamRequestInternal( const StreamRequest& arRe
 void StreamingStateManager::RePostStreamRequest( const StreamRequest& request )
 {
     CGS_ASSERT( muNumRePostRequests < E_MAX_REQUEST_RE_POSTS,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "muNumRePostRequests < E_MAX_REQUEST_RE_POSTS",
             KAC_ARTIST_ASSERT_FILE, 349 /* ARTIST 0x82683780 */));
 

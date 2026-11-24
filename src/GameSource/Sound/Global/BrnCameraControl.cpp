@@ -231,7 +231,7 @@ BrnSound::ECameraModes CameraControl::GetCameraMode(
 {
     using BrnDirector::Camera::CameraState;
 
-    CGS_ASSERT(lpGameModeInterface != 0, CgsDev::Assert::MessageAt(
+    CGS_ASSERT(lpGameModeInterface != 0, CGS_ASSERT_MESSAGE_AT(
         "lpGameModeInterface",
         "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
         "../Sound/Global/BrnCameraControl.cpp", 397));  // 0x8269C70C
@@ -270,12 +270,12 @@ BrnSound::ECameraModes CameraControl::GetCameraMode(
 BrnSound::ECameraModes CameraControl::GetCameraModeFromLogicModule(
     BrnSound::Module::SoundLogicModule* lpLogicModule)
 {
-    CGS_ASSERT(lpLogicModule != 0, CgsDev::Assert::MessageAt("lpLogicModule", KAC_BRN_CAMERA_CONTROL_ASSERT_FILE, 446));
+    CGS_ASSERT(lpLogicModule != 0, CGS_ASSERT_MESSAGE_AT("lpLogicModule", KAC_BRN_CAMERA_CONTROL_ASSERT_FILE, 446));
 
     // 8269C884 `lwz r11, 0x4C94(r31)` + the "mpBrnLogicInputBuffer" assert is
     // GetBrnInputStructure() @0x82682518 inlined; 8269C8B0 re-loads the same member.
     BrnSound::Module::Io::RootInputBuffer* lpInputBuffer = lpLogicModule->GetBrnInputStructure();
-    CGS_ASSERT(lpInputBuffer != 0, CgsDev::Assert::MessageAt("lpInputBuffer", KAC_BRN_CAMERA_CONTROL_ASSERT_FILE, 451));
+    CGS_ASSERT(lpInputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpInputBuffer", KAC_BRN_CAMERA_CONTROL_ASSERT_FILE, 451));
 
     // 8269C8DC / 8269C8E8 / 8269C8F0 (`addi r3, r30, 0x138` == Camera::mState).
     return GetCameraMode(lpInputBuffer->GetDirectorCamera()->GetState(),

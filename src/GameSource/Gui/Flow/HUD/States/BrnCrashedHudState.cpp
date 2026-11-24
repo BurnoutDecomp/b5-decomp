@@ -89,7 +89,7 @@ u32       CrashedHudState::muNumResourcesToLoad = 4;
     // observable effect is the store into mauExpectedComponentIds[count] + count++.
     void CrashedHudState::SetExpectedComponent(const char* lpacComponentName)
     {
-        CGS_ASSERT(muNumExpectedComponents < KU_MAX_INIT_COMPONENTS_NUM, CgsDev::Assert::StreamMessageAt("No space for new expected component", "..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnCrashedHudState.h", 291));
+        CGS_ASSERT(muNumExpectedComponents < KU_MAX_INIT_COMPONENTS_NUM, CGS_ASSERT_STREAM_MESSAGE_AT("No space for new expected component", "..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnCrashedHudState.h", 291));
 
 
         // X360: inline strlen (char* walk to the NUL) then CalculateHash(name, len).
@@ -428,8 +428,8 @@ void CrashedHudState::UpdateRunning()
                     CgsDev::Assert::BeginAssert();
                     CgsDev::Assert::FireAssert(
                         lacMessage,
-                        "..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnCrashedHudState.cpp",
-                        937);
+                        CGS_ASSERT_LOCATION("..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnCrashedHudState.cpp",
+                        937));
                     CgsDev::Assert::EndAssert();
                 }
                 break;
@@ -534,8 +534,8 @@ void CrashedHudState::UpdateRunning()
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 lacMessage,
-                "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsFastBitArray.h",
-                396);
+                CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Containers/CgsFastBitArray.h",
+                396));
             CgsDev::Assert::EndAssert();
         }
         const BrnGameState::GameStateModuleIO::CompletedFburnChallenges* lpCompleted =

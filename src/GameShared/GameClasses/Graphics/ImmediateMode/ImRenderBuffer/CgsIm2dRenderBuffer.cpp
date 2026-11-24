@@ -14,7 +14,7 @@
 // 32-byte clear record and its by-value colour at +16. Derived writers retain
 // their native block assertions, overflow rewind and cache prewarm.
 // =============================================================================
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBuffer.h"
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsIm2dRenderBuffer.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2d.h"
@@ -137,7 +137,7 @@ namespace CgsGraphics
         if (!mbInRenderBlock)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("Command called outside of a BeginRendering/EndRendering block", lpFile, 1216);
+            CgsDev::Assert::FireAssert("Command called outside of a BeginRendering/EndRendering block", CGS_ASSERT_LOCATION(lpFile, 1216));
             CgsDev::Assert::EndAssert();
         }
         __dcbz128(static_cast<int>(mpWriteBuffer->muCommandBufferWritePos + 128u),
@@ -157,7 +157,7 @@ namespace CgsGraphics
             if (!mbFailGracefully)
             {
                 CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert("ImRenderBuffer command buffer is full", lpFile, 1254);
+                CgsDev::Assert::FireAssert("ImRenderBuffer command buffer is full", CGS_ASSERT_LOCATION(lpFile, 1254));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -172,7 +172,7 @@ namespace CgsGraphics
         if (!mbInRenderBlock)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("Command called outside of a BeginRendering/EndRendering block", lpFile, 1216);
+            CgsDev::Assert::FireAssert("Command called outside of a BeginRendering/EndRendering block", CGS_ASSERT_LOCATION(lpFile, 1216));
             CgsDev::Assert::EndAssert();
         }
         __dcbz128(static_cast<int>(mpWriteBuffer->muCommandBufferWritePos + 128u), mpWriteBuffer->mpu8CommandBuffer);
@@ -194,7 +194,7 @@ namespace CgsGraphics
             if (!mbFailGracefully)
             {
                 CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert("ImRenderBuffer command buffer is full", lpFile, 1254);
+                CgsDev::Assert::FireAssert("ImRenderBuffer command buffer is full", CGS_ASSERT_LOCATION(lpFile, 1254));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -208,7 +208,7 @@ namespace CgsGraphics
         if (!mbInRenderBlock)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("Command called outside of a BeginRendering/EndRendering block", lpFile, 1216);
+            CgsDev::Assert::FireAssert("Command called outside of a BeginRendering/EndRendering block", CGS_ASSERT_LOCATION(lpFile, 1216));
             CgsDev::Assert::EndAssert();
         }
         __dcbz128(static_cast<int>(mpWriteBuffer->muCommandBufferWritePos + 128u),
@@ -229,7 +229,7 @@ namespace CgsGraphics
             if (!mbFailGracefully)
             {
                 CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert("ImRenderBuffer command buffer is full", lpFile, 1254);
+                CgsDev::Assert::FireAssert("ImRenderBuffer command buffer is full", CGS_ASSERT_LOCATION(lpFile, 1254));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -246,7 +246,7 @@ namespace CgsGraphics
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("Im2dRenderBuffer: Push Mask, we have run out of vertex buffer space...",
-                "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/ImRenderBuffer/CgsIm2dRenderBuffer.h", 200);
+                CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/ImRenderBuffer/CgsIm2dRenderBuffer.h", 200));
             CgsDev::Assert::EndAssert();
         }
         if (lpCommand && lpVertices)
@@ -382,8 +382,8 @@ namespace CgsGraphics
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 "Command called outside of a BeginRendering/EndRendering block",
-                "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBuffer.h",
-                1216);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                1216));
             CgsDev::Assert::EndAssert();
         }
 
@@ -398,8 +398,8 @@ namespace CgsGraphics
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 "ImRenderBuffer command buffer is full",
-                "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBuffer.h",
-                1254);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                1254));
             CgsDev::Assert::EndAssert();
         }
     }
@@ -470,3 +470,5 @@ namespace CgsGraphics
         const Im2dTransform&, renderengine::Texture*, const renderengine::BlendState*,
         renderengine::PrimitiveType, const Basic2dColouredTexturedVertex*, u32, u8);
 }
+
+#undef CGS_ARTIST_FILE

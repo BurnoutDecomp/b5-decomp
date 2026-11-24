@@ -75,8 +75,8 @@ namespace BrnResource
                 lStrStream << "\n";
                 CgsDev::Assert::FireAssert(
                     lacMessageBuffer,
-                    "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h",
-                    65);
+                    CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h",
+                    65));
                 CgsDev::Assert::EndAssert();
             }
 
@@ -461,8 +461,8 @@ namespace BrnResource
             lStrStream << "No module\n";
             CgsDev::Assert::FireAssert(
                 CgsDev::Assert::gpcMessageBuffer,
-                "..\\..\\..\\GameSource\\Resource/BrnResourceDebugComponent.cpp",
-                313); // ARTIST 0x82662734
+                CGS_ASSERT_LOCATION("..\\..\\..\\GameSource\\Resource/BrnResourceDebugComponent.cpp",
+                313)); // ARTIST 0x82662734
             CgsDev::Assert::EndAssert();
         }
 

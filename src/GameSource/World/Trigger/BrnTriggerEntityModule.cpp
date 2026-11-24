@@ -152,7 +152,7 @@ bool TriggerEntityModule::Prepare()
         {
             // Only stage values > DONE(2) are a corrupt resume point.
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("Invalid Stage\n", KAC_FILE, 110);
+            CgsDev::Assert::FireAssert("Invalid Stage\n", CGS_ASSERT_LOCATION(KAC_FILE, 110));
             CgsDev::Assert::EndAssert();
         }
     }
@@ -199,7 +199,7 @@ bool TriggerEntityModule::Release()
         {
             // meReleaseStage > DONE(2) -> invalid resume point.
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("Invalid Stage\n", KAC_FILE, 161);
+            CgsDev::Assert::FireAssert("Invalid Stage\n", CGS_ASSERT_LOCATION(KAC_FILE, 161));
             CgsDev::Assert::EndAssert();
         }
     }
@@ -224,13 +224,13 @@ void TriggerEntityModule::ProcessAddTriggerEvents(
     if (!lpInputInterface)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpInputInterface", KAC_FILE, 221);
+        CgsDev::Assert::FireAssert("lpInputInterface", CGS_ASSERT_LOCATION(KAC_FILE, 221));
         CgsDev::Assert::EndAssert();
     }
     if (!lpOutSceneInputInterface)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpOutSceneInputInterface", KAC_FILE, 222);
+        CgsDev::Assert::FireAssert("lpOutSceneInputInterface", CGS_ASSERT_LOCATION(KAC_FILE, 222));
         CgsDev::Assert::EndAssert();
     }
 
@@ -249,7 +249,7 @@ void TriggerEntityModule::ProcessAddTriggerEvents(
         if (liTriggerIndex < 0 || static_cast<u16>(liTriggerIndex) >= KU_MAX_TRIGGERS)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("All available triggers used.", KAC_FILE, 260);
+            CgsDev::Assert::FireAssert("All available triggers used.", CGS_ASSERT_LOCATION(KAC_FILE, 260));
             CgsDev::Assert::EndAssert();
             break;
         }
@@ -285,7 +285,7 @@ void TriggerEntityModule::ProcessAddTriggerEvents(
                 if (!(lfDimX > 0.0f) || !(lfDimY > 0.0f))
                 {
                     CgsDev::Assert::BeginAssert();
-                    CgsDev::Assert::FireAssert("Invalid plane segment trigger dimensions", KAC_FILE, 282);
+                    CgsDev::Assert::FireAssert("Invalid plane segment trigger dimensions", CGS_ASSERT_LOCATION(KAC_FILE, 282));
                     CgsDev::Assert::EndAssert();
                 }
                 // A plane segment is a very thin box. The X360 feeds BoxVolume::Initialize the
@@ -316,7 +316,7 @@ void TriggerEntityModule::ProcessAddTriggerEvents(
                 if (!(lfRadius > 0.0f))
                 {
                     CgsDev::Assert::BeginAssert();
-                    CgsDev::Assert::FireAssert("Invalid sphere trigger radius", KAC_FILE, 327);
+                    CgsDev::Assert::FireAssert("Invalid sphere trigger radius", CGS_ASSERT_LOCATION(KAC_FILE, 327));
                     CgsDev::Assert::EndAssert();
                 }
                 // Same staged rw::Resource as the two box branches (0x822D96C4..0x822D96EC).
@@ -353,7 +353,7 @@ void TriggerEntityModule::ProcessAddTriggerEvents(
 
             default:
                 CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert("Unknown event type.", KAC_FILE, 394);
+                CgsDev::Assert::FireAssert("Unknown event type.", CGS_ASSERT_LOCATION(KAC_FILE, 394));
                 CgsDev::Assert::EndAssert();
                 break;
         }
@@ -361,19 +361,19 @@ void TriggerEntityModule::ProcessAddTriggerEvents(
         if (!lbVolumeOk)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpVolume", KAC_FILE, 398);
+            CgsDev::Assert::FireAssert("lpVolume", CGS_ASSERT_LOCATION(KAC_FILE, 398));
             CgsDev::Assert::EndAssert();
         }
         if (!(lfEntityBoundingSphereRadius > 0.0f))
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lfEntityBoundingSphereRadius > 0.0f", KAC_FILE, 399);
+            CgsDev::Assert::FireAssert("lfEntityBoundingSphereRadius > 0.0f", CGS_ASSERT_LOCATION(KAC_FILE, 399));
             CgsDev::Assert::EndAssert();
         }
         if (lu8TriggerTypeFlag == 0)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lu8TriggerTypeFlag > 0", KAC_FILE, 400);
+            CgsDev::Assert::FireAssert("lu8TriggerTypeFlag > 0", CGS_ASSERT_LOCATION(KAC_FILE, 400));
             CgsDev::Assert::EndAssert();
         }
 
@@ -418,13 +418,13 @@ void TriggerEntityModule::ProcessTriggerQueryEvents(const InputBuffer_PostScene*
     if (!lpInput)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpInput", KAC_FILE, 512);
+        CgsDev::Assert::FireAssert("lpInput", CGS_ASSERT_LOCATION(KAC_FILE, 512));
         CgsDev::Assert::EndAssert();
     }
     if (!lpOutput)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpOutput", KAC_FILE, 513);
+        CgsDev::Assert::FireAssert("lpOutput", CGS_ASSERT_LOCATION(KAC_FILE, 513));
         CgsDev::Assert::EndAssert();
     }
 
@@ -467,7 +467,7 @@ void TriggerEntityModule::ProcessTriggerQueryEvents(const InputBuffer_PostScene*
             CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
             lStrStream << "Unknown trigger query type " << liType;
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), KAC_FILE, 544);
+            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), CGS_ASSERT_LOCATION(KAC_FILE, 544));
             CgsDev::Assert::EndAssert();
         }
 
@@ -485,13 +485,13 @@ void TriggerEntityModule::ProcessSceneQueryResults(const InputBuffer_PrePhysics*
     if (!lpInput)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpInput", KAC_FILE, 587);
+        CgsDev::Assert::FireAssert("lpInput", CGS_ASSERT_LOCATION(KAC_FILE, 587));
         CgsDev::Assert::EndAssert();
     }
     if (!lpOutput)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpOutput", KAC_FILE, 588);
+        CgsDev::Assert::FireAssert("lpOutput", CGS_ASSERT_LOCATION(KAC_FILE, 588));
         CgsDev::Assert::EndAssert();
     }
 
@@ -527,13 +527,13 @@ void TriggerEntityModule::ProcessLineTestFineResult(
     if (!lpLineTestFineResult)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpLineTestFineResult", KAC_FILE, 629);
+        CgsDev::Assert::FireAssert("lpLineTestFineResult", CGS_ASSERT_LOCATION(KAC_FILE, 629));
         CgsDev::Assert::EndAssert();
     }
     if (!lpOutput)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpOutput", KAC_FILE, 630);
+        CgsDev::Assert::FireAssert("lpOutput", CGS_ASSERT_LOCATION(KAC_FILE, 630));
         CgsDev::Assert::EndAssert();
     }
 
@@ -557,7 +557,7 @@ void TriggerEntityModule::ProcessLineTestFineResult(
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 "lpIntersections[liIndex].mEntityId.GetOwner() == E_ENTITYTYPE_TRIGGER",
-                KAC_FILE, 650);
+                CGS_ASSERT_LOCATION(KAC_FILE, 650));
             CgsDev::Assert::EndAssert();
         }
         if (!(lEntityId.GetEntityIndex() < KU_MAX_TRIGGERS))
@@ -565,7 +565,7 @@ void TriggerEntityModule::ProcessLineTestFineResult(
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 "lpIntersections[liIndex].mEntityId.GetEntityIndex() < KU_MAX_TRIGGERS",
-                KAC_FILE, 651);
+                CGS_ASSERT_LOCATION(KAC_FILE, 651));
             CgsDev::Assert::EndAssert();
         }
     }
@@ -643,13 +643,13 @@ void TriggerEntityModule::ProcessRemoveTriggerEvents(
     if (!lpInputInterface)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpInputInterface", KAC_FILE, 436);
+        CgsDev::Assert::FireAssert("lpInputInterface", CGS_ASSERT_LOCATION(KAC_FILE, 436));
         CgsDev::Assert::EndAssert();
     }
     if (!lpOutSceneInputInterface)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpOutSceneInputInterface", KAC_FILE, 437);
+        CgsDev::Assert::FireAssert("lpOutSceneInputInterface", CGS_ASSERT_LOCATION(KAC_FILE, 437));
         CgsDev::Assert::EndAssert();
     }
 
@@ -675,7 +675,7 @@ void TriggerEntityModule::ProcessRemoveTriggerEvents(
             // The console appends the unfound handle to the message buffer here; the project
             // convention drops the formatting and keeps the literal prefix.
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("Failed to find trigger to remove: ", KAC_FILE, 471);
+            CgsDev::Assert::FireAssert("Failed to find trigger to remove: ", CGS_ASSERT_LOCATION(KAC_FILE, 471));
             CgsDev::Assert::EndAssert();
             continue;
         }

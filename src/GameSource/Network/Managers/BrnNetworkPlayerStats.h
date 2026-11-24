@@ -156,7 +156,7 @@ namespace BrnNetwork
         leEnumIndex = static_cast<NetworkPlayerStats::EStatsValue>(static_cast<s32>(leEnumIndex) + 1);
         // ARTIST (inlined in Clear, 0x825466F4) reports line 218 of this header, path at
         // 0x8207CAD4.
-        CGS_ASSERT(leEnumIndex <= NetworkPlayerStats::E_STATS_VALUE_COUNT, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(leEnumIndex <= NetworkPlayerStats::E_STATS_VALUE_COUNT, CGS_ASSERT_MESSAGE_AT(
                    "leEnumIndex <= NetworkPlayerStats::E_STATS_VALUE_COUNT",
                    "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkPlayerStats.h", 218));
         return leOldEnumIndex;

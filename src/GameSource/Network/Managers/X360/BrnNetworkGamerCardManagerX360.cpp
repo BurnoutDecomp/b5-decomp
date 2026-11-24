@@ -12,7 +12,7 @@
 //   * meSubState selects the per-frame mapUpdateFunctions[meSubState] that ProcessBeforeSimulation
 //     ticks, which (on completion) calls SetNextAction to advance the action cursor.
 // ===================================================================================
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Managers/X360/BrnNetworkGamerCardManagerX360.cpp"
 #include "GameSource/Network/Managers/X360/BrnNetworkGamerCardManagerX360.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 
@@ -77,9 +77,9 @@ namespace BrnNetwork
         for (s32 liProcess = 0; liProcess < KI_NUMBER_OF_PROCESSES; ++liProcess)
         {
             CGS_ASSERT(maProcessActions[liProcess * KI_ACTIONS_PER_PROCESS] != KI_NO_ACTION,
-                CgsDev::Assert::MessageAt(
+                CGS_ASSERT_MESSAGE_AT(
                     "No actions supplied for this process",
-                    "..\\..\\..\\GameSource\\Network/Managers/X360/BrnNetworkGamerCardManagerX360.cpp", 262 /* ARTIST 0x8254CAF8 */));
+                    CGS_ARTIST_FILE, 262 /* ARTIST 0x8254CAF8 */));
         }
     }
 
@@ -93,7 +93,7 @@ namespace BrnNetwork
 
         for (s32 li = 0; li < KI_NUMBER_OF_SUBSTATES; ++li)
         {
-            CGS_ASSERT(mapUpdateFunctions[li] != 0, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(mapUpdateFunctions[li] != 0, CGS_ASSERT_MESSAGE_AT(
                 "No update function supplied for this substate",
                 __FILE__, 179 /* ARTIST 0x8255E8B0 */));
         }
@@ -108,7 +108,7 @@ namespace BrnNetwork
 
         for (s32 li = 0; li < KI_NUMBER_OF_ACTIONS; ++li)
         {
-            CGS_ASSERT(mapActionFunctions[li] != 0, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(mapActionFunctions[li] != 0, CGS_ASSERT_MESSAGE_AT(
                 "No function supplied for this action",
                 __FILE__, 211 /* ARTIST 0x82557B40 */));
         }
@@ -122,9 +122,9 @@ namespace BrnNetwork
         InitialiseProcessArray();
 
         CGS_ASSERT(lpServerInterface != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpServerInterface",
-                "..\\..\\..\\GameSource\\Network/Managers/X360/BrnNetworkGamerCardManagerX360.cpp", 58 /* ARTIST 0x825618D0 */));
+                CGS_ARTIST_FILE, 58 /* ARTIST 0x825618D0 */));
 
         mpServerInterface          = lpServerInterface;   // *(a1 + 148) = a2
         maRequestedPlayerName.macName[0] = '\0';          // stb 0, 0x68
@@ -186,7 +186,7 @@ namespace BrnNetwork
     // X360 0x8254CC50 -- dispatch the update function for the current sub-state.
     s32 NetworkGamerCardManagerX360::ProcessBeforeSimulation()
     {
-        CGS_ASSERT(mapUpdateFunctions[meSubState] != 0, CgsDev::Assert::StreamMessageAt("No update function supplied for the current substate", "..\\..\\..\\GameSource\\Network/Managers/X360/BrnNetworkGamerCardManagerX360.cpp", 375));
+        CGS_ASSERT(mapUpdateFunctions[meSubState] != 0, CGS_ASSERT_STREAM_MESSAGE_AT("No update function supplied for the current substate", CGS_ARTIST_FILE, 375));
 
         return (this->*mapUpdateFunctions[meSubState])();
     }
@@ -296,12 +296,12 @@ namespace BrnNetwork
     // wait-for-sign-in sub-state.
     s32 NetworkGamerCardManagerX360::ActionShowGamercardUI()
     {
-        CGS_ASSERT(muRequestingControllerPort != KU_NUMBER_OF_PADS, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(muRequestingControllerPort != KU_NUMBER_OF_PADS, CGS_ASSERT_MESSAGE_AT(
             "muRequestingControllerPort != CgsInput::KU_NUMBER_OF_PADS",
-            "..\\..\\..\\GameSource\\Network/Managers/X360/BrnNetworkGamerCardManagerX360.cpp", 499 /* ARTIST 0x8254CE68 */));
-        CGS_ASSERT(mRequestedGamerCardXUID != 0, CgsDev::Assert::MessageAt(
+            CGS_ARTIST_FILE, 499 /* ARTIST 0x8254CE68 */));
+        CGS_ASSERT(mRequestedGamerCardXUID != 0, CGS_ASSERT_MESSAGE_AT(
             "mRequestedGamerCardXUID != 0",
-            "..\\..\\..\\GameSource\\Network/Managers/X360/BrnNetworkGamerCardManagerX360.cpp", 500 /* ARTIST 0x8254CE90 */));
+            CGS_ARTIST_FILE, 500 /* ARTIST 0x8254CE90 */));
 
         // The X360 sets up only two arg registers: r3 = the controller/user-index member
         // (lwz r3, 0x80(r30)) and r4 = the full 64-bit requested XUID (ld r4, 0x78(r30)).
@@ -403,10 +403,10 @@ namespace BrnNetwork
         s32 liResult = 0;
         if (meProcess == KI_PROCESS_NONE)
         {
-            CGS_ASSERT(luRequestingControllerPort != KU_NUMBER_OF_PADS, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(luRequestingControllerPort != KU_NUMBER_OF_PADS, CGS_ASSERT_MESSAGE_AT(
                 "luRequestingControllerPort != CgsInput::KU_NUMBER_OF_PADS",
                 __FILE__, 694 /* ARTIST 0x8254D1E8 */));
-            CGS_ASSERT(lPlayerXuid != 0, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(lPlayerXuid != 0, CGS_ASSERT_MESSAGE_AT(
                 "lPlayerXuid != 0",
                 __FILE__, 695 /* ARTIST 0x8254D20C */));
 
@@ -491,3 +491,5 @@ namespace BrnNetwork
         return liResult;
     }
 }
+
+#undef CGS_ARTIST_FILE

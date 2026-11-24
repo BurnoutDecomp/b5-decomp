@@ -29,7 +29,7 @@ namespace Playback
 void Object::Release()
 {
     CGS_ASSERT(mu32RefCount > 0,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "mu32RefCount > 0",
             "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsObject.h", 117 /* ARTIST 0x82680960 */));
     --mu32RefCount;

@@ -242,7 +242,7 @@ void BrnRendererMemory::CreateBackBuffer(rw::IResourceAllocator* lpAllocator, u3
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("GetDownSampleBuffer() != NULL",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Graphics/BrnRendererMemory.cpp", 856);
+            CGS_ASSERT_LOCATION("d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Graphics/BrnRendererMemory.cpp", 856));
         CgsDev::Assert::EndAssert();
     }
 
@@ -272,7 +272,7 @@ CgsRenderTarget* BrnRendererMemory::GetShadowMapBuffer(s32 liIndex)
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("liIndex >=0 && liIndex<4",
-            "..\\..\\..\\GameSource\\Graphics/BrnRendererMemory.h", 359);
+            CGS_ASSERT_LOCATION("..\\..\\..\\GameSource\\Graphics/BrnRendererMemory.h", 359));
         CgsDev::Assert::EndAssert();
     }
     return mapRenderTarget[liIndex + 1];

@@ -19,7 +19,7 @@
 // E_BURNOUT_SKILL_COUNT == 14, two more than the declared 12. The home was grown
 // additively (array -> [14], two placeholder enumerators) to match the console.
 // ----------------------------------------------------------------------------
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\GameState/ModeManager/Scoring/BrnBurnoutSkillzData.h"
 #include "GameSource/GameState/ModeManager/Scoring/BrnBurnoutSkillzData.h" // home (layout + decls)
 
 // BrnNetwork::NetworkRounder::RoundFloatToAccuracy -- SetBurnoutSkill snaps the sample
@@ -43,9 +43,9 @@ namespace BrnGameState
         const BurnoutSkillzData::EBurnoutSkillType eOld = eSkill;
         eSkill = static_cast<BurnoutSkillzData::EBurnoutSkillType>(static_cast<int>(eSkill) + 1);
         CGS_ASSERT(static_cast<int>(eSkill) <= BurnoutSkillzData::E_BURNOUT_SKILL_COUNT,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "leEnumIndex <= BurnoutSkillzData::E_BURNOUT_SKILL_COUNT",
-                "..\\..\\..\\GameSource\\GameState/ModeManager/Scoring/BrnBurnoutSkillzData.h", 109 /* ARTIST 0x8230FC38 */));
+                CGS_ARTIST_FILE, 109 /* ARTIST 0x8230FC38 */));
         return eOld;
     }
 
@@ -84,8 +84,8 @@ namespace BrnGameState
     // either way; FLAGGED for the consolidator rather than retyping the committed home.
     f32 BurnoutSkillzData::GetSkillAccuracy(EBurnoutSkillType eSkill)
     {
-        CGS_ASSERT(eSkill >= E_BURNOUT_SKILL_START, CgsDev::Assert::MessageAt("leSkillType >= E_BURNOUT_SKILL_START", "..\\..\\..\\GameSource\\GameState/ModeManager/Scoring/BrnBurnoutSkillzData.h", 161));
-        CGS_ASSERT(eSkill < E_BURNOUT_SKILL_COUNT, CgsDev::Assert::MessageAt("leSkillType < E_BURNOUT_SKILL_COUNT", "..\\..\\..\\GameSource\\GameState/ModeManager/Scoring/BrnBurnoutSkillzData.h", 162));
+        CGS_ASSERT(eSkill >= E_BURNOUT_SKILL_START, CGS_ASSERT_MESSAGE_AT("leSkillType >= E_BURNOUT_SKILL_START", CGS_ARTIST_FILE, 161));
+        CGS_ASSERT(eSkill < E_BURNOUT_SKILL_COUNT, CGS_ASSERT_MESSAGE_AT("leSkillType < E_BURNOUT_SKILL_COUNT", CGS_ARTIST_FILE, 162));
 
         return 0.0049999999f;
     }
@@ -100,11 +100,11 @@ namespace BrnGameState
     f32 BurnoutSkillzData::GetBurnoutSkill(EBurnoutSkillType eSkill) const
     {
         CGS_ASSERT(eSkill >= E_BURNOUT_SKILL_START,
-            CgsDev::Assert::MessageAt(
-                "leSkillType >= E_BURNOUT_SKILL_START", "..\\..\\..\\GameSource\\GameState/ModeManager/Scoring/BrnBurnoutSkillzData.h", 135 /* ARTIST 0x8230FC8C */));
+            CGS_ASSERT_MESSAGE_AT(
+                "leSkillType >= E_BURNOUT_SKILL_START", CGS_ARTIST_FILE, 135 /* ARTIST 0x8230FC8C */));
         CGS_ASSERT(eSkill < E_BURNOUT_SKILL_COUNT,
-            CgsDev::Assert::MessageAt(
-                "leSkillType < E_BURNOUT_SKILL_COUNT", "..\\..\\..\\GameSource\\GameState/ModeManager/Scoring/BrnBurnoutSkillzData.h", 136 /* ARTIST 0x8230FCB0 */));
+            CGS_ASSERT_MESSAGE_AT(
+                "leSkillType < E_BURNOUT_SKILL_COUNT", CGS_ARTIST_FILE, 136 /* ARTIST 0x8230FCB0 */));
 
         return mafBurnoutSkilz[eSkill];
     }
@@ -128,8 +128,8 @@ namespace BrnGameState
     // three, confirming the home's (EBurnoutSkillType eSkill, f32 fVal) signature.
     void BurnoutSkillzData::SetBurnoutSkill(EBurnoutSkillType eSkill, f32 fVal)
     {
-        CGS_ASSERT(eSkill >= E_BURNOUT_SKILL_START, CgsDev::Assert::MessageAt("leSkillType >= E_BURNOUT_SKILL_START", "..\\..\\..\\GameSource\\GameState/ModeManager/Scoring/BrnBurnoutSkillzData.h", 147));
-        CGS_ASSERT(eSkill < E_BURNOUT_SKILL_COUNT, CgsDev::Assert::MessageAt("leSkillType < E_BURNOUT_SKILL_COUNT", "..\\..\\..\\GameSource\\GameState/ModeManager/Scoring/BrnBurnoutSkillzData.h", 148));
+        CGS_ASSERT(eSkill >= E_BURNOUT_SKILL_START, CGS_ASSERT_MESSAGE_AT("leSkillType >= E_BURNOUT_SKILL_START", CGS_ARTIST_FILE, 147));
+        CGS_ASSERT(eSkill < E_BURNOUT_SKILL_COUNT, CGS_ASSERT_MESSAGE_AT("leSkillType < E_BURNOUT_SKILL_COUNT", CGS_ARTIST_FILE, 148));
 
         const f32 lfAccuracy = GetSkillAccuracy(eSkill);
 
@@ -139,3 +139,5 @@ namespace BrnGameState
         mafBurnoutSkilz[eSkill] = lfVal;
     }
 }
+
+#undef CGS_ARTIST_FILE

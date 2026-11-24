@@ -1,6 +1,6 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkManager.cpp"
 #include "GameSource/Network/BrnNetworkManager.h"
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsMessage.h"
 #include "GameSource/Network/BrnServerInterface.h"                                          // GetTelemetryComponent
@@ -38,10 +38,10 @@ namespace BrnNetwork
     // ----------------------------------------------------------------------------------------
     void BrnNetworkManager::CaptureTelemetryEvent(ETelemetryHook leHook, s32 liData)
     {
-        CGS_ASSERT(GetServerInterface(), CgsDev::Assert::MessageAt(
+        CGS_ASSERT(GetServerInterface(), CGS_ASSERT_MESSAGE_AT(
             "GetServerInterface()",
             __FILE__, 3121 /* ARTIST 0x825821B4 */));
-        CGS_ASSERT(GetServerInterface()->GetTelemetryComponent(), CgsDev::Assert::MessageAt(
+        CGS_ASSERT(GetServerInterface()->GetTelemetryComponent(), CGS_ASSERT_MESSAGE_AT(
             "GetServerInterface()->GetTelemetryComponent()",
             __FILE__, 3122 /* ARTIST 0x825821DC */));
 
@@ -297,7 +297,7 @@ namespace BrnNetwork
             {
                 return false;
             }
-            CGS_ASSERT(lReturnCode == CgsNetwork::E_MANAGER_STATUS_READY, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(lReturnCode == CgsNetwork::E_MANAGER_STATUS_READY, CGS_ASSERT_MESSAGE_AT(
                 "lReturnCode == CgsNetwork::E_MANAGER_STATUS_READY",
                 __FILE__, 430 /* ARTIST 0x8259ADE8 */));
 
@@ -465,7 +465,7 @@ namespace BrnNetwork
             return true;
 
         default:
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
                 "unknown prepare stage",
                 __FILE__, 811 /* ARTIST 0x8259B318 */));
             return false;
@@ -635,7 +635,7 @@ namespace BrnNetwork
             return true;
 
         default:
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
                 "unknown release stage",
                 __FILE__, 1210 /* ARTIST 0x8258E230 */));
             return false;
@@ -935,17 +935,17 @@ namespace BrnNetwork
     // ----------------------------------------------------------------------------------------
     void BrnNetworkManager::ProcessHLUpdateFlags(BrnUpdateSet luUpdateSet)
     {
-        CGS_ASSERT(GetPlayerManager(), CgsDev::Assert::MessageAt(
+        CGS_ASSERT(GetPlayerManager(), CGS_ASSERT_MESSAGE_AT(
             "GetPlayerManager()",
             __FILE__, 3260 /* ARTIST 0x82596900 */));
 
         mbDiskReadErrorThisFrame = (luUpdateSet & 0x200) != 0;
         if (mbDiskReadErrorThisFrame)
         {
-            CGS_ASSERT(GetServerInterface(), CgsDev::Assert::MessageAt(
+            CGS_ASSERT(GetServerInterface(), CGS_ASSERT_MESSAGE_AT(
                 "GetServerInterface()",
                 __FILE__, 3267 /* ARTIST 0x82596940 */));
-            CGS_ASSERT(GetServerInterface()->GetConnectionComponent(), CgsDev::Assert::MessageAt(
+            CGS_ASSERT(GetServerInterface()->GetConnectionComponent(), CGS_ASSERT_MESSAGE_AT(
                 "GetServerInterface()->GetConnectionComponent()",
                 __FILE__, 3268 /* ARTIST 0x82596968 */));
 
@@ -989,13 +989,13 @@ namespace BrnNetwork
     {
         BrnNetworkManager* lpNetworkManager = static_cast<BrnNetworkManager*>(lpUserData);
         CGS_ASSERT(lpNetworkManager,
-            CgsDev::Assert::MessageAt("lpNetworkManager", __FILE__, 2276 /* ARTIST 0x82581BD4 */));
+            CGS_ASSERT_MESSAGE_AT("lpNetworkManager", __FILE__, 2276 /* ARTIST 0x82581BD4 */));
         CGS_ASSERT(lpNetworkManager->GetServerInterface(),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpNetworkManager->GetServerInterface()",
                 __FILE__, 2281 /* ARTIST 0x82581BF8 */));
         CGS_ASSERT(lpNetworkManager->GetServerInterface()->GetGameComponent(),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpNetworkManager->GetServerInterface()->GetGameComponent()",
                 __FILE__, 2282 /* ARTIST 0x82581C20 */));
 
@@ -1003,7 +1003,7 @@ namespace BrnNetwork
             !lpNetworkManager->GetServerInterface()->GetGameComponent()->IsGameStarted())
         {
             CGS_ASSERT(lpNetworkManager->mpNetworkModule,
-                CgsDev::Assert::MessageAt(
+                CGS_ASSERT_MESSAGE_AT(
                     "lpNetworkManager->mpNetworkModule",
                     __FILE__, 2286 /* ARTIST 0x82581C78 */));
             lpNetworkManager->GetTrafficManager()->RestartNetworkTraffic(lClientReadyID);
@@ -1123,18 +1123,18 @@ namespace BrnNetwork
     void BrnNetworkManager::CaptureTelemetryEvent(ETelemetryHook leHook, const char* lpcData)
     {
         CGS_ASSERT(GetServerInterface(),
-            CgsDev::Assert::MessageAt("GetServerInterface()", __FILE__, 3121 /* ARTIST 0x825821A8 */));
+            CGS_ASSERT_MESSAGE_AT("GetServerInterface()", __FILE__, 3121 /* ARTIST 0x825821A8 */));
         CGS_ASSERT(GetServerInterface()->GetTelemetryComponent(),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "GetServerInterface()->GetTelemetryComponent()", __FILE__, 3122 /* ARTIST 0x825821D0 */));
         GetServerInterface()->GetTelemetryComponent()->CaptureEvent(leHook, lpcData);
     }
 
     EActiveRaceCarIndex BrnNetworkManager::GetActiveRaceCarIndex(NetworkPlayerID lPlayerID)
     {
-        CGS_ASSERT(mpNetworkModule, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpNetworkModule, CGS_ASSERT_MESSAGE_AT(
             "mpNetworkModule",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkManager.cpp", 3311 /* ARTIST 0x825822E4 */));
+            CGS_ARTIST_FILE, 3311 /* ARTIST 0x825822E4 */));
         return mpNetworkModule->GetActiveRaceCarIndex(lPlayerID);
     }
 
@@ -1203,27 +1203,27 @@ namespace BrnNetwork
     // ----------------------------------------------------------------------------------------
     void BrnNetworkManager::DxtDecodeCallback(void* lpPixels, void* lpUserData)
     {
-        CGS_ASSERT(lpPixels, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpPixels, CGS_ASSERT_MESSAGE_AT(
             "lpPixels",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkManager.cpp", 3236 /* ARTIST 0x82593D10 */));
-        CGS_ASSERT(lpUserData, CgsDev::Assert::MessageAt(
+            CGS_ARTIST_FILE, 3236 /* ARTIST 0x82593D10 */));
+        CGS_ASSERT(lpUserData, CGS_ASSERT_MESSAGE_AT(
             "lpUserData",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkManager.cpp", 3237 /* ARTIST 0x82593D34 */));
+            CGS_ARTIST_FILE, 3237 /* ARTIST 0x82593D34 */));
         BrnNetworkManager* lpNetworkManager = static_cast<BrnNetworkManager*>(lpUserData);
-        CGS_ASSERT(lpNetworkManager, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpNetworkManager, CGS_ASSERT_MESSAGE_AT(
             "lpNetworkManager",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkManager.cpp", 3240 /* ARTIST 0x82593D50 */));
+            CGS_ARTIST_FILE, 3240 /* ARTIST 0x82593D50 */));
 
         BrnNetworkModuleIO::NetworkOutImageDxtDecodedEvent lNetworkOutImageDxtDecodedEvent;
         lNetworkOutImageDxtDecodedEvent.mpDecodedPixels = lpPixels;
         lNetworkOutImageDxtDecodedEvent.mPlayerName     = lpNetworkManager->mExportPlayerName;
 
-        CGS_ASSERT(lpNetworkManager->mpNetworkModule, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpNetworkManager->mpNetworkModule, CGS_ASSERT_MESSAGE_AT(
             "lpNetworkManager->mpNetworkModule",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkManager.cpp", 3245 /* ARTIST 0x82593D98 */));
-        CGS_ASSERT(lpNetworkManager->mpNetworkModule->GetNetworkEventQueue(), CgsDev::Assert::MessageAt(
+            CGS_ARTIST_FILE, 3245 /* ARTIST 0x82593D98 */));
+        CGS_ASSERT(lpNetworkManager->mpNetworkModule->GetNetworkEventQueue(), CGS_ASSERT_MESSAGE_AT(
             "lpNetworkManager->mpNetworkModule->GetNetworkEventQueue()",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkManager.cpp", 3246 /* ARTIST 0x82593DC4 */));
+            CGS_ARTIST_FILE, 3246 /* ARTIST 0x82593DC4 */));
         lpNetworkManager->mpNetworkModule->GetNetworkEventQueue()->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lNetworkOutImageDxtDecodedEvent),
             lNetworkOutImageDxtDecodedEvent.GetEventType(), sizeof(lNetworkOutImageDxtDecodedEvent));
@@ -1236,10 +1236,10 @@ namespace BrnNetwork
     void BrnNetworkManager::ProcessNetworkTextureDecodeEvent(
             const BrnNetworkModuleIO::NetworkInDxtDecodeImageEvent* lpDxtDecodeRequestEvent)
     {
-        CGS_ASSERT(lpDxtDecodeRequestEvent, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpDxtDecodeRequestEvent, CGS_ASSERT_MESSAGE_AT(
             "lpDxtDecodeRequestEvent",
             __FILE__, 3208 /* ARTIST 0x82596828 */));
-        CGS_ASSERT(renderengine::PIXELFORMAT_DXT1 == lpDxtDecodeRequestEvent->mpTextureToDecode->GetFormat(), CgsDev::Assert::MessageAt(
+        CGS_ASSERT(renderengine::PIXELFORMAT_DXT1 == lpDxtDecodeRequestEvent->mpTextureToDecode->GetFormat(), CGS_ASSERT_MESSAGE_AT(
             "rw::graphics::core::PIXELFORMAT_LIN_DXT1 == lpDxtDecodeRequestEvent->mpTextureToDecode->GetFormat()",
             __FILE__, 3209 /* ARTIST 0x8259685C */));
 
@@ -1332,7 +1332,7 @@ namespace BrnNetwork
         case E_LOGIN_EVENT_PROCEED:
             return;
         default:
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
                 "Invalid login event",
                 __FILE__, 1556 /* ARTIST 0x825959D8 */));
             return;
@@ -2176,3 +2176,5 @@ namespace BrnNetwork
         }
     }
 } // namespace BrnNetwork
+
+#undef CGS_ARTIST_FILE

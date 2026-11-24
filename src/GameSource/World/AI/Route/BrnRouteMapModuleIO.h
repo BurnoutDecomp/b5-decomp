@@ -318,7 +318,7 @@ namespace BrnAI
             // transient "Route" output buffer.
             const RouteResponseQueue* GetRouteResponseQueue() const
             {
-                CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/AI/Route/BrnRouteMapModuleIO.h", 624));
+                CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", "..\\..\\..\\GameSource\\World/AI/Route/BrnRouteMapModuleIO.h", 624));
                 return &mRouteResponseQueue;
             }
 

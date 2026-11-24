@@ -3,7 +3,7 @@
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameSource/Gui/BrnGuiPerfmons.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/texturestate.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Gui/View/AptInterface/CgsAptRender.h"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBufferTemplate.h" // ImRenderBuffer<V> (SetTransform/SetProgram/SetTextureState/SetTexture/RenderFromStaticVertexBuffer)
 #include "rw/rwcore_structs.h"                        // rw::ResourceAllocatorRegistry::GetDefaultAllocator + rw::Resource
@@ -115,7 +115,7 @@ namespace CgsGui
     // -------------------------------------------------------------------------
     void AptRenderHandler::SetWhiteTexture(renderengine::Texture* lpWhiteTexture)
     {
-        CGS_ASSERT(lpWhiteTexture != 0, CgsDev::Assert::StreamMessageAt("Invalid texture pointer sent to AptRenderHandler::SetWhiteTexture", "..\\..\\..\\GameShared\\GameClasses\\Gui/View/AptInterface/CgsAptRender.h", 314));
+        CGS_ASSERT(lpWhiteTexture != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid texture pointer sent to AptRenderHandler::SetWhiteTexture", CGS_ARTIST_FILE, 314));
 
         mpWhiteTexture = lpWhiteTexture;
     }
@@ -129,9 +129,9 @@ namespace CgsGui
     AptIm2dRenderBuffer* AptRenderHandler::GetIm2dRendererType() const
     {
         CGS_ASSERT(mpImRenderers != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpImRenderers",
-                "..\\..\\..\\GameShared\\GameClasses\\Gui/View/AptInterface/CgsAptRender.h", 424 /* ARTIST 0x828467AC */));
+                CGS_ARTIST_FILE, 424 /* ARTIST 0x828467AC */));
         return mpImRenderers->mpIm2dRenderBuffer;
     }
 
@@ -342,3 +342,5 @@ namespace CgsGui
         return &maAptStrings[static_cast<u32>(liZID) - 1u];
     }
 }
+
+#undef CGS_ARTIST_FILE

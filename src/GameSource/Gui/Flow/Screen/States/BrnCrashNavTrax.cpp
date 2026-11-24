@@ -22,7 +22,7 @@
 //   PreviewTrack                   @0x824CF830   ApplyAndSaveSettings @0x824CF938
 //   StateCancelFlow                @0x824D9E30   GetResourcesToLoad   @0x825000E0 (header)
 // ===================================================================================
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavTrax.cpp"
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavTrax.h"
 
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"        // CGS_ASSERT
@@ -453,7 +453,7 @@ namespace BrnGui
     // trigger it acts on.
     void CrashNavTrax::HandleTriggers(const CgsModule::Event* lpEvent)
     {
-        CGS_ASSERT(lpEvent != 0, CgsDev::Assert::StreamMessageAt("Invalid event in CrashNavTrax::HandleTriggers", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavTrax.cpp", 636));   // cpp:636
+        CGS_ASSERT(lpEvent != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event in CrashNavTrax::HandleTriggers", CGS_ARTIST_FILE, 636));   // cpp:636
         (void)lpEvent;
     }
 
@@ -461,9 +461,9 @@ namespace BrnGui
     void CrashNavTrax::HandleOverlayCompleteEvent(const CgsModule::Event* lpEvent)
     {
         CGS_ASSERT(lpEvent != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpOverlayCompleteEvent",
-                "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavTrax.cpp", 544 /* ARTIST 0x824DEF8C */));   // cpp:544
+                CGS_ARTIST_FILE, 544 /* ARTIST 0x824DEF8C */));   // cpp:544
 
         const GuiOverlayCompletePayload* lpComplete =
             reinterpret_cast<const GuiOverlayCompletePayload*>(lpEvent);
@@ -527,7 +527,7 @@ namespace BrnGui
     // CrashNavOptionsData::OutputEvents ends with.
     void CrashNavTrax::ApplyAndSaveSettings()
     {
-        CGS_ASSERT(mpGuiCache, CgsDev::Assert::MessageAt("mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavTrax.cpp", 670 /* ARTIST 0x824CF974 */));   // cpp:670
+        CGS_ASSERT(mpGuiCache, CGS_ASSERT_MESSAGE_AT("mpGuiCache", CGS_ARTIST_FILE, 670 /* ARTIST 0x824CF974 */));   // cpp:670
 
         OptionsDataProfile* lpProfile = mpGuiCache->GetMenuOptionsData();
         lpProfile->SetTraxAvailableInFreeBurn(
@@ -577,3 +577,5 @@ namespace BrnGui
         PostRecord(mpStateInterface, lOrderRecord);
     }
 }
+
+#undef CGS_ARTIST_FILE

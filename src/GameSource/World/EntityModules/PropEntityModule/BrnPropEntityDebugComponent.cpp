@@ -98,7 +98,7 @@ namespace BrnWorld
     void PropEntityDebugComponent::Construct(PropEntityModule* lpPropEntityModule)
     {
         CgsDev::DebugComponent::Construct();   // ARTIST 0x822A96C4 (folded at 0x8284CB38)
-        CGS_ASSERT(lpPropEntityModule != 0, CgsDev::Assert::MessageAt("lpPropEntityModule != NULL", __FILE__, 50));
+        CGS_ASSERT(lpPropEntityModule != 0, CGS_ASSERT_MESSAGE_AT("lpPropEntityModule != NULL", __FILE__, 50));
         mpPropEntityModule = lpPropEntityModule;
 
         mbRenderProps         = false;   // +0x38
@@ -139,7 +139,7 @@ namespace BrnWorld
 
         RegisterVariable(&mbRenderTrafficLights, "Render props marked as Traffic Lights");
 
-        CGS_ASSERT(mpPropEntityModule != 0, CgsDev::Assert::MessageAt("mpPropEntityModule != NULL", __FILE__, 290));   // ARTIST 0x822C53B8
+        CGS_ASSERT(mpPropEntityModule != 0, CGS_ASSERT_MESSAGE_AT("mpPropEntityModule != NULL", __FILE__, 290));   // ARTIST 0x822C53B8
 
         RegisterVariable(&mpPropEntityModule->mbUseOverrides,          "Overrides...", "Use Overrides");
         RegisterVariable(&mpPropEntityModule->mfOverrideLeanThreshold, "Overrides...", "Override Lean Threshold");

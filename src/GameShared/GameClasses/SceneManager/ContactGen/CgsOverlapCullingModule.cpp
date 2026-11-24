@@ -410,9 +410,9 @@ void OverlapCullingModule::Update(OverlapCullingIO::InputBuffer* lpInputBuffer,
                                   OverlapCullingIO::OutputBuffer* lpOutputBuffer)
 {
     CGS_ASSERT(lpInputBuffer != 0,
-        CgsDev::Assert::MessageAt("lpInputBuffer != NULL", KAC_ARTIST_ASSERT_FILE, 209 /* ARTIST 0x828D1D80 */));    // .cpp:209
+        CGS_ASSERT_MESSAGE_AT("lpInputBuffer != NULL", KAC_ARTIST_ASSERT_FILE, 209 /* ARTIST 0x828D1D80 */));    // .cpp:209
     CGS_ASSERT(lpOutputBuffer != 0,
-        CgsDev::Assert::MessageAt("lpOutputBuffer != NULL", KAC_ARTIST_ASSERT_FILE, 210 /* ARTIST 0x828D1DA4 */));  // .cpp:210
+        CGS_ASSERT_MESSAGE_AT("lpOutputBuffer != NULL", KAC_ARTIST_ASSERT_FILE, 210 /* ARTIST 0x828D1DA4 */));  // .cpp:210
 
     lpInputBuffer->LockForRead();
     lpOutputBuffer->LockForWrite();
@@ -1087,9 +1087,9 @@ bool OverlapCullingModule::IsInsideEscapeVolume(s32 liVolumeInstanceIndex)
         mpEntityManager->GetVolumeInstance(static_cast<s32>(luEscapeVolumeInstanceIndex));
 
     CGS_ASSERT(lpVolInst != NULL,
-        CgsDev::Assert::MessageAt("lpVolInst", KAC_ARTIST_ASSERT_FILE, 614 /* ARTIST 0x828CB0FC */));              // .cpp:614
+        CGS_ASSERT_MESSAGE_AT("lpVolInst", KAC_ARTIST_ASSERT_FILE, 614 /* ARTIST 0x828CB0FC */));              // .cpp:614
     CGS_ASSERT(lpEscapeVolInst != NULL,
-        CgsDev::Assert::MessageAt("lpEscapeVolInst", KAC_ARTIST_ASSERT_FILE, 615 /* ARTIST 0x828CB120 */));  // .cpp:615
+        CGS_ASSERT_MESSAGE_AT("lpEscapeVolInst", KAC_ARTIST_ASSERT_FILE, 615 /* ARTIST 0x828CB120 */));  // .cpp:615
 
     const VolRef::Volume* lpVol =
         mpVolumeManager->GetRwVolume(lpVolInst->miVolumeIndex);
@@ -1097,9 +1097,9 @@ bool OverlapCullingModule::IsInsideEscapeVolume(s32 liVolumeInstanceIndex)
         mpVolumeManager->GetRwVolume(lpEscapeVolInst->miVolumeIndex);
 
     CGS_ASSERT(lpVol != NULL,
-        CgsDev::Assert::MessageAt("lpVol", KAC_ARTIST_ASSERT_FILE, 619 /* ARTIST 0x828CB164 */));              // .cpp:619
+        CGS_ASSERT_MESSAGE_AT("lpVol", KAC_ARTIST_ASSERT_FILE, 619 /* ARTIST 0x828CB164 */));              // .cpp:619
     CGS_ASSERT(lpEscapeVol != NULL,
-        CgsDev::Assert::MessageAt("lpEscapeVol", KAC_ARTIST_ASSERT_FILE, 620 /* ARTIST 0x828CB188 */));  // .cpp:620
+        CGS_ASSERT_MESSAGE_AT("lpEscapeVol", KAC_ARTIST_ASSERT_FILE, 620 /* ARTIST 0x828CB188 */));  // .cpp:620
 
     rw::collision::PrimitivePairIntersectResult lIntersectResult;
 
@@ -1167,9 +1167,9 @@ void OverlapCullingModule::DoInternalCollision(s32 liVolumeInstanceIndex,
         mpEntityManager->GetVolumeInstance(static_cast<s32>(luInternalVolumeInstanceIndex));
 
     CGS_ASSERT(lpVolInst != NULL,
-        CgsDev::Assert::MessageAt("lpVolInst", KAC_ARTIST_ASSERT_FILE, 657 /* ARTIST 0x828CB234 */));        // .cpp:657
+        CGS_ASSERT_MESSAGE_AT("lpVolInst", KAC_ARTIST_ASSERT_FILE, 657 /* ARTIST 0x828CB234 */));        // .cpp:657
     CGS_ASSERT(lpIntVolInst != NULL,
-        CgsDev::Assert::MessageAt("lpIntVolInst", KAC_ARTIST_ASSERT_FILE, 658 /* ARTIST 0x828CB258 */));  // .cpp:658
+        CGS_ASSERT_MESSAGE_AT("lpIntVolInst", KAC_ARTIST_ASSERT_FILE, 658 /* ARTIST 0x828CB258 */));  // .cpp:658
 
     const VolRef::Volume* lpVol =
         mpVolumeManager->GetRwVolume(lpVolInst->miVolumeIndex);
@@ -1177,9 +1177,9 @@ void OverlapCullingModule::DoInternalCollision(s32 liVolumeInstanceIndex,
         mpVolumeManager->GetRwVolume(lpIntVolInst->miVolumeIndex);
 
     CGS_ASSERT(lpVol != NULL,
-        CgsDev::Assert::MessageAt("lpVol", KAC_ARTIST_ASSERT_FILE, 662 /* ARTIST 0x828CB29C */));        // .cpp:662
+        CGS_ASSERT_MESSAGE_AT("lpVol", KAC_ARTIST_ASSERT_FILE, 662 /* ARTIST 0x828CB29C */));        // .cpp:662
     CGS_ASSERT(lpIntVol != NULL,
-        CgsDev::Assert::MessageAt("lpIntVol", KAC_ARTIST_ASSERT_FILE, 663 /* ARTIST 0x828CB2C0 */));  // .cpp:663
+        CGS_ASSERT_MESSAGE_AT("lpIntVol", KAC_ARTIST_ASSERT_FILE, 663 /* ARTIST 0x828CB2C0 */));  // .cpp:663
 
     DoPairQuery(lpOutputBuffer,
                 lpVolInst, static_cast<u32>(liVolumeInstanceIndex), lpVol,

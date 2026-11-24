@@ -537,8 +537,8 @@ namespace BrnGui
                 lAssertStream << static_cast<s32>(meInternalState);
                 CgsDev::Assert::FireAssert(
                     CgsDev::Assert::gpcMessageBuffer,
-                    "..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnFBurnMainHudState.cpp",
-                    1282);
+                    CGS_ASSERT_LOCATION("..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnFBurnMainHudState.cpp",
+                    1282));
                 CgsDev::Assert::EndAssert();
             }
             break;

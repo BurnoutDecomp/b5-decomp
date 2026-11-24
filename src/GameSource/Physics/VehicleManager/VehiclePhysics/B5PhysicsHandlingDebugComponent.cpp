@@ -179,7 +179,7 @@ namespace Vehicle
                                       static_cast<double>(lPosition.GetVector().y), static_cast<double>(lPosition.GetVector().z));
                 lMessage << ", please tell Graham D.";
                 CgsDev::Assert::FireAssert(lacMessage,
-                    "..\\..\\..\\GameSource\\Physics/VehicleManager/VehiclePhysics/Wheel.h", 412);
+                    CGS_ASSERT_LOCATION("..\\..\\..\\GameSource\\Physics/VehicleManager/VehiclePhysics/Wheel.h", 412));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -192,8 +192,8 @@ namespace Vehicle
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert(
                     "strlen( lOutputStream.GetBuffer() ) < 2000",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/VehicleManager/VehiclePhysics/B5PhysicsHandlingDebugComponent.cpp",
-                    liOriginalLine);
+                    CGS_ASSERT_LOCATION("d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/VehicleManager/VehiclePhysics/B5PhysicsHandlingDebugComponent.cpp",
+                    liOriginalLine));
                 CgsDev::Assert::EndAssert();
             }
             // Original vaddfp followed by a Y-lane-only insert, before draw.
@@ -894,7 +894,7 @@ namespace Vehicle
     void DebugComponent::SetLastWallTriangle(const CgsGeometric::Triangle4::AOSTriangle* lpTriangle)
     {
         CGS_ASSERT(lpTriangle != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpTriangle != NULL",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\vehiclemanager\\VehiclePhysics/B5PhysicsHandlingDebugComponent.h", 762 /* ARTIST 0x825B4D8C */));
 

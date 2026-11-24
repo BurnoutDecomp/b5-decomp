@@ -58,10 +58,10 @@ namespace BrnNetwork
     void SelectedRoutesManager::Construct(BrnNetworkModule* lpNetworkModule,
                                           CgsNetwork::TimeManager* lpTimeManager)
     {
-        CGS_ASSERT(lpNetworkModule != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpNetworkModule != 0, CGS_ASSERT_MESSAGE_AT(
             "lpNetworkModule",
             __FILE__, 50 /* ARTIST 0x8255BC74 */));
-        CGS_ASSERT(lpTimeManager != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpTimeManager != 0, CGS_ASSERT_MESSAGE_AT(
             "lpTimeManager",
             __FILE__, 51 /* ARTIST 0x8255BC98 */));
 
@@ -167,7 +167,7 @@ namespace BrnNetwork
     // ---------------------------------------------------------------------------------
     void SelectedRoutesManager::AddPlayer(NetworkPlayerID lPlayerID)
     {
-        CGS_ASSERT(mpNetworkModule->GetNetworkManager()->GetPlayerManager() != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpNetworkModule->GetNetworkManager()->GetPlayerManager() != 0, CGS_ASSERT_MESSAGE_AT(
             "mpNetworkModule->GetNetworkManager()->GetPlayerManager()",
             __FILE__, 183 /* ARTIST 0x8255BDE0 */));
 
@@ -187,7 +187,7 @@ namespace BrnNetwork
                     break;
                 }
             }
-            CGS_ASSERT(lpDataEntry != 0, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(lpDataEntry != 0, CGS_ASSERT_MESSAGE_AT(
                 "lpDataEntry",
                 __FILE__, 191 /* ARTIST 0x8255BE60 */));
 
@@ -216,7 +216,7 @@ namespace BrnNetwork
     // ---------------------------------------------------------------------------------
     void SelectedRoutesManager::RemovePlayer(NetworkPlayerID lPlayerID)
     {
-        CGS_ASSERT(mpNetworkModule->GetNetworkManager()->GetPlayerManager() != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpNetworkModule->GetNetworkManager()->GetPlayerManager() != 0, CGS_ASSERT_MESSAGE_AT(
             "mpNetworkModule->GetNetworkManager()->GetPlayerManager()",
             __FILE__, 229 /* ARTIST 0x8255BF0C */));
 
@@ -250,7 +250,7 @@ namespace BrnNetwork
             if (maSelectedRoutesData[liPlayerIndex].mPlayerID != KI_INVALID_PLAYER_ID)
             {
                 RemovePlayer(maSelectedRoutesData[liPlayerIndex].mPlayerID);
-                CGS_ASSERT(maSelectedRoutesData[liPlayerIndex].mPlayerID == KI_INVALID_PLAYER_ID, CgsDev::Assert::MessageAt(
+                CGS_ASSERT(maSelectedRoutesData[liPlayerIndex].mPlayerID == KI_INVALID_PLAYER_ID, CGS_ASSERT_MESSAGE_AT(
                     "maSelectedRoutesData[liPlayerIndex].mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID",
                     __FILE__, 277 /* ARTIST 0x8255C010 */));
             }

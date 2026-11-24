@@ -6,7 +6,7 @@
 // proven there) + the DecFIGS DWARF (member names/types/order) + the LegacySrc idiom. The
 // full byte-exact Profile layout lives in BrnProfile.h; every member here is reached BY NAME.
 // ===================================================================================
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProfile.cpp"
 #include "BrnProfile.h"
 #include "GameSource/Gui/SaveLoad/BrnGuiSaveLoadProfileDLC1.h"   // BrnGuiSaveLoad::ProfileDLC1::IsDLCCarId (SplitArray DLC test)
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
@@ -14,7 +14,7 @@
 #include "GameShared/GameClasses/Network/Texture/CgsNetworkTexture.h"
 #include "GameShared/GameClasses/Network/Utilities/CgsNetworkImageConverter.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint ([profile] selftest witness)
-
+#define CGS_ARTIST_FILE_BRNPROFILE "..\\..\\..\\GameSource\\GameState/Progression/BrnProfile.h"
 #include <string.h>   // memset / memcpy
 #include <stdlib.h>   // getenv (the [profile] selftest gate)
 
@@ -96,7 +96,7 @@ void CarData::Construct(CgsID lId)
 void CarData::SetColourIndex(s32 liColour)
 {
     CGS_ASSERT((u32)liColour < 256,
-        CgsDev::Assert::MessageAt("luColourIndex < 256", KAC_ARTIST_ASSERT_FILE, 1560 /* ARTIST 0x823548BC */));
+        CGS_ASSERT_MESSAGE_AT("luColourIndex < 256", KAC_ARTIST_ASSERT_FILE, 1560 /* ARTIST 0x823548BC */));
     mu8ColourIndex = (u8)liColour;
 }
 
@@ -107,7 +107,7 @@ void CarData::SetColourIndex(s32 liColour)
 void CarData::SetPaletteIndex(s32 liPalette)
 {
     CGS_ASSERT((u32)liPalette < 256,
-        CgsDev::Assert::MessageAt("luPaletteIndex < 256", KAC_ARTIST_ASSERT_FILE, 1568 /* ARTIST 0x8235491C */));
+        CGS_ASSERT_MESSAGE_AT("luPaletteIndex < 256", KAC_ARTIST_ASSERT_FILE, 1568 /* ARTIST 0x8235491C */));
     mu8PaletteIndex = (u8)liPalette;
 }
 
@@ -258,7 +258,7 @@ void Profile::Construct()
         maaMugshotInfo[liIndex].Construct();
         maAvailableMugshotFileIDs[liIndex].UnSetAll();   // X360 `std r31(0), 0(r11)`
         maAvailableMugshotFileIDs[liIndex].SetAll();     // X360 `std r26(-1), 0(r10)`
-        CGS_ASSERT(liIndex + 1 <= 5, CgsDev::Assert::MessageAt("leEnumIndex <= E_IMAGE_GALLERY_TYPE_COUNT", "..\\..\\..\\GameSource\\GameState/BrnGameStateSharedEnums.h", 237));
+        CGS_ASSERT(liIndex + 1 <= 5, CGS_ASSERT_MESSAGE_AT("leEnumIndex <= E_IMAGE_GALLERY_TYPE_COUNT", "..\\..\\..\\GameSource\\GameState/BrnGameStateSharedEnums.h", 237));
     }
 
     // The two milestone dates: asm writes mbIsLocal=1 (byte @+0) + the two FILETIME words = 0
@@ -321,7 +321,7 @@ void Profile::Construct()
 // ====================================================================================
 CarData* Profile::AddCar(CgsID lCarId, CarData::UnlockType leUnlockType)
 {
-    CGS_ASSERT(miCarCount < KI_MAX_PROFILE_CAR_COUNT, CgsDev::Assert::MessageAt("miCarCount < KI_MAX_PROFILE_CAR_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProfile.cpp", 560));
+    CGS_ASSERT(miCarCount < KI_MAX_PROFILE_CAR_COUNT, CGS_ASSERT_MESSAGE_AT("miCarCount < KI_MAX_PROFILE_CAR_COUNT", CGS_ARTIST_FILE, 560));
 
     s32 liIndex = miCarCount;
     ++miCarCount;
@@ -347,7 +347,7 @@ CarData* Profile::AddCar(CgsID lCarId, CarData::UnlockType leUnlockType)
 ProfileEvent* Profile::AddEvent(u32 luEventID)
 {
     CGS_ASSERT(miEventCount < KI_MAX_EVENTS,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "miEventCount < KI_MAX_EVENTS", KAC_ARTIST_ASSERT_SOURCE, 687 /* ARTIST 0x82359EE8 */));
 
     s32 liIndex = miEventCount;
@@ -399,7 +399,7 @@ ProfileEvent* Profile::FindEvent(u32 luEventID)
 // ====================================================================================
 RivalData* Profile::AddRival(CgsID lRivalId, CgsID lCarId)
 {
-    CGS_ASSERT(miRivalCount < KI_MAX_RIVAL_COUNT - 1, CgsDev::Assert::MessageAt("miRivalCount < KI_MAX_RIVAL_COUNT - 1", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProfile.cpp", 729));
+    CGS_ASSERT(miRivalCount < KI_MAX_RIVAL_COUNT - 1, CGS_ASSERT_MESSAGE_AT("miRivalCount < KI_MAX_RIVAL_COUNT - 1", CGS_ARTIST_FILE, 729));
 
     s32 liIndex = miRivalCount;
     RivalData& lRival = maRivals[liIndex];
@@ -496,7 +496,7 @@ void Profile::SetChosenLiveryIdForBaseCar(CgsID lBaseCarId, CgsID lChosenLiveryI
             }
         }
 
-        CGS_ASSERT(liIndex < KI_MAX_PROFILE_CAR_COUNT, CgsDev::Assert::MessageAt("liIndex < KI_MAX_PROFILE_CAR_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProfile.cpp", 601));
+        CGS_ASSERT(liIndex < KI_MAX_PROFILE_CAR_COUNT, CGS_ASSERT_MESSAGE_AT("liIndex < KI_MAX_PROFILE_CAR_COUNT", CGS_ARTIST_FILE, 601));
     }
 
     LiveryData& lLivery = maLiveryChoices[liIndex];
@@ -516,7 +516,7 @@ void Profile::SetCarUnlockAlreadyShown(CgsID lCarId)
 {
     CarData* lpCarData = FindCar(lCarId);
 
-    CGS_ASSERT(lpCarData, CgsDev::Assert::MessageAt("lpCarData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProfile.cpp", 671));
+    CGS_ASSERT(lpCarData, CGS_ASSERT_MESSAGE_AT("lpCarData", CGS_ARTIST_FILE, 671));
     if (lpCarData)
         lpCarData->mbUnlockSequenceAlreadyShown = true;
 }
@@ -588,7 +588,7 @@ void Profile::ClearTrainingFlags()
 bool Profile::HasPlayerSeenTrainingType(ETrainingType leTrainingType) const
 {
     CGS_ASSERT(leTrainingType >= 0 && leTrainingType < E_TRAINING_TYPE_COUNT,
-               CgsDev::Assert::MessageAt("leTrainingType >= 0 && leTrainingType < E_TRAINING_TYPE_COUNT", "..\\..\\..\\GameSource\\GameState/Progression/BrnProfile.h", 2769));  // :2769
+               CGS_ASSERT_MESSAGE_AT("leTrainingType >= 0 && leTrainingType < E_TRAINING_TYPE_COUNT", CGS_ARTIST_FILE_BRNPROFILE, 2769));  // :2769
     CGS_ASSERT(static_cast<u32>(leTrainingType) < 256u, "invalid index : ");      // CgsBitArray.h:203
 
     return maHasPlayerSeenTraining.IsBitSet(static_cast<u32>(leTrainingType));
@@ -668,7 +668,7 @@ void Profile::DEBUG_ClearMedals()
 // ====================================================================================
 s32 Profile::GetNumMugshots(s32 leMugshotType)
 {
-    CGS_ASSERT(leMugshotType < 5, CgsDev::Assert::MessageAt("leMugshotType < GsmIO::E_IMAGE_GALLERY_TYPE_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProfile.cpp", 979));
+    CGS_ASSERT(leMugshotType < 5, CGS_ASSERT_MESSAGE_AT("leMugshotType < GsmIO::E_IMAGE_GALLERY_TYPE_COUNT", CGS_ARTIST_FILE, 979));
 
     return maaMugshotInfo[leMugshotType].GetCount();
 }
@@ -694,7 +694,7 @@ s32 Profile::GetNumAllMugshots()
 void Profile::SetPlayerLicencePicture(const CgsNetwork::NetworkTexture* lpNewPlayerImage)
 {
     CGS_ASSERT(lpNewPlayerImage,
-        CgsDev::Assert::MessageAt("lpNewPlayerImage", KAC_ARTIST_ASSERT_SOURCE, 1273 /* ARTIST 0x8235A044 */));
+        CGS_ASSERT_MESSAGE_AT("lpNewPlayerImage", KAC_ARTIST_ASSERT_SOURCE, 1273 /* ARTIST 0x8235A044 */));
 
     mPlayerLicencePicture.Construct();
     mPlayerLicencePicture.Prepare(&macPlayerLicenceTextureData[0],
@@ -774,7 +774,7 @@ u8  MugshotInfo::GetLockedFlag() const { return mbLocked ? 1u : 0u; }           
 s32 Profile::AddMugshot(s32 leMugshotType, MugshotInfo::UniquePlayerID lUniqueID,
                         CgsSystem::DateAndTime lDateTaken, BrnWorld::WorldRegion lRegion)
 {
-    CGS_ASSERT(leMugshotType != 5, CgsDev::Assert::MessageAt("leMugshotType != GsmIO::E_IMAGE_GALLERY_TYPE_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProfile.cpp", 758));  // X360 BrnProfile.cpp:758
+    CGS_ASSERT(leMugshotType != 5, CGS_ASSERT_MESSAGE_AT("leMugshotType != GsmIO::E_IMAGE_GALLERY_TYPE_COUNT", CGS_ARTIST_FILE, 758));  // X360 BrnProfile.cpp:758
 
     CgsContainers::BitArray<20u>& lrFileIds = maAvailableMugshotFileIDs[leMugshotType];
     CgsContainers::Array<MugshotInfo, 20u>&      lrGallery = maaMugshotInfo[leMugshotType];
@@ -786,7 +786,7 @@ s32 Profile::AddMugshot(s32 leMugshotType, MugshotInfo::UniquePlayerID lUniqueID
     const s32 liFreeFileIdBit = lrFileIds.GetFirstNonZeroBit();
     if (liFreeFileIdBit != CgsContainers::BitArray<20u>::KI_INVALID_BITINDEX)
     {
-        CGS_ASSERT(static_cast<u32>(liFreeFileIdBit) < 20u, CgsDev::Assert::MessageAt("luIndex < NUMBITS", "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsBitArray.h", 241));   // CgsBitArray.h:241
+        CGS_ASSERT(static_cast<u32>(liFreeFileIdBit) < 20u, CGS_ASSERT_MESSAGE_AT("luIndex < NUMBITS", "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsBitArray.h", 241));   // CgsBitArray.h:241
         lrFileIds.UnSetBit(static_cast<u32>(liFreeFileIdBit));                      // X360 `andc`
 
         // X360 `mulli r8, r28, 0x3E8 ; add r30, r8, r31` -- the file id is namespaced per gallery.
@@ -797,7 +797,7 @@ s32 Profile::AddMugshot(s32 leMugshotType, MugshotInfo::UniquePlayerID lUniqueID
     }
 
     // No file id left: the gallery must be full (X360 BrnProfile.cpp:784).
-    CGS_ASSERT(lrGallery.IsFull(), CgsDev::Assert::MessageAt("maaMugshotInfo[leMugshotType].IsFull()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProfile.cpp", 784));
+    CGS_ASSERT(lrGallery.IsFull(), CGS_ASSERT_MESSAGE_AT("maaMugshotInfo[leMugshotType].IsFull()", CGS_ARTIST_FILE, 784));
 
     // Evict the first NON-LOCKED record and reuse its file id (X360 0x82370E84..0x82371008).
     const s32 liCount = static_cast<s32>(lrGallery.GetLength());
@@ -826,7 +826,7 @@ s32 Profile::AddMugshot(s32 leMugshotType, MugshotInfo::UniquePlayerID lUniqueID
 // ====================================================================================
 MugshotInfo* Profile::GetMugshotInfo(s32 leMugshotType, s32 liImageIndex)
 {
-    CGS_ASSERT(leMugshotType < 5, CgsDev::Assert::MessageAt("leMugshotType < GsmIO::E_IMAGE_GALLERY_TYPE_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProfile.cpp", 999));  // X360 BrnProfile.cpp:999
+    CGS_ASSERT(leMugshotType < 5, CGS_ASSERT_MESSAGE_AT("leMugshotType < GsmIO::E_IMAGE_GALLERY_TYPE_COUNT", CGS_ARTIST_FILE, 999));  // X360 BrnProfile.cpp:999
 
     CgsContainers::Array<MugshotInfo, 20u>& lrGallery = maaMugshotInfo[leMugshotType];
     if (liImageIndex >= static_cast<s32>(lrGallery.GetLength()))    // X360 `cmpw ; bge -> li r3,0`
@@ -845,7 +845,7 @@ MugshotInfo* Profile::GetMugshotInfo(s32 leMugshotType, s32 liImageIndex)
 // ====================================================================================
 bool Profile::LockOrUnlockMugshot(s32 leMugshotType, s32 liImageIndex)
 {
-    CGS_ASSERT(leMugshotType < 5, CgsDev::Assert::MessageAt("leMugshotType < GsmIO::E_IMAGE_GALLERY_TYPE_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProfile.cpp", 926));  // X360 BrnProfile.cpp:926
+    CGS_ASSERT(leMugshotType < 5, CGS_ASSERT_MESSAGE_AT("leMugshotType < GsmIO::E_IMAGE_GALLERY_TYPE_COUNT", CGS_ARTIST_FILE, 926));  // X360 BrnProfile.cpp:926
 
     CgsContainers::Array<MugshotInfo, 20u>& lrGallery = maaMugshotInfo[leMugshotType];
     if (liImageIndex >= static_cast<s32>(lrGallery.GetLength()))
@@ -866,7 +866,7 @@ bool Profile::LockOrUnlockMugshot(s32 leMugshotType, s32 liImageIndex)
 // ====================================================================================
 s32 Profile::DeleteMugshot(s32 leMugshotType, s32 liImageIndex)
 {
-    CGS_ASSERT(leMugshotType < 5, CgsDev::Assert::MessageAt("leMugshotType < GsmIO::E_IMAGE_GALLERY_TYPE_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProfile.cpp", 836));  // X360 BrnProfile.cpp:836
+    CGS_ASSERT(leMugshotType < 5, CGS_ASSERT_MESSAGE_AT("leMugshotType < GsmIO::E_IMAGE_GALLERY_TYPE_COUNT", CGS_ARTIST_FILE, 836));  // X360 BrnProfile.cpp:836
 
     s32 liFileID = -1;                                             // X360 `li r27, -1`
 
@@ -1157,7 +1157,7 @@ void Profile::AddGameModeTypeToTotals(GsmIO::EGameModeType lEGameModeType)
 void Profile::AddGameModeTypeCompleted(GsmIO::EGameModeType lEGameModeType)
 {
     CGS_ASSERT(lEGameModeType > GsmIO::E_MODE_NONE,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lEGameModeType > GsmIO::E_MODE_NONE", KAC_ARTIST_ASSERT_FILE, 2091 /* ARTIST 0x82354B3C */));
 
     ++maGameModeTypeAmountCompleted[lEGameModeType];
@@ -1171,7 +1171,7 @@ void Profile::AddGameModeTypeCompleted(GsmIO::EGameModeType lEGameModeType)
 void Profile::AddGameModeTypeToDiscovered(GsmIO::EGameModeType lEGameModeType)
 {
     CGS_ASSERT(lEGameModeType > GsmIO::E_MODE_NONE,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lEGameModeType > GsmIO::E_MODE_NONE", KAC_ARTIST_ASSERT_FILE, 2064 /* ARTIST 0x82354ACC */));
 
     ++maGameModeTypeAmountDiscovered[lEGameModeType];
@@ -1183,7 +1183,7 @@ void Profile::AddGameModeTypeToDiscovered(GsmIO::EGameModeType lEGameModeType)
 s32 Profile::GetGameModeTypeAmount(GsmIO::EGameModeType lEGameModeType) const
 {
     CGS_ASSERT(lEGameModeType > GsmIO::E_MODE_NONE,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lEGameModeType > GsmIO::E_MODE_NONE", KAC_ARTIST_ASSERT_FILE, 2055 /* ARTIST 0x82354A64 */));
 
     return maGameModeTypeAmount[lEGameModeType];
@@ -1195,7 +1195,7 @@ s32 Profile::GetGameModeTypeAmount(GsmIO::EGameModeType lEGameModeType) const
 s32 Profile::GetGameModeTypeDiscovered(GsmIO::EGameModeType lEGameModeType) const
 {
     CGS_ASSERT(lEGameModeType > GsmIO::E_MODE_NONE,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lEGameModeType > GsmIO::E_MODE_NONE", KAC_ARTIST_ASSERT_FILE, 2072 /* ARTIST 0x8240E96C */));
 
     return maGameModeTypeAmountDiscovered[lEGameModeType];
@@ -1208,7 +1208,7 @@ s32 Profile::GetGameModeTypeDiscovered(GsmIO::EGameModeType lEGameModeType) cons
 void Profile::AddWinForGameMode(GsmIO::EGameModeType leGameModeType)
 {
     CGS_ASSERT((leGameModeType < GsmIO::E_MODE_OFFLINE_COUNT) && (leGameModeType > GsmIO::E_MODE_NONE),
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "( leGameModeType < GsmIO::E_MODE_OFFLINE_COUNT ) && ( leGameModeType > GsmIO::E_MODE_NONE )",
             KAC_ARTIST_ASSERT_FILE, 2294 /* ARTIST 0x82354CB4 */));
 
@@ -1224,7 +1224,7 @@ void Profile::AddWinForGameMode(GsmIO::EGameModeType leGameModeType)
 void Profile::AddLossForGameMode(GsmIO::EGameModeType leGameModeType)
 {
     CGS_ASSERT((leGameModeType < GsmIO::E_MODE_OFFLINE_COUNT) && (leGameModeType > GsmIO::E_MODE_NONE),
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "( leGameModeType < GsmIO::E_MODE_OFFLINE_COUNT ) && ( leGameModeType > GsmIO::E_MODE_NONE )",
             KAC_ARTIST_ASSERT_FILE, 2303 /* ARTIST 0x8230FB54 */));
 
@@ -1239,7 +1239,7 @@ void Profile::AddLossForGameMode(GsmIO::EGameModeType leGameModeType)
 s32 Profile::GetNumRankWinsForGameMode(GsmIO::EGameModeType leGameModeType) const
 {
     CGS_ASSERT((leGameModeType < GsmIO::E_MODE_OFFLINE_COUNT) && (leGameModeType > GsmIO::E_MODE_NONE),
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "( leGameModeType < GsmIO::E_MODE_OFFLINE_COUNT ) && ( leGameModeType > GsmIO::E_MODE_NONE )",
             KAC_ARTIST_ASSERT_FILE, 2195 /* ARTIST 0x8230FA74 */));
 
@@ -1252,7 +1252,7 @@ s32 Profile::GetNumRankWinsForGameMode(GsmIO::EGameModeType leGameModeType) cons
 s32 Profile::GetNumLossesForGameMode(GsmIO::EGameModeType leGameModeType) const
 {
     CGS_ASSERT((leGameModeType < GsmIO::E_MODE_OFFLINE_COUNT) && (leGameModeType > GsmIO::E_MODE_NONE),
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "( leGameModeType < GsmIO::E_MODE_OFFLINE_COUNT ) && ( leGameModeType > GsmIO::E_MODE_NONE )",
             KAC_ARTIST_ASSERT_FILE, 2212 /* ARTIST 0x8230FAE4 */));
 
@@ -1266,7 +1266,7 @@ s32 Profile::GetNumLossesForGameMode(GsmIO::EGameModeType leGameModeType) const
 void Profile::AddTakedown(BrnGameState::ETakedownType leTakedownType)
 {
     CGS_ASSERT(leTakedownType > BrnGameState::E_TAKEDOWN_NONE,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "leTakedownType > BrnGameState::E_TAKEDOWN_NONE",
             KAC_ARTIST_ASSERT_FILE, 2285 /* ARTIST 0x82354C2C */));
 
@@ -1284,7 +1284,7 @@ void Profile::AddStuntElement(BrnGameState::StuntElementType leStuntElementType,
                               BrnWorld::ECounty leCounty)
 {
     CGS_ASSERT(leStuntElementType < BrnGameState::E_STUNT_ELEMENT_TYPE_COUNT,
-               CgsDev::Assert::MessageAt("leStuntElementType < BrnGameState::E_STUNT_ELEMENT_TYPE_COUNT", "..\\..\\..\\GameSource\\GameState/Progression/BrnProfile.h", 2328));
+               CGS_ASSERT_MESSAGE_AT("leStuntElementType < BrnGameState::E_STUNT_ELEMENT_TYPE_COUNT", CGS_ARTIST_FILE_BRNPROFILE, 2328));
 
     if (maStuntElements[leStuntElementType].Find(lId) == CgsContainers::Set<CgsID, 512u>::KU_INVALID &&
         leCounty < BrnWorld::E_COUNTY_VALID_COUNT)
@@ -1321,11 +1321,11 @@ s32 Profile::GetStuntElementCountByCounty(BrnGameState::StuntElementType leStunt
                                           BrnWorld::ECounty leCounty) const
 {
     CGS_ASSERT(leStuntElementType < BrnGameState::E_STUNT_ELEMENT_TYPE_COUNT,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "leStuntElementType < BrnGameState::E_STUNT_ELEMENT_TYPE_COUNT",
             KAC_ARTIST_ASSERT_FILE, 2487 /* ARTIST 0x82354D40 */));
     CGS_ASSERT(leCounty < BrnWorld::E_COUNTY_VALID_COUNT,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "leCounty < BrnWorld::E_COUNTY_VALID_COUNT",
             KAC_ARTIST_ASSERT_FILE, 2488 /* ARTIST 0x82354D64 */));
 
@@ -1340,7 +1340,7 @@ s32 Profile::GetStuntElementCountByCounty(BrnGameState::StuntElementType leStunt
 const CarData* Profile::GetCarData(s32 liCarIndex) const
 {
     CGS_ASSERT(liCarIndex >= 0 && liCarIndex < miCarCount,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "liCarIndex >= 0 && liCarIndex < miCarCount",
             KAC_ARTIST_ASSERT_FILE, 1923 /* ARTIST 0x82354988 */));
 
@@ -1378,7 +1378,7 @@ s32 Profile::GetTotalCarsToShutDown() const
 const ProfileEvent* Profile::GetEvent(u32 luIndex) const
 {
     CGS_ASSERT(luIndex < static_cast<u32>(miEventCount),
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "luIndex < static_cast<uint32_t>(miEventCount)",
             KAC_ARTIST_ASSERT_FILE, 3004 /* ARTIST 0x82354DD0 */));
 
@@ -1466,7 +1466,7 @@ CarData* Profile::RepairUnlockedVehicle(CgsID lCarId)
 {
     CarData* lpCarData = FindCar(lCarId);
 
-    CGS_ASSERT(lpCarData, CgsDev::Assert::MessageAt("lpCarData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProfile.cpp", 671));
+    CGS_ASSERT(lpCarData, CGS_ASSERT_MESSAGE_AT("lpCarData", CGS_ARTIST_FILE, 671));
     lpCarData->mfUnlockDeformedAmount = 0.0f;   // the X360 stores through even after a failed assert
     return lpCarData;
 }
@@ -1495,8 +1495,8 @@ void Profile::RecordPropHit(s32 liZoneIndex, s32 liPropIndex)
 // ====================================================================================
 bool Profile::GetSeenAllEventTypeWonMessage(s32 leModeType) const
 {
-    CGS_ASSERT(leModeType > -1, CgsDev::Assert::MessageAt("leModeType > RaceEventData::E_MODE_INVALID", "..\\..\\..\\GameSource\\GameState/Progression/BrnProfile.h", 3320));   // :3320
-    CGS_ASSERT(leModeType < 6,  CgsDev::Assert::MessageAt("leModeType < RaceEventData::E_MODE_COUNT", "..\\..\\..\\GameSource\\GameState/Progression/BrnProfile.h", 3321));     // :3321
+    CGS_ASSERT(leModeType > -1, CGS_ASSERT_MESSAGE_AT("leModeType > RaceEventData::E_MODE_INVALID", CGS_ARTIST_FILE_BRNPROFILE, 3320));   // :3320
+    CGS_ASSERT(leModeType < 6,  CGS_ASSERT_MESSAGE_AT("leModeType < RaceEventData::E_MODE_COUNT", CGS_ARTIST_FILE_BRNPROFILE, 3321));     // :3321
     CGS_ASSERT(static_cast<u32>(leModeType) < 6u, "invalid index : < 6");        // CgsBitArray.h:203 Get guard
 
     return mSeenCompleteAllEventTypeArray.IsBitSet(static_cast<u32>(leModeType));
@@ -1507,8 +1507,8 @@ bool Profile::GetSeenAllEventTypeWonMessage(s32 leModeType) const
 // ====================================================================================
 void Profile::SetSeenAllEventTypeWonMessage(s32 leModeType)
 {
-    CGS_ASSERT(leModeType > -1, CgsDev::Assert::MessageAt("leModeType > RaceEventData::E_MODE_INVALID", "..\\..\\..\\GameSource\\GameState/Progression/BrnProfile.h", 3336));   // :3336
-    CGS_ASSERT(leModeType < 6,  CgsDev::Assert::MessageAt("leModeType < RaceEventData::E_MODE_COUNT", "..\\..\\..\\GameSource\\GameState/Progression/BrnProfile.h", 3337));     // :3337
+    CGS_ASSERT(leModeType > -1, CGS_ASSERT_MESSAGE_AT("leModeType > RaceEventData::E_MODE_INVALID", CGS_ARTIST_FILE_BRNPROFILE, 3336));   // :3336
+    CGS_ASSERT(leModeType < 6,  CGS_ASSERT_MESSAGE_AT("leModeType < RaceEventData::E_MODE_COUNT", CGS_ARTIST_FILE_BRNPROFILE, 3337));     // :3337
     CGS_ASSERT(static_cast<u32>(leModeType) < 6u, "Index: ");                    // CgsBitArray.h:222 SetBit guard
 
     mSeenCompleteAllEventTypeArray.SetBit(static_cast<u32>(leModeType));
@@ -1521,8 +1521,8 @@ void Profile::SetSeenAllEventTypeWonMessage(s32 leModeType)
 // ====================================================================================
 bool Profile::GetSeenTrophyUnlockSequence(s32 leUnlockType) const
 {
-    CGS_ASSERT(leUnlockType > 0,  CgsDev::Assert::MessageAt("leUnlockType > BrnProgression::TrophyUnlockData::E_UNLOCKTYPE_NONE", "..\\..\\..\\GameSource\\GameState/Progression/BrnProfile.h", 3287));  // :3287
-    CGS_ASSERT(leUnlockType < 35, CgsDev::Assert::MessageAt("leUnlockType < BrnProgression::TrophyUnlockData::E_UNLOCKTYPE_COUNT", "..\\..\\..\\GameSource\\GameState/Progression/BrnProfile.h", 3288)); // :3288
+    CGS_ASSERT(leUnlockType > 0,  CGS_ASSERT_MESSAGE_AT("leUnlockType > BrnProgression::TrophyUnlockData::E_UNLOCKTYPE_NONE", CGS_ARTIST_FILE_BRNPROFILE, 3287));  // :3287
+    CGS_ASSERT(leUnlockType < 35, CGS_ASSERT_MESSAGE_AT("leUnlockType < BrnProgression::TrophyUnlockData::E_UNLOCKTYPE_COUNT", CGS_ARTIST_FILE_BRNPROFILE, 3288)); // :3288
     CGS_ASSERT(static_cast<u32>(leUnlockType) < 35u, "invalid index : < 35");    // CgsBitArray.h:203 Get guard
 
     return mSeenTrophyAwardBitArray.IsBitSet(static_cast<u32>(leUnlockType));
@@ -1533,8 +1533,8 @@ bool Profile::GetSeenTrophyUnlockSequence(s32 leUnlockType) const
 // ====================================================================================
 void Profile::SetSeenTrophyUnlockSequence(s32 leUnlockType)
 {
-    CGS_ASSERT(leUnlockType > 0,  CgsDev::Assert::MessageAt("leUnlockType > BrnProgression::TrophyUnlockData::E_UNLOCKTYPE_NONE", "..\\..\\..\\GameSource\\GameState/Progression/BrnProfile.h", 3303));  // :3303
-    CGS_ASSERT(leUnlockType < 35, CgsDev::Assert::MessageAt("leUnlockType < BrnProgression::TrophyUnlockData::E_UNLOCKTYPE_COUNT", "..\\..\\..\\GameSource\\GameState/Progression/BrnProfile.h", 3304)); // :3304
+    CGS_ASSERT(leUnlockType > 0,  CGS_ASSERT_MESSAGE_AT("leUnlockType > BrnProgression::TrophyUnlockData::E_UNLOCKTYPE_NONE", CGS_ARTIST_FILE_BRNPROFILE, 3303));  // :3303
+    CGS_ASSERT(leUnlockType < 35, CGS_ASSERT_MESSAGE_AT("leUnlockType < BrnProgression::TrophyUnlockData::E_UNLOCKTYPE_COUNT", CGS_ARTIST_FILE_BRNPROFILE, 3304)); // :3304
     CGS_ASSERT(static_cast<u32>(leUnlockType) < 35u, "Index: ");                 // CgsBitArray.h:222 SetBit guard
 
     mSeenTrophyAwardBitArray.SetBit(static_cast<u32>(leUnlockType));
@@ -1547,7 +1547,7 @@ void Profile::SetSeenTrophyUnlockSequence(s32 leUnlockType)
 void Profile::SetTrainingAlreadySeen(ETrainingType leTrainingType)
 {
     CGS_ASSERT(leTrainingType >= 0 && leTrainingType < E_TRAINING_TYPE_COUNT,
-               CgsDev::Assert::MessageAt("leTrainingType >= 0 && leTrainingType < E_TRAINING_TYPE_COUNT", "..\\..\\..\\GameSource\\GameState/Progression/BrnProfile.h", 2761));  // :2761
+               CGS_ASSERT_MESSAGE_AT("leTrainingType >= 0 && leTrainingType < E_TRAINING_TYPE_COUNT", CGS_ARTIST_FILE_BRNPROFILE, 2761));  // :2761
     CGS_ASSERT(static_cast<u32>(leTrainingType) < 256u, "Index: ");               // CgsBitArray.h:222 SetBit guard
 
     maHasPlayerSeenTraining.SetBit(static_cast<u32>(leTrainingType));
@@ -1646,7 +1646,7 @@ void Profile::SetTargetEventScore(BrnGameState::GameStateModuleIO::TargetEventSc
     if (!lpTargetEventScore)
     {
         lpTargetEventScore = maTargetEventScores.AddNew();
-        CGS_ASSERT(lpTargetEventScore, CgsDev::Assert::MessageAt("lpTargetEventScore", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProfile.cpp", 1604));   // BrnProfile.cpp:1604
+        CGS_ASSERT(lpTargetEventScore, CGS_ASSERT_MESSAGE_AT("lpTargetEventScore", CGS_ARTIST_FILE, 1604));   // BrnProfile.cpp:1604
     }
 
     lpTargetEventScore->mEventId = lEventId;
@@ -1722,7 +1722,7 @@ void Profile::SetEventScoreToUpload(CgsID lEventId, s32 liScore, GsmIO::EGameMod
     if (!lpEventScoreToUpload)
     {
         lpEventScoreToUpload = maEventScoresToUpload.AddNew();
-        CGS_ASSERT(lpEventScoreToUpload, CgsDev::Assert::MessageAt("lpEventScoreToUpload", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProfile.cpp", 1714));   // BrnProfile.cpp:1714
+        CGS_ASSERT(lpEventScoreToUpload, CGS_ASSERT_MESSAGE_AT("lpEventScoreToUpload", CGS_ARTIST_FILE, 1714));   // BrnProfile.cpp:1714
     }
 
     lpEventScoreToUpload->mu64EventID = lEventId;
@@ -2021,7 +2021,7 @@ u32 Profile::CompleteFreeburnChallenge(CgsID lChallengeID)
 s32 Profile::GetGameModeTypeCompletedAmountSinceTheStart(GsmIO::EGameModeType lEGameModeType) const
 {
     CGS_ASSERT(lEGameModeType > -1,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lEGameModeType > GsmIO::E_MODE_NONE", KAC_ARTIST_ASSERT_FILE, 2108 /* ARTIST 0x82354BC4 */));
 
     return maGameModeTypeAmountCompletedSinceTheStart[lEGameModeType];
@@ -2888,3 +2888,6 @@ void Profile::Deserialise(const BrnGuiSaveLoad::Profile* lpImage,
 }
 
 }  // namespace BrnProgression
+
+#undef CGS_ARTIST_FILE
+#undef CGS_ARTIST_FILE_BRNPROFILE

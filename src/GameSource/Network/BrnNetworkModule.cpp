@@ -8,11 +8,11 @@
 //
 // Every accessor asserts mbIsUpdating ("Can not use this function unless module is updating") and
 // then returns the address of its embedded member.
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkModule.cpp"
 #include "GameSource/Network/BrnNetworkModule.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
-
+#define CGS_ARTIST_FILE_BRNNETWORKMODULE "..\\..\\..\\GameSource\\Network/BrnNetworkModule.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"                         // CgsDev::PerfMonCpu::AddMonitor
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"            // CgsDev::DebugInterface (the two update-message toggles)
 #include "GameShared/GameClasses/Network/Utilities/CgsNetworkImageConverter.h"                     // CgsNetwork::NetworkImageConverter::SetupPerfmons
@@ -110,34 +110,34 @@ namespace BrnNetwork
         miNetworkAfterSim7PM = CgsDev::PerfMonCpu::AddMonitor("Module - Process after 7",       CgsDev::E_PMP_9, false, 1.0f, true);
         miNetworkAfterSim8PM = CgsDev::PerfMonCpu::AddMonitor("Module - Process after 8",       CgsDev::E_PMP_9, false, 1.0f, true);
 
-        CGS_ASSERT(miNetworkBeforeSimPM >= 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(miNetworkBeforeSimPM >= 0, CGS_ASSERT_MESSAGE_AT(
             "miNetworkBeforeSimPM >= 0",
             __FILE__, 119 /* ARTIST 0x82592C54 */));
-        CGS_ASSERT(miNetworkAfterSimPM  >= 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(miNetworkAfterSimPM  >= 0, CGS_ASSERT_MESSAGE_AT(
             "miNetworkAfterSimPM >= 0",
             __FILE__, 120 /* ARTIST 0x82592C7C */));
-        CGS_ASSERT(miNetworkAfterSim1PM >= 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(miNetworkAfterSim1PM >= 0, CGS_ASSERT_MESSAGE_AT(
             "miNetworkAfterSim1PM >= 0",
             __FILE__, 121 /* ARTIST 0x82592CA4 */));
-        CGS_ASSERT(miNetworkAfterSim2PM >= 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(miNetworkAfterSim2PM >= 0, CGS_ASSERT_MESSAGE_AT(
             "miNetworkAfterSim2PM >= 0",
             __FILE__, 122 /* ARTIST 0x82592CCC */));
-        CGS_ASSERT(miNetworkAfterSim3PM >= 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(miNetworkAfterSim3PM >= 0, CGS_ASSERT_MESSAGE_AT(
             "miNetworkAfterSim3PM >= 0",
             __FILE__, 123 /* ARTIST 0x82592CF4 */));
-        CGS_ASSERT(miNetworkAfterSim4PM >= 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(miNetworkAfterSim4PM >= 0, CGS_ASSERT_MESSAGE_AT(
             "miNetworkAfterSim4PM >= 0",
             __FILE__, 124 /* ARTIST 0x82592D1C */));
-        CGS_ASSERT(miNetworkAfterSim5PM >= 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(miNetworkAfterSim5PM >= 0, CGS_ASSERT_MESSAGE_AT(
             "miNetworkAfterSim5PM >= 0",
             __FILE__, 125 /* ARTIST 0x82592D44 */));
-        CGS_ASSERT(miNetworkAfterSim6PM >= 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(miNetworkAfterSim6PM >= 0, CGS_ASSERT_MESSAGE_AT(
             "miNetworkAfterSim6PM >= 0",
             __FILE__, 126 /* ARTIST 0x82592D6C */));
-        CGS_ASSERT(miNetworkAfterSim7PM >= 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(miNetworkAfterSim7PM >= 0, CGS_ASSERT_MESSAGE_AT(
             "miNetworkAfterSim7PM >= 0",
             __FILE__, 127 /* ARTIST 0x82592D94 */));
-        CGS_ASSERT(miNetworkAfterSim8PM >= 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(miNetworkAfterSim8PM >= 0, CGS_ASSERT_MESSAGE_AT(
             "miNetworkAfterSim8PM >= 0",
             __FILE__, 128 /* ARTIST 0x82592DBC */));
 
@@ -182,15 +182,15 @@ namespace BrnNetwork
             mePrepareStage = E_PREPARESTAGE_DONE;
             meReleaseStage = E_RELEASESTAGE_START;
 
-            CGS_ASSERT(mInputGuiEventQueue.Prepare(), CgsDev::Assert::MessageAt(
+            CGS_ASSERT(mInputGuiEventQueue.Prepare(), CGS_ASSERT_MESSAGE_AT(
                 "mInputGuiEventQueue.Prepare()",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkModule.cpp", 198 /* ARTIST 0x8259B448 */));
-            CGS_ASSERT(mOutputGuiEventQueue.Prepare(), CgsDev::Assert::MessageAt(
+                CGS_ARTIST_FILE, 198 /* ARTIST 0x8259B448 */));
+            CGS_ASSERT(mOutputGuiEventQueue.Prepare(), CGS_ASSERT_MESSAGE_AT(
                 "mOutputGuiEventQueue.Prepare()",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkModule.cpp", 199 /* ARTIST 0x8259B47C */));
-            CGS_ASSERT(mNetworkEventQueue.Prepare(), CgsDev::Assert::MessageAt(
+                CGS_ARTIST_FILE, 199 /* ARTIST 0x8259B47C */));
+            CGS_ASSERT(mNetworkEventQueue.Prepare(), CGS_ASSERT_MESSAGE_AT(
                 "mNetworkEventQueue.Prepare()",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkModule.cpp", 200 /* ARTIST 0x8259B4B0 */));
+                CGS_ARTIST_FILE, 200 /* ARTIST 0x8259B4B0 */));
 
             CgsDev::DebugInterface lDebugInterface;
             mbOutputSendUpdateMessages = false;
@@ -204,9 +204,9 @@ namespace BrnNetwork
             return true;
         }
         default:
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
                 "unknown prepare stage",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkModule.cpp", 221 /* ARTIST 0x8259B55C */));
+                CGS_ARTIST_FILE, 221 /* ARTIST 0x8259B55C */));
             break;
         }
 
@@ -230,9 +230,9 @@ namespace BrnNetwork
             CgsDev::DebugInterface lDebugInterface;
             lDebugInterface.UnregisterVariable(&mbOutputSendUpdateMessages);
             lDebugInterface.UnregisterVariable(&mbOutputRecvUpdateMessages);
-            CGS_ASSERT(mNetworkEventQueue.Release(), CgsDev::Assert::MessageAt(
+            CGS_ASSERT(mNetworkEventQueue.Release(), CGS_ASSERT_MESSAGE_AT(
                 "mNetworkEventQueue.Release()",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkModule.cpp", 257 /* ARTIST 0x82592E8C */));
+                CGS_ARTIST_FILE, 257 /* ARTIST 0x82592E8C */));
         }
             // fall through
         case E_RELEASESTAGE_NETWORK_MANAGER:
@@ -257,9 +257,9 @@ namespace BrnNetwork
             mbPadIdle      = true;
             return true;
         default:
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
                 "unknown release stage",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkModule.cpp", 300 /* ARTIST 0x82592F30 */));
+                CGS_ARTIST_FILE, 300 /* ARTIST 0x82592F30 */));
             break;
         }
 
@@ -282,7 +282,7 @@ namespace BrnNetwork
     void BrnNetworkModule::CacheNetworkPlayerIDsAtGameStart()
     {
         CGS_ASSERT(mNetworkManager.GetServerInterface(),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mNetworkManager.GetServerInterface()", __FILE__, 515 /* ARTIST 0x82581A70 */));
 
         CgsNetwork::ServerInterfaceGames* lpServerInterfaceGames = mNetworkManager.GetServerInterface()->GetGameComponent();
@@ -290,10 +290,10 @@ namespace BrnNetwork
         NetworkPlayerID                   lPlayerID              = CgsNetwork::KI_INVALID_PLAYER_ID;
 
         CGS_ASSERT(lpServerInterfaceGames,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpServerInterfaceGames", __FILE__, 521 /* ARTIST 0x82581AA4 */));
         CGS_ASSERT(lpPlayerManager,
-            CgsDev::Assert::MessageAt("lpPlayerManager", __FILE__, 522 /* ARTIST 0x82581AC8 */));
+            CGS_ASSERT_MESSAGE_AT("lpPlayerManager", __FILE__, 522 /* ARTIST 0x82581AC8 */));
 
         miCachedPlayersInGame = 0;
         while (lpPlayerManager->GetNextPlayerID(&lPlayerID, CgsNetwork::PlayerManager::E_CONSIDER_PLAYERS_WHO_HAVE_FINALISED))
@@ -499,7 +499,7 @@ namespace BrnNetwork
     // -> &mCrashNetworkInputInterface (+800576).
     BrnWorld::CrashIO::NetworkInputInterface* BrnNetworkModule::GetCrashInputInterface()
     {
-        CGS_ASSERT(mbIsUpdating, CgsDev::Assert::StreamMessageAt("Can not use this function unless module is updating\n", "..\\..\\..\\GameSource\\Network/BrnNetworkModule.h", 408));
+        CGS_ASSERT(mbIsUpdating, CGS_ASSERT_STREAM_MESSAGE_AT("Can not use this function unless module is updating\n", CGS_ARTIST_FILE_BRNNETWORKMODULE, 408));
         return &mCrashNetworkInputInterface;
     }
 
@@ -527,7 +527,7 @@ namespace BrnNetwork
     // -> &mPlayerVehicleControls (+827880).
     BrnWorld::PlayerVehicleControls* BrnNetworkModule::GetPlayerVehicleControls()
     {
-        CGS_ASSERT(mbIsUpdating, CgsDev::Assert::StreamMessageAt("Can not use this function unless module is updating\n", "..\\..\\..\\GameSource\\Network/BrnNetworkModule.h", 431));
+        CGS_ASSERT(mbIsUpdating, CGS_ASSERT_STREAM_MESSAGE_AT("Can not use this function unless module is updating\n", CGS_ARTIST_FILE_BRNNETWORKMODULE, 431));
         return &mPlayerVehicleControls;
     }
 
@@ -541,7 +541,7 @@ namespace BrnNetwork
     // -> &mInputGuiEventQueue (+829832).
     CgsModule::VariableEventQueue<18432, 16>* BrnNetworkModule::GetInputGuiEventQueue()
     {
-        CGS_ASSERT(mbIsUpdating, CgsDev::Assert::StreamMessageAt("Can not use this function unless module is updating\n", "..\\..\\..\\GameSource\\Network/BrnNetworkModule.h", 458));
+        CGS_ASSERT(mbIsUpdating, CGS_ASSERT_STREAM_MESSAGE_AT("Can not use this function unless module is updating\n", CGS_ARTIST_FILE_BRNNETWORKMODULE, 458));
         return &mInputGuiEventQueue;
     }
 
@@ -557,14 +557,14 @@ namespace BrnNetwork
     // -> mbOutputSendUpdateMessages (+614664).
     bool BrnNetworkModule::IsSendUpdateMessageToBeShown() const
     {
-        CGS_ASSERT(mbIsUpdating, CgsDev::Assert::StreamMessageAt("Can not use this function unless module is updating\n", "..\\..\\..\\GameSource\\Network/BrnNetworkModule.h", 514));
+        CGS_ASSERT(mbIsUpdating, CGS_ASSERT_STREAM_MESSAGE_AT("Can not use this function unless module is updating\n", CGS_ARTIST_FILE_BRNNETWORKMODULE, 514));
         return mbOutputSendUpdateMessages;
     }
 
     // -> mbOutputRecvUpdateMessages (+614665).
     bool BrnNetworkModule::IsRecvUpdateMessageToBeShown() const
     {
-        CGS_ASSERT(mbIsUpdating, CgsDev::Assert::StreamMessageAt("Can not use this function unless module is updating\n", "..\\..\\..\\GameSource\\Network/BrnNetworkModule.h", 522));
+        CGS_ASSERT(mbIsUpdating, CGS_ASSERT_STREAM_MESSAGE_AT("Can not use this function unless module is updating\n", CGS_ARTIST_FILE_BRNNETWORKMODULE, 522));
         return mbOutputRecvUpdateMessages;
     }
 
@@ -605,3 +605,6 @@ namespace BrnNetwork
         CGS_STATIC_ASSERT((offsetof(BrnNetworkModule, miNetworkAfterSim8PM)  - offsetof(BrnNetworkModule, miNetworkBeforeSimPM) == 36),            "the ten perf-monitor ids are contiguous");
     }
 }
+
+#undef CGS_ARTIST_FILE
+#undef CGS_ARTIST_FILE_BRNNETWORKMODULE

@@ -12,7 +12,7 @@
 // Three DWARF virtuals (Prepare / GetParameters / SetupTweaker) are absent from the X360
 // export and are therefore NOT declared -- see the ⛔⛔ block in the header.
 // ============================================================================
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourRotateAboutVehicle.cpp"
 #include <cmath>                                 // sqrtf / sinf / cosf / fabsf
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
@@ -315,7 +315,7 @@ void BehaviourRotateAboutVehicle::Construct()
 // ============================================================================
 bool BehaviourRotateAboutVehicle::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo)
 {
-    CGS_ASSERT(mpParameters != 0, CgsDev::Assert::MessageAt("mpParameters != NULL", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourRotateAboutVehicle.cpp", 136));                          // .cpp:136
+    CGS_ASSERT(mpParameters != 0, CGS_ASSERT_MESSAGE_AT("mpParameters != NULL", CGS_ARTIST_FILE, 136));                          // .cpp:136
 
     // ---- 1. the camera-state FOLLOW bit --------------------------------------
     // `lbz r11,9(this)` then `ld/ori 2/std` at camera +0x140. The same bit
@@ -433,13 +433,13 @@ bool BehaviourRotateAboutVehicle::Update(Camera& lrCamera, const BehaviourShared
         lEyePosition.mV.z - (lrVehiclePosition.mV.z - lEyePosition.mV.z) * KF_STEP_BACK_DISTANCE,
         0.0f ));
 
-    CGS_ASSERT(IsValid(lMovedBackPos), CgsDev::Assert::MessageAt("IsValid(lMovedBackPos)", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourRotateAboutVehicle.cpp", 171));                   // .cpp:171
+    CGS_ASSERT(IsValid(lMovedBackPos), CGS_ASSERT_MESSAGE_AT("IsValid(lMovedBackPos)", CGS_ARTIST_FILE, 171));                   // .cpp:171
     lrCamera.mTransform.wAxis = lMovedBackPos;   // stvx128 v127, r0, r19 (camera +0x30)
 
     // ---- 5. aim at the car and fit the FOV -----------------------------------
     const Matrix44Affine lLookAtCarTransform = Utils::CreateLookAt(lMovedBackPos,
                                                                   lrVehiclePosition);
-    CGS_ASSERT(IsValid(lLookAtCarTransform), CgsDev::Assert::MessageAt("IsValid(lLookAtCarTransform)", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourRotateAboutVehicle.cpp", 183));       // .cpp:183
+    CGS_ASSERT(IsValid(lLookAtCarTransform), CGS_ASSERT_MESSAGE_AT("IsValid(lLookAtCarTransform)", CGS_ARTIST_FILE, 183));       // .cpp:183
 
     lrCamera.mTransform = lLookAtCarTransform;
     lrCamera.ValidateTransformWithDebugInfo();
@@ -471,7 +471,7 @@ bool BehaviourRotateAboutVehicle::Update(Camera& lrCamera, const BehaviourShared
                                                                       lrCamera.mfFOV,
                                                                       lrCamera.mfAspectRatio,
                                                                       lTargetScreenOffset);
-    CGS_ASSERT(IsValid(lAdjustedLookAt), CgsDev::Assert::MessageAt("IsValid(lAdjustedLookAt)", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourRotateAboutVehicle.cpp", 201));               // .cpp:201
+    CGS_ASSERT(IsValid(lAdjustedLookAt), CGS_ASSERT_MESSAGE_AT("IsValid(lAdjustedLookAt)", CGS_ARTIST_FILE, 201));               // .cpp:201
 
     lrCamera.mTransform = lAdjustedLookAt;
     lrCamera.ValidateTransformWithDebugInfo();
@@ -538,7 +538,7 @@ bool BehaviourRotateAboutVehicle::Update(Camera& lrCamera, const BehaviourShared
 
     const Matrix44Affine lShakenCamera = rw::math::vpu::Mult(mLastShakeTransform,
                                                              lrCamera.mTransform);
-    CGS_ASSERT(IsValid(lShakenCamera), CgsDev::Assert::MessageAt("IsValid(lShakenCamera)", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourRotateAboutVehicle.cpp", 234));                   // .cpp:234
+    CGS_ASSERT(IsValid(lShakenCamera), CGS_ASSERT_MESSAGE_AT("IsValid(lShakenCamera)", CGS_ARTIST_FILE, 234));                   // .cpp:234
 
     lrCamera.mTransform = lShakenCamera;
     lrCamera.ValidateTransformWithDebugInfo();
@@ -715,7 +715,7 @@ void BehaviourRotateAboutVehicle::BecomeSimilarTo(const Camera& lrSourceCamera,
 void BehaviourRotateAboutVehicle::SetParameters(const Behaviour::Parameters* lpParameters)
 {
     CGS_ASSERT(lpParameters->GetType() == 18u,
-               CgsDev::Assert::MessageAt("lpParameters->GetType() == eBehaviourRotateAboutVehicle", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourRotateAboutVehicle.cpp", 299));   // .cpp:299
+               CGS_ASSERT_MESSAGE_AT("lpParameters->GetType() == eBehaviourRotateAboutVehicle", CGS_ARTIST_FILE, 299));   // .cpp:299
 
     mpParameters = static_cast<const Parameters*>(lpParameters);
 }
@@ -730,3 +730,5 @@ const Behaviour::Parameters* BehaviourRotateAboutVehicle::GetParameters() const
 
 } // namespace Camera
 } // namespace BrnDirector
+
+#undef CGS_ARTIST_FILE

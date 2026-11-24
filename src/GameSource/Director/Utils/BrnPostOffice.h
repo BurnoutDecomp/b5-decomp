@@ -1,5 +1,5 @@
 #pragma once
-
+#define CGS_ARTIST_BRNPOSTOFFICE_FILE "..\\..\\..\\GameSource\\Director/Utils/BrnPostOffice.h"
 // ============================================================================
 // GameSource/Director/Utils/BrnPostOffice.h
 //
@@ -66,8 +66,8 @@ namespace BrnDirector
         PostBoxIDIntType AddPostBox(PostBox<Type>& lPostBox)                         // h:76
         {
             CGS_ASSERT(mPostBoxMap.GetLength() < mPostBoxMap.GetCapacity(),
-                       CgsDev::Assert::MessageAt("mPostBoxMap.GetLength() < mPostBoxMap.GetCapacity()", "..\\..\\..\\GameSource\\Director/Utils/BrnPostOffice.h", 78));      // h:78
-            CGS_ASSERT(!mPostBoxMap.Contains(&lPostBox), CgsDev::Assert::MessageAt("!mPostBoxMap.Contains(&lPostBox)", "..\\..\\..\\GameSource\\Director/Utils/BrnPostOffice.h", 79));  // h:79
+                       CGS_ASSERT_MESSAGE_AT("mPostBoxMap.GetLength() < mPostBoxMap.GetCapacity()", CGS_ARTIST_BRNPOSTOFFICE_FILE, 78));      // h:78
+            CGS_ASSERT(!mPostBoxMap.Contains(&lPostBox), CGS_ASSERT_MESSAGE_AT("!mPostBoxMap.Contains(&lPostBox)", CGS_ARTIST_BRNPOSTOFFICE_FILE, 79));  // h:79
             lPostBox.WaitForPackage();
             mPostBoxMap.Append(&lPostBox);
             return static_cast<PostBoxIDIntType>(mPostBoxMap.GetLength() - 1);
@@ -75,8 +75,8 @@ namespace BrnDirector
 
         void Deliver(u16 lID, const Type& lrPackage)                                 // h:93
         {
-            CGS_ASSERT(lID < mPostBoxMap.GetLength(), CgsDev::Assert::MessageAt("lID < mPostBoxMap.GetLength()", "..\\..\\..\\GameSource\\Director/Utils/BrnPostOffice.h", 95));  // h:95
-            CGS_ASSERT(mPostBoxMap[lID] != 0, CgsDev::Assert::MessageAt("mPostBoxMap[lID] != NULL", "..\\..\\..\\GameSource\\Director/Utils/BrnPostOffice.h", 96));              // h:96
+            CGS_ASSERT(lID < mPostBoxMap.GetLength(), CGS_ASSERT_MESSAGE_AT("lID < mPostBoxMap.GetLength()", CGS_ARTIST_BRNPOSTOFFICE_FILE, 95));  // h:95
+            CGS_ASSERT(mPostBoxMap[lID] != 0, CGS_ASSERT_MESSAGE_AT("mPostBoxMap[lID] != NULL", CGS_ARTIST_BRNPOSTOFFICE_FILE, 96));              // h:96
             mPostBoxMap[lID]->TakePackage(lrPackage);
         }
 
@@ -105,3 +105,5 @@ namespace BrnDirector
         mPostBoxMap.Clear();
     }
 }
+
+#undef CGS_ARTIST_BRNPOSTOFFICE_FILE

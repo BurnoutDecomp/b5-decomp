@@ -3,7 +3,7 @@
 // keyboard holder: Prepare latches the active keyboard pointer, Release clears it. Both
 // run a single non-fatal CGS_ASSERT pointer guard (the X360 returns 1 regardless) and
 // touch only the keyboard pointer slot. Original diagnostics and continuation are retained.
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/BrnGuiModule.h"
 #include "GameSource/Gui/BrnGuiKeyboardHost.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/CgsSaveLoad.h"  // CgsGui::ConvertWideCharToAsciiSafe
@@ -32,7 +32,7 @@ bool KeyboardHost::Prepare(BrnGuiKeyboard* lpGuiKeyboard)
     if (lpGuiKeyboard == 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpGuiKeyboard", "..\\..\\..\\GameSource\\Gui/BrnGuiModule.h", 739);
+        CgsDev::Assert::FireAssert("lpGuiKeyboard", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 739));
         CgsDev::Assert::EndAssert();
     }
     mpGuiKeyboard = lpGuiKeyboard;
@@ -47,7 +47,7 @@ bool KeyboardHost::Release()
     if (mpGuiKeyboard == 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("mpGuiKeyboard", "..\\..\\..\\GameSource\\Gui/BrnGuiModule.h", 754);
+        CgsDev::Assert::FireAssert("mpGuiKeyboard", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 754));
         CgsDev::Assert::EndAssert();
     }
     mpGuiKeyboard = 0;
@@ -77,3 +77,5 @@ void KeyboardHost::KeyboardClosed(const CgsGui::CgsUtf16* lpResultText)
 }
 
 } // namespace BrnGui
+
+#undef CGS_ARTIST_FILE

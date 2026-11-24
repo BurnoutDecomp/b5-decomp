@@ -41,10 +41,10 @@
 //             mbActive +0xC -> +0x9C for [0])
 //   this+0x1B0 maStuntTypeScoreCount[0] (4-byte stride; per-stunt-type hit counter)
 //   this+0x22BD mbStuntInfoEventPending
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp"
 #include "GameSource/GameState/ModeManager/Scoring/BrnStuntModeScoring.h"
 #include "GameSource/GameState/BrnGameActions.h"   // GameStateModuleIO action types (group include)
-
+#define CGS_ARTIST_FILE_BRNRACECARENTITYMODULEOUTPUTINTERFACE "..\\..\\..\\GameSource\\World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
 // Completes the output-interface typedef (StuntModeScoring::ActiveRaceCarOutputInterface ==
 // BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface): UpdateStunts dereferences
 // it BY NAME (GetPlayerActiveRaceCarIndex / IsPlayerCarActive / IsPlayerCarCrashing /
@@ -141,7 +141,7 @@ namespace BrnGameState
     // and UpdateScores' player-active gate is faithful (its body is bodied below).
     void StuntModeScoring::Update(const ActiveRaceCarOutputInterface* lpRaceCar, f32 lfDelta)
     {
-        CGS_ASSERT(mbStuntModeActive, CgsDev::Assert::MessageAt("mbStuntModeActive", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 184));
+        CGS_ASSERT(mbStuntModeActive, CGS_ASSERT_MESSAGE_AT("mbStuntModeActive", CGS_ARTIST_FILE, 184));
 
         // Clear the per-category "scored this frame" flag for every stunt category (asm: 18 wide).
         for (s32 liType = 0; liType < 18; ++liType)
@@ -196,7 +196,7 @@ namespace BrnGameState
     {
         const EActiveRaceCarIndex lePlayerIndex = lpRaceCar->GetPlayerActiveRaceCarIndex();
         CGS_ASSERT(lePlayerIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   CgsDev::Assert::MessageAt("mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", "..\\..\\..\\GameSource\\World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h", 967));
+                   CGS_ASSERT_MESSAGE_AT("mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE_BRNRACECARENTITYMODULEOUTPUTINTERFACE, 967));
 
         bool lbPlayerCarActive = false;
         if (lePlayerIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)
@@ -275,14 +275,14 @@ namespace BrnGameState
         // maStuntTypeScoreCount[18]) is 18 -- the asm indexes up to type 17. FLAG: the committed
         // E_STUNT_TYPE_COUNT (15) disagrees with the asm's 18-wide range; the literal 18 is faithful.
         CGS_ASSERT(leStuntType > E_STUNT_TYPE_INVALID && static_cast<s32>(leStuntType) < 18,
-                   CgsDev::Assert::MessageAt("leStuntType > E_STUNT_TYPE_INVALID && leStuntType < E_STUNT_TYPE_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 1047));
+                   CGS_ASSERT_MESSAGE_AT("leStuntType > E_STUNT_TYPE_INVALID && leStuntType < E_STUNT_TYPE_COUNT", CGS_ARTIST_FILE, 1047));
 
         if (!mbStuntInProgress)
         {
             CGS_ASSERT(HasAnyPendingScore() && mfPendingScoreTimer <= KF_ZERO,
-                       CgsDev::Assert::MessageAt("mbStuntInProgress || (HasAnyPendingScore() && mfPendingScoreTimer<=0.0f)", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 1048));
+                       CGS_ASSERT_MESSAGE_AT("mbStuntInProgress || (HasAnyPendingScore() && mfPendingScoreTimer<=0.0f)", CGS_ARTIST_FILE, 1048));
         }
-        CGS_ASSERT(mbComboInProgress, CgsDev::Assert::MessageAt("mbComboInProgress", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 1049));
+        CGS_ASSERT(mbComboInProgress, CGS_ASSERT_MESSAGE_AT("mbComboInProgress", CGS_ARTIST_FILE, 1049));
 
         const s32 liType = static_cast<s32>(leStuntType);
 
@@ -297,7 +297,7 @@ namespace BrnGameState
             const f32 lfScoreScale =
                 ((lfRaw - KF_SCORE_FALLOFF_FLOOR) >= KF_ZERO) ? lfRaw : KF_SCORE_FALLOFF_FLOOR;
             CGS_ASSERT(lfScoreScale >= KF_ZERO && lfScoreScale <= KF_ONE,
-                       CgsDev::Assert::MessageAt("lfScoreScale >= 0.0f && lfScoreScale <= 1.0f", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 1058));
+                       CGS_ASSERT_MESSAGE_AT("lfScoreScale >= 0.0f && lfScoreScale <= 1.0f", CGS_ARTIST_FILE, 1058));
             lfScore = lfScoreScale * lfScore;
         }
 
@@ -355,7 +355,7 @@ namespace BrnGameState
     // being reconstructed).
     void StuntModeScoring::UpdateBufferedScore(f32 lfDelta)
     {
-        CGS_ASSERT(!mbRecentStunt, CgsDev::Assert::MessageAt("!mbRecentStunt", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 373));
+        CGS_ASSERT(!mbRecentStunt, CGS_ASSERT_MESSAGE_AT("!mbRecentStunt", CGS_ARTIST_FILE, 373));
 
         if (HasAnyPendingScore())
         {
@@ -382,7 +382,7 @@ namespace BrnGameState
                     mRecentStunt.muStuntTypes        = muStuntTypesInProgress;
                     mRecentStunt.muAwesomeStuntTypes = muAwesomeStuntTypesInProgress;
 
-                    CGS_ASSERT(mRecentStunt.muStuntTypes != 0, CgsDev::Assert::MessageAt("mRecentStunt.muStuntTypes != 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 395));
+                    CGS_ASSERT(mRecentStunt.muStuntTypes != 0, CGS_ASSERT_MESSAGE_AT("mRecentStunt.muStuntTypes != 0", CGS_ARTIST_FILE, 395));
 
                     // The reverse-takeoff bonus multiplier is applied to spin/roll banking when the
                     // REVERSE_TAKEOFF bit (bit 14) of muStuntTypesInProgress is set.
@@ -407,7 +407,7 @@ namespace BrnGameState
                                     lfSpinDegrees * KF_FLAT_SPIN_DEGREES_PER_SPIN + KF_SPIN_COUNT_ROUNDING_BIAS;
                                 mRecentStunt.muFlatSpins =
                                     static_cast<u16>(static_cast<s32>(lfSpins));
-                                CGS_ASSERT(mRecentStunt.muFlatSpins >= 1, CgsDev::Assert::MessageAt("mRecentStunt.muFlatSpins >= 1", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 408));
+                                CGS_ASSERT(mRecentStunt.muFlatSpins >= 1, CGS_ASSERT_MESSAGE_AT("mRecentStunt.muFlatSpins >= 1", CGS_ARTIST_FILE, 408));
                             }
                         }
 
@@ -425,7 +425,7 @@ namespace BrnGameState
                                     lfRollDegrees * KF_BARREL_ROLL_DEGREES_PER_ROLL + KF_SPIN_COUNT_ROUNDING_BIAS;
                                 mRecentStunt.muBarrelRolls =
                                     static_cast<u16>(static_cast<s32>(lfRolls));
-                                CGS_ASSERT(mRecentStunt.muBarrelRolls >= 1, CgsDev::Assert::MessageAt("mRecentStunt.muBarrelRolls >= 1", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 420));
+                                CGS_ASSERT(mRecentStunt.muBarrelRolls >= 1, CGS_ASSERT_MESSAGE_AT("mRecentStunt.muBarrelRolls >= 1", CGS_ARTIST_FILE, 420));
                             }
                         }
 
@@ -443,7 +443,7 @@ namespace BrnGameState
                         // Arm the stunt-info HUD event when there are any awesome stunt types.
                         mbStuntInfoEventPending = (mRecentStunt.muAwesomeStuntTypes != 0);
 
-                        CGS_ASSERT(mbComboInProgress, CgsDev::Assert::MessageAt("mbComboInProgress", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 1049));
+                        CGS_ASSERT(mbComboInProgress, CGS_ASSERT_MESSAGE_AT("mbComboInProgress", CGS_ARTIST_FILE, 1049));
 
                         if (mbRecentStunt)
                         {
@@ -511,7 +511,7 @@ namespace BrnGameState
     {
         const EActiveRaceCarIndex lePlayerIndex = lpRaceCar->GetPlayerActiveRaceCarIndex();
         CGS_ASSERT(lePlayerIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   CgsDev::Assert::MessageAt("mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", "..\\..\\..\\GameSource\\World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h", 967));
+                   CGS_ASSERT_MESSAGE_AT("mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE_BRNRACECARENTITYMODULEOUTPUTINTERFACE, 967));
 
         bool lbPlayerCarActive = false;
         if (lePlayerIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)
@@ -568,7 +568,7 @@ namespace BrnGameState
             lEvent.miBarrelRolls       = static_cast<s16>(mRecentStunt.muBarrelRolls);
 
             CGS_ASSERT(lpOutputActionQueue != 0,
-                CgsDev::Assert::MessageAt(
+                CGS_ASSERT_MESSAGE_AT(
                     "lpOutputActionQueue",
                     "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
                     "../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 163 /* ARTIST 0x82344748 */));
@@ -581,3 +581,6 @@ namespace BrnGameState
         }
     }
 }
+
+#undef CGS_ARTIST_FILE
+#undef CGS_ARTIST_FILE_BRNRACECARENTITYMODULEOUTPUTINTERFACE

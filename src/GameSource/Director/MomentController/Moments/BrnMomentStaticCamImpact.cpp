@@ -97,7 +97,7 @@ void MomentStaticCamImpact::Update(f32 lfTimeStep, void* lrBehaviourController,
         break;
 
     default:
-        CGS_ASSERT(false, CgsDev::Assert::MessageAt("unhandled case in switch", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentStaticCamImpact.cpp", 134));
+        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unhandled case in switch", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentStaticCamImpact.cpp", 134));
         break;
     }
 }

@@ -364,7 +364,7 @@ namespace CgsResource
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("mpapTextures[0] != NULL",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\fonts\\CgsFont.cpp", 383);
+                CGS_ASSERT_LOCATION("d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\fonts\\CgsFont.cpp", 383));
             CgsDev::Assert::EndAssert();
         }
         lParams.mpTexture = mpapTextures[0];

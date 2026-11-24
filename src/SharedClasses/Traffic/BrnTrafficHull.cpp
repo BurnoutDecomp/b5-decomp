@@ -136,12 +136,12 @@ namespace BrnTraffic
     const JunctionLogicBox* Hull::GetJunctionForLightTrigger(u32 luIndex) const
     {
         CGS_ASSERT(luIndex < muNumLightTriggers,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "luIndex < muNumLightTriggers", KAC_ARTIST_ASSERT_FILE, 274 /* ARTIST 0x827528A0 */));
 
         const u8 lu8JunctionIndex = mpaLightTriggerJunctionLookup[luIndex];
         CGS_ASSERT(lu8JunctionIndex < muNumJunctions,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lu8JunctionIndex < muNumJunctions", KAC_ARTIST_ASSERT_FILE, 276 /* ARTIST 0x827528D0 */));
 
         return &mpaJunctions[lu8JunctionIndex];

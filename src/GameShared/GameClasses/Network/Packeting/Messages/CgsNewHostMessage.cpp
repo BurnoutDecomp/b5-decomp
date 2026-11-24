@@ -42,7 +42,7 @@ namespace CgsNetwork
             }
 
             SetMessageInvalid();
-            CGS_ASSERT(!IsMessageValid(), CgsDev::Assert::MessageAt(
+            CGS_ASSERT(!IsMessageValid(), CGS_ASSERT_MESSAGE_AT(
                 "!IsMessageValid()",
                 "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\Messages\\CgsNewHostMessage.cpp", 118 /* ARTIST 0x8288255C */));
             return true;

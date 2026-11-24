@@ -34,7 +34,7 @@ namespace AIModuleIO
     u16 AICarOutputInterface::GetAISectionIndex(s32 liAICarIndex) const
     {
         CGS_ASSERT(liAICarIndex >= 0 && liAICarIndex < BrnWorld::KI_MAX_OUT_OF_RANGE_RACE_CARS,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "liAICarIndex >= 0 && liAICarIndex < BrnWorld::KI_MAX_OUT_OF_RANGE_RACE_CARS",
                 "..\\..\\..\\GameSource\\World/AI/SharedIO/BrnAICarOutputInterface.h", 229 /* ARTIST 0x8230F8BC */));
         return mauAISections[liAICarIndex];

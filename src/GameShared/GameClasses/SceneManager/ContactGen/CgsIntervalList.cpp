@@ -35,10 +35,10 @@ namespace CgsSceneManager
                                u32 luMaxNumIntervals)
     {
         CGS_ASSERT(lpaIntervalsMem != NULL,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpaIntervalsMem != NULL", KAC_ARTIST_ASSERT_FILE, 94 /* ARTIST 0x828B468C */));
         CGS_ASSERT(lpaObjectToIntervalMapMem != NULL,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpaObjectToIntervalMapMem != NULL", KAC_ARTIST_ASSERT_FILE, 95 /* ARTIST 0x828B46B0 */));
 
         mpaIntervals           = lpaIntervalsMem;

@@ -243,7 +243,7 @@ namespace BrnGui
     {
         CGS_ASSERT(lePlayOrderMode == GuiEventAudioTraxPlayOrder::E_TRAX_PLAY_ORDER_MODE_RANDOM ||
                    lePlayOrderMode == GuiEventAudioTraxPlayOrder::E_TRAX_PLAY_ORDER_MODE_SEQUENTIAL,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "liPlayOrderMode == GuiEventAudioTraxPlayOrder::E_TRAX_PLAY_ORDER_MODE_RANDOM || liPlayOrderMode == GuiEventAudioTraxPlayOrder::E_TRAX_PLAY_ORDER_MODE_SEQUENTIAL",
                 "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnEATraxMenuComponent.cpp", 321 /* ARTIST 0x82419824 */));
 

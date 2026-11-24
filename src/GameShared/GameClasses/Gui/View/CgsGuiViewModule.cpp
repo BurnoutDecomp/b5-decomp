@@ -5,7 +5,7 @@
 #include "GameShared/GameClasses/Gui/CgsGuiEventAddLocalisedTextPointer.h"
 #include "GameShared/GameClasses/Gui/CgsGuiEventLocalisedTextPointerRemoved.h"
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptDataHeader.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Gui/View/CgsGuiViewModule.h"
 #include <cstring>
 
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
@@ -482,7 +482,7 @@ namespace CgsGui
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert(
-                    "Undefined format type for localised value", lpcFile, 654);
+                    "Undefined format type for localised value", CGS_ASSERT_LOCATION(lpcFile, 654));
                 CgsDev::Assert::EndAssert();
                 // ARTIST continues to UpdateFlashComponent after this assert.
             }
@@ -495,7 +495,7 @@ namespace CgsGui
         case 11:
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
-                "E_GUI_ADD_LOCALISED_TEXT event is no longer supported", lpcFile, 671);
+                "E_GUI_ADD_LOCALISED_TEXT event is no longer supported", CGS_ASSERT_LOCATION(lpcFile, 671));
             CgsDev::Assert::EndAssert();
             break;
 
@@ -529,7 +529,7 @@ namespace CgsGui
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 "Unexpected type sent to ViewModule::ProcessIncomingLanguageEvent",
-                lpcFile, 701);
+                CGS_ASSERT_LOCATION(lpcFile, 701));
             CgsDev::Assert::EndAssert();
             break;
         }
@@ -587,17 +587,17 @@ namespace CgsGui
     const char* ViewModule::GetMovieNameByLevel(int liLevel) const
     {
         CGS_ASSERT(liLevel >= 0 && liLevel < KI_NUM_MOVIE_LEVELS,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "liLevel>=0 && liLevel < KI_NUM_MOVIE_LEVELS",
-                "..\\..\\..\\GameShared\\GameClasses\\Gui/View/CgsGuiViewModule.h", 498 /* ARTIST 0x824EBCDC */));
+                CGS_ARTIST_FILE, 498 /* ARTIST 0x824EBCDC */));
         return macCurrentlyPlayingMovies[liLevel];
     }
 
     void ViewModule::SetClearScreenAlpha(f32 lfAlpha)
     {
         CGS_ASSERT(lfAlpha >= 0.0f && lfAlpha <= 1.0f,
-            CgsDev::Assert::MessageAt("lfAlpha>=0.0f && lfAlpha <= 1.0f",
-                "..\\..\\..\\GameShared\\GameClasses\\Gui/View/CgsGuiViewModule.h", 482 /* ARTIST 0x82847544 */));
+            CGS_ASSERT_MESSAGE_AT("lfAlpha>=0.0f && lfAlpha <= 1.0f",
+                CGS_ARTIST_FILE, 482 /* ARTIST 0x82847544 */));
         mfClearScreenAlpha = lfAlpha;
     }
 
@@ -855,3 +855,5 @@ namespace CgsGui
     }
 
 }
+
+#undef CGS_ARTIST_FILE

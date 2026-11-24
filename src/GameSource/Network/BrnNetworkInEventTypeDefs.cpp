@@ -26,7 +26,7 @@ namespace BrnNetworkModuleIO
     void NetworkInSelectScoreboardEvent::GetIndexes(s32 liCategory)
     {
         CGS_ASSERT(liCategory >= 0,
-            CgsDev::Assert::MessageAt("liCategory >= 0", __FILE__, 1031 /* ARTIST 0x823A637C */));
+            CGS_ASSERT_MESSAGE_AT("liCategory >= 0", __FILE__, 1031 /* ARTIST 0x823A637C */));
         miCategory = liCategory;
         meType     = E_TYPE_GET_INDEX;
     }
@@ -34,7 +34,7 @@ namespace BrnNetworkModuleIO
     void NetworkInSelectScoreboardEvent::GetVariations(s32 liIndex)
     {
         CGS_ASSERT(liIndex >= 0,
-            CgsDev::Assert::MessageAt("liIndex >= 0", __FILE__, 1048 /* ARTIST 0x823A63E4 */));
+            CGS_ASSERT_MESSAGE_AT("liIndex >= 0", __FILE__, 1048 /* ARTIST 0x823A63E4 */));
         miIndex = liIndex;
         meType  = E_TYPE_GET_VARIATION;
     }
@@ -42,7 +42,7 @@ namespace BrnNetworkModuleIO
     void NetworkInSelectScoreboardEvent::GetScoreboard(s32 liVariation)
     {
         CGS_ASSERT(liVariation >= 0,
-            CgsDev::Assert::MessageAt("liVariation >= 0", __FILE__, 1065 /* ARTIST 0x823A644C */));
+            CGS_ASSERT_MESSAGE_AT("liVariation >= 0", __FILE__, 1065 /* ARTIST 0x823A644C */));
         miVariation = liVariation;
         meType      = E_TYPE_GET_SCOREBOARD;
     }

@@ -543,7 +543,7 @@ void Im2d::Construct(rw::IResourceAllocator* allocator)
             &maHandleColourShift[i], &maHandleColourScale[i] };
         for (u32 j = 0; j < 4; ++j)
         {
-            if (!mapVertexProgramBuffer[i]) Im2dConstructAssert("mapVertexProgramBuffer[ li8Program ] != NULL", kRendererFile, 570);
+            if (!mapVertexProgramBuffer[i]) Im2dConstructAssert("mapVertexProgramBuffer[ li8Program ] != NULL", CGS_ASSERT_LOCATION(kRendererFile, 570));
             renderengine::ProgramBuffer::GetVariableHandleByName(
                 reinterpret_cast<const renderengine::ProgramBufferData*>(mapVertexProgramBuffer[i]),
                 reinterpret_cast<const u8*>(transformNames[j]), handles[j]);
@@ -558,16 +558,16 @@ void Im2d::Construct(rw::IResourceAllocator* allocator)
     for (u32 m = 0; m < 4; ++m)
     {
         const u32 program = 2 * m + 1;
-        if (!mapVertexProgramBuffer[program]) Im2dConstructAssert("mapVertexProgramBuffer[ li8Program ] != NULL", kRendererFile, 570);
+        if (!mapVertexProgramBuffer[program]) Im2dConstructAssert("mapVertexProgramBuffer[ li8Program ] != NULL", CGS_ASSERT_LOCATION(kRendererFile, 570));
         if (!renderengine::ProgramBuffer::GetVariableHandleByName(
             reinterpret_cast<const renderengine::ProgramBufferData*>(mapVertexProgramBuffer[program]),
             reinterpret_cast<const u8*>("gvMaskUseFlags"), &maMask[m].mPixelMaskUseHandle))
         {
-            if (!mapPixelProgramBuffer[program]) Im2dConstructAssert("mapPixelProgramBuffer[ li8Program ] != NULL", kRendererFile, 554);
+            if (!mapPixelProgramBuffer[program]) Im2dConstructAssert("mapPixelProgramBuffer[ li8Program ] != NULL", CGS_ASSERT_LOCATION(kRendererFile, 554));
             if (!renderengine::ProgramBuffer::GetVariableHandleByName(
                 reinterpret_cast<const renderengine::ProgramBufferData*>(mapPixelProgramBuffer[program]),
                 reinterpret_cast<const u8*>("gvMaskUseFlags"), &maMask[m].mPixelMaskUseHandle))
-                Im2dConstructAssert("GetPixelProgram(leMaskShader)->GetVariableHandleByName(\"gvMaskUseFlags\", maMask[ liShader ].mPixelMaskUseHandle)", kIm2dFile, 201);
+                Im2dConstructAssert("GetPixelProgram(leMaskShader)->GetVariableHandleByName(\"gvMaskUseFlags\", maMask[ liShader ].mPixelMaskUseHandle)", CGS_ASSERT_LOCATION(kIm2dFile, 201));
         }
         maMask[m].mvPixelMask.SetZero();
         for (u32 lane = 0; lane < 2; ++lane)
@@ -578,16 +578,16 @@ void Im2d::Construct(rw::IResourceAllocator* allocator)
             for (u32 k = 0; k < 3; ++k)
             {
                 char name[256]; CgsCore::SPrintf(name, 256, formats[k], 'A' + lane);
-                if (!mapVertexProgramBuffer[program]) Im2dConstructAssert("mapVertexProgramBuffer[ li8Program ] != NULL", kRendererFile, 570);
+                if (!mapVertexProgramBuffer[program]) Im2dConstructAssert("mapVertexProgramBuffer[ li8Program ] != NULL", CGS_ASSERT_LOCATION(kRendererFile, 570));
                 if (!renderengine::ProgramBuffer::GetVariableHandleByName(
                     reinterpret_cast<const renderengine::ProgramBufferData*>(mapVertexProgramBuffer[program]),
                     reinterpret_cast<const u8*>(name), handles[k]))
                 {
-                    if (!mapPixelProgramBuffer[program]) Im2dConstructAssert("mapPixelProgramBuffer[ li8Program ] != NULL", kRendererFile, 554);
+                    if (!mapPixelProgramBuffer[program]) Im2dConstructAssert("mapPixelProgramBuffer[ li8Program ] != NULL", CGS_ASSERT_LOCATION(kRendererFile, 554));
                     if (!renderengine::ProgramBuffer::GetVariableHandleByName(
                         reinterpret_cast<const renderengine::ProgramBufferData*>(mapPixelProgramBuffer[program]),
                         reinterpret_cast<const u8*>(name), handles[k]))
-                        Im2dConstructAssert(failures[k], kIm2dFile, failureLines[k]);
+                        Im2dConstructAssert(failures[k], CGS_ASSERT_LOCATION(kIm2dFile, failureLines[k]));
                 }
             }
             layer.mvPixelMaskPositionMinMax.SetZero(); layer.mvPixelMaskUVStartEnd.SetZero();
@@ -597,16 +597,16 @@ void Im2d::Construct(rw::IResourceAllocator* allocator)
     for (u32 i = 0; i < 2; ++i)
     {
         const u32 program = i + 6;
-        if (!mapPixelProgramBuffer[program]) Im2dConstructAssert("mapPixelProgramBuffer[ li8Program ] != NULL", kRendererFile, 554);
+        if (!mapPixelProgramBuffer[program]) Im2dConstructAssert("mapPixelProgramBuffer[ li8Program ] != NULL", CGS_ASSERT_LOCATION(kRendererFile, 554));
         if (!renderengine::ProgramBuffer::GetVariableHandleByName(
             reinterpret_cast<const renderengine::ProgramBufferData*>(mapPixelProgramBuffer[program]),
             reinterpret_cast<const u8*>("gv3OuterColour"), &maBoostBarOuterColours[i]))
-            Im2dConstructAssert("GetPixelProgram(liShader + E_SHADERS_BOOSTBAR)->GetVariableHandleByName( \"gv3OuterColour\", maBoostBarOuterColours[ liShader ] )", kIm2dFile, 245);
-        if (!mapPixelProgramBuffer[program]) Im2dConstructAssert("mapPixelProgramBuffer[ li8Program ] != NULL", kRendererFile, 554);
+            Im2dConstructAssert("GetPixelProgram(liShader + E_SHADERS_BOOSTBAR)->GetVariableHandleByName( \"gv3OuterColour\", maBoostBarOuterColours[ liShader ] )", CGS_ASSERT_LOCATION(kIm2dFile, 245));
+        if (!mapPixelProgramBuffer[program]) Im2dConstructAssert("mapPixelProgramBuffer[ li8Program ] != NULL", CGS_ASSERT_LOCATION(kRendererFile, 554));
         if (!renderengine::ProgramBuffer::GetVariableHandleByName(
             reinterpret_cast<const renderengine::ProgramBufferData*>(mapPixelProgramBuffer[program]),
             reinterpret_cast<const u8*>("gv3InnerColour"), &maBoostBarInnerColours[i]))
-            Im2dConstructAssert("GetPixelProgram(liShader + E_SHADERS_BOOSTBAR)->GetVariableHandleByName( \"gv3InnerColour\", maBoostBarInnerColours[ liShader ] )", kIm2dFile, 246);
+            Im2dConstructAssert("GetPixelProgram(liShader + E_SHADERS_BOOSTBAR)->GetVariableHandleByName( \"gv3InnerColour\", maBoostBarInnerColours[ liShader ] )", CGS_ASSERT_LOCATION(kIm2dFile, 246));
     }
     mu32NumMasks = 0;
 }

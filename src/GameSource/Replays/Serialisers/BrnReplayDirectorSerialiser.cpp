@@ -1,5 +1,5 @@
 #include "GameSource/Replays/Serialisers/BrnReplayDirectorSerialiser.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayDirectorSerialiser.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/Camera/Camera.h"   // BrnDirector::Camera::Camera (the static-layout image)
 
@@ -25,7 +25,7 @@ void DirectorSerialiser::Read()
 
     BrnDirector::Camera::Camera* lpStatic = GetStaticLayout();
     CGS_ASSERT(lpStatic != 0,
-        CgsDev::Assert::MessageAt("lpStatic", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayDirectorSerialiser.cpp", 38 /* ARTIST 0x82650378 */));   // :38 (non-gating)
+        CGS_ASSERT_MESSAGE_AT("lpStatic", CGS_ARTIST_FILE, 38 /* ARTIST 0x82650378 */));   // :38 (non-gating)
 
     const EMode leMode = GetMode();
     bool lbSkip = (leMode == E_MODE_RECORDING_STALLED || leMode == E_MODE_PLAYING_STALLED);
@@ -55,7 +55,7 @@ void DirectorSerialiser::Write()
 
     BrnDirector::Camera::Camera* lpStatic = GetStaticLayout();
     CGS_ASSERT(lpStatic != 0,
-        CgsDev::Assert::MessageAt("lpStatic", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayDirectorSerialiser.cpp", 69 /* ARTIST 0x82650470 */));   // :69 (non-gating)
+        CGS_ASSERT_MESSAGE_AT("lpStatic", CGS_ARTIST_FILE, 69 /* ARTIST 0x82650470 */));   // :69 (non-gating)
 
     if (!mbStaticCameraConstructed)
     {
@@ -76,3 +76,5 @@ void DirectorSerialiser::Write()
 }
 
 }
+
+#undef CGS_ARTIST_FILE

@@ -1,5 +1,5 @@
 #include "GameSource/Gui/Flow/Screen/States/BrnImageGallery.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnImageGallery.cpp"
 #include "GameShared/GameClasses/Containers/CgsFastBitArray.h"            // CgsContainers::FastBitArray (collected-data bits)
 #include "GameShared/GameClasses/Containers/CgsHash.h"                    // CgsContainers::CgsHash::CalculateHash
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
@@ -570,9 +570,9 @@ namespace BrnGui
             SetExpectedComponent(maCategorySelectable[liCategory].GetName());
         }
         CGS_ASSERT(muNumExpectedComponents <= KU_MAX_INIT_COMPONENTS_NUM,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "muNumExpectedComponents <= KU_MAX_INIT_COMPONENTS_NUM",
-                "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnImageGallery.cpp", 1057 /* ARTIST 0x8248476C */));
+                CGS_ARTIST_FILE, 1057 /* ARTIST 0x8248476C */));
         mpGuiCache->SetExpectedAptComponentList(E_GUIFLOW_SCREEN, mauExpectedComponentIds,
                                                 muNumExpectedComponents);
     }
@@ -588,7 +588,7 @@ namespace BrnGui
         muNumExpectedComponents = 0;
 
         CGS_ASSERT(mpGuiCache,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpGuiCache",
                 "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnImageGallery.h", 310 /* ARTIST 0x82482D08 */));
         mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
@@ -1077,7 +1077,7 @@ namespace BrnGui
                 break;
 
             default:
-                CGS_ASSERT(false, CgsDev::Assert::MessageAt("lpcLabel", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnImageGallery.cpp", 1525 /* ARTIST 0x824964D0 */));
+                CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("lpcLabel", CGS_ARTIST_FILE, 1525 /* ARTIST 0x824964D0 */));
                 break;
         }
 
@@ -1125,3 +1125,5 @@ namespace BrnGui
         CGS_STATIC_ASSERT((sizeof(CollectedDataPayload) == 16), "collected-data payload: type + one bit field");
     }
 }   // namespace BrnGui
+
+#undef CGS_ARTIST_FILE

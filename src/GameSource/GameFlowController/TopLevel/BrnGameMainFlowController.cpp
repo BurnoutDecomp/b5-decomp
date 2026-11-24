@@ -1,6 +1,6 @@
 #include "GameSource/GameFlowController/TopLevel/BrnGameMainFlowController.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameFlowController/TopLevel/BrnGameMainFlowController.cpp"
 namespace BrnGameMainFlowController
 {
     // @ 0x823C6440 - wire the per-state pointer table (indexed by EMainGameFlowState) to the
@@ -62,7 +62,7 @@ namespace BrnGameMainFlowController
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("meCurrentState >= 0 && meCurrentState < E_MGS_COUNT",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameFlowController/TopLevel/BrnGameMainFlowController.cpp", 206);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 206));
             CgsDev::Assert::EndAssert();
         }
         switch (meCurrentState)
@@ -92,7 +92,7 @@ namespace BrnGameMainFlowController
             default:
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("Unknown main game state.\n",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameFlowController/TopLevel/BrnGameMainFlowController.cpp", 297);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 297));
                 CgsDev::Assert::EndAssert();
                 break;
         }
@@ -122,3 +122,5 @@ namespace BrnGameMainFlowController
     void GameMainFlowController::SetSaveLoadState(bool lbSaveLoadState) { mbSaveLoadState = lbSaveLoadState; }
     void GameMainFlowController::SetInGameState(bool lbInGameState)     { mbInGameState = lbInGameState; }
 }
+
+#undef CGS_ARTIST_FILE

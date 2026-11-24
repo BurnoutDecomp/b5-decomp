@@ -51,7 +51,7 @@ namespace BrnNetwork
                                                bool lbEnteringShowtime)
     {
         CGS_ASSERT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lu16FrameCount != KU16_INVALID_FRAME",
                 "..\\..\\..\\GameSource\\Network/Messages/BrnShowtimeSwitchMessage.cpp", 131 /* ARTIST 0x8257C4C0 */));
 

@@ -85,7 +85,7 @@ void OverlayComponent::Prepare(const char* lacName, const BrnFlapt::FileRef& lFi
 void OverlayComponent::TransitionCompleteCallback(void* lpUserData, u16 /*luArg*/)
 {
     CGS_ASSERT(NULL != lpUserData,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "NULL != lpUserData",
             "..\\..\\..\\GameSource\\Gui\\Flow\\Overlay\\Components\\BrnOverlayComponent.cpp", 87 /* ARTIST 0x8241C1BC */));
 
@@ -97,7 +97,7 @@ void OverlayComponent::TransitionCompleteCallback(void* lpUserData, u16 /*luArg*
 void OverlayComponent::RunOverlay(const char* lpcOverlayFlashId, const char* lpcFrameLabel)
 {
     // Non-gating tripwire (h:115): the popup family must have filled in its flash id.
-    CGS_ASSERT(NULL != lpcOverlayFlashId, CgsDev::Assert::MessageAt("NULL != lpcOverlayFlashId", "..\\..\\..\\GameSource\\Gui/Flow/Overlay/Components/BrnOverlayComponent.h", 115 /* ARTIST 0x824B14D0 */));
+    CGS_ASSERT(NULL != lpcOverlayFlashId, CGS_ASSERT_MESSAGE_AT("NULL != lpcOverlayFlashId", "..\\..\\..\\GameSource\\Gui/Flow/Overlay/Components/BrnOverlayComponent.h", 115 /* ARTIST 0x824B14D0 */));
 
     mAptRef.GotoAndPlayLabel(lpcOverlayFlashId);
 

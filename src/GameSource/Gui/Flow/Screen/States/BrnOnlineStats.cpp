@@ -14,7 +14,7 @@
 //
 // Out-queue records are the console's own wire records, posted on channel 40 through
 // GetOutputEventQueue()->AddEvent with host sizeof sizes.
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineStats.cpp"
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineStats.h"
 
 #include <cstddef>                                                        // offsetof (wire records)
@@ -204,7 +204,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineStats::UpdateGetCache()
     {
-        CGS_ASSERT(0 == mpGuiCache, CgsDev::Assert::MessageAt("NULL == mpGuiCache", KAC_BRN_ONLINE_STATS_ASSERT_FILE, 270));
+        CGS_ASSERT(0 == mpGuiCache, CGS_ASSERT_MESSAGE_AT("NULL == mpGuiCache", KAC_BRN_ONLINE_STATS_ASSERT_FILE, 270));
 
 
 
@@ -219,13 +219,13 @@ namespace BrnGui
                 const GuiEventCachePayload* lpCacheEvent =
                     static_cast<const GuiEventCachePayload*>(lpEvent);
                 CGS_ASSERT(0 != lpCacheEvent->mpCachePointer,
-                    CgsDev::Assert::MessageAt("NULL != lpCacheEvent->mpCachePointer", KAC_BRN_ONLINE_STATS_ASSERT_FILE, 280));
+                    CGS_ASSERT_MESSAGE_AT("NULL != lpCacheEvent->mpCachePointer", KAC_BRN_ONLINE_STATS_ASSERT_FILE, 280));
                 mpGuiCache = lpCacheEvent->mpCachePointer;
                 break;
             }
         }
 
-        CGS_ASSERT(0 != mpGuiCache, CgsDev::Assert::MessageAt("NULL != mpGuiCache", KAC_BRN_ONLINE_STATS_ASSERT_FILE, 289));
+        CGS_ASSERT(0 != mpGuiCache, CGS_ASSERT_MESSAGE_AT("NULL != mpGuiCache", KAC_BRN_ONLINE_STATS_ASSERT_FILE, 289));
     }
 
     // ================================================================================
@@ -314,9 +314,9 @@ namespace BrnGui
     void OnlineStats::ClearExpectedComponent()
     {
         CGS_ASSERT(mpGuiCache != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpGuiCache",
-                "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineStats.cpp", 229 /* ARTIST 0x824875B8 */));
+                CGS_ARTIST_FILE, 229 /* ARTIST 0x824875B8 */));
 
         mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
 
@@ -332,7 +332,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineStats::HandleControllerInputPressed(const CgsModule::Event* lpEvent)
     {
-        CGS_ASSERT(lpEvent != 0, CgsDev::Assert::StreamMessageAt("Invalid event sent to OnlineStats::HandleControllerInput", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineStats.cpp", 442));
+        CGS_ASSERT(lpEvent != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event sent to OnlineStats::HandleControllerInput", CGS_ARTIST_FILE, 442));
 
         const ControllerButtonPayload* lpInput =
             static_cast<const ControllerButtonPayload*>(lpEvent);
@@ -374,3 +374,5 @@ namespace BrnGui
         mDisconnectRate.SetText(lacText);
     }
 }
+
+#undef CGS_ARTIST_FILE

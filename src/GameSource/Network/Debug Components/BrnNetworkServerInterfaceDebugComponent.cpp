@@ -111,7 +111,7 @@ namespace BrnNetwork
     // bodies); it is a no-op and carries no observable effect, so it is dropped.
     void ServerInterfaceDebugComponent::Construct(BrnServerInterfaceBase* lpServerInterfaceBase)
     {
-        CGS_ASSERT(lpServerInterfaceBase != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpServerInterfaceBase != 0, CGS_ASSERT_MESSAGE_AT(
             "lpServerInterfaceBase",
             __FILE__, 86 /* ARTIST 0x8258573C */));
 
@@ -169,7 +169,7 @@ namespace BrnNetwork
     void ServerInterfaceDebugComponent::Disconnect(void* lpData)
     {
         CGS_ASSERT(lpData != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpServerInterfaceDebugComponent",
                 __FILE__, 235 /* ARTIST 0x825857CC */));
         static_cast<ServerInterfaceDebugComponent*>(lpData)->mbDisconnectNextUpdate = true;
@@ -223,7 +223,7 @@ namespace BrnNetwork
         {
             mbApplyServerTypeNextUpdate = false;
             CGS_ASSERT(mpNetworkManager != 0,
-                CgsDev::Assert::MessageAt("mpNetworkManager", __FILE__, 190 /* ARTIST 0x8258ACCC */));
+                CGS_ASSERT_MESSAGE_AT("mpNetworkManager", __FILE__, 190 /* ARTIST 0x8258ACCC */));
             mpNetworkManager->GetNetworkServers()->SetServerType(static_cast<CgsNetwork::EServerType>(miServerType));
         }
     }
@@ -368,7 +368,7 @@ namespace BrnNetwork
     void ServerInterfaceDebugComponent::ServerTypeSelectCallback(void* /*lpData*/, void* lpUserData)
     {
         CGS_ASSERT(lpUserData != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpServerInterfaceDebugComponent",
                 __FILE__, 541 /* ARTIST 0x82585824 */));
         static_cast<ServerInterfaceDebugComponent*>(lpUserData)->mbApplyServerTypeNextUpdate = true;

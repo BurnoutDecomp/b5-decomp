@@ -87,7 +87,7 @@ int DynamicMixer::DMixPrintf(const char* apFormat, ...)
     const int liCopied = ::vsnprintf(lacText, sizeof(lacText), apFormat, lArgs);
     va_end(lArgs);
     CGS_ASSERT(liCopied < static_cast<int>(sizeof(lacText)),
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lNumBytesCopied<(int32_t)luBytes",
             "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 96 /* ARTIST 0x8268D2F4 */));
     if (CgsDev::Message::gxMessageFilterFlags & 1)

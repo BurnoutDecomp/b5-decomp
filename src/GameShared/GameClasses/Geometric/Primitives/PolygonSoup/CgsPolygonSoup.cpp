@@ -38,7 +38,7 @@ namespace CgsGeometric
     u8* PolygonSoup::GetPolygon(u8 lu8PolyIndex) const
     {
         CGS_ASSERT(lu8PolyIndex < mu8NumPolygons,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lu8PolyIndex < GetNumPolygons()", KAC_ARTIST_ASSERT_FILE, 183 /* ARTIST 0x8283A9A8 */));
         return mpPolygons + KI_POLYGON_STRIDE * static_cast<s32>(lu8PolyIndex);
     }
@@ -50,7 +50,7 @@ namespace CgsGeometric
     u8* PolygonSoup::GetVertex(u16 lu16VertexIndex) const
     {
         CGS_ASSERT(lu16VertexIndex < mu8NumVertices,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lu8VertexIndex < GetNumVertices()", KAC_ARTIST_ASSERT_FILE, 192 /* ARTIST 0x8283AA20 */));
         return mpVertices + KI_VERTEX_STRIDE * static_cast<s32>(lu16VertexIndex);
     }

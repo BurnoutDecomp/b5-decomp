@@ -1085,7 +1085,7 @@ const char* PhysicsControl::GetEngineComponentName(
     const BrnSound::Vehicles::VehicleState* lpVehicleState =
         static_cast<const BrnSound::Vehicles::VehicleState*>(GetStateBase());
     CGS_ASSERT(lpVehicleState != 0,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lpVehicleState",
             "..\\..\\..\\GameSource\\Sound/Vehicles/Engines/BrnPhysicsControl.h", 435 /* ARTIST 0x82682CD4 */));
     return lpVehicleState->GetEngineComponentName(aeComponentType);

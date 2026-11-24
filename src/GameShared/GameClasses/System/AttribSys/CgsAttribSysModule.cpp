@@ -36,7 +36,7 @@ AttribSysModule::EPrepareStage operator++(AttribSysModule::EPrepareStage& leStag
     const AttribSysModule::EPrepareStage leOld = leStage;
     leStage = static_cast<AttribSysModule::EPrepareStage>(leStage + 1);
     CGS_ASSERT(leStage <= AttribSysModule::E_PREPARESTAGE_DONE,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "leEnumIndex <= AttribSysModule::E_PREPARESTAGE_DONE",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\attribsys\\CgsAttribSysModule.h", 230 /* ARTIST 0x828024EC */));
     return leOld;
@@ -143,19 +143,19 @@ bool AttribSysModule::Prepare(CgsMemory::LinearMalloc* lpLinearAlloc,
             mePrepareStage = E_PREPARESTAGE_MEMORY;
 
             CGS_ASSERT(lpLinearAlloc   != 0,
-                CgsDev::Assert::MessageAt(
+                CGS_ASSERT_MESSAGE_AT(
                     "lpLinearAlloc != NULL", __FILE__, 133 /* ARTIST 0x828076C8 */));
             CGS_ASSERT(lpAttribSysHeap != 0,
-                CgsDev::Assert::MessageAt(
+                CGS_ASSERT_MESSAGE_AT(
                     "lpAttribSysHeap != NULL", __FILE__, 134 /* ARTIST 0x828076EC */));
             CGS_ASSERT(lpGameTalkHeap  != 0,
-                CgsDev::Assert::MessageAt(
+                CGS_ASSERT_MESSAGE_AT(
                     "lpGameTalkHeap != NULL", __FILE__, 135 /* ARTIST 0x82807710 */));
             CGS_ASSERT(lpEastlHeap     != 0,
-                CgsDev::Assert::MessageAt(
+                CGS_ASSERT_MESSAGE_AT(
                     "lpEastlHeap != NULL", __FILE__, 136 /* ARTIST 0x82807734 */));
             CGS_ASSERT(liMaxNumVaults > 0,
-                CgsDev::Assert::MessageAt(
+                CGS_ASSERT_MESSAGE_AT(
                     "liMaxNumVaults > 0", __FILE__, 137 /* ARTIST 0x82807758 */));
 
             mMemoryManager.Prepare(lpLinearAlloc, lpAttribSysHeap,
@@ -165,7 +165,7 @@ bool AttribSysModule::Prepare(CgsMemory::LinearMalloc* lpLinearAlloc,
             mpSchemaVault = static_cast<Attrib::Vault*>(
                 lpLinearAlloc->Malloc(KI_SCHEMA_VAULT_BYTES));
             CGS_ASSERT(mpSchemaVault != 0,
-                CgsDev::Assert::MessageAt(
+                CGS_ASSERT_MESSAGE_AT(
                     "mpSchemaVault != NULL", __FILE__, 152 /* ARTIST 0x828077B4 */));
 
             mePrepareStage++;
@@ -176,7 +176,7 @@ bool AttribSysModule::Prepare(CgsMemory::LinearMalloc* lpLinearAlloc,
             return true;
         default:
             CGS_ASSERT(false,
-                CgsDev::Assert::MessageAt(
+                CGS_ASSERT_MESSAGE_AT(
                     "Invalid prepare state.\n", __FILE__, 169 /* ARTIST 0x828077F4 */));
             return false;
     }
@@ -204,7 +204,7 @@ bool AttribSysModule::Release()
             return true;
         default:
             CGS_ASSERT(false,
-                CgsDev::Assert::MessageAt(
+                CGS_ASSERT_MESSAGE_AT(
                     "Invalid release state.\n", __FILE__, 226 /* ARTIST 0x828025B4 */));
             return false;
     }

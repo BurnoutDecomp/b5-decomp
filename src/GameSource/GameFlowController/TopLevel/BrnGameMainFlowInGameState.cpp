@@ -2,7 +2,7 @@
 #include "GameSource/GameFlowController/TopLevel/BrnGameMainFlowController.h"
 #include "GameSource/Game/BrnGameModule.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameFlowController/TopLevel/BrnGameMainFlowController.cpp"
 // ARTIST823AACF8: use the controller embedded in the live main-game object.
 void MainGameFlowStateInGame::OnEnter()
 {
@@ -38,7 +38,7 @@ void MainGameFlowStateInGame::Update()
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("meCurrentState >= 0 && meCurrentState < E_MGS_COUNT",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameFlowController/TopLevel/BrnGameMainFlowController.cpp", 206);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 206));
         CgsDev::Assert::EndAssert();
     }
     switch (lrController.GetCurrentState())
@@ -58,8 +58,10 @@ void MainGameFlowStateInGame::Update()
     default:
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("Unknown main game state.\n",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameFlowController/TopLevel/BrnGameMainFlowController.cpp", 297);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 297));
         CgsDev::Assert::EndAssert();
         break;
     }
 }
+
+#undef CGS_ARTIST_FILE

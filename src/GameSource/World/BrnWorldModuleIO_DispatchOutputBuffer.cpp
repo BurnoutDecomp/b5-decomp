@@ -16,7 +16,7 @@
 // rodata carries "Not locked for reading\n"; every setter carries "Not locked for writing\n".
 // ============================================================================
 #include "GameSource/World/BrnWorldModuleIO_DispatchOutputBuffer.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // CGS_ASSERT
 
 namespace BrnWorldIO
@@ -28,7 +28,7 @@ namespace BrnWorldIO
 // vector copies (lvx/stvx x4) == the by-value 64-byte Matrix44 return.
 Matrix44 DispatchOutputBuffer::GetQuadricIrradianceA() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 462));
+    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 462));
     return mmQuadricIrradianceA;
 }
 
@@ -37,14 +37,14 @@ Matrix44 DispatchOutputBuffer::GetQuadricIrradianceA() const
 // this+0x10; modelled as the Matrix44 struct-assignment (store-for-store).
 void DispatchOutputBuffer::SetQuadricIrradianceA(rw::math::vpu::Matrix44 lmQuadricIrradianceA)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 463));
+    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 463));
     mmQuadricIrradianceA = lmQuadricIrradianceA;
 }
 
 // X360 0x827BC340 (:464 R) -- const quadric-irradiance-B accessor (Matrix44 @ +80).
 Matrix44 DispatchOutputBuffer::GetQuadricIrradianceB() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 464));
+    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 464));
     return mmQuadricIrradianceB;
 }
 
@@ -52,7 +52,7 @@ Matrix44 DispatchOutputBuffer::GetQuadricIrradianceB() const
 // mmQuadricIrradianceB (this+0x50). Same 4x lvx128/stvx128 shape; store-for-store.
 void DispatchOutputBuffer::SetQuadricIrradianceB(rw::math::vpu::Matrix44 lmQuadricIrradianceB)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 465));
+    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 465));
     mmQuadricIrradianceB = lmQuadricIrradianceB;
 }
 
@@ -62,14 +62,14 @@ void DispatchOutputBuffer::SetQuadricIrradianceB(rw::math::vpu::Matrix44 lmQuadr
 // Incoming Vector4 spilled v1->v127 across the assert, one stvx128 stores it.
 void DispatchOutputBuffer::SetFogColourPlusWhiteLevel(rw::math::vpu::Vector4 lvFogColourPlusWhiteLevel)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 467));
+    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 467));
     mvFogColourPlusWhiteLevel = lvFogColourPlusWhiteLevel;
 }
 
 // X360 0x827BC668 (:468 R) -- const fog-scattering accessor (member @ +160).
 Vector4 DispatchOutputBuffer::GetFogScattering() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 468));
+    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 468));
     return mvFogScattering;
 }
 
@@ -86,7 +86,7 @@ Vector4 DispatchOutputBuffer::GetFogColourPlusWhiteLevel() const
 // spilled v1->v127 across the assert, one stvx128 stores it.
 void DispatchOutputBuffer::SetFogScattering(rw::math::vpu::Vector4 lvFogScattering)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 469));
+    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 469));
     mvFogScattering = lvFogScattering;
 }
 
@@ -95,7 +95,7 @@ void DispatchOutputBuffer::SetFogScattering(rw::math::vpu::Vector4 lvFogScatteri
 // X360 0x823B54B0 (:470 R) -- const key-light-direction accessor (member @ +176).
 Vector3 DispatchOutputBuffer::GetKeyLightDirection() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 470));
+    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 470));
     return mvKeyLightDirection;
 }
 
@@ -103,14 +103,14 @@ Vector3 DispatchOutputBuffer::GetKeyLightDirection() const
 // Vector3 spilled v1->v127 across the assert, one stvx128 stores it.
 void DispatchOutputBuffer::SetKeyLightDirection(rw::math::vpu::Vector3 lvKeyLightDirection)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 471));
+    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 471));
     mvKeyLightDirection = lvKeyLightDirection;
 }
 
 // X360 0x823B5568 (:472 R) -- const key-light-colour accessor (member @ +192).
 Vector3 DispatchOutputBuffer::GetKeyLightColour() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 472));
+    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 472));
     return mvKeyLightColour;
 }
 
@@ -118,7 +118,7 @@ Vector3 DispatchOutputBuffer::GetKeyLightColour() const
 // spilled v1->v127 across the assert, one stvx128 stores it.
 void DispatchOutputBuffer::SetKeyLightColour(rw::math::vpu::Vector3 lvKeyLightColour)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 473));
+    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 473));
     mvKeyLightColour = lvKeyLightColour;
 }
 
@@ -126,7 +126,7 @@ void DispatchOutputBuffer::SetKeyLightColour(rw::math::vpu::Vector3 lvKeyLightCo
 // 16-byte vector copy (lvx/stvx) == the by-value Vector3 return (sret r3).
 Vector3 DispatchOutputBuffer::GetAverageIrradianceColour() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 474));
+    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 474));
     return mvAverageIrradianceColour;
 }
 
@@ -134,7 +134,7 @@ Vector3 DispatchOutputBuffer::GetAverageIrradianceColour() const
 // Incoming Vector3 spilled v1->v127 across the assert, one stvx128 stores it.
 void DispatchOutputBuffer::SetAverageIrradianceColour(rw::math::vpu::Vector3 lvAverageIrradianceColour)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 475));
+    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 475));
     mvAverageIrradianceColour = lvAverageIrradianceColour;
 }
 
@@ -144,7 +144,7 @@ void DispatchOutputBuffer::SetAverageIrradianceColour(rw::math::vpu::Vector3 lvA
 // `lfs f1,0xE0(r28)` returns the float in f1. (This getter's rodata DOES carry the trailing \n.)
 f32 DispatchOutputBuffer::GetWhiteLevel() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 476));
+    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 476));
     return mfWhiteLevel;
 }
 
@@ -152,7 +152,7 @@ f32 DispatchOutputBuffer::GetWhiteLevel() const
 // (this+0xE0). The X360 spills the incoming f1 to f31 across the assert call, then stfs it.
 void DispatchOutputBuffer::SetWhiteLevel(f32 lfWhiteLevel)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 477));
+    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 477));
     mfWhiteLevel = lfWhiteLevel;
 }
 
@@ -165,3 +165,5 @@ void BrnWorldIO::DispatchOutputBuffer::Destruct()
 {
     CgsModule::IOBuffer::Destruct();
 }
+
+#undef CGS_ARTIST_FILE

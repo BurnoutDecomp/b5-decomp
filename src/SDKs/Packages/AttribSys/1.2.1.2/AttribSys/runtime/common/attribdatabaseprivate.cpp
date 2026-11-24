@@ -44,7 +44,7 @@ namespace Attrib
     {
         // FAKEMATCH: Preserve the search key separately from the node's address-taken value.
         const T* const lpCandidate = lpObject;
-        CGS_ASSERT(lpCandidate && !IsReferenced(*lpCandidate), CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpCandidate && !IsReferenced(*lpCandidate), CGS_ASSERT_MESSAGE_AT(
             "Cannot queue NULL or referenced object for delete.",
             "..\\..\\..\\SDKs\\Packages\\AttribSys\\1.2.1.2\\AttribSys/runtime/common/attribdatabase.cpp",
             76 /* ARTIST 0x8280BEF0, 0x8280BFC4 */));

@@ -441,7 +441,7 @@ namespace BrnDirector
             // li r5 0x127), tick the state (vtable +8), take its camera (arb +0x3920 == the
             // state's +0x10 Camera), and drop back to NORMAL on the frame it has released
             // itself (ArbStateCrashNav::Release zeroes meState; the same `lwz 0x4188 ; cmpwi 0`).
-            CGS_ASSERT(mArbStateCrashNav.IsActive(), CgsDev::Assert::MessageAt("mArbStateCrashNav.IsActive()", "..\\..\\..\\GameSource\\Director/Arbitrator/BrnDirectorArbitrator.cpp", 295));
+            CGS_ASSERT(mArbStateCrashNav.IsActive(), CGS_ASSERT_MESSAGE_AT("mArbStateCrashNav.IsActive()", "..\\..\\..\\GameSource\\Director/Arbitrator/BrnDirectorArbitrator.cpp", 295));
             mArbStateCrashNav.Update(lrSharedInfo);
             lrCameraInOut = mArbStateCrashNav.GetCamera();
             if (!mArbStateCrashNav.IsActive())
@@ -630,7 +630,7 @@ namespace BrnDirector
     void Arbitrator::DebugCameraFlyWorldLookAt(rw::math::vpu::Vector3 lEye,
                                                rw::math::vpu::Vector3 lLookAt)
     {
-        CGS_ASSERT(mDebugCameraFlyWorld.IsAllocated(), CgsDev::Assert::MessageAt("IsAllocated()", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 589));   // BrnBehaviourManager.h:589 (non-gating)
+        CGS_ASSERT(mDebugCameraFlyWorld.IsAllocated(), CGS_ASSERT_MESSAGE_AT("IsAllocated()", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 589));   // BrnBehaviourManager.h:589 (non-gating)
         mDebugCameraFlyWorld.GetBehaviour()->WarpToLookAt(lEye, lLookAt);
     }
 }

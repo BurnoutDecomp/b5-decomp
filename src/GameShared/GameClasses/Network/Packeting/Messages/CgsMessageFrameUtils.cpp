@@ -53,10 +53,10 @@ namespace CgsNetwork
     bool UInt16IsLargerOrEqualWrapped(u16 lu16A, u16 lu16B)
     {
         CGS_ASSERT(lu16A != KU16_INVALID_FRAME,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lu16A != KU16_INVALID_FRAME", __FILE__, 522 /* ARTIST 0x82540F54 */));
         CGS_ASSERT(lu16B != KU16_INVALID_FRAME,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lu16B != KU16_INVALID_FRAME", __FILE__, 523 /* ARTIST 0x82540F7C */));
         return static_cast<u16>(lu16A - lu16B) < KU16_HALF_OF_FRAMES;
     }
@@ -66,10 +66,10 @@ namespace CgsNetwork
     bool UInt16IsLargerWrapped(u16 lu16A, u16 lu16B)
     {
         CGS_ASSERT(lu16A != KU16_INVALID_FRAME,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lu16A != KU16_INVALID_FRAME", __FILE__, 544 /* ARTIST 0x82540FE8 */));
         CGS_ASSERT(lu16B != KU16_INVALID_FRAME,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lu16B != KU16_INVALID_FRAME", __FILE__, 545 /* ARTIST 0x82541010 */));
         if (lu16A == lu16B)
         {

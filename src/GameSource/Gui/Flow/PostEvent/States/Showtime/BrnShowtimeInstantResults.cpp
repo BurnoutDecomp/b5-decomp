@@ -388,7 +388,7 @@ namespace BrnGui
     void ShowtimeInstantResultsState::AppendExpectedComponents()
     {
         CGS_ASSERT(mpGuiCache,
-            CgsDev::Assert::MessageAt("mpGuiCache", __FILE__, 305 /* ARTIST 0x824B49BC */));                          // cpp:305
+            CGS_ASSERT_MESSAGE_AT("mpGuiCache", __FILE__, 305 /* ARTIST 0x824B49BC */));                          // cpp:305
 
         for (s32 liHelpItem = 0; liHelpItem < KI_HELPITEMS; ++liHelpItem)
         {
@@ -425,7 +425,7 @@ namespace BrnGui
                        == BrnGameState::GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME
                    || mResults.meFinishedGameModeType
                        == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_SHOWTIME,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mResults.meFinishedGameModeType == BrnGameState::GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME || mResults.meFinishedGameModeType == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_SHOWTIME",
                 __FILE__, 527 /* ARTIST 0x824B4B78 */));   // cpp:527
 
@@ -972,7 +972,7 @@ namespace BrnGui
         const CgsGui::GuiEventAptTriggerPayload* lpEvent)
     {
         CGS_ASSERT(lpEvent,
-                   CgsDev::Assert::MessageAt("lpEvent",
+                   CGS_ASSERT_MESSAGE_AT("lpEvent",
                        "..\\..\\..\\GameSource\\Gui/Flow/PostEvent/States/Showtime/BrnShowtimeInstantResults.cpp",
                        484 /* ARTIST 0x824B4A84 */));
 

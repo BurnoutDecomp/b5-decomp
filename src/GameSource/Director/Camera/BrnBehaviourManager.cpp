@@ -6,7 +6,7 @@
 // Behaviour pools and frame dispatch. ARTIST is the behaviour authority;
 // named member shapes come from DecFIGS. The pre-scene pass advances camera
 // responders and rotation, and the collision pass republishes their current state.
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h"
 #include "GameSource/Director/Camera/BrnBehaviourManager.h"
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleDebugPrinter.h"
 #include "GameSource/Director/Arbitrator/BrnDirectorArbitratorState.h"   // ArbitratorState (owner identity + GetName)
@@ -17,7 +17,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"           // CgsCore::SPrintf
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"        // gpDebugPrint / gxMessageFilterFlags
-
+#define CGS_ARTIST_FILE_BRNBEHAVIOURMANAGER "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.cpp"
 // The behaviour-type homes, pulled in so each AllocateBehaviour<TBehaviour> explicit
 // instantiation (below) sees a COMPLETE TBehaviour (AllocateVoid<T> needs sizeof(T) + a
 // placement-new). These minimal-slice behaviour headers each re-declare the shared Camera
@@ -213,7 +213,7 @@ namespace Camera
     // ------------------------------------------------------------------------
     void BehaviourManager::CheckNoBehavioursAreAllocatedByState(ArbitratorState* lpArbitratorState)
     {
-        CGS_ASSERT(lpArbitratorState != 0, CgsDev::Assert::MessageAt("lpArbitratorState != NULL", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.cpp", 484));
+        CGS_ASSERT(lpArbitratorState != 0, CGS_ASSERT_MESSAGE_AT("lpArbitratorState != NULL", CGS_ARTIST_FILE_BRNBEHAVIOURMANAGER, 484));
 
         const u32 luNumBehaviours = mBehaviourHelperIndexArray.GetLength();
         for (u32 luLoop = 0; luLoop < luNumBehaviours; ++luLoop)
@@ -277,7 +277,7 @@ namespace Camera
         const BehaviourHelperIndex lBehaviourIndex(static_cast<s32>(luAllocationKey));
 
         CGS_ASSERT(mBehaviourHelperPool.IsObjectAllocated(lBehaviourIndex),
-                   CgsDev::Assert::MessageAt("mBehaviourHelperPool.IsObjectAllocated(lBehaviourIndex)", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 218));
+                   CGS_ASSERT_MESSAGE_AT("mBehaviourHelperPool.IsObjectAllocated(lBehaviourIndex)", CGS_ARTIST_FILE, 218));
         CGS_ASSERT(luAllocationKey < mBehaviourNeedsPreparingFlags.GetCapacity(),
                    "invalid index : luAllocationKey < capacity");
 
@@ -310,13 +310,13 @@ namespace Camera
         const BehaviourHelperIndex lBehaviourHelperIndex(static_cast<s32>(luAllocationKey));
 
         CGS_ASSERT(mBehaviourHelperPool.IsObjectAllocated(lBehaviourHelperIndex),
-                   CgsDev::Assert::MessageAt("mBehaviourHelperPool.IsObjectAllocated(lBehaviourHelperIndex)", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 928));      // :928
+                   CGS_ASSERT_MESSAGE_AT("mBehaviourHelperPool.IsObjectAllocated(lBehaviourHelperIndex)", CGS_ARTIST_FILE, 928));      // :928
         CGS_ASSERT(mBehaviourRefCounts[luAllocationKey] == 0,
-                   CgsDev::Assert::MessageAt("mBehaviourRefCounts[lBehaviourHelperIndex] == 0", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 929));                    // :929
+                   CGS_ASSERT_MESSAGE_AT("mBehaviourRefCounts[lBehaviourHelperIndex] == 0", CGS_ARTIST_FILE, 929));                    // :929
         CGS_ASSERT(!mBehaviourNeedsReleasingFlags.IsBitSet(luAllocationKey),
-                   CgsDev::Assert::MessageAt("mBehaviourNeedsReleasingFlags.IsBitSet(lBehaviourHelperIndex) == false", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 930)); // :930
+                   CGS_ASSERT_MESSAGE_AT("mBehaviourNeedsReleasingFlags.IsBitSet(lBehaviourHelperIndex) == false", CGS_ARTIST_FILE, 930)); // :930
         CGS_ASSERT(!mBehaviourUsedByHandleFlags.IsBitSet(luAllocationKey),
-                   CgsDev::Assert::MessageAt("mBehaviourUsedByHandleFlags.IsBitSet(lBehaviourHelperIndex) == false", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 931));   // :931
+                   CGS_ASSERT_MESSAGE_AT("mBehaviourUsedByHandleFlags.IsBitSet(lBehaviourHelperIndex) == false", CGS_ARTIST_FILE, 931));   // :931
 
         mBehaviourUsedByHandleFlags.SetBit(luAllocationKey);
     }
@@ -326,9 +326,9 @@ namespace Camera
         const BehaviourHelperIndex lBehaviourHelperIndex(static_cast<s32>(luAllocationKey));
 
         CGS_ASSERT(mBehaviourHelperPool.IsObjectAllocated(lBehaviourHelperIndex),
-                   CgsDev::Assert::MessageAt("mBehaviourHelperPool.IsObjectAllocated(lBehaviourHelperIndex)", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 942));      // :942
+                   CGS_ASSERT_MESSAGE_AT("mBehaviourHelperPool.IsObjectAllocated(lBehaviourHelperIndex)", CGS_ARTIST_FILE, 942));      // :942
         CGS_ASSERT(mBehaviourUsedByHandleFlags.IsBitSet(luAllocationKey),
-                   CgsDev::Assert::MessageAt("mBehaviourUsedByHandleFlags.IsBitSet(lBehaviourHelperIndex) == true", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 943));    // :943
+                   CGS_ASSERT_MESSAGE_AT("mBehaviourUsedByHandleFlags.IsBitSet(lBehaviourHelperIndex) == true", CGS_ARTIST_FILE, 943));    // :943
 
         mBehaviourUsedByHandleFlags.UnSetBit(luAllocationKey);
 
@@ -743,7 +743,7 @@ namespace Camera
 
             const bool lbPrepared = mBehaviourHelperPool[lHelper].GetBehaviour()->Prepare(lSharedInfo);
             CGS_ASSERT(lbPrepared,
-                       CgsDev::Assert::MessageAt("mBehaviourHelperPool[lBehaviourHelperIndex].Get().Prepare(lSharedInfo)", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.cpp", 162)); // .cpp:162
+                       CGS_ASSERT_MESSAGE_AT("mBehaviourHelperPool[lBehaviourHelperIndex].Get().Prepare(lSharedInfo)", CGS_ARTIST_FILE_BRNBEHAVIOURMANAGER, 162)); // .cpp:162
             (void)lbPrepared;
 
             mBehaviourNeedsPreparingFlags.UnSetBit(static_cast<u32>(liHelper));
@@ -1244,3 +1244,6 @@ namespace Camera
         const void* lpOwner, s32 liRefLimit);
 }
 }
+
+#undef CGS_ARTIST_FILE
+#undef CGS_ARTIST_FILE_BRNBEHAVIOURMANAGER

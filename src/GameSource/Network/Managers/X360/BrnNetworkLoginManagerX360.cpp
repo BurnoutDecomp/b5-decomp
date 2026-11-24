@@ -112,7 +112,7 @@ namespace BrnNetwork
         }
         else
         {
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
                 "Unknown platform specific update state",
                 __FILE__, 144 /* ARTIST 0x8255E7F4 */));
         }
@@ -126,7 +126,7 @@ namespace BrnNetwork
                           lpcUserName, KI_GAMERTAG_BUFFER_SIZE) != KI_NETCONNSTATUS_SUCCESS)
         {
             CGS_ASSERT(false,
-                CgsDev::Assert::MessageAt(
+                CGS_ASSERT_MESSAGE_AT(
                     "Error getting gamertag",
                     "..\\..\\..\\GameSource\\Network/Managers/X360/BrnNetworkLoginManagerX360.cpp", 262 /* ARTIST 0x8254C1E0 */));
             lpcUserName[0] = '\0';

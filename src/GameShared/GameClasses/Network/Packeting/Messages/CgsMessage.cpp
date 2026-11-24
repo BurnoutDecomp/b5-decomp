@@ -657,7 +657,7 @@ namespace CgsNetwork
     void Message::PrepareForSend(s32 leType, u16 lu16Frame)
     {
         CGS_ASSERT(lu16Frame != KU16_INVALID_FRAME,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lu16Frame != KU16_INVALID_FRAME", __FILE__, 594 /* ARTIST 0x8257D624 */));
         SetType(leType);
         mu16Frame = lu16Frame;
@@ -668,7 +668,7 @@ namespace CgsNetwork
     void Message::PrepareAck(s32 leType, u16 lu16Frame, u8 lu8GameID)
     {
         CGS_ASSERT((mx8Flags & KX8_FLAGS_VALID) == 0,
-            CgsDev::Assert::MessageAt("!IsMessageValid()", __FILE__, 888 /* ARTIST 0x8286F4BC */));
+            CGS_ASSERT_MESSAGE_AT("!IsMessageValid()", __FILE__, 888 /* ARTIST 0x8286F4BC */));
         mu16Frame = lu16Frame;
         mx8Flags  = KX8_FLAGS_ACK;
         SetType(leType);
@@ -680,7 +680,7 @@ namespace CgsNetwork
     void Message::PrepareNack(s32 leType, u16 lu16Frame, u8 lu8GameID)
     {
         CGS_ASSERT((mx8Flags & KX8_FLAGS_VALID) == 0,
-            CgsDev::Assert::MessageAt("!IsMessageValid()", __FILE__, 915 /* ARTIST 0x8286F53C */));
+            CGS_ASSERT_MESSAGE_AT("!IsMessageValid()", __FILE__, 915 /* ARTIST 0x8286F53C */));
         mu16Frame = lu16Frame;
         mx8Flags  = KX8_FLAGS_NACK;
         SetType(leType);
@@ -788,7 +788,7 @@ namespace CgsNetwork
 
         const bool lbPacked = Pack(lacTmpBuffer, 0, KI_MAX_PACKED_MESSAGE_SIZE * 8,
                                    &liMessageSizeInBits);
-        CGS_ASSERT(lbPacked, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lbPacked, CGS_ASSERT_MESSAGE_AT(
             "Pack(lacTmpBuffer, 0, KI_MAX_PACKED_MESSAGE_SIZE*8, &liMessageSizeInBits)",
             __FILE__, 416 /* ARTIST 0x82880EB4 */));
 
@@ -807,7 +807,7 @@ namespace CgsNetwork
     {
         const XMVECTOR lvMinusOne = { -1.0f, -1.0f, -1.0f, 0.0f };
         const XMVECTOR lvPlusOne = { 1.0f, 1.0f, 1.0f, 0.0f };
-        CGS_ASSERT(lpfRollOut && lpfPitchOut && lpfYawOut, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpfRollOut && lpfPitchOut && lpfYawOut, CGS_ASSERT_MESSAGE_AT(
             "lpfRollOut && lpfPitchOut && lpfYawOut",
             __FILE__, 828 /* ARTIST 0x82881680 */));
         const XMVECTOR lvZAxis = __vminfp(__vmaxfp(__lvx(&lMatrix.zAxis, 0), lvMinusOne), lvPlusOne);

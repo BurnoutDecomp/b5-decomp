@@ -28,3 +28,6 @@ namespace Assert
     }
 }
 }
+
+#define CGS_ASSERT_STREAM_MESSAGE_AT(msg, artistFile, artistLine) \
+    CgsDev::Assert::StreamMessageAt(msg, CGS_ASSERT_LOCATION(artistFile, artistLine))

@@ -57,7 +57,7 @@ void VoiceWrapper::Play(u32 au32OptionalPlayParam)
     mbPlay = true;
     mu32OptionalPlayParam = au32OptionalPlayParam;
     CGS_ASSERT(meUpdateStage != E_UPDATE_STAGE_IDLE,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "Cannot 'Play' a voice wrapper if it hasn't been 'Created'\n",
             "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/CgsVoice.cpp", 284 /* ARTIST 0x826EB0BC */));
     if (meUpdateStage == E_UPDATE_STAGE_FINISHED)

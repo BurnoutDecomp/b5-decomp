@@ -445,7 +445,7 @@ void BehaviourIceAnim::SetParameters(ShotReference* lpParameters)
     if (!lpParameters)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpParameters != NULL", KPC_SOURCE_FILE, 325);
+        CgsDev::Assert::FireAssert("lpParameters != NULL", CGS_ASSERT_LOCATION(KPC_SOURCE_FILE, 325));
         CgsDev::Assert::EndAssert();
     }
 
@@ -455,7 +455,7 @@ void BehaviourIceAnim::SetParameters(ShotReference* lpParameters)
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(
-            "lpParameters->GetClassKey()==Attrib::Gen::iceanim::ClassKey()", KPC_SOURCE_FILE, 326);
+            "lpParameters->GetClassKey()==Attrib::Gen::iceanim::ClassKey()", CGS_ASSERT_LOCATION(KPC_SOURCE_FILE, 326));
         CgsDev::Assert::EndAssert();
     }
 
@@ -493,7 +493,7 @@ void BehaviourIceAnim::ChangeMovie(ShotReference* lpParameters,
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(
-            "mKeyAnimController.Prepare(lResourceManager, miAnimGuid)", KPC_SOURCE_FILE, 347);
+            "mKeyAnimController.Prepare(lResourceManager, miAnimGuid)", CGS_ASSERT_LOCATION(KPC_SOURCE_FILE, 347));
         CgsDev::Assert::EndAssert();
     }
 
@@ -507,7 +507,7 @@ void BehaviourIceAnim::ChangeMovie(ShotReference* lpParameters,
     if (!lpTakeData)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpTakeData != NULL", KPC_SOURCE_FILE, 351);
+        CgsDev::Assert::FireAssert("lpTakeData != NULL", CGS_ASSERT_LOCATION(KPC_SOURCE_FILE, 351));
         CgsDev::Assert::EndAssert();
     }
 
@@ -549,7 +549,7 @@ bool BehaviourIceAnim::Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo)
     if (!lpResourceManager)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lSharedInfo.mpDirectorResourceManager", KPC_SOURCE_FILE, 80);
+        CgsDev::Assert::FireAssert("lSharedInfo.mpDirectorResourceManager", CGS_ASSERT_LOCATION(KPC_SOURCE_FILE, 80));
         CgsDev::Assert::EndAssert();
     }
 
@@ -558,7 +558,7 @@ bool BehaviourIceAnim::Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo)
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(
             "mKeyAnimController.Prepare(*lSharedInfo.mpDirectorResourceManager, miAnimGuid)",
-            KPC_SOURCE_FILE, 81);
+            CGS_ASSERT_LOCATION(KPC_SOURCE_FILE, 81));
         CgsDev::Assert::EndAssert();
     }
 
@@ -571,7 +571,7 @@ bool BehaviourIceAnim::Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo)
     if (!lpTakeData)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpTakeData != NULL", KPC_SOURCE_FILE, 85);
+        CgsDev::Assert::FireAssert("lpTakeData != NULL", CGS_ASSERT_LOCATION(KPC_SOURCE_FILE, 85));
         CgsDev::Assert::EndAssert();
     }
 
@@ -617,7 +617,7 @@ bool BehaviourIceAnim::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSha
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(
             "mKeyAnimController.Prepare(*lrSharedInfo.mpDirectorResourceManager, miAnimGuid)",
-            KPC_SOURCE_FILE, 116);
+            CGS_ASSERT_LOCATION(KPC_SOURCE_FILE, 116));
         CgsDev::Assert::EndAssert();
     }
 

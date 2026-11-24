@@ -1488,7 +1488,7 @@ namespace CgsResource
 
     void HeapEntry::SetSize(u32 luSize)
     {
-        CGS_ASSERT(luSize <= KU_MAX_SIZE, CgsDev::Assert::StreamMessageAt("Size can not be larger than 0x8FFFFFFF - last bit is used as flag!\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceHeap.h", 621));   // CgsResourceHeap.h:621
+        CGS_ASSERT(luSize <= KU_MAX_SIZE, CGS_ASSERT_STREAM_MESSAGE_AT("Size can not be larger than 0x8FFFFFFF - last bit is used as flag!\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceHeap.h", 621));   // CgsResourceHeap.h:621
         muSize = (muSize & 0x70000000u) | luSize;   // preserve status, replace size
     }
 

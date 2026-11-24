@@ -1,5 +1,5 @@
 #include "GameSource/GameState/CarSelect/BrnCarSelectManager.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\CarSelect/BrnCarSelectManager.h"
 #include <cstddef>   // offsetof (layout asserts)
 #include <cstring>   // memset/memcpy (opaque action payloads)
 #include <cstdlib>   // std::getenv ([car-audio] BRN_DEBUG_UNLOCK_CARS harness arm)
@@ -138,8 +138,8 @@ void CarSelectManager::Construct(const TriggerQueryManager* lpTriggerQueryManage
                                  GameStateModule* lpGameStateModule,
                                  BrnProgression::ProgressionManager* lpProgressionManager)
 {
-    CGS_ASSERT(lpTriggerQueryManager, CgsDev::Assert::MessageAt("lpTriggerQueryManager", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\CarSelect/BrnCarSelectManager.h", 319));
-    CGS_ASSERT(lpGameStateModule, CgsDev::Assert::MessageAt("lpGameStateModule", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\CarSelect/BrnCarSelectManager.h", 320));
+    CGS_ASSERT(lpTriggerQueryManager, CGS_ASSERT_MESSAGE_AT("lpTriggerQueryManager", CGS_ARTIST_FILE, 319));
+    CGS_ASSERT(lpGameStateModule, CGS_ASSERT_MESSAGE_AT("lpGameStateModule", CGS_ARTIST_FILE, 320));
 
     mpGameStateModule.Set(lpGameStateModule);
     mpTriggerQueryManager.Set(lpTriggerQueryManager);
@@ -269,7 +269,7 @@ void CarSelectManager::Update(GameStateModuleIO::GameActionQueue* lpActionQueue,
     if (lpModule == 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("mpGameStateModule", KAC_CSM_FILE, 67);
+        CgsDev::Assert::FireAssert("mpGameStateModule", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 67));
         CgsDev::Assert::EndAssert();
     }
 
@@ -280,7 +280,7 @@ void CarSelectManager::Update(GameStateModuleIO::GameActionQueue* lpActionQueue,
         if (lpActionQueue == 0)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpActionQueue", KAC_CSM_FILE, 70);
+            CgsDev::Assert::FireAssert("lpActionQueue", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 70));
             CgsDev::Assert::EndAssert();
         }
         u8 lacPaused[1] = { 0 };
@@ -345,7 +345,7 @@ void CarSelectManager::StartTransitionInState(GameStateModuleIO::GameActionQueue
     if (meState != E_STATE_NONE)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("CarSelectManager: State needs to be in E_STATE_NONE", KAC_CSM_FILE, 251);
+        CgsDev::Assert::FireAssert("CarSelectManager: State needs to be in E_STATE_NONE", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 251));
         CgsDev::Assert::EndAssert();
     }
 
@@ -386,7 +386,7 @@ void CarSelectManager::EndTransitionInState(GameStateModuleIO::GameActionQueue* 
     if (meState != E_STATE_TRANSITION_IN)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("CarSelectManager: State needs to be in E_STATE_TRANSITION_IN.", KAC_CSM_FILE, 294);
+        CgsDev::Assert::FireAssert("CarSelectManager: State needs to be in E_STATE_TRANSITION_IN.", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 294));
         CgsDev::Assert::EndAssert();
     }
 
@@ -425,7 +425,7 @@ void CarSelectManager::SaveChosenLiveryForCar(CgsID lCarId)
     if (lpProfile == 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpProfile", KAC_CSM_FILE, 1550);
+        CgsDev::Assert::FireAssert("lpProfile", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1550));
         CgsDev::Assert::EndAssert();
         return;
     }
@@ -438,7 +438,7 @@ void CarSelectManager::SaveChosenLiveryForCar(CgsID lCarId)
     if (lpVehicleListEntry == 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpVehicleListEntry", KAC_CSM_FILE, 1553);
+        CgsDev::Assert::FireAssert("lpVehicleListEntry", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1553));
         CgsDev::Assert::EndAssert();
         return;   // the X360 falls through into a null deref; bail instead of faulting
     }
@@ -471,7 +471,7 @@ void CarSelectManager::StartCarModificationState(GameStateModuleIO::GameActionQu
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(
             "CarSelectManager: State needs to be in E_STATE_CAR_SELECT or E_STATE_REQUEST_CAR_CHANGE.",
-            KAC_CSM_FILE, 385);
+            CGS_ASSERT_LOCATION(KAC_CSM_FILE, 385));
         CgsDev::Assert::EndAssert();
     }
 
@@ -499,7 +499,7 @@ void CarSelectManager::StartCarModificationState(GameStateModuleIO::GameActionQu
     if (mDesiredCarId == 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("mDesiredCarId != kCGSID_NULL", KAC_CSM_FILE, 402);
+        CgsDev::Assert::FireAssert("mDesiredCarId != kCGSID_NULL", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 402));
         CgsDev::Assert::EndAssert();
     }
 
@@ -538,7 +538,7 @@ void CarSelectManager::StartCarModificationState(GameStateModuleIO::GameActionQu
         if (lDerivedCars.GetLength() > BrnProgression::KU_MAX_AMOUNT_OF_DERIVED_CARS)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("We weren't expecting ", KAC_CSM_FILE, 407);
+            CgsDev::Assert::FireAssert("We weren't expecting ", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 407));
             CgsDev::Assert::EndAssert();
         }
 
@@ -582,7 +582,7 @@ void CarSelectManager::StartCarSelectState(GameStateModuleIO::GameActionQueue* l
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(
             "CarSelectManager: State needs to be in E_STATE_TRANSITION_IN or E_STATE_CAR_MODIFICATION.",
-            KAC_CSM_FILE, 331);
+            CGS_ASSERT_LOCATION(KAC_CSM_FILE, 331));
         CgsDev::Assert::EndAssert();
     }
 
@@ -631,7 +631,7 @@ void CarSelectManager::StartUnlockState(GameStateModuleIO::GameActionQueue* lpAc
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(
             "CarSelectManager: State needs to be in E_STATE_TRANSITION_IN or E_STATE_DISPLAY_UNLOCKED_CARS.",
-            KAC_CSM_FILE, 449);
+            CGS_ASSERT_LOCATION(KAC_CSM_FILE, 449));
         CgsDev::Assert::EndAssert();
     }
 
@@ -678,7 +678,7 @@ void CarSelectManager::UpdateUnlockState(GameStateModuleIO::GameActionQueue* lpA
     if (meState != E_STATE_DISPLAY_UNLOCKED_CARS && meState != E_STATE_DISPLAY_UNLOCKED_SHUTDOWN_CARS)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("CarSelectManager: State needs to be in Unlock sequence.", KAC_CSM_FILE, 758);
+        CgsDev::Assert::FireAssert("CarSelectManager: State needs to be in Unlock sequence.", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 758));
         CgsDev::Assert::EndAssert();
     }
 
@@ -700,7 +700,7 @@ void CarSelectManager::UpdateUnlockState(GameStateModuleIO::GameActionQueue* lpA
     if (lpUnlockCarData == 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpUnlockCarData", KAC_CSM_FILE, 777);
+        CgsDev::Assert::FireAssert("lpUnlockCarData", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 777));
         CgsDev::Assert::EndAssert();
     }
 
@@ -731,7 +731,7 @@ void CarSelectManager::UpdateUnlockState(GameStateModuleIO::GameActionQueue* lpA
     if (mpGameStateModule.Get() == 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("mpGameStateModule", KAC_CSM_FILE, 816);
+        CgsDev::Assert::FireAssert("mpGameStateModule", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 816));
         CgsDev::Assert::EndAssert();
     }
     mpGameStateModule.Get()->SetCarUnlockAlreadyShown(lpUnlockCarData->GetId());
@@ -741,7 +741,7 @@ void CarSelectManager::UpdateUnlockState(GameStateModuleIO::GameActionQueue* lpA
     if (lpUnlockSpawnLocation == 0)   // X360 *(v2+13) byte 0x34 == maSpawnLocations[3]
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpSpawnLocation", KAC_CSM_FILE, 824);
+        CgsDev::Assert::FireAssert("lpSpawnLocation", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 824));
         CgsDev::Assert::EndAssert();
     }
 
@@ -821,7 +821,7 @@ void CarSelectManager::EndUnlockState(GameStateModuleIO::GameActionQueue* lpActi
     if (meState != E_STATE_DISPLAY_UNLOCKED_CARS && meState != E_STATE_DISPLAY_UNLOCKED_SHUTDOWN_CARS)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("CarSelectManager: State needs to be in Unlock sequence.", KAC_CSM_FILE, 880);
+        CgsDev::Assert::FireAssert("CarSelectManager: State needs to be in Unlock sequence.", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 880));
         CgsDev::Assert::EndAssert();
     }
 
@@ -839,7 +839,7 @@ void CarSelectManager::EndUnlockState(GameStateModuleIO::GameActionQueue* lpActi
     if (lpSpawnLocation == 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpSpawnLocation", KAC_CSM_FILE, 898);
+        CgsDev::Assert::FireAssert("lpSpawnLocation", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 898));
         CgsDev::Assert::EndAssert();
     }
 
@@ -882,7 +882,7 @@ void CarSelectManager::EndUnlockState(GameStateModuleIO::GameActionQueue* lpActi
     if (luSpawnType >= static_cast<u32>(BrnTrigger::SpawnLocation::E_TYPE_COUNT))
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("muType < E_TYPE_COUNT", KAC_SPAWNLOC_FILE, 152);
+        CgsDev::Assert::FireAssert("muType < E_TYPE_COUNT", CGS_ASSERT_LOCATION(KAC_SPAWNLOC_FILE, 152));
         CgsDev::Assert::EndAssert();
     }
 
@@ -905,7 +905,7 @@ void CarSelectManager::EndUnlockState(GameStateModuleIO::GameActionQueue* lpActi
     if (static_cast<u32>(lpSpawnLocation->GetType()) >= static_cast<u32>(BrnTrigger::SpawnLocation::E_TYPE_COUNT))
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("muType < E_TYPE_COUNT", KAC_SPAWNLOC_FILE, 152);
+        CgsDev::Assert::FireAssert("muType < E_TYPE_COUNT", CGS_ASSERT_LOCATION(KAC_SPAWNLOC_FILE, 152));
         CgsDev::Assert::EndAssert();
     }
 
@@ -946,7 +946,7 @@ void CarSelectManager::UpdateRequestCarChangeState(GameStateModuleIO::GameAction
     if (meState != E_STATE_REQUEST_CAR_CHANGE)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("CarSelectManager: State needs to be in E_STATE_REQUEST_CAR_CHANGE.", KAC_CSM_FILE, 611);
+        CgsDev::Assert::FireAssert("CarSelectManager: State needs to be in E_STATE_REQUEST_CAR_CHANGE.", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 611));
         CgsDev::Assert::EndAssert();
     }
 
@@ -962,7 +962,7 @@ void CarSelectManager::UpdateRequestCarChangeState(GameStateModuleIO::GameAction
     if (mbWaitingForStreaming)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("!mbWaitingForStreaming", KAC_CSM_FILE, 622);
+        CgsDev::Assert::FireAssert("!mbWaitingForStreaming", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 622));
         CgsDev::Assert::EndAssert();
     }
 
@@ -983,7 +983,7 @@ void CarSelectManager::UpdateRequestCarChangeState(GameStateModuleIO::GameAction
     if (lpSpawnLocation == 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpSpawnLocation", KAC_CSM_FILE, 643);
+        CgsDev::Assert::FireAssert("lpSpawnLocation", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 643));
         CgsDev::Assert::EndAssert();
     }
 
@@ -1020,7 +1020,7 @@ void CarSelectManager::UpdateChangeCarState(GameStateModuleIO::GameActionQueue* 
     if (meState != E_STATE_STARTING_CHANGING_CAR && meState != E_STATE_CHANGING_CAR)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("CarSelectManager: State needs to be in E_STATE_CHANGING_CAR.", KAC_CSM_FILE, 679);
+        CgsDev::Assert::FireAssert("CarSelectManager: State needs to be in E_STATE_CHANGING_CAR.", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 679));
         CgsDev::Assert::EndAssert();
     }
 
@@ -1045,7 +1045,7 @@ void CarSelectManager::UpdateChangeCarState(GameStateModuleIO::GameActionQueue* 
                 if (mpGameStateModule.Get() == 0)
                 {
                     CgsDev::Assert::BeginAssert();
-                    CgsDev::Assert::FireAssert("mpGameStateModule", KAC_CSM_FILE, 689);
+                    CgsDev::Assert::FireAssert("mpGameStateModule", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 689));
                     CgsDev::Assert::EndAssert();
                 }
                 mpGameStateModule.Get()->OnSpecialEventPlayerCarChange(mDesiredCarId, 0, lpActionQueue, true);
@@ -1106,7 +1106,7 @@ void CarSelectManager::UpdateExitState(GameStateModuleIO::GameActionQueue* lpAct
     if (meState != E_STATE_EXITING)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("CarSelectManager: State needs to be in E_STATE_EXITING.", KAC_CSM_FILE, 958);
+        CgsDev::Assert::FireAssert("CarSelectManager: State needs to be in E_STATE_EXITING.", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 958));
         CgsDev::Assert::EndAssert();
     }
 
@@ -1142,7 +1142,7 @@ void CarSelectManager::UpdateExitState(GameStateModuleIO::GameActionQueue* lpAct
     if (lpExitSpawnLocation == 0)   // X360 v2[14] byte 0x38 == maSpawnLocations[4]
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpSpawnLocation", KAC_CSM_FILE, 988);
+        CgsDev::Assert::FireAssert("lpSpawnLocation", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 988));
         CgsDev::Assert::EndAssert();
     }
 
@@ -1162,7 +1162,7 @@ void CarSelectManager::UpdateExitState(GameStateModuleIO::GameActionQueue* lpAct
     if (lpCarData == 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpCarData", KAC_CSM_FILE, 1004);
+        CgsDev::Assert::FireAssert("lpCarData", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1004));
         CgsDev::Assert::EndAssert();
     }
 
@@ -1217,7 +1217,7 @@ void CarSelectManager::UpdateExitState(GameStateModuleIO::GameActionQueue* lpAct
     if (mpProgressionManager.Get() == 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("mpProgressionManager", KAC_CSM_FILE, 1043);
+        CgsDev::Assert::FireAssert("mpProgressionManager", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1043));
         CgsDev::Assert::EndAssert();
     }
 
@@ -1246,7 +1246,7 @@ void CarSelectManager::EnterJunkyard(GameStateModuleIO::GameActionQueue* lpActio
     if (meState != E_STATE_NONE)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("CarSelectManager: State is invalid", KAC_CSM_FILE, 196);
+        CgsDev::Assert::FireAssert("CarSelectManager: State is invalid", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 196));
         CgsDev::Assert::EndAssert();
     }
 
@@ -1315,13 +1315,13 @@ void CarSelectManager::EnterJunkyardAtStartOfGame(GameStateModuleIO::GameActionQ
     if (lpSpawnLocation == 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpSpawnLocation", KAC_CSM_FILE, 1589);
+        CgsDev::Assert::FireAssert("lpSpawnLocation", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1589));
         CgsDev::Assert::EndAssert();
     }
     if (static_cast<u32>(lpSpawnLocation->GetType()) >= static_cast<u32>(BrnTrigger::SpawnLocation::E_TYPE_COUNT))
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("muType < E_TYPE_COUNT", KAC_SPAWNLOC_FILE, 152);
+        CgsDev::Assert::FireAssert("muType < E_TYPE_COUNT", CGS_ASSERT_LOCATION(KAC_SPAWNLOC_FILE, 152));
         CgsDev::Assert::EndAssert();
     }
 
@@ -1431,7 +1431,7 @@ void CarSelectManager::ReallyEnterJunkyardAtStartOfGame(GameStateModuleIO::GameA
         if (lpCarData == 0)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpCarData", KAC_CSM_FILE, 1646);
+            CgsDev::Assert::FireAssert("lpCarData", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1646));
             CgsDev::Assert::EndAssert();
         }
         lacStartupDeform[0] = 1;
@@ -1457,7 +1457,7 @@ void CarSelectManager::ExitJunkyard(GameStateModuleIO::GameActionQueue* lpAction
     if (meState != E_STATE_CAR_MODIFICATION)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("CarSelectManager: State needs to be in E_STATE_CAR_MODIFICATION.", KAC_CSM_FILE, 503);
+        CgsDev::Assert::FireAssert("CarSelectManager: State needs to be in E_STATE_CAR_MODIFICATION.", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 503));
         CgsDev::Assert::EndAssert();
     }
 
@@ -1513,3 +1513,5 @@ void BrnGameState::CarSelectManager::OnCarUnlockTickerComplete()
     mbCurrentCarTickerVisible = false;
     mfCarUnlockFadedOutTargetTime = mfStateTimer + 2.0f;
 }
+
+#undef CGS_ARTIST_FILE

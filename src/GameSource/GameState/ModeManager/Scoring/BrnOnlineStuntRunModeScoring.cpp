@@ -1,5 +1,5 @@
 #include "GameSource/GameState/ModeManager/Scoring/BrnOnlineStuntRunModeScoring.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnOnlineStuntRunModeScoring.cpp"
 #include "GameSource/GameState/ModeManager/Scoring/BrnBaseOnlineModeScoring.h"
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"
 #include "GameSource/GameState/BrnGameStateSharedIO.h"
@@ -165,7 +165,7 @@ void OnlineStuntRunModeScoring::UpdatePlayerPoints(ScoringSystem* lpScoringSyste
             ++liNumContestingTeams;
         }
 
-        CGS_ASSERT(leTeam + 1 <= KI_MAX_PLAYER_TEAMS, CgsDev::Assert::MessageAt("leEnumIndex <= E_PLAYER_TEAM_COUNT", "..\\..\\..\\GameSource\\GameState/BrnGameStateSharedEnums.h", 112));
+        CGS_ASSERT(leTeam + 1 <= KI_MAX_PLAYER_TEAMS, CGS_ASSERT_MESSAGE_AT("leEnumIndex <= E_PLAYER_TEAM_COUNT", "..\\..\\..\\GameSource\\GameState/BrnGameStateSharedEnums.h", 112));
     }
 
     qsort(laPlayerData, liNumberOfCars, sizeof(PlayerSortData), Compare);
@@ -182,8 +182,8 @@ void OnlineStuntRunModeScoring::UpdatePlayerPoints(ScoringSystem* lpScoringSyste
     for (s32 liTeamRank = 0; liTeamRank < liNumContestingTeams; ++liTeamRank)
     {
         const s32 liTeam = laTeamData[liTeamRank].miTeam;
-        CGS_ASSERT(liTeam >= 0, CgsDev::Assert::MessageAt("lePlayerTeam >= GsmIO::E_PLAYER_TEAM_START", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnOnlineStuntRunModeScoring.cpp", 189));
-        CGS_ASSERT(liTeam < KI_MAX_PLAYER_TEAMS, CgsDev::Assert::MessageAt("lePlayerTeam < GsmIO::E_PLAYER_TEAM_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnOnlineStuntRunModeScoring.cpp", 190));
+        CGS_ASSERT(liTeam >= 0, CGS_ASSERT_MESSAGE_AT("lePlayerTeam >= GsmIO::E_PLAYER_TEAM_START", CGS_ARTIST_FILE, 189));
+        CGS_ASSERT(liTeam < KI_MAX_PLAYER_TEAMS, CGS_ASSERT_MESSAGE_AT("lePlayerTeam < GsmIO::E_PLAYER_TEAM_COUNT", CGS_ARTIST_FILE, 190));
         laTeamStandings[liTeam] = liRankValue;
         --liRankValue;
     }
@@ -193,9 +193,9 @@ void OnlineStuntRunModeScoring::UpdatePlayerPoints(ScoringSystem* lpScoringSyste
     {
         const PlayerSortData& lRow = laPlayerData[liPosition];
         CarData* lpCarData = lpScoringSystem->GetCarData(static_cast<EActiveRaceCarIndex>(lRow.miRaceCarIndex));
-        CGS_ASSERT(lpCarData, CgsDev::Assert::MessageAt("lpCarData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnOnlineStuntRunModeScoring.cpp", 202));
+        CGS_ASSERT(lpCarData, CGS_ASSERT_MESSAGE_AT("lpCarData", CGS_ARTIST_FILE, 202));
         GameStateModuleIO::CarScoreData* lpScore = lpCarData->GetScoreData();
-        CGS_ASSERT(lpScore, CgsDev::Assert::MessageAt("lpCarScoreData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnOnlineStuntRunModeScoring.cpp", 203));
+        CGS_ASSERT(lpScore, CGS_ASSERT_MESSAGE_AT("lpCarScoreData", CGS_ARTIST_FILE, 203));
 
         if (lRow.mbDisconnected)
         {
@@ -204,8 +204,8 @@ void OnlineStuntRunModeScoring::UpdatePlayerPoints(ScoringSystem* lpScoringSyste
         else
         {
             const s32 liTeam = static_cast<s32>(lpCarData->GetTeam());
-            CGS_ASSERT(liTeam >= 0, CgsDev::Assert::MessageAt("lpCarData->GetTeam() >= GsmIO::E_PLAYER_TEAM_START", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnOnlineStuntRunModeScoring.cpp", 208));
-            CGS_ASSERT(liTeam < KI_MAX_PLAYER_TEAMS, CgsDev::Assert::MessageAt("lpCarData->GetTeam() < GsmIO::E_PLAYER_TEAM_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnOnlineStuntRunModeScoring.cpp", 209));
+            CGS_ASSERT(liTeam >= 0, CGS_ASSERT_MESSAGE_AT("lpCarData->GetTeam() >= GsmIO::E_PLAYER_TEAM_START", CGS_ARTIST_FILE, 208));
+            CGS_ASSERT(liTeam < KI_MAX_PLAYER_TEAMS, CGS_ASSERT_MESSAGE_AT("lpCarData->GetTeam() < GsmIO::E_PLAYER_TEAM_COUNT", CGS_ARTIST_FILE, 209));
             lpScore->SetOnlineRacePoints(laTeamStandings[liTeam]);
         }
 
@@ -254,3 +254,5 @@ void OnlineStuntRunModeScoring::WriteDataToOutput(GameStateModuleIO::OnlineScori
     BaseOnlineModeScoring::WriteDataToOutput(lpOutput);
 }
 }
+
+#undef CGS_ARTIST_FILE

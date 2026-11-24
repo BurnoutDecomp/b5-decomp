@@ -65,7 +65,7 @@ bool ReliableMessageManager::Release()
     if (mpReliableMessageBuffer)
     {
         CGS_ASSERT(mpHeapAllocator,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpHeapAllocator",
                 "..\\..\\..\\GameShared\\GameClasses\\Network\\Players\\CgsReliableMessageManager.cpp", 160 /* ARTIST 0x82890A50 */));
         mpHeapAllocator->Free(mpReliableMessageBuffer);
@@ -443,7 +443,7 @@ void ReliableMessageManager::UpdateReliableMessagesReceived()
             continue;
         }
 
-        CGS_ASSERT(lData.miValidCountdown == 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lData.miValidCountdown == 0, CGS_ASSERT_MESSAGE_AT(
             "maReliableMessagesRcvdData[i].miValidCountdown == 0",
             __FILE__, 721 /* ARTIST 0x82875250 */));
         *CgsDev::Log::gpDebugPrint << "Removing reliable message received data for message type "
@@ -464,10 +464,10 @@ void ReliableMessageManager::FakeNackMessage(Message* lpMessage, NetworkPlayerID
                                              NetworkPlayerID lRecvingPlayerID, bool lbAck)
 {
     SignalMessage lNackMessage;
-    CGS_ASSERT(lSendingPlayerID != K_INVALID_PLAYER_ID, CgsDev::Assert::MessageAt(
+    CGS_ASSERT(lSendingPlayerID != K_INVALID_PLAYER_ID, CGS_ASSERT_MESSAGE_AT(
         "lSendingPlayerID != K_INVALID_PLAYER_ID",
         __FILE__, 568 /* ARTIST 0x82890AF8 */));
-    CGS_ASSERT(lRecvingPlayerID != K_INVALID_PLAYER_ID, CgsDev::Assert::MessageAt(
+    CGS_ASSERT(lRecvingPlayerID != K_INVALID_PLAYER_ID, CGS_ASSERT_MESSAGE_AT(
         "lRecvingPlayerID != K_INVALID_PLAYER_ID",
         __FILE__, 569 /* ARTIST 0x82890B1C */));
 

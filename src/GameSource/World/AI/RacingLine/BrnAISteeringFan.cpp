@@ -467,7 +467,7 @@ const NearbyVehicle* SteeringFan::FindNeabyAIInTraffic(const NearbyVehicles* lpN
 void SteeringFan::IncludeSmashIntoPlayer(AICar* lpCar, const NearbyVehicles* lpNearbyVehicles,
                                          EGlobalRaceCarIndex leAggressionVictim)
 {
-    CGS_ASSERT(leAggressionVictim != -1, CgsDev::Assert::StreamMessageAt("Invalid global race car ID used in slam\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/RacingLine/BrnAISteeringFan.cpp", 1952));
+    CGS_ASSERT(leAggressionVictim != -1, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid global race car ID used in slam\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/RacingLine/BrnAISteeringFan.cpp", 1952));
 
     const NearbyVehicle* lpPlayer = FindVictimInTraffic(lpNearbyVehicles, leAggressionVictim);
     if (lpPlayer == 0)

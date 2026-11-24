@@ -86,7 +86,7 @@ namespace CgsGeometric
         inline void ReportTriangleBoxAssert(const char* lpcExpression, s32 liLine)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lpcExpression, klpTriangleBoxOriginalFile, liLine);
+            CgsDev::Assert::FireAssert(lpcExpression, CGS_ASSERT_LOCATION(klpTriangleBoxOriginalFile, liLine));
             CgsDev::Assert::EndAssert();
         }
     }
@@ -588,7 +588,7 @@ namespace CgsGeometric
                     lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
                 lStrStream.Reset();
                 lStrStream << "Overrun contacts buffer - pass in a larger buffer\n";
-                CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), klpTriangleBoxOriginalFile, 1004);
+                CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), CGS_ASSERT_LOCATION(klpTriangleBoxOriginalFile, 1004));
                 CgsDev::Assert::EndAssert();
             }
 

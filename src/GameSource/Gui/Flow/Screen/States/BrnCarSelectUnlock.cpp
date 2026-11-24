@@ -21,7 +21,7 @@
 // {148,4},{55,4} (xref: UpdateLoadResources only; count is its `li r5, 2`), and
 // unk_820046A7 is a genuine "" (the NUL tail after the "%s..." pool string).
 // ===================================================================================
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCarSelectUnlock.cpp"
 #include "GameSource/Gui/Flow/Screen/States/BrnCarSelectUnlock.h"
 
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
@@ -309,7 +309,7 @@ namespace BrnGui
     // pointer into mpGuiCache.
     void CarSelectUnlock::UpdateGetCache()
     {
-        CGS_ASSERT(mpGuiCache == NULL, CgsDev::Assert::MessageAt("NULL == mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCarSelectUnlock.cpp", 215 /* ARTIST 0x824C15E0 */));   // cpp:215
+        CGS_ASSERT(mpGuiCache == NULL, CGS_ASSERT_MESSAGE_AT("NULL == mpGuiCache", CGS_ARTIST_FILE, 215 /* ARTIST 0x824C15E0 */));   // cpp:215
 
         InGuiEventQueue* lpInQueue = reinterpret_cast<InGuiEventQueue*>(mpInGuiEventQueue);
 
@@ -330,12 +330,12 @@ namespace BrnGui
             {
                 // The cache event carries the GuiCache pointer in its leading word.
                 GuiCache* lpCache = *reinterpret_cast<GuiCache* const*>(lpEvent);
-                CGS_ASSERT(lpCache != NULL, CgsDev::Assert::MessageAt("NULL != lpCacheEvent->mpCachePointer", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCarSelectUnlock.cpp", 225 /* ARTIST 0x824C1650 */));   // cpp:225
+                CGS_ASSERT(lpCache != NULL, CGS_ASSERT_MESSAGE_AT("NULL != lpCacheEvent->mpCachePointer", CGS_ARTIST_FILE, 225 /* ARTIST 0x824C1650 */));   // cpp:225
                 mpGuiCache = lpCache;
             }
         }
 
-        CGS_ASSERT(mpGuiCache != NULL, CgsDev::Assert::MessageAt("NULL != mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCarSelectUnlock.cpp", 234 /* ARTIST 0x824C1680 */));   // cpp:234
+        CGS_ASSERT(mpGuiCache != NULL, CGS_ASSERT_MESSAGE_AT("NULL != mpGuiCache", CGS_ARTIST_FILE, 234 /* ARTIST 0x824C1680 */));   // cpp:234
     }
 
     // ---- UpdateLoadResources @ 0x824D8268 -----------------------------------------
@@ -520,3 +520,5 @@ namespace BrnGui
         }
     }
 }
+
+#undef CGS_ARTIST_FILE

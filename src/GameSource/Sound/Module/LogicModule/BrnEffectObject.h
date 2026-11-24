@@ -63,7 +63,7 @@ struct BrnEffectObject : public IResourceRequester,
         //   stw 2, +0x24   (meAttachState = E_ATTACH_STATE_PREPARING)
         mbHasLoadedData = true;
         CGS_ASSERT(GetAttachState() == CgsSound::Logic::EffectBase::E_ATTACH_STATE_WAITING_FOR_DATA,
-            CgsDev::Assert::MessageAt("GetAttachState() == E_ATTACH_STATE_WAITING_FOR_DATA",
+            CGS_ASSERT_MESSAGE_AT("GetAttachState() == E_ATTACH_STATE_WAITING_FOR_DATA",
                 "..\\..\\..\\GameSource\\Sound/Module/LogicModule/BrnEffectObject.h",
                 142 /* ARTIST 0x826967A8 */));
         meAttachState = CgsSound::Logic::EffectBase::E_ATTACH_STATE_PREPARING;

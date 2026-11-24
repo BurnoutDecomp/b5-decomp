@@ -28,7 +28,7 @@
 //   - UpdateInstance's transform-validity checks are emitted as inlined RwMath::IsValid /
 //     vcmpgtfp SIMD lane tests; restored to IsValid(...) / scalar component comparisons.
 #include "GameSource/World/EntityModules/PropEntityModule/BrnPropZoneManager.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropZoneManager.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "SharedClasses/Physics/Props/BrnPropPhysicsDataHeader.h" // PropPhysicsDataHeader::GetType, PropTypeData
@@ -177,14 +177,14 @@ namespace BrnWorld
     // populated) or installs the pointer with ref count 1. Always returns true.
     bool PropGraphicsManager::Register(const PropGraphics* lpPropGraphics)
     {
-        CGS_ASSERT(lpPropGraphics != 0, CgsDev::Assert::MessageAt("lpPropGraphics", __FILE__, 986));
+        CGS_ASSERT(lpPropGraphics != 0, CGS_ASSERT_MESSAGE_AT("lpPropGraphics", __FILE__, 986));
 
         // X360 `lwz r30,0(r29)` -- the record's FIRST word is its prop type id. Read BY
         // NAME now that BrnPropGraphicsList.h homes the layout (muTypeId @ +0), replacing
         // the previous `*reinterpret_cast<const u32*>(lpPropGraphics)` offset-read.
         const u32 luType = lpPropGraphics->muTypeId;
         CGS_ASSERT(luType < KU_MAX_PROP_TYPES,
-                   CgsDev::Assert::MessageAt("luType < BrnPhysics::Props::KU_MAX_PROP_TYPES", __FILE__, 990));
+                   CGS_ASSERT_MESSAGE_AT("luType < BrnPhysics::Props::KU_MAX_PROP_TYPES", __FILE__, 990));
 
         // ARTIST 0x822A9E64 and the PS3 body (0x129234) both store the record and a count of
         // one straight into the slot they tested: no second index computation, no helper call.
@@ -351,9 +351,9 @@ namespace BrnWorld
     bool PropZoneManager::IsZoneLoaded(u16 lu16ZoneId) const
     {
         CGS_ASSERT(lu16ZoneId < KU_MAX_ZONES,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "luZoneIndex < BrnPhysics::Props::KU_MAX_ZONES",
-                "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropZoneManager.h", 645 /* ARTIST 0x822A43BC */));
+                CGS_ARTIST_FILE, 645 /* ARTIST 0x822A43BC */));
         return mauStartIndexOfZone[lu16ZoneId] != KU_UNLOADED_ZONE;
     }
 
@@ -383,21 +383,21 @@ namespace BrnWorld
     PropEntityInstance* PropZoneManager::GetProp(u16 lu16ZoneId, u32 luPropIndex)
     {
         CGS_ASSERT(lu16ZoneId < KU_MAX_ZONES,
-            CgsDev::Assert::MessageAt("luZoneId < 500", KAC_ARTIST_ASSERT_FILE, 555 /* ARTIST 0x822A41D8 */));
+            CGS_ASSERT_MESSAGE_AT("luZoneId < 500", KAC_ARTIST_ASSERT_FILE, 555 /* ARTIST 0x822A41D8 */));
 
         const u16 lu16StartIndex = mauStartIndexOfZone[lu16ZoneId];
         CGS_ASSERT(lu16StartIndex != KU_UNLOADED_ZONE,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "luStartIndex != KU_UNLOADED_ZONE",
                 KAC_ARTIST_ASSERT_FILE, 558 /* ARTIST 0x822A420C */));
         CGS_ASSERT(luPropIndex < mauNumberOfPropsInZone[lu16ZoneId],
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "luInstanceId < mauNumberOfPropsInZone[luZoneId]",
                 KAC_ARTIST_ASSERT_FILE, 559 /* ARTIST 0x822A4240 */));
 
         const u32 luPoolIndex = lu16StartIndex + luPropIndex;
         CGS_ASSERT(luPoolIndex < KU_MAX_LOADED_PROP_INSTANCES,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "luStartIndex + luInstanceId < BrnPhysics::Props::KU_MAX_LOADED_PROP_INSTANCES",
                 KAC_ARTIST_ASSERT_FILE, 560 /* ARTIST 0x822A4268 */));
 
@@ -415,16 +415,16 @@ namespace BrnWorld
     PropPartEntityInstance* PropZoneManager::GetPart(u16 lu16ZoneId, u16 lu16PropIndex, u16 lu16PartIndex)
     {
         CGS_ASSERT(lu16ZoneId < KU_MAX_ZONES,
-            CgsDev::Assert::MessageAt("luZoneId < BrnPhysics::Props::KU_MAX_ZONES",
+            CGS_ASSERT_MESSAGE_AT("luZoneId < BrnPhysics::Props::KU_MAX_ZONES",
                                       KAC_ARTIST_ASSERT_FILE, 600 /* ARTIST 0x822A42CC */));
 
         // u32, as the assert text names it (luStartIndex); ARTIST keeps it in r27.
         const u32 luStartIndex = mauStartIndexOfZone[lu16ZoneId];
         CGS_ASSERT(luStartIndex != KU_UNLOADED_ZONE,
-            CgsDev::Assert::MessageAt("luStartIndex != KU_UNLOADED_ZONE",
+            CGS_ASSERT_MESSAGE_AT("luStartIndex != KU_UNLOADED_ZONE",
                                       KAC_ARTIST_ASSERT_FILE, 603 /* ARTIST 0x822A4300 */));
         CGS_ASSERT(lu16PropIndex < mauNumberOfPropsInZone[lu16ZoneId],
-            CgsDev::Assert::MessageAt("luPropIndex < mauNumberOfPropsInZone[luZoneId]",
+            CGS_ASSERT_MESSAGE_AT("luPropIndex < mauNumberOfPropsInZone[luZoneId]",
                                       KAC_ARTIST_ASSERT_FILE, 604 /* ARTIST 0x822A4338 */));
 
         const PropEntityInstance& lrProp = maProps[luStartIndex + lu16PropIndex];
@@ -1118,7 +1118,7 @@ namespace BrnWorld
                             lPropPosition.GetZ().GetFloat());
                         lMessage << "\n";
                         CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
-                            "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropZoneManager.h", 0x349);
+                            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 0x349));
                         CgsDev::Assert::EndAssert();
                     }
                 }
@@ -1799,3 +1799,5 @@ namespace BrnWorld
     // recovered by its own TU; reproducing it here would require re-typing the parameter and
     // every call site across TUs).
 }
+
+#undef CGS_ARTIST_FILE

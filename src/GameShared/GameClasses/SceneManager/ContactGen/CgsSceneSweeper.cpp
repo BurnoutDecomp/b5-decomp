@@ -125,11 +125,11 @@ namespace CgsSceneManager
                                rw::BitTable::Storage* lpCullingTable)
     {
         CGS_ASSERT(lpaVolumeInstanceCullingGroup != NULL,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpaVolumeInstanceCullingGroup != NULL",
                 KAC_ARTIST_ASSERT_FILE, 115 /* ARTIST 0x828C2030 */));           // CgsSceneSweeper.cpp:115
         CGS_ASSERT(lpCullingTable != NULL,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpCullingTable != NULL",
                 KAC_ARTIST_ASSERT_FILE, 116 /* ARTIST 0x828C2054 */));  // CgsSceneSweeper.cpp:116
 

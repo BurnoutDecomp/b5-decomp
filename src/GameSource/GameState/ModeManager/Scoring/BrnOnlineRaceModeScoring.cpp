@@ -1,5 +1,5 @@
 #include "GameSource/GameState/ModeManager/Scoring/BrnOnlineRaceModeScoring.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnOnlineRaceModeScoring.cpp"
 #include "GameSource/GameState/ModeManager/Scoring/BrnBaseOnlineModeScoring.h"
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"
 #include "GameSource/GameState/BrnGameStateSharedIO.h"
@@ -62,8 +62,8 @@ void OnlineRaceModeScoring::WriteDataToOutput(GameStateModuleIO::OnlineScoringOu
 // below mean "order by finish time, break ties by player id".
 int OnlineRaceModeScoring::_PlayerFinishTimesCompare(const void* lpPlayer1, const void* lpPlayer2)
 {
-    CGS_ASSERT(lpPlayer1, CgsDev::Assert::MessageAt("lpPlayer1", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnOnlineRaceModeScoring.cpp", 126));
-    CGS_ASSERT(lpPlayer2, CgsDev::Assert::MessageAt("lpPlayer2", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnOnlineRaceModeScoring.cpp", 127));
+    CGS_ASSERT(lpPlayer1, CGS_ASSERT_MESSAGE_AT("lpPlayer1", CGS_ARTIST_FILE, 126));
+    CGS_ASSERT(lpPlayer2, CGS_ASSERT_MESSAGE_AT("lpPlayer2", CGS_ARTIST_FILE, 127));
 
     const IndexToFinishTuple* lpP1 = static_cast<const IndexToFinishTuple*>(lpPlayer1);
     const IndexToFinishTuple* lpP2 = static_cast<const IndexToFinishTuple*>(lpPlayer2);
@@ -174,7 +174,7 @@ void OnlineRaceModeScoring::UpdatePlayerPoints(ScoringSystem* lpScoringSystem, s
 {
     GameStateModuleIO::CarScoreData lDefaultScoreData;
 
-    CGS_ASSERT(lpScoringSystem, CgsDev::Assert::MessageAt("lpScoringSystem", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnOnlineRaceModeScoring.cpp", 248));
+    CGS_ASSERT(lpScoringSystem, CGS_ASSERT_MESSAGE_AT("lpScoringSystem", CGS_ARTIST_FILE, 248));
 
     lDefaultScoreData.ClearData();
 
@@ -232,3 +232,5 @@ void OnlineRaceModeScoring::UpdatePlayerPoints(ScoringSystem* lpScoringSystem, s
     }
 }
 }
+
+#undef CGS_ARTIST_FILE

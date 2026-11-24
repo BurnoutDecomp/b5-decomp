@@ -24,7 +24,7 @@
 //   HashMap::Remove             @ 0x82807A78
 //   HashMap::Transfer           @ 0x828049D8
 //   HashMap::UpdateSearchLength @ 0x82804B50
-
+#define CGS_ARTIST_FILE "..\\..\\..\\SDKs\\Packages\\AttribSys\\1.2.1.2\\attribsys/runtime/common/attribhashmap.h"
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribhashmap.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttribHashMapTablePolicy.h" // Free (teardown bucket release)
@@ -369,8 +369,8 @@ unsigned int Attrib::HashMap::FindIndex(u64 luKey) const
 u64 Attrib::HashMap::GetKeyAtIndex(u32 luIndex) const
 {
     const bool lbValid = luIndex < muCapacity && mpBuckets[luIndex].IsOccupied();
-    CGS_ASSERT(lbValid, CgsDev::Assert::MessageAt("Attrib::HashMap invalid index used.",
-        "..\\..\\..\\SDKs\\Packages\\AttribSys\\1.2.1.2\\attribsys/runtime/common/attribhashmap.h",
+    CGS_ASSERT(lbValid, CGS_ASSERT_MESSAGE_AT("Attrib::HashMap invalid index used.",
+        CGS_ARTIST_FILE,
         418 /* ARTIST 0x828026C0 */));
     return mpBuckets[luIndex].Key();
 }
@@ -433,8 +433,8 @@ bool Attrib::HashMap::Release() const
     }
 
     const bool lbReleased = (lu16Refs == 1);
-    CGS_ASSERT(lu16Refs != 0, CgsDev::Assert::MessageAt("Too many releases of object!\n",
-        "..\\..\\..\\SDKs\\Packages\\AttribSys\\1.2.1.2\\attribsys/runtime/common/attribhashmap.h",
+    CGS_ASSERT(lu16Refs != 0, CGS_ASSERT_MESSAGE_AT("Too many releases of object!\n",
+        CGS_ARTIST_FILE,
         623 /* ARTIST 0x82802768 */));
     muRefCount = 0;
     return lbReleased;
@@ -472,8 +472,8 @@ void* Attrib::HashMap::Remove(Node* lpNode, void* lpBase, const Collection* lpCo
     CGS_ASSERT(lpNode->IsOccupied()
                    && lpNode >= mpBuckets
                    && lpNode < mpBuckets + muCapacity,
-        CgsDev::Assert::MessageAt("Attrib::HashMap removing node which is not valid node in table.",
-            "..\\..\\..\\SDKs\\Packages\\AttribSys\\1.2.1.2\\attribsys/runtime/common/attribhashmap.h", 449 /* ARTIST 0x82807AD0 */));
+        CGS_ASSERT_MESSAGE_AT("Attrib::HashMap removing node which is not valid node in table.",
+            CGS_ARTIST_FILE, 449 /* ARTIST 0x82807AD0 */));
 
     // The node's stored key (0 when the occupied bit is clear) drives the home-index rehash.
     const u64 lu64Key   = lpNode->Key();
@@ -689,3 +689,5 @@ unsigned int Attrib::HashMap::UpdateSearchLength(unsigned int luIndex, unsigned 
 
     return luTail;
 }
+
+#undef CGS_ARTIST_FILE

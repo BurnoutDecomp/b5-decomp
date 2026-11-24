@@ -1,5 +1,5 @@
 #include "GameSource/GameState/Offences/BrnDriveThruManager.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Offences/BrnDriveThruManager.cpp"
 #include <cstddef>   // offsetof (layout asserts)
 #include <cstring>   // memset/memcpy (opaque action payloads)
 
@@ -340,8 +340,8 @@ bool DriveThruManager::Prepare(const BrnTrigger::TriggerData* lpTriggerData,
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(
             "lpTriggerData != NULL",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Offences/BrnDriveThruManager.cpp",
-            191);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+            191));
         CgsDev::Assert::EndAssert();
     }
 
@@ -365,8 +365,8 @@ bool DriveThruManager::Prepare(const BrnTrigger::TriggerData* lpTriggerData,
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 "lpGenericRegion != NULL",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Offences/BrnDriveThruManager.cpp",
-                213);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                213));
             CgsDev::Assert::EndAssert();
         }
 
@@ -378,8 +378,8 @@ bool DriveThruManager::Prepare(const BrnTrigger::TriggerData* lpTriggerData,
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 "static_cast<uint32_t>( miTotalDriveThrus ) < KI_MAX_DRIVE_THRUS_IN_THE_WORLD",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Offences/BrnDriveThruManager.cpp",
-                217);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                217));
             CgsDev::Assert::EndAssert();
         }
 
@@ -438,8 +438,8 @@ void DriveThruManager::HandleDriveThru(
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(
             "lpGenericRegion != NULL",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Offences/BrnDriveThruManager.cpp",
-            610);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+            610));
         CgsDev::Assert::EndAssert();
     }
     if (!lpRegion->IsDriveThru())
@@ -447,8 +447,8 @@ void DriveThruManager::HandleDriveThru(
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(
             "lpGenericRegion->IsDriveThru()",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Offences/BrnDriveThruManager.cpp",
-            611);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+            611));
         CgsDev::Assert::EndAssert();
     }
 
@@ -496,8 +496,8 @@ void DriveThruManager::HandleDriveThru(
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(
             "Failed to find drive thru",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Offences/BrnDriveThruManager.cpp",
-            652);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+            652));
         CgsDev::Assert::EndAssert();
     }
 
@@ -526,8 +526,8 @@ void DriveThruManager::HandleDriveThru(
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 "lpVehicleList->GetVehicleData( lPlayerCarID ) != NULL",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Offences/BrnDriveThruManager.cpp",
-                666);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                666));
             CgsDev::Assert::EndAssert();
         }
 
@@ -779,8 +779,8 @@ void DriveThruManager::Update(GameStateModuleIO::GameActionQueue*  lpActionQueue
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(
             "lpProfile",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Offences/BrnDriveThruManager.cpp",
-            338);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+            338));
         CgsDev::Assert::EndAssert();
     }
 
@@ -963,8 +963,8 @@ void DriveThruManager::Update(GameStateModuleIO::GameActionQueue*  lpActionQueue
                         CgsDev::Assert::BeginAssert();
                         CgsDev::Assert::FireAssert(
                             "Unknown trigger type \n",
-                            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Offences/BrnDriveThruManager.cpp",
-                            535);
+                            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                            535));
                         CgsDev::Assert::EndAssert();
                         break;
                 }
@@ -1091,8 +1091,8 @@ void DriveThruManager::PlayAutoRepairTraining(
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(
             "lpVehicleData != NULL",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Offences/BrnDriveThruManager.cpp",
-            1073);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+            1073));
         CgsDev::Assert::EndAssert();
     }
 
@@ -1122,8 +1122,8 @@ void DriveThruManager::UnlockCarChallengeForCar(CgsID lRepairedCarID, GameStateM
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(
             "lpProgressionData",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Offences/BrnDriveThruManager.cpp",
-            999);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+            999));
         CgsDev::Assert::EndAssert();
     }
 
@@ -1140,8 +1140,8 @@ void DriveThruManager::UnlockCarChallengeForCar(CgsID lRepairedCarID, GameStateM
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 "lpEventJunction",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Offences/BrnDriveThruManager.cpp",
-                1008);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                1008));
             CgsDev::Assert::EndAssert();
         }
         lpRaceEventData = lpEventJunction->GetOfflineEvent();
@@ -1150,8 +1150,8 @@ void DriveThruManager::UnlockCarChallengeForCar(CgsID lRepairedCarID, GameStateM
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 "lpRaceEventData",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Offences/BrnDriveThruManager.cpp",
-                1011);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                1011));
             CgsDev::Assert::EndAssert();
         }
         if (lpRaceEventData->GetUnlockCarId() == lRepairedCarID)   // ARTIST 82386958: whole CgsID at +0x10
@@ -1174,8 +1174,8 @@ void DriveThruManager::UnlockCarChallengeForCar(CgsID lRepairedCarID, GameStateM
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(
             "lpProfileEvent",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Offences/BrnDriveThruManager.cpp",
-            1021);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+            1021));
         CgsDev::Assert::EndAssert();
     }
 
@@ -1258,3 +1258,5 @@ s32 DriveThruManager::GetTotalDriveThrusOfType(BrnTrigger::GenericRegion::Type l
     return liResult;
 }
 }
+
+#undef CGS_ARTIST_FILE

@@ -106,7 +106,7 @@ namespace BrnNetwork
 
         mhNotifier = XNotifyCreateListener(KU_NOTIFY_LISTENER_AREAS);
         CGS_ASSERT(mhNotifier,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mhNotifier",
                 "..\\..\\..\\GameSource\\Network/Managers/X360/BrnNetworkBuddyManagerX360.cpp", 67 /* ARTIST 0x82557A2C */));
 
@@ -164,22 +164,22 @@ namespace BrnNetwork
     // =======================================================================
     bool BuddyManagerX360::IsUserInGameSession(const char* lpcSessionID)
     {
-        CGS_ASSERT(lpcSessionID, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpcSessionID, CGS_ASSERT_MESSAGE_AT(
             "lpcSessionID",
             __FILE__, 342 /* ARTIST 0x8256C780 */));
 
-        CGS_ASSERT(GetNetworkModule(), CgsDev::Assert::MessageAt(
+        CGS_ASSERT(GetNetworkModule(), CGS_ASSERT_MESSAGE_AT(
             "GetNetworkModule()",
             __FILE__, 345 /* ARTIST 0x8256C7B0 */));
-        CGS_ASSERT(GetNetworkModule()->GetNetworkManager(), CgsDev::Assert::MessageAt(
+        CGS_ASSERT(GetNetworkModule()->GetNetworkManager(), CGS_ASSERT_MESSAGE_AT(
             "GetNetworkModule()->GetNetworkManager()",
             __FILE__, 346 /* ARTIST 0x8256C7DC */));
 
         BrnServerInterface* lpServerInterface = GetNetworkModule()->GetNetworkManager()->GetServerInterface();
-        CGS_ASSERT(lpServerInterface, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpServerInterface, CGS_ASSERT_MESSAGE_AT(
             "lpServerInterface",
             __FILE__, 348 /* ARTIST 0x8256C80C */));
-        CGS_ASSERT(lpServerInterface->GetGameComponent(), CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpServerInterface->GetGameComponent(), CGS_ASSERT_MESSAGE_AT(
             "lpServerInterface->GetGameComponent()",
             __FILE__, 349 /* ARTIST 0x8256C834 */));
 
@@ -297,7 +297,7 @@ namespace BrnNetwork
             }
             else if (liEventType == KI_NETWORK_EVENT_SHOW_PROFILE)
             {
-                CGS_ASSERT(lpEvent, CgsDev::Assert::MessageAt(
+                CGS_ASSERT(lpEvent, CGS_ASSERT_MESSAGE_AT(
                     "lpShowProfileEvent",
                     __FILE__, 402 /* ARTIST 0x8256C980 */));
                 // this IS-A CgsNetwork::BuddyManagerX360 (the platform leaf in the base chain);

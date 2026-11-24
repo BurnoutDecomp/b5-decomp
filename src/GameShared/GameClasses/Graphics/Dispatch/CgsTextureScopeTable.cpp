@@ -14,7 +14,7 @@ namespace CgsGraphics
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 "( lePurpose < E_MAX_TEXTURE_PURPOSES ) && ( lePurpose >= E_TEXTURE_PURPOSE_NONE )",
-                "..\\..\\..\\GameShared\\GameClasses\\Graphics\\Dispatch\\CgsTextureScopeTable.h", 242);
+                CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Graphics\\Dispatch\\CgsTextureScopeTable.h", 242));
             CgsDev::Assert::EndAssert();
         }
         const char* scan = name;

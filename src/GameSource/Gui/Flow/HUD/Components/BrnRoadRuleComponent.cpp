@@ -916,7 +916,7 @@ void RoadRuleComponent::TransitionComplete(s32 liArg)
 void RoadRuleComponent::TransitionCompleteCallback(void* lpUserData, u16 lu16Label)
 {
     CGS_ASSERT(lpUserData != 0,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lpUserData",
             "..\\..\\..\\GameSource\\Gui/Flow/hud/Components/BrnRoadRuleComponent.cpp", 2231 /* ARTIST 0x824417A4 */));   // :2231 (non-gating)
     static_cast<RoadRuleComponent*>(lpUserData)->TransitionComplete(static_cast<s32>(lu16Label));
@@ -1425,7 +1425,7 @@ void RoadRuleComponent::UpdateUpcomingRoadLeaders(GuiEventRoadRuleUpcomingRoads*
 void RoadRuleComponent::SetCachePointer(GuiCache* lpGuiCache)
 {
     CGS_ASSERT(0 != lpGuiCache,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lpCache",
             "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnRoadRuleComponent.h", 628 /* ARTIST 0x8247354C */));   // :628 (non-gating)
     mpGuiCache = lpGuiCache;

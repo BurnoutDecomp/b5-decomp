@@ -182,7 +182,7 @@ void TrafficSkid::UpdateParams( f32 lf32TimeStep )
     // 213 and 231 (0x826F0C90, 0x826F0D34).
     const BrnTraffic::BrnTrafficIO::TrafficSoundEntity* lpTrafficSoundEntity = mpTrafficControl->GetTrafficEntity();
     CGS_ASSERT( lpTrafficSoundEntity != 0,
-                CgsDev::Assert::MessageAt( "lpTrafficSoundEntity", KAC_TRAFFIC_SKID_FILE, 213 ) );
+                CGS_ASSERT_MESSAGE_AT( "lpTrafficSoundEntity", KAC_TRAFFIC_SKID_FILE, 213 ) );
 
     if ( !lpTrafficSoundEntity->mbIsPhysical )
     {
@@ -199,7 +199,7 @@ void TrafficSkid::UpdateParams( f32 lf32TimeStep )
 
     BrnSound::Module::Io::LogicInputBuffer* lpInputBuffer =
         static_cast<BrnSound::Module::SoundLogicModule*>( GetLogicModule() )->GetBrnInputStructure();
-    CGS_ASSERT( lpInputBuffer != 0, CgsDev::Assert::MessageAt( "lpInputBuffer", KAC_TRAFFIC_SKID_FILE, 231 ) );
+    CGS_ASSERT( lpInputBuffer != 0, CGS_ASSERT_MESSAGE_AT( "lpInputBuffer", KAC_TRAFFIC_SKID_FILE, 231 ) );
     const BrnSound::Module::Io::RootInputBuffer::PhysicalTrafficStateQueue* lpPhysicalTrafficStates =
         lpInputBuffer->GetPhysicalTrafficStates();
 
@@ -275,7 +275,7 @@ s32 TrafficSkid::FindPhysicalTrafficState(
     EntityId lEntityId )
 {
     CGS_ASSERT( lpPhysicalTrafficStates != 0,
-        CgsDev::Assert::MessageAt("lpPhysicalTrafficStates", KAC_ARTIST_ASSERT_FILE,
+        CGS_ASSERT_MESSAGE_AT("lpPhysicalTrafficStates", KAC_ARTIST_ASSERT_FILE,
             413 /* ARTIST 0x826989E4 */) );
     s32 liFound = -1;
     for ( s32 liIndex = 0; liIndex < lpPhysicalTrafficStates->GetLength(); ++liIndex )

@@ -78,8 +78,8 @@ namespace ReplayIO
                            << "\n";
                 CgsDev::Assert::FireAssert(
                     lacMessageBuffer,
-                    "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h",
-                    65);
+                    CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h",
+                    65));
                 CgsDev::Assert::EndAssert();
             }
 

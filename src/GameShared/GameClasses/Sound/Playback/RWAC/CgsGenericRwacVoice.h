@@ -78,9 +78,9 @@ private:
 // CgsGenericRwacVoice.h:467 (DWARF h:357). ARTIST copy 0x82682700, asserts 469/470.
 inline rw::audio::core::PlugIn* GenericRwacVoice::GetPlugin(uint32_t lu32I)
 {
-    CGS_ASSERT(lu32I < mu16PluginCount, CgsDev::Assert::MessageAt(
+    CGS_ASSERT(lu32I < mu16PluginCount, CGS_ASSERT_MESSAGE_AT(
         "lu32I < mu16PluginCount", CGS_GENERIC_RWAC_VOICE_H_ASSERT_FILE, 469));
-    CGS_ASSERT(mppPlugin[lu32I], CgsDev::Assert::MessageAt(
+    CGS_ASSERT(mppPlugin[lu32I], CGS_ASSERT_MESSAGE_AT(
         "mppPlugin[lu32I]", CGS_GENERIC_RWAC_VOICE_H_ASSERT_FILE, 470));
     return mppPlugin[lu32I];
 }
@@ -89,12 +89,12 @@ inline rw::audio::core::PlugIn* GenericRwacVoice::GetPlugin(uint32_t lu32I)
 // asserts (479, then 483/484 -- not a GetPlugin call; PS3 inlines the same lines).
 inline rw::audio::core::PlugIn* GenericRwacVoice::GetSendPlugin(uint32_t lu32Index)
 {
-    CGS_ASSERT(mu16FirstSendPlugin > 0, CgsDev::Assert::MessageAt(
+    CGS_ASSERT(mu16FirstSendPlugin > 0, CGS_ASSERT_MESSAGE_AT(
         "mu16FirstSendPlugin > 0", CGS_GENERIC_RWAC_VOICE_H_ASSERT_FILE, 479));
     uint32_t lu32I = mu16FirstSendPlugin + lu32Index;
-    CGS_ASSERT(lu32I < mu16PluginCount, CgsDev::Assert::MessageAt(
+    CGS_ASSERT(lu32I < mu16PluginCount, CGS_ASSERT_MESSAGE_AT(
         "lu32I < mu16PluginCount", CGS_GENERIC_RWAC_VOICE_H_ASSERT_FILE, 483));
-    CGS_ASSERT(mppPlugin[lu32I], CgsDev::Assert::MessageAt(
+    CGS_ASSERT(mppPlugin[lu32I], CGS_ASSERT_MESSAGE_AT(
         "mppPlugin[lu32I]", CGS_GENERIC_RWAC_VOICE_H_ASSERT_FILE, 484));
     return mppPlugin[lu32I];
 }
@@ -102,7 +102,7 @@ inline rw::audio::core::PlugIn* GenericRwacVoice::GetSendPlugin(uint32_t lu32Ind
 // CgsGenericRwacVoice.h:596 (DWARF h:374). ARTIST copy 0x82682840, assert 598.
 inline GenericRwacFactory& GenericRwacVoice::GetRwacFactory()
 {
-    CGS_ASSERT(mpFactory, CgsDev::Assert::MessageAt(
+    CGS_ASSERT(mpFactory, CGS_ASSERT_MESSAGE_AT(
         "mpFactory", CGS_GENERIC_RWAC_VOICE_H_ASSERT_FILE, 598));
     return *mpFactory;
 }

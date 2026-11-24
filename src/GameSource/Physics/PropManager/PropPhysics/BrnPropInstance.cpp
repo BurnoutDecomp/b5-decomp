@@ -2,7 +2,7 @@
 #include "rw/math/vpu/vector3_operation.h"           // rw::math::vpu::IsValid(Vector3)
 #include "rw/math/vpu/matrix44affine_operation.h"    // rw::math::vpu::IsValid(Matrix44Affine)
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\propmanager\\PropPhysics/BrnPropInstance.h"
 // ===========================================================================
 // BrnPhysics::Props::PropInstance out-of-line accessors, reconstructed store-for-
 // store from BURNOUT_X360_ARTIST.XEX (GetJointIndex @0x825B96B0,
@@ -34,7 +34,7 @@ namespace Props
     void PropInstance::SetAngularVelocity(Vector3 lAngularVelocity)
     {
         CGS_ASSERT(rw::math::vpu::IsValid(lAngularVelocity),
-            CgsDev::Assert::MessageAt("RwMath::IsValid( lAngularVelocity )", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\propmanager\\PropPhysics/BrnPropInstance.h", 251));
+            CGS_ASSERT_MESSAGE_AT("RwMath::IsValid( lAngularVelocity )", CGS_ARTIST_FILE, 251));
         mAngularVelocity = lAngularVelocity;
     }
 
@@ -66,10 +66,12 @@ namespace Props
     int32_t PropInstance::GetJointIndex() const
     {
         CGS_ASSERT(IsJointed(),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "IsJointed()",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\propmanager\\PropPhysics/BrnPropInstance.h", 326 /* ARTIST 0x825B96D8 */));
+                CGS_ARTIST_FILE, 326 /* ARTIST 0x825B96D8 */));
         return mu8JointIndex;
     }
 }
 }
+
+#undef CGS_ARTIST_FILE

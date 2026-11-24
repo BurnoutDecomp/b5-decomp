@@ -17,7 +17,7 @@
 //                                        them out of line @0x25054 / @0x15B40)
 // The vtable (0x8200A5A0) also points slot 3 at 0x82C296C8 (`li r3, 1`, the base PostCollisionUpdate) and slot 4 at
 // 0x8284CB38 (the empty base Release), so neither is overridden here.
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BehaviourRig.cpp"
 #include "GameSource/Director/Camera/Behaviours/BehaviourRig.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
@@ -186,7 +186,7 @@ BehaviourRig::Prepare(const BehaviourSharedPrepareReleaseInfo& /*lrInfo*/)
 {
     SetNotPrepared();
 
-    CGS_ASSERT(mAttachedToRef.IsValid(), CgsDev::Assert::MessageAt("mAttachedToRef.HasBeenSet()", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BehaviourRig.cpp", 115));     // :115
+    CGS_ASSERT(mAttachedToRef.IsValid(), CGS_ASSERT_MESSAGE_AT("mAttachedToRef.HasBeenSet()", CGS_ARTIST_FILE, 115));     // :115
     CGS_ASSERT(mpParameters != NULL, "mpParameters != NULL");                // :116
 
     mAccelSpring.Prepare(0.0f, 0.0f,
@@ -217,7 +217,7 @@ BehaviourRig::SetupTweaker(Utils::Tweaker& lrTweaker)
 {
     lrTweaker.Construct();
 
-    CGS_ASSERT(mpParameters != NULL, CgsDev::Assert::MessageAt("mpParameters", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BehaviourRig.cpp", 372));                        // :372
+    CGS_ASSERT(mpParameters != NULL, CGS_ASSERT_MESSAGE_AT("mpParameters", CGS_ARTIST_FILE, 372));                        // :372
 
     Parameters& lrParameters = const_cast<Parameters&>(*mpParameters);
     lrTweaker.AddMapping("DOF Blur Near", &lrParameters.mfDOFNear, KF_TWEAK_DOF_SCALE,
@@ -302,7 +302,7 @@ BehaviourRig::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo)
 {
     using namespace rw::math::vpu;
 
-    CGS_ASSERT(mpParameters != NULL, CgsDev::Assert::MessageAt("mpParameters != NULL", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BehaviourRig.cpp", 136));                // :136
+    CGS_ASSERT(mpParameters != NULL, CGS_ASSERT_MESSAGE_AT("mpParameters != NULL", CGS_ARTIST_FILE, 136));                // :136
 
     if (!HasFailed())
     {
@@ -474,3 +474,5 @@ BehaviourRig::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo)
 
 } // namespace Camera
 } // namespace BrnDirector
+
+#undef CGS_ARTIST_FILE

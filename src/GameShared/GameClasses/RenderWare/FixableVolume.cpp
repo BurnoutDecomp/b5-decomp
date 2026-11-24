@@ -1,7 +1,7 @@
 #include "GameShared/GameClasses/RenderWare/FixableVolume.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include <cstring>
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\renderware\\FixableVolume.cpp"
 // ARTIST FixUp 828A87A0 and FixDown 828A8830 store the converted word
 // before reporting unsupported types. The serialized word occupies mpVTable's
 // representation until FixUp; memcpy preserves those bytes without a typed alias.
@@ -20,7 +20,7 @@ namespace Props
             case 1: case 2: case 3: case 4: case 5: return;
             default:
                 CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert("Unsupported type\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\renderware\\FixableVolume.cpp", 92);
+                CgsDev::Assert::FireAssert("Unsupported type\n", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 92));
                 CgsDev::Assert::EndAssert();
                 return;
         }
@@ -35,10 +35,12 @@ namespace Props
             case 1: case 2: case 3: case 4: case 5: return;
             default:
                 CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert("Unsupported type\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\renderware\\FixableVolume.cpp", 156);
+                CgsDev::Assert::FireAssert("Unsupported type\n", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 156));
                 CgsDev::Assert::EndAssert();
                 return;
         }
     }
 }
 }
+
+#undef CGS_ARTIST_FILE

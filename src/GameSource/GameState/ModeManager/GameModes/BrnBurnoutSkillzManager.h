@@ -1,5 +1,5 @@
 #pragma once
-
+#define CGS_ARTIST_BRNBURNOUTSKILLZMANAGER_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\gamemodes\\BrnBurnoutSkillzManager.h"
 #include "types.hpp"
 
 #include "GameSource/BurnoutConstants.h"                                          // ::EActiveRaceCarIndex, E_ACTIVE_RACE_CAR_INDEX_COUNT (== 8)
@@ -127,13 +127,13 @@ public:
     // Inline setters (inlined into ModeManager::Construct after the lobby mode's own assert).
     void SetStreetManager(StreetManager* lpStreetManager)
     {
-        CGS_ASSERT(lpStreetManager, CgsDev::Assert::MessageAt("lpStreetManager", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\gamemodes\\BrnBurnoutSkillzManager.h", 265));
+        CGS_ASSERT(lpStreetManager, CGS_ASSERT_MESSAGE_AT("lpStreetManager", CGS_ARTIST_BRNBURNOUTSKILLZMANAGER_FILE, 265));
         mpStreetManager = lpStreetManager;
     }
 
     void SetMugshotManager(MugshotManager* lpMugshotManager)
     {
-        CGS_ASSERT(lpMugshotManager, CgsDev::Assert::MessageAt("lpMugshotManager", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\gamemodes\\BrnBurnoutSkillzManager.h", 280));
+        CGS_ASSERT(lpMugshotManager, CGS_ASSERT_MESSAGE_AT("lpMugshotManager", CGS_ARTIST_BRNBURNOUTSKILLZMANAGER_FILE, 280));
         mpMugshotManager = lpMugshotManager;
     }
 
@@ -230,3 +230,5 @@ private:
     bool mbIsInCrashedState;
 };
 }
+
+#undef CGS_ARTIST_BRNBURNOUTSKILLZMANAGER_FILE

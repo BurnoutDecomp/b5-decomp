@@ -439,7 +439,7 @@ namespace CgsLanguage
     const char* LanguageManager::GetDefaultFont() const
     {
         CGS_ASSERT(mpcDefaultFontName != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "Invalid Default Font Name in Language Manager",
                 "..\\..\\..\\GameShared\\GameClasses\\Language/CgsLanguageManager.h", 642 /* ARTIST 0x824434E8 */));
         return mpcDefaultFontName;
@@ -453,7 +453,7 @@ namespace CgsLanguage
     bool LanguageManager::Prepare(CgsMemory::HeapMalloc* lpLanguageAllocator)
     {
         CGS_ASSERT(lpLanguageAllocator != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "Null pointer for language allocator given",
                 "..\\..\\..\\GameShared\\GameClasses\\Language/CgsLanguageManager.cpp", 180 /* ARTIST 0x828608FC */));
         mpLanguageAllocator = lpLanguageAllocator;

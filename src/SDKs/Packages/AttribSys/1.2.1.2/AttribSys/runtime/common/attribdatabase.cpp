@@ -1,5 +1,5 @@
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribdatabase.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\SDKs\\Packages\\AttribSys\\1.2.1.2\\AttribSys/runtime/common/attribdatabase.cpp"
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysMemoryManager.h"     // GetEaStlAllocator()
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysPackageAllocator.h"  // AttribSysPackageAllocator::Free(void*,s32,const char*)
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/export/attribexportmanager.h" // Class/CollectionExportPolicy
@@ -191,14 +191,14 @@ static const char KAC_ARTIST_DATABASE_FILE[] =
 // Clean is a programming error.
 void ClassExportPolicy::Clean(Vault&, const TypeID&, const ExportID&)
 {
-    CGS_ASSERT(false, CgsDev::Assert::MessageAt("Classes should not have export entries!\n",
+    CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Classes should not have export entries!\n",
         KAC_ARTIST_DATABASE_FILE, 274 /* ARTIST 0x82805634 */));
 }
 
 // @ 0x82805660 (attribdatabase.cpp:292). Same guard on the per-export Deinitialize hook.
 void ClassExportPolicy::Deinitialize(Vault&, const TypeID&, const ExportID&)
 {
-    CGS_ASSERT(false, CgsDev::Assert::MessageAt("Classes should not have export entries!\n",
+    CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Classes should not have export entries!\n",
         KAC_ARTIST_DATABASE_FILE, 292 /* ARTIST 0x82805674 */));
 }
 
@@ -206,7 +206,7 @@ void ClassExportPolicy::Deinitialize(Vault&, const TypeID&, const ExportID&)
 // so IsReferenced can only be reached in error; it asserts and reports "not referenced".
 bool CollectionExportPolicy::IsReferenced(const Vault&, const TypeID&, const ExportID&)
 {
-    CGS_ASSERT(false, CgsDev::Assert::MessageAt("Collections should not be in export table!\n",
+    CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Collections should not be in export table!\n",
         KAC_ARTIST_DATABASE_FILE, 341 /* ARTIST 0x828056B4 */));
     return false;
 }
@@ -215,7 +215,7 @@ bool CollectionExportPolicy::IsReferenced(const Vault&, const TypeID&, const Exp
 // per-export Clean hook is a dead path. (Shares the Class rodata message.)
 void CollectionExportPolicy::Clean(Vault&, const TypeID&, const ExportID&)
 {
-    CGS_ASSERT(false, CgsDev::Assert::MessageAt("Classes should not have export entries!\n",
+    CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Classes should not have export entries!\n",
         KAC_ARTIST_DATABASE_FILE, 366 /* ARTIST 0x828056F4 */));
 }
 
@@ -223,7 +223,7 @@ void CollectionExportPolicy::Clean(Vault&, const TypeID&, const ExportID&)
 // Deinitialize hook.
 void CollectionExportPolicy::Deinitialize(Vault&, const TypeID&, const ExportID&)
 {
-    CGS_ASSERT(false, CgsDev::Assert::MessageAt("Classes should not have export entries!\n",
+    CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Classes should not have export entries!\n",
         KAC_ARTIST_DATABASE_FILE, 391 /* ARTIST 0x82805734 */));
 }
 
@@ -576,8 +576,8 @@ void DatabaseExportPolicy::Initialize(Vault& lrVault, const TypeID& lrType,
                                       const ExportID& lrExport, void* lpData,
                                       unsigned int luSize)
 {
-    CGS_ASSERT(luSize >= 0x10, CgsDev::Assert::MessageAt(
-        "Invalid DatabaseLoadData.", "..\\..\\..\\SDKs\\Packages\\AttribSys\\1.2.1.2\\AttribSys/runtime/common/attribdatabase.cpp", 130));
+    CGS_ASSERT(luSize >= 0x10, CGS_ASSERT_MESSAGE_AT(
+        "Invalid DatabaseLoadData.", CGS_ARTIST_FILE, 130));
 
     void* lpBlock = Attrib::Alloc(sizeof(DatabasePrivate), NULL);
     Database::sThis = lpBlock != NULL
@@ -638,8 +638,8 @@ void CollectionExportPolicy::Initialize(Vault& lrVault, const TypeID& /*lrType*/
                                         const ExportID& /*lrExport*/, void* lpData,
                                         unsigned int luSize)
 {
-    CGS_ASSERT(luSize >= 0x30, CgsDev::Assert::MessageAt(
-        "Invalid CollectionLoadData.", "..\\..\\..\\SDKs\\Packages\\AttribSys\\1.2.1.2\\AttribSys/runtime/common/attribdatabase.cpp", 309));
+    CGS_ASSERT(luSize >= 0x30, CGS_ASSERT_MESSAGE_AT(
+        "Invalid CollectionLoadData.", CGS_ARTIST_FILE, 309));
 
     DatabasePrivate* lpPrivates = GetDatabasePrivate();
     const CollectionLoadData* lpLoad = static_cast<const CollectionLoadData*>(lpData);
@@ -857,3 +857,5 @@ AttribListBase* DatabasePrivate_CollectClassGarbageBag(AttribListBase* lpGarbage
 }
 
 } // namespace Attrib
+
+#undef CGS_ARTIST_FILE

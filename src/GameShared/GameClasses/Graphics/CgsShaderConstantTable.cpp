@@ -3,7 +3,7 @@
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsDispatcher.h" // DispatchBin::AllocateMemoryFast
 #include "rw/math/vpu/types.h"                             // rw::math::vpu::Vector4
 #include <cstring>                                         // strlen / strcpy
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Graphics/CgsShaderConstants.h"
 static const char KAC_ARTIST_ASSERT_FILE[] =
     "..\\..\\..\\GameShared\\GameClasses\\Graphics/CgsShaderConstants.h";
 
@@ -84,12 +84,12 @@ void ShaderConstantTable::FastNonOverlappedVectorMemcpy(Vector4* lpDest, const r
 void ShaderConstantTable::SetShaderConstantArrayData(u32 luIndex, const rw::math::vpu::Vector4* lpaValues)
 {
     CGS_ASSERT(luIndex < mu8NumUsedConstants,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "luIndex < mu8NumUsedConstants", KAC_ARTIST_ASSERT_FILE, 474 /* ARTIST 0x822B348C */));
 
     Vector4* lpDest = UpdateShaderChangeTableAndGetConstantDestination(luIndex);
     CGS_ASSERT(lpDest,
-        CgsDev::Assert::MessageAt("lpDest", KAC_ARTIST_ASSERT_FILE, 478 /* ARTIST 0x822B34C0 */));
+        CGS_ASSERT_MESSAGE_AT("lpDest", KAC_ARTIST_ASSERT_FILE, 478 /* ARTIST 0x822B34C0 */));
 
     FastNonOverlappedVectorMemcpy(lpDest, lpaValues, maConstants[luIndex].GetNumEntries());
 }
@@ -175,7 +175,7 @@ Vector4* ShaderConstantTable::UpdateShaderChangeTableAndGetConstantDestination(u
     if (!(luIndex < mu8NumUsedConstants))
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("luIndex < mu8NumUsedConstants", "..\\..\\..\\GameShared\\GameClasses\\Graphics/CgsShaderConstants.h", 670);
+        CgsDev::Assert::FireAssert("luIndex < mu8NumUsedConstants", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 670));
         CgsDev::Assert::EndAssert();
     }
 
@@ -183,7 +183,7 @@ Vector4* ShaderConstantTable::UpdateShaderChangeTableAndGetConstantDestination(u
     if (!(lu8NumDirtyConstants < KU_MAX_SHADER_CONSTANTS_DIRTY_LIST))
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("mu8NumDirtyConstants < KU_MAX_SHADER_CONSTANTS_DIRTY_LIST", "..\\..\\..\\GameShared\\GameClasses\\Graphics/CgsShaderConstants.h", 678);
+        CgsDev::Assert::FireAssert("mu8NumDirtyConstants < KU_MAX_SHADER_CONSTANTS_DIRTY_LIST", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 678));
         CgsDev::Assert::EndAssert();
     }
 
@@ -243,15 +243,15 @@ void ShaderConstantTable::AddShaderConstant(u32 luIndex, const char* lpcName, u8
 void ShaderConstantTable::SetShaderConstantData(u32 luIndex, Vector4 lValue)
 {
     CGS_ASSERT(luIndex < mu8NumUsedConstants,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "luIndex < mu8NumUsedConstants",
             KAC_ARTIST_ASSERT_FILE, 396 /* ARTIST 0x822B3324 */));
 
     Vector4* lpDest = UpdateShaderChangeTableAndGetConstantDestination(luIndex);
     CGS_ASSERT(lpDest,
-        CgsDev::Assert::MessageAt("lpDest", KAC_ARTIST_ASSERT_FILE, 400 /* ARTIST 0x822B3358 */));
+        CGS_ASSERT_MESSAGE_AT("lpDest", KAC_ARTIST_ASSERT_FILE, 400 /* ARTIST 0x822B3358 */));
     CGS_ASSERT(maConstants[luIndex].GetSizeInBytes() == 16u,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "sizeof(lData) == maConstants[luIndex].GetSizeInBytes()",
             KAC_ARTIST_ASSERT_FILE, 401 /* ARTIST 0x822B3390 */));
 
@@ -301,7 +301,7 @@ void ShaderConstantTable::SetShaderConstantData(u32 luIndex, Matrix44Affine lVal
     if (!(luIndex < mu8NumUsedConstants))
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("luIndex < mu8NumUsedConstants", "..\\..\\..\\GameShared\\GameClasses\\Graphics/CgsShaderConstants.h", 443);
+        CgsDev::Assert::FireAssert("luIndex < mu8NumUsedConstants", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 443));
         CgsDev::Assert::EndAssert();
     }
 
@@ -327,3 +327,5 @@ void ShaderConstantTable::ResetShadowingForDispatch()
         }
     }
 }
+
+#undef CGS_ARTIST_FILE

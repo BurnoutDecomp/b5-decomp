@@ -207,7 +207,7 @@ void Im2dUntex::Construct(rw::IResourceAllocator* allocator)
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("mapVertexProgramBuffer[ li8Program ] != NULL",
-                "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/CgsImRenderer.h", 570);
+                CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/CgsImRenderer.h", 570));
             CgsDev::Assert::EndAssert();
         }
         renderengine::ProgramBuffer::GetVariableHandleByName(

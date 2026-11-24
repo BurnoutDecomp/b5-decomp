@@ -1,5 +1,5 @@
 #include "GameSource/Gui/Flow/HUD/Components/BrnOdometerComponent.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnOdometerComponent.cpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                 // CGS_ASSERT + CgsDev::Assert::{Begin,Fire,End}Assert
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                            // CgsCore::SnPrintf
 #include "GameShared/GameClasses/Development/CgsStrStream.h"                        // CgsDev::StrStream (streamed assert message)
@@ -317,8 +317,8 @@ namespace BrnGui
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert(
                     lacMessage,
-                    "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnOdometerComponent.cpp",
-                    324);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                    324));
                 CgsDev::Assert::EndAssert();
             }
             break;
@@ -388,8 +388,8 @@ namespace BrnGui
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert(
                     lacMessage,
-                    "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnOdometerComponent.cpp",
-                    392);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                    392));
                 CgsDev::Assert::EndAssert();
             }
             break;
@@ -399,3 +399,5 @@ namespace BrnGui
         mfEnteredStateTime = mpGuiCache->GetTime();
     }
 }
+
+#undef CGS_ARTIST_FILE

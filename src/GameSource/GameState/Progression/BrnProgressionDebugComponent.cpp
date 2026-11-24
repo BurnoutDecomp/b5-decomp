@@ -1,5 +1,5 @@
 #include "GameSource/GameState/Progression/BrnProgressionDebugComponent.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionDebugComponent.cpp"
 #include "GameSource/GameState/Progression/BrnProgressionManager.h"
 #include "GameSource/GameState/Progression/BrnProfile.h"
 #include "GameSource/GameState/Progression/BrnDerivedCars.h"                       // DerivedCarArray (AddSpecialEventWins)
@@ -28,7 +28,7 @@
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                         // gpDebugPrint / gxMessageFilterFlags
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
-
+#define CGS_ARTIST_FILE_BRNPROFILE "..\\..\\..\\GameSource\\GameState/Progression/BrnProfile.h"
 #include <float.h>
 #include <limits>
 
@@ -301,20 +301,20 @@ namespace BrnProgression
         s32 liWinsToAdd, RaceEventData::EModeType leModeType)
     {
         Profile* lpProfile = &mpProgressionManager->mProfile;
-        CGS_ASSERT(lpProfile, CgsDev::Assert::MessageAt("lpProfile", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionDebugComponent.cpp", 862));
+        CGS_ASSERT(lpProfile, CGS_ASSERT_MESSAGE_AT("lpProfile", CGS_ARTIST_FILE, 862));
 
         s32 liEventsAdded = 0;
         for (s32 liEventIndex = 0; liEventIndex < lpProfile->miEventCount; ++liEventIndex)
         {
             CGS_ASSERT(static_cast<u32>(liEventIndex) <
                            static_cast<u32>(lpProfile->miEventCount),
-                       CgsDev::Assert::MessageAt("luIndex < static_cast<uint32_t>(miEventCount)", "..\\..\\..\\GameSource\\GameState/Progression/BrnProfile.h", 3004));
+                       CGS_ASSERT_MESSAGE_AT("luIndex < static_cast<uint32_t>(miEventCount)", CGS_ARTIST_FILE_BRNPROFILE, 3004));
             ProfileEvent& lrEvent = lpProfile->maEvents[liEventIndex];
             const ProgressionData* lpProgressionData =
                 GetLoadedProgressionData(mpProgressionManager->mpProgressionData);
             const RaceEventData* lpRaceEventData =
                 lpProgressionData->FindOfflineEvent(lrEvent.GetID());
-            CGS_ASSERT(lpRaceEventData, CgsDev::Assert::MessageAt("lpRaceEventData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionDebugComponent.cpp", 874));
+            CGS_ASSERT(lpRaceEventData, CGS_ASSERT_MESSAGE_AT("lpRaceEventData", CGS_ARTIST_FILE, 874));
 
             if (lpRaceEventData->GetMode() != static_cast<u8>(leModeType))
             {
@@ -341,7 +341,7 @@ namespace BrnProgression
     void ProgressionDebugComponent::AddRaceWins()
     {
         Profile* lpProfile = &mpProgressionManager->mProfile;
-        CGS_ASSERT(lpProfile, CgsDev::Assert::MessageAt("lpProfile", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionDebugComponent.cpp", 752));
+        CGS_ASSERT(lpProfile, CGS_ASSERT_MESSAGE_AT("lpProfile", CGS_ARTIST_FILE, 752));
         ++lpProfile->muMedalCountFromTheStart;
         mpProgressionManager->mbPlayerMedalsUpdateRequired = true;
 
@@ -358,7 +358,7 @@ namespace BrnProgression
     void ProgressionDebugComponent::AddRoadRageWins()
     {
         Profile* lpProfile = &mpProgressionManager->mProfile;
-        CGS_ASSERT(lpProfile, CgsDev::Assert::MessageAt("lpProfile", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionDebugComponent.cpp", 780));
+        CGS_ASSERT(lpProfile, CGS_ASSERT_MESSAGE_AT("lpProfile", CGS_ARTIST_FILE, 780));
         ++lpProfile->muMedalCountFromTheStart;
         mpProgressionManager->mbPlayerMedalsUpdateRequired = true;
 
@@ -375,7 +375,7 @@ namespace BrnProgression
     void ProgressionDebugComponent::AddMarkedManWins()
     {
         Profile* lpProfile = &mpProgressionManager->mProfile;
-        CGS_ASSERT(lpProfile, CgsDev::Assert::MessageAt("lpProfile", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionDebugComponent.cpp", 807));
+        CGS_ASSERT(lpProfile, CGS_ASSERT_MESSAGE_AT("lpProfile", CGS_ARTIST_FILE, 807));
         ++lpProfile->muMedalCountFromTheStart;
         mpProgressionManager->mbPlayerMedalsUpdateRequired = true;
 
@@ -392,7 +392,7 @@ namespace BrnProgression
     void ProgressionDebugComponent::AddStuntWins()
     {
         Profile* lpProfile = &mpProgressionManager->mProfile;
-        CGS_ASSERT(lpProfile, CgsDev::Assert::MessageAt("lpProfile", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionDebugComponent.cpp", 833));
+        CGS_ASSERT(lpProfile, CGS_ASSERT_MESSAGE_AT("lpProfile", CGS_ARTIST_FILE, 833));
         ++lpProfile->muMedalCountFromTheStart;
         mpProgressionManager->mbPlayerMedalsUpdateRequired = true;
 
@@ -478,7 +478,7 @@ namespace BrnProgression
         {
             const BrnResource::VehicleListEntry* lpVehicleEntry =
                 lpVehicleList->GetVehicleData(liVehicle);
-            CGS_ASSERT(lpVehicleEntry != 0, CgsDev::Assert::MessageAt("lpVehicleListEntry != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionDebugComponent.cpp", 375));
+            CGS_ASSERT(lpVehicleEntry != 0, CGS_ASSERT_MESSAGE_AT("lpVehicleListEntry != NULL", CGS_ARTIST_FILE, 375));
 
             const u8 lu8LiveryType = lpVehicleEntry->GetLiveryType();
             if (lu8LiveryType != BrnResource::VehicleListEntry::E_LIVERY_TYPE_COLOUR_ALT &&
@@ -489,7 +489,7 @@ namespace BrnProgression
 
             CarData* lpCarData = mpProgressionManager->AddCar(
                 lpVehicleEntry->GetId(), CarData::E_UNLOCK_TYPE_GOLD_SILVER);
-            CGS_ASSERT(lpCarData != 0, CgsDev::Assert::MessageAt("lpCarData != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionDebugComponent.cpp", 381));
+            CGS_ASSERT(lpCarData != 0, CGS_ASSERT_MESSAGE_AT("lpCarData != NULL", CGS_ARTIST_FILE, 381));
             lpCarData->SetUnlockSequenceAlreadyShown();
 
             const CgsID lParentCarId = lpVehicleEntry->GetParentId();
@@ -497,7 +497,7 @@ namespace BrnProgression
             {
                 CarData* lpParentCarData = mpProgressionManager->AddCar(
                     lParentCarId, CarData::E_UNLOCK_TYPE_GOLD_SILVER);
-                CGS_ASSERT(lpParentCarData != 0, CgsDev::Assert::MessageAt("lpParentCarData != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionDebugComponent.cpp", 387));
+                CGS_ASSERT(lpParentCarData != 0, CGS_ASSERT_MESSAGE_AT("lpParentCarData != NULL", CGS_ARTIST_FILE, 387));
                 lpParentCarData->SetUnlockSequenceAlreadyShown();
             }
         }
@@ -918,7 +918,7 @@ namespace BrnProgression
                 for (s32 liOpponent = 0; liOpponent < lrSet.GetOpponentCount(); ++liOpponent)
                 {
                     CGS_ASSERT(liOpponent >= 0 && liOpponent < lrSet.GetOpponentCount(),
-                               CgsDev::Assert::MessageAt("liCarOpponentIndex >= 0 && liCarOpponentIndex < miOpponentCount", "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\progression\\BrnOpponentData.h", 224));
+                               CGS_ASSERT_MESSAGE_AT("liCarOpponentIndex >= 0 && liCarOpponentIndex < miOpponentCount", "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\progression\\BrnOpponentData.h", 224));
                     CgsIDUnCompress(lrSet.GetCarOpponent(liOpponent)->GetCarId(), lacCarId);
                     lStream << lacCarId;
                     lStream << " ";
@@ -936,7 +936,7 @@ namespace BrnProgression
     void ProgressionDebugComponent::AddSpecialEventWins()
     {
         Profile* lpProfile = &mpProgressionManager->mProfile;
-        CGS_ASSERT(lpProfile, CgsDev::Assert::MessageAt("lpProfile", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionDebugComponent.cpp", 908));
+        CGS_ASSERT(lpProfile, CGS_ASSERT_MESSAGE_AT("lpProfile", CGS_ARTIST_FILE, 908));
 
         ++lpProfile->muMedalCountFromTheStart;
         mpProgressionManager->mbPlayerMedalsUpdateRequired = true;
@@ -947,12 +947,12 @@ namespace BrnProgression
 
         for (u32 luEvent = 0; luEvent < static_cast<u32>(lpProfile->miEventCount); ++luEvent)
         {
-            CGS_ASSERT(luEvent < static_cast<u32>(lpProfile->miEventCount), CgsDev::Assert::MessageAt("luIndex < static_cast<uint32_t>(miEventCount)", "..\\..\\..\\GameSource\\GameState/Progression/BrnProfile.h", 3004));
+            CGS_ASSERT(luEvent < static_cast<u32>(lpProfile->miEventCount), CGS_ASSERT_MESSAGE_AT("luIndex < static_cast<uint32_t>(miEventCount)", CGS_ARTIST_FILE_BRNPROFILE, 3004));
             ProfileEvent& lrEvent = lpProfile->maEvents[luEvent];
 
             const ProgressionData* lpProgressionData = GetLoadedProgressionData(mpProgressionManager->mpProgressionData);
             const RaceEventData* lpRaceEventData = lpProgressionData->FindOfflineEvent(lrEvent.GetID());
-            CGS_ASSERT(lpRaceEventData, CgsDev::Assert::MessageAt("lpRaceEventData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionDebugComponent.cpp", 874));
+            CGS_ASSERT(lpRaceEventData, CGS_ASSERT_MESSAGE_AT("lpRaceEventData", CGS_ARTIST_FILE, 874));
 
             if (lpRaceEventData->GetSpecialEventCarId() == 0)
             {
@@ -1190,7 +1190,7 @@ namespace BrnProgression
             {
                 CGS_ASSERT(luEvent < static_cast<u32>(lpProfile->miEventCount), "luIndex < static_cast<uint32_t>(miEventCount)");
                 const ProfileEvent* lpEvent = &lpProfile->maEvents[luEvent];
-                CGS_ASSERT(lpEvent, CgsDev::Assert::MessageAt("lpEvent", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionDebugComponent.cpp", 1615));
+                CGS_ASSERT(lpEvent, CGS_ASSERT_MESSAGE_AT("lpEvent", CGS_ARTIST_FILE, 1615));
 
                 char lacMedal[6] = { '.', '.', '.', '.', '.', '\0' };
                 if (lpEvent->IsFlagSet(ProfileEvent::E_FLAG_RANK_WIN))
@@ -1277,3 +1277,6 @@ namespace BrnProgression
         DrawTextWithOffsets(lpDisplay, &lStream, 550.0f, 30.0f);
     }
 }
+
+#undef CGS_ARTIST_FILE
+#undef CGS_ARTIST_FILE_BRNPROFILE

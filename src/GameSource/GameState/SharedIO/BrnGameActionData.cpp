@@ -95,7 +95,7 @@ void GameStats::Construct()
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("leEnumIndex <= E_COUNTY_VALID_COUNT",
-                                            "..\\..\\..\\SharedClasses\\World/BrnWorldRegion.h", 44);
+                                            CGS_ASSERT_LOCATION("..\\..\\..\\SharedClasses\\World/BrnWorldRegion.h", 44));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -106,7 +106,7 @@ void GameStats::Construct()
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("leEnumIndex <= E_STUNT_ELEMENT_TYPE_COUNT",
-                                        "..\\..\\..\\GameSource\\GameState/BrnGameStateTypes.h", 98);
+                                        CGS_ASSERT_LOCATION("..\\..\\..\\GameSource\\GameState/BrnGameStateTypes.h", 98));
             CgsDev::Assert::EndAssert();
         }
     }

@@ -89,7 +89,7 @@ namespace BrnNetwork
         void NetworkToGameStateInterface::Append(const NetworkToGameStateInterface* lpCopyFrom)
         {
             CGS_ASSERT(lpCopyFrom != 0,
-                CgsDev::Assert::MessageAt("lpCopyFrom", __FILE__, 621 /* ARTIST 0x823C94DC */));
+                CGS_ASSERT_MESSAGE_AT("lpCopyFrom", __FILE__, 621 /* ARTIST 0x823C94DC */));
 
             mDirtyTrickEventQueue.Append(lpCopyFrom->mDirtyTrickEventQueue);
             mRoadRulesReceivedQueue.Append(lpCopyFrom->mRoadRulesReceivedQueue);
@@ -188,14 +188,14 @@ namespace BrnNetwork
             if (leActiveRaceCarIndex < 0)
             {
                 CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-                    CgsDev::Assert::MessageAt(
+                    CGS_ASSERT_MESSAGE_AT(
                         "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0",
                         __FILE__, 520 /* ARTIST 0x82542254 */));
             }
             if (leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_COUNT)
             {
                 CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                    CgsDev::Assert::MessageAt(
+                    CGS_ASSERT_MESSAGE_AT(
                         "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
                         __FILE__, 521 /* ARTIST 0x82542278 */));
             }
@@ -219,14 +219,14 @@ namespace BrnNetwork
             if (leActiveRaceCarIndex < 0)
             {
                 CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-                    CgsDev::Assert::MessageAt(
+                    CGS_ASSERT_MESSAGE_AT(
                         "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0",
                         __FILE__, 588 /* ARTIST 0x825422FC */));
             }
             if (leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_COUNT)
             {
                 CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                    CgsDev::Assert::MessageAt(
+                    CGS_ASSERT_MESSAGE_AT(
                         "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
                         __FILE__, 589 /* ARTIST 0x82542320 */));
             }

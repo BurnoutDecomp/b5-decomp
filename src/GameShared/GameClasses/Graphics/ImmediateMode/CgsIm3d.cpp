@@ -402,7 +402,7 @@ void Im3d::PopMask()
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("mu32NumMasks",
-            "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/CgsIm3d.h", 407);
+            CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/CgsIm3d.h", 407));
         CgsDev::Assert::EndAssert();
     }
     --mu32NumMasks;

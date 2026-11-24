@@ -29,7 +29,7 @@ namespace Explosion
 void ExplosionState::Attach(void* lpvAttachment)
 {
     CGS_ASSERT(lpvAttachment != 0,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lpvAttachment",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
             "../Sound/Explosions/BrnExplosionState.cpp", 69 /* ARTIST 0x826891D4 */));

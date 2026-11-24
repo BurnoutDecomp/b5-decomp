@@ -115,7 +115,7 @@ void MapIconManager::ResetOwnerParameter()
 void MapIconManager::SetRoadRuleBatchData(const GuiEventRoadRuleBatchDataResponse* lpRoadRules)
 {
     CGS_ASSERT(lpRoadRules != 0,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lpRoadRules",
             "..\\..\\..\\GameSource\\Gui/SatNav/BrnMapIconManager.h", 789 /* ARTIST 0x824B2FAC */));
 
@@ -302,9 +302,9 @@ s32 MapIconManager::GetDriveThroughAndJunkyardCount() const
 const char* MapIconManager::GetRoadSignNameAtIndex(s32 liIndex) const
 {
     CGS_ASSERT(liIndex >= 0,
-        CgsDev::Assert::MessageAt("liIndex >= 0", __FILE__, 2591 /* ARTIST 0x824FAA7C */));                        // :2591 (non-gating)
+        CGS_ASSERT_MESSAGE_AT("liIndex >= 0", __FILE__, 2591 /* ARTIST 0x824FAA7C */));                        // :2591 (non-gating)
     CGS_ASSERT(mbUseRoadSigns == true,
-        CgsDev::Assert::MessageAt("mbUseRoadSigns == true", __FILE__, 2592 /* ARTIST 0x824FAAAC */));    // :2592 (non-gating)
+        CGS_ASSERT_MESSAGE_AT("mbUseRoadSigns == true", __FILE__, 2592 /* ARTIST 0x824FAAAC */));    // :2592 (non-gating)
 
     s32 liRoadSignIndex = liIndex;
     if (mbAllowRivalSelection)   // +0x7081
@@ -313,9 +313,9 @@ const char* MapIconManager::GetRoadSignNameAtIndex(s32 liIndex) const
     }
 
     CGS_ASSERT(liRoadSignIndex >= 0,
-        CgsDev::Assert::MessageAt("liRoadSignIndex >= 0", __FILE__, 2601 /* ARTIST 0x824FAAE8 */));        // :2601 (non-gating)
+        CGS_ASSERT_MESSAGE_AT("liRoadSignIndex >= 0", __FILE__, 2601 /* ARTIST 0x824FAAE8 */));        // :2601 (non-gating)
     CGS_ASSERT(liRoadSignIndex < mRoadSignIconManager.GetNumIcons(),
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "liRoadSignIndex < mRoadSignIconManager.GetNumIcons()",
             __FILE__, 2602 /* ARTIST 0x824FAB0C */));   // :2602 (non-gating)
 
@@ -328,7 +328,7 @@ const char* MapIconManager::GetRoadSignNameAtIndex(s32 liIndex) const
 u32 MapIconManager::GetEventIDAtIndex(s32 liIndex) const
 {
     CGS_ASSERT(meEventIconDisplayType != GuiEventDrawEventIcons::E_ICON_DISPLAY_TYPE_COUNT,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "meEventIconDisplayType != GuiEventDrawEventIcons::E_ICON_DISPLAY_TYPE_COUNT",
             __FILE__, 2618 /* ARTIST 0x824FAB70 */));
                                                                      // :2618 (non-gating)
@@ -397,8 +397,8 @@ const GuiEventUpdateSatNav::SatNavIconInfo* MapIconManager::GetRivalIconAtIndex(
 // unlike the icon-drawing passes, because these are snap targets.
 void MapIconManager::GetSatNavIconPositions(Vector2* lpav2Positions, s32* lpiNumIcons)
 {
-    CGS_ASSERT(lpiNumIcons != 0, CgsDev::Assert::MessageAt("lpiNumIcons != NULL", __FILE__, 2484 /* ARTIST 0x8250A744 */));   // :2484 (non-gating)
-    CGS_ASSERT(mpGuiCache != 0, CgsDev::Assert::MessageAt("mpGuiCache", __FILE__, 2485 /* ARTIST 0x8250A774 */));             // :2485 (non-gating)
+    CGS_ASSERT(lpiNumIcons != 0, CGS_ASSERT_MESSAGE_AT("lpiNumIcons != NULL", __FILE__, 2484 /* ARTIST 0x8250A744 */));   // :2484 (non-gating)
+    CGS_ASSERT(mpGuiCache != 0, CGS_ASSERT_MESSAGE_AT("mpGuiCache", __FILE__, 2485 /* ARTIST 0x8250A774 */));             // :2485 (non-gating)
 
     *lpiNumIcons = 0;
 
@@ -487,7 +487,7 @@ void MapIconManager::GetSatNavIconPositions(Vector2* lpav2Positions, s32* lpiNum
 // controller/cache/zoom tail).
 void MapIconManager::Construct(GuiCache* lpGuiCache)
 {
-    CGS_ASSERT(lpGuiCache != 0, CgsDev::Assert::MessageAt("lpGuiCache", __FILE__, 144 /* ARTIST 0x824FA124 */));   // BrnMapIconManager.cpp:144 (non-gating)
+    CGS_ASSERT(lpGuiCache != 0, CGS_ASSERT_MESSAGE_AT("lpGuiCache", __FILE__, 144 /* ARTIST 0x824FA124 */));   // BrnMapIconManager.cpp:144 (non-gating)
     mpGuiCache = lpGuiCache;
 
     if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
@@ -795,7 +795,7 @@ void MapIconManager::UpdateSatNavInfo(const GuiEventUpdateSatNav* lpSatNavEvent)
 // the flag tail (+0xAA19..+0xAA1D).
 void MapIconManager::UpdateSatNavParams(const CgsModule::Event* lpParamsEvent)
 {
-    CGS_ASSERT(lpParamsEvent != 0, CgsDev::Assert::MessageAt("lpParams", __FILE__, 766 /* ARTIST 0x824F4494 */));   // :766 (non-gating)
+    CGS_ASSERT(lpParamsEvent != 0, CGS_ASSERT_MESSAGE_AT("lpParams", __FILE__, 766 /* ARTIST 0x824F4494 */));   // :766 (non-gating)
     const u8* lpuPayload = reinterpret_cast<const u8*>(lpParamsEvent);
     mbRivalFovFreeburn          = (lpuPayload[0] != 0);   // +0xAA19
     mbRivalFovRace              = (lpuPayload[1] != 0);   // +0xAA1A
@@ -1113,13 +1113,13 @@ bool MapIconManager::IsTrackedIcon(const SatNavIconInfo* lpIcon)
 // ARTIST 0x824F4BC0.
 bool MapIconManager::IsStartIcon(const SatNavIconInfo* lpIcon)
 {
-    CGS_ASSERT(lpIcon != 0, CgsDev::Assert::MessageAt("lpSatNavIconInfo", __FILE__, 2835 /* ARTIST 0x824F4BF8 */));
-    CGS_ASSERT(mpGuiCache != 0, CgsDev::Assert::MessageAt("mpGuiCache", __FILE__, 2836 /* ARTIST 0x824F4C28 */));
+    CGS_ASSERT(lpIcon != 0, CGS_ASSERT_MESSAGE_AT("lpSatNavIconInfo", __FILE__, 2835 /* ARTIST 0x824F4BF8 */));
+    CGS_ASSERT(mpGuiCache != 0, CGS_ASSERT_MESSAGE_AT("mpGuiCache", __FILE__, 2836 /* ARTIST 0x824F4C28 */));
     if ((mbIsDisplayingEventInfo || mpGuiCache->GetInEventColouringGate()) && mpGuiCache->GetNumPresetRaces() > 0)
     {
-        CGS_ASSERT(mi8CurrentEventIndex >= 0 && mi8CurrentEventIndex < mpGuiCache->GetNumPresetRaces(), CgsDev::Assert::MessageAt("mi8CurrentEventIndex >= 0 && mi8CurrentEventIndex < mpGuiCache->GetNumPresetRaces()", __FILE__, 2842 /* ARTIST 0x824F4C90 */));
+        CGS_ASSERT(mi8CurrentEventIndex >= 0 && mi8CurrentEventIndex < mpGuiCache->GetNumPresetRaces(), CGS_ASSERT_MESSAGE_AT("mi8CurrentEventIndex >= 0 && mi8CurrentEventIndex < mpGuiCache->GetNumPresetRaces()", __FILE__, 2842 /* ARTIST 0x824F4C90 */));
         const PresetRace* lpRace = mpGuiCache->GetPresetRace(mi8CurrentEventIndex);
-        CGS_ASSERT(lpRace != 0, CgsDev::Assert::MessageAt("lpPresetRace", __FILE__, 2844 /* ARTIST 0x824F4CC8 */));
+        CGS_ASSERT(lpRace != 0, CGS_ASSERT_MESSAGE_AT("lpPresetRace", __FILE__, 2844 /* ARTIST 0x824F4CC8 */));
         return static_cast<s32>(lpRace->GetStartLandmarkIndex()) == static_cast<u16>(lpIcon->GetLandmarkIndexHalf());
     }
     return false;
@@ -1128,18 +1128,18 @@ bool MapIconManager::IsStartIcon(const SatNavIconInfo* lpIcon)
 // ARTIST 0x824F4D00.
 bool MapIconManager::IsPendingRaceLandmark(const SatNavIconInfo* lpIcon) const
 {
-    CGS_ASSERT(lpIcon != 0, CgsDev::Assert::MessageAt("lpSatNavIconInfo", __FILE__, 2868 /* ARTIST 0x824F4D38 */));
-    CGS_ASSERT(mpGuiCache != 0, CgsDev::Assert::MessageAt("mpGuiCache", __FILE__, 2869 /* ARTIST 0x824F4D68 */));
+    CGS_ASSERT(lpIcon != 0, CGS_ASSERT_MESSAGE_AT("lpSatNavIconInfo", __FILE__, 2868 /* ARTIST 0x824F4D38 */));
+    CGS_ASSERT(mpGuiCache != 0, CGS_ASSERT_MESSAGE_AT("mpGuiCache", __FILE__, 2869 /* ARTIST 0x824F4D68 */));
     const s32 liMode = mpGuiCache->GetGameMode();
     if (!mpGuiCache->GetInEventColouringGate() || liMode == 15 || liMode == 16)
         return false;
     GuiTracker* lpTracker = mpGuiCache->GetGuiTracker();
-    CGS_ASSERT(lpTracker != 0, CgsDev::Assert::MessageAt("lpTracker", __FILE__, 2881 /* ARTIST 0x824F4DD0 */));
+    CGS_ASSERT(lpTracker != 0, CGS_ASSERT_MESSAGE_AT("lpTracker", __FILE__, 2881 /* ARTIST 0x824F4DD0 */));
     const s32 liCurrent = lpTracker->GetCurrentlyTrackedIndex();
     if (liCurrent >= lpTracker->GetNumTracked() - 1)
         return false;
     const GuiTracker::TrackerInformation* lpInfo = lpTracker->GetTrackerInformation(liCurrent + 1);
-    CGS_ASSERT(lpInfo != 0, CgsDev::Assert::MessageAt("lpTrackerInfo", __FILE__, 2889 /* ARTIST 0x824F4E20 */));
+    CGS_ASSERT(lpInfo != 0, CGS_ASSERT_MESSAGE_AT("lpTrackerInfo", __FILE__, 2889 /* ARTIST 0x824F4E20 */));
     return lpInfo->mTargetLandmarkIndex == static_cast<u16>(lpIcon->GetLandmarkIndexHalf());
 }
 
@@ -2188,7 +2188,7 @@ void MapIconManager::SetShowDrivethrus(bool lbShowDrivethrus)
 void MapIconManager::SetAllowDriveThruSelection(bool lbAllowDriveThruSelection)
 {
     CGS_ASSERT(mbShowingDriveThrus || !lbAllowDriveThruSelection,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "mbShowingDriveThrus || !lbAllowDriveThruSelection",
             __FILE__, 3409 /* ARTIST 0x824F4FBC */));   // cpp:3409
 
@@ -2209,7 +2209,7 @@ void MapIconManager::SetAllowRivalSelection(bool lbAllowRivalSelection)
 void MapIconManager::SetUseRoadSigns(bool lbUseRoadSigns, CgsGui::StateInterface* lpStateInterface)
 {
     CGS_ASSERT(lpStateInterface != 0,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lpStateInterface",
             "..\\..\\..\\GameSource\\Gui/SatNav/BrnMapIconManager.cpp", 3457 /* ARTIST 0x82512404 */));   // cpp:3457
 

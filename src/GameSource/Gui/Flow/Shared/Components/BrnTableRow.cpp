@@ -26,7 +26,7 @@
 // SetSelectable(true).
 // ===================================================================================
 #include "GameSource/Gui/Flow/Shared/Components/BrnTableRow.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnTableRow.h"
 #include "GameSource/Gui/BrnGuiCache.h"                       // BrnGui::GuiCache
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"       // CgsCore::SPrintf
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"            // CGS_ASSERT
@@ -93,7 +93,7 @@ namespace BrnGui
     void TableRow::SetupRow(s32 liColumn, bool lbEnableShowingAnim)
     {
         CGS_ASSERT(liColumn >= 0 && liColumn <= miNumColumns,
-            CgsDev::Assert::StreamMessageAt("TableRow::SetupRow() too many columns!", "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnTableRow.cpp", 103)); // X360 line 103
+            CGS_ASSERT_STREAM_MESSAGE_AT("TableRow::SetupRow() too many columns!", "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnTableRow.cpp", 103)); // X360 line 103
 
         // X360 @0x824E4C9C: slot 6 on the row's own vptr (TableRow::Clear), then slot 0 with
         // r4 = 1 (SelectableGroup::SetActive).
@@ -208,7 +208,7 @@ namespace BrnGui
     TableCell* TableRow::GetSelectable(s32 liIndex)
     {
         CGS_ASSERT(liIndex >= 0 && liIndex < KI_MAX_CELLS_PER_ROW,
-            CgsDev::Assert::StreamMessageAt("TableRow::GetSelectable() invalid index specified", "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnTableRow.h", 395)); // X360 line 395
+            CGS_ASSERT_STREAM_MESSAGE_AT("TableRow::GetSelectable() invalid index specified", CGS_ARTIST_FILE, 395)); // X360 line 395
 
         return &maCells[liIndex];
     }
@@ -216,7 +216,7 @@ namespace BrnGui
     // @0x824E4468 -- attach the row's backing data set and dirty the component.
     void TableRow::SetData(TableRowDataSet* lpData)
     {
-        CGS_ASSERT(lpData != 0, CgsDev::Assert::StreamMessageAt("TableRow::SetData() Invalid DataSet", "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnTableRow.h", 271)); // X360 line 271
+        CGS_ASSERT(lpData != 0, CGS_ASSERT_STREAM_MESSAGE_AT("TableRow::SetData() Invalid DataSet", CGS_ARTIST_FILE, 271)); // X360 line 271
 
         mpData = lpData;
         SetDirty();
@@ -225,8 +225,8 @@ namespace BrnGui
     // @0x824890E8 -- set a cell's text directly in the backing data set and dirty the component.
     void TableRow::SetText(s32 liCell, const char* lpacText)
     {
-        CGS_ASSERT(mpData != 0, CgsDev::Assert::StreamMessageAt("TableRow::SetText() Row data not set", "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnTableRow.h", 302)); // X360 line 302
-        CGS_ASSERT(lpacText != 0, CgsDev::Assert::StreamMessageAt("invalid text specified", "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnTableRow.h", 303));             // X360 line 303
+        CGS_ASSERT(mpData != 0, CGS_ASSERT_STREAM_MESSAGE_AT("TableRow::SetText() Row data not set", CGS_ARTIST_FILE, 302)); // X360 line 302
+        CGS_ASSERT(lpacText != 0, CGS_ASSERT_STREAM_MESSAGE_AT("invalid text specified", CGS_ARTIST_FILE, 303));             // X360 line 303
 
         mpData->SetText(liCell, lpacText);
 
@@ -237,7 +237,7 @@ namespace BrnGui
     // value + "use colour" flag in the backing data set, then dirty the component.
     void TableRow::SetColourValue(s32 liColumn, s32 liColour)
     {
-        CGS_ASSERT(mpData != 0, CgsDev::Assert::StreamMessageAt("TableRow::SetText() Row data not set", "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnTableRow.h", 320)); // X360 line 320 (shared string)
+        CGS_ASSERT(mpData != 0, CGS_ASSERT_STREAM_MESSAGE_AT("TableRow::SetText() Row data not set", CGS_ARTIST_FILE, 320)); // X360 line 320 (shared string)
 
         maCells[liColumn].SetColourValue(static_cast<u32>(liColour));
         mpData->SetColourValue(liColumn, liColour);
@@ -269,8 +269,8 @@ namespace BrnGui
     // set (validated against the row's cells) and dirty the component.
     void TableRow::SetIconState(s32 liCell, u32 luState)
     {
-        CGS_ASSERT(mpData != 0, CgsDev::Assert::StreamMessageAt("TableRow::SetText() Row data not set", "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnTableRow.h", 378)); // X360 line 378 (shared string)
-        CGS_ASSERT(GetSelectable(liCell) != 0, CgsDev::Assert::StreamMessageAt("Invalid selectable specified", "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnTableRow.h", 379)); // X360 line 379
+        CGS_ASSERT(mpData != 0, CGS_ASSERT_STREAM_MESSAGE_AT("TableRow::SetText() Row data not set", CGS_ARTIST_FILE, 378)); // X360 line 378 (shared string)
+        CGS_ASSERT(GetSelectable(liCell) != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid selectable specified", CGS_ARTIST_FILE, 379)); // X360 line 379
 
         mpData->SetInteger(liCell, static_cast<s32>(luState));
 
@@ -308,7 +308,7 @@ namespace BrnGui
     const char* TableRowDataSet::GetText(s32 liCell) const
     {
         CGS_ASSERT(liCell >= 0 && liCell < KI_MAX_CELLS_PER_ROW,
-            CgsDev::Assert::StreamMessageAt("TableRowDataSet::GetText() invalid index specified", "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnTableRow.h", 439)); // X360 line 439
+            CGS_ASSERT_STREAM_MESSAGE_AT("TableRowDataSet::GetText() invalid index specified", CGS_ARTIST_FILE, 439)); // X360 line 439
 
         return maCellData[liCell].macText;
     }
@@ -317,7 +317,7 @@ namespace BrnGui
     s32 TableRowDataSet::GetInteger(s32 liCell) const
     {
         CGS_ASSERT(liCell >= 0 && liCell < KI_MAX_CELLS_PER_ROW,
-            CgsDev::Assert::StreamMessageAt("TableRowDataSet::GetInteger() invalid index specified", "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnTableRow.h", 453)); // X360 line 453
+            CGS_ASSERT_STREAM_MESSAGE_AT("TableRowDataSet::GetInteger() invalid index specified", CGS_ARTIST_FILE, 453)); // X360 line 453
 
         return maCellData[liCell].miInt;
     }
@@ -327,7 +327,7 @@ namespace BrnGui
     s32 TableRowDataSet::GetColourValue(s32 liCell) const
     {
         CGS_ASSERT(liCell >= 0 && liCell < KI_MAX_CELLS_PER_ROW,
-            CgsDev::Assert::StreamMessageAt("TableRowDataSet::GetInteger() invalid index specified", "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnTableRow.h", 467)); // X360 line 467
+            CGS_ASSERT_STREAM_MESSAGE_AT("TableRowDataSet::GetInteger() invalid index specified", CGS_ARTIST_FILE, 467)); // X360 line 467
 
         return maiCellInt[liCell];
     }
@@ -359,7 +359,7 @@ namespace BrnGui
     void TableRowDataSet::SetInteger(s32 liCell, s32 liValue)
     {
         CGS_ASSERT(liCell >= 0 && liCell < KI_MAX_CELLS_PER_ROW,
-            CgsDev::Assert::StreamMessageAt("TableRowDataSet::SetInteger() invalid index specified", "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnTableRow.h", 513)); // X360 line 513
+            CGS_ASSERT_STREAM_MESSAGE_AT("TableRowDataSet::SetInteger() invalid index specified", CGS_ARTIST_FILE, 513)); // X360 line 513
 
         maCellData[liCell].miInt = liValue;
     }
@@ -369,7 +369,7 @@ namespace BrnGui
     void TableRowDataSet::SetColourValue(s32 liCell, s32 liValue)
     {
         CGS_ASSERT(liCell >= 0 && liCell < KI_MAX_CELLS_PER_ROW,
-            CgsDev::Assert::StreamMessageAt("TableRowDataSet::SetColourValue() invalid index specified", "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnTableRow.h", 528)); // X360 line 528
+            CGS_ASSERT_STREAM_MESSAGE_AT("TableRowDataSet::SetColourValue() invalid index specified", CGS_ARTIST_FILE, 528)); // X360 line 528
 
         maiCellInt[liCell] = liValue;
     }
@@ -458,3 +458,5 @@ namespace BrnGui
         ClearFlag(E_FLAG_DIRTY);   // 0x824E9C30 xori, unconditional (ClearFlag is the XOR)
     }
 }
+
+#undef CGS_ARTIST_FILE

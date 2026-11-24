@@ -132,7 +132,7 @@ namespace
 void RaceCarEntityModuleDebugComponent::Construct(RaceCarEntityModule* lpRaceCarEntityModule)
 {
     CgsDev::DebugComponent::Construct();   // ARTIST 0x822A7874 (folded at 0x8284CB38)
-    CGS_ASSERT(lpRaceCarEntityModule != 0, CgsDev::Assert::MessageAt("lpRaceCarEntityModule != NULL", __FILE__, 64));
+    CGS_ASSERT(lpRaceCarEntityModule != 0, CGS_ASSERT_MESSAGE_AT("lpRaceCarEntityModule != NULL", __FILE__, 64));
 
     mpRaceCarEntityModule = lpRaceCarEntityModule;
 

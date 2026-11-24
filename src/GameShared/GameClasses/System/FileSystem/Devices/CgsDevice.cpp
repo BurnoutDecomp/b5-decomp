@@ -11,7 +11,7 @@
 // machinery and returns -2 (a device that does not support the operation reports a
 // generic failure). CallErrorCallback runs the registered error callback and then
 // yields the calling thread for 5ms.
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsDevice.cpp"
 #include "GameShared/GameClasses/System/FileSystem/Devices/CgsDevice.h"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 
@@ -87,7 +87,7 @@ namespace CgsFileSystem
 
     int Device::GetFileSize(Handle::DeviceHandle /*lpHandle*/, u64* /*lpu64OutSize*/)   // @0x828DDE50 (default)
     {
-        CGS_ASSERT(false, CgsDev::Assert::StreamMessageAt("Not implemented\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsDevice.cpp", 91));
+        CGS_ASSERT(false, CGS_ASSERT_STREAM_MESSAGE_AT("Not implemented\n", CGS_ARTIST_FILE, 91));
         return -2;
     }
 
@@ -95,20 +95,20 @@ namespace CgsFileSystem
     int Device::OpenDirectory(const char* /*lpcPath*/, void* /*lpEntryBuffer*/, u32 /*luMaxEntries*/,
                               u32* /*lpuOutCount*/, Handle::DeviceHandle* /*lppOutHandle*/)  // @0x828DDEE0
     {
-        CGS_ASSERT(false, CgsDev::Assert::StreamMessageAt("Not implemented\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsDevice.cpp", 103));
+        CGS_ASSERT(false, CGS_ASSERT_STREAM_MESSAGE_AT("Not implemented\n", CGS_ARTIST_FILE, 103));
         return -2;
     }
 
     int Device::CloseDirectory(Handle::DeviceHandle /*lpHandle*/)   // @0x828DDF70
     {
-        CGS_ASSERT(false, CgsDev::Assert::StreamMessageAt("Not implemented\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsDevice.cpp", 111));
+        CGS_ASSERT(false, CGS_ASSERT_STREAM_MESSAGE_AT("Not implemented\n", CGS_ARTIST_FILE, 111));
         return -2;
     }
 
     int Device::ReadDirectory(Handle::DeviceHandle /*lpHandle*/, void* /*lpEntryBuffer*/,
                               u32 /*luMaxEntries*/, u32* /*lpuOutCount*/)  // @0x828DE000
     {
-        CGS_ASSERT(false, CgsDev::Assert::StreamMessageAt("Not implemented\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsDevice.cpp", 122));
+        CGS_ASSERT(false, CGS_ASSERT_STREAM_MESSAGE_AT("Not implemented\n", CGS_ARTIST_FILE, 122));
         return -2;
     }
 
@@ -118,3 +118,5 @@ namespace CgsFileSystem
     }
 
 } // namespace CgsFileSystem
+
+#undef CGS_ARTIST_FILE

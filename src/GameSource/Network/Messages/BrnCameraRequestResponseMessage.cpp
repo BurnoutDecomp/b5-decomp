@@ -1,6 +1,6 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Messages/BrnCameraRequestResponseMessage.cpp"
 #include "GameSource/Network/Messages/BrnCameraRequestResponseMessage.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
@@ -47,9 +47,9 @@ namespace BrnNetwork
 
     bool CameraRequestResponseMessage::Retrieve(EResponse* lpeCameraRequestResponse)
     {
-        CGS_ASSERT(lpeCameraRequestResponse, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpeCameraRequestResponse, CGS_ASSERT_MESSAGE_AT(
             "lpeCameraRequestResponse",
-            "..\\..\\..\\GameSource\\Network/Messages/BrnCameraRequestResponseMessage.cpp", 103 /* ARTIST 0x8257E700 */));
+            CGS_ARTIST_FILE, 103 /* ARTIST 0x8257E700 */));
 
         // ARTIST 0x8257E714 branches to a trailing `return false` (0x8257E760): the copy-out is the body
         // of the valid test.
@@ -58,9 +58,9 @@ namespace BrnNetwork
             *lpeCameraRequestResponse = meCameraRequestResponse;
             mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
 
-            CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0, CgsDev::Assert::MessageAt(
+            CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0, CGS_ASSERT_MESSAGE_AT(
                 "!CgsNetwork::ReliableMessage::IsMessageValid()",
-                "..\\..\\..\\GameSource\\Network/Messages/BrnCameraRequestResponseMessage.cpp", 113 /* ARTIST 0x8257E74C */));
+                CGS_ARTIST_FILE, 113 /* ARTIST 0x8257E74C */));
             return true;
         }
         return false;
@@ -74,3 +74,5 @@ namespace BrnNetwork
         return CgsNetwork::ReliableMessage::GetPackedMessageSize();
     }
 }
+
+#undef CGS_ARTIST_FILE

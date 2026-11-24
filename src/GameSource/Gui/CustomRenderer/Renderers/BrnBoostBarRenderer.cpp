@@ -331,7 +331,7 @@ bool BoostBarRenderer::Prepare(CgsGui::GuiEventQueueSmall* /*lpEventQueue*/,
             lacMessage[0] = '\0';
             CgsDev::StrStream lStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
             lStream << " unknown prepare stage in BoostBarRenderer ";
-            CgsDev::Assert::FireAssert(lacMessage, KPC_ASSERT_FILE, 302);
+            CgsDev::Assert::FireAssert(lacMessage, CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 302));
             CgsDev::Assert::EndAssert();
         }
         return false;
@@ -349,7 +349,7 @@ bool BoostBarRenderer::Release()
         lacMessage[0] = '\0';
         CgsDev::StrStream lStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
         lStream << " unknown release stage in BoostBarRenderer ";
-        CgsDev::Assert::FireAssert(lacMessage, KPC_ASSERT_FILE, 343);
+        CgsDev::Assert::FireAssert(lacMessage, CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 343));
         CgsDev::Assert::EndAssert();
         return false;
     }
@@ -381,7 +381,7 @@ void BoostBarRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEventTyp
         lacMessage[0] = '\0';
         CgsDev::StrStream lStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
         lStream << " null event passed ";
-        CgsDev::Assert::FireAssert(lacMessage, KPC_ASSERT_FILE, 630);
+        CgsDev::Assert::FireAssert(lacMessage, CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 630));
         CgsDev::Assert::EndAssert();
     }
 
@@ -397,7 +397,7 @@ void BoostBarRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEventTyp
                 lacMessage[0] = '\0';
                 CgsDev::StrStream lStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
                 lStream << "Invalid GUI cache pointer";
-                CgsDev::Assert::FireAssert(lacMessage, KPC_ASSERT_FILE, 694);
+                CgsDev::Assert::FireAssert(lacMessage, CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 694));
                 CgsDev::Assert::EndAssert();
             }
             mpGuiCache = *lppGuiCache;
@@ -416,7 +416,7 @@ void BoostBarRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEventTyp
                 lacMessage[0] = '\0';
                 CgsDev::StrStream lStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
                 lStream << "Max boost is zero. Should never be told car can have zero boost. Crazy value from bridge?";
-                CgsDev::Assert::FireAssert(lacMessage, KPC_ASSERT_FILE, 640);
+                CgsDev::Assert::FireAssert(lacMessage, CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 640));
                 CgsDev::Assert::EndAssert();
             }
             if (mGuiEventBoostInfo.mfBoostAmount < 0.0f)
@@ -426,7 +426,7 @@ void BoostBarRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEventTyp
                 lacMessage[0] = '\0';
                 CgsDev::StrStream lStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
                 lStream << "Current boost is less than zero. Should never be told boost is less than zero. Crazy value from bridge?";
-                CgsDev::Assert::FireAssert(lacMessage, KPC_ASSERT_FILE, 641);
+                CgsDev::Assert::FireAssert(lacMessage, CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 641));
                 CgsDev::Assert::EndAssert();
             }
             if (mGuiEventBoostInfo.mfBoostAmount > mGuiEventBoostInfo.mfMaxBoost)
@@ -436,7 +436,7 @@ void BoostBarRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEventTyp
                 lacMessage[0] = '\0';
                 CgsDev::StrStream lStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
                 lStream << "Current boost is more than max. Should never be told boost is more than max. Crazy value from bridge?";
-                CgsDev::Assert::FireAssert(lacMessage, KPC_ASSERT_FILE, 642);
+                CgsDev::Assert::FireAssert(lacMessage, CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 642));
                 CgsDev::Assert::EndAssert();
             }
 
@@ -524,7 +524,7 @@ Vector3 BoostBarRenderer::GetInnerBoostBarColour()
 {
     CGS_ASSERT(meCurrentBoostType != BrnWorld::E_BOOST_TYPE_COUNT &&
                meCurrentBoostType != BrnWorld::E_BOOST_TYPE_NONE,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "( meCurrentBoostType != BrnWorld::E_BOOST_TYPE_COUNT ) && ( meCurrentBoostType != BrnWorld::E_BOOST_TYPE_NONE )",
             __FILE__, 641 /* ARTIST 0x824EC788 */));
     return mav3BoostInnerColours[meCurrentBoostType];
@@ -534,7 +534,7 @@ Vector3 BoostBarRenderer::GetOuterBoostBarColour()
 {
     CGS_ASSERT(meCurrentBoostType != BrnWorld::E_BOOST_TYPE_COUNT &&
                meCurrentBoostType != BrnWorld::E_BOOST_TYPE_NONE,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "( meCurrentBoostType != BrnWorld::E_BOOST_TYPE_COUNT ) && ( meCurrentBoostType != BrnWorld::E_BOOST_TYPE_NONE )",
             __FILE__, 658 /* ARTIST 0x824EC808 */));
     return mav3BoostOuterColours[meCurrentBoostType];
@@ -690,7 +690,7 @@ void BoostBarRenderer::Update()
     default:
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("Unknown boost type - cannot determine boost status",
-                                   KPC_ASSERT_FILE, 456);
+                                   CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 456));
         CgsDev::Assert::EndAssert();
         meBoostBarMultiplier = E_MULTIPLIER_1X;
         meBoostBarStatus = E_STATUS_AGGRESSION_BOOST;
@@ -766,7 +766,7 @@ void BoostBarRenderer::Update()
                 {
                     CgsDev::Assert::BeginAssert();
                     CgsDev::Assert::FireAssert("mVisibilityInterpolator.IsValid() == true",
-                                               KPC_ASSERT_FILE, 555);
+                                               CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 555));
                     CgsDev::Assert::EndAssert();
                 }
                 const f32 lfCurrent = mVisibilityInterpolator.GetCurrentValue(lfTime);
@@ -781,7 +781,7 @@ void BoostBarRenderer::Update()
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("mVisibilityInterpolator.IsValid() == false",
-                                           KPC_ASSERT_FILE, 547);
+                                           CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 547));
                 CgsDev::Assert::EndAssert();
             }
             mVisibilityInterpolator.SetStart(1.0f, lfTime);
@@ -797,7 +797,7 @@ void BoostBarRenderer::Update()
                 CgsDev::StrStream lStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
                 lStream << "Should not be able to run out of boost when renderer in visibility state "
                         << static_cast<s32>(meVisibilityFadeState) << "\n";
-                CgsDev::Assert::FireAssert(lacMessage, KPC_ASSERT_FILE, 565);
+                CgsDev::Assert::FireAssert(lacMessage, CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 565));
                 CgsDev::Assert::EndAssert();
             }
             mVisibilityInterpolator.SetStart(1.0f, lfTime);
@@ -816,7 +816,7 @@ void BoostBarRenderer::Update()
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("mVisibilityInterpolator.IsValid() == false",
-                                           KPC_ASSERT_FILE, 583);
+                                           CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 583));
                 CgsDev::Assert::EndAssert();
             }
             mVisibilityInterpolator.SetStart(0.0f, lfTime);
@@ -829,7 +829,7 @@ void BoostBarRenderer::Update()
                 {
                     CgsDev::Assert::BeginAssert();
                     CgsDev::Assert::FireAssert("mVisibilityInterpolator.IsValid() == true",
-                                               KPC_ASSERT_FILE, 591);
+                                               CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 591));
                     CgsDev::Assert::EndAssert();
                 }
                 const f32 lfCurrent = mVisibilityInterpolator.GetCurrentValue(lfTime);
@@ -846,7 +846,7 @@ void BoostBarRenderer::Update()
                 CgsDev::StrStream lStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
                 lStream << "Should not be able to first earn boost when renderer in visibility state "
                         << static_cast<s32>(meVisibilityFadeState) << " \n";
-                CgsDev::Assert::FireAssert(lacMessage, KPC_ASSERT_FILE, 601);
+                CgsDev::Assert::FireAssert(lacMessage, CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 601));
                 CgsDev::Assert::EndAssert();
             }
             mVisibilityInterpolator.SetStart(0.0f, lfTime);
@@ -1765,7 +1765,7 @@ void BoostBarRenderer::RenderComponent(CgsGui::ImRendererSet* lpImRenderers)
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("Visibility is none but we are allowed to boost",
-                                       KPC_ASSERT_FILE, 1073);
+                                       CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 1073));
             CgsDev::Assert::EndAssert();
         }
         lbRenderBody = false;
@@ -1781,7 +1781,7 @@ void BoostBarRenderer::RenderComponent(CgsGui::ImRendererSet* lpImRenderers)
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 "Visibility is fading in the wrong direction for what we expect",
-                KPC_ASSERT_FILE, 1065);
+                CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 1065));
             CgsDev::Assert::EndAssert();
         }
         lfBaseAlpha = mVisibilityInterpolator.GetCurrentValue(lfTimeNow);
@@ -1794,7 +1794,7 @@ void BoostBarRenderer::RenderComponent(CgsGui::ImRendererSet* lpImRenderers)
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("Visibility is full but we are not allowed to boost",
-                                       KPC_ASSERT_FILE, 1080);
+                                       CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 1080));
             CgsDev::Assert::EndAssert();
         }
         break;
@@ -1807,7 +1807,7 @@ void BoostBarRenderer::RenderComponent(CgsGui::ImRendererSet* lpImRenderers)
             CgsDev::StrStream lStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
             lStream << "Unexpected visibility state in boost bar render cpt ( "
                     << static_cast<s32>(meVisibilityFadeState) << " ) \n";
-            CgsDev::Assert::FireAssert(lacMessage, KPC_ASSERT_FILE, 1087);
+            CgsDev::Assert::FireAssert(lacMessage, CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 1087));
             CgsDev::Assert::EndAssert();
         }
         break;

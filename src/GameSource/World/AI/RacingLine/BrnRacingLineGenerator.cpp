@@ -241,7 +241,7 @@ void FireSectionNotCachedAssert(s32 liSectionIndex, s32 liCacheIndex)
     lStream << "Cached Sections wrapped [Section" << liSectionIndex
             << " not cached in " << liCacheIndex << "]";
     CgsDev::Assert::BeginAssert();
-    CgsDev::Assert::FireAssert(lacMessageBuffer, KPC_SOURCE_FILE_H, 418);
+    CgsDev::Assert::FireAssert(lacMessageBuffer, CGS_ASSERT_LOCATION(KPC_SOURCE_FILE_H, 418));
     CgsDev::Assert::EndAssert();
 }
 
@@ -251,7 +251,7 @@ void FireStreamedTextAssert(const char* lpcText, s32 liLine)
     CgsDev::StrStream lStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
     lStream << lpcText;
     CgsDev::Assert::BeginAssert();
-    CgsDev::Assert::FireAssert(lacMessageBuffer, KPC_SOURCE_FILE_CPP, liLine);
+    CgsDev::Assert::FireAssert(lacMessageBuffer, CGS_ASSERT_LOCATION(KPC_SOURCE_FILE_CPP, liLine));
     CgsDev::Assert::EndAssert();
 }
 
@@ -261,7 +261,7 @@ void FireSectionIndexAssert(const char* lpcPrefix, s32 liValue, const char* lpcS
     CgsDev::StrStream lStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
     lStream << lpcPrefix << liValue << lpcSuffix;
     CgsDev::Assert::BeginAssert();
-    CgsDev::Assert::FireAssert(lacMessageBuffer, KPC_SOURCE_FILE_CPP, liLine);
+    CgsDev::Assert::FireAssert(lacMessageBuffer, CGS_ASSERT_LOCATION(KPC_SOURCE_FILE_CPP, liLine));
     CgsDev::Assert::EndAssert();
 }
 }   // anonymous namespace
@@ -680,7 +680,7 @@ void RacingLineGenerator::GetSimpleHermite(Vector2 lInVectorA, Vector2 lInVector
         lStream.AppendFormat("(%f, %f)", lOutVector.mV.x, lOutVector.mV.y);
         lStream << "\n";
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(lacMessageBuffer, KPC_SOURCE_FILE_CPP, 1826);
+        CgsDev::Assert::FireAssert(lacMessageBuffer, CGS_ASSERT_LOCATION(KPC_SOURCE_FILE_CPP, 1826));
         CgsDev::Assert::EndAssert();
     }
 }
@@ -776,7 +776,7 @@ f32 RacingLineGenerator::GetIterativeHermite(Vector2 lInVectorA, Vector2 lInVect
             lStream.AppendFormat("(%f, %f)", lPointLine.mV.x, lPointLine.mV.y);
             lStream << " lNewInterp=" << lfNewInterp << " lInterp=" << lInterp << "\n";
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lacMessageBuffer, KPC_SOURCE_FILE_CPP, 1899);
+            CgsDev::Assert::FireAssert(lacMessageBuffer, CGS_ASSERT_LOCATION(KPC_SOURCE_FILE_CPP, 1899));
             CgsDev::Assert::EndAssert();
         }
 
@@ -808,7 +808,7 @@ f32 RacingLineGenerator::GetIterativeHermite(Vector2 lInVectorA, Vector2 lInVect
             lStream.AppendFormat("(%f, %f)", lrResult.mV.x, lrResult.mV.y);
             lStream << "\n";
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lacMessageBuffer, KPC_SOURCE_FILE_CPP, 1906);
+            CgsDev::Assert::FireAssert(lacMessageBuffer, CGS_ASSERT_LOCATION(KPC_SOURCE_FILE_CPP, 1906));
             CgsDev::Assert::EndAssert();
         }
     }
@@ -1202,7 +1202,7 @@ bool RacingLineGenerator::GetCentreCentreLineHere(RacingLine* lpRacingLine, Vect
                                                   Vector2 lTargetPos2D, Vector2& lrCentreHere,
                                                   Vector2& lrCentreAhead)
 {
-    CGS_ASSERT(lpRacingLine->IsInitialised(), CgsDev::Assert::MessageAt("lpRacingLine->IsInitialised()", __FILE__, 126));   // .cpp:126
+    CGS_ASSERT(lpRacingLine->IsInitialised(), CGS_ASSERT_MESSAGE_AT("lpRacingLine->IsInitialised()", __FILE__, 126));   // .cpp:126
 
     const s32 liLocalSection = GetLocalSectionID(lpRacingLine, lCarPos2D,
                                                  lpRacingLine->miLastKnownSectionID);
@@ -1354,7 +1354,7 @@ s32 RacingLineGenerator::CacheLocalSections(RacingLine* lpRacingLine, const Rout
          liSection <= lpRacingLine->mLastSectionInCache;
          ++liSection)
     {
-        CGS_ASSERT(liSection < lpRoute->GetNodeCount(), CgsDev::Assert::MessageAt("Route node count out of range", __FILE__, 341));  // :341
+        CGS_ASSERT(liSection < lpRoute->GetNodeCount(), CGS_ASSERT_MESSAGE_AT("Route node count out of range", __FILE__, 341));  // :341
 
         if (CacheUpToDate(lpRacingLine, liSection))
         {
@@ -1616,7 +1616,7 @@ void FireBadCentreAssert(const char* lpcPrefix, s32 liSectionIndex, f32 lfInterp
     CgsDev::StrStream lStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
     lStream << lpcPrefix << liSectionIndex << ", interp " << lfInterp << "\n";
     CgsDev::Assert::BeginAssert();
-    CgsDev::Assert::FireAssert(lacMessageBuffer, KPC_SOURCE_FILE_CPP, liLine);
+    CgsDev::Assert::FireAssert(lacMessageBuffer, CGS_ASSERT_LOCATION(KPC_SOURCE_FILE_CPP, liLine));
     CgsDev::Assert::EndAssert();
 }
 
@@ -1627,7 +1627,7 @@ void FireZeroNormalAssert(f32 lfInterp, s32 liLine)
     CgsDev::StrStream lStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
     lStream << "Zero vector being normalize, Interp = " << lfInterp << "\n";
     CgsDev::Assert::BeginAssert();
-    CgsDev::Assert::FireAssert(lacMessageBuffer, KPC_SOURCE_FILE_CPP, liLine);
+    CgsDev::Assert::FireAssert(lacMessageBuffer, CGS_ASSERT_LOCATION(KPC_SOURCE_FILE_CPP, liLine));
     CgsDev::Assert::EndAssert();
 }
 }   // anonymous namespace
@@ -2017,7 +2017,7 @@ namespace
         CgsDev::StrStream lStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
         lStream << "Strangely shaped section index " << static_cast<s32>(luSectionIndex) << "\n";
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(lacMessageBuffer, KPC_SOURCE_FILE, liLine);
+        CgsDev::Assert::FireAssert(lacMessageBuffer, CGS_ASSERT_LOCATION(KPC_SOURCE_FILE, liLine));
         CgsDev::Assert::EndAssert();
     }
 
@@ -2121,7 +2121,7 @@ s32 RacingLineGenerator::ExtrapolateRouteBackwards(s32 liNumSectionsToGenerate,
     (void)lCarPosition;   // v2: never read (0x82782580..0x82782BB8 copy only v1)
 
     CGS_ASSERT(luStartSectionIndex != KU_INVALID_SECTION_INDEX,
-               CgsDev::Assert::MessageAt("luStartSectionIndex != BrnWorld::KI_INVALID_SECTION_INDEX", __FILE__, 3087));   // :3087
+               CGS_ASSERT_MESSAGE_AT("luStartSectionIndex != BrnWorld::KI_INVALID_SECTION_INDEX", __FILE__, 3087));   // :3087
 
     s32 liCurrentSectionIndex = luStartSectionIndex;
 
@@ -2773,13 +2773,13 @@ f32 RacingLineGenerator::GetPerpendicularDistanceToCentreLine(RacingLine* lpRaci
 void RacingLineGenerator::InitialiseRacingLine(RacingLine* lpRacingLine, AICar* lpCar,
                                                s32 liSectionIndex, AISectionsData* lpSectionsData)
 {
-    CGS_ASSERT(lpRacingLine != 0, CgsDev::Assert::MessageAt("lpRacingLine", __FILE__, 1196));      // :1196
-    CGS_ASSERT(lpSectionsData != 0, CgsDev::Assert::MessageAt("lpSectionsData", __FILE__, 1197));  // :1197
+    CGS_ASSERT(lpRacingLine != 0, CGS_ASSERT_MESSAGE_AT("lpRacingLine", __FILE__, 1196));      // :1196
+    CGS_ASSERT(lpSectionsData != 0, CGS_ASSERT_MESSAGE_AT("lpSectionsData", __FILE__, 1197));  // :1197
 
     const Route* lpRoute = lpCar->GetRoute();
-    CGS_ASSERT(lpRoute != 0, CgsDev::Assert::MessageAt("lpRoute", __FILE__, 1201));                                                // :1201
+    CGS_ASSERT(lpRoute != 0, CGS_ASSERT_MESSAGE_AT("lpRoute", __FILE__, 1201));                                                // :1201
     CGS_ASSERT(lpRoute->GetStatus() != Route::E_STATUS_UNINITIALISED,
-               CgsDev::Assert::MessageAt("lpRoute->IsInitialised()", __FILE__, 1202));                                             // :1202
+               CGS_ASSERT_MESSAGE_AT("lpRoute->IsInitialised()", __FILE__, 1202));                                             // :1202
 
     const Vector3 lCarPosition = lpCar->GetPosition();
 
@@ -2804,11 +2804,11 @@ void RacingLineGenerator::InitialiseRacingLine(RacingLine* lpRacingLine, AICar* 
                                                                 KE_RACING_LINE_PERFMON_PAGE, false,
                                                                 KF_PERFMON_BUDGET_STEP, true);
 
-        CGS_ASSERT(miGenerateRacingLinePM >= 0, CgsDev::Assert::MessageAt("miGenerateRacingLinePM >= 0", __FILE__, 1216));   // :1216
-        CGS_ASSERT(miGenerateInSectionPM  >= 0, CgsDev::Assert::MessageAt("miGenerateInSectionPM >= 0", __FILE__, 1217));    // :1217
-        CGS_ASSERT(miHNGMapGenerationPM1  >= 0, CgsDev::Assert::MessageAt("miHNGMapGenerationPM1 >= 0", __FILE__, 1218));    // :1218
-        CGS_ASSERT(miHNGMapGenerationPM2  >= 0, CgsDev::Assert::MessageAt("miHNGMapGenerationPM2 >= 0", __FILE__, 1219));    // :1219
-        CGS_ASSERT(miHNGMapGenerationPM3  >= 0, CgsDev::Assert::MessageAt("miHNGMapGenerationPM3 >= 0", __FILE__, 1220));    // :1220
+        CGS_ASSERT(miGenerateRacingLinePM >= 0, CGS_ASSERT_MESSAGE_AT("miGenerateRacingLinePM >= 0", __FILE__, 1216));   // :1216
+        CGS_ASSERT(miGenerateInSectionPM  >= 0, CGS_ASSERT_MESSAGE_AT("miGenerateInSectionPM >= 0", __FILE__, 1217));    // :1217
+        CGS_ASSERT(miHNGMapGenerationPM1  >= 0, CGS_ASSERT_MESSAGE_AT("miHNGMapGenerationPM1 >= 0", __FILE__, 1218));    // :1218
+        CGS_ASSERT(miHNGMapGenerationPM2  >= 0, CGS_ASSERT_MESSAGE_AT("miHNGMapGenerationPM2 >= 0", __FILE__, 1219));    // :1219
+        CGS_ASSERT(miHNGMapGenerationPM3  >= 0, CGS_ASSERT_MESSAGE_AT("miHNGMapGenerationPM3 >= 0", __FILE__, 1220));    // :1220
         // (the console emits FIVE of these, not six -- miFarAheadPM is not asserted.)
     }
 
@@ -2938,7 +2938,7 @@ f32 RacingLineGenerator::GetRoadPositionAsPercentage(RacingLine* lpRacingLine, A
 void RacingLineGenerator::RaceLineDefaultsToSlamPlayer(RacingLine* lpRacingLine,
                                                        Vector3 lSlamTarget3D)
 {
-    CGS_ASSERT(rw::math::vpu::IsValid(lSlamTarget3D), CgsDev::Assert::MessageAt("RwMath::IsValid( lSlamTarget3D )", __FILE__, 3297));  // :3297
+    CGS_ASSERT(rw::math::vpu::IsValid(lSlamTarget3D), CGS_ASSERT_MESSAGE_AT("RwMath::IsValid( lSlamTarget3D )", __FILE__, 3297));  // :3297
 
     const Vector2 lSlamTarget2D = BrnMath::Flatten(lSlamTarget3D);
 

@@ -7,7 +7,7 @@ namespace BrnWorld
 void WorldRegion::Construct(EDistrict leDistrict)
 {
     CGS_ASSERT(leDistrict < E_DISTRICT_COUNT,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "leDistrict < E_DISTRICT_COUNT",
             "..\\..\\..\\SharedClasses\\World/BrnWorldRegion.h", 155 /* ARTIST 0x8229FE4C */));
 
@@ -126,7 +126,7 @@ const char* WorldRegion::CountyToString(ECounty leCounty)
 const char* WorldRegion::DistrictToString(EDistrict leDistrict)
 {
     CGS_ASSERT(static_cast<u32>(leDistrict) < (sizeof(KAPC_DISTRICT_NAMES) / sizeof(char*)),
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "static_cast<size_t>( leDistrict ) < sizeof(KAPC_DISTRICT_NAMES) / sizeof(char*)",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
             "../../SharedClasses/World/BrnWorldRegion.cpp", 188 /* ARTIST 0x8267652C */));

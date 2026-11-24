@@ -12,7 +12,7 @@
 // The event-post / expected-component / cache-boundary wiring mirrors the committed
 // OnlineQuickCustomCreate / OnlineNews / OnlineMarkMan twins.
 // ===================================================================================
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlinePlay.cpp"
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlinePlay.h"
 
 #include <xtl.h>
@@ -248,7 +248,7 @@ void OnlinePlay::OnLeave()
 // ------------------------------------------------ HandleControllerInput @ 0x824AD6A0
 void OnlinePlay::HandleControllerInput(const CgsModule::Event* lpEvent)
 {
-    CGS_ASSERT(lpEvent != NULL, CgsDev::Assert::StreamMessageAt("Invalid event sent to OnlinePlay::HandleControllerInput", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlinePlay.cpp", 487));
+    CGS_ASSERT(lpEvent != NULL, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event sent to OnlinePlay::HandleControllerInput", CGS_ARTIST_FILE, 487));
 
     if (meSubState == E_SUBSTATE_MAIN)
         HandleControllerInputMainMenu(
@@ -399,7 +399,7 @@ bool OnlinePlay::CheckPrivileges(EMainMenuOptions leOption)
             return true;
 
         default:
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt("Invalid menu option", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlinePlay.cpp", 872 /* ARTIST 0x824859F0 */));
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Invalid menu option", CGS_ARTIST_FILE, 872 /* ARTIST 0x824859F0 */));
             return false;
     }
 }
@@ -648,7 +648,7 @@ void OnlinePlay::CheckForCompletedLoads()
 // ------------------------------------------------ HandlePlayerStatsEvent
 void OnlinePlay::HandlePlayerStatsEvent(const CgsModule::Event* lpEvent)
 {
-    CGS_ASSERT(lpEvent != NULL, CgsDev::Assert::StreamMessageAt("Invalid event sent to OnlinePlay::HandlePlayerStatsEvent", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlinePlay.cpp", 708));
+    CGS_ASSERT(lpEvent != NULL, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event sent to OnlinePlay::HandlePlayerStatsEvent", CGS_ARTIST_FILE, 708));
 
     if (!CgsSystem::HardwareInit::IsHardDiskAvailable())
         return;
@@ -679,3 +679,5 @@ void OnlinePlay::ShowFriendsMenu()
     }
 }
 }   // namespace BrnGui
+
+#undef CGS_ARTIST_FILE

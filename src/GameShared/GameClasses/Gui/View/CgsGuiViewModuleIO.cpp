@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Gui/View/CgsGuiViewModuleIO.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\view\\CgsGuiViewModuleIO.h"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // CGS_ASSERT
 
 #include <cstddef>   // offsetof
@@ -43,7 +43,7 @@ namespace ViewIO
     // X360 0x8284F040: read-lock handle to the embedded GUI event queue (this+4).
     const OutputBuffer::GuiEventQueue* OutputBuffer::GetGuiEventQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\view\\CgsGuiViewModuleIO.h", 237));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 237));
         return &mGuiEvents;
     }
 
@@ -91,7 +91,7 @@ namespace ViewIO
     // this + 0x10020 == &mRendererSet.
     const ImRendererSet& InputBuffer::GetImRenderers() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\view\\CgsGuiViewModuleIO.h", 156));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 156));
         return mRendererSet;
     }
 
@@ -100,7 +100,7 @@ namespace ViewIO
     // reproduced verbatim. Returns this + 4 == &mViewStateQueue.
     InputBuffer::ViewStateQueue& InputBuffer::GetViewStateQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\view\\CgsGuiViewModuleIO.h", 188));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 188));
         return mViewStateQueue;
     }
 
@@ -130,3 +130,5 @@ namespace ViewIO
     }
 }
 }
+
+#undef CGS_ARTIST_FILE

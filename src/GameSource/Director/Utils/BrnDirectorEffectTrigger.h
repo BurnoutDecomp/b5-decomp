@@ -1,6 +1,6 @@
 #ifndef GAMESOURCE_DIRECTOR_UTILS_BRN_DIRECTOR_EFFECT_TRIGGER_H
 #define GAMESOURCE_DIRECTOR_UTILS_BRN_DIRECTOR_EFFECT_TRIGGER_H
-
+#define CGS_ARTIST_BRNDIRECTOREFFECTTRIGGER_FILE "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorEffectTrigger.h"
 #include "types.hpp"
 #include <cstring>                                        // strcpy / strcmp / strlen (Set + the comparisons)
 #include "GameShared/GameClasses/Containers/CgsArray.h"   // Array<T,N> (the 100-slot hook table)
@@ -43,9 +43,9 @@ namespace BrnDirector
         //   a plain strcpy including the NUL.
         void Set(const char* lpcName)
         {
-            CGS_ASSERT(lpcName != NULL, CgsDev::Assert::MessageAt("lpcName != NULL", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorEffectTrigger.h", 54));                              // 1st
+            CGS_ASSERT(lpcName != NULL, CGS_ASSERT_MESSAGE_AT("lpcName != NULL", CGS_ARTIST_BRNDIRECTOREFFECTTRIGGER_FILE, 54));                              // 1st
             CGS_ASSERT(strlen(lpcName) <= BrnGui::KI_MAX_PFX_ID_LENGTH,
-                       CgsDev::Assert::MessageAt("strlen(lpcName) <= BrnGui::KI_MAX_PFX_ID_LENGTH", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorEffectTrigger.h", 55));               // 2nd
+                       CGS_ASSERT_MESSAGE_AT("strlen(lpcName) <= BrnGui::KI_MAX_PFX_ID_LENGTH", CGS_ARTIST_BRNDIRECTOREFFECTTRIGGER_FILE, 55));               // 2nd
             CGS_ASSERT(strlen(lpcName) < 32, "String is too long. Buffer size = 32");    // 3rd
             strcpy(mHookNameString, lpcName);
         }
@@ -120,7 +120,7 @@ namespace BrnDirector
         // wrapper's address == its string; non-gating).
         const char* GetCurrentEffectName() const
         {
-            CGS_ASSERT(mbHasCurrentEffectName, CgsDev::Assert::MessageAt("HasCurrentEffectName()", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorEffectTrigger.h", 112));   // non-gating
+            CGS_ASSERT(mbHasCurrentEffectName, CGS_ASSERT_MESSAGE_AT("HasCurrentEffectName()", CGS_ARTIST_BRNDIRECTOREFFECTTRIGGER_FILE, 112));   // non-gating
             return mCurrentEffectName.mHookNameString;
         }
 
@@ -259,3 +259,5 @@ namespace BrnDirector
 }
 
 #endif // GAMESOURCE_DIRECTOR_UTILS_BRN_DIRECTOR_EFFECT_TRIGGER_H
+
+#undef CGS_ARTIST_BRNDIRECTOREFFECTTRIGGER_FILE

@@ -6,7 +6,7 @@
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include <cstdlib>
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineViewChallenges.cpp"
 namespace BrnGui {
 namespace {
     // The player-count strings (read from the image).
@@ -77,7 +77,7 @@ void OnlineViewChallenges::HandleGuiCacheEvent(const CgsModule::Event* event)
 // ARTIST 0x824A1F98.
 void OnlineViewChallenges::CheckForCompletedLoads()
 {
-    CGS_ASSERT(mpGuiCache != 0, CgsDev::Assert::MessageAt("mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineViewChallenges.cpp", 227 /* ARTIST 0x824A1FD0 */));
+    CGS_ASSERT(mpGuiCache != 0, CGS_ASSERT_MESSAGE_AT("mpGuiCache", CGS_ARTIST_FILE, 227 /* ARTIST 0x824A1FD0 */));
     if (meSubState == E_SUBSTATE_LOADING_SCREEN)
     {
         if (mpGuiCache->EnsureResourcesAreLoaded(maResourceTuplesToLoad, miNumResourcesToLoad))
@@ -151,7 +151,7 @@ void OnlineViewChallenges::HandleControllerInputSelectParams(const s32* event)
 // ARTIST 0x824AB580.
 void OnlineViewChallenges::HandleControllerInput(const s32* event)
 {
-    CGS_ASSERT(event != 0, CgsDev::Assert::StreamMessageAt("Invalid event sent to OnlineViewChallenges::HandleControllerInput", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineViewChallenges.cpp", 268));
+    CGS_ASSERT(event != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event sent to OnlineViewChallenges::HandleControllerInput", CGS_ARTIST_FILE, 268));
     if (meSubState == E_SUBSTATE_SELECTING_PARAMS) HandleControllerInputSelectParams(event);
 }
 
@@ -181,3 +181,5 @@ void OnlineViewChallenges::Update()
     mChallengeListComponent.Update();
 }
 }
+
+#undef CGS_ARTIST_FILE

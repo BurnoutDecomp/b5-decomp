@@ -7,7 +7,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include <cstring>
 #include "rw/rwcore_structs.h"                        // rw::Resource / ResourceDescriptor / IResourceAllocator_vtbl
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\CgsMemoryModule.cpp"
 // CgsMemory::MemoryModule -- see the header. This pass reconstructs the two pure stage-machine lifecycle
 // bodies (Prepare 0x8286BF18 / Release 0x82866FF0); both are faithful ports of the X360 (single call
 // chains the stages via fall-through, resuming at the current stage if a sub-step is not yet complete).
@@ -76,7 +76,7 @@ namespace CgsMemory
                 lMessage << lpcMessage;
             }
             CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\CgsMemoryModule.cpp", liLine);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, liLine));
             CgsDev::Assert::EndAssert();
         }
     }
@@ -1022,7 +1022,7 @@ namespace CgsMemory
                 lMessage << "Invalid stage\n";
             }
             CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\CgsMemoryModule.cpp", 159);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 159));
             CgsDev::Assert::EndAssert();
             return false;
         }
@@ -1057,3 +1057,5 @@ namespace CgsMemory
         ModuleSingleBuffered::Destruct();
     }
 }
+
+#undef CGS_ARTIST_FILE

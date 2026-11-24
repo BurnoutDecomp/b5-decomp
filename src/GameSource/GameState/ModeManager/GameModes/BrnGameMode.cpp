@@ -1,6 +1,6 @@
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameMode.h"
 #include "SharedClasses/DataLists/VehicleListEntry.h"   // VehicleListEntry::GetStrengthStat (CalculateMaxPlayerWrecks)
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnGameMode.cpp"
 #include "GameSource/GameState/ModeManager/GameModeStates/BrnGameModeState.h"
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"   // ScoringSystem::GetPlayerNoInputTime / GetPlayerStationaryTime (slot 13)
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -12,7 +12,7 @@
 // GetRaceCarState) and BrnPhysics::Vehicle::RaceCarState, which it reaches by value.
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
 #include "rw/math/vpu/vector3_operation.h"                   // Dot / Magnitude / operator- over Vector3
-
+#define CGS_ARTIST_BRNGAMEMODE_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\gamemodes\\BrnGameMode.h"
 namespace BrnGameState
 {
 // ---------------------------------------------------------------------------
@@ -336,7 +336,7 @@ void GameMode::PreWorldUpdate(GameStateModuleIO::OutputBuffer* lpOutput,
     if (meCurrentState != -1)
     {
         CGS_ASSERT(meCurrentState >= 0 && meCurrentState < KI_GMS_COUNT,
-                   CgsDev::Assert::MessageAt("meCurrentState >=0 && meCurrentState < GameStateModuleIO::E_GMS_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnGameMode.cpp", 159));
+                   CGS_ASSERT_MESSAGE_AT("meCurrentState >=0 && meCurrentState < GameStateModuleIO::E_GMS_COUNT", CGS_ARTIST_FILE, 159));
 
         maGameModeStates[meCurrentState]->Update();
     }
@@ -552,13 +552,13 @@ f32 GameMode::GetOutroTimeout() const
 // ===========================================================================
 void GameMode::SetCurrentState(s32 liState)
 {
-    CGS_ASSERT(liState >= 0 && liState < KI_GMS_COUNT, CgsDev::Assert::MessageAt("leState >=0 && leState < GameStateModuleIO::E_GMS_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\gamemodes\\BrnGameMode.h", 483));
+    CGS_ASSERT(liState >= 0 && liState < KI_GMS_COUNT, CGS_ASSERT_MESSAGE_AT("leState >=0 && leState < GameStateModuleIO::E_GMS_COUNT", CGS_ARTIST_BRNGAMEMODE_FILE, 483));
 
     if (meCurrentState != liState)
     {
         if (meCurrentState != -1)
         {
-            CGS_ASSERT(meCurrentState >= 0 && meCurrentState < KI_GMS_COUNT, CgsDev::Assert::MessageAt("meCurrentState >=0 && meCurrentState < GameStateModuleIO::E_GMS_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\gamemodes\\BrnGameMode.h", 489));
+            CGS_ASSERT(meCurrentState >= 0 && meCurrentState < KI_GMS_COUNT, CGS_ASSERT_MESSAGE_AT("meCurrentState >=0 && meCurrentState < GameStateModuleIO::E_GMS_COUNT", CGS_ARTIST_BRNGAMEMODE_FILE, 489));
 
             maGameModeStates[meCurrentState]->OnLeave();
         }
@@ -600,8 +600,8 @@ s32 GameMode::CalculateMaxPlayerWrecks(const StartGameModeParams* lpStartGameMod
     // embedded block; reproduced as the tripwire it is.
     const BrnResource::VehicleListEntry* lpPlayerCarVehicleListEntry =
         lpStartGameModeParams->GetPlayerVehicleGamePlayData();
-    CGS_ASSERT(lpPlayerCarVehicleListEntry != NULL, CgsDev::Assert::MessageAt("lpPlayerCarVehicleListEntry != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnGameMode.cpp", 414));   // cpp:414
-    CGS_ASSERT(lpPlayerCarVehicleListEntry != NULL, CgsDev::Assert::MessageAt("lpPlayerCarVehicleListEntryGamePlayData != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnGameMode.cpp", 417)); // cpp:417
+    CGS_ASSERT(lpPlayerCarVehicleListEntry != NULL, CGS_ASSERT_MESSAGE_AT("lpPlayerCarVehicleListEntry != NULL", CGS_ARTIST_FILE, 414));   // cpp:414
+    CGS_ASSERT(lpPlayerCarVehicleListEntry != NULL, CGS_ASSERT_MESSAGE_AT("lpPlayerCarVehicleListEntryGamePlayData != NULL", CGS_ARTIST_FILE, 417)); // cpp:417
     if (lpPlayerCarVehicleListEntry == NULL)
     {
         return KI_NUM_WEAKEST_CAR_CRASHES;   // [PC GUARD] assert-is-not-a-guard; console would deref NULL
@@ -634,7 +634,7 @@ bool GameMode::HasCountdownDisplayChanged(s32* lpiNewCountdownDisplay)
         return false;
     }
 
-    CGS_ASSERT(lpiNewCountdownDisplay != 0, CgsDev::Assert::MessageAt("lpiNewCountdownDisplay != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\gamemodes\\BrnGameMode.h", 449));
+    CGS_ASSERT(lpiNewCountdownDisplay != 0, CGS_ASSERT_MESSAGE_AT("lpiNewCountdownDisplay != NULL", CGS_ARTIST_BRNGAMEMODE_FILE, 449));
 
     *lpiNewCountdownDisplay = miCountdownDisplay;
     mbCountdownDisplayChanged = false;
@@ -880,3 +880,6 @@ void OnlineSplashState::OnEnter()
     mpGameMode->SetFinished(false);
 }
 }
+
+#undef CGS_ARTIST_FILE
+#undef CGS_ARTIST_BRNGAMEMODE_FILE

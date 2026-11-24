@@ -1,5 +1,5 @@
 #include "GameSource/Director/Arbitrator/States/BrnArbStateOnlineRaceIntro.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateOnlineRaceIntro.cpp"
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT (online-race-intro asserts)
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
@@ -149,7 +149,7 @@ namespace BrnDirector
         if (luNumRivals != 0)
         {
             const f32 lfBudget = lfMaxTime - KF_FIXED_TIME_DEDUCTION;
-            CGS_ASSERT(lfBudget > KF_ZERO, CgsDev::Assert::MessageAt("lfMaxTime > 0.0f", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateOnlineRaceIntro.cpp", 89));
+            CGS_ASSERT(lfBudget > KF_ZERO, CGS_ASSERT_MESSAGE_AT("lfMaxTime > 0.0f", CGS_ARTIST_FILE, 89));
 
             // Total weighted time: (numRivals+1) shows + 2*(numRivals+1) moves.
             const f32 lfShowCount      = static_cast<f32>(luNumRivals + 1);
@@ -202,7 +202,7 @@ namespace BrnDirector
         // The number of RIVAL movies is the ShotList length minus the two leading non-rival
         // shots (the player + lights takes).
         const u32 luNumRivalMovies = lrOnlineRaceStartShotGroup.Num_ShotList() - 2;
-        CGS_ASSERT(luNumRivalMovies > 0, CgsDev::Assert::MessageAt("luNumRivalMovies > 0", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateOnlineRaceIntro.cpp", 480));
+        CGS_ASSERT(luNumRivalMovies > 0, CGS_ASSERT_MESSAGE_AT("luNumRivalMovies > 0", CGS_ARTIST_FILE, 480));
 
         // The shot index for this rival: wrap the rival counter into the rival range, then skip
         // the two leading non-rival shots.
@@ -330,7 +330,7 @@ namespace BrnDirector
                         const Attrib::Gen::shotgroup& lrOnlineRaceStartShotGroup =
                             lrSharedInfo.mpDirectorResourceManager->GetOnlineRaceStart();
                         CGS_ASSERT(lrOnlineRaceStartShotGroup.Num_ShotList() >= KU_ICE_MOVIE_MIN_COUNT,
-                                   CgsDev::Assert::MessageAt("lOnlineRaceStartShotGroup.Num_ShotList() >= E_ICE_MOVIE_MIN_COUNT", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateOnlineRaceIntro.cpp", 169));
+                                   CGS_ASSERT_MESSAGE_AT("lOnlineRaceStartShotGroup.Num_ShotList() >= E_ICE_MOVIE_MIN_COUNT", CGS_ARTIST_FILE, 169));
 
                         // Force the primary gameplay behaviour to finish so the intro camera can
                         // take over (the console resolves the primary gameplay behaviour and sets its
@@ -647,7 +647,7 @@ namespace BrnDirector
         }
 
         default:
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt("unhandled state", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateOnlineRaceIntro.cpp", 419));
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unhandled state", CGS_ARTIST_FILE, 419));
             break;
         }
 
@@ -714,3 +714,5 @@ namespace BrnDirector
         return true;
     }
 }
+
+#undef CGS_ARTIST_FILE

@@ -35,13 +35,13 @@ void DecompressionJobInterface::Construct(EA::Jobs::JobScheduler* lpScheduler,
     if (!lpScheduler)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("No scheduler given\n", KPC_ASSERT_FILE, 42);
+        CgsDev::Assert::FireAssert("No scheduler given\n", CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 42));
         CgsDev::Assert::EndAssert();
     }
     if (!lpEntries)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("No entry list given\n", KPC_ASSERT_FILE, 43);
+        CgsDev::Assert::FireAssert("No entry list given\n", CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 43));
         CgsDev::Assert::EndAssert();
     }
 
@@ -61,7 +61,7 @@ void DecompressionJobInterface::BeginStream()
     if (meStage == E_DJS_FLUSHING)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("Invalid stage to begin stream\n", KPC_ASSERT_FILE, 84);
+        CgsDev::Assert::FireAssert("Invalid stage to begin stream\n", CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 84));
         CgsDev::Assert::EndAssert();
     }
 
@@ -86,7 +86,7 @@ bool DecompressionJobInterface::RunFlushJobs()
     if (meStage != E_DJS_ADDING_ENTRIES)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("Invalid stage to begin flush\n", KPC_ASSERT_FILE, 115);
+        CgsDev::Assert::FireAssert("Invalid stage to begin flush\n", CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 115));
         CgsDev::Assert::EndAssert();
     }
 
@@ -137,7 +137,7 @@ bool DecompressionJobInterface::WaitForFlushJobs(bool lbWait)
     if (meStage != E_DJS_FLUSHING)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("Invalid stage to begin flush\n", KPC_ASSERT_FILE, 187);
+        CgsDev::Assert::FireAssert("Invalid stage to begin flush\n", CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 187));
         CgsDev::Assert::EndAssert();
     }
     if (lbWait)
@@ -157,7 +157,7 @@ bool DecompressionJobInterface::WaitForFlushJobs(bool lbWait)
                 "Entry is in progress but source stream failed with error or ended (result=%d)\n",
                 mJobStatus.miLastInflateResult);
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lacMessage, KPC_ASSERT_FILE, 209);
+            CgsDev::Assert::FireAssert(lacMessage, CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 209));
             CgsDev::Assert::EndAssert();
         }
         mpEntries[0] = lLast;
@@ -174,7 +174,7 @@ bool DecompressionJobInterface::WaitForFlushJobs(bool lbWait)
                 "Entry is in progress but source stream failed with error or did not complete (result=%d)\n",
                 mJobStatus.miLastInflateResult);
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lacMessage, KPC_ASSERT_FILE, 225);
+            CgsDev::Assert::FireAssert(lacMessage, CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 225));
             CgsDev::Assert::EndAssert();
         }
         muNumEntries = 0;
@@ -189,13 +189,13 @@ void DecompressionJobInterface::EndStream()
     if (meStage != E_DJS_ADDING_ENTRIES)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("Invalid stage to end stream\n", KPC_ASSERT_FILE, 251);
+        CgsDev::Assert::FireAssert("Invalid stage to end stream\n", CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 251));
         CgsDev::Assert::EndAssert();
     }
     if (mbEntryInProgress)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("Can not end stream while creating an entry\n", KPC_ASSERT_FILE, 252);
+        CgsDev::Assert::FireAssert("Can not end stream while creating an entry\n", CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 252));
         CgsDev::Assert::EndAssert();
     }
 
@@ -208,31 +208,31 @@ void DecompressionJobInterface::CreateEntry(void* lpDestBuffer, u32 luDestBuffer
     if (meStage != E_DJS_ADDING_ENTRIES)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("Invalid stage to create an entry\n", KPC_ASSERT_FILE, 270);
+        CgsDev::Assert::FireAssert("Invalid stage to create an entry\n", CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 270));
         CgsDev::Assert::EndAssert();
     }
     if (mbEntryInProgress)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("Already creating an entry\n", KPC_ASSERT_FILE, 271);
+        CgsDev::Assert::FireAssert("Already creating an entry\n", CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 271));
         CgsDev::Assert::EndAssert();
     }
     if (muNumEntries >= muMaxEntries)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("Out of space for new entries", KPC_ASSERT_FILE, 272);
+        CgsDev::Assert::FireAssert("Out of space for new entries", CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 272));
         CgsDev::Assert::EndAssert();
     }
     if (!lpDestBuffer)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("Can not create entry without dest buffer\n", KPC_ASSERT_FILE, 273);
+        CgsDev::Assert::FireAssert("Can not create entry without dest buffer\n", CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 273));
         CgsDev::Assert::EndAssert();
     }
     if (luDestBufferSize == 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("Entry must have more than 0 bytes for destination!\n", KPC_ASSERT_FILE, 274);
+        CgsDev::Assert::FireAssert("Entry must have more than 0 bytes for destination!\n", CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 274));
         CgsDev::Assert::EndAssert();
     }
     if ((luDestBufferSize & 0xF) != 0)
@@ -240,7 +240,7 @@ void DecompressionJobInterface::CreateEntry(void* lpDestBuffer, u32 luDestBuffer
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(
             "Entry must be at least 16 byte aligned to decompress on a job or DMAs will fail\n",
-            KPC_ASSERT_FILE, 275);
+            CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 275));
         CgsDev::Assert::EndAssert();
     }
 
@@ -264,31 +264,31 @@ void DecompressionJobInterface::AppendToEntry(void* lpSourceBuffer, u32 luSource
     if (meStage != E_DJS_ADDING_ENTRIES)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("Invalid stage to create an entry\n", KPC_ASSERT_FILE, 304);
+        CgsDev::Assert::FireAssert("Invalid stage to create an entry\n", CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 304));
         CgsDev::Assert::EndAssert();
     }
     if (!mbEntryInProgress)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("Not creating an entry\n", KPC_ASSERT_FILE, 305);
+        CgsDev::Assert::FireAssert("Not creating an entry\n", CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 305));
         CgsDev::Assert::EndAssert();
     }
     if (muNumEntries == 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("Should have at least 1 entry in list to append to", KPC_ASSERT_FILE, 306);
+        CgsDev::Assert::FireAssert("Should have at least 1 entry in list to append to", CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 306));
         CgsDev::Assert::EndAssert();
     }
     if (!lpSourceBuffer)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("Can not create entry without source buffer\n", KPC_ASSERT_FILE, 307);
+        CgsDev::Assert::FireAssert("Can not create entry without source buffer\n", CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 307));
         CgsDev::Assert::EndAssert();
     }
     if (luSourceBufferSize == 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("Entry must have more than 0 bytes for source!\n", KPC_ASSERT_FILE, 308);
+        CgsDev::Assert::FireAssert("Entry must have more than 0 bytes for source!\n", CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 308));
         CgsDev::Assert::EndAssert();
     }
 
@@ -296,13 +296,13 @@ void DecompressionJobInterface::AppendToEntry(void* lpSourceBuffer, u32 luSource
     if (lEntry.mpSourceBuffer != 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("Entry already has source buffer\n", KPC_ASSERT_FILE, 316);
+        CgsDev::Assert::FireAssert("Entry already has source buffer\n", CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 316));
         CgsDev::Assert::EndAssert();
     }
     if (lEntry.muSourceSize != 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("Entry already has source size\n", KPC_ASSERT_FILE, 317);
+        CgsDev::Assert::FireAssert("Entry already has source size\n", CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 317));
         CgsDev::Assert::EndAssert();
     }
 
@@ -317,19 +317,19 @@ void DecompressionJobInterface::FinishEntry()
     if (meStage != E_DJS_ADDING_ENTRIES)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("Invalid stage to create an entry\n", KPC_ASSERT_FILE, 336);
+        CgsDev::Assert::FireAssert("Invalid stage to create an entry\n", CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 336));
         CgsDev::Assert::EndAssert();
     }
     if (!mbEntryInProgress)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("Not creating an entry\n", KPC_ASSERT_FILE, 337);
+        CgsDev::Assert::FireAssert("Not creating an entry\n", CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 337));
         CgsDev::Assert::EndAssert();
     }
     if (muNumEntries == 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("Should have at least 1 entry in list to append to", KPC_ASSERT_FILE, 338);
+        CgsDev::Assert::FireAssert("Should have at least 1 entry in list to append to", CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 338));
         CgsDev::Assert::EndAssert();
     }
 

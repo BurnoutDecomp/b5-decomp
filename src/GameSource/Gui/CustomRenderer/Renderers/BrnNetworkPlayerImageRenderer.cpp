@@ -546,12 +546,12 @@ namespace BrnGui
     void NetworkPlayerImageRenderer::PrepareDefaultTexture()
     {
         CGS_ASSERT(mpGuiCache != 0,
-            CgsDev::Assert::MessageAt("NULL != mpGuiCache", __FILE__, 758 /* ARTIST 0x824461D4 */));
+            CGS_ASSERT_MESSAGE_AT("NULL != mpGuiCache", __FILE__, 758 /* ARTIST 0x824461D4 */));
         mpDefaultTexture = const_cast<renderengine::Texture2D*>(
             static_cast<const renderengine::Texture2D*>(
                 mpGuiCache->GetLoadedResource(KU_DEFAULT_TEXTURE_RESOURCE_ID)));
         CGS_ASSERT(mpDefaultTexture != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "NULL != mpDefaultTexture", __FILE__, 763 /* ARTIST 0x82446208 */));
     }
 }

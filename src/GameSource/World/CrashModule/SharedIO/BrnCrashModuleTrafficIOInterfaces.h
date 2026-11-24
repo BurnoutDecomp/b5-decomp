@@ -139,7 +139,7 @@ namespace CrashIO
         void RemoveSlammedTraffic(u16 luVehicleIndex)
         {
             CGS_ASSERT(luVehicleIndex < 600u,
-                       CgsDev::Assert::MessageAt("luVehicleIndex < BrnTraffic::KU_MAX_TOTAL_TRAFFIC",
+                       CGS_ASSERT_MESSAGE_AT("luVehicleIndex < BrnTraffic::KU_MAX_TOTAL_TRAFFIC",
                                                  BRN_CRASHMODULETRAFFICIOINTERFACES_H_ASSERT_FILE, 294));
             RemoveSlammedTrafficEvent lEvent;
             lEvent.muVehicleId = luVehicleIndex;
@@ -148,7 +148,7 @@ namespace CrashIO
         void RemoveCrashedTraffic(u16 luVehicleIndex)
         {
             CGS_ASSERT(luVehicleIndex < 600u,
-                       CgsDev::Assert::MessageAt("luVehicleIndex < BrnTraffic::KU_MAX_TOTAL_TRAFFIC",
+                       CGS_ASSERT_MESSAGE_AT("luVehicleIndex < BrnTraffic::KU_MAX_TOTAL_TRAFFIC",
                                                  BRN_CRASHMODULETRAFFICIOINTERFACES_H_ASSERT_FILE, 314));   // 0x8272079C
             RemoveCrashedTrafficEvent lEvent;
             lEvent.muVehicleId = luVehicleIndex;
@@ -193,7 +193,7 @@ namespace CrashIO
         void StartNetworkTrafficVehicleCrashing(u32 luVehicleId)
         {
             CGS_ASSERT(luVehicleId < 600u,
-                       CgsDev::Assert::MessageAt("luVehicleId < BrnTraffic::KU_MAX_TOTAL_TRAFFIC",
+                       CGS_ASSERT_MESSAGE_AT("luVehicleId < BrnTraffic::KU_MAX_TOTAL_TRAFFIC",
                                                  BRN_CRASHMODULETRAFFICIOINTERFACES_H_ASSERT_FILE, 365));
             NetworkTrafficCrashingEvent lEvent;
             lEvent.muVehicleId = static_cast<u16>(luVehicleId);

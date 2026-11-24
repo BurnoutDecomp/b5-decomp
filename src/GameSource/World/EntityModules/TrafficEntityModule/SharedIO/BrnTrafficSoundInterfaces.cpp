@@ -35,7 +35,7 @@ void TrafficSoundOutputInterface::AddTrafficEntity(const TrafficSoundEntity& lrE
 u16 TrafficSoundOutputInterface::GetTrafficEntityCount() const
 {
     CGS_ASSERT(mu16EntityCount < KU_MAX_ENTITIES,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "mu16EntityCount < KU_MAX_ENTITIES",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\SharedIO/BrnTrafficSoundInterfaces.h", 232 /* ARTIST 0x82681E98 */));
     return mu16EntityCount;

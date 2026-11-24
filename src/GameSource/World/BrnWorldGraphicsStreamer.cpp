@@ -122,7 +122,7 @@ WorldGraphicsStreamer::OnLoadComplete( const BrnResource::GameDataIO::GameDataAs
                                        s32 liListIndex )
 {
     CGS_ASSERT( mpWorldEntityModule,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "mpWorldEntityModule",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
             "../World/BrnWorldGraphicsStreamer.cpp", 129 /* ARTIST 0x827BE5F4 */));

@@ -1,5 +1,5 @@
 #include "GameSource/Director/MomentController/Moments/BrnMomentTumbling.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentTumbling.cpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                 // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "rw/math/vpu/vector3_operation.h"                         // Vector3 operator-/*/+ + Dot
@@ -194,7 +194,7 @@ void MomentTumbling::SetGyroCamParameters(const void* lSharedInfo)
         return;
 
     default:
-        CGS_ASSERT(false, CgsDev::Assert::MessageAt("invalid subtype", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentTumbling.cpp", 343));   //  (non-gating)
+        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("invalid subtype", CGS_ARTIST_FILE, 343));   //  (non-gating)
         return;
     }
 }
@@ -203,7 +203,7 @@ void MomentTumbling::SetGyroCamParameters(const void* lSharedInfo)
 // request pair (behaviour +0x630/+0x631).
 void MomentTumbling::SignalIsGoodTimeToPlant()
 {
-    CGS_ASSERT(IsValid(), CgsDev::Assert::MessageAt("IsValid()", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentTumbling.cpp", 265));   //  (non-gating)
+    CGS_ASSERT(IsValid(), CGS_ASSERT_MESSAGE_AT("IsValid()", CGS_ARTIST_FILE, 265));   //  (non-gating)
     if (mpParameters->meSubType == Parameters::E_SUBTYPE_LEAD)
     {
         mGyroCam.GetBehaviour()->SignalGoodTimeToPlant();
@@ -245,7 +245,7 @@ void MomentTumbling::Update(f32 lfTimeStep, void* lrBehaviourController,
     Camera::BehaviourManager* lpBehaviourManager =
         static_cast<Camera::BehaviourManager*>(lrBehaviourController);
 
-    CGS_ASSERT(mpParameters != 0, CgsDev::Assert::MessageAt("mpParameters != NULL", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentTumbling.cpp", 89));   //  (non-gating)
+    CGS_ASSERT(mpParameters != 0, CGS_ASSERT_MESSAGE_AT("mpParameters != NULL", CGS_ARTIST_FILE, 89));   //  (non-gating)
 
     // ---- the per-frame angular-velocity smoother (before the state machine) ----
     {
@@ -356,7 +356,7 @@ void MomentTumbling::Update(f32 lfTimeStep, void* lrBehaviourController,
         break;
 
     default:
-        CGS_ASSERT(false, CgsDev::Assert::MessageAt("unhandled case in switch", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentTumbling.cpp", 250));   //  (non-gating)
+        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unhandled case in switch", CGS_ARTIST_FILE, 250));   //  (non-gating)
         return;
     }
 
@@ -457,3 +457,5 @@ Moment::EType MomentTumbling::GetInstanceType()
     return E_MOMENT_TUMBLING;   // li r3, 2
 }
 }
+
+#undef CGS_ARTIST_FILE

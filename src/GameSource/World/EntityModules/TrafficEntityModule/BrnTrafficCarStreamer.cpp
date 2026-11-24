@@ -178,10 +178,10 @@ void TrafficCarStreamer::SetAssetList( u32 luNumAssets, const VehicleAsset* lpaA
 void TrafficCarStreamer::AddVehiclesToTargetList( u32 luNumVehicles, const u8* lpauVehicleAssetIds )
 {
     CGS_ASSERT( luNumVehicles <= muNumAssets,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "luNumVehicles <= muNumAssets", KAC_ARTIST_ASSERT_FILE, 169 /* ARTIST 0x8274F6D4 */));
     CGS_ASSERT( lpauVehicleAssetIds != 0,
-        CgsDev::Assert::MessageAt("lpauVehicleAssetIds", KAC_ARTIST_ASSERT_FILE, 170 /* ARTIST 0x8274F6F8 */));
+        CGS_ASSERT_MESSAGE_AT("lpauVehicleAssetIds", KAC_ARTIST_ASSERT_FILE, 170 /* ARTIST 0x8274F6F8 */));
 
     for( u32 luVehicle = 0; luVehicle < luNumVehicles; luVehicle++ )
     {
@@ -286,9 +286,9 @@ void TrafficCarStreamer::Update( const u8* lpauOverrideBonusAssets, u32 luNumBon
 void TrafficCarStreamer::GetBonusAssets( u8* lpauOutBonusAssets, u32* lpuOutNumBonusAssets ) const
 {
     CGS_ASSERT( lpauOutBonusAssets != 0,
-        CgsDev::Assert::MessageAt("lpauOutBonusAssets", KAC_ARTIST_ASSERT_FILE, 269 /* ARTIST 0x8274F8F0 */));
+        CGS_ASSERT_MESSAGE_AT("lpauOutBonusAssets", KAC_ARTIST_ASSERT_FILE, 269 /* ARTIST 0x8274F8F0 */));
     CGS_ASSERT( lpuOutNumBonusAssets != 0,
-        CgsDev::Assert::MessageAt("lpuOutNumBonusAssets", KAC_ARTIST_ASSERT_FILE, 270 /* ARTIST 0x8274F914 */));
+        CGS_ASSERT_MESSAGE_AT("lpuOutNumBonusAssets", KAC_ARTIST_ASSERT_FILE, 270 /* ARTIST 0x8274F914 */));
 
     u32 luBonusAssetsUsed = 0;
 
@@ -297,7 +297,7 @@ void TrafficCarStreamer::GetBonusAssets( u8* lpauOutBonusAssets, u32* lpuOutNumB
         if( ( maxLoadFlags[luAsset] & E_LOADFLAG_SHOULD_BE_LOADED ) == E_LOADFLAG_BONUS )
         {
             CGS_ASSERT( luBonusAssetsUsed < KU_MAX_BONUS_STREAMED_ASSETS,
-                CgsDev::Assert::MessageAt(
+                CGS_ASSERT_MESSAGE_AT(
                     "luBonusAssetsUsed < KU_MAX_BONUS_STREAMED_ASSETS",
                     KAC_ARTIST_ASSERT_FILE, 277 /* ARTIST 0x8274F964 */));
 

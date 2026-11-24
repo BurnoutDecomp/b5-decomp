@@ -667,7 +667,7 @@ namespace BrnGui
     // brightness but never contrast.
     void CrashNavColourCalibrate::GetSettingsFromProfile()
     {
-        CGS_ASSERT(mpGuiCache != 0, CgsDev::Assert::MessageAt("NULL != mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavColourCalibrate.cpp", 688 /* ARTIST 0x824B83B0 */));   // cpp:688
+        CGS_ASSERT(mpGuiCache != 0, CGS_ASSERT_MESSAGE_AT("NULL != mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavColourCalibrate.cpp", 688 /* ARTIST 0x824B83B0 */));   // cpp:688
 
         // X360 `addis r3, r11, 1 ; addi r3, r3, -0x4788` == cache + 0xB878 (47224) ==
         // GuiCache::GetOptionsDataProfile().
@@ -680,7 +680,7 @@ namespace BrnGui
     // republishes through the dispatch buffer every frame.
     void CrashNavColourCalibrate::ApplySettings()
     {
-        CGS_ASSERT(mpGuiCache != 0, CgsDev::Assert::MessageAt("NULL != mpGuiCache", __FILE__, 708 /* ARTIST 0x824CEB78 */));
+        CGS_ASSERT(mpGuiCache != 0, CGS_ASSERT_MESSAGE_AT("NULL != mpGuiCache", __FILE__, 708 /* ARTIST 0x824CEB78 */));
 
         // X360 `ld` of the ADJACENT member pair 0xED8/0xEDC into one 8-byte payload; on
         // the host the two words are copied by name (same bytes, no guest-offset read).

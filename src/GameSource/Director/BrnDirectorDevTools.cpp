@@ -1,5 +1,5 @@
 #include "GameSource/Director/BrnDirectorDevTools.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Director/BrnDirectorDevTools.cpp"
 #include <string.h>                                          // _stricmp (the GameTalk key dispatch)
 #include <stdlib.h>                                          // atof (the CameraPos float fields)
 #include "rw/core/stdc/stdc.h"                               // rw::core::stdc::ConvertAToI
@@ -23,8 +23,8 @@ namespace BrnDirector
     void DirectorDevTools::Construct(MainDirector* lpDirectorModule,
                                      DirectorResourceManager* lpDirectorResourceManager)
     {
-        CGS_ASSERT(!mpInstance, CgsDev::Assert::MessageAt("mpInstance==NULL", "..\\..\\..\\GameSource\\Director/BrnDirectorDevTools.cpp", 46));
-        CGS_ASSERT(lpDirectorModule, CgsDev::Assert::MessageAt("lpCameraModule != NULL", "..\\..\\..\\GameSource\\Director/BrnDirectorDevTools.cpp", 47));
+        CGS_ASSERT(!mpInstance, CGS_ASSERT_MESSAGE_AT("mpInstance==NULL", CGS_ARTIST_FILE, 46));
+        CGS_ASSERT(lpDirectorModule, CGS_ASSERT_MESSAGE_AT("lpCameraModule != NULL", CGS_ARTIST_FILE, 47));
 
         // ARTIST 0x821F6FC0 stores the module (+0x34) before the resource manager (+0x30).
         mpDirectorModule = lpDirectorModule;
@@ -76,7 +76,7 @@ namespace BrnDirector
     // -----------------------------------------------------------------------
     void DirectorDevTools::GameTalkMsgHandler(EA::GameTalk::GameTalkMessage* lpMessage)
     {
-        CGS_ASSERT(mpInstance != 0, CgsDev::Assert::MessageAt("mpInstance!=NULL", "..\\..\\..\\GameSource\\Director/BrnDirectorDevTools.cpp", 130));   // :130 (non-fatal on the X360; the dispatch runs regardless)
+        CGS_ASSERT(mpInstance != 0, CGS_ASSERT_MESSAGE_AT("mpInstance!=NULL", CGS_ARTIST_FILE, 130));   // :130 (non-fatal on the X360; the dispatch runs regardless)
 
         if (lpMessage->GetNumKeys() != 1)
             return;
@@ -250,3 +250,5 @@ namespace BrnDirector
         }
     }
 }
+
+#undef CGS_ARTIST_FILE

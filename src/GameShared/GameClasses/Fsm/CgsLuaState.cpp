@@ -38,7 +38,7 @@ void LuaState::Construct()
 void* LuaState::LuaAllocator(void* lpData, void* lpPointer, usize /*luOldSize*/, usize luNewSize)
 {
     CGS_ASSERT(lpData != 0,
-        CgsDev::Assert::MessageAt("lpData != NULL", KAC_ARTIST_ASSERT_FILE, 412 /* ARTIST 0x82835D88 */));
+        CGS_ASSERT_MESSAGE_AT("lpData != NULL", KAC_ARTIST_ASSERT_FILE, 412 /* ARTIST 0x82835D88 */));
     CgsMemory::HeapMalloc* lpHeap = static_cast<CgsMemory::HeapMalloc*>(lpData);
     if (luNewSize == 0)
     {
@@ -53,7 +53,7 @@ bool LuaState::Prepare(CgsResource::LuaCodeResource* lpLuaCodeResource, CgsMemor
 {
     mpHeapMalloc = lpHeapMalloc;
     mpLuaState   = lua_newstate(reinterpret_cast<lua_Alloc>(&LuaState::LuaAllocator), lpHeapMalloc);
-    CGS_ASSERT(mpLuaState != 0, CgsDev::Assert::StreamMessageAt("Failed to allocate LUA state, out of memory", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\fsm\\CgsLuaState.cpp", 85));
+    CGS_ASSERT(mpLuaState != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Failed to allocate LUA state, out of memory", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\fsm\\CgsLuaState.cpp", 85));
 
     // Load the script chunk and run it (defining the FSM's Lua globals).
     luaL_loadbuffer(mpLuaState, lpLuaCodeResource->GetSource(),
@@ -82,7 +82,7 @@ bool LuaState::IsLuaResourceValid() const
 void LuaState::LuaPushId(CgsID lId)
 {
     CGS_ASSERT(mpLuaState != 0,
-        CgsDev::Assert::MessageAt("mpLuaState", KAC_ARTIST_ASSERT_FILE, 438 /* ARTIST 0x82835E00 */));
+        CGS_ASSERT_MESSAGE_AT("mpLuaState", KAC_ARTIST_ASSERT_FILE, 438 /* ARTIST 0x82835E00 */));
     char lacId[KI_CGSID_STRING_LEN];
     CgsIDUnCompress(lId, lacId);
     for (int li = 0; li < KI_CGSID_STRING_LEN; ++li)

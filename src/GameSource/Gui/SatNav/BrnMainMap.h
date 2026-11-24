@@ -360,7 +360,7 @@ namespace BrnGui
         const MainMapComponent::ZoomFactor leOldEnumIndex = leEnumIndex;
         leEnumIndex = static_cast<MainMapComponent::ZoomFactor>(static_cast<s32>(leEnumIndex) + 1);
         CGS_ASSERT(leEnumIndex <= MainMapComponent::E_ZOOMFACTOR_COUNT,
-                   CgsDev::Assert::MessageAt("leEnumIndex <= MainMapComponent::E_ZOOMFACTOR_COUNT", __FILE__, 265));
+                   CGS_ASSERT_MESSAGE_AT("leEnumIndex <= MainMapComponent::E_ZOOMFACTOR_COUNT", __FILE__, 265));
         return leOldEnumIndex;
     }
 }

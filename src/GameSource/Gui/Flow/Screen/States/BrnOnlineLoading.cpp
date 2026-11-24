@@ -16,7 +16,7 @@
 // done (GUI 135) and waits for the game mode to start. Out-queue records are the console's
 // own wire records, posted on channel 40 through GetOutputEventQueue()->AddEvent with host
 // sizeof sizes.
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineLoading.cpp"
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineLoading.h"
 
 #include <cstring>                                                        // std::memcpy / std::memset
@@ -444,7 +444,7 @@ namespace BrnGui
     {
         const GuiEventNetworkGameParams* lpParams =
             reinterpret_cast<const GuiEventNetworkGameParams*>(mpGuiCache->maOnlineGameModeOptionsStorage);
-        CGS_ASSERT(lpParams != 0, CgsDev::Assert::MessageAt("lpParams", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineLoading.cpp", 680 /* ARTIST 0x82485634 */));
+        CGS_ASSERT(lpParams != 0, CGS_ASSERT_MESSAGE_AT("lpParams", CGS_ARTIST_FILE, 680 /* ARTIST 0x82485634 */));
 
         const char* lpacChevronsState = 0;
 
@@ -480,7 +480,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineLoading::SetupPlayerList()
     {
-        CGS_ASSERT(mpGuiCache != 0, CgsDev::Assert::MessageAt("mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineLoading.cpp", 737 /* ARTIST 0x82485754 */));
+        CGS_ASSERT(mpGuiCache != 0, CGS_ASSERT_MESSAGE_AT("mpGuiCache", CGS_ARTIST_FILE, 737 /* ARTIST 0x82485754 */));
 
         for (s32 liPlayer = 0; liPlayer < KI_MAX_PLAYERS; ++liPlayer)
         {
@@ -594,7 +594,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineLoading::HandlePlayerLobbyListEvent(const CgsModule::Event* lpEvent)
     {
-        CGS_ASSERT(lpEvent != 0, CgsDev::Assert::StreamMessageAt("Invalid event sent to OnlineLoading::HandlePlayerLobbyListEvent", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineLoading.cpp", 543));
+        CGS_ASSERT(lpEvent != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event sent to OnlineLoading::HandlePlayerLobbyListEvent", CGS_ARTIST_FILE, 543));
 
         std::memcpy(&mLobbyPlayerInfoList, lpEvent, sizeof(mLobbyPlayerInfoList));
 
@@ -638,7 +638,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineLoading::HandleInviteFailed(const CgsModule::Event* lpInviteFailedEvent)
     {
-        CGS_ASSERT(lpInviteFailedEvent != 0, CgsDev::Assert::MessageAt("lpInviteFailedEvent", __FILE__, 604 /* ARTIST 0x8249B644 */));
+        CGS_ASSERT(lpInviteFailedEvent != 0, CGS_ASSERT_MESSAGE_AT("lpInviteFailedEvent", __FILE__, 604 /* ARTIST 0x8249B644 */));
 
         const InviteFailedPayload* lpInviteFailed =
             static_cast<const InviteFailedPayload*>(lpInviteFailedEvent);
@@ -650,3 +650,5 @@ namespace BrnGui
         }
     }
 }
+
+#undef CGS_ARTIST_FILE

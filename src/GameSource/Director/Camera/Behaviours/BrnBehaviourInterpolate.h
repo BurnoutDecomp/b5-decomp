@@ -1,6 +1,6 @@
 #ifndef GAMESOURCE_DIRECTOR_CAMERA_BEHAVIOURS_BRN_BEHAVIOUR_INTERPOLATE_H
 #define GAMESOURCE_DIRECTOR_CAMERA_BEHAVIOURS_BRN_BEHAVIOUR_INTERPOLATE_H
-
+#define CGS_ARTIST_BRNBEHAVIOURINTERPOLATE_FILE "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourInterpolate.h"
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                 // CGS_ASSERT (the Setup asserts)
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
@@ -222,7 +222,7 @@ public:
 inline CameraReference&
 BehaviourInterpolate::GetCameraAForSetup()
 {
-    CGS_ASSERT(!mbSetup, CgsDev::Assert::MessageAt("Can't setup camera A after Setup() has been called", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourInterpolate.h", 313));
+    CGS_ASSERT(!mbSetup, CGS_ASSERT_MESSAGE_AT("Can't setup camera A after Setup() has been called", CGS_ARTIST_BRNBEHAVIOURINTERPOLATE_FILE, 313));
     return mFromCamera;
 }
 
@@ -235,7 +235,7 @@ BehaviourInterpolate::GetCameraAForSetup()
 inline CameraReference&
 BehaviourInterpolate::GetCameraBForSetup()
 {
-    CGS_ASSERT(!mbSetup, CgsDev::Assert::MessageAt("Can't setup camera B after Setup() has been called", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourInterpolate.h", 322));
+    CGS_ASSERT(!mbSetup, CGS_ASSERT_MESSAGE_AT("Can't setup camera B after Setup() has been called", CGS_ARTIST_BRNBEHAVIOURINTERPOLATE_FILE, 322));
     return mToCamera;
 }
 
@@ -275,7 +275,7 @@ BehaviourInterpolate::SetParameters(const Parameters* lpParams)
 inline void
 BehaviourInterpolate::SetupDuration(f32 lfDuration)
 {
-    CGS_ASSERT(!mbSetup, CgsDev::Assert::MessageAt("Can't setup duration after Setup() has been called", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourInterpolate.h", 304));
+    CGS_ASSERT(!mbSetup, CGS_ASSERT_MESSAGE_AT("Can't setup duration after Setup() has been called", CGS_ARTIST_BRNBEHAVIOURINTERPOLATE_FILE, 304));
     mfDuration = lfDuration;
 }
 
@@ -361,9 +361,9 @@ BehaviourInterpolate::SetInterpolationMode(s32 liMode)
 inline void
 BehaviourInterpolate::Setup()
 {
-    CGS_ASSERT(!mbSetup, CgsDev::Assert::MessageAt("Can't setup twice", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourInterpolate.h", 332));
-    CGS_ASSERT(mFromCamera.IsValid(), CgsDev::Assert::MessageAt("Can't setup twice", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourInterpolate.h", 333));
-    CGS_ASSERT(mToCamera.IsValid(), CgsDev::Assert::MessageAt("Can't setup twice", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourInterpolate.h", 334));
+    CGS_ASSERT(!mbSetup, CGS_ASSERT_MESSAGE_AT("Can't setup twice", CGS_ARTIST_BRNBEHAVIOURINTERPOLATE_FILE, 332));
+    CGS_ASSERT(mFromCamera.IsValid(), CGS_ASSERT_MESSAGE_AT("Can't setup twice", CGS_ARTIST_BRNBEHAVIOURINTERPOLATE_FILE, 333));
+    CGS_ASSERT(mToCamera.IsValid(), CGS_ASSERT_MESSAGE_AT("Can't setup twice", CGS_ARTIST_BRNBEHAVIOURINTERPOLATE_FILE, 334));
     mbSetup = true;
 }
 
@@ -371,3 +371,5 @@ BehaviourInterpolate::Setup()
 } // namespace BrnDirector
 
 #endif // GAMESOURCE_DIRECTOR_CAMERA_BEHAVIOURS_BRN_BEHAVIOUR_INTERPOLATE_H
+
+#undef CGS_ARTIST_BRNBEHAVIOURINTERPOLATE_FILE

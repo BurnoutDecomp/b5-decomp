@@ -19,11 +19,11 @@ void ObjectToMeshEntry(EA::Jobs::Param, EA::Jobs::Param param,
         const u64 reported = static_cast<u64>(reinterpret_cast<uintptr_t>(EA::Thread::GetThreadId()));
         message << "SPU Id out of range: " << reported << "\n";
         const char* const file = "D:\\P4\\B5_MAIN\\Burnout\\MAIN\\Code\\GameShared\\Jobs\\ObjectToMesh\\ObjectToMesh.cpp";
-        CgsDev::Assert::PrintStringed(file, 0, 59, message.GetBuffer());
+        CGS_JOB_ASSERT_LOG(file, 59, message.GetBuffer());
         __asm { mfmsr r12 }
         __asm { ori r12, r12, 0x400 }
         __asm { mtmsr r12 }
-        CgsDev::Assert::PrintStringed(file, 0, 59, message.GetBuffer());
+        CGS_JOB_ASSERT_LOG(file, 59, message.GetBuffer());
         __asm { mfmsr r12 }
         __asm { ori r12, r12, 0x400 }
         __asm { mtmsr r12 }

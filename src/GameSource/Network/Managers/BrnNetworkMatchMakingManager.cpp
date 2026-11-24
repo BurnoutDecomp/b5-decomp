@@ -1,5 +1,5 @@
 #include "GameSource/Network/Managers/BrnNetworkMatchMakingManager.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkMatchMakingManager.cpp"
 // BrnNetwork::MatchMakingManager: the constructor is compiler-generated (member construction
 // only); the remaining member functions are declared in the header and not yet bodied.
 
@@ -98,7 +98,7 @@ namespace BrnNetwork
     void MatchMakingManager::Update()
     {
         CGS_ASSERT(maUpdateFunctions[meSubState] != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "No update function supplied for the current substate", __FILE__, 322 /* ARTIST 0x8254461C */));
         (this->*maUpdateFunctions[meSubState])();
     }
@@ -122,7 +122,7 @@ namespace BrnNetwork
         for (s32 liIndex = 0; liIndex < E_SUBSTATE_COUNT; ++liIndex)
         {
             CGS_ASSERT(maUpdateFunctions[liIndex] != 0,
-                CgsDev::Assert::MessageAt(
+                CGS_ASSERT_MESSAGE_AT(
                     "No update function supplied for this substate", __FILE__, 99 /* ARTIST 0x82558D84 */));
         }
     }
@@ -165,12 +165,12 @@ namespace BrnNetwork
 
         for (s32 liActionIndex = 0; liActionIndex < E_ACTION_COUNT; ++liActionIndex)
         {
-            CGS_ASSERT(maActionFunctions[liActionIndex] != 0, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(maActionFunctions[liActionIndex] != 0, CGS_ASSERT_MESSAGE_AT(
                 "No function supplied for this action",
-                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkMatchMakingManager.cpp", 152 /* ARTIST 0x82571338 */));
-            CGS_ASSERT(maeComponentToUse[liActionIndex] != CgsNetwork::E_COMPONENTS_COUNT, CgsDev::Assert::MessageAt(
+                CGS_ARTIST_FILE, 152 /* ARTIST 0x82571338 */));
+            CGS_ASSERT(maeComponentToUse[liActionIndex] != CgsNetwork::E_COMPONENTS_COUNT, CGS_ASSERT_MESSAGE_AT(
                 "No component to use supplied for this action",
-                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkMatchMakingManager.cpp", 153 /* ARTIST 0x8257135C */));
+                CGS_ARTIST_FILE, 153 /* ARTIST 0x8257135C */));
         }
 
         for (s32 liProcessIndex = 0; liProcessIndex < E_PROCESS_COUNT; ++liProcessIndex)
@@ -196,9 +196,9 @@ namespace BrnNetwork
 
         for (s32 liProcessIndex = 0; liProcessIndex < E_PROCESS_COUNT; ++liProcessIndex)
         {
-            CGS_ASSERT(maProcessActions[liProcessIndex].maeAction[0] != E_ACTION_COUNT, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(maProcessActions[liProcessIndex].maeAction[0] != E_ACTION_COUNT, CGS_ASSERT_MESSAGE_AT(
                 "No actions supplied for this process",
-                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkMatchMakingManager.cpp", 200 /* ARTIST 0x825713FC */));
+                CGS_ARTIST_FILE, 200 /* ARTIST 0x825713FC */));
         }
     }
 
@@ -280,7 +280,7 @@ namespace BrnNetwork
     void MatchMakingManager::ProcessComplete(bool lbSuccess)
     {
         CGS_ASSERT(mCallback != 0,
-            CgsDev::Assert::MessageAt("mCallback", __FILE__, 442 /* ARTIST 0x825447B8 */));
+            CGS_ASSERT_MESSAGE_AT("mCallback", __FILE__, 442 /* ARTIST 0x825447B8 */));
 
         Callback lCallback          = mCallback;
         void*    lpCallbackUserData = mpCallbackUserData;
@@ -369,9 +369,9 @@ namespace BrnNetwork
         }
 
         default:
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
                 "Invalid state returned by mpNetworkManager->GetServerInterface()->GetStatus() in MatchMakingManager::ServerInterfaceIdle",
-                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkMatchMakingManager.cpp", 739 /* ARTIST 0x82544990 */));
+                CGS_ARTIST_FILE, 739 /* ARTIST 0x82544990 */));
             break;
         }
 
@@ -528,7 +528,7 @@ namespace BrnNetwork
             mpNetworkManager->GetServerInterface()->GetUsersetsComponent());
         if (lpUsersets->IsLocalPlayerInUserset() && lpUsersets->IsLocalPlayerHost())
         {
-            CGS_ASSERT(lpUsersets->IsLocalPlayerHost(), CgsDev::Assert::MessageAt(
+            CGS_ASSERT(lpUsersets->IsLocalPlayerHost(), CGS_ASSERT_MESSAGE_AT(
                 "mpNetworkManager->GetServerInterface()->GetUsersetsComponent()->IsLocalPlayerHost()",
                 __FILE__, 1042 /* ARTIST 0x8255EBF4 */));
 
@@ -721,3 +721,5 @@ namespace BrnNetwork
         return true;
     }
 }
+
+#undef CGS_ARTIST_FILE

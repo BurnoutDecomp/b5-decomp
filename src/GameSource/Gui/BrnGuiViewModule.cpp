@@ -67,7 +67,7 @@ void ViewModule::Construct(BrnGui::GuiModule* lpGuiModule, const char* lpcName, 
     CgsGui::ViewModule::Construct(lpcName, liArg2, lfArg3, lpColour, liArg5);
 
     CGS_ASSERT(lpGuiModule != 0,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lpGuiModule",
             "..\\..\\..\\GameSource\\Gui/BrnGuiViewModule.cpp", 61 /* ARTIST 0x824F13F8 */));
     mpGuiModule = lpGuiModule;

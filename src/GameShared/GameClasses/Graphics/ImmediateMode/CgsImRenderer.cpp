@@ -17,7 +17,7 @@
 // renderengine state types + their factory calls are the dependency homes (renderstates.h /
 // blendstate.h). SetState / SetTexture are the X360 low-level shadow-state setters that cache the last
 // state / texture in the module statics and only re-issue the device call on a change.
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/CgsImRenderer.h"
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -293,13 +293,13 @@ renderengine::Texture* ImRendererBase::ConstructWhiteTexture(rw::IResourceAlloca
     if (!lpWhiteTexture->Lock(renderengine::Texture::LOCK_WRITE, 0, 0, lLocked))
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpWhiteTexture->Lock(RwGCore::Texture::LOCK_WRITE, 0, 0, lLocked)", lpcFile, 235);
+        CgsDev::Assert::FireAssert("lpWhiteTexture->Lock(RwGCore::Texture::LOCK_WRITE, 0, 0, lLocked)", CGS_ASSERT_LOCATION(lpcFile, 235));
         CgsDev::Assert::EndAssert();
     }
     if (!lLocked.mpPixelData)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lLocked.pixelData", lpcFile, 237);
+        CgsDev::Assert::FireAssert("lLocked.pixelData", CGS_ASSERT_LOCATION(lpcFile, 237));
         CgsDev::Assert::EndAssert();
     }
 
@@ -428,7 +428,7 @@ void ImRendererBase::SetState(const DepthStencilState* p, u32 luStencilRef)
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("mgpActiveRenderer == this",
-            "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/CgsImRenderer.h", 754);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 754));
         CgsDev::Assert::EndAssert();
     }
     D3DDevice* d = gpD3DDevice;
@@ -465,7 +465,7 @@ void ImRendererBase::SetState(const RenderTargetState* lpState)
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("mgpActiveRenderer == this",
-            "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/CgsImRenderer.h", 797);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 797));
         CgsDev::Assert::EndAssert();
     }
     shadow::Device::SetState(lpState);
@@ -477,7 +477,7 @@ void ImRendererBase::SetState(const SamplerState* lpState)
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("mgpActiveRenderer == this",
-            "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/CgsImRenderer.h", 818);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 818));
         CgsDev::Assert::EndAssert();
     }
     shadow::Device::SetState(lpState, 0);
@@ -561,3 +561,5 @@ bool ImRendererBase::mgbStateLibraryConstructed = false;
 // shared by the existing direct-draw backend; no second definition lives here.
 
 }  // namespace CgsGraphics
+
+#undef CGS_ARTIST_FILE

@@ -136,7 +136,7 @@ namespace BrnWorld
                             + miWeightedPositionAlignmentScore
                             + miWeightedAngleAlignmentScore;
 
-            CGS_ASSERT(miOverallRating >= 0, CgsDev::Assert::MessageAt("miOverallRating >= 0", __FILE__, 399));
+            CGS_ASSERT(miOverallRating >= 0, CGS_ASSERT_MESSAGE_AT("miOverallRating >= 0", __FILE__, 399));
 
             if (miOverallRating >= 100)
                 miOverallRating = 100;
@@ -238,7 +238,7 @@ namespace BrnWorld
             {
                 ClearData();
             }
-            CGS_ASSERT(!mbPowerParkInProgress, CgsDev::Assert::MessageAt("!mbPowerParkInProgress", __FILE__, 150));         // :150 (li r5, 0x96)
+            CGS_ASSERT(!mbPowerParkInProgress, CGS_ASSERT_MESSAGE_AT("!mbPowerParkInProgress", __FILE__, 150));         // :150 (li r5, 0x96)
             return;
         }
 

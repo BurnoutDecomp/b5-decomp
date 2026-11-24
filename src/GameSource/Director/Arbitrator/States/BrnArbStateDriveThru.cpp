@@ -1,5 +1,5 @@
 #include "GameSource/Director/Arbitrator/States/BrnArbStateDriveThru.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateDriveThru.cpp"
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT (drive-thru asserts)
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
@@ -169,9 +169,9 @@ namespace BrnDirector
 
         GameState& lrGameState = *lrSharedInfo.mpGameState;
 
-        CGS_ASSERT(lrGameState.mbDriveThruActive, CgsDev::Assert::MessageAt("lSharedInfo.mpGameState->mbDriveThruActive", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateDriveThru.cpp", 54));
+        CGS_ASSERT(lrGameState.mbDriveThruActive, CGS_ASSERT_MESSAGE_AT("lSharedInfo.mpGameState->mbDriveThruActive", CGS_ARTIST_FILE, 54));
         CGS_ASSERT(lrGameState.meDriveThruType != GameState::E_DRIVETHRU_INVALID,
-                   CgsDev::Assert::MessageAt("lSharedInfo.mpGameState->meDriveThruType != GameState::E_DRIVETHRU_INVALID", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateDriveThru.cpp", 55));
+                   CGS_ASSERT_MESSAGE_AT("lSharedInfo.mpGameState->meDriveThruType != GameState::E_DRIVETHRU_INVALID", CGS_ARTIST_FILE, 55));
 
         // ---- resolve whether the bay approach is reversed ---------------------------------
         // X360: dot(mDriveThruTransform.Pos() - mpPlayerCarTransform->Pos(), mDriveThruTransform.At()) < 0.
@@ -225,8 +225,8 @@ namespace BrnDirector
                 lStream << "unhandled drivethru type: " << static_cast<s32>(lrGameState.meDriveThruType);
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert(lacMessageBuffer,
-                                           "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateDriveThru.cpp",
-                                           111);
+                                           CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                                           111));
                 CgsDev::Assert::EndAssert();
 
                 // X360 falls through to the E_DRIVETHRU_TIRE_SHOP slot on any unhandled value.
@@ -237,7 +237,7 @@ namespace BrnDirector
 
             const Attrib::Gen::shotgroup& lrShotGroup = *lpShotGroup;
 
-            CGS_ASSERT(lrShotGroup.Num_ShotList() > 0, CgsDev::Assert::MessageAt("lpShotGroup->Num_ShotList()>0", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateDriveThru.cpp", 117));
+            CGS_ASSERT(lrShotGroup.Num_ShotList() > 0, CGS_ASSERT_MESSAGE_AT("lpShotGroup->Num_ShotList()>0", CGS_ARTIST_FILE, 117));
 
             // When the group has at least two shots and the approach is reversed, use the
             // second shot (the group's reverse-approach take); otherwise the first.
@@ -246,7 +246,7 @@ namespace BrnDirector
 
             if (lbUseSecondShot)
             {
-                CGS_ASSERT(lrShotGroup.Num_ShotList() >= 2, CgsDev::Assert::MessageAt("lpShotGroup->Num_ShotList() >= 2", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateDriveThru.cpp", 124));
+                CGS_ASSERT(lrShotGroup.Num_ShotList() >= 2, CGS_ASSERT_MESSAGE_AT("lpShotGroup->Num_ShotList() >= 2", CGS_ARTIST_FILE, 124));
             }
 
             const void* lpShotData = lrShotGroup.GetShotListData(lbUseSecondShot);
@@ -344,7 +344,7 @@ namespace BrnDirector
             break;
 
         default:
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt("unhandled state", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateDriveThru.cpp", 201));
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unhandled state", CGS_ARTIST_FILE, 201));
             break;
         }
     }
@@ -367,3 +367,5 @@ namespace BrnDirector
         return true;
     }
 }
+
+#undef CGS_ARTIST_FILE

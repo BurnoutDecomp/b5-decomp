@@ -369,7 +369,7 @@ inline void
 BehaviourLooseAttachment::SetParameters(const Parameters* lpParameters)
 {
     CGS_ASSERT(lpParameters->GetType() == eBehaviourLooseAttachment,
-               CgsDev::Assert::MessageAt("lpParameters->GetType() == eBehaviourLooseAttachment", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourLooseAttachment.h", 164));
+               CGS_ASSERT_MESSAGE_AT("lpParameters->GetType() == eBehaviourLooseAttachment", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourLooseAttachment.h", 164));
     SetDebugParametersName(lpParameters->GetDebugName());
     mpParameters = lpParameters;               // stw r4, +0x324(this)
 }

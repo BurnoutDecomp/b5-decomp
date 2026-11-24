@@ -300,11 +300,11 @@ namespace BrnAI
     AICar* ResetOnTrackManager::GetAICar(EGlobalRaceCarIndex leGlobalRaceCarIndex)
     {
         CGS_ASSERT(leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0",
                 __FILE__, 419 /* ARTIST 0x827658A4 */));
         CGS_ASSERT(leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT",
                 __FILE__, 420 /* ARTIST 0x827658C8 */));
 
@@ -383,7 +383,7 @@ namespace BrnAI
             }
         }
 
-        CGS_ASSERT(luIndex < 0x23u, CgsDev::Assert::MessageAt("Overflow in ResetOnTrackManager request queue", __FILE__, 187));   // :187
+        CGS_ASSERT(luIndex < 0x23u, CGS_ASSERT_MESSAGE_AT("Overflow in ResetOnTrackManager request queue", __FILE__, 187));   // :187
 
         mResetOnTrackRequestQueue.Append(*lpRequest);
     }

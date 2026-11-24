@@ -84,7 +84,7 @@ namespace BrnDirector
             // ARTIST's every inlined copy fires at BrnPostBox.h line 110 (`li r5, 0x6E`, e.g.
             // ResolveCollisions 0x822249AC, VisibilityTest::ProcessSceneQueryResults), path string
             // aDP4B5MainBurno_11 @0x82005790.
-            CGS_ASSERT(meState == E_STATE_GOT_PACKAGE, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(meState == E_STATE_GOT_PACKAGE, CGS_ASSERT_MESSAGE_AT(
                 "meState == E_STATE_GOT_PACKAGE",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\director\\utils\\BrnPostBox.h", 110));
             return mPackage;

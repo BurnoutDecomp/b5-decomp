@@ -1,5 +1,5 @@
 #pragma once
-
+#define CGS_ARTIST_BRNAIDRIVER_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/BrnAIDriver.cpp"
 // BrnAI::AIDriver -- the per-car STEERING + CAR-CONTROL controller. This is the link that turns
 // a navigation target (a heading + a desired speed) into the four physics inputs the car
 // actually drives with: steering angle, accelerator, brake and hand-brake (plus the boost flag).
@@ -116,11 +116,11 @@ namespace BrnAI
             // ARTIST compiled this body from BrnAIDriver.cpp (unity TU), so the tripwires carry
             // that file and its lines rather than this header's.
             CGS_ASSERT(miCount >= 0,
-                CgsDev::Assert::MessageAt("miCount >= 0",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/BrnAIDriver.cpp", 2912 /* ARTIST 0x8276677C */));
+                CGS_ASSERT_MESSAGE_AT("miCount >= 0",
+                    CGS_ARTIST_BRNAIDRIVER_FILE, 2912 /* ARTIST 0x8276677C */));
             CGS_ASSERT(miCount <= KI_MAX_NEARBY_VEHICLES,
-                CgsDev::Assert::MessageAt("miCount <= KI_MAX_NEARBY_TRAFFIC",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/BrnAIDriver.cpp", 2913 /* ARTIST 0x827667A4 */));
+                CGS_ASSERT_MESSAGE_AT("miCount <= KI_MAX_NEARBY_TRAFFIC",
+                    CGS_ARTIST_BRNAIDRIVER_FILE, 2913 /* ARTIST 0x827667A4 */));
             return miCount;
         }
         void Reset()          { miCount = 0; }                          // :110 (inlined)
@@ -374,3 +374,5 @@ namespace BrnAI
     CGS_STATIC_ASSERT((offsetof(AIDriver, mbCurrentRouteComplete) == 0x1D6A), "AIDriver::mbCurrentRouteComplete @ +0x1D6A");
     CGS_STATIC_ASSERT((offsetof(AIDriver, mbBoosting)           == 0x1D6B), "AIDriver::mbBoosting @ +0x1D6B");
 }
+
+#undef CGS_ARTIST_BRNAIDRIVER_FILE

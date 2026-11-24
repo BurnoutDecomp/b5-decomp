@@ -32,7 +32,7 @@ namespace BrnMath
         if (!rw::math::vpu::IsValid(lVector))
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("RwMath::IsValid( lVector )", "..\\..\\..\\GameSource\\Math/BrnMathUtils.h", 140);
+            CgsDev::Assert::FireAssert("RwMath::IsValid( lVector )", CGS_ASSERT_LOCATION("..\\..\\..\\GameSource\\Math/BrnMathUtils.h", 140));
             CgsDev::Assert::EndAssert();
         }
         static const CGS_ALIGN(16) u32 lauFlattenPermute[4] = {
@@ -318,33 +318,33 @@ namespace BrnMath
         if (!(lvPositionEqual.u[0] && lvPositionEqual.u[1] && lvPositionEqual.u[2]))
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("RwMath::IsValid( lPosition )", lpcFile, 50);
+            CgsDev::Assert::FireAssert("RwMath::IsValid( lPosition )", CGS_ASSERT_LOCATION(lpcFile, 50));
             CgsDev::Assert::EndAssert();
         }
         const __vector4 lvAtEqual = __vcmpeqfp(lAt.mV, lAt.mV);
         if (!(lvAtEqual.u[0] && lvAtEqual.u[1] && lvAtEqual.u[2]))
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("RwMath::IsValid( lAt )", lpcFile, 51);
+            CgsDev::Assert::FireAssert("RwMath::IsValid( lAt )", CGS_ASSERT_LOCATION(lpcFile, 51));
             CgsDev::Assert::EndAssert();
         }
         const __vector4 lvUpEqual = __vcmpeqfp(lUp.mV, lUp.mV);
         if (!(lvUpEqual.u[0] && lvUpEqual.u[1] && lvUpEqual.u[2]))
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("RwMath::IsValid( lUp )", lpcFile, 52);
+            CgsDev::Assert::FireAssert("RwMath::IsValid( lUp )", CGS_ASSERT_LOCATION(lpcFile, 52));
             CgsDev::Assert::EndAssert();
         }
         if (!IsNormal(lAt))
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("IsNormal( lAt )", lpcFile, 53);
+            CgsDev::Assert::FireAssert("IsNormal( lAt )", CGS_ASSERT_LOCATION(lpcFile, 53));
             CgsDev::Assert::EndAssert();
         }
         if (!IsNormal(lUp))
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("IsNormal( lUp )", lpcFile, 54);
+            CgsDev::Assert::FireAssert("IsNormal( lUp )", CGS_ASSERT_LOCATION(lpcFile, 54));
             CgsDev::Assert::EndAssert();
         }
         const __vector4 lvSign = __vslw(__vspltisw(-1), __vspltisw(-1));
@@ -355,7 +355,7 @@ namespace BrnMath
         if (!(lvLarger.u[0] || lvLarger.u[1] || lvLarger.u[2]))
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("!RwMath::IsSimilar( lAt, lUp )", lpcFile, 55);
+            CgsDev::Assert::FireAssert("!RwMath::IsSimilar( lAt, lUp )", CGS_ASSERT_LOCATION(lpcFile, 55));
             CgsDev::Assert::EndAssert();
         }
 
@@ -431,7 +431,7 @@ namespace BrnMath
         if (__vcmpgtfp(lvTotalError, lvTolerance).u[0])
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("RwMath::IsOrthogonal3x3( lTransform )", lpcFile, 64);
+            CgsDev::Assert::FireAssert("RwMath::IsOrthogonal3x3( lTransform )", CGS_ASSERT_LOCATION(lpcFile, 64));
             CgsDev::Assert::EndAssert();
         }
 
@@ -447,7 +447,7 @@ namespace BrnMath
         if (__vcmpgtfp(lvTotalLength, lvTolerance).u[0])
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("RwMath::IsNormal3x3( lTransform )", lpcFile, 65);
+            CgsDev::Assert::FireAssert("RwMath::IsNormal3x3( lTransform )", CGS_ASSERT_LOCATION(lpcFile, 65));
             CgsDev::Assert::EndAssert();
         }
         return lTransform;

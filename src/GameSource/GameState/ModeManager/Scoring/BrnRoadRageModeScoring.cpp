@@ -103,7 +103,7 @@ namespace BrnGameState
     void RoadRageModeScoring::Update(const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarInterface,
                                      f32 /* lfSimTimeStep */)
     {
-        CGS_ASSERT(lpActiveRaceCarInterface != NULL, CgsDev::Assert::MessageAt("lpActiveRaceCarInterface != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnRoadRageModeScoring.cpp", 91));
+        CGS_ASSERT(lpActiveRaceCarInterface != NULL, CGS_ASSERT_MESSAGE_AT("lpActiveRaceCarInterface != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnRoadRageModeScoring.cpp", 91));
     }
 
     // FLAG no inline site found. ScoringSystem::Release @0x823124A0 (the only lifecycle caller)

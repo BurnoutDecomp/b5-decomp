@@ -162,7 +162,7 @@ namespace Native
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("mgpActiveRenderer == this",
-                "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/CgsImRenderer.h", 839);
+                CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/CgsImRenderer.h", 839));
             CgsDev::Assert::EndAssert();
         }
         shadow::Device::SetState(sampler, 0);
@@ -256,12 +256,12 @@ namespace Native
     void BrnDebrisRenderer::RenderDebrisArray(f32 currentTime, const BrnDebrisArray* array,
         EDebrisArrayID, bool fullLifetime)
     {
-        DebrisAssert(array != 0, "lpArray != NULL", kDebrisRendererSource, 524);
+        DebrisAssert(array != 0, "lpArray != NULL", CGS_ASSERT_LOCATION(kDebrisRendererSource, 524));
         if (!array->Buckets())
             return;
 
         const BrnDebrisArrayParams* const params = array->Params();
-        DebrisAssert(params != 0, "lpParams != NULL", kDebrisRendererSource, 538);
+        DebrisAssert(params != 0, "lpParams != NULL", CGS_ASSERT_LOCATION(kDebrisRendererSource, 538));
         mpRenderer->SetShinyParams(0.0f, params->mfAmbientFactor, params->mfSpecularPower,
             params->mfSpecularIntensity);
         mpRenderer->SetTexture(const_cast<renderengine::Texture*>(array->Texture()), 0);
@@ -291,14 +291,14 @@ namespace Native
              bucket = static_cast<const BrnDebrisArray::DebrisBucket*>(bucket->mpNextBucket))
         {
             DebrisAssert((reinterpret_cast<uintptr_t>(bucket) & 15u) == 0,
-                "(((uint32_t)lpCurrentBucket) & 0xf) == 0", kDebrisRendererSource, 587);
+                "(((uint32_t)lpCurrentBucket) & 0xf) == 0", CGS_ASSERT_LOCATION(kDebrisRendererSource, 587));
             const u32 count = bucket->mu16NumberOfParticlesInBucket;
             const u32 capacity = BrnDebrisArray::DebrisBucket::KuMaxNumParticles;
             DebrisAssert(count <= capacity,
-                "mu16NumberOfParticlesInBucket <= KuMaxNumParticles", kBucketSource, 152);
+                "mu16NumberOfParticlesInBucket <= KuMaxNumParticles", CGS_ASSERT_LOCATION(kBucketSource, 152));
             DebrisAssert((reinterpret_cast<uintptr_t>(bucket->maParticleBirthTimes) & 15u) == 0,
-                "( ( (uint32_t)maParticleBirthTimes ) & 15 ) == 0", kBucketSource, 123);
-            DebrisAssert(count != 0, "luNumParticles != 0", kDebrisRendererSource, 598);
+                "( ( (uint32_t)maParticleBirthTimes ) & 15 ) == 0", CGS_ASSERT_LOCATION(kBucketSource, 123));
+            DebrisAssert(count != 0, "luNumParticles != 0", CGS_ASSERT_LOCATION(kDebrisRendererSource, 598));
 
             const __vector4 countLimit = SplatFloat(static_cast<f32>(count));
             __vector4 indices = firstIndices.mV;
@@ -320,7 +320,7 @@ namespace Native
                     const __vector4 fadeOut = __vminfp(one, __vmulfp(remaining, fadeOutRate));
 
                     for (u32 lane = 0; lane < 4; ++lane)
-                        DebrisAssert(first + lane < capacity, "luParticle < KuMaxNumParticles", kBucketSource, 133);
+                        DebrisAssert(first + lane < capacity, "luParticle < KuMaxNumParticles", CGS_ASSERT_LOCATION(kBucketSource, 133));
 
                     const BrnDebris* const particle = bucket->maParticleData + first;
                     const __vector4 mask0 = __vspltw(visible, 0);

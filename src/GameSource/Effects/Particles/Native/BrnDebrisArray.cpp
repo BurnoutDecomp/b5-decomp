@@ -58,14 +58,14 @@ namespace Native
     void BrnDebrisArray::Construct(FXBucketManager* lpBucketManager, EDebrisArrayID leDebrisType)
     {
         CGS_ASSERT( ( leDebrisType >= 0 ) && ( leDebrisType < eDebrisArray_Max ),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "( leDebrisType >= 0 ) && ( leDebrisType < eDebrisArray_Max )",
                 __FILE__, 182 /* ARTIST 0x8227A408 */));
 
         mpParams = &_gaDebrisArrayParams[leDebrisType];
 
         CGS_ASSERT( mpParams->mnNumParticles > 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpParams->mnNumParticles > 0",
                 __FILE__, 185 /* ARTIST 0x8227A44C */));
 

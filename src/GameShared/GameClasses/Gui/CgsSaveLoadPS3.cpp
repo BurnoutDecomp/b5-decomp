@@ -233,7 +233,7 @@ void SaveLoadSystem::ShowAutosaveIcon(bool visible)
 void SaveLoadSystem::HandleOption(u32 option)
 {
     CGS_ASSERT(mMessageDisplayOptionFunc != 0,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "mpMessageDisplayOptionFunc != 0",
             "..\\..\\..\\GameShared\\GameClasses\\Gui/CgsSaveLoadX360.cpp", 843 /* ARTIST 0x8284C760 */));
     mpMessageDisplay->HideMessage();
@@ -382,19 +382,19 @@ void* SaveLoadSystem::GetMugshotBufferFromImageId(s32 liImageId)
         const s32 liTypeIndex = liImageId % 1000;
 
         CGS_ASSERT(liType < miNumberOfMugshotTypes,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "liType < miNumberOfMugshotTypes",
                 __FILE__, 1153 /* ARTIST 0x8284C964 */));
         CGS_ASSERT(liTypeIndex < miNumberOfMugshotsPerType,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "liIndex < miNumberOfMugshotsPerType",
                 __FILE__, 1154 /* ARTIST 0x8284C98C */));
 
         const s32 liIndex = miNumberOfMugshotsPerType * liType + liTypeIndex;
         CGS_ASSERT(0 <= liIndex,
-            CgsDev::Assert::MessageAt("0 <= liIndex", __FILE__, 1160 /* ARTIST 0x8284C9BC */));
+            CGS_ASSERT_MESSAGE_AT("0 <= liIndex", __FILE__, 1160 /* ARTIST 0x8284C9BC */));
         CGS_ASSERT(liIndex <= miNumberOfMugshotTypes * miNumberOfMugshotsPerType,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "liIndex <= miNumberOfMugshotTypes * miNumberOfMugshotsPerType",
                 __FILE__, 1161 /* ARTIST 0x8284C9EC */));
 

@@ -1,5 +1,5 @@
 #include "GameSource/Director/Utils/BrnDirectorEffectTrigger.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorEffectTrigger.h"
 #include <cstring>                                   // strcmp (the open-coded console compares)
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "GameSource/Director/Camera/Camera.h"       // Camera::Camera / GetEffects (EnsureEffectIsPlaying)
@@ -59,7 +59,7 @@ namespace BrnDirector
     // Non-gating guard, then the staged blend.
     f32 BackgroundEffectRequest::GetBackgroundStartRequestBlendAmount() const
     {
-        CGS_ASSERT(HasBackgroundStartRequest(), CgsDev::Assert::MessageAt("HasBackgroundStartRequest()", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorEffectTrigger.h", 249));   // non-gating
+        CGS_ASSERT(HasBackgroundStartRequest(), CGS_ASSERT_MESSAGE_AT("HasBackgroundStartRequest()", CGS_ARTIST_FILE, 249));   // non-gating
         return mfBlendAmount;
     }
 
@@ -71,8 +71,8 @@ namespace BrnDirector
     void BackgroundEffectRequest::RegisterAndUpdateRequest(EffectInterface* lpEffectInterface)
     {
         CGS_ASSERT(lpEffectInterface != 0,
-            CgsDev::Assert::MessageAt(
-                "lpEffectInterface != NULL", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorEffectTrigger.h", 361 /* ARTIST 0x82232EB8 */));
+            CGS_ASSERT_MESSAGE_AT(
+                "lpEffectInterface != NULL", CGS_ARTIST_FILE, 361 /* ARTIST 0x82232EB8 */));
 
         if (mbStartRequested)
         {
@@ -105,7 +105,7 @@ namespace BrnDirector
 f32 EffectInterface::GetCurrentEffectBlendAmount() const
 {
     CGS_ASSERT(mbHasCurrentEffectName,
-        CgsDev::Assert::MessageAt("HasCurrentEffectName()", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorEffectTrigger.h", 115 /* ARTIST 0x821F1840 */));   // non-gating
+        CGS_ASSERT_MESSAGE_AT("HasCurrentEffectName()", CGS_ARTIST_FILE, 115 /* ARTIST 0x821F1840 */));   // non-gating
     return mfCurrentEffectBlendAmount;
 }
 
@@ -379,3 +379,5 @@ void EffectInterface::Construct()
 }
 
 }
+
+#undef CGS_ARTIST_FILE

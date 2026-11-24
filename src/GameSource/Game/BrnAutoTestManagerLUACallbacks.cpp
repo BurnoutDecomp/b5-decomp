@@ -3,7 +3,7 @@
 #include "GameSource/Game/BrnGameModule.hpp"                         // gpBurnoutGame
 #include "GameShared/GameClasses/Core/CgsAssert.h"                   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"           // gpDebugPrint / gxMessageFilterFlags
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnAutoTestManager.cpp"
 // BrnGame::AutoTestManager::LUACBPressButton @ 0x823C6150 (BURNOUT_X360_ARTIST.XEX).
 //
 // The scripted-test Lua callback "PressButton(actionIndex)". A LUACallbackHelper is
@@ -36,7 +36,7 @@ namespace BrnGame
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lHelper.GetNumParams() == 1",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnAutoTestManager.cpp", 635);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 635));
             CgsDev::Assert::EndAssert();
         }
 
@@ -63,7 +63,7 @@ namespace BrnGame
         if (lHelper.GetNumParams() != 1)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lHelper.GetNumParams() == 1", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnAutoTestManager.cpp", 581);
+            CgsDev::Assert::FireAssert("lHelper.GetNumParams() == 1", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 581));
             CgsDev::Assert::EndAssert();
         }
         gpBurnoutGame->GetDebugManager().CallFunction(lHelper.GetStringParam(0));
@@ -78,7 +78,7 @@ namespace BrnGame
         if (liNumParams > 1)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lHelper.GetNumParams() <= 1", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnAutoTestManager.cpp", 605);
+            CgsDev::Assert::FireAssert("lHelper.GetNumParams() <= 1", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 605));
             CgsDev::Assert::EndAssert();
         }
         gpBurnoutGame->mAutoTestManager.DumpGameState(liNumParams ? lHelper.GetStringParam(0) : 0);
@@ -92,7 +92,7 @@ namespace BrnGame
         if (lHelper.GetNumParams() != 0)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lHelper.GetNumParams() == 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnAutoTestManager.cpp", 693);
+            CgsDev::Assert::FireAssert("lHelper.GetNumParams() == 0", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 693));
             CgsDev::Assert::EndAssert();
         }
         gpBurnoutGame->mAutoTestManager.mbControlPad = true;
@@ -106,7 +106,7 @@ namespace BrnGame
         if (lHelper.GetNumParams() != 0)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lHelper.GetNumParams() == 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnAutoTestManager.cpp", 667);
+            CgsDev::Assert::FireAssert("lHelper.GetNumParams() == 0", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 667));
             CgsDev::Assert::EndAssert();
         }
         gpBurnoutGame->mAutoTestManager.mbControlPad = false;
@@ -120,7 +120,7 @@ namespace BrnGame
         if (lHelper.GetNumParams() != 1)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lHelper.GetNumParams() == 1", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnAutoTestManager.cpp", 719);
+            CgsDev::Assert::FireAssert("lHelper.GetNumParams() == 1", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 719));
             CgsDev::Assert::EndAssert();
         }
         CgsDev::DebugManager& lrManager = gpBurnoutGame->GetDebugManager();
@@ -137,7 +137,7 @@ namespace BrnGame
         if (lHelper.GetNumParams() != 1)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lHelper.GetNumParams() == 1", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnAutoTestManager.cpp", 747);
+            CgsDev::Assert::FireAssert("lHelper.GetNumParams() == 1", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 747));
             CgsDev::Assert::EndAssert();
         }
         gpBurnoutGame->GetDebugManager().DeactivateComponent(lHelper.GetStringParam(0));
@@ -146,3 +146,5 @@ namespace BrnGame
     }
 
 }
+
+#undef CGS_ARTIST_FILE

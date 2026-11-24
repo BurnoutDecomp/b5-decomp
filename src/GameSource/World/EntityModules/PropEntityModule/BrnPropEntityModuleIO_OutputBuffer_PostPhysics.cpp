@@ -1,5 +1,5 @@
 #include "GameSource/World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // the header-baked lock asserts
 
@@ -159,7 +159,7 @@ namespace PropEntityIO
     // (console this+0x860). Rodata carries a trailing newline (VERBATIM).
     OutputBuffer_PostPhysics::SceneInputInterface* OutputBuffer_PostPhysics::GetSceneInputInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 741));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 741));
         return &mSceneInputInterface;
     }
 
@@ -169,9 +169,9 @@ namespace PropEntityIO
     // interface -- the independent confirmation that this getter is the PROP one.
     OutputBuffer_PostPhysics::PropInputInterface* OutputBuffer_PostPhysics::GetPropInputInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt(
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
             "Not locked for writing\n",
-            "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 742));
+            CGS_ARTIST_FILE, 742));
         return &mPropInputInterface;
     }
 
@@ -179,7 +179,7 @@ namespace PropEntityIO
     // (console this+0x7B0).
     OutputBuffer_PostPhysics::HitOverheadSignQueue* OutputBuffer_PostPhysics::GetHitOverheadSignQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 743));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 743));
         return &mHitOverheadSignQueue;
     }
 
@@ -187,7 +187,7 @@ namespace PropEntityIO
     // (console this+0x820).
     OutputBuffer_PostPhysics::BrokenPropQueue* OutputBuffer_PostPhysics::GetBrokenPropQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 744));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 744));
         return &mBrokenPropQueue;
     }
 
@@ -195,7 +195,7 @@ namespace PropEntityIO
     // (console this+0xCB2C0).
     OutputBuffer_PostPhysics::PropVFXLocatorQueue* OutputBuffer_PostPhysics::GetPropVFXLocatorQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 745));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 745));
         return &mPropVFXLocatorQueue;
     }
 
@@ -203,7 +203,7 @@ namespace PropEntityIO
     // (console this+0x160).
     OutputBuffer_PostPhysics::RecordHitPropQueue* OutputBuffer_PostPhysics::GetRecordHitPropQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 746));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 746));
         return &mRecordHitPropQueue;
     }
 
@@ -211,7 +211,7 @@ namespace PropEntityIO
     // (console this+0x10).
     OutputBuffer_PostPhysics::PropBecamePhysicalEventQueue* OutputBuffer_PostPhysics::GetPropBecamePhysicalEventQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 747));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 747));
         return &mPropBecamePhysicalEventQueue;
     }
 
@@ -220,9 +220,9 @@ namespace PropEntityIO
     // getter and hands the result to ReplayIO::RequestInterface::RegisterSerialiser.
     OutputBuffer_PostPhysics::ReplayRequestInterface* OutputBuffer_PostPhysics::GetReplayRequestInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt(
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
             "Not locked for writing\n",
-            "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 748));
+            CGS_ARTIST_FILE, 748));
         return &mReplayRequestInterface;
     }
 
@@ -257,7 +257,7 @@ namespace PropEntityIO
     // X360 0x827A1CB8 (R, line 732) -- read-lock; the scene input interface (console +0x860).
     const OutputBuffer_PostPhysics::SceneInputInterface* OutputBuffer_PostPhysics::GetSceneInputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 732));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 732));
         return &mSceneInputInterface;
     }
 
@@ -271,7 +271,7 @@ namespace PropEntityIO
     // X360 0x827A1E08 (R, line 736) -- read-lock; the prop-VFX-locator queue (console +0xCB2C0).
     const OutputBuffer_PostPhysics::PropVFXLocatorQueue* OutputBuffer_PostPhysics::GetPropVFXLocatorQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 736));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 736));
         return &mPropVFXLocatorQueue;
     }
 
@@ -283,21 +283,21 @@ namespace PropEntityIO
     // which a smashed prop reaches GameStateModule::ProcessGameEvents -> StuntManager::OnPropHit.
     const OutputBuffer_PostPhysics::RecordHitPropQueue* OutputBuffer_PostPhysics::GetRecordHitPropQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 737));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 737));
         return &mRecordHitPropQueue;
     }
 
     // X360 0x827A1F58 (R, line 738) -- read-lock; the prop-became-physical queue (console +0x10).
     const OutputBuffer_PostPhysics::PropBecamePhysicalEventQueue* OutputBuffer_PostPhysics::GetPropBecamePhysicalEventQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 738));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 738));
         return &mPropBecamePhysicalEventQueue;
     }
 
     // X360 0x827A2000 (R, line 739) -- read-lock; the const twin of the getter above, same member.
     const OutputBuffer_PostPhysics::ReplayRequestInterface* OutputBuffer_PostPhysics::GetReplayRequestInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 739));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 739));
         return &mReplayRequestInterface;
     }
 }
@@ -310,3 +310,5 @@ void BrnWorld::PropEntityIO::OutputBuffer_PostPhysics::Destruct()
 {
     CgsModule::IOBuffer::Destruct();
 }
+
+#undef CGS_ARTIST_FILE

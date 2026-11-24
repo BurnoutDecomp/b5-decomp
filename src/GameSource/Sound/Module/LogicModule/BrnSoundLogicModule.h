@@ -298,7 +298,7 @@ public:
 inline Io::LogicInputBuffer* SoundLogicModule::GetBrnInputStructure()
 {
     CGS_ASSERT(mpBrnLogicInputBuffer,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "mpBrnLogicInputBuffer",
             "..\\..\\..\\GameSource\\Sound/Module/LogicModule/BrnSoundLogicModule.h", 432 /* ARTIST 0x82682540 */));
     return mpBrnLogicInputBuffer;

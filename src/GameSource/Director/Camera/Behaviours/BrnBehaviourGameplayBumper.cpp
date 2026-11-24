@@ -15,7 +15,7 @@
 // runs (ProcessNewVehicleEvents / UpdateAttribSys) to populate a bumper-cam block from the
 // vehicle's attribute-system source block before installing it.
 // ============================================================================
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourGameplayBumper.cpp"
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourGameplayBumper.h"
 #include "GameSource/Director/Camera/Behaviours/Behaviour.h"        // BehaviourSharedInfo
 #include "GameSource/Director/Camera/Camera.h"                      // Camera::SetFOV / mState_uFlags
@@ -92,8 +92,8 @@ void BehaviourGameplayBumper::Parameters::Set(const Source* lpSource)
     mfYOffset               = lpfSrc[0x04 / 4];   // <- source[0x04]
     mfZOffset               = lpfSrc[0x00 / 4];   // <- source[0x00]
 
-    CGS_ASSERT(mfBoostFOV > 0.0f, CgsDev::Assert::MessageAt("mfBoostFOV > 0.0f", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourGameplayBumper.cpp", 75));
-    CGS_ASSERT(mfFOV > 0.0f, CgsDev::Assert::MessageAt("mfFOV > 0.0f", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourGameplayBumper.cpp", 76));
+    CGS_ASSERT(mfBoostFOV > 0.0f, CGS_ASSERT_MESSAGE_AT("mfBoostFOV > 0.0f", CGS_ARTIST_FILE, 75));
+    CGS_ASSERT(mfFOV > 0.0f, CGS_ASSERT_MESSAGE_AT("mfFOV > 0.0f", CGS_ARTIST_FILE, 76));
 }
 
 // ----------------------------------------------------------------------------
@@ -229,7 +229,7 @@ void BehaviourGameplayBumper_SetParametersAnchor(
 bool BehaviourGameplayBumper::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo)
 {
     // @0x822267A0..0x822267DC
-    CGS_ASSERT(mpParameters != 0, CgsDev::Assert::MessageAt("Updating with no parameters", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourGameplayBumper.cpp", 115));   // :115
+    CGS_ASSERT(mpParameters != 0, CGS_ASSERT_MESSAGE_AT("Updating with no parameters", CGS_ARTIST_FILE, 115));   // :115
     if (mpParameters == 0 || !mpParameters->mbIsValid)
         return true;
 
@@ -331,7 +331,7 @@ bool BehaviourGameplayBumper::Update(Camera& lrCamera, const BehaviourSharedInfo
         Utils::EulerAnglesZXYFromMatrix44Affine(lCarBasis, &mLastCameraAngles, 0.0099999998f);
 
     // @0x82226A54..0x82226ADC -- three per-lane self-compares (vcmpeqfp., the NaN test).
-    CGS_ASSERT(rw::math::vpu::IsValid(lTargetCameraAngles), CgsDev::Assert::MessageAt("IsValid(lTargetCameraAngles)", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourGameplayBumper.cpp", 179));  // :179
+    CGS_ASSERT(rw::math::vpu::IsValid(lTargetCameraAngles), CGS_ASSERT_MESSAGE_AT("IsValid(lTargetCameraAngles)", CGS_ARTIST_FILE, 179));  // :179
 
     // ---- 5. the springs --------------------------------------------------------------------
     // @0x82226AE0..0x82226B30. While the car is crashing every axis springs at 1 (the camera
@@ -361,7 +361,7 @@ bool BehaviourGameplayBumper::Update(Camera& lrCamera, const BehaviourSharedInfo
     // Utils::GetSmallestDifferenceBetweenRadAngles @0x821F8988.
     Vector3 lCameraDiffAngles =
         Utils::GetSmallestDifferenceBetweenRadAngles(mLastCameraAngles, lTargetCameraAngles);
-    CGS_ASSERT(rw::math::vpu::IsValid(lCameraDiffAngles), CgsDev::Assert::MessageAt("IsValid(lCameraDiffAngles)", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourGameplayBumper.cpp", 204));      // :204
+    CGS_ASSERT(rw::math::vpu::IsValid(lCameraDiffAngles), CGS_ASSERT_MESSAGE_AT("IsValid(lCameraDiffAngles)", CGS_ARTIST_FILE, 204));      // :204
 
     // ---- 6. the acceleration the camera pitches against ------------------------------------
     // @0x82226BF0..0x82226C2C, transcribed from the Hex-Rays scalar line verbatim: a one-pole
@@ -495,7 +495,7 @@ bool BehaviourGameplayBumper::Update(Camera& lrCamera, const BehaviourSharedInfo
     // order is the one CameraShake::Update declares (f1 = the timestep slot, f2 = the amplitude).
     CGS_ASSERT(GetTimestepType() > BrnDirector::Timestep::E_TIMESTEP_INVALID
                && GetTimestepType() < BrnDirector::Timestep::E_TIMESTEP_COUNT,
-               CgsDev::Assert::MessageAt("leType > E_TIMESTEP_INVALID && leType < E_TIMESTEP_COUNT", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorTimestep.h", 78));
+               CGS_ASSERT_MESSAGE_AT("leType > E_TIMESTEP_INVALID && leType < E_TIMESTEP_COUNT", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorTimestep.h", 78));
     const f32 KF_IMPACT_SHAKE_FREQ_MUL = 8.0f;                    // flt_82004C88, dumped
     mImpactShake.Update(lrCamera.mTransform,
                         mpParameters->mImpactShakeParams,
@@ -531,3 +531,5 @@ bool BehaviourGameplayBumper::Update(Camera& lrCamera, const BehaviourSharedInfo
 
 } // namespace Camera
 } // namespace BrnDirector
+
+#undef CGS_ARTIST_FILE

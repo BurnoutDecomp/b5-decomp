@@ -207,7 +207,7 @@ namespace BrnGui
     void RoadPanel::AppendExpectedAptComponents(GuiFlow leFlow, GuiCache* lpGuiCache)
     {
         CGS_ASSERT(lpGuiCache != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpGuiCache",
                 "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnRoadPanel.cpp", 174 /* ARTIST 0x82418438 */));   // cpp:174
 
@@ -501,7 +501,7 @@ namespace BrnGui
     const char* RoadPanel::GetSelectedFriendName() const
     {
         CGS_ASSERT(meCurrentScoreMode == KI_ROAD_PANEL_MODE_ONLINE,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "GetScoringMode() == GuiEventSetRoadRuleScoreMode::E_ROAD_PANEL_MODE_ONLINE",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flow\\screen\\components\\BrnRoadPanel.h", 231 /* ARTIST 0x82418020 */)); // @0x82418018
 

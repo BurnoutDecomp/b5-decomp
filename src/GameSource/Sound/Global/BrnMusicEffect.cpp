@@ -152,7 +152,7 @@ MusicEffect::EaTraxData::EaTraxData()
 // leaves mRemainingSongs alone, and clears mbPendingChange last (0x826975AC).
 bool MusicEffect::EaTraxData::Prepare(Module::SoundLogicModule* apLogicModule)
 {
-    CGS_ASSERT(apLogicModule != 0, CgsDev::Assert::MessageAt("lpLogicModule",
+    CGS_ASSERT(apLogicModule != 0, CGS_ASSERT_MESSAGE_AT("lpLogicModule",
         "..\\..\\..\\GameSource\\Sound/Global/BrnMusicEffect.h", 720 /* ARTIST 0x82697564 */));
     mEnabledSongs.UnSetAll();
     mEnabledSongsNoGameMode.UnSetAll();

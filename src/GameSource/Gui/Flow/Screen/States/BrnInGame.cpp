@@ -1,5 +1,5 @@
 #include "GameSource/Gui/Flow/Screen/States/BrnInGame.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnInGame.cpp"
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface / GuiEventNetworkSuspension / GuiEventPlayAptMovie
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // the state in-queue
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
@@ -566,9 +566,9 @@ namespace BrnGui
     void InGame::PauseGame(bool /*lbUserInstigated*/, bool lbOpenDriverDetails)
     {
         CGS_ASSERT(mpGuiCache != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpGuiCache",
-                "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnInGame.cpp", 1038 /* ARTIST 0x824DF018 */));   // cpp:1038
+                CGS_ARTIST_FILE, 1038 /* ARTIST 0x824DF018 */));   // cpp:1038
 
         if (!PauseAllowed())
             return;
@@ -647,7 +647,7 @@ namespace BrnGui
     // news) are always allowed; the join options need the multiplayer privilege.
     bool InGame::CheckPrivileges(EMainMenuOptions leMainMenuOption)
     {
-        CGS_ASSERT(mpGuiCache != 0, CgsDev::Assert::MessageAt("mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnInGame.cpp", 1253 /* ARTIST 0x824B8F34 */));   // cpp:1253
+        CGS_ASSERT(mpGuiCache != 0, CGS_ASSERT_MESSAGE_AT("mpGuiCache", CGS_ARTIST_FILE, 1253 /* ARTIST 0x824B8F34 */));   // cpp:1253
 
         const bool lbMultiplayerAllowed = mpGuiCache->IsMultiplayerAllowed();
         switch (leMainMenuOption)
@@ -670,7 +670,7 @@ namespace BrnGui
             return true;
 
         default:
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt("Invalid menu option", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnInGame.cpp", 1289 /* ARTIST 0x824B8FB8 */));   // cpp:1289
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Invalid menu option", CGS_ARTIST_FILE, 1289 /* ARTIST 0x824B8FB8 */));   // cpp:1289
             return false;
         }
     }
@@ -1044,3 +1044,5 @@ namespace BrnGui
         mpInGuiEventQueue->Clear();
     }
 }
+
+#undef CGS_ARTIST_FILE

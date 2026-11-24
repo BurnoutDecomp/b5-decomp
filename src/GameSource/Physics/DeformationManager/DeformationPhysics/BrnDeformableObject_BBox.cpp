@@ -77,7 +77,7 @@ namespace Deformation
 	s32 DeformableObject::GetSweptSpheres(const CgsGeometric::SweptSphere** lppSpheresOut)
 	{
 		CGS_ASSERT(mbDoSweptSphereTests,
-		    CgsDev::Assert::MessageAt(
+		    CGS_ASSERT_MESSAGE_AT(
 		        "mbDoSweptSphereTests",
 		        "..\\..\\..\\GameSource\\Physics/DeformationManager/DeformationPhysics/BrnDeformableObject.h", 446 /* ARTIST 0x825B4260 */));   // BrnDeformableObject.h:446 (non-gating)
 

@@ -46,7 +46,7 @@
 //   +0x14 RecvEvent  +0x18 Update   +0x1C SetRenderEnabled         +0x20 GetRenderLayer
 //   +0x24 GetID      +0x28 GetNumTextures  +0x2C StartFade  +0x30 ClearFadeState
 //   +0x34 RenderComponent
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/CustomRenderer/BrnCustomRenderer.cpp"
 #include "GameSource/Gui/BrnCustomRendererManager.h"
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasic2dColouredTexturedVertex.h" // mask corner vertices (SetMaskRect)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] the satnav-diag prints
@@ -618,7 +618,7 @@ void CustomRendererManager::Render(CgsGui::ImRendererSet* lpRendererSet,
 CgsID CustomRendererManager::GetComponentID(s32 liComponent) const
 {
     CGS_ASSERT(liComponent >= 0 && liComponent < E_CUSTOM_RENDER_TYPES_COUNT,
-               CgsDev::Assert::MessageAt("liComponent>=0 && liComponent<E_CUSTOM_RENDER_TYPES_COUNT", "..\\..\\..\\GameSource\\Gui/CustomRenderer/BrnCustomRenderer.cpp", 663 /* ARTIST 0x824453BC */));
+               CGS_ASSERT_MESSAGE_AT("liComponent>=0 && liComponent<E_CUSTOM_RENDER_TYPES_COUNT", CGS_ARTIST_FILE, 663 /* ARTIST 0x824453BC */));
     // No guard after the non-gating assert: ARTIST calls the slot's GetID (vtable +0x24)
     // straight away (@0x824453DC).
 
@@ -631,7 +631,7 @@ CgsID CustomRendererManager::GetComponentID(s32 liComponent) const
 void CustomRendererManager::SetComponentRenderable(s32 liComponent, bool lbRenderable)
 {
     CGS_ASSERT(liComponent >= 0 && liComponent < E_CUSTOM_RENDER_TYPES_COUNT,
-               CgsDev::Assert::MessageAt("liComponent>=0 && liComponent<E_CUSTOM_RENDER_TYPES_COUNT", "..\\..\\..\\GameSource\\Gui/CustomRenderer/BrnCustomRenderer.cpp", 684 /* ARTIST 0x82445438 */));
+               CGS_ASSERT_MESSAGE_AT("liComponent>=0 && liComponent<E_CUSTOM_RENDER_TYPES_COUNT", CGS_ARTIST_FILE, 684 /* ARTIST 0x82445438 */));
     // Unguarded, as ARTIST calls SetRenderEnabled (vtable +0x1C) @0x8244545C.
 
 
@@ -643,7 +643,7 @@ void CustomRendererManager::SetComponentRenderable(s32 liComponent, bool lbRende
 bool CustomRendererManager::GetComponentRenderable(s32 liComponent)
 {
     CGS_ASSERT(liComponent >= 0 && liComponent < E_CUSTOM_RENDER_TYPES_COUNT,
-               CgsDev::Assert::MessageAt("liComponent>=0 && liComponent<E_CUSTOM_RENDER_TYPES_COUNT", "..\\..\\..\\GameSource\\Gui/CustomRenderer/BrnCustomRenderer.cpp", 707 /* ARTIST 0x824454AC */));
+               CGS_ASSERT_MESSAGE_AT("liComponent>=0 && liComponent<E_CUSTOM_RENDER_TYPES_COUNT", CGS_ARTIST_FILE, 707 /* ARTIST 0x824454AC */));
     // Unguarded: ARTIST reads the slot's flag straight away (lbz r3, 4(slot) @0x824454C0).
 
 
@@ -655,9 +655,9 @@ bool CustomRendererManager::GetComponentRenderable(s32 liComponent)
 // ================= GetNumTexturesForComponent @ 0x82445658 =================
 s32 CustomRendererManager::GetNumTexturesForComponent(s32 liComponent) const
 {
-    CGS_ASSERT(liComponent >= 0, CgsDev::Assert::MessageAt("liComponent >= 0", "..\\..\\..\\GameSource\\Gui/CustomRenderer/BrnCustomRenderer.cpp", 834 /* ARTIST 0x82445690 */));
+    CGS_ASSERT(liComponent >= 0, CGS_ASSERT_MESSAGE_AT("liComponent >= 0", CGS_ARTIST_FILE, 834 /* ARTIST 0x82445690 */));
     CGS_ASSERT(liComponent < E_CUSTOM_RENDER_TYPES_COUNT,
-               CgsDev::Assert::MessageAt("liComponent < E_CUSTOM_RENDER_TYPES_COUNT", "..\\..\\..\\GameSource\\Gui/CustomRenderer/BrnCustomRenderer.cpp", 835 /* ARTIST 0x824456B4 */));
+               CGS_ASSERT_MESSAGE_AT("liComponent < E_CUSTOM_RENDER_TYPES_COUNT", CGS_ARTIST_FILE, 835 /* ARTIST 0x824456B4 */));
     // Unguarded: ARTIST calls the slot's GetNumTextures (vtable +0x28) @0x824456D4.
 
 
@@ -867,3 +867,5 @@ void SetMaskAspectCorrectionMatrix(GuiCache*)
 }
 
 } // namespace BrnGui
+
+#undef CGS_ARTIST_FILE

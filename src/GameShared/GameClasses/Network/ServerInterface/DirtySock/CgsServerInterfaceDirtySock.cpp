@@ -15,7 +15,7 @@
 #include "lobbysetting.h"    // LobbySettingCreate / LobbySettingDestroy
 #include "connapi.h"         // ConnApiCreate / ConnApiDestroy / ConnApiOnline / ConnApiControl
 #include "netconn.h"         // NetConnMAC
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\CgsServerInterfaceDirtySock.cpp"
 #include <string.h>          // strlen / strncpy
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
@@ -67,7 +67,7 @@ namespace CgsNetwork
     char* ServerInterfaceDirtySock::GetMessageBuffer() const
     {
         CGS_ASSERT(mpacMessageBuffer != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpacMessageBuffer",
                 "..\\..\\..\\GameShared\\GameClasses\\Network/ServerInterface\\DirtySock\\CgsServerInterfaceDirtySock.h", 719 /* ARTIST 0x82580B70 */));
         return mpacMessageBuffer;
@@ -247,16 +247,16 @@ namespace CgsNetwork
     void ServerInterfaceDirtySock::MemFree(void* lpBlock, s32 /*liAlignment*/, s32 /*liPool*/)
     {
         CGS_ASSERT(mpMemoryBlock,
-            CgsDev::Assert::MessageAt("mpMemoryBlock", __FILE__, 256 /* ARTIST 0x828755B8 */));
+            CGS_ASSERT_MESSAGE_AT("mpMemoryBlock", __FILE__, 256 /* ARTIST 0x828755B8 */));
         mpMemoryBlock->Free(lpBlock);
     }
 
     void ServerInterfaceDirtySock::SetMemoryBuffer(CgsMemory::HeapMalloc* lpHeapMalloc)
     {
-        CGS_ASSERT(lpHeapMalloc, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpHeapMalloc, CGS_ASSERT_MESSAGE_AT(
             "lpHeapMalloc",
             __FILE__, 932 /* ARTIST 0x82875C34 */));
-        CGS_ASSERT(mpMemoryBlock == 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpMemoryBlock == 0, CGS_ASSERT_MESSAGE_AT(
             "mpMemoryBlock == NULL",
             __FILE__, 934 /* ARTIST 0x82875C60 */));
         mpMemoryBlock = lpHeapMalloc;
@@ -264,7 +264,7 @@ namespace CgsNetwork
 
     void ServerInterfaceDirtySock::ReleaseMemoryBuffer()
     {
-        CGS_ASSERT(mpMemoryBlock, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpMemoryBlock, CGS_ASSERT_MESSAGE_AT(
             "mpMemoryBlock",
             __FILE__, 950 /* ARTIST 0x82875CB0 */));
         mpMemoryBlock = 0;
@@ -300,23 +300,23 @@ namespace CgsNetwork
 
         miCgsNetworkServerInterfacePM1 =
             CgsDev::PerfMonCpu::AddMonitor("Int - DirtySock Update", CgsDev::E_PMP_9, false, 5.0f, true);
-        CGS_ASSERT(miCgsNetworkServerInterfacePM1 >= 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(miCgsNetworkServerInterfacePM1 >= 0, CGS_ASSERT_MESSAGE_AT(
             "miCgsNetworkServerInterfacePM1 >= 0",
-            "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\CgsServerInterfaceDirtySock.cpp", 311 /* ARTIST 0x828859C4 */));
+            CGS_ARTIST_FILE, 311 /* ARTIST 0x828859C4 */));
     }
 
     bool ServerInterfaceDirtySock::Prepare(ServerInterfacePrepareParams* lpParams)
     {
         CGS_ASSERT(mpMemoryBlock,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "Set a memory buffer before preparing the lobby", __FILE__, 330 /* ARTIST 0x828980DC */));
         CGS_ASSERT(mpacMessageBuffer == 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpacMessageBuffer == NULL", __FILE__, 334 /* ARTIST 0x82898104 */));
 
         mpacMessageBuffer = static_cast<char*>(MemAlloc(KI_MESSAGE_BUFFER_SIZE, 0, KI_DIRTY_MEM_GROUP_DEFAULT));
         CGS_ASSERT(mpacMessageBuffer,
-            CgsDev::Assert::MessageAt("mpacMessageBuffer", __FILE__, 336 /* ARTIST 0x82898140 */));
+            CGS_ASSERT_MESSAGE_AT("mpacMessageBuffer", __FILE__, 336 /* ARTIST 0x82898140 */));
 
         miLanguage            = lpParams->mLobbyParams.miLanguage;
         mpcVersion            = lpParams->mLobbyParams.mpcVersion;
@@ -361,31 +361,31 @@ namespace CgsNetwork
     void ServerInterfaceDirtySock::Destruct()
     {
         CGS_ASSERT(mpMemoryBlock == 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "Release the memory block before calling Destruct!",
                 __FILE__, 409 /* ARTIST 0x82885A90 */));
         CGS_ASSERT(mpLobbyAPIRef == 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "Call release before calling Destruct!",
                 __FILE__, 410 /* ARTIST 0x82885ABC */));
         CGS_ASSERT(mpLobbyLoginRef == 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "Call release before calling Destruct!",
                 __FILE__, 411 /* ARTIST 0x82885AE0 */));
         CGS_ASSERT(mpConnApiRef == 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "Call release before calling Destruct!",
                 __FILE__, 412 /* ARTIST 0x82885B04 */));
         CGS_ASSERT(mpGameManagerRef == 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "Call release before calling Destruct!",
                 __FILE__, 413 /* ARTIST 0x82885B28 */));
         CGS_ASSERT(mpSettingRef == 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "Call release before calling Destruct!",
                 __FILE__, 414 /* ARTIST 0x82885B4C */));
         CGS_ASSERT(mpacMessageBuffer == 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "Call release before calling Destruct!",
                 __FILE__, 415 /* ARTIST 0x82885B70 */));
 
@@ -412,9 +412,9 @@ namespace CgsNetwork
 
     void ServerInterfaceDirtySock::Update()
     {
-        CGS_ASSERT(mpLobbyAPIRef != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpLobbyAPIRef != 0, CGS_ASSERT_MESSAGE_AT(
             "Prepare the server interface before calling update!",
-            "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\CgsServerInterfaceDirtySock.cpp", 454 /* ARTIST 0x82898210 */));
+            CGS_ARTIST_FILE, 454 /* ARTIST 0x82898210 */));
 
         CgsDev::PerfMonCpu::StartMonitor(miCgsNetworkServerInterfacePM1);
         LobbyApiUpdate(mpLobbyAPIRef);
@@ -569,7 +569,7 @@ namespace CgsNetwork
         {
             return meStatus;
         }
-        CGS_ASSERT(GetComponent(leComponent), CgsDev::Assert::MessageAt(
+        CGS_ASSERT(GetComponent(leComponent), CGS_ASSERT_MESSAGE_AT(
             "GetComponent( leComponent )",
             __FILE__, 1044 /* ARTIST 0x82875EC8 */));
         return static_cast<EStatus>(GetComponent(leComponent)->GetStatus());
@@ -581,7 +581,7 @@ namespace CgsNetwork
         {
             return miLastError;
         }
-        CGS_ASSERT(GetComponent(leComponent), CgsDev::Assert::MessageAt(
+        CGS_ASSERT(GetComponent(leComponent), CGS_ASSERT_MESSAGE_AT(
             "GetComponent( leComponent )",
             __FILE__, 1067 /* ARTIST 0x82885EA0 */));
         return GetComponent(leComponent)->GetLastError();
@@ -596,7 +596,7 @@ namespace CgsNetwork
             mpcCurrentAction = 0;
             return;
         }
-        CGS_ASSERT(GetComponent(leComponent), CgsDev::Assert::MessageAt(
+        CGS_ASSERT(GetComponent(leComponent), CGS_ASSERT_MESSAGE_AT(
             "GetComponent( leComponent )",
             __FILE__, 1092 /* ARTIST 0x82885F38 */));
         GetComponent(leComponent)->ClearLastError();
@@ -665,19 +665,19 @@ namespace CgsNetwork
 
         mpLobbyLoginRef = LobbyLoginCreate(mpLobbyAPIRef, KA_LOBBY_LOGIN_ALERT_TEXT);
         CGS_ASSERT(mpLobbyLoginRef,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "Lobby Login reference creation failed!", __FILE__, 491 /* ARTIST 0x82890D40 */));
 
         CreateConnApi();
 
         mpGameManagerRef = GameManagerCreate(mpLobbyAPIRef, mpConnApiRef);
         CGS_ASSERT(mpGameManagerRef,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "Failed to allocate GameManager", __FILE__, 587 /* ARTIST 0x82890D7C */));
 
         mpSettingRef = LobbySettingCreate(mpLobbyAPIRef);
         CGS_ASSERT(mpSettingRef,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "Failed to allocate SettingRef", __FILE__, 602 /* ARTIST 0x82890DAC */));
 
         OnEvent(E_SERVER_INTERFACE_GENERAL_EVENT_LOBBY_API_CREATED, 0);
@@ -753,7 +753,7 @@ namespace CgsNetwork
         mpConnApiRef = ConnApiCreate(mConnApiPrepareParams.miPort, mConnApiPrepareParams.miMaxPlayers,
                                      &ServerInterfaceDirtySock::ConnApiCallback, this);
         CGS_ASSERT(mpConnApiRef,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "Failed to allocate ConnAPI", __FILE__, 563 /* ARTIST 0x82885C20 */));
 
         ConnApiControl(mpConnApiRef, 0x70656572 /* 'peer' */, mConnApiPrepareParams.mbPeerToPeer, 0, 0);
@@ -848,3 +848,5 @@ extern "C" void DirtyMemFree(void* pMem, s32 iMemModule, s32 iMemGroup)
 {
     CgsNetwork::ServerInterfaceDirtySock::MemFree(pMem, iMemModule, iMemGroup);
 }
+
+#undef CGS_ARTIST_FILE

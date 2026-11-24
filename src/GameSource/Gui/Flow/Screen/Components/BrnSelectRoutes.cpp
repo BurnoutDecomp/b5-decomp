@@ -47,13 +47,13 @@ namespace BrnGui
                                                                     s32 liCheckpointIndex) const
     {
         CGS_ASSERT(liCheckpointIndex > 0,
-            CgsDev::Assert::MessageAt("liCheckpointIndex > 0", __FILE__, 288 /* ARTIST 0x824837EC */));
+            CGS_ASSERT_MESSAGE_AT("liCheckpointIndex > 0", __FILE__, 288 /* ARTIST 0x824837EC */));
         CGS_ASSERT(liCheckpointIndex < KI_MAX_CHECKPOINTS,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "liCheckpointIndex < KI_MAX_CHECKPOINTS",
                 __FILE__, 289 /* ARTIST 0x82483810 */));
         CGS_ASSERT(liCheckpointIndex < maiNumCheckpoints[liRoundNumber],
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "liCheckpointIndex < maiNumCheckpoints[ liRoundNumber ]",
                 __FILE__, 290 /* ARTIST 0x82483840 */));
 
@@ -750,7 +750,7 @@ namespace BrnGui
     {
         const SatNavEventDisplayInfo* lpStart = mpGuiCache->GetPresetEventDisplayInfo(luStartLightTriggerID);
         CGS_ASSERT(lpStart,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpEventStart",
                 "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnSelectRoutes.h", 360 /* ARTIST 0x824838B0 */));
         maCheckpointData[0].maeSelectedCounty[liRoundNumber] = static_cast<BrnWorld::ECounty>(lpStart->muCounty);

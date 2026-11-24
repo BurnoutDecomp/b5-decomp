@@ -130,7 +130,7 @@ namespace Vehicle
                                       static_cast<double>(lPosition.mV.y), static_cast<double>(lPosition.mV.z));
                 lMessage << ", please tell Graham D.";
                 CgsDev::Assert::FireAssert(lacMessage,
-                    "..\\..\\..\\GameSource\\Physics/VehicleManager/VehiclePhysics/Wheel.h", 412);
+                    CGS_ASSERT_LOCATION("..\\..\\..\\GameSource\\Physics/VehicleManager/VehiclePhysics/Wheel.h", 412));
                 CgsDev::Assert::EndAssert();
             }
         }

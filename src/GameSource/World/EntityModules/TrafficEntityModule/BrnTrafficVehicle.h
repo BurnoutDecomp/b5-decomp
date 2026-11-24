@@ -1,5 +1,5 @@
 #pragma once
-
+#define CGS_ARTIST_BRNTRAFFICVEHICLE_FILE "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficVehicle.h"
 #include "BrnCommonTypes.h"
 #include "GameShared/GameClasses/Containers/CgsFastBitArray.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -391,10 +391,10 @@ public:
     // Its asserts carry the original header's lines h:1091/h:1092 (li r5,0x443/0x444).
     s32 GetPhysicalPartsIndex() const
     {
-        CGS_ASSERT(IsPhysical(), CgsDev::Assert::MessageAt("IsPhysical()",
-            "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficVehicle.h", 1091));
-        CGS_ASSERT(miPhysicalPartsIndex >= 0, CgsDev::Assert::MessageAt("miPhysicalPartsIndex >= 0",
-            "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficVehicle.h", 1092));
+        CGS_ASSERT(IsPhysical(), CGS_ASSERT_MESSAGE_AT("IsPhysical()",
+            CGS_ARTIST_BRNTRAFFICVEHICLE_FILE, 1091));
+        CGS_ASSERT(miPhysicalPartsIndex >= 0, CGS_ASSERT_MESSAGE_AT("miPhysicalPartsIndex >= 0",
+            CGS_ARTIST_BRNTRAFFICVEHICLE_FILE, 1092));
         return static_cast<u8>(miPhysicalPartsIndex);
     }
 
@@ -446,8 +446,8 @@ private:
 inline Vehicle::Species GetVehicleSpecies(u32 luIndex)
 {
     // BrnTrafficVehicle.h:578 -- the pool-wide bound (TrafficEntityModule::KU_MAX_TOTAL_TRAFFIC).
-    CGS_ASSERT(luIndex < 0x258u, CgsDev::Assert::MessageAt("luIndex < KU_MAX_TOTAL_TRAFFIC",
-        "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficVehicle.h", 578));
+    CGS_ASSERT(luIndex < 0x258u, CGS_ASSERT_MESSAGE_AT("luIndex < KU_MAX_TOTAL_TRAFFIC",
+        CGS_ARTIST_BRNTRAFFICVEHICLE_FILE, 578));
 
     if (luIndex < 0x190u)        // < 400
         return Vehicle::E_SPECIES_STANDARD;
@@ -456,3 +456,5 @@ inline Vehicle::Species GetVehicleSpecies(u32 luIndex)
     return Vehicle::E_SPECIES_TRAILER;
 }
 }
+
+#undef CGS_ARTIST_BRNTRAFFICVEHICLE_FILE

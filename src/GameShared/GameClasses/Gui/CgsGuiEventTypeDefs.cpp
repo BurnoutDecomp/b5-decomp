@@ -14,7 +14,7 @@ namespace CgsGui
     f64 GuiEventTimeInfo::GetTime() const
     {
         CGS_ASSERT(mfTimeNow != -FLT_MAX,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mfTimeNow!=-FLT_MAX",
                 "..\\..\\..\\GameShared\\GameClasses\\Gui/CgsGuiEventTypeDefs.h", 250 /* ARTIST 0x8240E358 */));
         return mfTimeNow;

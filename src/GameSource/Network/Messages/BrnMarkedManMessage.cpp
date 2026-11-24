@@ -1,6 +1,6 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Messages/BrnMarkedManMessage.cpp"
 #include "GameSource/Network/Messages/BrnMarkedManMessage.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
@@ -74,12 +74,12 @@ namespace BrnNetwork
 
     bool MarkedManMessage::Retrieve(NetworkPlayerID* lpMarkedMan, bool* lpbFinalAnswer)
     {
-        CGS_ASSERT(lpMarkedMan != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpMarkedMan != 0, CGS_ASSERT_MESSAGE_AT(
             "lpMarkedMan",
-            "..\\..\\..\\GameSource\\Network/Messages/BrnMarkedManMessage.cpp", 109 /* ARTIST 0x8257E96C */));
-        CGS_ASSERT(lpbFinalAnswer != 0, CgsDev::Assert::MessageAt(
+            CGS_ARTIST_FILE, 109 /* ARTIST 0x8257E96C */));
+        CGS_ASSERT(lpbFinalAnswer != 0, CGS_ASSERT_MESSAGE_AT(
             "lpbIsFinalSelection",
-            "..\\..\\..\\GameSource\\Network/Messages/BrnMarkedManMessage.cpp", 110 /* ARTIST 0x8257E990 */));
+            CGS_ARTIST_FILE, 110 /* ARTIST 0x8257E990 */));
 
         // ARTIST 0x8257E9A4 branches to a trailing `return false` (0x8257E9F8): the copy-out is the body
         // of the valid test.
@@ -88,11 +88,13 @@ namespace BrnNetwork
             *lpMarkedMan    = mMarkedMan;
             *lpbFinalAnswer = mbFinalAnswer;
             mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
-            CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0, CgsDev::Assert::MessageAt(
+            CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0, CGS_ASSERT_MESSAGE_AT(
                 "!CgsNetwork::ReliableMessage::IsMessageValid()",
-                "..\\..\\..\\GameSource\\Network/Messages/BrnMarkedManMessage.cpp", 121 /* ARTIST 0x8257E9E4 */));
+                CGS_ARTIST_FILE, 121 /* ARTIST 0x8257E9E4 */));
             return true;
         }
         return false;
     }
 } // namespace BrnNetwork
+
+#undef CGS_ARTIST_FILE

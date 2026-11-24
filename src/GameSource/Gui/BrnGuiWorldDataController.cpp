@@ -17,7 +17,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h" // AcquireResourceRequest / AcquireResourceResponse
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h" // CgsResource::ResourceHandle
 #include "GameSource/Resource/SharedIO/BrnGameDataEvents.h"           // GameDataAssetEvent (the GET reply record)
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/BrnGuiWorldDataController.h"
 // BrnGui::WorldDataController -- reconstructed from BURNOUT_X360_ARTIST.XEX. The readiness
 // accessors each assert the controller has reached the ready state (the X360 compares meState
 // against 11 / WFPLAYERCARCOLOURS; the baked rodata text names READY, reproduced verbatim) then
@@ -25,7 +25,7 @@
 // acquire state machine (0x82516770) are real as of f80e1fab; of the DWARF-declared method set
 // only Release, GetRoadTriggerVolumeRegions and the two
 // *AtPositionInList lookups remain un-homed (no bodies anywhere in the tree).
-
+#define CGS_ARTIST_BRNGUIWORLDDATACONTROLLER_FILE "..\\..\\..\\GameSource\\Gui/BrnGuiWorldDataController.cpp"
 namespace BrnGui
 {
 
@@ -435,7 +435,7 @@ bool WorldDataController::Prepare2(BrnResource::GameDataIO::InputBuffer* lpGameD
 s32 WorldDataController::GetTotalNumberOfLandmarks() const
 {
     CGS_ASSERT(meState >= E_WORLDDATACONTROLLERSTATE_WFPLAYERCARCOLOURS,
-        CgsDev::Assert::MessageAt("E_WORLDDATACONTROLLERSTATE_READY <= meState", "..\\..\\..\\GameSource\\Gui/BrnGuiWorldDataController.h", 229 /* ARTIST 0x8248E710 */));
+        CGS_ASSERT_MESSAGE_AT("E_WORLDDATACONTROLLERSTATE_READY <= meState", CGS_ARTIST_FILE, 229 /* ARTIST 0x8248E710 */));
     return mpTriggerData->GetNumLandmarks();
 }
 
@@ -445,7 +445,7 @@ s32 WorldDataController::GetTotalNumberOfLandmarks() const
 s32 WorldDataController::GetTotalNumberOfOnlineLandmarks() const
 {
     CGS_ASSERT(meState >= E_WORLDDATACONTROLLERSTATE_WFPLAYERCARCOLOURS,
-        CgsDev::Assert::MessageAt("E_WORLDDATACONTROLLERSTATE_READY <= meState", "..\\..\\..\\GameSource\\Gui/BrnGuiWorldDataController.h", 246 /* ARTIST 0x82428718 */));
+        CGS_ASSERT_MESSAGE_AT("E_WORLDDATACONTROLLERSTATE_READY <= meState", CGS_ARTIST_FILE, 246 /* ARTIST 0x82428718 */));
     return mpTriggerData->GetOnlineLandmarkCount();
 }
 
@@ -482,7 +482,7 @@ s32 WorldDataController::GetRequiredWinsInRank(s32 liRank) const
 const BrnProgression::ProgressionData* WorldDataController::GetProgressionData() const
 {
     CGS_ASSERT(meState >= E_WORLDDATACONTROLLERSTATE_WFPLAYERCARCOLOURS,
-        CgsDev::Assert::MessageAt("E_WORLDDATACONTROLLERSTATE_READY <= meState", "..\\..\\..\\GameSource\\Gui/BrnGuiWorldDataController.h", 306 /* ARTIST 0x82428850 */));
+        CGS_ASSERT_MESSAGE_AT("E_WORLDDATACONTROLLERSTATE_READY <= meState", CGS_ARTIST_FILE, 306 /* ARTIST 0x82428850 */));
     return mpProgressionData.operator->();
 }
 
@@ -512,8 +512,8 @@ WorldDataController::GetLandmarkInfoFromIndex(BrnGameState::LandmarkIndex lLandm
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(
             lacMessageBuffer,
-            "..\\..\\..\\GameSource\\Gui/BrnGuiWorldDataController.cpp",
-            414);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_BRNGUIWORLDDATACONTROLLER_FILE,
+            414));
         CgsDev::Assert::EndAssert();
     }
 
@@ -543,8 +543,8 @@ WorldDataController::GetLandmarkInfoFromID(CgsID lLandmarkID) const
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(
             lacMessageBuffer,
-            "..\\..\\..\\GameSource\\Gui/BrnGuiWorldDataController.cpp",
-            445);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_BRNGUIWORLDDATACONTROLLER_FILE,
+            445));
         CgsDev::Assert::EndAssert();
     }
 
@@ -665,3 +665,6 @@ const BrnTrigger::Landmark* WorldDataController::GetOnlineLandmarkInfoAtPosition
     return mpTriggerData->GetOnlineLandmark(liIndex);
 }
 }
+
+#undef CGS_ARTIST_FILE
+#undef CGS_ARTIST_BRNGUIWORLDDATACONTROLLER_FILE

@@ -105,10 +105,10 @@ const f32 AStar::KF_ZERO_EPSILON = 1.1920929e-07f;
 AStarNode* AStarNodePool::GetNode(u16 luNodeIndex)
 {
     CGS_ASSERT(luNodeIndex < KU_MAX_NODES,
-        CgsDev::Assert::MessageAt("luIndex < KU_MAX_NODES", __FILE__, 483 /* ARTIST 0x8276555C */));
+        CGS_ASSERT_MESSAGE_AT("luIndex < KU_MAX_NODES", __FILE__, 483 /* ARTIST 0x8276555C */));
     CGS_ASSERT(luNodeIndex % KU_MAX_PARTITION_NODES
                    < mauNodeCount[luNodeIndex / KU_MAX_PARTITION_NODES],
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "luIndex % KU_MAX_PARTITION_NODES < mauNodeCount[luIndex / KU_MAX_PARTITION_NODES]",
             __FILE__, 484 /* ARTIST 0x827655A0 */));
     return &maNodes[luNodeIndex];

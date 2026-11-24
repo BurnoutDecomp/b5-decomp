@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Network/VoIP/DirtySock/CgsVoIPManagerDirtySock.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Network/VoIP/DirtySock/CgsVoIPManagerDirtySock.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 #include "GameShared/GameClasses/Network/CgsNetworkManager.h"
 #include "GameShared/GameClasses/Network/CgsNetworkUtils.h"
@@ -62,7 +62,7 @@ namespace CgsNetwork
                 return &maRegisteredTalkers[liIndex];
         }
 
-        CGS_ASSERT(false, CgsDev::Assert::StreamMessageAt("Failed to find registered talker\n", "..\\..\\..\\GameShared\\GameClasses\\Network/VoIP/DirtySock/CgsVoIPManagerDirtySock.cpp", 947));
+        CGS_ASSERT(false, CGS_ASSERT_STREAM_MESSAGE_AT("Failed to find registered talker\n", CGS_ARTIST_FILE, 947));
         return 0;
     }
 
@@ -85,7 +85,7 @@ namespace CgsNetwork
             if (mpVoiceRef)
             {
                 u32 lu32ConnectionMask = GetConnectionMask();
-                CGS_ASSERT(mpVoiceRef, CgsDev::Assert::MessageAt(
+                CGS_ASSERT(mpVoiceRef, CGS_ASSERT_MESSAGE_AT(
                     "mpVoiceRef",
                     __FILE__, 976 /* ARTIST 0x82893820 */));
 
@@ -113,9 +113,9 @@ namespace CgsNetwork
         if (mpVoiceRef)
         {
             u32 lu32ConnectionMask = GetConnectionMask();
-            CGS_ASSERT(mpVoiceRef, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(mpVoiceRef, CGS_ASSERT_MESSAGE_AT(
                 "mpVoiceRef",
-                "..\\..\\..\\GameShared\\GameClasses\\Network/VoIP/DirtySock/CgsVoIPManagerDirtySock.cpp", 1041 /* ARTIST 0x828938DC */));
+                CGS_ARTIST_FILE, 1041 /* ARTIST 0x828938DC */));
 
             VoipSpeaker(mpVoiceRef, lu32ConnectionMask);
 
@@ -238,7 +238,7 @@ namespace CgsNetwork
         }
 
         CGS_ASSERT(mpVoiceRef,
-            CgsDev::Assert::MessageAt("mpVoiceRef", __FILE__, 269 /* ARTIST 0x8289B2F4 */));
+            CGS_ASSERT_MESSAGE_AT("mpVoiceRef", __FILE__, 269 /* ARTIST 0x8289B2F4 */));
 
         UpdateLocalPlayer();
         UpdateHeadsetStatusMessages(lbIsLocalPlayerInGame);
@@ -250,7 +250,7 @@ namespace CgsNetwork
     // microphone when the headset comes or goes.
     void VoIPManager::UpdateLocalPlayer()
     {
-        CGS_ASSERT(mpVoiceRef, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpVoiceRef, CGS_ASSERT_MESSAGE_AT(
             "mpVoiceRef",
             __FILE__, 293 /* ARTIST 0x82899138 */));
 
@@ -271,7 +271,7 @@ namespace CgsNetwork
             if (mbIsLocalPlayerInGame)
             {
                 NetworkPlayerID lLocalPlayerID;
-                CGS_ASSERT(mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID), CgsDev::Assert::MessageAt(
+                CGS_ASSERT(mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID), CGS_ASSERT_MESSAGE_AT(
                     "mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID)",
                     __FILE__, 329 /* ARTIST 0x828991DC */));
                 mpPlayerManager->GetMenuDataByID(lLocalPlayerID)->mu8HeadsetStatus = mu8HeadsetStatus;
@@ -369,13 +369,13 @@ namespace CgsNetwork
     // (once) and gets its headset-status messages registered.
     bool VoIPManager::AddPlayer(VoIPNetworkPlayerID lPlayerID)
     {
-        CGS_ASSERT(lPlayerID != K_INVALID_PLAYER_ID, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lPlayerID != K_INVALID_PLAYER_ID, CGS_ASSERT_MESSAGE_AT(
             "lPlayerID != K_INVALID_PLAYER_ID",
             __FILE__, 502 /* ARTIST 0x828934E0 */));
-        CGS_ASSERT(meStatus != E_VOIP_MANAGER_STATUS_UNPREPARED, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(meStatus != E_VOIP_MANAGER_STATUS_UNPREPARED, CGS_ASSERT_MESSAGE_AT(
             "meStatus != E_VOIP_MANAGER_STATUS_UNPREPARED",
             __FILE__, 503 /* ARTIST 0x82893508 */));
-        CGS_ASSERT(mpVoiceRef, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpVoiceRef, CGS_ASSERT_MESSAGE_AT(
             "mpVoiceRef",
             __FILE__, 504 /* ARTIST 0x82893530 */));
 
@@ -405,7 +405,7 @@ namespace CgsNetwork
                 break;
             }
         }
-        CGS_ASSERT(liIndex < KI_NUM_TALKERS, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(liIndex < KI_NUM_TALKERS, CGS_ASSERT_MESSAGE_AT(
             "liIndex < KI_MAX_NETWORK_PLAYERS",
             __FILE__, 530 /* ARTIST 0x828935E8 */));
 
@@ -505,10 +505,10 @@ namespace CgsNetwork
     // callbacks).
     void VoIPManager::RegisterMessage(VoIPNetworkPlayerID lPlayerID)
     {
-        CGS_ASSERT(mpPlayerManager, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpPlayerManager, CGS_ASSERT_MESSAGE_AT(
             "mpPlayerManager",
             __FILE__, 703 /* ARTIST 0x8288B844 */));
-        CGS_ASSERT(lPlayerID != K_INVALID_PLAYER_ID, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lPlayerID != K_INVALID_PLAYER_ID, CGS_ASSERT_MESSAGE_AT(
             "lPlayerID != K_INVALID_PLAYER_ID",
             __FILE__, 704 /* ARTIST 0x8288B868 */));
 
@@ -528,7 +528,7 @@ namespace CgsNetwork
     // ---- UnregisterMessage ------------------------------------------------------
     void VoIPManager::UnregisterMessage(VoIPNetworkPlayerID lPlayerID)
     {
-        CGS_ASSERT(mpPlayerManager, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpPlayerManager, CGS_ASSERT_MESSAGE_AT(
             "mpPlayerManager",
             __FILE__, 734 /* ARTIST 0x8287E1C8 */));
 
@@ -544,7 +544,7 @@ namespace CgsNetwork
     bool VoIPManager::DoesLocalPlayerHaveHeadset()
     {
         CGS_ASSERT(mpVoiceRef,
-            CgsDev::Assert::MessageAt("mpVoiceRef", __FILE__, 758 /* ARTIST 0x8287E270 */));
+            CGS_ASSERT_MESSAGE_AT("mpVoiceRef", __FILE__, 758 /* ARTIST 0x8287E270 */));
 
         if (!mbIsVoiceAllowed)
         {
@@ -577,7 +577,7 @@ namespace CgsNetwork
     // The talker slot whose player has the given name, or -1.
     s32 VoIPManager::GetIndexFromPlayerName(const char* lpcPlayerName) const
     {
-        CGS_ASSERT(lpcPlayerName, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpcPlayerName, CGS_ASSERT_MESSAGE_AT(
             "lpcPlayerName",
             __FILE__, 874 /* ARTIST 0x8287E404 */));
 
@@ -618,20 +618,20 @@ namespace CgsNetwork
 
 void VoIPManager::UpdateConnectionIDsAndSendMask(ServerInterface* lpServerInterface)
 {
-    CGS_ASSERT(lpServerInterface, CgsDev::Assert::MessageAt(
+    CGS_ASSERT(lpServerInterface, CGS_ASSERT_MESSAGE_AT(
         "lpServerInterface",
         __FILE__, 584 /* ARTIST 0x828994E8 */));
-    CGS_ASSERT(meStatus != E_VOIP_MANAGER_STATUS_UNPREPARED, CgsDev::Assert::MessageAt(
+    CGS_ASSERT(meStatus != E_VOIP_MANAGER_STATUS_UNPREPARED, CGS_ASSERT_MESSAGE_AT(
         "meStatus != E_VOIP_MANAGER_STATUS_UNPREPARED",
         __FILE__, 586 /* ARTIST 0x82899510 */));
 
     DirtySock::ConnApiRefT* lpConnApi = lpServerInterface->GetConnAPIRef();
-    CGS_ASSERT(lpConnApi, CgsDev::Assert::MessageAt(
+    CGS_ASSERT(lpConnApi, CGS_ASSERT_MESSAGE_AT(
         "lpConnApi",
         __FILE__, 589 /* ARTIST 0x82899538 */));
 
     const DirtySock::ConnApiClientListT* lpClientList = ConnApiGetClientList(lpConnApi);
-    CGS_ASSERT(lpClientList, CgsDev::Assert::MessageAt(
+    CGS_ASSERT(lpClientList, CGS_ASSERT_MESSAGE_AT(
         "lpClientList",
         __FILE__, 592 /* ARTIST 0x82899568 */));
 
@@ -644,7 +644,7 @@ void VoIPManager::UpdateConnectionIDsAndSendMask(ServerInterface* lpServerInterf
         {
             continue;
         }
-        CGS_ASSERT(liEntryIndex < static_cast<s32>(sizeof(maRegisteredTalkers) / sizeof(maRegisteredTalkers[0])), CgsDev::Assert::MessageAt(
+        CGS_ASSERT(liEntryIndex < static_cast<s32>(sizeof(maRegisteredTalkers) / sizeof(maRegisteredTalkers[0])), CGS_ASSERT_MESSAGE_AT(
             "liEntryIndex < KI_MAX_NETWORK_PLAYERS",
             __FILE__, 607 /* ARTIST 0x828995BC */));
 
@@ -661,3 +661,5 @@ void VoIPManager::UpdateConnectionIDsAndSendMask(ServerInterface* lpServerInterf
 }
 
 }
+
+#undef CGS_ARTIST_FILE

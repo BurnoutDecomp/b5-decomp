@@ -71,8 +71,8 @@ const char* ICEMoviePlaylist::DebugGetMovieName(s32 liMovie) const
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(
             "mMoviePoolIndicies[liMovie] <= 20",
-            "..\\..\\..\\GameSource\\Director/Utils/BrnICEMoviePlayer.cpp",
-            289);
+            CGS_ASSERT_LOCATION("..\\..\\..\\GameSource\\Director/Utils/BrnICEMoviePlayer.cpp",
+            289));
         CgsDev::Assert::EndAssert();
     }
     static const char laacMovieNames[KI_CAPACITY][10] = {
@@ -99,8 +99,8 @@ void ICEMoviePlaylist::SetDebugComponent(DebugComponent* lpDebugComponent)
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(
             "mpDebugComponent != NULL",
-            "..\\..\\..\\GameSource\\Director/Utils/BrnICEMoviePlayer.h",
-            563);
+            CGS_ASSERT_LOCATION("..\\..\\..\\GameSource\\Director/Utils/BrnICEMoviePlayer.h",
+            563));
         CgsDev::Assert::EndAssert();
     }
 }

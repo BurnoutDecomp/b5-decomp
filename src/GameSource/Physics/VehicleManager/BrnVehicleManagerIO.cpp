@@ -1,5 +1,5 @@
 #include "GameSource/Physics/VehicleManager/BrnVehicleManagerIO.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\VehicleManager/BrnVehicleManagerIO.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // the header-baked lock asserts
 
@@ -50,7 +50,7 @@ namespace Vehicle
     const VehicleOutputRequestInterface*
     VehicleManagerOutputBuffer::GetVehicleOutputRequestInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\VehicleManager/BrnVehicleManagerIO.h", 60));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 60));
         return &mVehicleOutputRequestInterface;
     }
 
@@ -58,8 +58,10 @@ namespace Vehicle
     VehicleOutputRequestInterface*
     VehicleManagerOutputBuffer::GetVehicleOutputRequestInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\VehicleManager/BrnVehicleManagerIO.h", 61));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 61));
         return &mVehicleOutputRequestInterface;
     }
 }
 }
+
+#undef CGS_ARTIST_FILE

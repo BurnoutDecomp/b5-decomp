@@ -1,6 +1,6 @@
 #ifndef GAMESOURCE_REPLAYS_SERIALISERS_BRNREPLAYDIRECTORBRIDGESERIALISER_H
 #define GAMESOURCE_REPLAYS_SERIALISERS_BRNREPLAYDIRECTORBRIDGESERIALISER_H
-
+#define CGS_ARTIST_BRNREPLAYDIRECTORBRIDGESERIALISER_FILE "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayDirectorBridgeSerialiser.h"
 #include "types.hpp"
 #include "BrnCommonTypes.h"                             // Matrix44Affine (the CoM transforms)
 #include "GameShared/GameClasses/Core/CgsAssert.h"      // CGS_ASSERT (the lpStatic tripwires)
@@ -81,7 +81,7 @@ namespace BrnReplays
         s32 GetActivePlayerIndex()
         {
             DirectorBridgeSerialiserStaticLayout* lpStatic = GetStaticLayout();
-            CGS_ASSERT(lpStatic != 0, CgsDev::Assert::MessageAt("lpStatic", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayDirectorBridgeSerialiser.h", 193));   // :193 (non-gating)
+            CGS_ASSERT(lpStatic != 0, CGS_ASSERT_MESSAGE_AT("lpStatic", CGS_ARTIST_BRNREPLAYDIRECTORBRIDGESERIALISER_FILE, 193));   // :193 (non-gating)
             return lpStatic->muActivePlayerIndex;
         }
 
@@ -89,7 +89,7 @@ namespace BrnReplays
         bool GetVehicleActive(s32 liVehicleIndex)
         {
             DirectorBridgeSerialiserStaticLayout* lpStatic = GetStaticLayout();
-            CGS_ASSERT(lpStatic != 0, CgsDev::Assert::MessageAt("lpStatic", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayDirectorBridgeSerialiser.h", 215));   // :215 (non-gating)
+            CGS_ASSERT(lpStatic != 0, CGS_ASSERT_MESSAGE_AT("lpStatic", CGS_ARTIST_BRNREPLAYDIRECTORBRIDGESERIALISER_FILE, 215));   // :215 (non-gating)
             return lpStatic->mabVehicleActive[liVehicleIndex];
         }
 
@@ -97,7 +97,7 @@ namespace BrnReplays
         const BrnDirector::Camera::VehicleInfo* GetVehicleInfo(s32 liVehicleIndex)
         {
             DirectorBridgeSerialiserStaticLayout* lpStatic = GetStaticLayout();
-            CGS_ASSERT(lpStatic != 0, CgsDev::Assert::MessageAt("lpStatic", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayDirectorBridgeSerialiser.h", 238));   // :238 (non-gating)
+            CGS_ASSERT(lpStatic != 0, CGS_ASSERT_MESSAGE_AT("lpStatic", CGS_ARTIST_BRNREPLAYDIRECTORBRIDGESERIALISER_FILE, 238));   // :238 (non-gating)
             return &lpStatic->mVehicleInfo[liVehicleIndex];
         }
 
@@ -105,7 +105,7 @@ namespace BrnReplays
         Matrix44Affine* GetCentreOfMassTransform(s32 liVehicleIndex)
         {
             DirectorBridgeSerialiserStaticLayout* lpStatic = GetStaticLayout();
-            CGS_ASSERT(lpStatic != 0, CgsDev::Assert::MessageAt("lpStatic", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayDirectorBridgeSerialiser.h", 287));   // :287 (non-gating)
+            CGS_ASSERT(lpStatic != 0, CGS_ASSERT_MESSAGE_AT("lpStatic", CGS_ARTIST_BRNREPLAYDIRECTORBRIDGESERIALISER_FILE, 287));   // :287 (non-gating)
             return &lpStatic->maCentreOfMassTransforms[liVehicleIndex];
         }
 
@@ -113,14 +113,14 @@ namespace BrnReplays
         const BrnDirector::Camera::PlayerCrashInfo* ReadCrashInfo()
         {
             DirectorBridgeSerialiserStaticLayout* lpStatic = GetStaticLayout();
-            CGS_ASSERT(lpStatic != 0, CgsDev::Assert::MessageAt("lpStatic", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayDirectorBridgeSerialiser.h", 261));   // ARTIST h:261
+            CGS_ASSERT(lpStatic != 0, CGS_ASSERT_MESSAGE_AT("lpStatic", CGS_ARTIST_BRNREPLAYDIRECTORBRIDGESERIALISER_FILE, 261));   // ARTIST h:261
             return &lpStatic->mPlayerCrashInfo;
         }
 
         f32 ReadPlayerBoostPercentage()
         {
             DirectorBridgeSerialiserStaticLayout* lpStatic = GetStaticLayout();
-            CGS_ASSERT(lpStatic != 0, CgsDev::Assert::MessageAt("lpStatic", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayDirectorBridgeSerialiser.h", 356));   // ARTIST h:356
+            CGS_ASSERT(lpStatic != 0, CGS_ASSERT_MESSAGE_AT("lpStatic", CGS_ARTIST_BRNREPLAYDIRECTORBRIDGESERIALISER_FILE, 356));   // ARTIST h:356
             return lpStatic->mfPlayerBoostPercentage;
         }
 
@@ -128,7 +128,7 @@ namespace BrnReplays
         const BrnGameState::GameStateModuleIO::CarScoreData& ReadPlayerScoreData()
         {
             DirectorBridgeSerialiserStaticLayout* lpStatic = GetStaticLayout();
-            CGS_ASSERT(lpStatic != 0, CgsDev::Assert::MessageAt("lpStatic", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayDirectorBridgeSerialiser.h", 310));   // ARTIST h:310
+            CGS_ASSERT(lpStatic != 0, CGS_ASSERT_MESSAGE_AT("lpStatic", CGS_ARTIST_BRNREPLAYDIRECTORBRIDGESERIALISER_FILE, 310));   // ARTIST h:310
             return lpStatic->mPlayerScoreData;
         }
 
@@ -138,9 +138,9 @@ namespace BrnReplays
         void GetPlayerTakedownInfo(bool* lpbPlayerWasTakenDown, s32* lpePlayerKiller)
         {
             DirectorBridgeSerialiserStaticLayout* lpStatic = GetStaticLayout();
-            CGS_ASSERT(lpStatic != 0, CgsDev::Assert::MessageAt("lpStatic", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayDirectorBridgeSerialiser.h", 383));                    // :383 (non-gating)
-            CGS_ASSERT(lpbPlayerWasTakenDown != 0, CgsDev::Assert::MessageAt("lpbPlayerWasTakenDown", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayDirectorBridgeSerialiser.h", 384));   // :384
-            CGS_ASSERT(lpePlayerKiller != 0, CgsDev::Assert::MessageAt("lpePlayerKiller", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayDirectorBridgeSerialiser.h", 385));      // :385
+            CGS_ASSERT(lpStatic != 0, CGS_ASSERT_MESSAGE_AT("lpStatic", CGS_ARTIST_BRNREPLAYDIRECTORBRIDGESERIALISER_FILE, 383));                    // :383 (non-gating)
+            CGS_ASSERT(lpbPlayerWasTakenDown != 0, CGS_ASSERT_MESSAGE_AT("lpbPlayerWasTakenDown", CGS_ARTIST_BRNREPLAYDIRECTORBRIDGESERIALISER_FILE, 384));   // :384
+            CGS_ASSERT(lpePlayerKiller != 0, CGS_ASSERT_MESSAGE_AT("lpePlayerKiller", CGS_ARTIST_BRNREPLAYDIRECTORBRIDGESERIALISER_FILE, 385));      // :385
             *lpbPlayerWasTakenDown = lpStatic->mbPlayerWasTakenDown;
             *lpePlayerKiller       = lpStatic->muPlayerKillerIndex;
         }
@@ -153,3 +153,5 @@ namespace BrnReplays
 }
 
 #endif // GAMESOURCE_REPLAYS_SERIALISERS_BRNREPLAYDIRECTORBRIDGESERIALISER_H
+
+#undef CGS_ARTIST_BRNREPLAYDIRECTORBRIDGESERIALISER_FILE

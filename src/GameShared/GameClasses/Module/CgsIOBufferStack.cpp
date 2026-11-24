@@ -23,8 +23,8 @@ namespace CgsModule
         // ARTIST 0x8286E120 validates the requested alignment and the buffer address.
         const char* const lpcArtistFile =
             "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsIOBufferStack.cpp";
-        CGS_ASSERT(luAlignment >= 16, CgsDev::Assert::MessageAt("luAlignment >= 16", lpcArtistFile, 83));
-        CGS_ASSERT((reinterpret_cast<intptr_t>(lpMemory) & 0xf) == 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(luAlignment >= 16, CGS_ASSERT_MESSAGE_AT("luAlignment >= 16", lpcArtistFile, 83));
+        CGS_ASSERT((reinterpret_cast<intptr_t>(lpMemory) & 0xf) == 0, CGS_ASSERT_MESSAGE_AT(
             "0 == (reinterpret_cast<intptr_t>(lpData) & 0xf )", lpcArtistFile, 84));
 
         mpData = static_cast<u8*>(lpMemory);

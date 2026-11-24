@@ -70,7 +70,7 @@ namespace Vehicle
     void VehicleDriverInputInterface::AddTargetAssist(Vector3 lTargetAssistPosition, EntityId lTargetAssistID)
     {
         CGS_ASSERT(miTargetAssistCount < KI_MAX_TARGET_ASSIST_CARS,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "miTargetAssistCount < BrnTraffic::KI_MAX_STOMPED_CARS",
                 KAC_ARTIST_ASSERT_FILE, 231 /* ARTIST 0x822A03D4 */));
 
@@ -93,7 +93,7 @@ namespace Vehicle
         if (miTargetAssistCount > 0)
         {
             CGS_ASSERT(miTargetAssistCount <= KI_MAX_TARGET_ASSIST_CARS,
-                CgsDev::Assert::MessageAt(
+                CGS_ASSERT_MESSAGE_AT(
                     "miTargetAssistCount <= BrnTraffic::KI_MAX_STOMPED_CARS",
                     KAC_ARTIST_ASSERT_FILE, 260 /* ARTIST 0x823A7B80 */));
 
@@ -122,7 +122,7 @@ namespace Vehicle
         mDriverUpdateQueue.Append(*lpInterfaceToAppend->GetUpdateDriverQueue());
 
         CGS_ASSERT(miTargetAssistCount == 0 || lpInterfaceToAppend->GetTargetAssistCount() == 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "miTargetAssistCount==0 || lpInterfaceToAppend->GetTargetAssistCount()==0",
                 KAC_ARTIST_ASSERT_FILE, 164 /* ARTIST 0x823DB67C */));
 
@@ -170,10 +170,10 @@ namespace Vehicle
     f32 VehicleDriverInputInterface::GetBaseDeformationAmount(EActiveRaceCarIndex leRaceCarIndex) const
     {
         CGS_ASSERT(leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 286 /* ARTIST 0x825B35B4 */));
         CGS_ASSERT(leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 287 /* ARTIST 0x825B35D8 */));
 
         return maBaseDeformationAmounts[leRaceCarIndex];
@@ -186,10 +186,10 @@ namespace Vehicle
     s32 VehicleDriverInputInterface::Ge(EActiveRaceCarIndex leRaceCarIndex) const
     {
         CGS_ASSERT(leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 305 /* ARTIST 0x825B362C */));
         CGS_ASSERT(leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 306 /* ARTIST 0x825B3650 */));
 
         return maBaseDeformationFrames[leRaceCarIndex];

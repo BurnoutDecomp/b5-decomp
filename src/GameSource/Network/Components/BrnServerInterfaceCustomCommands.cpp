@@ -149,7 +149,7 @@ bool ServerInterfaceCustomCommands::Prepare(CgsNetwork::ServerInterfaceDirtySock
         return false;
 
     CGS_ASSERT(lpServerInterface != 0,
-        CgsDev::Assert::MessageAt("lpServerInterface", __FILE__, 209 /* ARTIST 0x825837B4 */));
+        CGS_ASSERT_MESSAGE_AT("lpServerInterface", __FILE__, 209 /* ARTIST 0x825837B4 */));
 
     mpServerInterface    = lpServerInterface;  // a1[4]
     mpCallback           = 0;            // a1[9]
@@ -206,14 +206,14 @@ void ServerInterfaceCustomCommands::Update()
 void ServerInterfaceCustomCommands::SendCustomCommand(EAction leNewAction,
                                                       const char* lpcMessageData)
 {
-    CGS_ASSERT(leNewAction != E_ACTION_COUNT, CgsDev::Assert::MessageAt(
+    CGS_ASSERT(leNewAction != E_ACTION_COUNT, CGS_ASSERT_MESSAGE_AT(
         "meNewAction != E_ACTION_COUNT",
         __FILE__, 571 /* ARTIST 0x8258F064 */));
 
     meCurrentAction = leNewAction;                       // a1[8] = leNewAction
     StartActionCore(KPC_ACTION_NAMES[leNewAction]);      // (*(vtable+12))(this, off_82F29F30[a2])
 
-    CGS_ASSERT(lpcMessageData != 0, CgsDev::Assert::MessageAt(
+    CGS_ASSERT(lpcMessageData != 0, CGS_ASSERT_MESSAGE_AT(
         "lpcMessageData",
         __FILE__, 578 /* ARTIST 0x8258F0B0 */));
 
@@ -239,15 +239,15 @@ void ServerInterfaceCustomCommands::GetEloOfLocalPlayer(s32* lpiRaceElo, s32* lp
                                                         CustomCommandCallback lCallback, void* lpData)
 {
     CGS_ASSERT(lpiRaceElo != 0,
-        CgsDev::Assert::MessageAt("lpRaceElo", __FILE__, 601 /* ARTIST 0x8258F12C */));            // a2, cpp:601
+        CGS_ASSERT_MESSAGE_AT("lpRaceElo", __FILE__, 601 /* ARTIST 0x8258F12C */));            // a2, cpp:601
     CGS_ASSERT(lpiRoadRageElo != 0,
-        CgsDev::Assert::MessageAt("lpRoadRageElo", __FILE__, 602 /* ARTIST 0x8258F150 */));    // a4, cpp:602
+        CGS_ASSERT_MESSAGE_AT("lpRoadRageElo", __FILE__, 602 /* ARTIST 0x8258F150 */));    // a4, cpp:602
     CGS_ASSERT(lpiBurningHomeRunElo != 0,
-        CgsDev::Assert::MessageAt("lpBurningHomeRunElo", __FILE__, 603 /* ARTIST 0x8258F174 */)); // a3, cpp:603
+        CGS_ASSERT_MESSAGE_AT("lpBurningHomeRunElo", __FILE__, 603 /* ARTIST 0x8258F174 */)); // a3, cpp:603
     CGS_ASSERT(lCallback != 0,
-        CgsDev::Assert::MessageAt("lCallback", __FILE__, 604 /* ARTIST 0x8258F198 */));            // a5, cpp:604
+        CGS_ASSERT_MESSAGE_AT("lCallback", __FILE__, 604 /* ARTIST 0x8258F198 */));            // a5, cpp:604
     CGS_ASSERT(lpData != 0,
-        CgsDev::Assert::MessageAt("lpData", __FILE__, 605 /* ARTIST 0x8258F1BC */));                  // a6, cpp:605
+        CGS_ASSERT_MESSAGE_AT("lpData", __FILE__, 605 /* ARTIST 0x8258F1BC */));                  // a6, cpp:605
 
     mpCallbackData       = lpData;                 // a1[10] -- stw r25, 0x28
     mpCallback           = lCallback;              // a1[9]  -- stw r26, 0x24

@@ -95,7 +95,7 @@ namespace CgsNetwork
     {
         CGS_ASSERT(
             (leServerType >= E_SERVER_TYPE_LOCAL) && (leServerType < E_SERVER_TYPE_COUNT),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "(leServerType>=E_SERVER_TYPE_LOCAL) && (leServerType<E_SERVER_TYPE_COUNT)",
                 "..\\..\\..\\GameShared\\GameClasses\\Network\\CgsNetworkVersionDisplay.cpp", 104 /* ARTIST 0x8286FA24 */));
 

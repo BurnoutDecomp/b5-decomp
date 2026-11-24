@@ -51,7 +51,7 @@
 // (boot-measured). That is fixed at the source now -- CgsInputPadsPC's KA_BINDINGS -- and the
 // compensating 45 arm this file carried is deleted; see the note at KI_ACTION_CONFIRM below.
 // ===================================================================================
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnIntro.cpp"
 #include "GameSource/Gui/Flow/Screen/States/BrnIntro.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Input/GameInputActions.h"                       // EGameInputActions (the controller action vocabulary)
@@ -334,7 +334,7 @@ namespace BrnGui
     // ================================================================================
     void Intro::Construct(CgsID lId, CgsFsm::ScriptedFsm* lpFsm)
     {
-        CGS_ASSERT(lpFsm != 0, CgsDev::Assert::StreamMessageAt("Invalid ScriptedFsm ptr", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnIntro.cpp", 111));   // cpp:111
+        CGS_ASSERT(lpFsm != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid ScriptedFsm ptr", CGS_ARTIST_FILE, 111));   // cpp:111
 
         CgsGui::State::Construct(lId, lpFsm);
 
@@ -438,9 +438,9 @@ namespace BrnGui
     void Intro::AppendExpectedComponents()
     {
         CGS_ASSERT(mpGuiCache != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpGuiCache",
-                "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnIntro.cpp", 595 /* ARTIST 0x824B90C8 */));   // cpp:595
+                CGS_ARTIST_FILE, 595 /* ARTIST 0x824B90C8 */));   // cpp:595
 
         mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mScreenAnim.GetName());
         mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mPhotoBoothComponent.GetName());
@@ -871,3 +871,5 @@ namespace BrnGui
         mPhotoBoothComponent.SendPlayerPictureEvent();
     }
 }
+
+#undef CGS_ARTIST_FILE

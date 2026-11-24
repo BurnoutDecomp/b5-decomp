@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Gui/Model/CgsModelModuleIO.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/CgsModelModuleIO.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 
@@ -88,7 +88,7 @@ namespace ModelIO
     // X360 0x8284F940: read-lock (bit 4) const handle to the GUI resource-request queue (this+4).
     const OutputBuffer::GuiResourceRequestQueue* OutputBuffer::GetGuiResourceRequestQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt(
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
             "Not locked for reading\n",
             "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/CgsModelModuleIO.cpp", 235));
         return &mResourceRequestQueue;
@@ -97,27 +97,27 @@ namespace ModelIO
     // X360 0x823B1590: read-lock (bit 4) const handle to the GUI out-event queue (this+0x814).
     const OutputBuffer::GuiEventQueue* OutputBuffer::GetGuiOutEvents() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt(
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
             "Not locked for reading\n",
-            "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/CgsModelModuleIO.h", 248));
+            CGS_ARTIST_FILE, 248));
         return &mGuiOutEvents;
     }
 
     // X360 0x8284E148: read-lock (bit 4) const handle to the view-event queue (this+0x5024).
     const OutputBuffer::GuiViewEventQueue* OutputBuffer::GetViewOutEvents() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt(
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
             "Not locked for reading\n",
-            "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/CgsModelModuleIO.h", 282));
+            CGS_ARTIST_FILE, 282));
         return &mViewOutEvents;
     }
 
     // X360 0x824F7538: read-lock (bit 4) const handle to the load-notification queue (this+0x15034).
     const OutputBuffer::GuiNotificationQueue* OutputBuffer::GetLoadNotifications() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt(
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
             "Not locked for reading\n",
-            "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/CgsModelModuleIO.h", 315));
+            CGS_ARTIST_FILE, 315));
         return &mLoadNotifications;
     }
 
@@ -153,3 +153,5 @@ namespace ModelIO
     }
 }
 }
+
+#undef CGS_ARTIST_FILE

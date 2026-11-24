@@ -303,7 +303,7 @@ Matrix44Affine CameraInterpolationController::RotateAboutPivot(
         Camera::Utils::Interpolater& lrLookAtInterpolater,
         f32                          lfT)
 {
-    CGS_ASSERT(lfT >= KF_ZERO && lfT <= KF_ONE, CgsDev::Assert::MessageAt("lT >= 0.0f && lT <= 1.0f", "..\\..\\..\\GameSource\\Director/Shots/ShotControllers/BrnCameraInterpolationController.cpp", 212));   // cpp:212
+    CGS_ASSERT(lfT >= KF_ZERO && lfT <= KF_ONE, CGS_ASSERT_MESSAGE_AT("lT >= 0.0f && lT <= 1.0f", "..\\..\\..\\GameSource\\Director/Shots/ShotControllers/BrnCameraInterpolationController.cpp", 212));   // cpp:212
 
     const Matrix44Affine lInversePivot =
         rw::math::vpu::InverseOfMatrixWithOrthonormal3x3(lrPivot);
@@ -394,7 +394,7 @@ void CameraInterpolationController::Update(Camera::Camera&       lrCamera,
     }
     default:
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("Unknown interpolation mapping", KAC_CIC_FILE, 112);
+        CgsDev::Assert::FireAssert("Unknown interpolation mapping", CGS_ASSERT_LOCATION(KAC_CIC_FILE, 112));
         CgsDev::Assert::EndAssert();
         break;
     }
@@ -433,7 +433,7 @@ void CameraInterpolationController::Update(Camera::Camera&       lrCamera,
     else
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("Unknown interpolation method", KAC_CIC_FILE, 156);
+        CgsDev::Assert::FireAssert("Unknown interpolation method", CGS_ASSERT_LOCATION(KAC_CIC_FILE, 156));
         CgsDev::Assert::EndAssert();
     }
 

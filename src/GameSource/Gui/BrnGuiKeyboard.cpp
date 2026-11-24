@@ -1,7 +1,7 @@
 #include "GameSource/Gui/BrnGuiKeyboard.h"
 #include "GameShared/GameClasses/Gui/CgsGuideIntegration.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/BrnGuiKeyboard.h"
 namespace BrnGui
 {
     void BrnGuiKeyboard::Construct()
@@ -17,13 +17,13 @@ namespace BrnGui
         if (lpSystemUserProfile == 0)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpSystemUserProfile", "..\\..\\..\\GameSource\\Gui/BrnGuiKeyboard.h", 139);
+            CgsDev::Assert::FireAssert("lpSystemUserProfile", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 139));
             CgsDev::Assert::EndAssert();
         }
         if (mpSystemUserProfile != 0)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("mpSystemUserProfile == NULL", "..\\..\\..\\GameSource\\Gui/BrnGuiKeyboard.h", 140);
+            CgsDev::Assert::FireAssert("mpSystemUserProfile == NULL", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 140));
             CgsDev::Assert::EndAssert();
         }
         mpSystemUserProfile = lpSystemUserProfile;
@@ -66,7 +66,7 @@ namespace BrnGui
         if (mpSystemUserProfile == 0)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("mpSystemUserProfile", "..\\..\\..\\GameSource\\Gui/BrnGuiKeyboard.cpp", 47);
+            CgsDev::Assert::FireAssert("mpSystemUserProfile", CGS_ASSERT_LOCATION("..\\..\\..\\GameSource\\Gui/BrnGuiKeyboard.cpp", 47));
             CgsDev::Assert::EndAssert();
         }
         mKeyboard.Show(mpSystemUserProfile->GetUserIndex(), lpDefaultText,
@@ -74,3 +74,5 @@ namespace BrnGui
         return true;
     }
 }
+
+#undef CGS_ARTIST_FILE

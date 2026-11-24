@@ -1,7 +1,7 @@
 #if defined(_XBOX) && defined(_MSC_VER)
 #pragma auto_inline(off)
 #endif
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp"
 #include <xtl.h>
 #include "GameShared/GameClasses/Development/PerfMon/Gpu/CgsPerfMonGpu.h"
 #ifdef AddMonitor
@@ -23,12 +23,12 @@
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"      // BrnGui::GuiAudioTriggerEvent (GUI-out event 201) + GuiEventProgressionProfileData (350)
 #include "GameSource/Game/GameBridgeGameStateToX.h"  // BrnGame::BridgeGameStateToGui_EventStatus (the GUI-leg status seam)
 #include "GameSource/GameState/Progression/BrnProfile.h" // BrnProgression::Profile (the action-193 payload's first word)
-
+#define CGS_ARTIST_GAMEBRIDGENETWORKTOX_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp"
 #include <cstring>   // memset
 #include <string.h>  // _stricmp (RenderMetricsMessageHandler; MSVC canonical, not declared by <cstring>)
 #include <cstddef>   // offsetof -- the 545/546 payload layout pins in BridgeGuiToGame
 #include "rw/math/vpu/matrix44affine_operation.h"
-
+#define CGS_ARTIST_FILE_CGSMODULEIOHELPER "..\\..\\..\\GameShared\\GameClasses\\Module/CgsModuleIOHelper.h"
 #include "GameShared/GameClasses/Module/CgsModuleIOHelper.h"       // [FX-RUMBLE3] CgsModule::IOHelper (DoUpdate_InputPreWorld's "InputPreWorld")
 #include "GameShared/GameClasses/Gui/CgsGuiModule.h" // CgsGui::GuiModule::AddGuiEvent (the world-load report below)
 #include "GameShared/GameClasses/Gui/CgsGuiEventTypeDefs.h" // CgsGui::GuiEventTimeInfo (the per-frame GUI timestep)
@@ -59,7 +59,7 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // RCEntityActiveRaceCarOutputInterface + BrnPhysics::Vehicle::RaceCarState (DoDispatch's TempRaceCarStateCache seam)
 // The native timer API returns the complete 64-bit time-base value.
 #include "GameShared/GameClasses/System/Timer/CgsTimeUtils.h"
-
+#define CGS_ARTIST_FILE_CGSMODULEUTILS "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h"
 namespace BrnGame
 {
     // File-scope globals the X360 GameMain references:
@@ -174,7 +174,7 @@ namespace BrnGame
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("mFrameRateManager.Prepare()",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 788);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 788));
                 CgsDev::Assert::EndAssert();
             }
         case E_PREPARESTAGE_DONE:
@@ -189,7 +189,7 @@ namespace BrnGame
         default:
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("0",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 808);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 808));
             CgsDev::Assert::EndAssert();
             break;
         }
@@ -476,7 +476,7 @@ namespace BrnGame
             lMessage << "Refresh rate " << liRefreshRate
                 << " not handled by M_CGS_PERFMON_CPU_SETGAMEFREQUENCY\n";
             CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 498);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 498));
             CgsDev::Assert::EndAssert();
         }
         mGamePrepareReceiverQueue.Construct();
@@ -668,7 +668,7 @@ namespace BrnGame
                     {
                         CgsDev::Assert::BeginAssert();
                         CgsDev::Assert::FireAssert("NULL != lpBrightnessContrast",
-                            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 3194);
+                            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 3194));
                         CgsDev::Assert::EndAssert();
                     }
                     miBrightness = lpBrightnessContrast->mBrightness;
@@ -683,7 +683,7 @@ namespace BrnGame
                     {
                         CgsDev::Assert::BeginAssert();
                         CgsDev::Assert::FireAssert("lpBrightnessContrastPostFxControl",
-                            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 3205);
+                            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 3205));
                         CgsDev::Assert::EndAssert();
                     }
                     mbEnableCalibrationUnfriendlyPostFx = lpControl->mbEnablePostFx;
@@ -1490,7 +1490,7 @@ namespace BrnGame
                     {
                         CgsDev::Assert::BeginAssert();
                         CgsDev::Assert::FireAssert(
-                            "lePlayerKillerRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID", lpcSource, 228);
+                            "lePlayerKillerRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID", CGS_ASSERT_LOCATION(lpcSource, 228));
                         CgsDev::Assert::EndAssert();
                     }
                     lpDirectorInput->SetPlayerKiller(lrTakedownEvent.meAggressorIndex);
@@ -1547,7 +1547,7 @@ namespace BrnGame
             if (lpEventScoring == 0)
             {
                 CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert("lpGameStateOutput->GetScoringOutputInterface()", lpcSource, 256);
+                CgsDev::Assert::FireAssert("lpGameStateOutput->GetScoringOutputInterface()", CGS_ASSERT_LOCATION(lpcSource, 256));
                 CgsDev::Assert::EndAssert();
             }
             const u8 luPlayerEliminated = lbPlayerUnbound
@@ -1567,7 +1567,7 @@ namespace BrnGame
                 {
                     CgsDev::Assert::BeginAssert();
                     CgsDev::Assert::FireAssert("leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT",
-                        "..\\..\\..\\GameSource\\BurnoutConstants.h", 39);
+                        CGS_ASSERT_LOCATION("..\\..\\..\\GameSource\\BurnoutConstants.h", 39));
                     CgsDev::Assert::EndAssert();
                 }
             }
@@ -1593,7 +1593,7 @@ namespace BrnGame
                     {
                         CgsDev::Assert::BeginAssert();
                         CgsDev::Assert::FireAssert(
-                            "lePlayerKillerRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID", lpcSource, 285);
+                            "lePlayerKillerRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID", CGS_ASSERT_LOCATION(lpcSource, 285));
                         CgsDev::Assert::EndAssert();
                     }
                     lpDirectorInput->SetPlayerKiller(static_cast<EActiveRaceCarIndex>(liKillerIndex));
@@ -2023,7 +2023,7 @@ namespace BrnGame
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("mbIsFrameRateTypeChangeRequested",
-                    "..\\..\\..\\GameShared\\GameClasses\\System\\Timer/CgsFrameRateTypeRequestInterface.h", 113);
+                    CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\System\\Timer/CgsFrameRateTypeRequestInterface.h", 113));
                 CgsDev::Assert::EndAssert();
             }
             meFrameRateManagerType = mFrameRateTypeRequestInterface.GetRequestedFrameRateTypeChange();
@@ -2048,7 +2048,7 @@ namespace BrnGame
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("Memory check failed",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", liLine);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, liLine));
                 CgsDev::Assert::EndAssert();
             }
         }
@@ -2095,7 +2095,7 @@ namespace BrnGame
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("mpReusableLoadingScreenAllocator",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 2008);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 2008));
             CgsDev::Assert::EndAssert();
         }
         mpReusableLoadingScreenAllocator->FreeAll();
@@ -2346,7 +2346,7 @@ namespace BrnGame
         default:
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("0",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 1033);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 1033));
             CgsDev::Assert::EndAssert();
             return false;
         }
@@ -2393,7 +2393,7 @@ namespace BrnGame
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("leEnumIndex <= BrnGameModule::E_RELEASESTAGE_DONE",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.h", 1443);
+                CGS_ASSERT_LOCATION("d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.h", 1443));
             CgsDev::Assert::EndAssert();
         }
         return leOld;
@@ -2488,7 +2488,7 @@ namespace BrnGame
                         default:
                             CgsDev::Assert::BeginAssert();
                             CgsDev::Assert::FireAssert("Unexpected Event Id in BrnGameModule::GamePrepare",
-                                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 1741);
+                                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 1741));
                             CgsDev::Assert::EndAssert();
                             break;
                         }
@@ -2506,7 +2506,7 @@ namespace BrnGame
                     {
                         CgsDev::Assert::BeginAssert();
                         CgsDev::Assert::FireAssert(kapcTextureAssertions[liTexture],
-                            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 1751 + liTexture);
+                            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 1751 + liTexture));
                         CgsDev::Assert::EndAssert();
                     }
                 }
@@ -2515,7 +2515,7 @@ namespace BrnGame
                 {
                     CgsDev::Assert::BeginAssert();
                     CgsDev::Assert::FireAssert("mRenderModule.PrepareAgain ( lpBlobbyShadow, lpCloudDensityTexture, lpCloudLightingTexture, lpCoronaAtlas, lpGlassFractureTexture )",
-                        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 1761);
+                        CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 1761));
                     CgsDev::Assert::EndAssert();
                 }
                 mGamePrepareReceiverQueue.Clear();
@@ -2543,7 +2543,7 @@ namespace BrnGame
         default:
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("Got into an unknown state",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 1807);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 1807));
             CgsDev::Assert::EndAssert();
             break;
         }
@@ -2556,14 +2556,14 @@ namespace BrnGame
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("mpStack->CreateIOBuffer( &mpBuffer, lpcName )",
-                "..\\..\\..\\GameShared\\GameClasses\\Module/CgsModuleIOHelper.h", 52);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE_CGSMODULEIOHELPER, 52));
             CgsDev::Assert::EndAssert();
         }
         if (!mpUpdateOutputBufferStack->CreateIOBuffer(&lpRendererOutput, "Render"))
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("mpStack->CreateIOBuffer( &mpBuffer, lpcName )",
-                "..\\..\\..\\GameShared\\GameClasses\\Module/CgsModuleIOHelper.h", 52);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE_CGSMODULEIOHELPER, 52));
             CgsDev::Assert::EndAssert();
         }
         mRenderModule.Update(mpUpdateInputBufferStack, mpUpdateOutputBufferStack,
@@ -2583,14 +2583,14 @@ namespace BrnGame
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("mpStack->DestroyIOBuffer( &mpBuffer )",
-                "..\\..\\..\\GameShared\\GameClasses\\Module/CgsModuleIOHelper.h", 57);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE_CGSMODULEIOHELPER, 57));
             CgsDev::Assert::EndAssert();
         }
         if (!mpUpdateInputBufferStack->DestroyIOBuffer(&lpRendererInput))
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("mpStack->DestroyIOBuffer( &mpBuffer )",
-                "..\\..\\..\\GameShared\\GameClasses\\Module/CgsModuleIOHelper.h", 57);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE_CGSMODULEIOHELPER, 57));
             CgsDev::Assert::EndAssert();
         }
         return false;
@@ -2666,7 +2666,7 @@ namespace BrnGame
                 CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
                 lMessage << "Invalid game release stage\n";
                 CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 2809);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 2809));
             }
             CgsDev::Assert::EndAssert();
             break;
@@ -2887,7 +2887,7 @@ namespace BrnGame
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("!_lbForceAssert",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 1872);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 1872));
             CgsDev::Assert::EndAssert();
         }
         mFrameRateManager.StartUpdateFrame(leFrameRateType, false);
@@ -3025,7 +3025,7 @@ namespace BrnGame
                 {
                     CgsDev::Assert::BeginAssert();
                     CgsDev::Assert::FireAssert("lpLaunchData",
-                        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModuleUpdateFunctions.cpp", 71);
+                        CGS_ASSERT_LOCATION("d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModuleUpdateFunctions.cpp", 71));
                     CgsDev::Assert::EndAssert();
                 }
                 liStartPressedPort = static_cast<s32>(lpLaunchData->mLaunchData.mdwUserIndex);
@@ -3061,11 +3061,11 @@ namespace BrnGame
         CgsInput::InputIO::PostWorldInputBuffer* lpPostWorldInput)
     {
         CGS_ASSERT(lpPostWorldInput != 0,
-            CgsDev::Assert::MessageAt("lpInputBuffer", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 238 /* ARTIST 0x823BCF6C */));
+            CGS_ASSERT_MESSAGE_AT("lpInputBuffer", CGS_ARTIST_FILE_CGSMODULEUTILS, 238 /* ARTIST 0x823BCF6C */));
         lpPostWorldInput->LockForWrite();
         lpPostWorldInput->PostMappingRequest(KA_CONSOLE_DEFAULT_GAME_INPUT_MAPPING, -1);
         CGS_ASSERT(lpPostWorldInput != 0,
-            CgsDev::Assert::MessageAt("lpInputBuffer", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 248 /* ARTIST 0x823BCFA8 */));
+            CGS_ASSERT_MESSAGE_AT("lpInputBuffer", CGS_ARTIST_FILE_CGSMODULEUTILS, 248 /* ARTIST 0x823BCFA8 */));
         lpPostWorldInput->UnlockForWrite();
     }
 
@@ -3075,11 +3075,11 @@ namespace BrnGame
         CgsInput::InputIO::PostWorldInputBuffer* lpPostWorldInput)
     {
         CGS_ASSERT(lpPostWorldInput != 0,
-            CgsDev::Assert::MessageAt("lpInputBuffer", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 238 /* ARTIST 0x823BD3C0 */));
+            CGS_ASSERT_MESSAGE_AT("lpInputBuffer", CGS_ARTIST_FILE_CGSMODULEUTILS, 238 /* ARTIST 0x823BD3C0 */));
         lpPostWorldInput->LockForWrite();
         lpPostWorldInput->PostBindRequest(0, liPort);
         CGS_ASSERT(lpPostWorldInput != 0,
-            CgsDev::Assert::MessageAt("lpInputBuffer", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 248 /* ARTIST 0x823BD3F8 */));
+            CGS_ASSERT_MESSAGE_AT("lpInputBuffer", CGS_ARTIST_FILE_CGSMODULEUTILS, 248 /* ARTIST 0x823BD3F8 */));
         lpPostWorldInput->UnlockForWrite();
     }
 
@@ -3177,9 +3177,9 @@ namespace BrnGame
             return;
 
         CGS_ASSERT(miInputModuleState == 3,
-                   CgsDev::Assert::MessageAt("meInputBindState == E_INPUTBINDSTATE_BIND_REQUESTED", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 3393));
+                   CGS_ASSERT_MESSAGE_AT("meInputBindState == E_INPUTBINDSTATE_BIND_REQUESTED", CGS_ARTIST_FILE, 3393));
         CGS_ASSERT(lrResult.meResultCode == CgsInput::E_BINDRESULTOK,
-                   CgsDev::Assert::MessageAt("CgsInput::E_BINDRESULTOK == lResult.GetResultCode()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 3394));
+                   CGS_ASSERT_MESSAGE_AT("CgsInput::E_BINDRESULTOK == lResult.GetResultCode()", CGS_ARTIST_FILE, 3394));
 
         miPlayer0ControllerPort = lrResult.miPort;
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
@@ -3199,13 +3199,13 @@ namespace BrnGame
             return;
 
         CGS_ASSERT(miInputModuleState == 6,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "meInputBindState == E_INPUTBINDSTATE_UNBIND_REQUESTED",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 3421 /* ARTIST 0x823A8D94 */));
+                CGS_ARTIST_FILE, 3421 /* ARTIST 0x823A8D94 */));
         CGS_ASSERT(lrResult.meResultCode == CgsInput::E_UNBINDRESULTOK,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "CgsInput::E_UNBINDRESULTOK == lResult.GetResultCode()",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 3422 /* ARTIST 0x823A8DBC */));
+                CGS_ARTIST_FILE, 3422 /* ARTIST 0x823A8DBC */));
 
         miPlayer0ControllerPort = CgsInput::KU_NUMBER_OF_PADS;
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
@@ -3369,17 +3369,17 @@ namespace BrnGame
         const BrnReplays::ReplayIO::OutputBuffer_PreSim* lpReplayOutputBuffer)
     {
         CGS_ASSERT(lpGameStateModuleOutputBuffer != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpGameStateModuleOutputBuffer != NULL",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 3450 /* ARTIST 0x823DCB7C */));
+                CGS_ARTIST_FILE, 3450 /* ARTIST 0x823DCB7C */));
         CGS_ASSERT(lpInputModuleOutputBuffer != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpInputModuleOutputBuffer != NULL",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 3451 /* ARTIST 0x823DCBA0 */));
+                CGS_ARTIST_FILE, 3451 /* ARTIST 0x823DCBA0 */));
         CGS_ASSERT(lpGuiModuleModelOutputBuffer != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpGuiModuleModelOutputBuffer != NULL",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 3452 /* ARTIST 0x823DCBC4 */));
+                CGS_ARTIST_FILE, 3452 /* ARTIST 0x823DCBC4 */));
 
         BrnUpdateSet leUpdateSet = ConstructUpdateSetFromFsm();
 
@@ -3401,9 +3401,9 @@ namespace BrnGame
         lpInputModuleOutputBuffer->UnlockForRead();
 
         CGS_ASSERT(lpNetworkModuleOutputBuffer != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpNetworkModuleOutputBuffer != NULL",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 3491 /* ARTIST 0x823DCC60 */));
+                CGS_ARTIST_FILE, 3491 /* ARTIST 0x823DCC60 */));
         lpNetworkModuleOutputBuffer->LockForRead();
         if (IsEventInGuiQueue(44, lpNetworkModuleOutputBuffer->GetGuiEventQueue()))
             leUpdateSet |= 0x2;
@@ -3464,7 +3464,7 @@ namespace BrnGame
         default:
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("Invalid update stage\n",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 1199);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 1199));
             CgsDev::Assert::EndAssert();
             break;
         }
@@ -3692,7 +3692,7 @@ namespace BrnGame
                 default:
                     // The console leaves the telemetry record unconstructed on this arm.
                     leCrasherIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
-                    CGS_ASSERT(false, CgsDev::Assert::MessageAt("Unknown crash type", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeWorldToX.cpp", 437));
+                    CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Unknown crash type", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeWorldToX.cpp", 437));
                     break;
             }
 
@@ -3869,18 +3869,18 @@ namespace BrnGame
     void BrnGameModule::BridgeNetworkToGameState(BrnGameState::GameStateModuleIO::PreWorldInputBuffer* lpGameStateInput,
                                                  const BrnNetwork::BrnNetworkModuleIO::OutputBuffer* lpNetworkOutput)
     {
-        CGS_ASSERT(lpGameStateInput, CgsDev::Assert::MessageAt("lpGameStateInput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 223));
-        CGS_ASSERT(lpNetworkOutput, CgsDev::Assert::MessageAt("lpNetworkOutput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 224));
+        CGS_ASSERT(lpGameStateInput, CGS_ASSERT_MESSAGE_AT("lpGameStateInput", CGS_ARTIST_GAMEBRIDGENETWORKTOX_FILE, 223));
+        CGS_ASSERT(lpNetworkOutput, CGS_ASSERT_MESSAGE_AT("lpNetworkOutput", CGS_ARTIST_GAMEBRIDGENETWORKTOX_FILE, 224));
 
-        CGS_ASSERT(lpNetworkOutput->GetGameEventQueue(), CgsDev::Assert::MessageAt("lpNetworkOutput->GetGameEventQueue()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 230));
+        CGS_ASSERT(lpNetworkOutput->GetGameEventQueue(), CGS_ASSERT_MESSAGE_AT("lpNetworkOutput->GetGameEventQueue()", CGS_ARTIST_GAMEBRIDGENETWORKTOX_FILE, 230));
         lpGameStateInput->GetGameEventQueue()->Append(*lpNetworkOutput->GetGameEventQueue());
 
-        CGS_ASSERT(lpNetworkOutput->GetTakedownEventOutputQueue(), CgsDev::Assert::MessageAt("lpNetworkOutput->GetTakedownEventOutputQueue()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 233));
+        CGS_ASSERT(lpNetworkOutput->GetTakedownEventOutputQueue(), CGS_ASSERT_MESSAGE_AT("lpNetworkOutput->GetTakedownEventOutputQueue()", CGS_ARTIST_GAMEBRIDGENETWORKTOX_FILE, 233));
         lpGameStateInput->GetTakedownEventInputQueue()->Append(*lpNetworkOutput->GetTakedownEventOutputQueue());
 
-        CGS_ASSERT(lpNetworkOutput->GetNetworkToGameStateInterface(), CgsDev::Assert::MessageAt("lpNetworkOutput->GetNetworkToGameStateInterface()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 236));
-        CGS_ASSERT(lpNetworkOutput->GetInGamePlayerStatusInterface(), CgsDev::Assert::MessageAt("lpNetworkOutput->GetInGamePlayerStatusInterface()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 237));
-        CGS_ASSERT(lpNetworkOutput->GetPlayerResultsInterface(), CgsDev::Assert::MessageAt("lpNetworkOutput->GetPlayerResultsInterface()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 238));
+        CGS_ASSERT(lpNetworkOutput->GetNetworkToGameStateInterface(), CGS_ASSERT_MESSAGE_AT("lpNetworkOutput->GetNetworkToGameStateInterface()", CGS_ARTIST_GAMEBRIDGENETWORKTOX_FILE, 236));
+        CGS_ASSERT(lpNetworkOutput->GetInGamePlayerStatusInterface(), CGS_ASSERT_MESSAGE_AT("lpNetworkOutput->GetInGamePlayerStatusInterface()", CGS_ARTIST_GAMEBRIDGENETWORKTOX_FILE, 237));
+        CGS_ASSERT(lpNetworkOutput->GetPlayerResultsInterface(), CGS_ASSERT_MESSAGE_AT("lpNetworkOutput->GetPlayerResultsInterface()", CGS_ARTIST_GAMEBRIDGENETWORKTOX_FILE, 238));
 
         lpGameStateInput->AppendGetNetworkToGameStateInterface(lpNetworkOutput->GetNetworkToGameStateInterface());
         lpGameStateInput->SetPlayerStatusInterface(lpNetworkOutput->GetInGamePlayerStatusInterface());
@@ -3921,7 +3921,7 @@ namespace BrnGame
         namespace GsIO  = BrnGameState::GameStateModuleIO;
 
         const NetIO::NetworkEventQueue* lpNetworkEventQueue = lpNetworkOutput->GetNetworkEventQueue();
-        CGS_ASSERT(lpNetworkEventQueue, CgsDev::Assert::MessageAt("lpNetworkEventQueue", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 349));
+        CGS_ASSERT(lpNetworkEventQueue, CGS_ASSERT_MESSAGE_AT("lpNetworkEventQueue", CGS_ARTIST_GAMEBRIDGENETWORKTOX_FILE, 349));
 
         const CgsModule::Event* lpEvent = 0;
         s32 liSize = 0;
@@ -3935,7 +3935,7 @@ namespace BrnGame
                 {
                     const NetIO::NetworkOutPlayerChangedCarColourEvent* lpPlayerChangedCarColourEvent =
                         reinterpret_cast<const NetIO::NetworkOutPlayerChangedCarColourEvent*>(lpEvent);
-                    CGS_ASSERT(lpPlayerChangedCarColourEvent, CgsDev::Assert::MessageAt("lpPlayerChangedCarColourEvent", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 394));
+                    CGS_ASSERT(lpPlayerChangedCarColourEvent, CGS_ASSERT_MESSAGE_AT("lpPlayerChangedCarColourEvent", CGS_ARTIST_GAMEBRIDGENETWORKTOX_FILE, 394));
                     const EActiveRaceCarIndex leActiveRaceCarIndex = lpPlayerChangedCarColourEvent->GetActiveRaceCarIndex();
                     if (static_cast<u32>(leActiveRaceCarIndex) <= 7u)
                     {
@@ -3982,7 +3982,7 @@ namespace BrnGame
                 {
                     const NetIO::NetworkOutRestartTrafficEvent* lpRestartTrafficEvent =
                         reinterpret_cast<const NetIO::NetworkOutRestartTrafficEvent*>(lpEvent);
-                    CGS_ASSERT(lpRestartTrafficEvent, CgsDev::Assert::MessageAt("lpRestartTrafficEvent", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 365));
+                    CGS_ASSERT(lpRestartTrafficEvent, CGS_ASSERT_MESSAGE_AT("lpRestartTrafficEvent", CGS_ARTIST_GAMEBRIDGENETWORKTOX_FILE, 365));
                     GsIO::RestartTrafficAction lRestartTrafficAction;
                     std::memcpy(lRestartTrafficAction.mau16ActveHulls, lpRestartTrafficEvent->mau16ActveHulls,
                                 sizeof(lRestartTrafficAction.mau16ActveHulls));
@@ -3995,7 +3995,7 @@ namespace BrnGame
                 {
                     const NetIO::NetworkOutPlayerCarSelectStatus* lpPlayerCarSelectStatus =
                         reinterpret_cast<const NetIO::NetworkOutPlayerCarSelectStatus*>(lpEvent);
-                    CGS_ASSERT(lpPlayerCarSelectStatus, CgsDev::Assert::MessageAt("lpPlayerCarSelectStatus", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 429));
+                    CGS_ASSERT(lpPlayerCarSelectStatus, CGS_ASSERT_MESSAGE_AT("lpPlayerCarSelectStatus", CGS_ARTIST_GAMEBRIDGENETWORKTOX_FILE, 429));
                     lpWorldInput->SetCarSelectStatus(lpPlayerCarSelectStatus->meActiveRaceCarIndex,
                                                      lpPlayerCarSelectStatus->mbInCarSelect);
                     break;
@@ -4006,3 +4006,8 @@ namespace BrnGame
         }
     }
 }
+
+#undef CGS_ARTIST_FILE
+#undef CGS_ARTIST_GAMEBRIDGENETWORKTOX_FILE
+#undef CGS_ARTIST_FILE_CGSMODULEIOHELPER
+#undef CGS_ARTIST_FILE_CGSMODULEUTILS

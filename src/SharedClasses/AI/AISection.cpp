@@ -166,7 +166,7 @@ namespace BrnAI
             lStream << "Trying to access portal " << static_cast<s32>(luPortalIndex)
                     << " when only " << static_cast<s32>(mu8NumPortals) << " available.";
             CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                "..\\..\\..\\SharedClasses\\AI/AISectionsData.h", 880); // ARTIST 0x8230F6AC
+                CGS_ASSERT_LOCATION("..\\..\\..\\SharedClasses\\AI/AISectionsData.h", 880)); // ARTIST 0x8230F6AC
             CgsDev::Assert::EndAssert();
         }
 

@@ -117,7 +117,7 @@ namespace CgsDev
         {
             Assert::BeginAssert();
             Assert::FireAssert("lNumBytesCopied<(int32_t)luBytes",
-                               "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 96);
+                               CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 96));
             Assert::EndAssert();
         }
         Append(lacBuffer);

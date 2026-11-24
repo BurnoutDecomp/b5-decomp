@@ -1,5 +1,5 @@
 #include "GameSource/Game/BrnDispatchThreadInputBuffer.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Game/BrnDispatchThreadInputBuffer.h"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"           // CGS_ASSERT
 #include "GameShared/GameClasses/Module/CgsIOBufferStack.h"  // CgsModule::IOBufferStack (the manager's buffer home)
 
@@ -23,7 +23,7 @@ namespace BrnGame
     // GetParticleData() const @ 0x8227F4F0 (DWARF h:97). Read-lock, return &mParticleData (+16).
     const BrnParticle::ParticleModule::DispatchThreadUpdateData* DispatchThreadInputBuffer::GetParticleData() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Game/BrnDispatchThreadInputBuffer.h", 97));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 97));
         return &mParticleData;
     }
 
@@ -31,7 +31,7 @@ namespace BrnGame
     // &mParticleData (+16).
     BrnParticle::ParticleModule::DispatchThreadUpdateData* DispatchThreadInputBuffer::GetParticleData()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Game/BrnDispatchThreadInputBuffer.h", 98));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 98));
         return &mParticleData;
     }
 
@@ -39,7 +39,7 @@ namespace BrnGame
     // return &mParticleRenderData (+0x38A0).
     BrnParticle::ParticleModule::ParticleRenderData* DispatchThreadInputBuffer::GetParticleRenderData()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Game/BrnDispatchThreadInputBuffer.h", 101));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 101));
         return &mParticleRenderData;
     }
 
@@ -49,7 +49,7 @@ namespace BrnGame
     // unnamed body as this overload.
     const BrnParticle::ParticleModule::ParticleRenderData* DispatchThreadInputBuffer::GetParticleRenderData() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Game/BrnDispatchThreadInputBuffer.h", 100));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 100));
         return &mParticleRenderData;
     }
 
@@ -58,14 +58,14 @@ namespace BrnGame
     // GetBufferCrashTriangleCache() const @ 0x8227F790 (DWARF h:103). Read-lock, &member (+0x3B00).
     const BrnEffects::BrnCrashTriangleCache* DispatchThreadInputBuffer::GetBufferCrashTriangleCache() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Game/BrnDispatchThreadInputBuffer.h", 103));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 103));
         return &mBufferCrashTriangleCache;
     }
 
     // GetBufferCrashTriangleCache() @ 0x8227F838 (DWARF h:104, NON-const). Write-lock, &member.
     BrnEffects::BrnCrashTriangleCache* DispatchThreadInputBuffer::GetBufferCrashTriangleCache()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Game/BrnDispatchThreadInputBuffer.h", 104));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 104));
         return &mBufferCrashTriangleCache;
     }
 
@@ -75,7 +75,7 @@ namespace BrnGame
     // Read-lock, return &mParticleInterThreadEventQueue (+0x5980).
     const DispatchThreadInputBuffer::CappedInterThreadEventQueue* DispatchThreadInputBuffer::GetParticleInterThreadEventQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Game/BrnDispatchThreadInputBuffer.h", 106));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 106));
         return &mParticleInterThreadEventQueue;
     }
 
@@ -83,7 +83,7 @@ namespace BrnGame
     // "GetParticleInterT"). Write-lock, return &mParticleInterThreadEventQueue (+0x5980).
     DispatchThreadInputBuffer::CappedInterThreadEventQueue* DispatchThreadInputBuffer::GetParticleInterThreadEventQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Game/BrnDispatchThreadInputBuffer.h", 107));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 107));
         return &mParticleInterThreadEventQueue;
     }
 
@@ -93,7 +93,7 @@ namespace BrnGame
     // committed template's Append<SRCBUF,SRCALIGN> deduces <16384,16> from the source type.
     void DispatchThreadInputBuffer::AppendParticleInterThreadEventQueue(const CappedInterThreadEventQueue* lpSource)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Game/BrnDispatchThreadInputBuffer.h", 108));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 108));
         mParticleInterThreadEventQueue.Append(*lpSource);
     }
 
@@ -102,35 +102,35 @@ namespace BrnGame
     // SetRendererFlags @ 0x827BBDA0 (DWARF h:95). Write-lock, stw a2 at this+4 (mxRendererFlags).
     void DispatchThreadInputBuffer::SetRendererFlags(uint32_t xRendererFlags)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Game/BrnDispatchThreadInputBuffer.h", 95));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 95));
         mxRendererFlags = xRendererFlags;
     }
 
     // SetBrightness @ 0x823B4280 (DWARF h:111). Write-lock, stw at +8 (miBrightness).
     void DispatchThreadInputBuffer::SetBrightness(int32_t liBrightness)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Game/BrnDispatchThreadInputBuffer.h", 111));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 111));
         miBrightness = liBrightness;
     }
 
     // GetBrightness() const @ 0x823FB970 (DWARF h:110). Read-lock, return miBrightness (+8).
     int32_t DispatchThreadInputBuffer::GetBrightness() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Game/BrnDispatchThreadInputBuffer.h", 110));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 110));
         return miBrightness;
     }
 
     // SetContrast @ 0x823B4328 (DWARF h:114). Write-lock, stw at +12 (miContrast).
     void DispatchThreadInputBuffer::SetContrast(int32_t liContrast)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Game/BrnDispatchThreadInputBuffer.h", 114));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 114));
         miContrast = liContrast;
     }
 
     // GetContrast() const @ 0x823FBA18 (DWARF h:113). Read-lock, return miContrast (+12).
     int32_t DispatchThreadInputBuffer::GetContrast() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Game/BrnDispatchThreadInputBuffer.h", 113));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 113));
         return miContrast;
     }
 
@@ -140,7 +140,7 @@ namespace BrnGame
     // (mhCalibrationTextureHandle == ResourceHandle 8-byte opaque handle).
     void DispatchThreadInputBuffer::SetCalibrationTextureHandle(CgsResource::ResourceHandle lhCalibrationTextureHandle)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Game/BrnDispatchThreadInputBuffer.h", 120));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 120));
         mhCalibrationTextureHandle = lhCalibrationTextureHandle;
     }
 
@@ -148,14 +148,14 @@ namespace BrnGame
     // handle (+0x9994) by value (both handle dwords copied into the sret slot).
     CgsResource::ResourceHandle DispatchThreadInputBuffer::GetCalibrationTextureHandle() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Game/BrnDispatchThreadInputBuffer.h", 119));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 119));
         return mhCalibrationTextureHandle;
     }
 
     // SetCalibrationUnfriendlyEnablePostFx @ 0x823B43D0 (DWARF h:117). Write-lock, stb at +0x99BB.
     void DispatchThreadInputBuffer::SetCalibrationUnfriendlyEnablePostFx(bool lbEnablePostFx)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Game/BrnDispatchThreadInputBuffer.h", 117));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 117));
         mbCalibrationUnfriendlyEnablePostFx = lbEnablePostFx;
     }
 
@@ -163,28 +163,28 @@ namespace BrnGame
     // the byte at +0x99BB.
     bool DispatchThreadInputBuffer::GetCalibrationUnfriendlyEnablePostFx() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Game/BrnDispatchThreadInputBuffer.h", 116));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 116));
         return mbCalibrationUnfriendlyEnablePostFx;
     }
 
     // SetIsStalled @ 0x823B4530 (DWARF h:123). Write-lock, stb a2 at +0x99BC (mbIsStalled).
     void DispatchThreadInputBuffer::SetIsStalled(bool bIsStalled)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Game/BrnDispatchThreadInputBuffer.h", 123));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 123));
         mbIsStalled = bIsStalled;
     }
 
     // GetIsStalled() const @ 0x823FBC30 (DWARF h:122). Read-lock, return the byte at +0x99BC.
     bool DispatchThreadInputBuffer::GetIsStalled() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Game/BrnDispatchThreadInputBuffer.h", 122));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 122));
         return mbIsStalled;
     }
 
     // SetIsDiskError @ 0x823B45E0 (DWARF h:131). Write-lock, stb at +0x99BD (mbIsDiskError).
     void DispatchThreadInputBuffer::SetIsDiskError(bool lbIsDiskError)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Game/BrnDispatchThreadInputBuffer.h", 131));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 131));
         mbIsDiskError = lbIsDiskError;
     }
 
@@ -194,7 +194,7 @@ namespace BrnGame
     // &mSnapShotRequest (+0x999C).
     DispatchThreadInputBuffer::SnapShotRequest* DispatchThreadInputBuffer::GetSnapShotRequest()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Game/BrnDispatchThreadInputBuffer.h", 134));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 134));
         return &mSnapShotRequest;
     }
 
@@ -298,3 +298,5 @@ namespace BrnGame
         mpReadBuffer->SetIsWriteBuffer(false);            // *(read  + 39354) = 0
     }
 }
+
+#undef CGS_ARTIST_FILE

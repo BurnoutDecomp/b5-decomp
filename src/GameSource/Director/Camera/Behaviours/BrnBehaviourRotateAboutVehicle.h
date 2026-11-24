@@ -345,7 +345,7 @@ private:
 // ----------------------------------------------------------------------------
 inline void BehaviourRotateAboutVehicle::SetParameters(const Parameters* lpParameters)
 {
-    CGS_ASSERT(lpParameters->GetType() == 18u, CgsDev::Assert::MessageAt(
+    CGS_ASSERT(lpParameters->GetType() == 18u, CGS_ASSERT_MESSAGE_AT(
                "lpParameters->GetType() == eBehaviourRotateAboutVehicle",
                "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourRotateAboutVehicle.h", 150));
 

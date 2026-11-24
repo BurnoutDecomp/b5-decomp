@@ -19,7 +19,7 @@ void
 WorldEntityModule::BridgePVSToOutput_Prepare( WorldEntityIO::OutputBuffer_Prepare* lpOutputBuffer )
 {
     CGS_ASSERT( lpOutputBuffer,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lpOutputBuffer",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
             "../World/EntityModules/WorldEntityModule/Bridges/WorldEntityBridgePVSToOutput.cpp", 38 /* ARTIST 0x822F9EF4 */));

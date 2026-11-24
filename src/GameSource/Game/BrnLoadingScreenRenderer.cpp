@@ -188,7 +188,7 @@ namespace BrnGame
                 CgsDev::StrStream message(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
                 message << "Language does not match SKU\n";
                 CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnLoadingScreenRenderer.cpp", 245);
+                    CGS_ASSERT_LOCATION("d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnLoadingScreenRenderer.cpp", 245));
             }
             CgsDev::Assert::EndAssert();
             break;

@@ -200,7 +200,7 @@ namespace BrnGui
     void EventPanel::AppendExpectedAptComponents(GuiFlow leFlow, GuiCache* lpGuiCache)
     {
         CGS_ASSERT(lpGuiCache != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpGuiCache",
                 "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnEventPanel.cpp", 134 /* ARTIST 0x82417B68 */));   // cpp:134
 
@@ -636,7 +636,7 @@ namespace BrnGui
     void EventPanel::SetPlayerRank(s32 iRank)
     {
         CGS_ASSERT(iRank >= 0,
-            CgsDev::Assert::MessageAt("0<=liCurrentRank", __FILE__, 258 /* ARTIST 0x82417A3C */));   // @0x82417A4C  h:258
+            CGS_ASSERT_MESSAGE_AT("0<=liCurrentRank", __FILE__, 258 /* ARTIST 0x82417A3C */));   // @0x82417A4C  h:258
 
         miPlayerRank = iRank;   // +0x8B4
     }
@@ -646,15 +646,15 @@ namespace BrnGui
                                   s32 iStuntAttackRank, s32 iMarkedManRank)
     {
         CGS_ASSERT(iRaceRank >= 0,
-            CgsDev::Assert::MessageAt("0<=liCurrentRaceRank", __FILE__, 279 /* ARTIST 0x82417AA8 */));        // @0x82417AB4  h:279
+            CGS_ASSERT_MESSAGE_AT("0<=liCurrentRaceRank", __FILE__, 279 /* ARTIST 0x82417AA8 */));        // @0x82417AB4  h:279
         CGS_ASSERT(iRoadRageRank >= 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "0<=liCurrentRoadRageRank", __FILE__, 280 /* ARTIST 0x82417ACC */));    // @0x82417AD8  h:280
         CGS_ASSERT(iStuntAttackRank >= 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "0<=liCurrentStuntAttackRank", __FILE__, 281 /* ARTIST 0x82417AF0 */)); // @0x82417AFC  h:281
         CGS_ASSERT(iMarkedManRank >= 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "0<=liCurrentMarkedManRank", __FILE__, 282 /* ARTIST 0x82417B14 */));   // @0x82417B20  h:282
 
         miCurrentRaceRank        = iRaceRank;        // +0x8B8

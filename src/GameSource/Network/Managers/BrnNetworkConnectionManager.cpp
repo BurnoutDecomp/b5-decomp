@@ -79,10 +79,10 @@ namespace BrnNetwork
         CgsNetwork::ServerInterfaceUsersets* lpUsersets =
             reinterpret_cast<CgsNetwork::ServerInterfaceUsersets*>(lpServerInterface->GetUsersetsComponent());
 
-        CGS_ASSERT(lpGames, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpGames, CGS_ASSERT_MESSAGE_AT(
             "lpGames",
             __FILE__, 226 /* ARTIST 0x825668C8 */));
-        CGS_ASSERT(lpUsersets, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpUsersets, CGS_ASSERT_MESSAGE_AT(
             "lpUsersets",
             __FILE__, 227 /* ARTIST 0x825668EC */));
 
@@ -91,7 +91,7 @@ namespace BrnNetwork
         lPlayerParams.Prepare();
         lpGames->GetPlayerParametersByPlayerID(liPlayerID, &lPlayerParams);
 
-        CGS_ASSERT(lpGames->IsLocalPlayerInGame(), CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpGames->IsLocalPlayerInGame(), CGS_ASSERT_MESSAGE_AT(
             "Natting when not in a game or a userset!",
             __FILE__, 232 /* ARTIST 0x82566934 */));
 

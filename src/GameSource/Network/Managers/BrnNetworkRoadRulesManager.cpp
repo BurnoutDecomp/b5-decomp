@@ -9,7 +9,7 @@
 // message / custom-command callbacks live in BrnNetworkRoadRulesManager_wN2_01.cpp.
 // Member layout and console offsets: see the class banner in the header.
 // ===================================================================================
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp"
 #include "GameSource/Network/Managers/BrnNetworkRoadRulesManager.h"
 
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                                  // CGS_ASSERT
@@ -77,7 +77,7 @@ namespace BrnNetwork
         NetworkPlayerID lPlayerID )
     {
         CGS_ASSERT( lPlayerID != CgsNetwork::KI_INVALID_PLAYER_ID,
-            CgsDev::Assert::MessageAt("lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", __FILE__, 1277 /* ARTIST 0x82549EFC */) );
+            CGS_ASSERT_MESSAGE_AT("lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", __FILE__, 1277 /* ARTIST 0x82549EFC */) );
 
         for ( s32 liIndex = 0; liIndex < KI_NUMBER_OF_PLAYER_DATA_SLOTS; ++liIndex )
         {
@@ -169,13 +169,13 @@ namespace BrnNetwork
         mpNetworkModule    = lpNetworkModule;
 
         CGS_ASSERT( mpTimeManager != 0,
-            CgsDev::Assert::MessageAt("mpTimeManager", __FILE__, 159 /* ARTIST 0x8255C848 */));
+            CGS_ASSERT_MESSAGE_AT("mpTimeManager", __FILE__, 159 /* ARTIST 0x8255C848 */));
         CGS_ASSERT( mpPlayerManager != 0,
-            CgsDev::Assert::MessageAt("mpPlayerManager", __FILE__, 160 /* ARTIST 0x8255C870 */));
+            CGS_ASSERT_MESSAGE_AT("mpPlayerManager", __FILE__, 160 /* ARTIST 0x8255C870 */));
         CGS_ASSERT( mpServerInterface != 0,
-            CgsDev::Assert::MessageAt("mpServerInterface", __FILE__, 161 /* ARTIST 0x8255C898 */));
+            CGS_ASSERT_MESSAGE_AT("mpServerInterface", __FILE__, 161 /* ARTIST 0x8255C898 */));
         CGS_ASSERT( mpNetworkModule != 0,
-            CgsDev::Assert::MessageAt("mpNetworkModule", __FILE__, 162 /* ARTIST 0x8255C8C0 */));
+            CGS_ASSERT_MESSAGE_AT("mpNetworkModule", __FILE__, 162 /* ARTIST 0x8255C8C0 */));
 
         mBufferedRoadRulesRecvQueue.Clear();
         mbDownloadedLocalScores = false;
@@ -212,10 +212,10 @@ namespace BrnNetwork
              || liPreviousState == E_ROAD_RULES_STATE_DOWNLOADING
              || liPreviousState == E_ROAD_RULES_STATE_DOWNLOADING_LOCAL )
         {
-            CGS_ASSERT(mpNetworkModule != 0, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(mpNetworkModule != 0, CGS_ASSERT_MESSAGE_AT(
                 "mpNetworkModule",
                 __FILE__, 1568 /* ARTIST 0x8254A574 */));
-            CGS_ASSERT(mpNetworkModule->GetNetworkManager() != 0, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(mpNetworkModule->GetNetworkManager() != 0, CGS_ASSERT_MESSAGE_AT(
                 "mpNetworkModule->GetNetworkManager()",
                 __FILE__, 1569 /* ARTIST 0x8254A5A0 */));
 
@@ -232,9 +232,9 @@ namespace BrnNetwork
     void NetworkRoadRulesManager::OnGameFinish()
     {
         CGS_ASSERT( mpServerInterface != 0,
-            CgsDev::Assert::MessageAt("mpServerInterface", __FILE__, 1590 /* ARTIST 0x82554D64 */));
+            CGS_ASSERT_MESSAGE_AT("mpServerInterface", __FILE__, 1590 /* ARTIST 0x82554D64 */));
         CGS_ASSERT( mpServerInterface->GetGameComponent() != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpServerInterface->GetGameComponent()",
                 __FILE__, 1591 /* ARTIST 0x82554D90 */));
 
@@ -253,9 +253,9 @@ namespace BrnNetwork
     void NetworkRoadRulesManager::OnRoundFinish()
     {
         CGS_ASSERT( mpServerInterface != 0,
-            CgsDev::Assert::MessageAt("mpServerInterface", __FILE__, 1614 /* ARTIST 0x82554E1C */));
+            CGS_ASSERT_MESSAGE_AT("mpServerInterface", __FILE__, 1614 /* ARTIST 0x82554E1C */));
         CGS_ASSERT( mpServerInterface->GetGameComponent() != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpServerInterface->GetGameComponent()",
                 __FILE__, 1615 /* ARTIST 0x82554E48 */));
 
@@ -274,7 +274,7 @@ namespace BrnNetwork
     void NetworkRoadRulesManager::OnLeaveGame()
     {
         CGS_ASSERT( !mpServerInterface->GetGameComponent()->IsLocalPlayerInGame(),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "!mpServerInterface->GetGameComponent()->IsLocalPlayerInGame()",
                 __FILE__, 1635 /* ARTIST 0x82554ED4 */));
 
@@ -294,10 +294,10 @@ namespace BrnNetwork
     // -----------------------------------------------------------------------------
     u32 NetworkRoadRulesManager::AttemptToDownloadLocalRoadRulesHighScores()
     {
-        CGS_ASSERT(mpServerInterface != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpServerInterface != 0, CGS_ASSERT_MESSAGE_AT(
             "mpServerInterface",
             __FILE__, 1686 /* ARTIST 0x8254A6F8 */));
-        CGS_ASSERT(mpServerInterface->GetConnectionComponent() != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpServerInterface->GetConnectionComponent() != 0, CGS_ASSERT_MESSAGE_AT(
             "mpServerInterface->GetConnectionComponent()",
             __FILE__, 1687 /* ARTIST 0x8254A724 */));
 
@@ -325,10 +325,10 @@ namespace BrnNetwork
     // -----------------------------------------------------------------------------
     u32 NetworkRoadRulesManager::AttemptToDownloadRoadRulesHighScores()
     {
-        CGS_ASSERT(mpServerInterface != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpServerInterface != 0, CGS_ASSERT_MESSAGE_AT(
             "mpServerInterface",
             __FILE__, 1663 /* ARTIST 0x8254A618 */));
-        CGS_ASSERT(mpServerInterface->GetConnectionComponent() != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpServerInterface->GetConnectionComponent() != 0, CGS_ASSERT_MESSAGE_AT(
             "mpServerInterface->GetConnectionComponent()",
             __FILE__, 1664 /* ARTIST 0x8254A644 */));
 
@@ -356,12 +356,12 @@ namespace BrnNetwork
     // -----------------------------------------------------------------------------
     s32 NetworkRoadRulesManager::AttemptToUploadNewRoadRulesScores()
     {
-        CGS_ASSERT(mpServerInterface != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpServerInterface != 0, CGS_ASSERT_MESSAGE_AT(
             "mpServerInterface",
-            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 763 /* ARTIST 0x82554B18 */));
-        CGS_ASSERT(mpServerInterface->GetGameComponent() != 0, CgsDev::Assert::MessageAt(
+            CGS_ARTIST_FILE, 763 /* ARTIST 0x82554B18 */));
+        CGS_ASSERT(mpServerInterface->GetGameComponent() != 0, CGS_ASSERT_MESSAGE_AT(
             "mpServerInterface->GetGameComponent()",
-            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 764 /* ARTIST 0x82554B44 */));
+            CGS_ARTIST_FILE, 764 /* ARTIST 0x82554B44 */));
 
         const bool lbInStartedGame =
             mpServerInterface->GetGameComponent()->IsLocalPlayerInGame()
@@ -369,9 +369,9 @@ namespace BrnNetwork
 
         if ( !lbInStartedGame )
         {
-            CGS_ASSERT(mpServerInterface->GetConnectionComponent() != 0, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(mpServerInterface->GetConnectionComponent() != 0, CGS_ASSERT_MESSAGE_AT(
                 "mpServerInterface->GetConnectionComponent()",
-                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 770 /* ARTIST 0x82554BA0 */));
+                CGS_ARTIST_FILE, 770 /* ARTIST 0x82554BA0 */));
 
             if ( mpServerInterface->GetConnectionComponent()->IsLoggedIn() )
             {
@@ -389,22 +389,22 @@ namespace BrnNetwork
     void NetworkRoadRulesManager::StartDownloadingLocalRoadRulesScoresFromServer()
     {
         CGS_ASSERT( mpServerInterface != 0,
-            CgsDev::Assert::MessageAt("mpServerInterface", __FILE__, 1403 /* ARTIST 0x8254A394 */));
+            CGS_ASSERT_MESSAGE_AT("mpServerInterface", __FILE__, 1403 /* ARTIST 0x8254A394 */));
         CGS_ASSERT( mpServerInterface->GetConnectionComponent() != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpServerInterface->GetConnectionComponent()",
                 __FILE__, 1404 /* ARTIST 0x8254A3C0 */));
         CGS_ASSERT( mpServerInterface->GetGameComponent() != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpServerInterface->GetGameComponent()",
                 __FILE__, 1405 /* ARTIST 0x8254A3EC */));
         CGS_ASSERT( mpServerInterface->GetConnectionComponent()->IsLoggedIn(),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpServerInterface->GetConnectionComponent()->IsLoggedIn()",
                 __FILE__, 1408 /* ARTIST 0x8254A420 */));
         CGS_ASSERT( !( mpServerInterface->GetGameComponent()->IsLocalPlayerInGame()
                        && mpServerInterface->GetGameComponent()->IsGameStarted() ),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "( !mpServerInterface->GetGameComponent()->IsLocalPlayerInGame() ) || ( !mpServerInterface->GetGameComponent()->IsGameStarted() )",
                 __FILE__, 1410 /* ARTIST 0x8254A46C */));
 
@@ -418,22 +418,22 @@ namespace BrnNetwork
     void NetworkRoadRulesManager::StartDownloadingRoadRulesScoresFromServer()
     {
         CGS_ASSERT( mpServerInterface != 0,
-            CgsDev::Assert::MessageAt("mpServerInterface", __FILE__, 1378 /* ARTIST 0x8254A244 */));
+            CGS_ASSERT_MESSAGE_AT("mpServerInterface", __FILE__, 1378 /* ARTIST 0x8254A244 */));
         CGS_ASSERT( mpServerInterface->GetConnectionComponent() != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpServerInterface->GetConnectionComponent()",
                 __FILE__, 1379 /* ARTIST 0x8254A270 */));
         CGS_ASSERT( mpServerInterface->GetGameComponent() != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpServerInterface->GetGameComponent()",
                 __FILE__, 1380 /* ARTIST 0x8254A29C */));
         CGS_ASSERT( mpServerInterface->GetConnectionComponent()->IsLoggedIn(),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpServerInterface->GetConnectionComponent()->IsLoggedIn()",
                 __FILE__, 1383 /* ARTIST 0x8254A2D0 */));
         CGS_ASSERT( !( mpServerInterface->GetGameComponent()->IsLocalPlayerInGame()
                        && mpServerInterface->GetGameComponent()->IsGameStarted() ),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "( !mpServerInterface->GetGameComponent()->IsLocalPlayerInGame() ) || ( !mpServerInterface->GetGameComponent()->IsGameStarted() )",
                 __FILE__, 1385 /* ARTIST 0x8254A31C */));
 
@@ -447,22 +447,22 @@ namespace BrnNetwork
     void NetworkRoadRulesManager::StartUploadingRoadRulesScoresToServer()
     {
         CGS_ASSERT( mpServerInterface != 0,
-            CgsDev::Assert::MessageAt("mpServerInterface", __FILE__, 1352 /* ARTIST 0x8254A0EC */));
+            CGS_ASSERT_MESSAGE_AT("mpServerInterface", __FILE__, 1352 /* ARTIST 0x8254A0EC */));
         CGS_ASSERT( mpServerInterface->GetConnectionComponent() != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpServerInterface->GetConnectionComponent()",
                 __FILE__, 1353 /* ARTIST 0x8254A118 */));
         CGS_ASSERT( mpServerInterface->GetGameComponent() != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpServerInterface->GetGameComponent()",
                 __FILE__, 1354 /* ARTIST 0x8254A144 */));
         CGS_ASSERT( mpServerInterface->GetConnectionComponent()->IsLoggedIn(),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpServerInterface->GetConnectionComponent()->IsLoggedIn()",
                 __FILE__, 1357 /* ARTIST 0x8254A178 */));
         CGS_ASSERT( !( mpServerInterface->GetGameComponent()->IsLocalPlayerInGame()
                        && mpServerInterface->GetGameComponent()->IsGameStarted() ),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "( !mpServerInterface->GetGameComponent()->IsLocalPlayerInGame() ) || ( !mpServerInterface->GetGameComponent()->IsGameStarted() )",
                 __FILE__, 1359 /* ARTIST 0x8254A1C4 */));
 
@@ -478,7 +478,7 @@ namespace BrnNetwork
     void NetworkRoadRulesManager::HandleDownloadingRoadRulesScores()
     {
         CGS_ASSERT( mpServerInterface != 0,
-            CgsDev::Assert::MessageAt("mpServerInterface", __FILE__, 1107 /* ARTIST 0x82561204 */));
+            CGS_ASSERT_MESSAGE_AT("mpServerInterface", __FILE__, 1107 /* ARTIST 0x82561204 */));
 
         if ( mpServerInterface->GetStatus( CgsNetwork::E_COMPONENTS_CUSTOM_COMMANDS )
              != CgsNetwork::ServerInterfaceDirtySock::E_STATUS_IDLE )
@@ -492,20 +492,20 @@ namespace BrnNetwork
         }
 
         CGS_ASSERT( mpServerInterface->GetConnectionComponent() != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpServerInterface->GetConnectionComponent()",
                 __FILE__, 1117 /* ARTIST 0x82561274 */));
         CGS_ASSERT( mpServerInterface->GetGameComponent() != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpServerInterface->GetGameComponent()",
                 __FILE__, 1118 /* ARTIST 0x825612A0 */));
         CGS_ASSERT( mpServerInterface->GetConnectionComponent()->IsLoggedIn(),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpServerInterface->GetConnectionComponent()->IsLoggedIn()",
                 __FILE__, 1119 /* ARTIST 0x825612D4 */));
         CGS_ASSERT( !( mpServerInterface->GetGameComponent()->IsLocalPlayerInGame()
                        && mpServerInterface->GetGameComponent()->IsGameStarted() ),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "( !mpServerInterface->GetGameComponent()->IsLocalPlayerInGame() ) || ( !mpServerInterface->GetGameComponent()->IsGameStarted() )",
                 __FILE__, 1121 /* ARTIST 0x82561320 */));
 
@@ -520,9 +520,9 @@ namespace BrnNetwork
     // -----------------------------------------------------------------------------
     void NetworkRoadRulesManager::HandleDownloadingLocalRoadRulesScores()
     {
-        CGS_ASSERT(mpServerInterface != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpServerInterface != 0, CGS_ASSERT_MESSAGE_AT(
             "mpServerInterface",
-            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 1144 /* ARTIST 0x825613B0 */));
+            CGS_ARTIST_FILE, 1144 /* ARTIST 0x825613B0 */));
 
         if ( mpServerInterface->GetStatus( CgsNetwork::E_COMPONENTS_CUSTOM_COMMANDS )
              != CgsNetwork::ServerInterfaceDirtySock::E_STATUS_IDLE )
@@ -535,18 +535,18 @@ namespace BrnNetwork
             return;
         }
 
-        CGS_ASSERT(mpServerInterface->GetConnectionComponent() != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpServerInterface->GetConnectionComponent() != 0, CGS_ASSERT_MESSAGE_AT(
             "mpServerInterface->GetConnectionComponent()",
-            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 1154 /* ARTIST 0x82561420 */));
-        CGS_ASSERT(mpServerInterface->GetGameComponent() != 0, CgsDev::Assert::MessageAt(
+            CGS_ARTIST_FILE, 1154 /* ARTIST 0x82561420 */));
+        CGS_ASSERT(mpServerInterface->GetGameComponent() != 0, CGS_ASSERT_MESSAGE_AT(
             "mpServerInterface->GetGameComponent()",
-            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 1155 /* ARTIST 0x8256144C */));
-        CGS_ASSERT(mpServerInterface->GetConnectionComponent()->IsLoggedIn(), CgsDev::Assert::MessageAt(
+            CGS_ARTIST_FILE, 1155 /* ARTIST 0x8256144C */));
+        CGS_ASSERT(mpServerInterface->GetConnectionComponent()->IsLoggedIn(), CGS_ASSERT_MESSAGE_AT(
             "mpServerInterface->GetConnectionComponent()->IsLoggedIn()",
-            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 1156 /* ARTIST 0x82561480 */));
-        CGS_ASSERT(!( mpServerInterface->GetGameComponent()->IsLocalPlayerInGame() && mpServerInterface->GetGameComponent()->IsGameStarted() ), CgsDev::Assert::MessageAt(
+            CGS_ARTIST_FILE, 1156 /* ARTIST 0x82561480 */));
+        CGS_ASSERT(!( mpServerInterface->GetGameComponent()->IsLocalPlayerInGame() && mpServerInterface->GetGameComponent()->IsGameStarted() ), CGS_ASSERT_MESSAGE_AT(
             "( !mpServerInterface->GetGameComponent()->IsLocalPlayerInGame() ) || " "( !mpServerInterface->GetGameComponent()->IsGameStarted() )",
-            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 1158 /* ARTIST 0x825614CC */));
+            CGS_ARTIST_FILE, 1158 /* ARTIST 0x825614CC */));
 
         s32 liNumToDownload = KI_NUMBER_OF_LOCAL_CHALLENGE_SLOTS - mIndexOfNextLocalChallengeToDownload;
         if ( liNumToDownload > KI_NUM_SCORES_TO_DOWNLOAD_IN_A_BATCH )
@@ -789,24 +789,24 @@ namespace BrnNetwork
     {
         (void)lUpdateSet;
 
-        CGS_ASSERT(lpOutput != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpOutput != 0, CGS_ASSERT_MESSAGE_AT(
             "lpOutput",
-            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 286 /* ARTIST 0x82563DF4 */));
+            CGS_ARTIST_FILE, 286 /* ARTIST 0x82563DF4 */));
 
         if ( !mbBufferRoadRulesReceived )
         {
-            CGS_ASSERT(mpNetworkModule != 0, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(mpNetworkModule != 0, CGS_ASSERT_MESSAGE_AT(
                 "mpNetworkModule",
-                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 291 /* ARTIST 0x82563E30 */));
-            CGS_ASSERT(mpNetworkModule->GetNetworkToGameStateInterface() != 0, CgsDev::Assert::MessageAt(
+                CGS_ARTIST_FILE, 291 /* ARTIST 0x82563E30 */));
+            CGS_ASSERT(mpNetworkModule->GetNetworkToGameStateInterface() != 0, CGS_ASSERT_MESSAGE_AT(
                 "mpNetworkModule->GetNetworkToGameStateInterface()",
-                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 292 /* ARTIST 0x82563E5C */));
+                CGS_ARTIST_FILE, 292 /* ARTIST 0x82563E5C */));
 
             BrnNetworkModuleIO::NetworkToGameStateInterface::RoadRulesReceivedQueue* lpOutputRoadRulesRecvQueue =
                 mpNetworkModule->GetNetworkToGameStateInterface()->GetRoadRulesReceivedQueue();
-            CGS_ASSERT(lpOutputRoadRulesRecvQueue != 0, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(lpOutputRoadRulesRecvQueue != 0, CGS_ASSERT_MESSAGE_AT(
                 "lpOutputRoadRulesRecvQueue",
-                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 294 /* ARTIST 0x82563E8C */));
+                CGS_ARTIST_FILE, 294 /* ARTIST 0x82563E8C */));
 
             if ( lpOutputRoadRulesRecvQueue->GetLength() == 0 )
             {
@@ -814,9 +814,9 @@ namespace BrnNetwork
                 mBufferedRoadRulesRecvQueue.Clear();
             }
 
-            CGS_ASSERT(mpNetworkModule->GetNetworkEventQueue() != 0, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(mpNetworkModule->GetNetworkEventQueue() != 0, CGS_ASSERT_MESSAGE_AT(
                 "mpNetworkModule->GetNetworkEventQueue()",
-                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 305 /* ARTIST 0x82563ED4 */));
+                CGS_ARTIST_FILE, 305 /* ARTIST 0x82563ED4 */));
 
             if ( mRoadRulesPersonalBestBuffer.GetLength() > 0 )
             {
@@ -842,33 +842,33 @@ namespace BrnNetwork
             case KI_STATE_AUTO_LOGIN_PRIMED:
                 if ( mIndexOfNextLocalChallengeToDownload < KI_NUMBER_OF_LOCAL_CHALLENGE_SLOTS )
                 {
-                    CGS_ASSERT(meState != E_ROAD_RULES_STATE_IN_GAME, CgsDev::Assert::MessageAt(
+                    CGS_ASSERT(meState != E_ROAD_RULES_STATE_IN_GAME, CGS_ASSERT_MESSAGE_AT(
                         "meState != E_ROAD_RULES_STATE_IN_GAME",
-                        "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 346 /* ARTIST 0x82563FB8 */));
+                        CGS_ARTIST_FILE, 346 /* ARTIST 0x82563FB8 */));
                     meState = E_ROAD_RULES_STATE_DOWNLOADING_LOCAL;
                 }
                 else if ( mIndexOfNextChallengeToDownload < KI_NUMBER_OF_LOCAL_CHALLENGE_SLOTS )
                 {
-                    CGS_ASSERT(meState != E_ROAD_RULES_STATE_IN_GAME, CgsDev::Assert::MessageAt(
+                    CGS_ASSERT(meState != E_ROAD_RULES_STATE_IN_GAME, CGS_ASSERT_MESSAGE_AT(
                         "meState != E_ROAD_RULES_STATE_IN_GAME",
-                        "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 353 /* ARTIST 0x82563FFC */));
+                        CGS_ARTIST_FILE, 353 /* ARTIST 0x82563FFC */));
                     meState = E_ROAD_RULES_STATE_DOWNLOADING;
                 }
                 else if ( mIndexOfNextChallengeToUpload < KI_NUMBER_OF_LOCAL_CHALLENGE_SLOTS )
                 {
-                    CGS_ASSERT(meState != E_ROAD_RULES_STATE_IN_GAME, CgsDev::Assert::MessageAt(
+                    CGS_ASSERT(meState != E_ROAD_RULES_STATE_IN_GAME, CGS_ASSERT_MESSAGE_AT(
                         "meState != E_ROAD_RULES_STATE_IN_GAME",
-                        "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 361 /* ARTIST 0x82564040 */));
+                        CGS_ARTIST_FILE, 361 /* ARTIST 0x82564040 */));
                     meState = E_ROAD_RULES_STATE_UPLOADING;
                 }
                 else
                 {
-                    CGS_ASSERT(mpNetworkModule != 0, CgsDev::Assert::MessageAt(
+                    CGS_ASSERT(mpNetworkModule != 0, CGS_ASSERT_MESSAGE_AT(
                         "mpNetworkModule",
-                        "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 372 /* ARTIST 0x82564078 */));
-                    CGS_ASSERT(mpNetworkModule->GetNetworkManager() != 0, CgsDev::Assert::MessageAt(
+                        CGS_ARTIST_FILE, 372 /* ARTIST 0x82564078 */));
+                    CGS_ASSERT(mpNetworkModule->GetNetworkManager() != 0, CGS_ASSERT_MESSAGE_AT(
                         "mpNetworkModule->GetNetworkManager()",
-                        "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 373 /* ARTIST 0x825640A4 */));
+                        CGS_ARTIST_FILE, 373 /* ARTIST 0x825640A4 */));
 
                     mpNetworkModule->GetNetworkManager()->OnAutoLoginProcessComplete( 0 );
                     meState = E_ROAD_RULES_STATE_BOOTING;
@@ -888,7 +888,7 @@ namespace BrnNetwork
     void NetworkRoadRulesManager::AddPlayer( NetworkPlayerID lPlayerID )
     {
         CGS_ASSERT( mpPlayerManager != 0,
-            CgsDev::Assert::MessageAt("mpPlayerManager", __FILE__, 1185 /* ARTIST 0x8256BA68 */));
+            CGS_ASSERT_MESSAGE_AT("mpPlayerManager", __FILE__, 1185 /* ARTIST 0x8256BA68 */));
 
         CgsNetwork::NetworkPlayer* lpNetworkPlayer = mpPlayerManager->GetPlayerByID( lPlayerID );
         if ( lpNetworkPlayer == 0 )
@@ -898,7 +898,7 @@ namespace BrnNetwork
 
         RoadRulesData* lpDataEntry = GetNextFreeRoadRulesDataEntry();
         CGS_ASSERT( lpDataEntry != 0,
-            CgsDev::Assert::MessageAt("lpDataEntry", __FILE__, 1195 /* ARTIST 0x8256BAB0 */));
+            CGS_ASSERT_MESSAGE_AT("lpDataEntry", __FILE__, 1195 /* ARTIST 0x8256BAB0 */));
 
         lpNetworkPlayer->RegisterMessageType( KI_ROAD_RULES_MESSAGE_TYPE, sizeof( RoadRulesMessage ),
                                               &lpDataEntry->mRoadRulesMessageSend,
@@ -923,7 +923,7 @@ namespace BrnNetwork
     void NetworkRoadRulesManager::RemovePlayer( NetworkPlayerID lPlayerID )
     {
         CGS_ASSERT( mpPlayerManager != 0,
-            CgsDev::Assert::MessageAt("mpPlayerManager", __FILE__, 1242 /* ARTIST 0x82554C10 */));
+            CGS_ASSERT_MESSAGE_AT("mpPlayerManager", __FILE__, 1242 /* ARTIST 0x82554C10 */));
 
         CgsNetwork::NetworkPlayer* lpNetworkPlayer = mpPlayerManager->GetPlayerByID( lPlayerID );
         if ( lpNetworkPlayer == 0 )
@@ -936,7 +936,7 @@ namespace BrnNetwork
 
         RoadRulesData* lpDataEntry = GetRoadRulesDataEntry( lPlayerID );
         CGS_ASSERT( lpDataEntry != 0,
-            CgsDev::Assert::MessageAt("lpDataEntry", __FILE__, 1254 /* ARTIST 0x82554C70 */));
+            CGS_ASSERT_MESSAGE_AT("lpDataEntry", __FILE__, 1254 /* ARTIST 0x82554C70 */));
 
         lpDataEntry->mPlayerID                   = CgsNetwork::KI_INVALID_PLAYER_ID;
         lpDataEntry->mIndexOfNextChallengeToSend = KI_NUMBER_OF_LOCAL_CHALLENGE_SLOTS;
@@ -954,7 +954,7 @@ namespace BrnNetwork
             {
                 RemovePlayer( maRoadRulesData[liPlayerIndex].mPlayerID );
                 CGS_ASSERT( maRoadRulesData[liPlayerIndex].mPlayerID == CgsNetwork::KI_INVALID_PLAYER_ID,
-                    CgsDev::Assert::MessageAt(
+                    CGS_ASSERT_MESSAGE_AT(
                         "maRoadRulesData[liPlayerIndex].mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID",
                         __FILE__, 1455 /* ARTIST 0x82554CEC */));
             }
@@ -973,9 +973,9 @@ namespace BrnNetwork
     void NetworkRoadRulesManager::HandleNewPersonalBest(
         const BrnNetworkModuleIO::NetworkInRoadRulesPBEvent* lpNetworkRoadRulesPBEvent )
     {
-        CGS_ASSERT(lpNetworkRoadRulesPBEvent != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpNetworkRoadRulesPBEvent != 0, CGS_ASSERT_MESSAGE_AT(
             "lpNetworkRoadRulesPBEvent",
-            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 586 /* ARTIST 0x82561044 */));
+            CGS_ARTIST_FILE, 586 /* ARTIST 0x82561044 */));
 
         if ( lpNetworkRoadRulesPBEvent->mbLobbyPersonalBest )
         {
@@ -993,9 +993,9 @@ namespace BrnNetwork
     void NetworkRoadRulesManager::StartSendingRoadRulesScoresToPlayer( RoadRulesData* lpPlayerDataEntry )
     {
         CGS_ASSERT( lpPlayerDataEntry != 0,
-            CgsDev::Assert::MessageAt("lpPlayerDataEntry", __FILE__, 1334 /* ARTIST 0x8254A058 */));
+            CGS_ASSERT_MESSAGE_AT("lpPlayerDataEntry", __FILE__, 1334 /* ARTIST 0x8254A058 */));
         CGS_ASSERT( lpPlayerDataEntry->mPlayerID != CgsNetwork::KI_INVALID_PLAYER_ID,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpPlayerDataEntry->mPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
                 __FILE__, 1335 /* ARTIST 0x8254A080 */));
 
@@ -1009,12 +1009,12 @@ namespace BrnNetwork
     // -----------------------------------------------------------------------------
     void NetworkRoadRulesManager::SendPersonalBestScore()
     {
-        CGS_ASSERT(mpPlayerManager != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpPlayerManager != 0, CGS_ASSERT_MESSAGE_AT(
             "mpPlayerManager",
-            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 704 /* ARTIST 0x82554940 */));
-        CGS_ASSERT(mpTimeManager != 0, CgsDev::Assert::MessageAt(
+            CGS_ARTIST_FILE, 704 /* ARTIST 0x82554940 */));
+        CGS_ASSERT(mpTimeManager != 0, CGS_ASSERT_MESSAGE_AT(
             "mpTimeManager",
-            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 705 /* ARTIST 0x82554968 */));
+            CGS_ARTIST_FILE, 705 /* ARTIST 0x82554968 */));
 
         // ARTIST 0x82554974 zeroes the message count before the buffer-length test.
         RoadRulesPersonalBestMessage* lapRoadRulesMessages[KI_NUMBER_OF_PLAYER_DATA_SLOTS];
@@ -1046,9 +1046,9 @@ namespace BrnNetwork
         for ( s32 liIndex = 0; liIndex < liNumMessages; ++liIndex )
         {
             RoadRulesPersonalBestMessage* lpRoadRulesMessage = lapRoadRulesMessages[liIndex];
-            CGS_ASSERT(!lpRoadRulesMessage->IsMessageValid(), CgsDev::Assert::MessageAt(
+            CGS_ASSERT(!lpRoadRulesMessage->IsMessageValid(), CGS_ASSERT_MESSAGE_AT(
                 "!lpRoadRulesMessage->IsMessageValid()",
-                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 742 /* ARTIST 0x82554A9C */));
+                CGS_ARTIST_FILE, 742 /* ARTIST 0x82554A9C */));
             lpRoadRulesMessage->PrepareForSend( lu16Frame, lPersonalBest.mChallengeIndex,
                                                 lPersonalBest.mPersonalBestScore );
         }
@@ -1061,10 +1061,10 @@ namespace BrnNetwork
     // -----------------------------------------------------------------------------
     void NetworkRoadRulesManager::HandleSendingRoadRulesScores( bool lbAreWePlaying )
     {
-        CGS_ASSERT(mpPlayerManager != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpPlayerManager != 0, CGS_ASSERT_MESSAGE_AT(
             "mpPlayerManager",
             __FILE__, 803 /* ARTIST 0x82564224 */));
-        CGS_ASSERT(mpTimeManager != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpTimeManager != 0, CGS_ASSERT_MESSAGE_AT(
             "mpTimeManager",
             __FILE__, 804 /* ARTIST 0x8256424C */));
 
@@ -1126,10 +1126,10 @@ namespace BrnNetwork
                 break;
             }
 
-            CGS_ASSERT(lChallengeIndex >= 0, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(lChallengeIndex >= 0, CGS_ASSERT_MESSAGE_AT(
                 "lChallengeIndex >= 0",
                 __FILE__, 883 /* ARTIST 0x82561108 */));
-            CGS_ASSERT(lChallengeIndex < KI_NUMBER_OF_LOCAL_CHALLENGE_SLOTS, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(lChallengeIndex < KI_NUMBER_OF_LOCAL_CHALLENGE_SLOTS, CGS_ASSERT_MESSAGE_AT(
                 "lChallengeIndex < BrnGameState::KI_MAX_CHALLENGES",
                 __FILE__, 884 /* ARTIST 0x82561128 */));
 
@@ -1214,22 +1214,22 @@ namespace BrnNetwork
         }
 
         CGS_ASSERT( mpServerInterface != 0,
-            CgsDev::Assert::MessageAt("mpServerInterface", __FILE__, 946 /* ARTIST 0x8256B898 */));
+            CGS_ASSERT_MESSAGE_AT("mpServerInterface", __FILE__, 946 /* ARTIST 0x8256B898 */));
         CGS_ASSERT( mpServerInterface->GetConnectionComponent() != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpServerInterface->GetConnectionComponent()",
                 __FILE__, 947 /* ARTIST 0x8256B8C4 */));
         CGS_ASSERT( mpServerInterface->GetGameComponent() != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpServerInterface->GetGameComponent()",
                 __FILE__, 948 /* ARTIST 0x8256B8F0 */));
         CGS_ASSERT( mpServerInterface->GetConnectionComponent()->IsLoggedIn(),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpServerInterface->GetConnectionComponent()->IsLoggedIn()",
                 __FILE__, 949 /* ARTIST 0x8256B924 */));
         CGS_ASSERT( !( mpServerInterface->GetGameComponent()->IsLocalPlayerInGame()
                        && mpServerInterface->GetGameComponent()->IsGameStarted() ),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "( !mpServerInterface->GetGameComponent()->IsLocalPlayerInGame() ) || ( !mpServerInterface->GetGameComponent()->IsGameStarted() )",
                 __FILE__, 951 /* ARTIST 0x8256B970 */));
 
@@ -1239,11 +1239,11 @@ namespace BrnNetwork
         if ( lUploadData.GetNumScores() > 0 )
         {
             CGS_ASSERT( mpServerInterface->GetCustomCommandsComponent() != 0,
-                CgsDev::Assert::MessageAt(
+                CGS_ASSERT_MESSAGE_AT(
                     "mpServerInterface->GetCustomCommandsComponent()",
                     __FILE__, 958 /* ARTIST 0x8256B9B4 */));
             CGS_ASSERT( NULL != macRoadRulesServerKey,
-                CgsDev::Assert::MessageAt(
+                CGS_ASSERT_MESSAGE_AT(
                     "NULL != macRoadRulesServerKey",
                     __FILE__, 959 /* ARTIST 0x8256B9D8 */));
 
@@ -1644,30 +1644,30 @@ namespace BrnNetwork
                                                                     NetworkPlayerID lSendingPlayerID, void* lpUserData )
     {
         NetworkRoadRulesManager* lpRoadRulesManager = static_cast<NetworkRoadRulesManager*>( lpUserData );
-        CGS_ASSERT(lpRoadRulesManager != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpRoadRulesManager != 0, CGS_ASSERT_MESSAGE_AT(
             "lpRoadRulesManager",
-            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 1722 /* ARTIST 0x82554F74 */));
+            CGS_ARTIST_FILE, 1722 /* ARTIST 0x82554F74 */));
 
         RoadRulesMessage* lpRoadRulesMessage = static_cast<RoadRulesMessage*>( lpMessage );
-        CGS_ASSERT(lpRoadRulesMessage != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpRoadRulesMessage != 0, CGS_ASSERT_MESSAGE_AT(
             "lpRoadRulesMessage",
-            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 1726 /* ARTIST 0x82554F98 */));
+            CGS_ARTIST_FILE, 1726 /* ARTIST 0x82554F98 */));
 
         s32                  liNumRoadRulesScoresRecv;
         RoadRulesMessageData laRoadRulesMessageData[KI_MAX_ROAD_RULES_MESSAGE_ENTRIES];
         const bool lbRetrieved = lpRoadRulesMessage->Retrieve( &liNumRoadRulesScoresRecv, laRoadRulesMessageData );
-        CGS_ASSERT(lbRetrieved, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lbRetrieved, CGS_ASSERT_MESSAGE_AT(
             "lpRoadRulesMessage->Retrieve(&liNumRoadRulesScoresRecv, laRoadRulesMessageData)",
-            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 1727 /* ARTIST 0x82554FD0 */));
+            CGS_ARTIST_FILE, 1727 /* ARTIST 0x82554FD0 */));
 
-        CGS_ASSERT(lpRoadRulesManager->mpPlayerManager != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpRoadRulesManager->mpPlayerManager != 0, CGS_ASSERT_MESSAGE_AT(
             "lpRoadRulesManager->mpPlayerManager",
-            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 1730 /* ARTIST 0x82554FF8 */));
+            CGS_ARTIST_FILE, 1730 /* ARTIST 0x82554FF8 */));
         CgsNetwork::PlayerMenuData* lpPlayerMenuData =
             lpRoadRulesManager->mpPlayerManager->GetMenuDataByID( lSendingPlayerID );
-        CGS_ASSERT(lpPlayerMenuData != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpPlayerMenuData != 0, CGS_ASSERT_MESSAGE_AT(
             "lpPlayerMenuData",
-            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 1732 /* ARTIST 0x8255502C */));
+            CGS_ARTIST_FILE, 1732 /* ARTIST 0x8255502C */));
 
         CgsNetwork::PlayerName lPlayerName;
         lPlayerName.Construct( lpPlayerMenuData->macName );
@@ -1679,30 +1679,30 @@ namespace BrnNetwork
         lRoadRulesRecvData.mPlayerName              = lPlayerName;
         lRoadRulesRecvData.mPlayerID                = lSendingPlayerID;
 
-        CGS_ASSERT(lpRoadRulesManager->mpNetworkModule != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpRoadRulesManager->mpNetworkModule != 0, CGS_ASSERT_MESSAGE_AT(
             "lpRoadRulesManager->mpNetworkModule",
-            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 1740 /* ARTIST 0x82555098 */));
-        CGS_ASSERT(lpRoadRulesManager->mpNetworkModule->GetNetworkToGameStateInterface() != 0, CgsDev::Assert::MessageAt(
+            CGS_ARTIST_FILE, 1740 /* ARTIST 0x82555098 */));
+        CGS_ASSERT(lpRoadRulesManager->mpNetworkModule->GetNetworkToGameStateInterface() != 0, CGS_ASSERT_MESSAGE_AT(
             "lpRoadRulesManager->mpNetworkModule->GetNetworkToGameStateInterface()",
-            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 1741 /* ARTIST 0x825550C4 */));
+            CGS_ARTIST_FILE, 1741 /* ARTIST 0x825550C4 */));
         BrnNetworkModuleIO::NetworkToGameStateInterface* lpNetworkToGameStateInterface =
             lpRoadRulesManager->mpNetworkModule->GetNetworkToGameStateInterface();
-        CGS_ASSERT(lpNetworkToGameStateInterface->GetRoadRulesDownloadedQueue() != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpNetworkToGameStateInterface->GetRoadRulesDownloadedQueue() != 0, CGS_ASSERT_MESSAGE_AT(
             "lpNetworkToGameStateInterface->GetRoadRulesDownloadedQueue()",
-            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 1743 /* ARTIST 0x825550F4 */));
+            CGS_ARTIST_FILE, 1743 /* ARTIST 0x825550F4 */));
 
         if ( lpRoadRulesManager->mbBufferRoadRulesReceived )
         {
-            CGS_ASSERT(lpRoadRulesManager->mBufferedRoadRulesRecvQueue.GetLength() < lpRoadRulesManager->mBufferedRoadRulesRecvQueue.GetMaxLength(), CgsDev::Assert::MessageAt(
+            CGS_ASSERT(lpRoadRulesManager->mBufferedRoadRulesRecvQueue.GetLength() < lpRoadRulesManager->mBufferedRoadRulesRecvQueue.GetMaxLength(), CGS_ASSERT_MESSAGE_AT(
                 "lpRoadRulesManager->mBufferedRoadRulesRecvQueue.GetLength() < " "lpRoadRulesManager->mBufferedRoadRulesRecvQueue.GetMaxLength()",
-                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 1750 /* ARTIST 0x8255512C */));
+                CGS_ARTIST_FILE, 1750 /* ARTIST 0x8255512C */));
             lpRoadRulesManager->mBufferedRoadRulesRecvQueue.AddEvent( lRoadRulesRecvData );
         }
         else
         {
-            CGS_ASSERT(lpNetworkToGameStateInterface->GetRoadRulesReceivedQueue()->GetLength() < lpNetworkToGameStateInterface->GetRoadRulesReceivedQueue()->GetMaxLength(), CgsDev::Assert::MessageAt(
+            CGS_ASSERT(lpNetworkToGameStateInterface->GetRoadRulesReceivedQueue()->GetLength() < lpNetworkToGameStateInterface->GetRoadRulesReceivedQueue()->GetMaxLength(), CGS_ASSERT_MESSAGE_AT(
                 "lpNetworkToGameStateInterface->GetRoadRulesReceivedQueue()->GetLength() < " "lpNetworkToGameStateInterface->GetRoadRulesReceivedQueue()->GetMaxLength()",
-                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 1756 /* ARTIST 0x8255516C */));
+                CGS_ARTIST_FILE, 1756 /* ARTIST 0x8255516C */));
             lpNetworkToGameStateInterface->GetRoadRulesReceivedQueue()->AddEvent( lRoadRulesRecvData );
         }
     }
@@ -1737,16 +1737,16 @@ namespace BrnNetwork
                                                                          NetworkPlayerID lSendingPlayerID, void* lpUserData )
     {
         NetworkRoadRulesManager* lpRoadRulesManager = static_cast<NetworkRoadRulesManager*>( lpUserData );
-        CGS_ASSERT(lpRoadRulesManager != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpRoadRulesManager != 0, CGS_ASSERT_MESSAGE_AT(
             "lpRoadRulesManager",
             __FILE__, 1819 /* ARTIST 0x8256457C */));
 
-        CGS_ASSERT(lpRoadRulesManager->mpPlayerManager != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpRoadRulesManager->mpPlayerManager != 0, CGS_ASSERT_MESSAGE_AT(
             "lpRoadRulesManager->mpPlayerManager",
             __FILE__, 1822 /* ARTIST 0x825645A4 */));
         CgsNetwork::PlayerMenuData* lpPlayerMenuData =
             lpRoadRulesManager->mpPlayerManager->GetMenuDataByID( lSendingPlayerID );
-        CGS_ASSERT(lpPlayerMenuData != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpPlayerMenuData != 0, CGS_ASSERT_MESSAGE_AT(
             "lpPlayerMenuData",
             __FILE__, 1824 /* ARTIST 0x825645D8 */));
 
@@ -1757,20 +1757,20 @@ namespace BrnNetwork
         lRoadRulesPbEvent.mPersonalBestPlayerID = lSendingPlayerID;
 
         RoadRulesPersonalBestMessage* lpRoadRulesPBMessage = static_cast<RoadRulesPersonalBestMessage*>( lpMessage );
-        CGS_ASSERT(lpRoadRulesPBMessage != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpRoadRulesPBMessage != 0, CGS_ASSERT_MESSAGE_AT(
             "lpRoadRulesPBMessage",
             __FILE__, 1833 /* ARTIST 0x8256460C */));
         lpRoadRulesPBMessage->Retrieve( &lPlayerName, &lRoadRulesPbEvent.mPersonalBestChallengeIndex,
                                         &lRoadRulesPbEvent.mPersonalBestScore );
 
-        CGS_ASSERT(lpRoadRulesManager->mpNetworkModule != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpRoadRulesManager->mpNetworkModule != 0, CGS_ASSERT_MESSAGE_AT(
             "lpRoadRulesManager->mpNetworkModule",
             __FILE__, 1839 /* ARTIST 0x82564648 */));
-        CGS_ASSERT(lpRoadRulesManager->mpNetworkModule->GetNetworkManager() != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpRoadRulesManager->mpNetworkModule->GetNetworkManager() != 0, CGS_ASSERT_MESSAGE_AT(
             "lpRoadRulesManager->mpNetworkModule->GetNetworkManager()",
             __FILE__, 1840 /* ARTIST 0x82564674 */));
         BuddyManagerX360* lpBuddyManager = lpRoadRulesManager->mpNetworkModule->GetNetworkManager()->GetBuddyManager();
-        CGS_ASSERT(lpBuddyManager != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpBuddyManager != 0, CGS_ASSERT_MESSAGE_AT(
             "lpBuddyManager",
             __FILE__, 1842 /* ARTIST 0x825646A8 */));
         lRoadRulesPbEvent.mbWasPBByFriend = lpBuddyManager->IsFullBuddy( &lPlayerName );
@@ -1781,7 +1781,7 @@ namespace BrnNetwork
         }
         else
         {
-            CGS_ASSERT(lpRoadRulesManager->mpNetworkModule->GetNetworkEventQueue() != 0, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(lpRoadRulesManager->mpNetworkModule->GetNetworkEventQueue() != 0, CGS_ASSERT_MESSAGE_AT(
                 "lpRoadRulesManager->mpNetworkModule->GetNetworkEventQueue()",
                 __FILE__, 1855 /* ARTIST 0x82564704 */));
             lpRoadRulesManager->mpNetworkModule->GetNetworkEventQueue()->AddEvent(
@@ -1822,14 +1822,14 @@ namespace BrnNetwork
         (void)lpResult;
 
         NetworkRoadRulesManager* lpRoadRulesManager = static_cast<NetworkRoadRulesManager*>( lpData );
-        CGS_ASSERT(lpRoadRulesManager != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpRoadRulesManager != 0, CGS_ASSERT_MESSAGE_AT(
             "lpRoadRulesManager",
-            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 1905 /* ARTIST 0x82564768 */));
+            CGS_ARTIST_FILE, 1905 /* ARTIST 0x82564768 */));
 
         BrnServerInterface* lpServerInterface = lpRoadRulesManager->mpServerInterface;
-        CGS_ASSERT(lpServerInterface != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpServerInterface != 0, CGS_ASSERT_MESSAGE_AT(
             "lpServerInterface",
-            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 1908 /* ARTIST 0x82564790 */));
+            CGS_ARTIST_FILE, 1908 /* ARTIST 0x82564790 */));
 
         if ( lbSuccess && lpRoadRulesManager->meState == E_ROAD_RULES_STATE_UPLOADING )
         {
@@ -1839,18 +1839,18 @@ namespace BrnNetwork
             for ( Road::ChallengeIndex lChallengeIndex = lpRoadRulesManager->mIndexOfNextChallengeToUpload;
                   lChallengeIndex < lEndUploadIndex; ++lChallengeIndex )
             {
-                CGS_ASSERT(lChallengeIndex >= 0, CgsDev::Assert::MessageAt(
+                CGS_ASSERT(lChallengeIndex >= 0, CGS_ASSERT_MESSAGE_AT(
                     "lChallengeIndex >= 0",
-                    "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 1925 /* ARTIST 0x8256480C */));
-                CGS_ASSERT(lChallengeIndex < KI_NUMBER_OF_LOCAL_CHALLENGE_SLOTS, CgsDev::Assert::MessageAt(
+                    CGS_ARTIST_FILE, 1925 /* ARTIST 0x8256480C */));
+                CGS_ASSERT(lChallengeIndex < KI_NUMBER_OF_LOCAL_CHALLENGE_SLOTS, CGS_ASSERT_MESSAGE_AT(
                     "lChallengeIndex < BrnGameState::KI_MAX_CHALLENGES",
-                    "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 1926 /* ARTIST 0x8256482C */));
+                    CGS_ARTIST_FILE, 1926 /* ARTIST 0x8256482C */));
 
                 BrnStreetData::ChallengePlayerScoreEntry* lpChallengeData =
                     &lpRoadRulesManager->maLocalRoadScoresToUpload[lChallengeIndex];
-                CGS_ASSERT(lpChallengeData != 0, CgsDev::Assert::MessageAt(
+                CGS_ASSERT(lpChallengeData != 0, CGS_ASSERT_MESSAGE_AT(
                     "lpChallengeData",
-                    "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 1929 /* ARTIST 0x8256484C */));
+                    CGS_ARTIST_FILE, 1929 /* ARTIST 0x8256484C */));
                 lpChallengeData->mDirty.UnSetAll();
             }
 
@@ -1858,19 +1858,19 @@ namespace BrnNetwork
             lUploadedEvent.mStartUploadIndex = lpRoadRulesManager->mIndexOfNextChallengeToUpload;
             lUploadedEvent.mEndUploadIndex   = lEndUploadIndex;
 
-            CGS_ASSERT(lpRoadRulesManager->mpNetworkModule != 0, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(lpRoadRulesManager->mpNetworkModule != 0, CGS_ASSERT_MESSAGE_AT(
                 "lpRoadRulesManager->mpNetworkModule",
-                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 1937 /* ARTIST 0x82564898 */));
-            CGS_ASSERT(lpRoadRulesManager->mpNetworkModule->GetNetworkEventQueue() != 0, CgsDev::Assert::MessageAt(
+                CGS_ARTIST_FILE, 1937 /* ARTIST 0x82564898 */));
+            CGS_ASSERT(lpRoadRulesManager->mpNetworkModule->GetNetworkEventQueue() != 0, CGS_ASSERT_MESSAGE_AT(
                 "lpRoadRulesManager->mpNetworkModule->GetNetworkEventQueue()",
-                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 1938 /* ARTIST 0x825648C4 */));
+                CGS_ARTIST_FILE, 1938 /* ARTIST 0x825648C4 */));
             lpRoadRulesManager->mpNetworkModule->GetNetworkEventQueue()->AddEvent(
                 reinterpret_cast<const CgsModule::Event*>( &lUploadedEvent ),
                 lUploadedEvent.GetEventType(), sizeof( lUploadedEvent ) );
 
-            CGS_ASSERT(lpServerInterface->GetDownloadableConfigComponent() != 0, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(lpServerInterface->GetDownloadableConfigComponent() != 0, CGS_ASSERT_MESSAGE_AT(
                 "lpServerInterface->GetDownloadableConfigComponent()",
-                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 1942 /* ARTIST 0x82564904 */));
+                CGS_ARTIST_FILE, 1942 /* ARTIST 0x82564904 */));
 
             lpRoadRulesManager->mIndexOfNextChallengeToUpload = lEndUploadIndex;
             lpRoadRulesManager->miNumRoadsConsideredForUpload = 0;
@@ -1893,9 +1893,9 @@ namespace BrnNetwork
                 lpRoadRulesManager->meState = KI_STATE_AUTO_LOGIN_PRIMED;
             }
 
-            CGS_ASSERT(lpServerInterface->GetCustomCommandsComponent() != 0, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(lpServerInterface->GetCustomCommandsComponent() != 0, CGS_ASSERT_MESSAGE_AT(
                 "lpServerInterface->GetCustomCommandsComponent()",
-                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 1971 /* ARTIST 0x82564984 */));
+                CGS_ARTIST_FILE, 1971 /* ARTIST 0x82564984 */));
             if ( lpServerInterface->GetCustomCommandsComponent()->GetStatus()
                  == CgsNetwork::ServerInterfaceDirtySock::E_STATUS_ERROR )
             {
@@ -1904,3 +1904,5 @@ namespace BrnNetwork
         }
     }
 }
+
+#undef CGS_ARTIST_FILE

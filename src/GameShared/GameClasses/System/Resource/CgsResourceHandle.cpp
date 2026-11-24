@@ -20,7 +20,7 @@ namespace CgsResource
     ID ResourceHandle::GetResourceId() const
     {
         CGS_ASSERT(mpSourceEntry != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpSourceEntry != NULL",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceHandle.cpp", 54 /* ARTIST 0x828D8468 */));
         return mpSourceEntry->mID;

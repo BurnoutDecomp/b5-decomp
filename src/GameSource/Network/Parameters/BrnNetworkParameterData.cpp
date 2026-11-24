@@ -53,7 +53,7 @@ namespace BrnNetwork
         case 4:  return 6;
         default:
             CGS_ASSERT(false,
-                CgsDev::Assert::MessageAt(
+                CGS_ASSERT_MESSAGE_AT(
                     "Unknown game mode",
                     "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
                     "../Network/Parameters/BrnNetworkParameterData.cpp", 73 /* ARTIST 0x825874E8 */));

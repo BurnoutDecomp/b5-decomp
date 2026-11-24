@@ -1,6 +1,6 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkTeamSelectionManager.cpp"
 #include "GameSource/Network/Managers/BrnNetworkTeamSelectionManager.h"
 #include "GameSource/Network/BrnNetworkManager.h"          // BrnNetwork::BrnNetworkManager (GetPlayerManager/GetServerInterface/GetActiveRaceCarIndex/GetCurrentFrame)
 #include "GameSource/Network/BrnServerInterface.h"         // BrnNetwork::BrnServerInterface::GetGameComponent
@@ -54,7 +54,7 @@ namespace BrnNetwork
         maUpdateFunctions[1] = &TeamSelectionManager::UpdateWaitIdle;
 
         for (s32 liIndex = 0; liIndex < KI_NUM_UPDATE_FUNCTIONS; ++liIndex)
-            CGS_ASSERT(maUpdateFunctions[liIndex] != 0, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(maUpdateFunctions[liIndex] != 0, CGS_ASSERT_MESSAGE_AT(
                 "No update function supplied for this sub state",
                 __FILE__, 113 /* ARTIST 0x8255E7A0 */));
     }
@@ -202,12 +202,12 @@ namespace BrnNetwork
     // ---------------------------------------------------------------------------------
     bool TeamSelectionManager::AddPlayer( NetworkPlayerID lPlayerID )
     {
-        CGS_ASSERT(mpNetworkManager != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpNetworkManager != 0, CGS_ASSERT_MESSAGE_AT(
             "mpNetworkManager",
-            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkTeamSelectionManager.cpp", 502 /* ARTIST 0x82556F3C */));
-        CGS_ASSERT(mpNetworkManager->GetPlayerManager() != 0, CgsDev::Assert::MessageAt(
+            CGS_ARTIST_FILE, 502 /* ARTIST 0x82556F3C */));
+        CGS_ASSERT(mpNetworkManager->GetPlayerManager() != 0, CGS_ASSERT_MESSAGE_AT(
             "mpNetworkManager->GetPlayerManager()",
-            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkTeamSelectionManager.cpp", 503 /* ARTIST 0x82556F64 */));
+            CGS_ARTIST_FILE, 503 /* ARTIST 0x82556F64 */));
 
         CgsNetwork::PlayerManager* lpPlayerManager = mpNetworkManager->GetPlayerManager();
         CgsNetwork::NetworkPlayer* lpNetworkPlayer = lpPlayerManager->GetPlayerByID(lPlayerID);
@@ -223,9 +223,9 @@ namespace BrnNetwork
                     break;
                 }
             }
-            CGS_ASSERT(lpDataEntry != 0, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(lpDataEntry != 0, CGS_ASSERT_MESSAGE_AT(
                 "lpDataEntry",
-                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkTeamSelectionManager.cpp", 514 /* ARTIST 0x82556FD8 */));
+                CGS_ARTIST_FILE, 514 /* ARTIST 0x82556FD8 */));
 
             lpNetworkPlayer->RegisterMessageType(
                 KI_TEAM_SELECT_MESSAGE_TYPE,
@@ -258,12 +258,12 @@ namespace BrnNetwork
             lpEntry->mMessageRecv.Construct();
         }
 
-        CGS_ASSERT(mpNetworkManager != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpNetworkManager != 0, CGS_ASSERT_MESSAGE_AT(
             "mpNetworkManager",
-            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkTeamSelectionManager.cpp", 554 /* ARTIST 0x825570A4 */));
-        CGS_ASSERT(mpNetworkManager->GetPlayerManager() != 0, CgsDev::Assert::MessageAt(
+            CGS_ARTIST_FILE, 554 /* ARTIST 0x825570A4 */));
+        CGS_ASSERT(mpNetworkManager->GetPlayerManager() != 0, CGS_ASSERT_MESSAGE_AT(
             "mpNetworkManager->GetPlayerManager()",
-            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkTeamSelectionManager.cpp", 555 /* ARTIST 0x825570CC */));
+            CGS_ARTIST_FILE, 555 /* ARTIST 0x825570CC */));
 
         CgsNetwork::PlayerManager* lpPlayerManager = mpNetworkManager->GetPlayerManager();
         CgsNetwork::NetworkPlayer* lpNetworkPlayer = lpPlayerManager->GetPlayerByID(lPlayerID);
@@ -285,9 +285,9 @@ namespace BrnNetwork
             {
                 RemovePlayer(maTeamSelectionData[liPlayerIndex].mPlayerID);
                 CGS_ASSERT(maTeamSelectionData[liPlayerIndex].mPlayerID == KI_INVALID_PLAYER_ID,
-                    CgsDev::Assert::MessageAt(
+                    CGS_ASSERT_MESSAGE_AT(
                         "maTeamSelectionData[liPlayerIndex].mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID",
-                        "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkTeamSelectionManager.cpp", 584 /* ARTIST 0x8255714C */));
+                        CGS_ARTIST_FILE, 584 /* ARTIST 0x8255714C */));
             }
         }
     }
@@ -324,12 +324,12 @@ namespace BrnNetwork
         {
             case KI_LAUNCH_TYPE_AUTOBALANCE: // 12
             {
-                CGS_ASSERT(mpNetworkManager != 0, CgsDev::Assert::MessageAt(
+                CGS_ASSERT(mpNetworkManager != 0, CGS_ASSERT_MESSAGE_AT(
                     "mpNetworkManager",
-                    "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkTeamSelectionManager.cpp", 610 /* ARTIST 0x8254BBE0 */));
-                CGS_ASSERT(mpNetworkManager->GetServerInterface() != 0, CgsDev::Assert::MessageAt(
+                    CGS_ARTIST_FILE, 610 /* ARTIST 0x8254BBE0 */));
+                CGS_ASSERT(mpNetworkManager->GetServerInterface() != 0, CGS_ASSERT_MESSAGE_AT(
                     "mpNetworkManager->GetServerInterface()",
-                    "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkTeamSelectionManager.cpp", 611 /* ARTIST 0x8254BC08 */));
+                    CGS_ARTIST_FILE, 611 /* ARTIST 0x8254BC08 */));
 
                 const bool lbIsLocalPlayerHost =
                     mpNetworkManager->GetServerInterface()->GetGameComponent()->IsLocalPlayerHost();
@@ -396,7 +396,7 @@ namespace BrnNetwork
     // ---------------------------------------------------------------------------------
     void TeamSelectionManager::ProcessAfterSimulation()
     {
-        CGS_ASSERT(maUpdateFunctions[meUpdateState] != 0, CgsDev::Assert::StreamMessageAt("No update function supplied for the current process substate", "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkTeamSelectionManager.cpp", 349));
+        CGS_ASSERT(maUpdateFunctions[meUpdateState] != 0, CGS_ASSERT_STREAM_MESSAGE_AT("No update function supplied for the current process substate", CGS_ARTIST_FILE, 349));
 
         (this->*maUpdateFunctions[meUpdateState])();
     }
@@ -600,10 +600,10 @@ namespace BrnNetwork
     // ---------------------------------------------------------------------------------
     bool TeamSelectionManager::ActionBroadcastFinalTeamSelection()
     {
-        CGS_ASSERT(mpNetworkManager != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpNetworkManager != 0, CGS_ASSERT_MESSAGE_AT(
             "mpNetworkManager",
             __FILE__, 864 /* ARTIST 0x825571B0 */));
-        CGS_ASSERT(mpNetworkManager->GetPlayerManager() != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpNetworkManager->GetPlayerManager() != 0, CGS_ASSERT_MESSAGE_AT(
             "mpNetworkManager->GetPlayerManager()",
             __FILE__, 865 /* ARTIST 0x825571D8 */));
 
@@ -625,7 +625,7 @@ namespace BrnNetwork
             if (!lbIsLocalPlayer)
             {
                 TeamSelectionData* lpTeamSelectionData = GetTeamSelectionDataEntry(lPlayerID);
-                CGS_ASSERT(lpTeamSelectionData != 0, CgsDev::Assert::MessageAt(
+                CGS_ASSERT(lpTeamSelectionData != 0, CGS_ASSERT_MESSAGE_AT(
                     "lpTeamSelectionData",
                     __FILE__, 877 /* ARTIST 0x82557290 */));
 
@@ -723,3 +723,5 @@ namespace BrnNetwork
                       "the recv message immediately follows the send message in a TeamSelectionData slot");
     }
 } // namespace BrnNetwork
+
+#undef CGS_ARTIST_FILE

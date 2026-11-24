@@ -987,8 +987,8 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("lpPhysicsInfo",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/"
-                    "TrafficEntityModule/BrnTrafficEntityModule.cpp", 15125);
+                    CGS_ASSERT_LOCATION("d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/"
+                    "TrafficEntityModule/BrnTrafficEntityModule.cpp", 15125));
                 CgsDev::Assert::EndAssert();
             }
         }

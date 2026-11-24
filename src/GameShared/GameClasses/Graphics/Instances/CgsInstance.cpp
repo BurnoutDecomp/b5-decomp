@@ -51,7 +51,7 @@ namespace CgsGraphics
     Instance* InstanceList::GetInstance(u32 luIndex) const
     {
         CGS_ASSERT(luIndex < muArraySize,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "Instance index out of range",
                 "..\\..\\..\\GameShared\\GameClasses\\Graphics/Instances/CgsInstance.h", 268 /* ARTIST 0x822A3DC0 */));
         return reinterpret_cast<Instance*>(static_cast<uintptr_t>(muaInstances) + luIndex * kInstanceStride);

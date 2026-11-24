@@ -1,9 +1,9 @@
 #include "GameSource/Gui/Flow/Shared/Components/BrnTableCell.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnTableCell.h"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                     // CGS_ASSERT
 #include "GameSource/Gui/BrnGuiTextField.h"                            // BrnGui::TextField (GetText/SetText/SetColour)
 #include "GameSource/Gui/Flow/Shared/Components/BrnIcon.h"             // BrnGui::IconComponent (SetState)
-
+#define CGS_ARTIST_BRNTABLECELL_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flow\\shared\\components\\BrnTableCell.h"
 // Reconstructed store-for-store from BURNOUT_X360_ARTIST.XEX.
 //
 //   Construct @0x824E68C0 -- validate the cell's construction inputs (state interface, name,
@@ -43,8 +43,8 @@ TableCell::TableCell()
 // the field's text buffer.
 const char* TableCell::GetText() const
 {
-    CGS_ASSERT(mpComponent != NULL, CgsDev::Assert::StreamMessageAt("TableCell::GetText() Invalid cell component", "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnTableCell.h", 173));
-    CGS_ASSERT(meComponentType == E_TABLECELLCOMPONENTTYPES_TEXTFIELD, CgsDev::Assert::StreamMessageAt("TableCell::GetText() Cannot get text from a non-TextField cell", "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnTableCell.h", 174));
+    CGS_ASSERT(mpComponent != NULL, CGS_ASSERT_STREAM_MESSAGE_AT("TableCell::GetText() Invalid cell component", CGS_ARTIST_FILE, 173));
+    CGS_ASSERT(meComponentType == E_TABLECELLCOMPONENTTYPES_TEXTFIELD, CGS_ASSERT_STREAM_MESSAGE_AT("TableCell::GetText() Cannot get text from a non-TextField cell", CGS_ARTIST_FILE, 174));
 
 
     return static_cast<const TextField*>(mpComponent)->GetText();
@@ -54,8 +54,8 @@ const char* TableCell::GetText() const
 // (+0x04 == 1); forwards straight to TextField::SetText.
 void TableCell::SetText(const char* lpacText)
 {
-    CGS_ASSERT(mpComponent != NULL, CgsDev::Assert::StreamMessageAt("TableCell::SetText() Invalid cell component", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flow\\shared\\components\\BrnTableCell.h", 190));
-    CGS_ASSERT(meComponentType == E_TABLECELLCOMPONENTTYPES_TEXTFIELD, CgsDev::Assert::StreamMessageAt("TableCell::SetText() Cannot set text in a non-TextField cell", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flow\\shared\\components\\BrnTableCell.h", 191));
+    CGS_ASSERT(mpComponent != NULL, CGS_ASSERT_STREAM_MESSAGE_AT("TableCell::SetText() Invalid cell component", CGS_ARTIST_BRNTABLECELL_FILE, 190));
+    CGS_ASSERT(meComponentType == E_TABLECELLCOMPONENTTYPES_TEXTFIELD, CGS_ASSERT_STREAM_MESSAGE_AT("TableCell::SetText() Cannot set text in a non-TextField cell", CGS_ARTIST_BRNTABLECELL_FILE, 191));
 
 
     static_cast<TextField*>(mpComponent)->SetText(lpacText);
@@ -179,3 +179,6 @@ void TableCell::Select() {}
 void TableCell::Update() {}
 
 } // namespace BrnGui
+
+#undef CGS_ARTIST_FILE
+#undef CGS_ARTIST_BRNTABLECELL_FILE

@@ -1,12 +1,12 @@
 #include "GameSource/World/EntityModules/WorldEntityModule/PVSModule/BrnPVSModule.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Module/CgsModuleSingleBufferedTemplate.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameSource/Resource/SharedIO/BrnGameDataEvents.h"   // GameDataIO::GameDataAssetEvent
-
+#define CGS_ARTIST_BRNPVSMODULE_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\worldentitymodule\\PVSModule/BrnPVSModule.h"
 #include <cmath>     // sqrtf -- the scalar stand-in for the X360 vrsqrtefp/vrefp pipelines
 #include <cstring>   // memset
-
+#define CGS_ARTIST_BRNPVSMODULE_FILE_ABSOLUTE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/WorldEntityModule/PVSModule/BrnPVSModule.cpp"
 // ============================================================================
 // Reconstructed from BURNOUT_X360_ARTIST.XEX -- BrnWorld::PVSModule.
 //
@@ -168,7 +168,7 @@ namespace
                         {
                             CgsDev::Assert::BeginAssert();
                             CgsDev::Assert::FireAssert( "Invalid event received\n",
-                                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/WorldEntityModule/PVSModule/BrnPVSModule.cpp", 155 );
+                                CGS_ASSERT_LOCATION(CGS_ARTIST_BRNPVSMODULE_FILE_ABSOLUTE, 155) );
                             CgsDev::Assert::EndAssert();
                         }
 
@@ -201,7 +201,7 @@ namespace
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert( "Invalid Stage\n",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/WorldEntityModule/PVSModule/BrnPVSModule.cpp", 200 );
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_BRNPVSMODULE_FILE_ABSOLUTE, 200) );
                 CgsDev::Assert::EndAssert();
                 break;
             }
@@ -246,7 +246,7 @@ namespace
 
             default:
             {
-                CGS_ASSERT(false, CgsDev::Assert::MessageAt("Invalid Stage\n", __FILE__, 257));
+                CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Invalid Stage\n", __FILE__, 257));
             }
         }
         return false;
@@ -465,11 +465,11 @@ namespace
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpBuffer != NULL",
-                "..\\..\\..\\GameShared\\GameClasses\\Module/CgsModuleSingleBufferedTemplate.h", 73);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 73));
             CgsDev::Assert::EndAssert();
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpInputBuffer",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\worldentitymodule\\PVSModule/BrnPVSModule.h", 122);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_BRNPVSMODULE_FILE, 122));
             CgsDev::Assert::EndAssert();
         }
         return lpInputBuffer;
@@ -483,11 +483,11 @@ namespace
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpBuffer != NULL",
-                "..\\..\\..\\GameShared\\GameClasses\\Module/CgsModuleSingleBufferedTemplate.h", 82);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 82));
             CgsDev::Assert::EndAssert();
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpOutputBuffer",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\worldentitymodule\\PVSModule/BrnPVSModule.h", 130);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_BRNPVSMODULE_FILE, 130));
             CgsDev::Assert::EndAssert();
         }
         return lpOutputBuffer->GetOutputInterface();
@@ -501,11 +501,11 @@ namespace
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpBuffer != NULL",
-                "..\\..\\..\\GameShared\\GameClasses\\Module/CgsModuleSingleBufferedTemplate.h", 82);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 82));
             CgsDev::Assert::EndAssert();
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpOutputBuffer",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\worldentitymodule\\PVSModule/BrnPVSModule.h", 138);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_BRNPVSMODULE_FILE, 138));
             CgsDev::Assert::EndAssert();
         }
         return &lpOutputBuffer->mGameDataRequestInterface;
@@ -527,3 +527,7 @@ namespace
 template BrnWorld::PVSIO::OutputBuffer*
 CgsModule::ModuleSingleBufferedTemplate<BrnWorld::PVSIO::InputBuffer,
                                         BrnWorld::PVSIO::OutputBuffer>::SafeLockOutputForWrite();
+
+#undef CGS_ARTIST_FILE
+#undef CGS_ARTIST_BRNPVSMODULE_FILE
+#undef CGS_ARTIST_BRNPVSMODULE_FILE_ABSOLUTE

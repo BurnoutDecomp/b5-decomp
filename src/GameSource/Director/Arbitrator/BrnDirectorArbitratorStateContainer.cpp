@@ -43,7 +43,7 @@ namespace BrnDirector
     ArbitratorState* ArbitratorStateContainer::GetCurrentState() const
     {
         CGS_ASSERT(mpCurrentState != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpCurrentState != NULL",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\director\\arbitrator\\BrnDirectorArbitratorStateContainer.h", 131 /* ARTIST 0x821F5A88 */));
         return mpCurrentState;
@@ -135,7 +135,7 @@ namespace BrnDirector
         {
             CGS_ASSERT(mArrayOfStatePointers[luLoop] != 0, "Uninitialised state pointer");
             bool lbReleased = mArrayOfStatePointers[luLoop]->Release(lrSharedInfo);
-            CGS_ASSERT(lbReleased, CgsDev::Assert::MessageAt("mArrayOfStatePointers[luLoop]->Release(lSharedInfo)", "..\\..\\..\\GameSource\\Director/Arbitrator/BrnDirectorArbitratorStateContainer.cpp", 99));
+            CGS_ASSERT(lbReleased, CGS_ASSERT_MESSAGE_AT("mArrayOfStatePointers[luLoop]->Release(lSharedInfo)", "..\\..\\..\\GameSource\\Director/Arbitrator/BrnDirectorArbitratorStateContainer.cpp", 99));
         }
     }
 }

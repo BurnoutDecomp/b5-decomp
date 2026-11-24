@@ -38,7 +38,7 @@ namespace BrnWorld
         *lpfTrafficAngle = lfAngleRatio * KF_TWO_PI;
 
         CGS_ASSERT(*lpfTrafficAngle >= 0.0f && *lpfTrafficAngle < KF_TWO_PI,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "*lpfTrafficAngle >= 0.0f && *lpfTrafficAngle < (2.0f * RwMath::PI)",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
                 "../../SharedClasses/World/BrnCollisionTag.cpp", 72 /* ARTIST 0x82676450 */));

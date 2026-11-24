@@ -24,7 +24,7 @@ namespace SceneManagerIO
     // X360 0x825BD8C0: write-lock (bit 3) handle to the embedded scene-update input aggregate (this+16).
     InSceneUpdateInterface* InputBuffer_Update::GetInSceneUpdateInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt(
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
             "Not locked for writing\n",
             "..\\..\\..\\GameShared\\GameClasses\\SceneManager/CgsSceneManagerModuleIO.h", 463));
         return &mInSceneUpdateInterface;

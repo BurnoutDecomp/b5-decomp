@@ -83,7 +83,7 @@ namespace Props
         // ARTIST 0x825BAD74: the empty base two-phase init (PS3 DecFIGS body `;`), folded at 0x8284CB38.
         CgsDev::DebugComponent::Construct();
 
-        CGS_ASSERT(lpPropManager, CgsDev::Assert::MessageAt("lpPropManager != NULL",
+        CGS_ASSERT(lpPropManager, CGS_ASSERT_MESSAGE_AT("lpPropManager != NULL",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
             "../Physics/PropManager/BrnPropDebugComponent.cpp", 52 /* ARTIST 0x825BAD88 */));
 

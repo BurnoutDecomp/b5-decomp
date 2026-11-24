@@ -157,7 +157,7 @@ namespace CgsGui
 
             default:
                 CGS_ASSERT(false,
-                    CgsDev::Assert::MessageAt(
+                    CGS_ASSERT_MESSAGE_AT(
                         "Unknown prepare stage", __FILE__, 191 /* ARTIST 0x8284FD68 */));
                 return false;
         }
@@ -336,7 +336,7 @@ namespace CgsGui
     GuiResourceModule::GuiBundleToLoad GuiResourceModule::PopFromBundleLoadQueue()
     {
         CGS_ASSERT(miNumBundlesToLoad > 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "miNumBundlesToLoad > 0", __FILE__, 949 /* ARTIST 0x82848498 */));
         --miNumBundlesToLoad;
         return maBundlesToLoad[miNumBundlesToLoad];
@@ -453,7 +453,7 @@ namespace CgsGui
             if (!lrBundle.mbLoaded && lrBundle.meLoadUnload == E_GUI_RESOURCEREQUEST_LOAD)
             {
                 CGS_ASSERT(lrBundle.mbParsed == false,
-                    CgsDev::Assert::MessageAt(
+                    CGS_ASSERT_MESSAGE_AT(
                         "lBundle.mbParsed == false", __FILE__, 283 /* ARTIST 0x8285F768 */));
                 LoadBundle(lrBundle, lpOutput);
             }

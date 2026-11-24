@@ -82,12 +82,12 @@ namespace BrnNetwork
         {
             CGS_ASSERT((leAggressorActiveRaceCarIndex > ::E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
                        (leAggressorActiveRaceCarIndex < ::E_ACTIVE_RACE_CAR_INDEX_COUNT),
-                CgsDev::Assert::MessageAt(
+                CGS_ASSERT_MESSAGE_AT(
                     "( leAggressorActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID ) && ( leAggressorActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )",
                     __FILE__, 511 /* ARTIST 0x82355790 */));
             CGS_ASSERT((leVictimActiveRaceCarIndex > ::E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
                        (leVictimActiveRaceCarIndex < ::E_ACTIVE_RACE_CAR_INDEX_COUNT),
-                CgsDev::Assert::MessageAt(
+                CGS_ASSERT_MESSAGE_AT(
                     "( leVictimActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID ) && ( leVictimActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )",
                     __FILE__, 512 /* ARTIST 0x823557BC */));
 

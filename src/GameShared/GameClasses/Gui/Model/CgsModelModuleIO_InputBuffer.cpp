@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Gui/Model/CgsModelModuleIO.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/CgsModelModuleIO.cpp"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
@@ -66,7 +66,7 @@ namespace ModelIO
                                        CgsDev::Assert::giMessageBufferSize);
             lMessage << "Not locked for writing\n";
             CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
-                "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/CgsModelModuleIO.cpp", 88);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 88));
             CgsDev::Assert::EndAssert();
         }
         mGuiEvents.Append<18432, 16>(*lpEvents);
@@ -83,7 +83,7 @@ namespace ModelIO
                                        CgsDev::Assert::giMessageBufferSize);
             lMessage << "Not locked for writing\n";
             CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
-                "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/CgsModelModuleIO.cpp", 105);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 105));
             CgsDev::Assert::EndAssert();
         }
         mGuiEvents.Append<32768, 16>(*lpEvents);
@@ -101,10 +101,12 @@ namespace ModelIO
     // X360 0x824F7490 (non-const overload -- write-lock guarded).
     InputBuffer::GuiEventQueueSmall* InputBuffer::GetLoadRequests()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt(
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
             "Not locked for writing\n",
             "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/CgsModelModuleIO.h", 214));
         return &mLoadRequests;
     }
 }
 }
+
+#undef CGS_ARTIST_FILE

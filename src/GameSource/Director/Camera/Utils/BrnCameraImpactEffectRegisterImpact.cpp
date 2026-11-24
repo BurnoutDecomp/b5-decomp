@@ -43,7 +43,7 @@ namespace Utils
 // `fsel(mfImpactFactor - lfImpulseMagnitude, mfImpactFactor, lfImpulseMagnitude)`).
 void CameraImpactEffect::RegisterImpact(f32 lfImpulseMagnitude)
 {
-    CGS_ASSERT(lfImpulseMagnitude >= 0.0f, CgsDev::Assert::MessageAt("lfImpulseMagnitude >= 0.0f", "..\\..\\..\\GameSource\\Director/Camera/Utils/BrnCameraShake.h", 221));   // :221
+    CGS_ASSERT(lfImpulseMagnitude >= 0.0f, CGS_ASSERT_MESSAGE_AT("lfImpulseMagnitude >= 0.0f", "..\\..\\..\\GameSource\\Director/Camera/Utils/BrnCameraShake.h", 221));   // :221
 
     if (mfImpactFactor - lfImpulseMagnitude < 0.0f)
     {

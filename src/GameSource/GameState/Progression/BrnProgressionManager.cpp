@@ -13,7 +13,7 @@
 // Profile and pointer members are naturally wider; behaviour is identical because every access
 // is by name.
 // ===================================================================================
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionManager.cpp"
 #include "BrnProgressionManager.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "BrnProfile.h"
@@ -206,7 +206,7 @@ bool ProgressionManager::LoadProgressionData(BrnGameState::GameStateModuleIO::Ou
     default:
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("ProgressionManager::meLoadStage in a weird state",
-                                   KAC_PROGMGR_FILE, 2799);
+                                   CGS_ASSERT_LOCATION(KAC_PROGMGR_FILE, 2799));
         CgsDev::Assert::EndAssert();
         // The console falls into LABEL_17 -- `result = 1` -- so a corrupt stage word reports DONE.
         return true;
@@ -233,8 +233,8 @@ bool ProgressionManager::Prepare2(BrnGameState::GameStateModuleIO::OutputBuffer*
                                   void* lpTriggerData,
                                   BrnGameState::AchievementManagerBase* lpAchievementManager)
 {
-    CGS_ASSERT(lpOutput != 0, CgsDev::Assert::MessageAt("lpOutput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionManager.cpp", 249));            // X360 BrnProgressionManager.cpp:249
-    CGS_ASSERT(lpReceiverQueue != 0, CgsDev::Assert::MessageAt("lpReceiverQueue", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionManager.cpp", 250));  // X360 :250
+    CGS_ASSERT(lpOutput != 0, CGS_ASSERT_MESSAGE_AT("lpOutput", CGS_ARTIST_FILE, 249));            // X360 BrnProgressionManager.cpp:249
+    CGS_ASSERT(lpReceiverQueue != 0, CGS_ASSERT_MESSAGE_AT("lpReceiverQueue", CGS_ARTIST_FILE, 250));  // X360 :250
 
     // ✅ [progression wave: lifecycle, 2026-09-06] THE PROFILE BOOT SEAM IS RETIRED, ITS OWN
     // DELETE-WHEN PAID. The seam that stood here (landed 2026-08-24, deform-land wave) called
@@ -256,11 +256,11 @@ bool ProgressionManager::Prepare2(BrnGameState::GameStateModuleIO::OutputBuffer*
         return false;
     }
 
-    CGS_ASSERT(lpTriggerData != 0, CgsDev::Assert::MessageAt("lpTriggerData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionManager.cpp", 261));
+    CGS_ASSERT(lpTriggerData != 0, CGS_ASSERT_MESSAGE_AT("lpTriggerData", CGS_ARTIST_FILE, 261));
     mpTriggerData     = lpTriggerData;           // X360 +0x20924 (a5)
     mpModeManager = lpModeManager;               // X360 +0x2093C (a3) -- the MODE manager; see the header
 
-    CGS_ASSERT(lpAchievementManager != 0, CgsDev::Assert::MessageAt("lpAchievementManager", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionManager.cpp", 265));
+    CGS_ASSERT(lpAchievementManager != 0, CGS_ASSERT_MESSAGE_AT("lpAchievementManager", CGS_ARTIST_FILE, 265));
     mpAchievementManager = lpAchievementManager; // X360 +0x20938 (a6)
 
     // The five trailing calls are dispatched by RunPrepare2Tail in the original order.
@@ -338,7 +338,7 @@ void ProgressionManager::UnlockToProgressionRank(s8 li8Rank,
     if (PlayerHasFinishedLastRank())
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("!PlayerHasFinishedLastRank()", KAC_PROGMGR_FILE, 965);
+        CgsDev::Assert::FireAssert("!PlayerHasFinishedLastRank()", CGS_ASSERT_LOCATION(KAC_PROGMGR_FILE, 965));
         CgsDev::Assert::EndAssert();
     }
 
@@ -460,7 +460,7 @@ void ProgressionManager::AddEventTypeToEventTotals(const EventJunction* lpEventJ
     if (lEGameModeType == BrnGameState::GameStateModuleIO::E_MODE_NONE)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lEGameModeType != GsmIO::E_MODE_NONE", KAC_PROGMGR_FILE, 797);
+        CgsDev::Assert::FireAssert("lEGameModeType != GsmIO::E_MODE_NONE", CGS_ASSERT_LOCATION(KAC_PROGMGR_FILE, 797));
         CgsDev::Assert::EndAssert();
         return;   // the X360 falls through into maGameModeTypeAmount[-1]; bail instead of
                   // corrupting the tally array (the OnPlayerCarChange precedent in this TU).
@@ -510,7 +510,7 @@ s32 ProgressionManager::GetEvent(s32 liGameType)
         case 4: return 5;
         case 5: return 4;
         default:
-            CGS_ASSERT(false, CgsDev::Assert::StreamMessageAt("I dont know what this game type is! Maybe its new mode and needs adding this switch statement?\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionManager.cpp", 906));
+            CGS_ASSERT(false, CGS_ASSERT_STREAM_MESSAGE_AT("I dont know what this game type is! Maybe its new mode and needs adding this switch statement?\n", CGS_ARTIST_FILE, 906));
 
             return -1;
     }
@@ -576,7 +576,7 @@ bool ProgressionManager::IsCarUnlocked(CgsID lCarId) const
 void ProgressionManager::RepairUnlockedVehicle(CgsID lCarId)
 {
     CGS_ASSERT(lCarId != 0,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lCarId != kCGSID_NULL",
             "..\\..\\..\\GameSource\\GameState/Progression/BrnProgressionManager.h", 1415 /* ARTIST 0x8236365C */));
     mProfile.RepairUnlockedVehicle(lCarId);
@@ -763,7 +763,7 @@ u16 ProgressionManager::FindLandmarkAISectionIndex(CgsID lLandmarkId) const
 
     CgsDev::Assert::BeginAssert();
     CgsDev::Assert::FireAssert("ProgressionManager::FindLandmarkAISectionIndex, landmark not found ",
-                               KAC_PROGMGR_FILE, 3259);
+                               CGS_ASSERT_LOCATION(KAC_PROGMGR_FILE, 3259));
     CgsDev::Assert::EndAssert();
     return 0x7FFF;   // BrnWorld::KI_INVALID_SECTION_INDEX
 }
@@ -1107,7 +1107,7 @@ s32 ProgressionManager::GetStuntRunScoreTarget(const BrnGameState::GameModeParam
                                                const BrnGameState::StartGameModeParams* lpStartGameModeParams) const
 {
     const RaceEventData* lpStuntRunEventData = lpStartGameModeParams->GetEventData();
-    CGS_ASSERT(lpStuntRunEventData != NULL, CgsDev::Assert::MessageAt("lpStuntRunEventData != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionManager.cpp", 3891));
+    CGS_ASSERT(lpStuntRunEventData != NULL, CGS_ASSERT_MESSAGE_AT("lpStuntRunEventData != NULL", CGS_ARTIST_FILE, 3891));
 
     // `lwz r11,0x14 / addi r11,r11,-1 / extsb r25` -- narrowed to a signed byte, like every other
     // rank count in this file.
@@ -1198,7 +1198,7 @@ s8 ProgressionManager::GetProgressionRankForGameMode(BrnGameState::GameStateModu
                leGameModeType == BrnGameState::GameStateModuleIO::E_MODE_ROAD_RAGE    ||
                leGameModeType == BrnGameState::GameStateModuleIO::E_MODE_STUNT_ATTACK ||
                leGameModeType == BrnGameState::GameStateModuleIO::E_MODE_MARKED_MAN,
-               CgsDev::Assert::MessageAt("This game mode doesn't have separate difficulty scaling", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionManager.cpp", 3779));
+               CGS_ASSERT_MESSAGE_AT("This game mode doesn't have separate difficulty scaling", CGS_ARTIST_FILE, 3779));
 
     // Profile::GetNumRankWinsForGameMode owns the range assert the console fires here.
     const s32 liRankWins = mProfile.GetNumRankWinsForGameMode(leGameModeType);
@@ -1219,7 +1219,7 @@ s8 ProgressionManager::GetProgressionRankForGameMode(BrnGameState::GameStateModu
     --liProgressionRank;
 
     CGS_ASSERT(liProgressionRank >= 0 && liProgressionRank < liNumRanks,
-               CgsDev::Assert::MessageAt("liProgressionRank >= 0 && liProgressionRank < liNumRanks", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionManager.cpp", 3802));
+               CGS_ASSERT_MESSAGE_AT("liProgressionRank >= 0 && liProgressionRank < liNumRanks", CGS_ARTIST_FILE, 3802));
 
     return static_cast<s8>(liProgressionRank);
 }
@@ -1246,7 +1246,7 @@ CarData* ProgressionManager::AddCar(CgsID lCarId, s32 leUnlockType)
     if (lpCarData == 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpCarData != NULL", KAC_PROGMGR_FILE, 536);
+        CgsDev::Assert::FireAssert("lpCarData != NULL", CGS_ASSERT_LOCATION(KAC_PROGMGR_FILE, 536));
         CgsDev::Assert::EndAssert();
     }
 
@@ -1280,7 +1280,7 @@ CarData* ProgressionManager::AddCar(CgsID lCarId, s32 leUnlockType)
             if (lpSilverCarData == 0)
             {
                 CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert("lpSilverCarData != NULL", KAC_PROGMGR_FILE, 568);
+                CgsDev::Assert::FireAssert("lpSilverCarData != NULL", CGS_ASSERT_LOCATION(KAC_PROGMGR_FILE, 568));
                 CgsDev::Assert::EndAssert();
             }
             lpSilverCarData->SetUnlockSequenceAlreadyShown();
@@ -1327,7 +1327,7 @@ void ProgressionManager::OnPlayerCarChange(CgsID lCarId, CgsID lWheelId, bool lb
     if (lpVehicleListEntry == 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpVehicleListEntry", KAC_PROGMGR_FILE, 1258);
+        CgsDev::Assert::FireAssert("lpVehicleListEntry", CGS_ASSERT_LOCATION(KAC_PROGMGR_FILE, 1258));
         CgsDev::Assert::EndAssert();
         return;   // the X360 falls through into a null deref; bail instead of faulting
     }
@@ -1461,7 +1461,7 @@ void ProgressionManager::GetCarColourAndPalette(CgsID lCarId, s32* lpiColour, s3
     if (lpVehicleListEntry == 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpVehicleListEntry", KAC_PROGMGR_FILE, 4500);
+        CgsDev::Assert::FireAssert("lpVehicleListEntry", CGS_ASSERT_LOCATION(KAC_PROGMGR_FILE, 4500));
         CgsDev::Assert::EndAssert();
         return;   // the X360 falls through into a null deref; bail instead of faulting
     }
@@ -2065,7 +2065,7 @@ u32 ProgressionManager::GetEventCountForType(s32 leModeType) const
         if (lpProfileEvent == 0)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpProfileEvent", KAC_COMPLETION_FILE, 1627);
+            CgsDev::Assert::FireAssert("lpProfileEvent", CGS_ASSERT_LOCATION(KAC_COMPLETION_FILE, 1627));
             CgsDev::Assert::EndAssert();
         }
 
@@ -2075,7 +2075,7 @@ u32 ProgressionManager::GetEventCountForType(s32 leModeType) const
         if (lpEventData == 0)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpEventData", KAC_COMPLETION_FILE, 1630);
+            CgsDev::Assert::FireAssert("lpEventData", CGS_ASSERT_LOCATION(KAC_COMPLETION_FILE, 1630));
             CgsDev::Assert::EndAssert();
             // [PC GUARD] the console then does `lbz r11, 0xEC(r31)` with r31 == 0 -- a read of
             // absolute address 0xEC, which its low-memory map tolerates and the host does not.
@@ -2116,7 +2116,7 @@ u32 ProgressionManager::GetEventTypeUniqueWinCount(s32 leModeType, u16 lu16WinTy
         if (lpProfileEvent == 0)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpProfileEvent", KAC_COMPLETION_FILE, 4401);
+            CgsDev::Assert::FireAssert("lpProfileEvent", CGS_ASSERT_LOCATION(KAC_COMPLETION_FILE, 4401));
             CgsDev::Assert::EndAssert();
         }
 
@@ -2126,7 +2126,7 @@ u32 ProgressionManager::GetEventTypeUniqueWinCount(s32 leModeType, u16 lu16WinTy
         if (lpEventData == 0)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpEventData", KAC_COMPLETION_FILE, 4404);
+            CgsDev::Assert::FireAssert("lpEventData", CGS_ASSERT_LOCATION(KAC_COMPLETION_FILE, 4404));
             CgsDev::Assert::EndAssert();
             continue;   // [PC GUARD] -- see GetEventCountForType's note on the same tail
         }
@@ -2275,7 +2275,7 @@ void ProgressionManager::SendTrophyUnlockUpdate(GsmIO::GameActionQueue* lpGameAc
         CgsDev::Assert::FireAssert(
             "mQueueOfTrophyCarUnLocks[lTrophyUnlockToSend].meUnlockType != "
             "TrophyUnlockData::E_UNLOCKTYPE_NONE",
-            KAC_COMPLETION_FILE, 639);
+            CGS_ASSERT_LOCATION(KAC_COMPLETION_FILE, 639));
         CgsDev::Assert::EndAssert();
     }
 
@@ -2284,7 +2284,7 @@ void ProgressionManager::SendTrophyUnlockUpdate(GsmIO::GameActionQueue* lpGameAc
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(
             "mQueueOfTrophyCarUnLocks[lTrophyUnlockToSend].mCarToUnlock != kCGSID_NULL",
-            KAC_COMPLETION_FILE, 640);
+            CGS_ASSERT_LOCATION(KAC_COMPLETION_FILE, 640));
         CgsDev::Assert::EndAssert();
     }
 
@@ -2660,7 +2660,7 @@ void ProgressionManager::OnEventFinishUpdateProfile(GsmIO::GameActionQueue* lpGa
     if (lpEvent == 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpEvent", KAC_PROGMGR_FILE, 1669);
+        CgsDev::Assert::FireAssert("lpEvent", CGS_ASSERT_LOCATION(KAC_PROGMGR_FILE, 1669));
         CgsDev::Assert::EndAssert();
         return;   // the X360 falls through into a null deref; bail instead of faulting
                   // (the OnPlayerCarChange / GetCarColourAndPalette precedent in this TU)
@@ -2670,7 +2670,7 @@ void ProgressionManager::OnEventFinishUpdateProfile(GsmIO::GameActionQueue* lpGa
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("lpEvent->IsFlagSet( ProfileEvent::E_FLAG_DISCOVERED )",
-                                   KAC_PROGMGR_FILE, 1672);
+                                   CGS_ASSERT_LOCATION(KAC_PROGMGR_FILE, 1672));
         CgsDev::Assert::EndAssert();
     }
 
@@ -2730,7 +2730,7 @@ void ProgressionManager::OnEventFinishUpdateProfile(GsmIO::GameActionQueue* lpGa
         if (lpcRaceEventData == 0)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpRaceEventData != NULL", KAC_PROGMGR_FILE, 1705);
+            CgsDev::Assert::FireAssert("lpRaceEventData != NULL", CGS_ASSERT_LOCATION(KAC_PROGMGR_FILE, 1705));
             CgsDev::Assert::EndAssert();
             return;   // the X360 falls through into a null deref; bail instead of faulting
         }
@@ -2805,7 +2805,7 @@ void ProgressionManager::OnEventFinishUpdateProfile(GsmIO::GameActionQueue* lpGa
                 if (lpCarData == 0)
                 {
                     CgsDev::Assert::BeginAssert();
-                    CgsDev::Assert::FireAssert("lpCarData != NULL", KAC_PROGMGR_FILE, 1723);
+                    CgsDev::Assert::FireAssert("lpCarData != NULL", CGS_ASSERT_LOCATION(KAC_PROGMGR_FILE, 1723));
                     CgsDev::Assert::EndAssert();
                 }
                 else
@@ -2840,7 +2840,7 @@ void ProgressionManager::OnEventFinishUpdateProfile(GsmIO::GameActionQueue* lpGa
         if (luRankWins > luMedalCount)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("luRankWin <= luMedalCount", KAC_PROGMGR_FILE, 1771);
+            CgsDev::Assert::FireAssert("luRankWin <= luMedalCount", CGS_ASSERT_LOCATION(KAC_PROGMGR_FILE, 1771));
             CgsDev::Assert::EndAssert();
         }
 
@@ -2949,7 +2949,7 @@ void ProgressionManager::OnEventFinishUpdateProfile(GsmIO::GameActionQueue* lpGa
         if (mpAchievementManager == 0)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("mpAchievementManager", KAC_PROGMGR_FILE, 1831);
+            CgsDev::Assert::FireAssert("mpAchievementManager", CGS_ASSERT_LOCATION(KAC_PROGMGR_FILE, 1831));
             CgsDev::Assert::EndAssert();
         }
         mpAchievementManager->OnEventWin(leGameModeType);
@@ -3099,7 +3099,7 @@ u32 ProgressionManager::GetTotalWinsForNextRank()
 {
     // `cmplwi r11, 0x80 / blt` -- an UNSIGNED compare of the raw byte against 0x80, i.e. "the
     // signed byte is not negative".
-    CGS_ASSERT(mi8ProgressionRank >= 0, CgsDev::Assert::MessageAt("mi8CurrentProgressionRank >= 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionManager.cpp", 4156));   // cpp:4156
+    CGS_ASSERT(mi8ProgressionRank >= 0, CGS_ASSERT_MESSAGE_AT("mi8CurrentProgressionRank >= 0", CGS_ARTIST_FILE, 4156));   // cpp:4156
 
     const ProgressionData* lpProgressionData = GetProgressionData();
     if (lpProgressionData == 0)
@@ -3108,11 +3108,11 @@ u32 ProgressionManager::GetTotalWinsForNextRank()
 
     const s32 liRank = static_cast<s32>(mi8ProgressionRank);
     CGS_ASSERT(static_cast<u32>(liRank) < lpProgressionData->GetProgressionRankCount(),
-               CgsDev::Assert::MessageAt("luIndex < muProgressionRankCount", "..\\..\\..\\SharedClasses\\Progression/BrnProgressionData.h", 330));                         // BrnProgressionData.h:330
+               CGS_ASSERT_MESSAGE_AT("luIndex < muProgressionRankCount", "..\\..\\..\\SharedClasses\\Progression/BrnProgressionData.h", 330));                         // BrnProgressionData.h:330
 
     const ProgressionRankData* lpProgressionRank =
         lpProgressionData->GetProgressionRankData(static_cast<u32>(liRank));
-    CGS_ASSERT(lpProgressionRank != 0, CgsDev::Assert::MessageAt("lpProgressionRank", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionManager.cpp", 4159));                // cpp:4159
+    CGS_ASSERT(lpProgressionRank != 0, CGS_ASSERT_MESSAGE_AT("lpProgressionRank", CGS_ARTIST_FILE, 4159));                // cpp:4159
     if (lpProgressionRank == 0)
     {
         return 0;
@@ -3200,7 +3200,7 @@ void ProgressionManager::GetGameStats(GsmIO::GameStats*                 lpGameSt
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("liCarIndex >= 0 && liCarIndex < miCarCount",
-                                           "..\\..\\..\\GameSource\\GameState/Progression/BrnProfile.h", 1923);
+                                           CGS_ASSERT_LOCATION("..\\..\\..\\GameSource\\GameState/Progression/BrnProfile.h", 1923));
                 CgsDev::Assert::EndAssert();
             }
 
@@ -3208,7 +3208,7 @@ void ProgressionManager::GetGameStats(GsmIO::GameStats*                 lpGameSt
             if (lpCarData == 0)
             {
                 CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert("lpCarData", KAC_PROGRESSION_MANAGER_CPP, 3475);
+                CgsDev::Assert::FireAssert("lpCarData", CGS_ASSERT_LOCATION(KAC_PROGRESSION_MANAGER_CPP, 3475));
                 CgsDev::Assert::EndAssert();
                 continue;   // [marked deviation] the console reads on through the null
             }
@@ -3219,7 +3219,7 @@ void ProgressionManager::GetGameStats(GsmIO::GameStats*                 lpGameSt
             if (lpVehicleData == 0)
             {
                 CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert("lpVehicleData", KAC_PROGRESSION_MANAGER_CPP, 3478);
+                CgsDev::Assert::FireAssert("lpVehicleData", CGS_ASSERT_LOCATION(KAC_PROGRESSION_MANAGER_CPP, 3478));
                 CgsDev::Assert::EndAssert();
                 continue;   // [marked deviation] the console reads on through the null
             }
@@ -3333,14 +3333,14 @@ void ProgressionManager::GetGameStats(GsmIO::GameStats*                 lpGameSt
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("leType != E_STUNT_ELEMENT_TYPE_COUNT",
-                                           KAC_STUNT_MANAGER_H, 284);
+                                           CGS_ASSERT_LOCATION(KAC_STUNT_MANAGER_H, 284));
                 CgsDev::Assert::EndAssert();
             }
             if (liCounty >= BrnWorld::E_COUNTY_VALID_COUNT)
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("leCounty < BrnWorld::E_COUNTY_VALID_COUNT",
-                                           KAC_STUNT_MANAGER_H, 285);
+                                           CGS_ASSERT_LOCATION(KAC_STUNT_MANAGER_H, 285));
                 CgsDev::Assert::EndAssert();
             }
 
@@ -3576,7 +3576,7 @@ namespace
     void FireConsoleAssert(const char* lpcExpression, s32 liLine)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(lpcExpression, KAC_PROGRESSION_MANAGER_CPP, liLine);
+        CgsDev::Assert::FireAssert(lpcExpression, CGS_ASSERT_LOCATION(KAC_PROGRESSION_MANAGER_CPP, liLine));
         CgsDev::Assert::EndAssert();
     }
 
@@ -4485,7 +4485,7 @@ void ProgressionManager::ClearMedalsOnRankUp()
         if (lpcProfileEvent == 0)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpProfileEvent", KAC_PROGMGR_FILE, 4369);
+            CgsDev::Assert::FireAssert("lpProfileEvent", CGS_ASSERT_LOCATION(KAC_PROGMGR_FILE, 4369));
             CgsDev::Assert::EndAssert();
             continue;   // [PC GUARD] the console reads through the null; GetEvent cannot return
                         // one on the host, so the guard is unreachable rather than divergent.
@@ -4496,7 +4496,7 @@ void ProgressionManager::ClearMedalsOnRankUp()
         if (lpcEventData == 0)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpEventData", KAC_PROGMGR_FILE, 4372);
+            CgsDev::Assert::FireAssert("lpEventData", CGS_ASSERT_LOCATION(KAC_PROGMGR_FILE, 4372));
             CgsDev::Assert::EndAssert();
         }
 
@@ -4705,7 +4705,7 @@ void ProgressionManager::UpdatePlayerMedals(GsmIO::GameActionQueue* lpGameAction
     if (static_cast<u8>(mi8ProgressionRank) >= 0x80u)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("mi8CurrentProgressionRank >= 0", KAC_PROGMGR_FILE, 723);
+        CgsDev::Assert::FireAssert("mi8CurrentProgressionRank >= 0", CGS_ASSERT_LOCATION(KAC_PROGMGR_FILE, 723));
         CgsDev::Assert::EndAssert();
     }
 
@@ -5051,7 +5051,7 @@ void ProgressionManager::PreWorldUpdate(
         if (lpRaceCarState == 0)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpRaceCarState", KAC_PROGRESSION_MANAGER_CPP, 343);
+            CgsDev::Assert::FireAssert("lpRaceCarState", CGS_ASSERT_LOCATION(KAC_PROGRESSION_MANAGER_CPP, 343));
             CgsDev::Assert::EndAssert();
         }
 
@@ -5131,7 +5131,7 @@ void ProgressionManager::PreWorldUpdate(
                     CgsDev::Assert::BeginAssert();
                     CgsDev::Assert::FireAssert(
                         "meModeToCheckForAllWinTypes != RaceEventData::E_MODE_INVALID",
-                        KAC_PROGRESSION_MANAGER_CPP, 382);
+                        CGS_ASSERT_LOCATION(KAC_PROGRESSION_MANAGER_CPP, 382));
                     CgsDev::Assert::EndAssert();
                 }
                 // ⭐ UN-PARKED [progression wave 2026-09-06, lane completion]: console
@@ -5358,7 +5358,7 @@ void ProgressionManager::DefeatRivalAndUnlockCar(s32 liRivalIndex, EUnlockSequen
             lpSavedRival = mProfile.AddRival(lRivalId, lCarId);
         }
     }
-    CGS_ASSERT(lpSavedRival != 0, CgsDev::Assert::MessageAt("lpSavedRival", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionManager.cpp", 2465));   // BrnProgressionManager.cpp:2465
+    CGS_ASSERT(lpSavedRival != 0, CGS_ASSERT_MESSAGE_AT("lpSavedRival", CGS_ARTIST_FILE, 2465));   // BrnProgressionManager.cpp:2465
 
     if ((CgsDev::Message::gxMessageFilterFlags & 1) && CgsDev::Log::gpDebugPrint != 0)
     {
@@ -5432,10 +5432,10 @@ void ProgressionManager::OnPursuitWon(CgsID lRivalId, BrnGameState::GameStateMod
     {
         return;
     }
-    CGS_ASSERT(lpRival != 0, CgsDev::Assert::MessageAt("lpRival != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionManager.cpp", 2410));   // :2410
+    CGS_ASSERT(lpRival != 0, CGS_ASSERT_MESSAGE_AT("lpRival != NULL", CGS_ARTIST_FILE, 2410));   // :2410
 
     RivalData* lpSavedRival = mProfile.FindRival(lRivalId);
-    CGS_ASSERT(lpSavedRival != 0, CgsDev::Assert::MessageAt("lpSavedRival", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionManager.cpp", 2413));   // :2413
+    CGS_ASSERT(lpSavedRival != 0, CGS_ASSERT_MESSAGE_AT("lpSavedRival", CGS_ARTIST_FILE, 2413));   // :2413
 
     DefeatRivalAndUnlockCar(liRivalIndex, E_UNLOCK_SEQUENCE_TYPE_DEFAULT);
 
@@ -5560,7 +5560,7 @@ CgsID ProgressionManager::UnlockRivals(BrnGameState::GameStateModuleIO::GameActi
     for (s32 liIndex = 0; liIndex < lpProgressionData->GetRivalCount(); ++liIndex)
     {
         const Rival* lpRival = lpProgressionData->GetRival(liIndex);   // carries the :468 assert
-        CGS_ASSERT(lpRival != 0, CgsDev::Assert::MessageAt("lpRival", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionManager.cpp", 1096));                          // :1096
+        CGS_ASSERT(lpRival != 0, CGS_ASSERT_MESSAGE_AT("lpRival", CGS_ARTIST_FILE, 1096));                          // :1096
         if (lpRival == 0)
         {
             continue;   // [GUARD] the console reads through it regardless
@@ -5755,14 +5755,14 @@ void ProgressionManager::AddRivalToWorld(const Rival* lpRival, s32 liRivalIndex,
     if (lpRivalSavedData == 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpRivalSavedData", KAC_PROGRESSION_MANAGER_CPP_R, 3673);
+        CgsDev::Assert::FireAssert("lpRivalSavedData", CGS_ASSERT_LOCATION(KAC_PROGRESSION_MANAGER_CPP_R, 3673));
         CgsDev::Assert::EndAssert();
     }
     if (leRivalDistrict >= 18)   // BrnWorld::E_DISTRICT_VALID_COUNT (`cmpwi r28, 0x12`)
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("leRivalDistrict < BrnWorld::E_DISTRICT_VALID_COUNT",
-                                   KAC_PROGRESSION_MANAGER_CPP_R, 3674);
+                                   CGS_ASSERT_LOCATION(KAC_PROGRESSION_MANAGER_CPP_R, 3674));
         CgsDev::Assert::EndAssert();
     }
 
@@ -5811,7 +5811,7 @@ void ProgressionManager::AddRivalToWorld(const Rival* lpRival, s32 liRivalIndex,
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("maRoamingSections[leRivalDistrict].GetLength() > 0",
-                                   KAC_PROGRESSION_MANAGER_CPP_R, 3686);
+                                   CGS_ASSERT_LOCATION(KAC_PROGRESSION_MANAGER_CPP_R, 3686));
         CgsDev::Assert::EndAssert();
     }
 
@@ -6057,7 +6057,7 @@ bool ProgressionManager::UnlockCarFromTrophy(CgsID lCarId, s32 liTrophyType)
     if (lpCarData == 0)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpCarData != NULL", KAC_UNLOCKS_FILE, 2322);
+        CgsDev::Assert::FireAssert("lpCarData != NULL", CGS_ASSERT_LOCATION(KAC_UNLOCKS_FILE, 2322));
         CgsDev::Assert::EndAssert();
     }
 
@@ -6100,7 +6100,7 @@ void ProgressionManager::UnlockSpecialCars(u8 lu8LiveryType)
         if (lpVehicleListEntry == 0)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpVehicleListEntry != NULL", KAC_UNLOCKS_FILE, 2117);
+            CgsDev::Assert::FireAssert("lpVehicleListEntry != NULL", CGS_ASSERT_LOCATION(KAC_UNLOCKS_FILE, 2117));
             CgsDev::Assert::EndAssert();
         }
 
@@ -6124,7 +6124,7 @@ void ProgressionManager::UnlockSpecialCars(u8 lu8LiveryType)
         if (lpCarData == 0)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpCarData != NULL", KAC_UNLOCKS_FILE, 2124);
+            CgsDev::Assert::FireAssert("lpCarData != NULL", CGS_ASSERT_LOCATION(KAC_UNLOCKS_FILE, 2124));
             CgsDev::Assert::EndAssert();
         }
 
@@ -6204,7 +6204,7 @@ void ProgressionManager::OnTrophyUnlock(s32 liTrophyType)
         if (lpCurrentTrophyUnlockData == 0)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpCurrentTrophyUnlockData != NULL", KAC_UNLOCKS_FILE, 2162);
+            CgsDev::Assert::FireAssert("lpCurrentTrophyUnlockData != NULL", CGS_ASSERT_LOCATION(KAC_UNLOCKS_FILE, 2162));
             CgsDev::Assert::EndAssert();
         }
 
@@ -6480,3 +6480,5 @@ void ProgressionManager::OnMugshotSent()
 }
 
 }
+
+#undef CGS_ARTIST_FILE

@@ -1,6 +1,6 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Messages/BrnFreeburnChallengeMessage.cpp"
 #include "GameSource/Network/Messages/BrnFreeburnChallengeMessage.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"   // CgsDev::StrStream (streamed assert)
@@ -109,15 +109,15 @@ namespace BrnNetwork
                                             BrnGameState::EChallengeStatus* lpeChallengeStatus,
                                             s32* lpiActionIndex)
     {
-        CGS_ASSERT(lpChallengeID, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpChallengeID, CGS_ASSERT_MESSAGE_AT(
             "lpChallengeID",
-            "..\\..\\..\\GameSource\\Network/Messages/BrnFreeburnChallengeMessage.cpp", 178 /* ARTIST 0x8257F964 */));
-        CGS_ASSERT(lpeEventType, CgsDev::Assert::MessageAt(
+            CGS_ARTIST_FILE, 178 /* ARTIST 0x8257F964 */));
+        CGS_ASSERT(lpeEventType, CGS_ASSERT_MESSAGE_AT(
             "lpeEventType",
-            "..\\..\\..\\GameSource\\Network/Messages/BrnFreeburnChallengeMessage.cpp", 179 /* ARTIST 0x8257F988 */));
-        CGS_ASSERT(lpeChallengeStatus, CgsDev::Assert::MessageAt(
+            CGS_ARTIST_FILE, 179 /* ARTIST 0x8257F988 */));
+        CGS_ASSERT(lpeChallengeStatus, CGS_ASSERT_MESSAGE_AT(
             "lpeChallengeStatus",
-            "..\\..\\..\\GameSource\\Network/Messages/BrnFreeburnChallengeMessage.cpp", 180 /* ARTIST 0x8257F9AC */));
+            CGS_ARTIST_FILE, 180 /* ARTIST 0x8257F9AC */));
 
         // ARTIST 0x8257F9C0 branches to a trailing `return false` (0x8257F9FC): the copy-out is the body
         // of the valid test.
@@ -133,3 +133,5 @@ namespace BrnNetwork
         return false;
     }
 }
+
+#undef CGS_ARTIST_FILE

@@ -74,7 +74,7 @@ int main(int lnArgc, char** lapcArgv)
             break;
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("Allocators::mpInternalDebugAllocator",
-            "..\\..\\..\\GameSource\\Resource/BrnResourceAllocator.h", 369);
+            CGS_ASSERT_LOCATION("..\\..\\..\\GameSource\\Resource/BrnResourceAllocator.h", 369));
         CgsDev::Assert::EndAssert();
     }
 

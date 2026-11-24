@@ -33,7 +33,7 @@ namespace CgsDev
                                      lpcLabel, liBufferLen, static_cast<s32>(luLabelLen));
                     CgsDev::Assert::FireAssert(
                         CgsDev::Assert::gpcMessageBuffer,
-                        "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 65);
+                        CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 65));
                     CgsDev::Assert::EndAssert();
                 }
                 std::memcpy(lpcBuffer, lpcLabel, luLabelLen + 1);

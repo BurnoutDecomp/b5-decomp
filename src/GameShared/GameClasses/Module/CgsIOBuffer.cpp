@@ -1,10 +1,10 @@
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Module/CgsIOBuffer.h"
 #define IO_ASSERT(condition, message, line) do { if (!(condition)) { \
     CgsDev::Assert::BeginAssert(); \
-    CgsDev::Assert::FireAssert(message, "..\\..\\..\\GameShared\\GameClasses\\Module/CgsIOBuffer.h", line); \
+    CgsDev::Assert::FireAssert(message, CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, line)); \
     CgsDev::Assert::EndAssert(); \
 } } while (0)
 
@@ -33,7 +33,7 @@ namespace CgsModule
             stream << CgsDev::E_PRINTMODE_HEXONCE;
             stream << static_cast<s32>(mxStatusFlags.GetFlags());
             stream << "\n";
-            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, "..\\..\\..\\GameShared\\GameClasses\\Module/CgsIOBuffer.h", 218);
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 218));
             CgsDev::Assert::EndAssert();
         }
         if (mxStatusFlags.IsBitSet(eStatusLockedForWrite))
@@ -44,7 +44,7 @@ namespace CgsModule
             stream << CgsDev::E_PRINTMODE_HEXONCE;
             stream << static_cast<s32>(mxStatusFlags.GetFlags());
             stream << "\n";
-            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, "..\\..\\..\\GameShared\\GameClasses\\Module/CgsIOBuffer.h", 219);
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 219));
             CgsDev::Assert::EndAssert();
         }
         mxStatusFlags.SetBit(eStatusLockedForWrite);
@@ -77,3 +77,5 @@ namespace CgsModule
         mxStatusFlags.UnSetBit(eStatusLockedForRead);
     }
 }
+
+#undef CGS_ARTIST_FILE

@@ -576,7 +576,7 @@ EffectsState JumpStateMachine::OnDetermineNextState(CarState& lCarState,
             break;
 
         default:
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt("Unknown state", __FILE__, 242));   // .cpp:242
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Unknown state", __FILE__, 242));   // .cpp:242
             break;
     }
 
@@ -639,7 +639,7 @@ void JumpStateMachine::OnChangeState(EffectsState leNewState,
             break;
 
         default:
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt("Unknown state", __FILE__, 302));   // .cpp:302
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Unknown state", __FILE__, 302));   // .cpp:302
             break;
     }
 }

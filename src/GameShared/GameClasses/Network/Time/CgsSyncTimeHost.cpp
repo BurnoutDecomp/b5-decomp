@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Network/Time/CgsSyncTimeHost.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Network\\Time\\CgsSyncTimeHost.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Network/Time/CgsSyncTimeBase.h"
 #include "GameShared/GameClasses/Network/Time/CgsSyncTimeMessage.h"
@@ -28,12 +28,12 @@ namespace CgsNetwork
     // message manager at +0x0 and the player manager at +0x4 (`*this = a3; this[1] = a2`).
     void SyncTimeHost::Construct(PlayerManager* lpPlayerManager, SyncTimeMessageManager* lpMessageManager)
     {
-        CGS_ASSERT(lpPlayerManager != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpPlayerManager != 0, CGS_ASSERT_MESSAGE_AT(
             "lpPlayerManager",
-            "..\\..\\..\\GameShared\\GameClasses\\Network\\Time\\CgsSyncTimeHost.cpp", 49 /* ARTIST 0x8287D3BC */));
-        CGS_ASSERT(lpMessageManager != 0, CgsDev::Assert::MessageAt(
+            CGS_ARTIST_FILE, 49 /* ARTIST 0x8287D3BC */));
+        CGS_ASSERT(lpMessageManager != 0, CGS_ASSERT_MESSAGE_AT(
             "lpMessageManager",
-            "..\\..\\..\\GameShared\\GameClasses\\Network\\Time\\CgsSyncTimeHost.cpp", 50 /* ARTIST 0x8287D3E0 */));
+            CGS_ARTIST_FILE, 50 /* ARTIST 0x8287D3E0 */));
 
         // ARTIST 0x8287D3E8 stores the player manager (+4) before the message manager (+0).
         mpPlayerManager          = lpPlayerManager;
@@ -52,7 +52,7 @@ namespace CgsNetwork
     bool SyncTimeHost::Prepare()
     {
         CGS_ASSERT(mpSyncTimeMessageManager != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpSyncTimeMessageManager", __FILE__, 70 /* ARTIST 0x8288B0A0 */));
 
         mpSyncTimeMessageManager->SwitchMode(SyncTimeMessageManager::E_MESSAGE_MODE_HOST);
@@ -64,7 +64,7 @@ namespace CgsNetwork
     bool SyncTimeHost::Release()
     {
         CGS_ASSERT(mpSyncTimeMessageManager != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpSyncTimeMessageManager", __FILE__, 137 /* ARTIST 0x8288B108 */));
 
         mpSyncTimeMessageManager->SwitchMode(SyncTimeMessageManager::E_MESSAGE_MODE_NONE);
@@ -80,10 +80,10 @@ namespace CgsNetwork
     // reversed back into the named calls the DWARF source hints record.
     void SyncTimeHost::Update(u16 lu16FrameNumber, CgsSystem::Time& lTime)
     {
-        CGS_ASSERT(mpPlayerManager != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpPlayerManager != 0, CGS_ASSERT_MESSAGE_AT(
             "mpPlayerManager",
             __FILE__, 95 /* ARTIST 0x82892954 */));
-        CGS_ASSERT(mpSyncTimeMessageManager != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpSyncTimeMessageManager != 0, CGS_ASSERT_MESSAGE_AT(
             "mpSyncTimeMessageManager",
             __FILE__, 96 /* ARTIST 0x8289297C */));
 
@@ -99,7 +99,7 @@ namespace CgsNetwork
             CgsSystem::Time lMessageClientTime;
             CgsSystem::Time lMessageHostTime;
 
-            CGS_ASSERT(lpMessage != 0, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(lpMessage != 0, CGS_ASSERT_MESSAGE_AT(
                 "lpMessage",
                 __FILE__, 108 /* ARTIST 0x82892A20 */));
 
@@ -107,7 +107,7 @@ namespace CgsNetwork
                                                          &lMessageClientTime,
                                                          &lMessageHostPlayerID,
                                                          &lMessageHostTime);
-            CGS_ASSERT(lbRetrieved, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(lbRetrieved, CGS_ASSERT_MESSAGE_AT(
                 "lpMessage->Retrieve( &lMessageClientPlayerID, &lMessageClientTime, " "&lMessageHostPlayerID, &lMessageHostTime )",
                 __FILE__, 109 /* ARTIST 0x82892A5C */));
 
@@ -124,3 +124,5 @@ namespace CgsNetwork
         }
     }
 } // namespace CgsNetwork
+
+#undef CGS_ARTIST_FILE

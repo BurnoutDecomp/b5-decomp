@@ -1,5 +1,5 @@
 #include "GameSource/Director/MomentController/Moments/BrnMomentFailsafe.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentFailsafe.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 
 // BrnDirector::MomentFailSafe -- reconstructed from the console executable.
@@ -48,7 +48,7 @@ void MomentFailSafe::Update(f32 lfTimeStep, void* lrBehaviourController,
     (void)lSharedInfo;
 
     CGS_ASSERT(mpParameters != NULL,
-        CgsDev::Assert::MessageAt("mpParameters != NULL", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentFailsafe.cpp", 69 /* ARTIST 0x8220A2E4 */));
+        CGS_ASSERT_MESSAGE_AT("mpParameters != NULL", CGS_ARTIST_FILE, 69 /* ARTIST 0x8220A2E4 */));
 
     switch (GetState())
     {
@@ -62,8 +62,8 @@ void MomentFailSafe::Update(f32 lfTimeStep, void* lrBehaviourController,
 
     default:
         CGS_ASSERT(false,
-            CgsDev::Assert::MessageAt(
-                "unhandled case in switch", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentFailsafe.cpp", 92 /* ARTIST 0x8220A314 */));
+            CGS_ASSERT_MESSAGE_AT(
+                "unhandled case in switch", CGS_ARTIST_FILE, 92 /* ARTIST 0x8220A314 */));
         break;
     }
 }
@@ -115,3 +115,5 @@ Moment::EType MomentFailSafe::GetInstanceType()
     return E_MOMENT_FAILSAFE;   // li r3, 6
 }
 }
+
+#undef CGS_ARTIST_FILE

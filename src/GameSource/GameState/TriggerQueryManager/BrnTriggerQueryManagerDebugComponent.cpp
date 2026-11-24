@@ -67,7 +67,7 @@ namespace BrnGameState
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("mpTriggerData != NULL",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TriggerQueryManager/BrnTriggerQueryManagerDebugComponent.cpp", 114);
+                CGS_ASSERT_LOCATION("d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TriggerQueryManager/BrnTriggerQueryManagerDebugComponent.cpp", 114));
             CgsDev::Assert::EndAssert();
         }
         mpTriggerData = 0;

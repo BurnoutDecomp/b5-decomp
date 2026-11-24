@@ -130,7 +130,7 @@ namespace BrnNetwork
     void LiveRevengeDebugComponent::AddPlayer(LiveRevengeRelationship* lpRelationship)
     {
         const CgsNetwork::PlayerName* lpRivalName = lpRelationship->GetRivalName();
-        CGS_ASSERT(lpRivalName != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpRivalName != 0, CGS_ASSERT_MESSAGE_AT(
             "lpRelationship->GetRivalName()",
             __FILE__, 180 /* ARTIST 0x8258500C */));
 
@@ -230,9 +230,9 @@ namespace BrnNetwork
         LiveRevengeDebugComponent* lpDebugComponent = static_cast<LiveRevengeDebugComponent*>(lpUserData);
 
         CGS_ASSERT(lpDebugComponent != 0,
-            CgsDev::Assert::MessageAt("lpDebugComponent", __FILE__, 302 /* ARTIST 0x82585188 */));
+            CGS_ASSERT_MESSAGE_AT("lpDebugComponent", __FILE__, 302 /* ARTIST 0x82585188 */));
         CGS_ASSERT(lpDebugComponent->mpLiveRevengeManager != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpDebugComponent->mpLiveRevengeManager", __FILE__, 303 /* ARTIST 0x825851B0 */));
 
         lpDebugComponent->mpLiveRevengeManager->SendLiveRevengeRivalsToServer();

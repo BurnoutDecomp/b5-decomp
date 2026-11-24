@@ -52,22 +52,22 @@ namespace CgsNetwork
         miPackToTexture    = CgsDev::PerfMonCpu::AddMonitor("DXT1 Pack",      CgsDev::E_PMP_8, false, 1.0f, false);
 
         CGS_ASSERT(miConvertPM        >= 0,
-            CgsDev::Assert::MessageAt("miConvertPM >= 0", __FILE__, 78 /* ARTIST 0x828719D0 */));
+            CGS_ASSERT_MESSAGE_AT("miConvertPM >= 0", __FILE__, 78 /* ARTIST 0x828719D0 */));
         CGS_ASSERT(miCopyPM           >= 0,
-            CgsDev::Assert::MessageAt("miCopyPM >= 0", __FILE__, 79 /* ARTIST 0x828719F8 */));
+            CGS_ASSERT_MESSAGE_AT("miCopyPM >= 0", __FILE__, 79 /* ARTIST 0x828719F8 */));
         CGS_ASSERT(miResizePM         >= 0,
-            CgsDev::Assert::MessageAt("miResizePM >= 0", __FILE__, 80 /* ARTIST 0x82871A20 */));
+            CGS_ASSERT_MESSAGE_AT("miResizePM >= 0", __FILE__, 80 /* ARTIST 0x82871A20 */));
         CGS_ASSERT(miUnpackToBufferPM >= 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "miUnpackToBufferPM >= 0", __FILE__, 81 /* ARTIST 0x82871A48 */));
         CGS_ASSERT(miXToRPM           >= 0,
-            CgsDev::Assert::MessageAt("miXToRPM >= 0", __FILE__, 82 /* ARTIST 0x82871A70 */));
+            CGS_ASSERT_MESSAGE_AT("miXToRPM >= 0", __FILE__, 82 /* ARTIST 0x82871A70 */));
         CGS_ASSERT(miCompressPM       >= 0,
-            CgsDev::Assert::MessageAt("miCompressPM >= 0", __FILE__, 83 /* ARTIST 0x82871A98 */));
+            CGS_ASSERT_MESSAGE_AT("miCompressPM >= 0", __FILE__, 83 /* ARTIST 0x82871A98 */));
         CGS_ASSERT(miUnpackToImage    >= 0,
-            CgsDev::Assert::MessageAt("miUnpackToImage >= 0", __FILE__, 84 /* ARTIST 0x82871AC0 */));
+            CGS_ASSERT_MESSAGE_AT("miUnpackToImage >= 0", __FILE__, 84 /* ARTIST 0x82871AC0 */));
         CGS_ASSERT(miPackToTexture    >= 0,
-            CgsDev::Assert::MessageAt("miPackToTexture >= 0", __FILE__, 85 /* ARTIST 0x82871AE8 */));
+            CGS_ASSERT_MESSAGE_AT("miPackToTexture >= 0", __FILE__, 85 /* ARTIST 0x82871AE8 */));
     }
 
     // ---- Convert @ 0x828943A8 -------------------------------------------------------------------
@@ -115,13 +115,13 @@ namespace CgsNetwork
     {
         CgsDev::PerfMonCpu::StartMonitor(miCopyPM);
 
-        CGS_ASSERT(lpDstTexture->GetWidth()  >= lpSrcTexture->GetWidth(), CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpDstTexture->GetWidth()  >= lpSrcTexture->GetWidth(), CGS_ASSERT_MESSAGE_AT(
             "lpDstTexture->GetWidth() >= lpSrcTexture->GetWidth()",
             __FILE__, 588 /* ARTIST 0x82871B54 */));
-        CGS_ASSERT(lpDstTexture->GetHeight() >= lpSrcTexture->GetHeight(), CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpDstTexture->GetHeight() >= lpSrcTexture->GetHeight(), CGS_ASSERT_MESSAGE_AT(
             "lpDstTexture->GetHeight() >= lpSrcTexture->GetHeight()",
             __FILE__, 589 /* ARTIST 0x82871B80 */));
-        CGS_ASSERT(lpDstTexture->GetFormat() == lpSrcTexture->GetFormat(), CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpDstTexture->GetFormat() == lpSrcTexture->GetFormat(), CGS_ASSERT_MESSAGE_AT(
             "lpDstTexture->GetFormat() == lpSrcTexture->GetFormat()",
             __FILE__, 590 /* ARTIST 0x82871BAC */));
 
@@ -147,10 +147,10 @@ namespace CgsNetwork
         const s32   liSrcStride = lpSrcTexture->GetStride();
         const s32   liDstStride = lpDstTexture->GetStride();
 
-        CGS_ASSERT(lpSrcTexture->GetWidth()  == lpDstTexture->GetWidth(), CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpSrcTexture->GetWidth()  == lpDstTexture->GetWidth(), CGS_ASSERT_MESSAGE_AT(
             "lpSrcTexture->GetWidth() == lpDstTexture->GetWidth()",
             __FILE__, 195 /* ARTIST 0x8288ED04 */));
-        CGS_ASSERT(lpSrcTexture->GetHeight() == lpDstTexture->GetHeight(), CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpSrcTexture->GetHeight() == lpDstTexture->GetHeight(), CGS_ASSERT_MESSAGE_AT(
             "lpSrcTexture->GetHeight() == lpDstTexture->GetHeight()",
             __FILE__, 196 /* ARTIST 0x8288ED30 */));
 

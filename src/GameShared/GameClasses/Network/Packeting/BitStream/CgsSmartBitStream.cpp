@@ -63,10 +63,10 @@ namespace
 
     bool SmartBitStream::AddRawData(const char* lpcData, s32 liNumBytes)
     {
-        CGS_ASSERT(lpcData != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpcData != 0, CGS_ASSERT_MESSAGE_AT(
             "lpcData != NULL",
             __FILE__, 47 /* ARTIST 0x82882F14 */));
-        CGS_ASSERT(liNumBytes >= 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(liNumBytes >= 0, CGS_ASSERT_MESSAGE_AT(
             "liNumBytes >= 0",
             __FILE__, 48 /* ARTIST 0x82882F38 */));
 
@@ -108,7 +108,7 @@ namespace
             ++lpcRemaining;
         }
 
-        CGS_ASSERT(liNumBytes == 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(liNumBytes == 0, CGS_ASSERT_MESSAGE_AT(
             "liNumBytes == 0",
             __FILE__, 85 /* ARTIST 0x82883004 */));
         return true;
@@ -116,10 +116,10 @@ namespace
 
     void SmartBitStream::GetRawData(char* lpcBuffer, s32 liNumBytes)
     {
-        CGS_ASSERT(lpcBuffer != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpcBuffer != 0, CGS_ASSERT_MESSAGE_AT(
             "lpcBuffer != NULL",
             __FILE__, 100 /* ARTIST 0x82883064 */));
-        CGS_ASSERT(liNumBytes >= 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(liNumBytes >= 0, CGS_ASSERT_MESSAGE_AT(
             "liNumBytes >= 0",
             __FILE__, 101 /* ARTIST 0x82883088 */));
 

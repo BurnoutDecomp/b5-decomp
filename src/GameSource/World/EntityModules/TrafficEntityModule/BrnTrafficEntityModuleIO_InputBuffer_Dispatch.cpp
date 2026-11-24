@@ -1,9 +1,9 @@
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // the header-baked lock asserts
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h"
 #include <cstddef>   // offsetof
-
+#define CGS_ARTIST_FILE_BRNTRAFFICENTITYMODULEIO "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\BrnTrafficEntityModuleIO.h"
 // BrnTraffic::BrnTrafficIO::InputBuffer_Dispatch members, reconstructed from
 // BURNOUT_X360_ARTIST.XEX. Eight accessors over four contiguous pointer slots at the buffer tail
 // (console words +0x8014..+0x8020; host pointers, see the header's POINTER WIDTH note).
@@ -77,21 +77,21 @@ namespace BrnTrafficIO
     // ARTIST 827BB138: write-lock assertion followed by the named queue address.
     InputBuffer_Dispatch::SceneResultQueue* InputBuffer_Dispatch::GetSceneResultQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h", 486));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 486));
         return &mSceneResultQueue;
     }
 
     // X360 0x827120D8 (asm-line :482) -- read-lock; return the dispatch frame (console word @this+0x8014).
     CgsGraphics::DispatchFrame* InputBuffer_Dispatch::GetDispatchFrame() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\BrnTrafficEntityModuleIO.h", 482));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE_BRNTRAFFICENTITYMODULEIO, 482));
         return mpDispatchFrame;
     }
 
     // X360 0x827A0EC0 (asm-line :483) -- write-lock; set the dispatch frame (console word @this+0x8014).
     void InputBuffer_Dispatch::SetDispatchFrame(CgsGraphics::DispatchFrame* lpDispatchFrame)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h", 483));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 483));
         mpDispatchFrame = lpDispatchFrame;
     }
 
@@ -99,7 +99,7 @@ namespace BrnTrafficIO
     // buffer (console word @this+0x8018).
     BrnBlobbyShadowManager::BrnBlobbyShadowBuffer* InputBuffer_Dispatch::GetBlobbyShadowBuffer() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\BrnTrafficEntityModuleIO.h", 488));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE_BRNTRAFFICENTITYMODULEIO, 488));
         return mpBlobbyShadowBuffer;
     }
 
@@ -107,7 +107,7 @@ namespace BrnTrafficIO
     void InputBuffer_Dispatch::SetBlobbyShadowBuffer(
         BrnBlobbyShadowManager::BrnBlobbyShadowBuffer* lpBlobbyShadowBuffer)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h", 489));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 489));
         mpBlobbyShadowBuffer = lpBlobbyShadowBuffer;
     }
 
@@ -115,7 +115,7 @@ namespace BrnTrafficIO
     // submission interface (console word @this+0x801C).
     BrnCoronaManager::BrnSubmissionInterface* InputBuffer_Dispatch::GetCoronaSubmissionInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\BrnTrafficEntityModuleIO.h", 491));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE_BRNTRAFFICENTITYMODULEIO, 491));
         return mpCoronaSubmissionInterface;
     }
 
@@ -123,22 +123,25 @@ namespace BrnTrafficIO
     void InputBuffer_Dispatch::SetCoronaSubmissionInterface(
         BrnCoronaManager::BrnSubmissionInterface* lpCoronaSubmissionInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h", 492));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 492));
         mpCoronaSubmissionInterface = lpCoronaSubmissionInterface;
     }
 
     // X360 0x827122E8 (asm-line :494) -- read-lock; return the shadow map (console word @this+0x8020).
     BrnWorld::ShadowMap* InputBuffer_Dispatch::GetShadowMap() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\BrnTrafficEntityModuleIO.h", 494));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE_BRNTRAFFICENTITYMODULEIO, 494));
         return mpShadowMap;
     }
 
     // X360 0x827A10D0 (asm-line :495) -- write-lock; set the shadow map (console word @this+0x8020).
     void InputBuffer_Dispatch::SetShadowMap(BrnWorld::ShadowMap* lpShadowMap)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h", 495));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 495));
         mpShadowMap = lpShadowMap;
     }
 }
 }
+
+#undef CGS_ARTIST_FILE
+#undef CGS_ARTIST_FILE_BRNTRAFFICENTITYMODULEIO

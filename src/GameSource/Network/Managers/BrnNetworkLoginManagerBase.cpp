@@ -105,13 +105,13 @@ namespace BrnNetwork
     // X360 0x82543808
     void LoginManagerBase::Construct(BrnNetworkModule* lpNetworkModule)
     {
-        CGS_ASSERT(lpNetworkModule != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpNetworkModule != 0, CGS_ASSERT_MESSAGE_AT(
             "lpNetworkModule",
             __FILE__, 60 /* ARTIST 0x82543840 */));
         mpNetworkModule = lpNetworkModule;
 
         mpNetworkManager = lpNetworkModule->GetNetworkManager();
-        CGS_ASSERT(mpNetworkManager != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpNetworkManager != 0, CGS_ASSERT_MESSAGE_AT(
             "mpNetworkManager",
             __FILE__, 65 /* ARTIST 0x82543874 */));
 
@@ -181,7 +181,7 @@ namespace BrnNetwork
 
         default:
             CGS_ASSERT(false,
-                CgsDev::Assert::MessageAt(
+                CGS_ASSERT_MESSAGE_AT(
                     "Invalid login sub state",
                     __FILE__, 237 /* ARTIST 0x8256CE04 */));
             return false;
@@ -333,7 +333,7 @@ namespace BrnNetwork
     void LoginManagerBase::AnswerSignIn(bool lbSuccess)
     {
         CGS_ASSERT(meSignInState == E_SIGN_IN_STATE_SIGNING_IN,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "meSignInState == E_SIGN_IN_STATE_SIGNING_IN",
                 __FILE__, 958 /* ARTIST 0x82543BE8 */));
         // X360: meSignInState = !lbSuccess + 1 -- success -> SUCCESS(1), failure -> FAILED(2).
@@ -407,7 +407,7 @@ namespace BrnNetwork
     // X360 0x8254FEC8
     void LoginManagerBase::PrepareConnectTelemetry()
     {
-        CGS_ASSERT(mpNetworkManager != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpNetworkManager != 0, CGS_ASSERT_MESSAGE_AT(
             "NULL != mpNetworkManager",
             __FILE__, 1116 /* ARTIST 0x8254FEFC */));
 
@@ -433,7 +433,7 @@ namespace BrnNetwork
     // X360 0x82543D88
     void LoginManagerBase::PrepareLoadSettings()
     {
-        CGS_ASSERT(mpNetworkManager != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpNetworkManager != 0, CGS_ASSERT_MESSAGE_AT(
             "mpNetworkManager",
             __FILE__, 1156 /* ARTIST 0x82543DC0 */));
 
@@ -448,7 +448,7 @@ namespace BrnNetwork
     // X360 0x82543E08
     void LoginManagerBase::PreparePingRegions()
     {
-        CGS_ASSERT(mpNetworkManager != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mpNetworkManager != 0, CGS_ASSERT_MESSAGE_AT(
             "mpNetworkManager",
             __FILE__, 1176 /* ARTIST 0x82543E40 */));
 
@@ -537,7 +537,7 @@ namespace BrnNetwork
         }
         else
         {
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
                 "Invalid server interface status!",
                 __FILE__, 362 /* ARTIST 0x8254F988 */));
         }
@@ -564,7 +564,7 @@ namespace BrnNetwork
         switch (lpConnection->GetLoginStatus())
         {
         case CgsNetwork::ServerInterfaceConnection::E_LOGIN_STATUS_LOGIN:
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
                 "Probably shouldn't get here but just in case try logging in again",
                 __FILE__, 389 /* ARTIST 0x8254FAE4 */));
             LogInToServer();
@@ -614,7 +614,7 @@ namespace BrnNetwork
             return;
 
         default:
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
                 "Unexpected Login status",
                 __FILE__, 469 /* ARTIST 0x8254FC34 */));
             break;
@@ -705,7 +705,7 @@ namespace BrnNetwork
     void LoginManagerBase::UpdateWaitingForPlayerID()
     {
         PlayerInfoData lPlayerInfo;
-        CGS_ASSERT(lPlayerInfo.Prepare(), CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lPlayerInfo.Prepare(), CGS_ASSERT_MESSAGE_AT(
             "lPlayerInfo.Prepare()",
             __FILE__, 644 /* ARTIST 0x82561A64 */));
 

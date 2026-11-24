@@ -136,7 +136,7 @@ void ValidityAccount::Print(DebugLog& lrDebugLog) const
 void ValidityAccount::SetFlag(s32 leFlag)
 {
     CGS_ASSERT(leFlag >= E_FIRST_FAILED_FLAG && leFlag < E_END_FAILED_FLAG,
-               CgsDev::Assert::MessageAt("leFlag >= E_FIRST_FAILED_FLAG && leFlag < E_END_FAILED_FLAG", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\director\\camera\\BrnCameraValidityAccount.h", 219));   // h:219 (non-gating)
+               CGS_ASSERT_MESSAGE_AT("leFlag >= E_FIRST_FAILED_FLAG && leFlag < E_END_FAILED_FLAG", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\director\\camera\\BrnCameraValidityAccount.h", 219));   // h:219 (non-gating)
     CGS_ASSERT(static_cast<u32>(leFlag) < 32u,
                "Index < Number of bits");   // CgsBitArray.h:222 (streamed on the X360; folded static)
     mFailedFlags.SetBit(static_cast<u32>(leFlag));

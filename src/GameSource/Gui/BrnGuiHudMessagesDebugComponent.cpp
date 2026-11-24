@@ -8,7 +8,7 @@
 // Reconstructed from BURNOUT_X360_ARTIST.XEX (both are constant-string returns). The rest of
 // the component bodied here is TriggerMessage, which posts the selected message with stand-in
 // parameters.
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/BrnGuiHudMessagesDebugComponent.cpp"
 #include "GameSource/Gui/BrnGuiHudMessagesDebugComponent.h"
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"           // BrnGui::GuiHudMessage
 #include "GameSource/Gui/BrnGuiHudMessageDirector.h"      // BrnGui::HudMessageDirector::AddMessage
@@ -102,7 +102,7 @@ namespace BrnGui
             CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
             lStream << "Invalid data pointer sent to GuiHudMessagesDebugComponent::TriggerMessageCallback";
             CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                "..\\..\\..\\GameSource\\Gui/BrnGuiHudMessagesDebugComponent.cpp", 238);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 238));
             CgsDev::Assert::EndAssert();
         }
         static_cast<GuiHudMessagesDebugComponent*>(lpUserData)->TriggerMessage(false);
@@ -116,7 +116,7 @@ namespace BrnGui
             CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
             lStream << "Invalid data sent to GuiHudMessagesDebugComponent::TriggerMessageWithoutTimerCallback";
             CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                "..\\..\\..\\GameSource\\Gui/BrnGuiHudMessagesDebugComponent.cpp", 252);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 252));
             CgsDev::Assert::EndAssert();
         }
         static_cast<GuiHudMessagesDebugComponent*>(lpUserData)->TriggerMessage(true);
@@ -130,7 +130,7 @@ namespace BrnGui
             CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
             lStream << "Invalid data in the callback";
             CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                "..\\..\\..\\GameSource\\Gui/BrnGuiHudMessagesDebugComponent.cpp", 267);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 267));
             CgsDev::Assert::EndAssert();
         }
         static_cast<GuiHudMessagesDebugComponent*>(lpUserData)->SelectNextMessage();
@@ -144,7 +144,7 @@ namespace BrnGui
             CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
             lStream << "Invalid data in the callback";
             CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                "..\\..\\..\\GameSource\\Gui/BrnGuiHudMessagesDebugComponent.cpp", 282);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 282));
             CgsDev::Assert::EndAssert();
         }
         static_cast<GuiHudMessagesDebugComponent*>(lpUserData)->SelectPreviousMessage();
@@ -204,3 +204,5 @@ namespace BrnGui
         mpMessageDirector->AddMessage(&lMessage, lbForce);
     }
 }
+
+#undef CGS_ARTIST_FILE

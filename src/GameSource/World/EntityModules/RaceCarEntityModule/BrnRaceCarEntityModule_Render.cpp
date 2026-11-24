@@ -1,5 +1,5 @@
 // Native race-car rendering: GenerateDispatchLists 0x822E79F8, RenderRaceCar 0x822CF6A0.
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.cpp"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.h"
 #include "GameShared/GameClasses/RenderWare/Math/RwMathVectorTemplates.h"
 #include "GameSource/Replays/Serialisers/BrnReplayRaceCarSerialiserFrame.h"
@@ -279,7 +279,7 @@ static void RaceCarMatrixAssert(const char* message, const Matrix44Affine& m, in
         m.zAxis.mV.x,m.zAxis.mV.y,m.zAxis.mV.z,m.zAxis.mV.w,
         m.wAxis.mV.x,m.wAxis.mV.y,m.wAxis.mV.z,m.wAxis.mV.w);
     CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.cpp", line);
+        CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, line));
     CgsDev::Assert::EndAssert();
 }
 
@@ -601,7 +601,7 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("IsNormal3x3( lpCarGraphicsSpec->mpPartLocators[ luPartIdx ], 0.01f )",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.cpp", 3583);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 3583));
                 CgsDev::Assert::EndAssert();
             }
             const Matrix44Affine& lrOrthogonalLocator = lrCarGraphics->GetPartLocators()[luPart];
@@ -609,7 +609,7 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("IsOrthogonal3x3( lpCarGraphicsSpec->mpPartLocators[ luPartIdx ] )",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.cpp", 3584);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 3584));
                 CgsDev::Assert::EndAssert();
             }
             const Matrix44Affine& lrLocator = lrCarGraphics->GetPartLocators()[luPart];
@@ -817,7 +817,7 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
                             {
                                 CgsDev::Assert::BeginAssert();
                                 CgsDev::Assert::FireAssert("rw::math::IsValid(lWheelMatrix)",
-                                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.cpp", 3856);
+                                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 3856));
                                 CgsDev::Assert::EndAssert();
                             }
                             luWheelCount = static_cast<u32>(giWheelsToRender);
@@ -953,8 +953,8 @@ RaceCarEntityModule::SubmitCoronasForRaceCar(
     ActiveRaceCar::RenderParams* lpRenderParams,
     bool lbIsPlayerCar ) const
 {
-    CGS_ASSERT(lpCoronaSubmissionInterface != 0, CgsDev::Assert::MessageAt("lpCoronaSubmissionInterface != NULL", __FILE__, 3905));  // :3905
-    CGS_ASSERT(lpRenderParams != 0, CgsDev::Assert::MessageAt("lpRenderParams != NULL", __FILE__, 3906));                            // :3906
+    CGS_ASSERT(lpCoronaSubmissionInterface != 0, CGS_ASSERT_MESSAGE_AT("lpCoronaSubmissionInterface != NULL", __FILE__, 3905));  // :3905
+    CGS_ASSERT(lpRenderParams != 0, CGS_ASSERT_MESSAGE_AT("lpRenderParams != NULL", __FILE__, 3906));                            // :3906
 
     // The four light-state bytes, in the console's own load order
     // (@0x822D1684/0x822D1688/0x822D1690/0x822D1698).
@@ -1314,3 +1314,5 @@ void RaceCarEntityModule::GenerateDispatchLists(
 }
 
 }
+
+#undef CGS_ARTIST_FILE

@@ -6,7 +6,7 @@
 #include "GameShared/GameClasses/Module/CgsModuleUtils.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "rw/rwcore_general_alloc.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\CgsGuiModule.cpp"
 namespace CgsGui
 {
     // ARTIST827E54B0 constructs the real base/Model owner and clears only
@@ -15,7 +15,7 @@ namespace CgsGui
     {
         mStoredGuiEvents.MarkUnconstructed();
     }
-
+#define CGS_ARTIST_FILE_CGSMODULEUTILS "..\\..\\..\\GameShared\\GameClasses\\Module/CgsModuleUtils.h"
     // ARTIST82856FA8. The non-null assertion does not gate continuation.
     void GuiModule::Construct(ViewModule* lpViewModule, bool lbHighDef)
     {
@@ -23,7 +23,7 @@ namespace CgsGui
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpViewModule",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\CgsGuiModule.cpp", 64);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 64));
             CgsDev::Assert::EndAssert();
         }
         CgsModule::ModuleSingleBuffered::Construct();
@@ -77,7 +77,7 @@ namespace CgsGui
         default:
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("Unknown prepare state",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\CgsGuiModule.cpp", 188);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 188));
             CgsDev::Assert::EndAssert();
             return false;
         }
@@ -112,7 +112,7 @@ namespace CgsGui
         default:
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("Unknown release state",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\CgsGuiModule.cpp", 261);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 261));
             CgsDev::Assert::EndAssert();
             return false;
         }
@@ -159,7 +159,7 @@ namespace CgsGui
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpInputBuffer",
-                "..\\..\\..\\GameShared\\GameClasses\\Module/CgsModuleUtils.h", 238);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE_CGSMODULEUTILS, 238));
             CgsDev::Assert::EndAssert();
         }
         lpModelInput->LockForWrite();
@@ -174,7 +174,7 @@ namespace CgsGui
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpInputBuffer",
-                "..\\..\\..\\GameShared\\GameClasses\\Module/CgsModuleUtils.h", 248);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE_CGSMODULEUTILS, 248));
             CgsDev::Assert::EndAssert();
         }
         lpModelInput->UnlockForWrite();
@@ -225,3 +225,6 @@ namespace CgsGui
         CgsDev::PerfMonCpu::StopMonitor(miGuiRenderPM);
     }
 }
+
+#undef CGS_ARTIST_FILE
+#undef CGS_ARTIST_FILE_CGSMODULEUTILS

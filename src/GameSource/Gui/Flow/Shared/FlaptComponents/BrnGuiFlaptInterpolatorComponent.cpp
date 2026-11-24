@@ -20,7 +20,7 @@
 // de-optimised here into ordinary named-component math (start + (end - start) * t).
 // ===================================================================================
 #include "GameSource/Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptInterpolatorComponent.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptInterpolatorComponent.cpp"
 #include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"   // BrnFlapt::FileRef
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 
@@ -38,7 +38,7 @@ namespace BrnGui
                                                CgsGui::StateInterface* lpStateInterface,
                                                const void* /*lpcParentName*/)
     {
-        CGS_ASSERT(lpStateInterface != 0, CgsDev::Assert::MessageAt("lpStateInterface", "..\\..\\..\\GameSource\\Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptComponent.h", 113 /* ARTIST 0x8241CFF4 */));
+        CGS_ASSERT(lpStateInterface != 0, CGS_ASSERT_MESSAGE_AT("lpStateInterface", "..\\..\\..\\GameSource\\Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptComponent.h", 113 /* ARTIST 0x8241CFF4 */));
 
         // Base init (the X360 inlined BrnFlaptComponent::Construct + MovieClipRef
         // SetInvalid): bind the state channel and invalidate the base clip handle.
@@ -67,9 +67,9 @@ namespace BrnGui
                                              const char* lacParentName)
     {
         CGS_ASSERT(lacName != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lacName",
-                "..\\..\\..\\GameSource\\Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptInterpolatorComponent.cpp", 76 /* ARTIST 0x8241D08C */));
+                CGS_ARTIST_FILE, 76 /* ARTIST 0x8241D08C */));
 
         BrnFlaptComponent::Prepare(lacName, lFile, lacParentName);
         mfCurrentProportion = KF_INVALID_PROPORTION;
@@ -84,7 +84,7 @@ namespace BrnGui
                                                      Vector2 lv2StartScale,
                                                      Vector2 lv2EndScale)
     {
-        CGS_ASSERT(mAptRef.mpMovieClipInst != 0, CgsDev::Assert::MessageAt("mMovieClipRef.IsValid()", "..\\..\\..\\GameSource\\Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptInterpolatorComponent.cpp", 99 /* ARTIST 0x8241D124 */));
+        CGS_ASSERT(mAptRef.mpMovieClipInst != 0, CGS_ASSERT_MESSAGE_AT("mMovieClipRef.IsValid()", CGS_ARTIST_FILE, 99 /* ARTIST 0x8241D124 */));
 
         // Locate the named child under the base clip's parent and adopt it as the
         // controlled clip.
@@ -128,3 +128,5 @@ namespace BrnGui
         }
     }
 }
+
+#undef CGS_ARTIST_FILE

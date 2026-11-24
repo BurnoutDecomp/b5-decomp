@@ -1,5 +1,5 @@
 #include "GameSource/GameState/ModeManager/GameModes/BrnRoadRageMode.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnRoadRageMode.cpp"
 #include <cmath>                                                        // std::fabs (the `fabs` in UpdateMaxActiveCars)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                      // CGS_ASSERT
@@ -240,9 +240,9 @@ void RoadRageMode::Start(const StartGameModeParams* lpStartGameModeParams,
     // 0x823306C8..0x823306F4 (BrnRoadRageMode.cpp:72 on the console).
     const BrnProgression::ProgressionRankData* lpProgressionRankData =
         lpStartGameModeParams->GetProgressionRankData();
-    CGS_ASSERT(lpProgressionRankData != 0, CgsDev::Assert::MessageAt("lpProgressionRankData != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnRoadRageMode.cpp", 72));
+    CGS_ASSERT(lpProgressionRankData != 0, CGS_ASSERT_MESSAGE_AT("lpProgressionRankData != NULL", CGS_ARTIST_FILE, 72));
     // 0x823306F8..0x82330718 (:73).
-    CGS_ASSERT(lpGameModeParams != 0, CgsDev::Assert::MessageAt("lpGameModeParams != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnRoadRageMode.cpp", 73));
+    CGS_ASSERT(lpGameModeParams != 0, CGS_ASSERT_MESSAGE_AT("lpGameModeParams != NULL", CGS_ARTIST_FILE, 73));
 
     // 0x8233071C..0x82330724 `li r4, 3` == E_MODE_ROAD_RAGE (a literal, not the start params' type).
     lpGameModeParams->Construct(GameStateModuleIO::E_MODE_ROAD_RAGE);
@@ -667,3 +667,5 @@ void RoadRageMode::BroadcastEventsToRivals(GameStateModuleIO::OutputBuffer* lpOu
     }
 }
 }
+
+#undef CGS_ARTIST_FILE

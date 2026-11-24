@@ -1,7 +1,7 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 #include <float.h> // FLT_MAX: the native 0x7F7FFFFF float bound
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Messages/BrnFburnChallengeSuccessMessage.cpp"
 #include "GameSource/Network/Messages/BrnFburnChallengeSuccessMessage.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
@@ -108,7 +108,7 @@ namespace BrnNetwork
                                                       const bool* lpaAccumulationsThisFrame,
                                                       const f32* lpaActionScores)
     {
-        CGS_ASSERT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME, CGS_ASSERT_MESSAGE_AT(
             "lu16FrameCount != KU16_INVALID_FRAME",
             __FILE__, 158 /* ARTIST 0x8257CB70 */));
 
@@ -128,18 +128,18 @@ namespace BrnNetwork
                                                 bool* lpaAccumulationsThisFrame,
                                                 f32* lpaActionScores)
     {
-        CGS_ASSERT(lpaSuccessfulActions, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpaSuccessfulActions, CGS_ASSERT_MESSAGE_AT(
             "lpaSuccessfulActions",
-            "..\\..\\..\\GameSource\\Network/Messages/BrnFburnChallengeSuccessMessage.cpp", 189 /* ARTIST 0x8257FBDC */));
-        CGS_ASSERT(lpaAccumulationsThisFrame, CgsDev::Assert::MessageAt(
+            CGS_ARTIST_FILE, 189 /* ARTIST 0x8257FBDC */));
+        CGS_ASSERT(lpaAccumulationsThisFrame, CGS_ASSERT_MESSAGE_AT(
             "lpaAccumulationsThisFrame",
-            "..\\..\\..\\GameSource\\Network/Messages/BrnFburnChallengeSuccessMessage.cpp", 190 /* ARTIST 0x8257FC00 */));
-        CGS_ASSERT(lpaActionScores, CgsDev::Assert::MessageAt(
+            CGS_ARTIST_FILE, 190 /* ARTIST 0x8257FC00 */));
+        CGS_ASSERT(lpaActionScores, CGS_ASSERT_MESSAGE_AT(
             "lpaActionScores",
-            "..\\..\\..\\GameSource\\Network/Messages/BrnFburnChallengeSuccessMessage.cpp", 191 /* ARTIST 0x8257FC24 */));
-        CGS_ASSERT(lpiFramesSinceStart, CgsDev::Assert::MessageAt(
+            CGS_ARTIST_FILE, 191 /* ARTIST 0x8257FC24 */));
+        CGS_ASSERT(lpiFramesSinceStart, CGS_ASSERT_MESSAGE_AT(
             "lpiFramesSinceStart",
-            "..\\..\\..\\GameSource\\Network/Messages/BrnFburnChallengeSuccessMessage.cpp", 192 /* ARTIST 0x8257FC48 */));
+            CGS_ARTIST_FILE, 192 /* ARTIST 0x8257FC48 */));
 
         // ARTIST 0x8257FC5C branches to a trailing `return false` (0x8257FCB0): the copy-out is the body
         // of the valid test.
@@ -161,3 +161,5 @@ namespace BrnNetwork
         return true;
     }
 } // namespace BrnNetwork
+
+#undef CGS_ARTIST_FILE

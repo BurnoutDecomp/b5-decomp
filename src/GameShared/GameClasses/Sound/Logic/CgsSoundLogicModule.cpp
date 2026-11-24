@@ -121,7 +121,7 @@ bool Module::Release()
         mePrepareStage = eModulePrepareStart;
         return true;
     default:
-        CGS_ASSERT(false, CgsDev::Assert::MessageAt("Invalid Release Stage", KAC_ARTIST_ASSERT_CPP_FILE, 260 /* ARTIST 0x826C4574 */));
+        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Invalid Release Stage", KAC_ARTIST_ASSERT_CPP_FILE, 260 /* ARTIST 0x826C4574 */));
         return false;
     }
 }
@@ -148,14 +148,14 @@ bool Module::Prepare(rw::IResourceAllocator* apAllocator,
                      CgsModule::IOBuffer* apOutputBuffer,
                      const ModuleParams& akrModuleParams)
 {
-    CGS_ASSERT(apAllocator != 0, CgsDev::Assert::MessageAt("lpAllocator", KAC_ARTIST_ASSERT_CPP_FILE, 107 /* ARTIST 0x826C42E0 */));
+    CGS_ASSERT(apAllocator != 0, CGS_ASSERT_MESSAGE_AT("lpAllocator", KAC_ARTIST_ASSERT_CPP_FILE, 107 /* ARTIST 0x826C42E0 */));
     mpAllocator       = apAllocator;
     CgsSound::MemBase::SetAllocator(apAllocator);
 
     mMessageQueue.Prepare();
 
-    CGS_ASSERT(apInputBuffer != 0, CgsDev::Assert::MessageAt("lpInputBuffer", KAC_ARTIST_ASSERT_CPP_FILE, 114 /* ARTIST 0x826C4318 */));
-    CGS_ASSERT(apOutputBuffer != 0, CgsDev::Assert::MessageAt("lpOutputBuffer", KAC_ARTIST_ASSERT_CPP_FILE, 115 /* ARTIST 0x826C433C */));
+    CGS_ASSERT(apInputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpInputBuffer", KAC_ARTIST_ASSERT_CPP_FILE, 114 /* ARTIST 0x826C4318 */));
+    CGS_ASSERT(apOutputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpOutputBuffer", KAC_ARTIST_ASSERT_CPP_FILE, 115 /* ARTIST 0x826C433C */));
     AttachBuffers(apInputBuffer, apOutputBuffer);
 
     switch (mePrepareStage)
@@ -198,7 +198,7 @@ bool Module::Prepare(rw::IResourceAllocator* apAllocator,
         mpLogicOutputBuffer = 0;
         return true;
     default:
-        CGS_ASSERT(false, CgsDev::Assert::MessageAt("Invalid Prepare Stage", KAC_ARTIST_ASSERT_CPP_FILE, 184 /* ARTIST 0x826C4474 */));
+        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Invalid Prepare Stage", KAC_ARTIST_ASSERT_CPP_FILE, 184 /* ARTIST 0x826C4474 */));
         DetachBuffers();
         return false;
     }
@@ -211,8 +211,8 @@ void Module::Update(f32 af32GameDt, f32 af32SimDt,
                     CgsModule::IOBuffer* apInputBuffer,
                     CgsModule::IOBuffer* apOutputBuffer)
 {
-    CGS_ASSERT(apInputBuffer != 0, CgsDev::Assert::MessageAt("lpInputBuffer", KAC_ARTIST_ASSERT_CPP_FILE, 308 /* ARTIST 0x826EAA90 */));
-    CGS_ASSERT(apOutputBuffer != 0, CgsDev::Assert::MessageAt("lpOutputBuffer", KAC_ARTIST_ASSERT_CPP_FILE, 309 /* ARTIST 0x826EAAB4 */));
+    CGS_ASSERT(apInputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpInputBuffer", KAC_ARTIST_ASSERT_CPP_FILE, 308 /* ARTIST 0x826EAA90 */));
+    CGS_ASSERT(apOutputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpOutputBuffer", KAC_ARTIST_ASSERT_CPP_FILE, 309 /* ARTIST 0x826EAAB4 */));
 
     AttachBuffers(apInputBuffer, apOutputBuffer);
     mpLogicInputBuffer->LockForRead();
@@ -295,9 +295,9 @@ void Module::DetachBuffers()
 u32 Module::GetUniqueId()
 {
     CGS_ASSERT(muInstanceIndex == 0,
-        CgsDev::Assert::MessageAt("muInstanceIndex == 0", KAC_ARTIST_ASSERT_FILE, 379 /* ARTIST 0x827E10AC */));
+        CGS_ASSERT_MESSAGE_AT("muInstanceIndex == 0", KAC_ARTIST_ASSERT_FILE, 379 /* ARTIST 0x827E10AC */));
     CGS_ASSERT(muUniqueId != 0xFFFFFFFFu,
-        CgsDev::Assert::MessageAt("muUniqueId != 0xffffffff", KAC_ARTIST_ASSERT_FILE, 380 /* ARTIST 0x827E10D4 */));
+        CGS_ASSERT_MESSAGE_AT("muUniqueId != 0xffffffff", KAC_ARTIST_ASSERT_FILE, 380 /* ARTIST 0x827E10D4 */));
 
     ++muUniqueId;
     return muUniqueId;
@@ -315,7 +315,7 @@ Module::EModulePrepareStage operator++(Module::EModulePrepareStage& leEnumIndex,
     leEnumIndex = static_cast<Module::EModulePrepareStage>(static_cast<s32>(leEnumIndex) + 1);
 
     CGS_ASSERT(leEnumIndex <= Module::eModulePrepareDone,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "leEnumIndex <= Module::eModulePrepareDone",
             KAC_ARTIST_ASSERT_FILE, 277 /* ARTIST 0x82681D5C */));
 

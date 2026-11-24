@@ -1,5 +1,5 @@
 #pragma once
-
+#define CGS_ARTIST_BRNARBSTATECARSELECT_FILE "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateCarSelect.h"
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT (the helper tripwires)
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
@@ -106,7 +106,7 @@ namespace BrnDirector
         // tripwire + the manager IsBehaviourWaitingToPrepare()==0 tail).
         bool IsReady() const
         {
-            CGS_ASSERT(IsPrepared(), CgsDev::Assert::MessageAt("IsPrepared()", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateCarSelect.h", 62));   // :62 (non-gating)
+            CGS_ASSERT(IsPrepared(), CGS_ASSERT_MESSAGE_AT("IsPrepared()", CGS_ARTIST_BRNARBSTATECARSELECT_FILE, 62));   // :62 (non-gating)
             return mInterpolater.IsReadyToPrepare();
         }
 
@@ -116,8 +116,8 @@ namespace BrnDirector
         // GetBehaviour() cache is that same pointee by Prepare's definition).
         bool HasFinished() const
         {
-            CGS_ASSERT(IsPrepared(), CgsDev::Assert::MessageAt("IsPrepared()", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateCarSelect.h", 65));            // :65 (non-gating)
-            CGS_ASSERT(mInterpolater.IsAllocated(), CgsDev::Assert::MessageAt("IsAllocated()", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 600));   // BrnBehaviourManager.h:600 (non-gating)
+            CGS_ASSERT(IsPrepared(), CGS_ASSERT_MESSAGE_AT("IsPrepared()", CGS_ARTIST_BRNARBSTATECARSELECT_FILE, 65));            // :65 (non-gating)
+            CGS_ASSERT(mInterpolater.IsAllocated(), CGS_ASSERT_MESSAGE_AT("IsAllocated()", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 600));   // BrnBehaviourManager.h:600 (non-gating)
             return mInterpolater.GetBehaviour()->HasFinished();
         }
 
@@ -128,7 +128,7 @@ namespace BrnDirector
         // which carries the :610 handle tripwire).
         Camera::Camera GetCamera() const
         {
-            CGS_ASSERT(IsReady(), CgsDev::Assert::MessageAt("IsReady()", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateCarSelect.h", 68));   // :68 (non-gating)
+            CGS_ASSERT(IsReady(), CGS_ASSERT_MESSAGE_AT("IsReady()", CGS_ARTIST_BRNARBSTATECARSELECT_FILE, 68));   // :68 (non-gating)
             return mInterpolater.GetProducedCamera();
         }
 
@@ -289,3 +289,5 @@ namespace BrnDirector
         EState meState;                                // +0x2D4 (724)
     };
 }
+
+#undef CGS_ARTIST_BRNARBSTATECARSELECT_FILE

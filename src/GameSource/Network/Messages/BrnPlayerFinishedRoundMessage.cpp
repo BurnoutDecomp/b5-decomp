@@ -127,7 +127,7 @@ namespace BrnNetwork
         lxResult |= CgsNetwork::PackOrUnpackTime(this, &mFinishTime, KF_FINISH_TIME_RESOLUTION);
 
         // A valid distance must never equal the in-range invalid sentinel.
-        CGS_ASSERT(mfDistanceFromFinish != KF_INVALID_NETWORK_DISTANCE, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mfDistanceFromFinish != KF_INVALID_NETWORK_DISTANCE, CGS_ASSERT_MESSAGE_AT(
             "mfDistanceFromFinish != KF_INVALID_NETWORK_DISTANCE",
             __FILE__, 199 /* ARTIST 0x8257A28C */));
 
@@ -212,7 +212,7 @@ namespace BrnNetwork
             *lpbWonRound                = mbWonRound;                  // +0x3E -> r10
 
             mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
-            CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0, CgsDev::Assert::MessageAt(
+            CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0, CGS_ASSERT_MESSAGE_AT(
                 "!CgsNetwork::ReliableMessage::IsMessageValid()",
                 "..\\..\\..\\GameSource\\Network/Messages/BrnPlayerFinishedRoundMessage.cpp", 170 /* ARTIST 0x8257DC04 */));
             return true;

@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Memory/DataStream/CgsDataStreamResultReader.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\DataStream/CgsDataStreamResultReader.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"  // CGS_ASSERT
 #include "GameShared/GameClasses/Development/CgsStrStream.h"  // CgsDev::StrStream (End's users-connected assert)
 
@@ -65,7 +65,7 @@ namespace CgsMemory
     void DataStreamResultReader::Begin()
     {
         __lwsync();
-        CGS_ASSERT(!mbStreaming, CgsDev::Assert::StreamMessageAt("Already streaming\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\DataStream/CgsDataStreamResultReader.cpp", 104));
+        CGS_ASSERT(!mbStreaming, CGS_ASSERT_STREAM_MESSAGE_AT("Already streaming\n", CGS_ARTIST_FILE, 104));
 
         miNextResult      = 0;   // this[9]
         miNumResultsAtEnd = 0;   // this[10]
@@ -118,7 +118,7 @@ namespace CgsMemory
             lStrStream << "Attempted to end stream while " << static_cast<s32>(luNumUsers) << " users connected\n";
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(lacMessage,
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\DataStream/CgsDataStreamResultReader.cpp", 143);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 143));
             CgsDev::Assert::EndAssert();
         }
 
@@ -127,3 +127,5 @@ namespace CgsMemory
         __lwsync();
     }
 }
+
+#undef CGS_ARTIST_FILE

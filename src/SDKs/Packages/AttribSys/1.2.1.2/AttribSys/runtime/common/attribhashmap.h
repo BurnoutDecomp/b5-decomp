@@ -119,7 +119,7 @@ namespace Attrib
         __forceinline void AddRef() const
         {
             CGS_ASSERT(muRefCount < 0xFFFF,
-                CgsDev::Assert::MessageAt("Exceeded collection refcount maximum!\n",
+                CGS_ASSERT_MESSAGE_AT("Exceeded collection refcount maximum!\n",
                     "..\\..\\..\\SDKs\\Packages\\AttribSys\\1.2.1.2\\attribsys/runtime/common/attribhashmap.h",
                     622 /* ARTIST 0x82802908 */));
             ++muRefCount;

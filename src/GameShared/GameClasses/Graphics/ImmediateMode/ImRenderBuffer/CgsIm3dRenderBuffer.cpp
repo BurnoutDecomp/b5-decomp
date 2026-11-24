@@ -2,7 +2,7 @@
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm3d.h"
 #include <ppcintrinsics.h>
 #include <cstring>
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/ImRenderBuffer/CgsIm3dRenderBuffer.h"
 namespace CgsGraphics
 {
 namespace
@@ -10,7 +10,7 @@ namespace
 const char* const kBufferFile = "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBuffer.h";
 void NativeAssert3d(const char* message, int line)
 {
-    CgsDev::Assert::BeginAssert(); CgsDev::Assert::FireAssert(message, kBufferFile, line); CgsDev::Assert::EndAssert();
+    CgsDev::Assert::BeginAssert(); CgsDev::Assert::FireAssert(message, CGS_ASSERT_LOCATION(kBufferFile, line)); CgsDev::Assert::EndAssert();
 }
 }
 
@@ -26,7 +26,7 @@ template<class V> void Im3dRenderBufferBase<V>::Dispatch(Im3dBase<V>* renderer) 
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("HandleCommand( lpCurrentCommand, lpImRenderer )",
-                "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/ImRenderBuffer/CgsIm3dRenderBuffer.h", 204);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 204));
             CgsDev::Assert::EndAssert();
         }
         const u32 pos = static_cast<u32>(reinterpret_cast<uintptr_t>(command) -
@@ -37,7 +37,7 @@ template<class V> void Im3dRenderBufferBase<V>::Dispatch(Im3dBase<V>* renderer) 
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 "luCurrentCommandPos >= 0 && luCurrentCommandPos < mpDispatchBuffer->muCommandBufferWritePos",
-                kBufferFile, 1301);
+                CGS_ASSERT_LOCATION(kBufferFile, 1301));
             CgsDev::Assert::EndAssert();
         }
         if (next >= this->mpDispatchBuffer->muCommandBufferWritePos) break;
@@ -124,7 +124,7 @@ bool Im3dRenderBuffer::HandleCommand(const ImCommand* c, Im3dBase<BasicColouredT
     if (!renderer)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpImRenderer", "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/ImRenderBuffer/CgsIm3dRenderBuffer.h", 316);
+        CgsDev::Assert::FireAssert("lpImRenderer", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 316));
         CgsDev::Assert::EndAssert();
     }
     Im3d* r = static_cast<Im3d*>(renderer);
@@ -152,3 +152,5 @@ INSTANTIATE(BasicColouredTexturedVertex)
 INSTANTIATE(BasicColouredVertex)
 #undef INSTANTIATE
 }
+
+#undef CGS_ARTIST_FILE

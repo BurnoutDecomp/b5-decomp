@@ -13,7 +13,7 @@
 // behaviour through the pluggable ISlotImplementation. Every operation asserts the
 // impl is present, and (when content is bound) that the handle owns a Content.
 // ============================================================================
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsVoice.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsVoice.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
@@ -540,9 +540,9 @@ void Voice::SetParameter(s32 as32Index, f32 af32Value, Name akParamName)
 
     // *a5 == *result : the caller's name must equal the resolved parameter's name.
     CGS_ASSERT(akParamName == lrParam.GetName(),
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lParam.GetName() == lParamName",
-            "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsVoice.h", 1288 /* ARTIST 0x826ACD78 */));
+            CGS_ARTIST_FILE, 1288 /* ARTIST 0x826ACD78 */));
 
     bool lbChanged = (lrParam.GetValueRaw() != af32Value);   // fcmpu mf32Value(@0xC) vs value
     lrParam.SetValueRaw(af32Value);                          // stfs @0xC
@@ -556,9 +556,9 @@ void Voice::SetParameter(s32 as32Index, f32 af32Value, Name akParamName)
 // 0x82680E6C) and stores the new state with the CHANGED bit inserted (rlwimi at 0x82680E7C).
 void Voice::SetPlaybackState(EPlaybackState lePlaybackState)
 {
-    CGS_ASSERT(!(lePlaybackState & E_PLAYBACK_STATE_CHANGED), CgsDev::Assert::MessageAt(
+    CGS_ASSERT(!(lePlaybackState & E_PLAYBACK_STATE_CHANGED), CGS_ASSERT_MESSAGE_AT(
                "!(lePlaybackState & E_PLAYBACK_STATE_CHANGED)",
-               "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsVoice.h", 1471));
+               CGS_ARTIST_FILE, 1471));
 
     AcknowledgePlaybackStateChange();
     if (GetPlaybackState() != lePlaybackState)
@@ -619,3 +619,5 @@ void Voice::DoDispose()
 
 } // namespace Playback
 } // namespace CgsSound
+
+#undef CGS_ARTIST_FILE

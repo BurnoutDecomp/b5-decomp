@@ -1,5 +1,5 @@
 #include "GameSource/GameState/ModeManager/GameModes/BrnOnlineStuntRunMode.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnOnlineStuntRunMode.cpp"
 #include <cmath>   // std::fabs (the |angle| vandc128)
 #include <cfloat>
 
@@ -162,7 +162,7 @@ bool OnlineStuntRunMode::ShouldFinish(ScoringSystem* lpScoringSystem)
             {
                 const CarData* lpCarData =
                     lpScoringSystem->GetCarData(static_cast<EActiveRaceCarIndex>(liMember));
-                CGS_ASSERT(lpCarData, CgsDev::Assert::MessageAt("lpCarData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnOnlineStuntRunMode.cpp", 288));
+                CGS_ASSERT(lpCarData, CGS_ASSERT_MESSAGE_AT("lpCarData", CGS_ARTIST_FILE, 288));
 
                 // X360 reads the per-car eliminated flag (CarScoreData +0xD9) and the disconnected
                 // flag (CarScoreData +0x69), both through the embedded score record.
@@ -341,7 +341,7 @@ LightTriggerId OnlineStuntRunMode::GetBestStartGridID(LightTriggerId luTriggerId
     const BrnTraffic::Hull* lpHull = lpTrafficData->GetHull(luHull);
 
     CGS_ASSERT(lpHull->muNumLightTriggers == lpHull->muNumLightTriggersStartData,
-               CgsDev::Assert::MessageAt("lpHull->muNumLightTriggers == lpHull->muNumLightTriggersStartData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnOnlineStuntRunMode.cpp", 165));
+               CGS_ASSERT_MESSAGE_AT("lpHull->muNumLightTriggers == lpHull->muNumLightTriggersStartData", CGS_ARTIST_FILE, 165));
 
     // The junction byte from the trigger id is itself an index into the per-light junction-lookup
     // table; the entry there is the JUNCTION-GROUP id whose lights we gather. The X360 reads
@@ -364,7 +364,7 @@ LightTriggerId OnlineStuntRunMode::GetBestStartGridID(LightTriggerId luTriggerId
         }
 
         CGS_ASSERT(liNumLightsFound < KI_MAX_LIGHTS_IN_ONE_JUNCTION,
-                   CgsDev::Assert::MessageAt("liNumLightsFound < KI_MAX_LIGHTS_IN_ONE_JUNCTION", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnOnlineStuntRunMode.cpp", 175));
+                   CGS_ASSERT_MESSAGE_AT("liNumLightsFound < KI_MAX_LIGHTS_IN_ONE_JUNCTION", CGS_ARTIST_FILE, 175));
         CGS_ASSERT(luHull < KU_MAX_HULLS, "luHull < KU_MAX_HULLS");
         CGS_ASSERT(luLight < KU_MAX_LIGHT_TRIGGER_INDEX, "luLightTriggerIndex < 256");
 
@@ -376,7 +376,7 @@ LightTriggerId OnlineStuntRunMode::GetBestStartGridID(LightTriggerId luTriggerId
         ++liNumLightsFound;
     }
 
-    CGS_ASSERT(liNumLightsFound > 0, CgsDev::Assert::MessageAt("liNumLightsFound > 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnOnlineStuntRunMode.cpp", 185));
+    CGS_ASSERT(liNumLightsFound > 0, CGS_ASSERT_MESSAGE_AT("liNumLightsFound > 0", CGS_ARTIST_FILE, 185));
 
     // Pick the gathered light whose start direction best aligns with the reference: the X360 SIMD
     // block normalises the start direction and the (reference - start position) delta and takes the
@@ -405,7 +405,7 @@ LightTriggerId OnlineStuntRunMode::GetBestStartGridID(LightTriggerId luTriggerId
         }
     }
 
-    CGS_ASSERT(liBestLightIndex >= 0, CgsDev::Assert::MessageAt("liBestLightIndex >= 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnOnlineStuntRunMode.cpp", 204));
+    CGS_ASSERT(liBestLightIndex >= 0, CGS_ASSERT_MESSAGE_AT("liBestLightIndex >= 0", CGS_ARTIST_FILE, 204));
 
     return aPackedIds[liBestLightIndex];
 }
@@ -420,3 +420,5 @@ bool OnlineStuntRunMode::HasLoadingScreen() const
     return true;
 }
 }
+
+#undef CGS_ARTIST_FILE

@@ -18,7 +18,7 @@ namespace MapFile
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpCallstack",
-                "..\\..\\..\\GameShared\\GameClasses\\Development/MapFile/Reader/CgsMapFileReader.cpp", 51);
+                CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Development/MapFile/Reader/CgsMapFileReader.cpp", 51));
             CgsDev::Assert::EndAssert();
         }
         mpCallstack = lpCallstack;

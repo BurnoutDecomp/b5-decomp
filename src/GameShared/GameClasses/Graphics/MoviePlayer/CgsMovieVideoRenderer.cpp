@@ -37,7 +37,7 @@ namespace CgsGraphics
             {
                 lrTexture.mpTexture->Release();
                 // ARTIST assertion at 0x827EAAEC.
-                CGS_ASSERT(lrTexture.mpTextureState != 0, CgsDev::Assert::MessageAt(
+                CGS_ASSERT(lrTexture.mpTextureState != 0, CGS_ASSERT_MESSAGE_AT(
                     "maTextureInfoTypes[i].mpTextureState",
                     "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\MoviePlayer/CgsMovieVideoRenderer.cpp", 144));
             }
@@ -98,7 +98,7 @@ namespace CgsGraphics
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpTextureTypeInfo->mTextureResource.GetPhysicalMemoryResource()",
-                                       lpcFile, 566);
+                                       CGS_ASSERT_LOCATION(lpcFile, 566));
             CgsDev::Assert::EndAssert();
         }
 
@@ -110,7 +110,7 @@ namespace CgsGraphics
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 "lpTextureTypeInfo->mpTexture->Lock(rw::graphics::core::Texture2D::LOCK_WRITE, 0, lLockedTexture)",
-                lpcFile, 579);
+                CGS_ASSERT_LOCATION(lpcFile, 579));
             CgsDev::Assert::EndAssert();
         }
         lpTextureTypeInfo->mpPixelData = static_cast<u32*>(lLockedTexture.mpPixelData);
@@ -254,7 +254,7 @@ namespace CgsGraphics
     float MovieVideoRenderer::GetPositionX()
     {
         CGS_ASSERT(false,
-            CgsDev::Assert::MessageAt("false", KAC_ARTIST_ASSERT_FILE, 112 /* ARTIST 0x827EAC44 */));
+            CGS_ASSERT_MESSAGE_AT("false", KAC_ARTIST_ASSERT_FILE, 112 /* ARTIST 0x827EAC44 */));
         return 0.0f;
     }
 
@@ -262,7 +262,7 @@ namespace CgsGraphics
     float MovieVideoRenderer::GetPositionZ()
     {
         CGS_ASSERT(false,
-            CgsDev::Assert::MessageAt("false", KAC_ARTIST_ASSERT_FILE, 114 /* ARTIST 0x827EACD4 */));
+            CGS_ASSERT_MESSAGE_AT("false", KAC_ARTIST_ASSERT_FILE, 114 /* ARTIST 0x827EACD4 */));
         return 0.0f;
     }
 
@@ -276,7 +276,7 @@ namespace CgsGraphics
     float MovieVideoRenderer::GetScaleX()
     {
         CGS_ASSERT(false,
-            CgsDev::Assert::MessageAt("false", KAC_ARTIST_ASSERT_FILE, 117 /* ARTIST 0x827EADBC */));
+            CGS_ASSERT_MESSAGE_AT("false", KAC_ARTIST_ASSERT_FILE, 117 /* ARTIST 0x827EADBC */));
         return 1.0f;
     }
 
@@ -284,7 +284,7 @@ namespace CgsGraphics
     float MovieVideoRenderer::GetScaleY()
     {
         CGS_ASSERT(false,
-            CgsDev::Assert::MessageAt("false", KAC_ARTIST_ASSERT_FILE, 118 /* ARTIST 0x827EAE04 */));
+            CGS_ASSERT_MESSAGE_AT("false", KAC_ARTIST_ASSERT_FILE, 118 /* ARTIST 0x827EAE04 */));
         return 1.0f;
     }
 
@@ -295,7 +295,7 @@ namespace CgsGraphics
         if (lfPositionX != 0.0f)
         {
             CGS_ASSERT(false,
-                CgsDev::Assert::MessageAt("false", KAC_ARTIST_ASSERT_FILE, 109 /* ARTIST 0x827EAB64 */));
+                CGS_ASSERT_MESSAGE_AT("false", KAC_ARTIST_ASSERT_FILE, 109 /* ARTIST 0x827EAB64 */));
         }
     }
 
@@ -303,28 +303,28 @@ namespace CgsGraphics
     void MovieVideoRenderer::SetPositionY(float lfPositionY)
     {
         CGS_ASSERT(lfPositionY == 0.0f,
-            CgsDev::Assert::MessageAt("false", KAC_ARTIST_ASSERT_FILE, 110 /* ARTIST 0x827EABB4 */));
+            CGS_ASSERT_MESSAGE_AT("false", KAC_ARTIST_ASSERT_FILE, 110 /* ARTIST 0x827EABB4 */));
     }
 
     // @ 0x827EABE0. Default position Z is 0.0f (flt_82001CC0); any other value asserts.
     void MovieVideoRenderer::SetPositionZ(float lfPositionZ)
     {
         CGS_ASSERT(lfPositionZ == 0.0f,
-            CgsDev::Assert::MessageAt("false", KAC_ARTIST_ASSERT_FILE, 111 /* ARTIST 0x827EAC04 */));
+            CGS_ASSERT_MESSAGE_AT("false", KAC_ARTIST_ASSERT_FILE, 111 /* ARTIST 0x827EAC04 */));
     }
 
     // @ 0x827EAD08. Default X scale is 1.0f (flt_82001C98); any other value asserts.
     void MovieVideoRenderer::SetScaleX(float lfScaleX)
     {
         CGS_ASSERT(lfScaleX == 1.0f,
-            CgsDev::Assert::MessageAt("false", KAC_ARTIST_ASSERT_FILE, 115 /* ARTIST 0x827EAD2C */));
+            CGS_ASSERT_MESSAGE_AT("false", KAC_ARTIST_ASSERT_FILE, 115 /* ARTIST 0x827EAD2C */));
     }
 
     // @ 0x827EAD58. Default Y scale is 1.0f (flt_82001C98); any other value asserts.
     void MovieVideoRenderer::SetScaleY(float lfScaleY)
     {
         CGS_ASSERT(lfScaleY == 1.0f,
-            CgsDev::Assert::MessageAt("false", KAC_ARTIST_ASSERT_FILE, 116 /* ARTIST 0x827EAD7C */));
+            CGS_ASSERT_MESSAGE_AT("false", KAC_ARTIST_ASSERT_FILE, 116 /* ARTIST 0x827EAD7C */));
     }
 
     // MovieVideoRenderer::'vector deleting destructor' @ 0x827EF3A0. The X360 emits the standard

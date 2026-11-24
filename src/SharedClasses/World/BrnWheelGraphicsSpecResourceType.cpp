@@ -49,7 +49,7 @@ void GraphicsSpecResourceType::FixUp(void* lpResource, const rw::Resource& lrRes
 
     const GraphicsSpec* lpGraphicsSpec = static_cast<const GraphicsSpec*>(lpResource);
 
-    CGS_ASSERT(lpGraphicsSpec->muVersion == KU_WHEEL_GRAPHICS_SPEC_VERSION, CgsDev::Assert::StreamMessageAt("Incorrect version for wheel Graphics Spec.  Get latest code/tools and rebuild data.  If that doesn't work, grab Keef! \n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../../SharedClasses/World/BrnWheelGraphicsSpecResourceType.cpp", 205));
+    CGS_ASSERT(lpGraphicsSpec->muVersion == KU_WHEEL_GRAPHICS_SPEC_VERSION, CGS_ASSERT_STREAM_MESSAGE_AT("Incorrect version for wheel Graphics Spec.  Get latest code/tools and rebuild data.  If that doesn't work, grab Keef! \n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../../SharedClasses/World/BrnWheelGraphicsSpecResourceType.cpp", 205));
 
 }
 

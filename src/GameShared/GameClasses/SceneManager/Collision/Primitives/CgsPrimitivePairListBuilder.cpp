@@ -50,9 +50,9 @@ namespace CgsCollision
 
         u8* lpMemory = static_cast<u8*>(lpMalloc->Malloc(liRequiredMemory));
         CGS_ASSERT(lpMemory != 0,
-            CgsDev::Assert::MessageAt("lpMemory", KAC_ARTIST_ASSERT_FILE, 111 /* ARTIST 0x82814394 */));
+            CGS_ASSERT_MESSAGE_AT("lpMemory", KAC_ARTIST_ASSERT_FILE, 111 /* ARTIST 0x82814394 */));
         CGS_ASSERT(lpMalloc->GetAlignment() >= 16,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpMalloc->GetAlignment() >= 16", KAC_ARTIST_ASSERT_FILE, 112 /* ARTIST 0x828143BC */));
 
         mpaDataStream   = lpMemory;
@@ -75,9 +75,9 @@ namespace CgsCollision
     void* PrimitivePairListBuilder::AllocateMemory(s32 liBytes)
     {
         CGS_ASSERT(mpaDataStream != NULL,
-            CgsDev::Assert::MessageAt("mpaDataStream != NULL", KAC_ARTIST_ASSERT_FILE, 755 /* ARTIST 0x828120C8 */));
+            CGS_ASSERT_MESSAGE_AT("mpaDataStream != NULL", KAC_ARTIST_ASSERT_FILE, 755 /* ARTIST 0x828120C8 */));
         CGS_ASSERT(static_cast<s32>(mu16UsedData) + liBytes <= static_cast<s32>(mu16MaxDataSize),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "Trying to use too much memory",
                 KAC_ARTIST_ASSERT_FILE, 756 /* ARTIST 0x828120F8 */));
 

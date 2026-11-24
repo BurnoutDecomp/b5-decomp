@@ -431,8 +431,8 @@ namespace BrnGui
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert(
                     "Unexpected event in IntroHudState::Update",
-                    "..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnBootLegal.cpp",
-                    293);
+                    CGS_ASSERT_LOCATION("..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnBootLegal.cpp",
+                    293));
                 CgsDev::Assert::EndAssert();
                 break;
             }

@@ -50,7 +50,7 @@ namespace BrnGui
     // non-null (BrnGuiHudMessageDirector.h:174).
     void HudMessageDirector::SetController(const BrnResource::HudMessageController* lpController)
     {
-        CGS_ASSERT(lpController != 0, CgsDev::Assert::StreamMessageAt("Invalid controller passed in to HudMessageDirector::SetController", "..\\..\\..\\GameSource\\Gui/BrnGuiHudMessageDirector.h", 174));
+        CGS_ASSERT(lpController != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid controller passed in to HudMessageDirector::SetController", "..\\..\\..\\GameSource\\Gui/BrnGuiHudMessageDirector.h", 174));
 
         mpController = lpController;
     }
@@ -464,7 +464,7 @@ void HudMessageDirector::Construct(CgsGui::ModelModule* lpModelModule,
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("lpModelModule",
-            "..\\..\\..\\GameSource\\Gui/BrnGuiHudMessageDirector.cpp", 80);
+            CGS_ASSERT_LOCATION("..\\..\\..\\GameSource\\Gui/BrnGuiHudMessageDirector.cpp", 80));
         CgsDev::Assert::EndAssert();
     }
     CGS_ASSERT(lpGuiCache != 0, "lpGuiCache");         // cpp:81

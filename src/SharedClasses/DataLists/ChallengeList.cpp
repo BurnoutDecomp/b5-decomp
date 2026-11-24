@@ -166,7 +166,7 @@ void ChallengeList::AddListResource( CgsResource::ResourcePtr<ChallengeListResou
         lStream << "Not enough space for " << static_cast<s32>( luNumChallenges )
                 << " more challenges. Already have " << miCount << "\n";
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert( lacMessageBuffer, KAC_CHALLENGELIST_FILE, 798 );
+        CgsDev::Assert::FireAssert( lacMessageBuffer, CGS_ASSERT_LOCATION(KAC_CHALLENGELIST_FILE, 798) );
         CgsDev::Assert::EndAssert();
     }
 

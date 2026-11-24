@@ -86,8 +86,8 @@ namespace CgsDev
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 "only one bit must be set",
-                "..\\..\\..\\GameShared\\GameClasses\\Development/MessageSystem/DebugComponent/CgsDebugComponentMessageFilter.cpp",
-                186);
+                CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Development/MessageSystem/DebugComponent/CgsDebugComponentMessageFilter.cpp",
+                186));
             CgsDev::Assert::EndAssert();
         }
 

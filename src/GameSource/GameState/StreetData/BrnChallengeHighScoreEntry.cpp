@@ -2,7 +2,7 @@
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Containers/CgsFastBitArray.h"  // CgsContainers::FastBitArray<2> (UpdateEntry's out-param)
 #include "lobbyname.h"   // ::LobbyNameCmp (vendor/dirtysdk/include, an extern "C" declaration)
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\GameState/StreetData/BrnChallengeHighScoreEntry.cpp"
 // Reconstructed from the console build.
 //
 //   Construct -- base ChallengeData::Construct, then blank each score-type owner
@@ -27,7 +27,7 @@
 // is vendor/dirtysdk/src/lobbyname.cpp, and that .cpp is already mounted
 // (tools/build/build_game_exe.bat:113). The header is included above and the call below is
 // explicitly ::-qualified so no future namespace-scope declaration can shadow it again.
-
+#define CGS_ARTIST_BRNCHALLENGEDATA_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\streetdata\\BrnChallengeData.h"
 namespace BrnStreetData
 {
 
@@ -54,9 +54,9 @@ void ChallengeHighScoreEntry::Construct()
 void ChallengeHighScoreEntry::Copy(const ChallengeHighScoreEntry* lpData)
 {
     CGS_ASSERT(lpData != NULL,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lpData",
-            "..\\..\\..\\GameSource\\GameState/StreetData/BrnChallengeHighScoreEntry.cpp", 221 /* ARTIST 0x823176FC */));
+            CGS_ARTIST_FILE, 221 /* ARTIST 0x823176FC */));
 
     ChallengeData::Copy(lpData);
 
@@ -78,7 +78,7 @@ bool ChallengeHighScoreEntry::IsWholeChallengeOwnedBySamePlayer()
                           maPlayerNames[liScoreType + 1].macName) == 0)
     {
         ++liScoreType;
-        CGS_ASSERT(liScoreType <= E_SCORE_TYPE_COUNT, CgsDev::Assert::MessageAt("leEnumIndex <= E_SCORE_TYPE_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\streetdata\\BrnChallengeData.h", 56));
+        CGS_ASSERT(liScoreType <= E_SCORE_TYPE_COUNT, CGS_ASSERT_MESSAGE_AT("leEnumIndex <= E_SCORE_TYPE_COUNT", CGS_ARTIST_BRNCHALLENGEDATA_FILE, 56));
 
         if (liScoreType >= 1)
         {
@@ -123,7 +123,7 @@ void ChallengeHighScoreEntry::Construct(ChallengeData* lpData)
 bool ChallengeHighScoreEntry::UpdateEntry(const ChallengeHighScoreEntry* lpEntry,
                                           CgsContainers::FastBitArray<2>* lpUpdateScoresBitArray)
 {
-    CGS_ASSERT(lpEntry != NULL, CgsDev::Assert::MessageAt("lpEntry", "..\\..\\..\\GameSource\\GameState/StreetData/BrnChallengeHighScoreEntry.cpp", 105));
+    CGS_ASSERT(lpEntry != NULL, CGS_ASSERT_MESSAGE_AT("lpEntry", CGS_ARTIST_FILE, 105));
 
     if (lpUpdateScoresBitArray)
     {
@@ -165,10 +165,13 @@ bool ChallengeHighScoreEntry::UpdateEntry(const ChallengeHighScoreEntry* lpEntry
             }
         }
 
-        CGS_ASSERT(liScoreType + 1 <= E_SCORE_TYPE_COUNT, CgsDev::Assert::MessageAt("leEnumIndex <= E_SCORE_TYPE_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\streetdata\\BrnChallengeData.h", 56));
+        CGS_ASSERT(liScoreType + 1 <= E_SCORE_TYPE_COUNT, CGS_ASSERT_MESSAGE_AT("leEnumIndex <= E_SCORE_TYPE_COUNT", CGS_ARTIST_BRNCHALLENGEDATA_FILE, 56));
     }
 
     return lbUpdated;
 }
 
 } // namespace BrnStreetData
+
+#undef CGS_ARTIST_FILE
+#undef CGS_ARTIST_BRNCHALLENGEDATA_FILE

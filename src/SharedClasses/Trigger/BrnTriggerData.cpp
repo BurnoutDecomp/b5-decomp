@@ -27,7 +27,7 @@ const BrnTrigger::TriggerRegion*
 BrnTrigger::TriggerData::GetRegion( int liRegionIndex ) const
 {
     CGS_ASSERT( liRegionIndex < miRegionCount,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "liRegionIndex < miRegionCount", KAC_ARTIST_ASSERT_FILE, 624 /* ARTIST 0x8230E4C0 */));
     return mppRegions[liRegionIndex];
 }
@@ -38,13 +38,13 @@ const BrnTrigger::Landmark*
 BrnTrigger::TriggerData::GetLandmarkFromRegionIndex( int liRegionIndex ) const
 {
     CGS_ASSERT( liRegionIndex < miRegionCount,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "liRegionIndex < miRegionCount",
             KAC_ARTIST_ASSERT_FILE, 624 /* ARTIST 0x8231B678 */));
 
     const TriggerRegion* lpTriggerRegion = mppRegions[liRegionIndex];
     CGS_ASSERT( lpTriggerRegion->GetType() == TriggerRegion::E_TYPE_LANDMARK,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lpTriggerRegion->GetType() == TriggerRegion::E_TYPE_LANDMARK",
             KAC_ARTIST_ASSERT_FILE, 615 /* ARTIST 0x8231B6AC */));
 
@@ -56,7 +56,7 @@ const BrnTrigger::Killzone*
 BrnTrigger::TriggerData::GetKillzone( int liKillzoneIndex ) const
 {
     CGS_ASSERT( liKillzoneIndex < miKillzoneCount,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "liKillzoneIndex < miKillzoneCount", KAC_ARTIST_ASSERT_FILE, 533 /* ARTIST 0x82354850 */));
     return &mpKillzones[liKillzoneIndex];
 }
@@ -162,8 +162,8 @@ BrnTrigger::TriggerData::GetOnlineLandmark( int liLandmarkIndex ) const
                 << " out of " << miOnlineLandmarkCount << "\n";
         CgsDev::Assert::FireAssert(
             CgsDev::Assert::gpcMessageBuffer,
-            "..\\..\\..\\SharedClasses\\Trigger/BrnTriggerData.h",
-            425 );
+            CGS_ASSERT_LOCATION("..\\..\\..\\SharedClasses\\Trigger/BrnTriggerData.h",
+            425) );
         CgsDev::Assert::EndAssert();
     }
 
@@ -313,8 +313,8 @@ BrnTrigger::TriggerData::FixUp( uintptr_t luDelta )
                 << ", got: " << static_cast<s32>( miVersionNumber );
         CgsDev::Assert::FireAssert(
             CgsDev::Assert::gpcMessageBuffer,
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../../SharedClasses/Trigger/BrnTriggerData.cpp",
-            168 );
+            CGS_ASSERT_LOCATION("d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../../SharedClasses/Trigger/BrnTriggerData.cpp",
+            168) );
         CgsDev::Assert::EndAssert();
     }
 

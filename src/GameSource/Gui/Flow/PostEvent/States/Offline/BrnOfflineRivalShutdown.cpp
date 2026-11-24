@@ -41,7 +41,7 @@
 // E_EVENT_RIVAL_SHUTDOWN_DISPLAY_FINSHED -- PS3 147 -- through the GUI->game-state bridge).
 // ===================================================================================
 #include "GameSource/Gui/Flow/PostEvent/States/Offline/BrnOfflineRivalShutdown.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/PostEvent/States/Offline/BrnOfflineRivalShutdown.cpp"
 #include <cstring>                                                        // strcmp / memcpy
 
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                        // CGS_ASSERT
@@ -170,7 +170,7 @@ const s32 OfflineRivalShutdown::miNumEventsObserved = 5;
 // run the base Construct, then zero the state word (+0x38) and the cache pointer (+0x40).
 void OfflineRivalShutdown::Construct(CgsID liId, CgsFsm::ScriptedFsm* lpFsm)
 {
-    CGS_ASSERT(lpFsm != 0, CgsDev::Assert::StreamMessageAt("Invalid ScriptedFsm ptr", "..\\..\\..\\GameSource\\Gui/Flow/PostEvent/States/Offline/BrnOfflineRivalShutdown.cpp", 88));   // cpp:88
+    CGS_ASSERT(lpFsm != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid ScriptedFsm ptr", CGS_ARTIST_FILE, 88));   // cpp:88
 
     CgsGui::State::Construct(liId, lpFsm);
 
@@ -370,9 +370,9 @@ void OfflineRivalShutdown::HandleIncomingEvents()
 void OfflineRivalShutdown::AppendExpectedComponents()
 {
     CGS_ASSERT(mpGuiCache,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "mpGuiCache",
-            "..\\..\\..\\GameSource\\Gui/Flow/PostEvent/States/Offline/BrnOfflineRivalShutdown.cpp", 374 /* ARTIST 0x824B96C8 */));   // cpp:374
+            CGS_ARTIST_FILE, 374 /* ARTIST 0x824B96C8 */));   // cpp:374
 
     mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mScreenAnim.GetName());
     mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mManufacturerIcon.GetName());
@@ -491,9 +491,9 @@ void OfflineRivalShutdown::HandleAptTriggers(const CgsGui::GuiEventAptTriggerPay
 void OfflineRivalShutdown::HandleControllerInput(const CgsModule::Event* lpEvent, s32 liEventType)
 {
     CGS_ASSERT(lpEvent,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lpEvent",
-            "..\\..\\..\\GameSource\\Gui/Flow/PostEvent/States/Offline/BrnOfflineRivalShutdown.cpp", 527 /* ARTIST 0x824BD128 */));   // cpp:527
+            CGS_ARTIST_FILE, 527 /* ARTIST 0x824BD128 */));   // cpp:527
 
     if (liEventType == KI_EVENT_CONTROLLER_INPUT_PRESSED)
     {
@@ -533,3 +533,5 @@ void OfflineRivalShutdown::HandleControllerInputPressed(
     }
 }
 }
+
+#undef CGS_ARTIST_FILE

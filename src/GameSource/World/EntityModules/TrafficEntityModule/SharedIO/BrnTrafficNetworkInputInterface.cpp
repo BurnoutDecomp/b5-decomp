@@ -26,11 +26,11 @@ namespace BrnTrafficIO
         EActiveRaceCarIndex leActiveRaceCarIndex, u32 luNewActiveHull, u32 luUpdateFrame)
     {
         CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-                   CgsDev::Assert::MessageAt("leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 218));
+                   CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 218));
         CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   CgsDev::Assert::MessageAt("leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 219));
+                   CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 219));
         CGS_ASSERT(luNewActiveHull < BrnTraffic::KU_INVALID_HULL,
-                   CgsDev::Assert::MessageAt("luNewActiveHull < BrnTraffic::KU_INVALID_HULL", KAC_ARTIST_ASSERT_FILE, 220));
+                   CGS_ASSERT_MESSAGE_AT("luNewActiveHull < BrnTraffic::KU_INVALID_HULL", KAC_ARTIST_ASSERT_FILE, 220));
 
         ActivateHullEvent lEvent;
         lEvent.meActiveRaceCarIndex = leActiveRaceCarIndex;

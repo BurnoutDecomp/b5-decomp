@@ -4,9 +4,9 @@
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/CgsModelModule.h"
 // Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/CgsModelModule.cpp".
-
+#define CGS_ARTIST_CGSMODELMODULE_FILE "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/CgsModelModule.cpp"
 namespace CgsGui
 {
     // ARTIST827E4F10 constructs the real base and the two embedded owners. C++
@@ -59,7 +59,7 @@ namespace CgsGui
             return true;
         default:
             CGS_ASSERT(false,
-                CgsDev::Assert::MessageAt(
+                CGS_ASSERT_MESSAGE_AT(
                     "Unknown prepare stage", __FILE__, 145 /* ARTIST 0x828478F8 */));
             return false;
         }
@@ -77,7 +77,7 @@ namespace CgsGui
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("leEnumIndex <= ModelModule::E_RELEASE_DONE",
-                    "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/CgsModelModule.h", 229);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 229));
                 CgsDev::Assert::EndAssert();
             }
             // C++03 native compiler: proceed into the next release stage.
@@ -89,7 +89,7 @@ namespace CgsGui
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("leEnumIndex <= ModelModule::E_RELEASE_DONE",
-                    "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/CgsModelModule.h", 229);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 229));
                 CgsDev::Assert::EndAssert();
             }
             // C++03 native compiler: proceed into the next release stage.
@@ -101,7 +101,7 @@ namespace CgsGui
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("leEnumIndex <= ModelModule::E_RELEASE_DONE",
-                    "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/CgsModelModule.h", 229);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 229));
                 CgsDev::Assert::EndAssert();
             }
             // C++03 native compiler: proceed into the next release stage.
@@ -113,7 +113,7 @@ namespace CgsGui
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("leEnumIndex <= ModelModule::E_RELEASE_DONE",
-                    "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/CgsModelModule.h", 229);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 229));
                 CgsDev::Assert::EndAssert();
             }
             // C++03 native compiler: proceed into the next release stage.
@@ -205,7 +205,7 @@ namespace CgsGui
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpEventObserver != NULL",
-                "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/CgsModelModule.cpp", 518);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_CGSMODELMODULE_FILE, 518));
             CgsDev::Assert::EndAssert();
         }
         mEventInterpreter.RegisterForEvent(lpEventObserver, liEventType);
@@ -222,7 +222,7 @@ namespace CgsGui
                                        CgsDev::Assert::giMessageBufferSize);
             lMessage << "Not locked for input";
             CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
-                "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/CgsModelModule.cpp", 373);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_CGSMODELMODULE_FILE, 373));
             CgsDev::Assert::EndAssert();
         }
         lpInput->AddGuiEvents(lpEvents);
@@ -240,7 +240,7 @@ namespace CgsGui
                                        CgsDev::Assert::giMessageBufferSize);
             lMessage << "Not locked for input";
             CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
-                "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/CgsModelModule.cpp", 392);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_CGSMODELMODULE_FILE, 392));
             CgsDev::Assert::EndAssert();
         }
         lpInput->AddGuiEvents(lpEvents);
@@ -253,7 +253,7 @@ namespace CgsGui
     {
         const ModelIO::InputBuffer::GuiEventInputQueue* lpInputEventQueue = lpInput->GetEventQueue();
         CGS_ASSERT(lpInputEventQueue != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpInputEventQueue != NULL", __FILE__, 415 /* ARTIST 0x8285E0D4 */));
         if (lpInputEventQueue->CgsModule::VariableEventQueue<32768, 16>::GetLength() > 0)
             lpInterpreterInput->AddGuiEvents(*lpInputEventQueue);
@@ -297,3 +297,6 @@ namespace CgsGui
         lpOutput->AddLoadNotifications(*lpResourceOutput->GetLoadNotifications());
     }
 }
+
+#undef CGS_ARTIST_FILE
+#undef CGS_ARTIST_CGSMODELMODULE_FILE

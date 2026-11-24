@@ -51,7 +51,7 @@ const char*
 GenericRegion::GetTypeName() const
 {
     CGS_ASSERT( meType < E_TYPE_COUNT,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "meType < E_TYPE_COUNT",
             "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\trigger\\BrnGenericRegion.h", 231 /* ARTIST 0x82354788 */));
     return KAPC_GENERIC_REGION_TYPE_STRINGS[meType];

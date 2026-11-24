@@ -93,7 +93,7 @@ namespace
         if (!condition)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(expression, kDispatcherSource, line);
+            CgsDev::Assert::FireAssert(expression, CGS_ASSERT_LOCATION(kDispatcherSource, line));
             CgsDev::Assert::EndAssert();
         }
     }
@@ -554,7 +554,7 @@ namespace
         CgsDev::StrStream stream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
         stream << "Failed to add mesh to dispatch bin. Mesh=" << const_cast<RenderableMesh*>(mesh)
                << pass << " technique=" << technique;
-        CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, kDispatcherSource, line);
+        CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, CGS_ASSERT_LOCATION(kDispatcherSource, line));
         CgsDev::Assert::EndAssert();
     }
 

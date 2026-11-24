@@ -66,7 +66,7 @@ namespace Props
     // check on x/y/z) then stores the position at this+0.
     void PropPartInstance::SetPosition(Vector3 lPosition)
     {
-        CGS_ASSERT(rw::math::vpu::IsValid(lPosition), CgsDev::Assert::MessageAt("RwMath::IsValid( lPosition )", KAC_BRN_PROP_PART_INSTANCE_ASSERT_FILE, 191));
+        CGS_ASSERT(rw::math::vpu::IsValid(lPosition), CGS_ASSERT_MESSAGE_AT("RwMath::IsValid( lPosition )", KAC_BRN_PROP_PART_INSTANCE_ASSERT_FILE, 191));
         mPos = lPosition;
     }
 
@@ -74,7 +74,7 @@ namespace Props
     // check on x/y/z) then stores the linear velocity at this+0x10.
     void PropPartInstance::SetLinearVelocity(Vector3 lLinearVelocity)
     {
-        CGS_ASSERT(rw::math::vpu::IsValid(lLinearVelocity), CgsDev::Assert::MessageAt("RwMath::IsValid( lLinearVelocity )", KAC_BRN_PROP_PART_INSTANCE_ASSERT_FILE, 205));
+        CGS_ASSERT(rw::math::vpu::IsValid(lLinearVelocity), CGS_ASSERT_MESSAGE_AT("RwMath::IsValid( lLinearVelocity )", KAC_BRN_PROP_PART_INSTANCE_ASSERT_FILE, 205));
         mLinearVelocity = lLinearVelocity;
     }
 }

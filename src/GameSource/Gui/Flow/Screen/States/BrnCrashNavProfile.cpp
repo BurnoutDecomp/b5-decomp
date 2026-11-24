@@ -27,7 +27,7 @@
 // task, row 1 (Load) its Load task, and any other highlight runs nothing -- reproduced
 // exactly, because the recovered body has no third arm.
 // ===================================================================================
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavProfile.cpp"
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavProfile.h"
 
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                        // CGS_ASSERT
@@ -123,9 +123,9 @@ namespace BrnGui
                                     ProfileManager& lrProfileManager)
     {
         CGS_ASSERT(lpFsm != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpFsm",
-                "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavProfile.cpp", 85 /* ARTIST 0x824B7AC4 */));
+                CGS_ARTIST_FILE, 85 /* ARTIST 0x824B7AC4 */));
 
         CgsGui::State::Construct(liId, lpFsm);
         mpProfileManager = &lrProfileManager;
@@ -199,7 +199,7 @@ namespace BrnGui
     // inventing behaviour the build does not have.
     void CrashNavProfile::HandleTriggers(const CgsModule::Event* lpAptTrigger)
     {
-        CGS_ASSERT(lpAptTrigger != 0, CgsDev::Assert::StreamMessageAt("Invalid event in CrashNavMapMain::HandleTriggers", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavProfile.cpp", 395));
+        CGS_ASSERT(lpAptTrigger != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event in CrashNavMapMain::HandleTriggers", CGS_ARTIST_FILE, 395));
     }
 
     // ---- HandleControllerInput -----------------------------------------------------
@@ -382,3 +382,5 @@ namespace BrnGui
         mProfileMenuComponent.Update();
     }
 }
+
+#undef CGS_ARTIST_FILE

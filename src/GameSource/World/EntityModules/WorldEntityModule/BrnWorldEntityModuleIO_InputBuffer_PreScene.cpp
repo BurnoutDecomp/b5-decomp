@@ -11,7 +11,7 @@
 #include "GameSource/World/EntityModules/WorldEntityModule/BrnWorldEntityModuleIO.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // the header-baked lock asserts
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\worldentitymodule\\BrnWorldEntityModuleIO.h"
 #include <cstddef>   // offsetof
 #include <cstring>   // memcpy (the X360 XMemCpy block copy)
 
@@ -30,14 +30,14 @@ namespace WorldEntityIO
     const InputBuffer_PreScene::ActiveRaceCarInterface*
     InputBuffer_PreScene::GetActiveRaceCarInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\worldentitymodule\\BrnWorldEntityModuleIO.h", 96));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 96));
         return &mActiveRaceCarInterface;
     }
 
     // X360 0x822BA2D0 (R, :100) -- read-lock; return &mRequestInterface (this + 10496).
     const RequestInterface* InputBuffer_PreScene::GetRequestInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\worldentitymodule\\BrnWorldEntityModuleIO.h", 100));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 100));
         return &mRequestInterface;
     }
 
@@ -45,7 +45,7 @@ namespace WorldEntityIO
     // (RequestInterface::Append OR-merges the two collision-world request flags).
     void InputBuffer_PreScene::AppendRequestInterface(const RequestInterface& lrOther)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\worldentitymodule\\BrnWorldEntityModuleIO.h", 99));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 99));
         mRequestInterface.Append(lrOther);
     }
 
@@ -54,7 +54,7 @@ namespace WorldEntityIO
     // 10480-byte block copy.
     void InputBuffer_PreScene::SetActiveRaceCarInterface(const ActiveRaceCarInterface& lrInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\worldentitymodule\\BrnWorldEntityModuleIO.h", 97));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 97));
         mActiveRaceCarInterface = lrInterface;   // header-inline operator=: XMemCpy (0x827A2878)
     }
 }
@@ -67,3 +67,5 @@ void BrnWorld::WorldEntityIO::InputBuffer_PreScene::Destruct()
 {
     CgsModule::IOBuffer::Destruct();
 }
+
+#undef CGS_ARTIST_FILE

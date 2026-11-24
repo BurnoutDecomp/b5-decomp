@@ -24,7 +24,7 @@
 // PackOrUnpackFloat as (fMin, fMax, resolution) [asm f1=flt_8307A2B0, f2=flt_82F335D4,
 // f3=flt_82F335D8]. Their exact rodata float values were NOT recoverable in scope --
 // left as named TU constants with placeholder 0.0f; CONSOLIDATOR: pin from rodata.
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\Messages\\CgsPingMessage.cpp"
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsPingMessage.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
@@ -63,7 +63,7 @@ namespace CgsNetwork
             mfPingTime = lfPingTime;                                 // stfs @ +0x20
             Message::PrepareForSend(KI_E_MESSAGE_TYPE_PING, lu16Frame);
             CGS_ASSERT(!IsReliable(),
-                CgsDev::Assert::MessageAt("!IsReliable()", __FILE__, 88 /* ARTIST 0x82882684 */));              // vtable slot0
+                CGS_ASSERT_MESSAGE_AT("!IsReliable()", __FILE__, 88 /* ARTIST 0x82882684 */));              // vtable slot0
         }
     }
 
@@ -77,9 +77,9 @@ namespace CgsNetwork
         {
             *lpfPingTime = mfPingTime;                 // lfs +0x20 -> stfs 0(lpfPingTime)
             mx8Flags &= ~KX8_FLAGS_VALID;              // clrrwi bit0, stb +0x19
-            CGS_ASSERT(!IsMessageValid(), CgsDev::Assert::MessageAt(
+            CGS_ASSERT(!IsMessageValid(), CGS_ASSERT_MESSAGE_AT(
                 "!IsMessageValid()",
-                "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\Messages\\CgsPingMessage.cpp", 116 /* ARTIST 0x8288EBBC */));
+                CGS_ARTIST_FILE, 116 /* ARTIST 0x8288EBBC */));
             return true;
         }
         return false;
@@ -121,7 +121,7 @@ namespace CgsNetwork
             mfPingTime = lfPingTime;                                 // stfs @ +0x20
             Message::PrepareForSend(KI_E_MESSAGE_TYPE_PING_REPLY, lu16Frame);
             CGS_ASSERT(!IsReliable(),
-                CgsDev::Assert::MessageAt("!IsReliable()", __FILE__, 253 /* ARTIST 0x8288271C */));              // vtable slot0
+                CGS_ASSERT_MESSAGE_AT("!IsReliable()", __FILE__, 253 /* ARTIST 0x8288271C */));              // vtable slot0
         }
     }
 
@@ -135,11 +135,13 @@ namespace CgsNetwork
         {
             *lpfPingTime = mfPingTime;                 // lfs +0x20 -> stfs 0(lpfPingTime)
             mx8Flags &= ~KX8_FLAGS_VALID;              // clrrwi bit0, stb +0x19
-            CGS_ASSERT(!IsMessageValid(), CgsDev::Assert::MessageAt(
+            CGS_ASSERT(!IsMessageValid(), CGS_ASSERT_MESSAGE_AT(
                 "!IsMessageValid()",
-                "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\Messages\\CgsPingMessage.cpp", 281 /* ARTIST 0x8288EC64 */));
+                CGS_ARTIST_FILE, 281 /* ARTIST 0x8288EC64 */));
             return true;
         }
         return false;
     }
 } // namespace CgsNetwork
+
+#undef CGS_ARTIST_FILE

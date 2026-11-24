@@ -20,7 +20,7 @@ namespace CgsDev
         if (!mpUI)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("mpUI", "..\\..\\..\\GameShared\\GameClasses\\Development/DebugSystem/Core/CgsDebugManager.cpp", 1201);
+            CgsDev::Assert::FireAssert("mpUI", CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Development/DebugSystem/Core/CgsDebugManager.cpp", 1201));
             CgsDev::Assert::EndAssert();
         }
         mpUI->GetFunctionManager().CallFunction(lpcPath);

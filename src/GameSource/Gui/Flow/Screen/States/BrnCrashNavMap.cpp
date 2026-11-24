@@ -71,7 +71,7 @@
 // rodata tables and the two `vperm` masks. X360 offsets appear only in comments; the host
 // layout is name-based.
 // ===================================================================================
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavMap.cpp"
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavMap.h"
 #include <cstdlib>   // getenv ([cnav-diag])
 
@@ -697,7 +697,7 @@ namespace BrnGui
                 CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
                 lStrStream << "Unknown selection in panel (" << static_cast<s32>(lePanelType)
                            << ") \n";
-                CgsDev::Assert::FireAssert(lacMessage, KAC_ASSERT_FILE, 1720);   // li r5, 0x6B8
+                CgsDev::Assert::FireAssert(lacMessage, CGS_ASSERT_LOCATION(KAC_ASSERT_FILE, 1720));   // li r5, 0x6B8
                 CgsDev::Assert::EndAssert();
             }
             break;
@@ -819,8 +819,8 @@ namespace BrnGui
                     << "while updating drivethrus\n";
 
             CgsDev::Assert::FireAssert(lacMessageBuffer,
-                                       "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavMap.cpp",
-                                       2000);   // `li r5, 0x7D0`
+                                       CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                                       2000));   // `li r5, 0x7D0`
             CgsDev::Assert::EndAssert();
         }
     }
@@ -907,8 +907,8 @@ namespace BrnGui
                         << "while updating events\n";
 
                 CgsDev::Assert::FireAssert(lacMessageBuffer,
-                                           "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavMap.cpp",
-                                           2091);   // `li r5, 0x82B`
+                                           CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                                           2091));   // `li r5, 0x82B`
                 CgsDev::Assert::EndAssert();
             }
             break;
@@ -999,8 +999,8 @@ namespace BrnGui
                         << "while updating rivals\n";
 
                 CgsDev::Assert::FireAssert(lacMessageBuffer,
-                                           "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavMap.cpp",
-                                           2047);   // `li r5, 0x7FF`
+                                           CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                                           2047));   // `li r5, 0x7FF`
                 CgsDev::Assert::EndAssert();
             }
             break;
@@ -1089,9 +1089,9 @@ namespace BrnGui
         // cpp:537 -- non-fatal on the X360; the manager is dereferenced either way,
         // exactly as the console does.
         CGS_ASSERT(mpIconManager != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpIconManager",
-                "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavMap.cpp", 537 /* ARTIST 0x824B6820 */));
+                CGS_ARTIST_FILE, 537 /* ARTIST 0x824B6820 */));
 
         if ((CgsDev::Message::gxMessageFilterFlags & KX_MESSAGE_FILTER_BIT) != 0)
         {
@@ -1166,7 +1166,7 @@ namespace BrnGui
             char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
             CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
             lStrStream << "Invalid cache in GenericHudState::Update";
-            CgsDev::Assert::FireAssert(lacMessage, KAC_ASSERT_FILE, 1408);
+            CgsDev::Assert::FireAssert(lacMessage, CGS_ASSERT_LOCATION(KAC_ASSERT_FILE, 1408));
             CgsDev::Assert::EndAssert();
         }
 
@@ -1241,9 +1241,9 @@ namespace BrnGui
     {
         // cpp:556 -- non-fatal on the X360 (the manager is dereferenced regardless).
         CGS_ASSERT(mpIconManager != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpIconManager",
-                "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavMap.cpp", 556 /* ARTIST 0x824D8C68 */));
+                CGS_ARTIST_FILE, 556 /* ARTIST 0x824D8C68 */));
 
         mpIconManager->SetupComponent();
         mCrashNavPanel.SetupComponent();
@@ -2016,7 +2016,7 @@ namespace BrnGui
             // leaves BOTH locals at their COUNT sentinel, which is why the X360 emits the
             // two asserts below unconditionally on this path.
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("Unknown screen type!\n", KPC_ASSERT_FILE, 1010);   // li r5, 0x3F2
+            CgsDev::Assert::FireAssert("Unknown screen type!\n", CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 1010));   // li r5, 0x3F2
             CgsDev::Assert::EndAssert();
             break;
         }
@@ -2025,7 +2025,7 @@ namespace BrnGui
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("E_VISIBLE_ANIMATION_STATES_COUNT != leTitleButtonsState",
-                                       KPC_ASSERT_FILE, 1015);   // li r5, 0x3F7
+                                       CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 1015));   // li r5, 0x3F7
             CgsDev::Assert::EndAssert();
         }
 
@@ -2033,7 +2033,7 @@ namespace BrnGui
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("E_BUTTON_PROMPT_ANIMATION_STATES_COUNT != leNavigationButtonsState",
-                                       KPC_ASSERT_FILE, 1016);   // li r5, 0x3F8, loc_824B6928
+                                       CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 1016));   // li r5, 0x3F8, loc_824B6928
             CgsDev::Assert::EndAssert();
         }
 
@@ -2154,7 +2154,7 @@ namespace BrnGui
         if (lpEvent == NULL)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpRoadRule", KPC_ASSERT_FILE, 1747);   // li r5, 0x6D3
+            CgsDev::Assert::FireAssert("lpRoadRule", CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 1747));   // li r5, 0x6D3
             CgsDev::Assert::EndAssert();
         }
 
@@ -2282,7 +2282,7 @@ namespace BrnGui
                 CgsDev::StrStream lStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
                 lStream << "Name for the first player not set";
 
-                CgsDev::Assert::FireAssert(lacMessageBuffer, KPC_ASSERT_FILE, 1861);   // li r5, 0x745
+                CgsDev::Assert::FireAssert(lacMessageBuffer, CGS_ASSERT_LOCATION(KPC_ASSERT_FILE, 1861));   // li r5, 0x745
                 CgsDev::Assert::EndAssert();
             }
 
@@ -2561,7 +2561,7 @@ namespace BrnGui
                 lStrStream << "Unhandled cursor mode "
                            << static_cast<s32>(meCursorMode)
                            << " in CrashNavMap::UpdateEvent\n";
-                CgsDev::Assert::FireAssert(lacMessage, KAC_ASSERT_FILE, 1959);
+                CgsDev::Assert::FireAssert(lacMessage, CGS_ASSERT_LOCATION(KAC_ASSERT_FILE, 1959));
                 CgsDev::Assert::EndAssert();
                 break;
             }
@@ -3265,7 +3265,7 @@ namespace BrnGui
                         lStrStream << "Invalid cache in GenericHudState::Update";
                         CgsDev::Assert::BeginAssert();
                         CgsDev::Assert::FireAssert(lStrStream.GetBuffer(),
-                                                   KAC_ASSERT_FILE, 330);
+                                                   CGS_ASSERT_LOCATION(KAC_ASSERT_FILE, 330));
                         CgsDev::Assert::EndAssert();
                     }
 
@@ -3696,7 +3696,7 @@ namespace BrnGui
                            << static_cast<s32>(meCursorMode)
                            << " in CrashNavMap::UpdateIconManager()\n";
                 CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), KAC_ASSERT_FILE, 1374);
+                CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), CGS_ASSERT_LOCATION(KAC_ASSERT_FILE, 1374));
                 CgsDev::Assert::EndAssert();
             }
             break;
@@ -3718,3 +3718,5 @@ namespace BrnGui
 // -----------------------------------------------------------------------------------
 
 }
+
+#undef CGS_ARTIST_FILE

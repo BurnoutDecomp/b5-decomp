@@ -57,7 +57,7 @@ const RouteNode* Route::GetNode(s32 liNodeIndex) const
         lStream << "Error accesing route node: index = " << liNodeIndex
                 << ", node count = " << miNodeCount << "\n";
         CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-            "..\\..\\..\\GameSource\\World/AI/Route/BrnRoute.h", 325);
+            CGS_ASSERT_LOCATION("..\\..\\..\\GameSource\\World/AI/Route/BrnRoute.h", 325));
         CgsDev::Assert::EndAssert();
     }
     return &maNodes[liNodeIndex];
@@ -139,7 +139,7 @@ bool Route::Prepare(s32 liDefaultStartNode)
                     << " in a route with " << liNodeCount << " sections\n";
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(lacMessageBuffer,
-                                       "..\\..\\..\\GameSource\\World/AI/Route/BrnRoute.cpp", 89);
+                                       CGS_ASSERT_LOCATION("..\\..\\..\\GameSource\\World/AI/Route/BrnRoute.cpp", 89));
             CgsDev::Assert::EndAssert();
         }
     }

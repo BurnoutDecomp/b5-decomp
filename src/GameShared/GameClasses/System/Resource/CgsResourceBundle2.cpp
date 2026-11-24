@@ -24,7 +24,7 @@ namespace CgsResource
     u32 BundleV2::ResourceEntry::GetDiskSize(u32 luMemType) const   // 0x828D62F8
     {
         CGS_ASSERT(luMemType < BundleV2::E_MEMTYPE_NUMTYPES,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "luMemType < E_MEMTYPE_NUMTYPES",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceBundle2.h", 294 /* ARTIST 0x828D6324 */));
         return mauSizeAndAlignmentOnDisk[luMemType] & BundleV2::KU_SIZE_MASK;

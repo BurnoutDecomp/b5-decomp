@@ -4,7 +4,7 @@
 // CgsInputPads.h (offsetof static_asserts).
 //
 // Source path: d:\p4\b5_main\burnout\main\code\gameshared\gameclasses\system\input\CgsInputPads.cpp
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\input\\CgsInputPads.cpp"
 #include "GameShared/GameClasses/System/Input/CgsInputPads.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/System/CgsHardwareInit.h"
@@ -31,9 +31,9 @@ namespace CgsInput
     DeviceX360Pad* InputPads::GetDebugGamePad(s32 liPortIndex)
     {
         CGS_ASSERT(liPortIndex >= 0,
-            CgsDev::Assert::MessageAt("liPortIndex >= 0", __FILE__, 251 /* ARTIST 0x823A5F64 */));                          // h:251
+            CGS_ASSERT_MESSAGE_AT("liPortIndex >= 0", __FILE__, 251 /* ARTIST 0x823A5F64 */));                          // h:251
         CGS_ASSERT(liPortIndex < (s32)KU_NUMBER_OF_PADS,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "liPortIndex < (int32_t)KU_NUMBER_OF_PADS", __FILE__, 252 /* ARTIST 0x823A5F88 */)); // h:252
         return &maPads[liPortIndex];
     }
@@ -215,13 +215,13 @@ namespace CgsInput
                 if (maiPortToPlayer[liPort] != liPlayer)
                 {
                     CgsDev::Assert::BeginAssert();
-                    CgsDev::Assert::FireAssert("maPorts[liPortIndex].GetPlayerID() == liPlayerIndex", lpcAssertFile, 274);
+                    CgsDev::Assert::FireAssert("maPorts[liPortIndex].GetPlayerID() == liPlayerIndex", CGS_ASSERT_LOCATION(lpcAssertFile, 274));
                     CgsDev::Assert::EndAssert();
                 }
                 if (!maPlayers[liPlayer].mbBound)
                 {
                     CgsDev::Assert::BeginAssert();
-                    CgsDev::Assert::FireAssert("maPlayers[liPlayerIndex].IsConnected()", lpcAssertFile, 275);
+                    CgsDev::Assert::FireAssert("maPlayers[liPlayerIndex].IsConnected()", CGS_ASSERT_LOCATION(lpcAssertFile, 275));
                     CgsDev::Assert::EndAssert();
                 }
                 lpPadInfo->meControllerState = lrPad.GetDeviceType();
@@ -235,7 +235,7 @@ namespace CgsInput
                     if (maiPortToPlayer[liPort] == -1)
                     {
                         CgsDev::Assert::BeginAssert();
-                        CgsDev::Assert::FireAssert("maPorts[liPortIndex].IsBound()", lpcAssertFile, 288);
+                        CgsDev::Assert::FireAssert("maPorts[liPortIndex].IsBound()", CGS_ASSERT_LOCATION(lpcAssertFile, 288));
                         CgsDev::Assert::EndAssert();
                     }
                     InputIO::BaseInputEvent lEvent;
@@ -513,7 +513,7 @@ namespace CgsInput
             lStrStream << "Player out of bounds. 0 <= " << liPlayer << " < " << static_cast<s32>(KU_NUMBER_OF_PADS) << "\n";
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(lacMessage,
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\input\\CgsInputPads.cpp", 432);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 432));
             CgsDev::Assert::EndAssert();
             return E_BINDRESULTINVALIDPLAYER;
         }
@@ -524,7 +524,7 @@ namespace CgsInput
             lStrStream << "Port out of bounds. 0 <= " << liPort << " < " << static_cast<s32>(KU_NUMBER_OF_PADS) << "\n";
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(lacMessage,
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\input\\CgsInputPads.cpp", 437);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 437));
             CgsDev::Assert::EndAssert();
             return E_BINDRESULTINVALIDPORT;
         }
@@ -567,7 +567,7 @@ namespace CgsInput
             lStrStream << "Player out of bounds. 0 <= " << liPlayer << " < " << static_cast<s32>(KU_NUMBER_OF_PADS) << "\n";
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(lacMessage,
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\input\\CgsInputPads.cpp", 479);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 479));
             CgsDev::Assert::EndAssert();
             return E_UNBINDRESULTINVALIDPLAYER;
         }
@@ -780,3 +780,5 @@ namespace CgsInput
         }
     }
 }
+
+#undef CGS_ARTIST_FILE

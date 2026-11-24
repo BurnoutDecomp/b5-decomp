@@ -1,7 +1,7 @@
 #include "GameSource/World/AI/SharedIO/BrnAIModuleIO_OutputBuffer.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // the header-baked lock asserts
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\World/AI/BrnAIModuleIO.h"
 // Out-of-line bodies of the lock-checked accessors of BrnAI::AIModuleIO::OutputBuffer that
 // the X360 ARTIST build emitted out-of-line, plus the buffer's own Construct.
 //
@@ -12,7 +12,7 @@
 //
 // ⛔ 2026-08-25: these used to return `reinterpret_cast<u8*>(this) + <X360 offset>` into a
 // one-byte host object. See the header banner.
-
+#define CGS_ARTIST_FILE_BRNAIMODULEIO "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\BrnAIModuleIO.h"
 namespace BrnAI
 {
 namespace AIModuleIO
@@ -53,16 +53,16 @@ namespace AIModuleIO
     const BrnResource::GameDataIO::RequestInterface<4096>*
     OutputBuffer::GetAIResourceRequestInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt(
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
             "Not locked for reading\n",
-            "..\\..\\..\\GameSource\\World/AI/BrnAIModuleIO.h", 423));
+            CGS_ARTIST_FILE, 423));
         return &mAIResourceRequestInterface;
     }
 
     // X360 0x8279CB50 (R, :437) -- read-lock handle at this+0x1014.
     const OutputBuffer::RouteResponseQueue* OutputBuffer::GetRouteMapResponseQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/AI/BrnAIModuleIO.h", 437));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 437));
         return &mRouteResponseQueue;
     }
 
@@ -79,7 +79,7 @@ namespace AIModuleIO
     // X360 0x8276D9C8 (W, :402) -- write-lock handle at this+0x15120.
     OutputBuffer::VehicleDriverInputInterface* OutputBuffer::GetVehicleDriverInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\BrnAIModuleIO.h", 402));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE_BRNAIMODULEIO, 402));
         return &mVehicleDriverInterface;
     }
 
@@ -87,14 +87,14 @@ namespace AIModuleIO
     // Consumer: WorldModule::BridgeAIModuleToPhysicsModule @0x827AAAA8 (0x827AAAF0).
     const OutputBuffer::VehicleDriverInputInterface* OutputBuffer::GetVehicleDriverInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/AI/BrnAIModuleIO.h", 409));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 409));
         return &mVehicleDriverInterface;
     }
 
     // X360 0x8276DBC0 (W, :444) -- write-lock handle at this+0x165D0.
     AIRaceCarInterface* OutputBuffer::GetAIRaceCarInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\BrnAIModuleIO.h", 444));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE_BRNAIMODULEIO, 444));
         return &mAIRaceCarInterface;
     }
 
@@ -112,42 +112,42 @@ namespace AIModuleIO
     // X360 0x8276DC68 (W, :458) -- write-lock handle at this+0x16A60.
     AICarOutputInterface* OutputBuffer::GetAICarOutputInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\BrnAIModuleIO.h", 458));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE_BRNAIMODULEIO, 458));
         return &mAICarOutputInterface;
     }
 
     // X360 0x8279CCA0 (R, :465) -- read-lock handle at this+0x16A60.
     const AICarOutputInterface* OutputBuffer::GetAICarOutputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/AI/BrnAIModuleIO.h", 465));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 465));
         return &mAICarOutputInterface;
     }
 
     // X360 0x8276DD10 (W, :472) -- write-lock handle at this+0x17F50.
     AIModuleResultInterface* OutputBuffer::GetAIModuleResultInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\BrnAIModuleIO.h", 472));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE_BRNAIMODULEIO, 472));
         return &mAIModuleResultInterface;
     }
 
     // X360 0x8279CD48 (R, :479) -- read-lock handle at this+0x17F50.
     const AIModuleResultInterface* OutputBuffer::GetAIModuleResultInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/AI/BrnAIModuleIO.h", 479));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 479));
         return &mAIModuleResultInterface;
     }
 
     // X360 0x8279C658 (R, :232) -- read-lock handle at this+0x1AF30.
     const OutputBuffer::GameEventQueue* OutputBuffer::GetGameEventQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/AI/BrnAIModuleIO.h", 232));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 232));
         return &mGameEventQueue;
     }
 
     // X360 0x8276D680 (W, :233) -- write-lock handle at this+0x1AF30.
     OutputBuffer::GameEventQueue* OutputBuffer::GetGameEventQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\BrnAIModuleIO.h", 233));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE_BRNAIMODULEIO, 233));
         return &mGameEventQueue;
     }
 }
@@ -160,3 +160,6 @@ void BrnAI::AIModuleIO::OutputBuffer::Destruct()
 {
     CgsModule::IOBuffer::Destruct();
 }
+
+#undef CGS_ARTIST_FILE
+#undef CGS_ARTIST_FILE_BRNAIMODULEIO

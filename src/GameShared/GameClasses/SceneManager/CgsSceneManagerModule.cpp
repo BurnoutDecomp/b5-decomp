@@ -230,7 +230,7 @@ void CullingGroupManager::CreateCullingTable(rw::IResourceAllocator* lpSceneAllo
 void SceneManagerModule::CreateCullingTable(rw::IResourceAllocator* lpSceneAllocator)
 {
     CGS_ASSERT(lpSceneAllocator != NULL,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lpSceneAllocator != NULL",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\CgsSceneManagerModule.cpp", 1362 /* ARTIST 0x828BACBC */));
     mCullingGroupManager.CreateCullingTable(lpSceneAllocator);
@@ -2723,10 +2723,10 @@ namespace CgsSceneManager
                                                   SceneManagerIO::InputBuffer_Query* lpSceneInputBuffer,
                                                   SceneManagerIO::OutputBuffer* lpSceneOutputBuffer)
     {
-        CGS_ASSERT(lpInputBufferStack != NULL, CgsDev::Assert::MessageAt("lpInputBufferStack != NULL", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 847));
-        CGS_ASSERT(lpOutputBufferStack != NULL, CgsDev::Assert::MessageAt("lpOutputBufferStack != NULL", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 848));
-        CGS_ASSERT(lpSceneInputBuffer != NULL, CgsDev::Assert::MessageAt("lpSceneInputBuffer != NULL", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 849));
-        CGS_ASSERT(lpSceneOutputBuffer != NULL, CgsDev::Assert::MessageAt("lpSceneOutputBuffer != NULL", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 850));
+        CGS_ASSERT(lpInputBufferStack != NULL, CGS_ASSERT_MESSAGE_AT("lpInputBufferStack != NULL", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 847));
+        CGS_ASSERT(lpOutputBufferStack != NULL, CGS_ASSERT_MESSAGE_AT("lpOutputBufferStack != NULL", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 848));
+        CGS_ASSERT(lpSceneInputBuffer != NULL, CGS_ASSERT_MESSAGE_AT("lpSceneInputBuffer != NULL", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 849));
+        CGS_ASSERT(lpSceneOutputBuffer != NULL, CGS_ASSERT_MESSAGE_AT("lpSceneOutputBuffer != NULL", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 850));
 
         SpatialPartitionIO::OutputBuffer* lpSpatialPartitionOutputBuffer = 0;
         lpOutputBufferStack->CreateIOBuffer(&lpSpatialPartitionOutputBuffer, "SpacialPartition");

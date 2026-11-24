@@ -16,7 +16,7 @@
 #include "GameSource/Resource/SharedIO/BrnGameDataRequestQueueImpl.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\""../Sound/Module/BrnRootSoundModule.cpp"
 #include <cstring>
 
 // BrnSound::Module::RootSoundModule -- see the header. Reconstructed from BURNOUT_X360_ARTIST.XEX
@@ -693,11 +693,11 @@ namespace Module
                                     Io::RootPreUpdateOutputBuffer* lpRootPreUpdateOutput)
     {
         CGS_ASSERT(lpOutputBufferStack != 0,
-            CgsDev::Assert::MessageAt("0 != lpOutputBufferStack",
+            CGS_ASSERT_MESSAGE_AT("0 != lpOutputBufferStack",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
                 "../Sound/Module/BrnRootSoundModule.cpp", 829 /* ARTIST 0x826EB958 */));
         CGS_ASSERT(lpRootPreUpdateOutput != 0,
-            CgsDev::Assert::MessageAt("0 != lpRootPreUpdateOutput",
+            CGS_ASSERT_MESSAGE_AT("0 != lpRootPreUpdateOutput",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
                 "../Sound/Module/BrnRootSoundModule.cpp", 830 /* ARTIST 0x826EB97C */));
 
@@ -892,11 +892,13 @@ namespace Module
         default:
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("Invalid Stage\n",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Module/BrnRootSoundModule.cpp",
-                779);
+                CGS_ASSERT_LOCATION("d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Module/BrnRootSoundModule.cpp",
+                779));
             CgsDev::Assert::EndAssert();
             return false;
         }
     }
 }
 }
+
+#undef CGS_ARTIST_FILE

@@ -21,7 +21,7 @@
 // (documented at each site); _MarkedManMessageDeliveredCallback's DWARF body is purely a debug
 // StrStream log with no state side-effects, so the reconstructed callback is a no-op.
 // ===================================================================================
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkMarkedManManager.cpp"
 #include "GameSource/Network/Managers/BrnNetworkMarkedManManager.h"
 
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
@@ -39,9 +39,9 @@ namespace BrnNetwork
     void MarkedManManager::Construct(BrnNetworkManager* lpNetworkManager)
     {
         CGS_ASSERT(lpNetworkManager != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpNetworkManager",
-                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkMarkedManManager.cpp", 44 /* ARTIST 0x82553A14 */));
+                CGS_ARTIST_FILE, 44 /* ARTIST 0x82553A14 */));
 
         mpNetworkManager = lpNetworkManager;
 
@@ -206,7 +206,7 @@ namespace BrnNetwork
         NetworkPlayerID lLocalNetworkPlayerID = KI_INVALID_PLAYER_ID;
         const bool lbHasLocalPlayer =
             mpNetworkManager->GetPlayerManager()->GetNextLocalPlayerID(&lLocalNetworkPlayerID);
-        CGS_ASSERT(lbHasLocalPlayer, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lbHasLocalPlayer, CGS_ASSERT_MESSAGE_AT(
             "mpNetworkManager->GetPlayerManager()->GetNextLocalPlayerID( &lLocalNetworkPlayerID )",
             __FILE__, 282 /* ARTIST 0x82548D84 */));
 
@@ -282,14 +282,14 @@ namespace BrnNetwork
         BrnNetwork::PlayerMenuData* lpMenuData = static_cast<BrnNetwork::PlayerMenuData*>(
             lpMarkedManManager->mpNetworkManager->GetPlayerManager()->GetMenuDataByID(
                 lSendingPlayerID));
-        CGS_ASSERT(lpMenuData != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpMenuData != 0, CGS_ASSERT_MESSAGE_AT(
             "lpMenuData",
-            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkMarkedManManager.cpp", 337 /* ARTIST 0x82548E50 */));
+            CGS_ARTIST_FILE, 337 /* ARTIST 0x82548E50 */));
 
         MarkedManMessage* lpMarkedManMessage = static_cast<MarkedManMessage*>(lpMessage);
-        CGS_ASSERT(lpMarkedManMessage != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpMarkedManMessage != 0, CGS_ASSERT_MESSAGE_AT(
             "lpMarkedManMessage",
-            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkMarkedManManager.cpp", 339 /* ARTIST 0x82548E74 */));
+            CGS_ARTIST_FILE, 339 /* ARTIST 0x82548E74 */));
 
         NetworkPlayerID lMarkedManPlayerID = KI_INVALID_PLAYER_ID;
         bool            lbIsFinal          = false;
@@ -313,3 +313,5 @@ namespace BrnNetwork
     {
     }
 } // namespace BrnNetwork
+
+#undef CGS_ARTIST_FILE

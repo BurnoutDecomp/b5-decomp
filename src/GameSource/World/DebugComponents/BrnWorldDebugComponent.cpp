@@ -53,7 +53,7 @@ namespace
 void WorldDebugComponent::Construct(WorldModule* lpWorldModule)
 {
     CgsDev::DebugComponent::Construct();   // ARTIST 0x827B1844 (folded at 0x8284CB38)
-    CGS_ASSERT(lpWorldModule != 0, CgsDev::Assert::MessageAt("lpWorldModule != NULL", __FILE__, 75));
+    CGS_ASSERT(lpWorldModule != 0, CGS_ASSERT_MESSAGE_AT("lpWorldModule != NULL", __FILE__, 75));
 
     mpWorldModule = lpWorldModule;
     mfVehicleVelocity = 100.0f;

@@ -464,7 +464,7 @@ void RouteRequestManager::GenerateRoute(
             lStream << "Unknown route finding style " << static_cast<s32>(lpAICar->GetRouteFindingStyle()) << "\n";
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(lacMessageBuffer,
-                                       "..\\..\\..\\GameSource\\World/AI/BrnRouteRequestManager.cpp", 201);
+                                       CGS_ASSERT_LOCATION("..\\..\\..\\GameSource\\World/AI/BrnRouteRequestManager.cpp", 201));
             CgsDev::Assert::EndAssert();
             break;
         }

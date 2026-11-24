@@ -54,7 +54,7 @@ bool BrnSkyDomeManager::Prepare(
     rw::IResourceAllocator* lpAlloc)
 {
     CGS_ASSERT(lpAlloc != NULL,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lpAlloc != NULL",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
             "../Graphics/BrnSkyDomeManager.cpp", 68 /* ARTIST 0x82408E18 */));

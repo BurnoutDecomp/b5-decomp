@@ -1,6 +1,6 @@
 #include "GameSource/World/CrashModule/SharedIO/BrnCrashModuleIO.h"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\crashmodule\\BrnCrashModuleIO.h"
 #include <cstddef>   // offsetof
 
 // BrnWorld::CrashIO::OutputBuffer_PreScene members, reconstructed from
@@ -45,18 +45,18 @@ namespace CrashIO
     const TrafficOutputInterface*
     OutputBuffer_PreScene::GetTrafficOutputInterface() const   // 0x827A23E0 read-lock
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt(
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
             "Not locked for reading\n",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\crashmodule\\BrnCrashModuleIO.h", 130));
+            CGS_ARTIST_FILE, 130));
         return &mTrafficOutputInterface;
     }
 
     TrafficOutputInterface*
     OutputBuffer_PreScene::GetTrafficOutputInterface()         // 0x827BB5D0 write-lock
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt(
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
             "Not locked for writing\n",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\crashmodule\\BrnCrashModuleIO.h", 131));
+            CGS_ARTIST_FILE, 131));
         return &mTrafficOutputInterface;
     }
 
@@ -64,18 +64,18 @@ namespace CrashIO
     const OutputBuffer_PreScene::VehicleInputInterface*
     OutputBuffer_PreScene::GetVehicleInputInterface() const   // 0x827A2488 read-lock
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt(
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
             "Not locked for reading\n",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\crashmodule\\BrnCrashModuleIO.h", 133));
+            CGS_ARTIST_FILE, 133));
         return &mVehicleInputInterface;
     }
 
     OutputBuffer_PreScene::VehicleInputInterface*
     OutputBuffer_PreScene::GetVehicleInputInterface()         // 0x827BB678 write-lock
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt(
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
             "Not locked for writing\n",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\crashmodule\\BrnCrashModuleIO.h", 134));
+            CGS_ARTIST_FILE, 134));
         return &mVehicleInputInterface;
     }
 
@@ -83,18 +83,18 @@ namespace CrashIO
     const RaceCarOutputInterface*
     OutputBuffer_PreScene::GetRaceCarOutputInterface() const   // 0x827A2530 read-lock
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt(
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
             "Not locked for reading\n",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\crashmodule\\BrnCrashModuleIO.h", 136));
+            CGS_ARTIST_FILE, 136));
         return &mRaceCarOutputInterface;
     }
 
     RaceCarOutputInterface*
     OutputBuffer_PreScene::GetRaceCarOutputInterface()         // 0x827BB720 write-lock
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt(
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
             "Not locked for writing\n",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\crashmodule\\BrnCrashModuleIO.h", 137));
+            CGS_ARTIST_FILE, 137));
         return &mRaceCarOutputInterface;
     }
 
@@ -133,3 +133,5 @@ namespace CrashIO
 
 }
 }
+
+#undef CGS_ARTIST_FILE

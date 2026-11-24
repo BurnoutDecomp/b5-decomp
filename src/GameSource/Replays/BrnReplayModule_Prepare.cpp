@@ -9,7 +9,7 @@
 // BrnEffects::EffectsModule::Update returned at its `GetStaticLayout() == 0` guard
 // before it ever reached HandleWheels -- so no tyre marks, sparks, debris or Lion effects.
 // ============================================================================
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Replays/BrnReplayModule.cpp"
 #include "GameSource/Replays/BrnReplayModule.h"
 #include "GameSource/Replays/BrnReplayRequestInterface.h"        // ReplayIO::RequestInterface
 #include "GameSource/Replays/BrnReplayBaseSerialiser.h"          // BaseSerialiser
@@ -46,7 +46,7 @@ namespace BrnReplays
         }
         else if (luStage >= 3)
         {
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt("Invalid Stage\n", "..\\..\\..\\GameSource\\Replays/BrnReplayModule.cpp", 218));
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Invalid Stage\n", CGS_ARTIST_FILE, 218));
             return false;
         }
 
@@ -73,7 +73,7 @@ namespace BrnReplays
         default:
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("Invalid Stage\n",
-                "..\\..\\..\\GameSource\\Replays/BrnReplayModule.cpp", 268);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 268));
             CgsDev::Assert::EndAssert();
             return false;
         }
@@ -155,3 +155,5 @@ namespace BrnReplays
         }
     }
 }
+
+#undef CGS_ARTIST_FILE

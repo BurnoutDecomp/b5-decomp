@@ -531,7 +531,7 @@ namespace CgsGui
     void AptCallbackDebug::AddSavedInput(AptSavedInputRecord* /*lpRecord*/, s32 /*liCount*/)
     {
         CGS_ASSERT(false,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "AptCallbackDebug::AddSavedInput() has not been implemented but is being used, please implement before utilising.", __FILE__, 799 /* ARTIST 0x8284953C */));
     }
 
@@ -539,7 +539,7 @@ namespace CgsGui
     void AptCallbackDebug::SetScreenGrabPending(const char* /*lpacName*/)
     {
         CGS_ASSERT(false,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "AptCallbackDebug::SetScreenGrabPending() has not been implemented but is being used, please implement before utilising.", __FILE__, 812 /* ARTIST 0x8284957C */));
     }
 
@@ -567,7 +567,7 @@ namespace CgsGui
     s32 AptCallbackFile::GetBytesTotal(const char* /*lpacFileName*/, AptGetBytesEnum /*leWhich*/)
     {
         CGS_ASSERT(false,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "AptCallbackFile::GetBytesTotal() has not been implemented but is being used, please implement before utilising.", __FILE__, 921 /* ARTIST 0x828495F4 */));
         return 0;
     }
@@ -576,7 +576,7 @@ namespace CgsGui
     s32 AptCallbackFile::GetBytesLoaded(const char* /*lpacFileName*/, AptGetBytesEnum /*leWhich*/)
     {
         CGS_ASSERT(false,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "AptCallbackFile::GetBytesLoaded() has not been implemented but is being used, please implement before utilising.", __FILE__, 936 /* ARTIST 0x82849634 */));
         return 0;
     }
@@ -599,7 +599,7 @@ namespace CgsGui
     void AptCallbackFile::OnUnload(AptValue* lpValue)
     {
         CGS_ASSERT(AptAuxPointer::mpAptAuxInst != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "AptAuxPointer::mpAptAuxInst",
                 __FILE__, 906 /* ARTIST 0x8285410C */));
         AptCommunicator::RemoveExpiredAptComponent(lpValue);
@@ -662,7 +662,7 @@ namespace CgsGui
     void AptCallbackVariable::SetExternVariable(const char* /*lpacName*/, const char* /*lpacValue*/)
     {
         CGS_ASSERT(false,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "AptCallbackVariable::SetExternVariable() has not been implemented but is being used, please implement before utilising.", __FILE__, 951 /* ARTIST 0x82849674 */));
     }
 
@@ -670,7 +670,7 @@ namespace CgsGui
     AptValue* AptCallbackVariable::GetExternVariable(const char* /*lpacName*/)
     {
         CGS_ASSERT(false,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "AptCallbackVariable::GetExternVariable() has not been implemented but is being used, please implement before utilising.", __FILE__, 964 /* ARTIST 0x828496B4 */));
         return 0;
     }
@@ -682,7 +682,7 @@ namespace CgsGui
                                               s32 /*liFlags*/)
     {
         CGS_ASSERT(false,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "SendVariables() has not been implemented but is being used, please implement before utilising.", __FILE__, 1114 /* ARTIST 0x828496F4 */));
     }
 
@@ -690,7 +690,7 @@ namespace CgsGui
     void AptCallbackDeprecated::FsCommand(const char* /*lpacCommand*/, const char* /*lpacArgs*/)
     {
         CGS_ASSERT(false,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "Command() has not been implemented but is being used, please implement before utilising.", __FILE__, 1128 /* ARTIST 0x82849734 */));
     }
 
@@ -705,7 +705,7 @@ namespace CgsGui
     AptValue* AptCallbackDeprecated::LoadVariablesNULL()
     {
         CGS_ASSERT(false,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "LoadVariablesNULL() has not been implemented but is being used, please implement before utilising.", __FILE__, 1154 /* ARTIST 0x828497B4 */));
         return 0;
     }
@@ -714,7 +714,7 @@ namespace CgsGui
     s32 AptCallbackDeprecated::PointHitTest(f32 /*lfX*/, f32 /*lfY*/, AptAssetMoiveClip /*leClip*/)
     {
         CGS_ASSERT(false,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "PointHitTest() has not been implemented but is being used, please implement before utilising.", __FILE__, 1204 /* ARTIST 0x828497F4 */));
         return 0;
     }
@@ -723,7 +723,7 @@ namespace CgsGui
     void AptCallbackDeprecated::GetRealTimeClock(AptSysClock* /*lpSysClock*/, bool /*lbUseUtc*/)
     {
         CGS_ASSERT(false,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "GetRealTimeClock() has not been implemented but is being used, please implement before utilising.", __FILE__, 1224 /* ARTIST 0x82849834 */));
     }
 

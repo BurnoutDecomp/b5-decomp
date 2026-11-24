@@ -17,7 +17,7 @@
 //
 // Out-queue records are the console's own wire records, posted on channel 40 through
 // GetOutputEventQueue()->AddEvent with host sizeof sizes.
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineNews.cpp"
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineNews.h"
 
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                        // CGS_ASSERT
@@ -277,9 +277,9 @@ namespace BrnGui
     void OnlineNews::CheckForCompletedLoads()
     {
         CGS_ASSERT(mpGuiCache != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpGuiCache",
-                "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineNews.cpp", 287 /* ARTIST 0x824AA448 */));
+                CGS_ARTIST_FILE, 287 /* ARTIST 0x824AA448 */));
 
         if (meSubState == E_SUBSTATE_LOADING_SCREEN)
         {
@@ -308,7 +308,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineNews::HandleControllerInput(const CgsModule::Event* lpEvent)
     {
-        CGS_ASSERT(lpEvent != 0, CgsDev::Assert::StreamMessageAt("Invalid event sent to OnlineNews::HandleControllerInput", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineNews.cpp", 328));
+        CGS_ASSERT(lpEvent != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event sent to OnlineNews::HandleControllerInput", CGS_ARTIST_FILE, 328));
 
         if (meSubState == E_SUBSTATE_SELECTING_PARAMS)
         {
@@ -354,7 +354,7 @@ namespace BrnGui
     {
         const GuiCachePayload* lpPayload = static_cast<const GuiCachePayload*>(lpEvent);
 
-        CGS_ASSERT(lpPayload->mpCache != 0, CgsDev::Assert::StreamMessageAt("Invalid cache in OnlineNews::HandleGuiCacheEvent", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineNews.cpp", 443));
+        CGS_ASSERT(lpPayload->mpCache != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid cache in OnlineNews::HandleGuiCacheEvent", CGS_ARTIST_FILE, 443));
 
         if (mpGuiCache == 0)
         {
@@ -405,7 +405,7 @@ namespace BrnGui
     void OnlineNews::HandleControllerAxis(const CgsModule::Event* lpEvent)
     {
         // The console's text names SelectRoutes (the same pooled string).
-        CGS_ASSERT(lpEvent != 0, CgsDev::Assert::StreamMessageAt("Invalid event in SelectRoutes::HandleControllerAxis", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineNews.cpp", 409));
+        CGS_ASSERT(lpEvent != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event in SelectRoutes::HandleControllerAxis", CGS_ARTIST_FILE, 409));
 
         if (meSubState < E_SUBSTATE_SELECTING_PARAMS)
         {
@@ -455,3 +455,5 @@ namespace BrnGui
         }
     }
 }
+
+#undef CGS_ARTIST_FILE

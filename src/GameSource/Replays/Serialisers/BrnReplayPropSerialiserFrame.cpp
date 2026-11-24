@@ -61,7 +61,7 @@
 // CgsContainers::BitArray<600>::IsBitSet and the record is indexed by member name, so the
 // x64 host recomputes both from the type -- both records are pure fixed-width POD, so
 // sizeof stays 168 either way (pinned by PropLoadedZoneRecord::_AssertLayout).
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayPropEntitySerialiser.h"
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
@@ -156,7 +156,7 @@ namespace BrnReplays
             }
         }
 
-        CGS_ASSERT(false, CgsDev::Assert::MessageAt("Zone not loaded", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayPropEntitySerialiser.h", 952));
+        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Zone not loaded", CGS_ARTIST_FILE, 952));
     }
 
     // ---- SetPropAddedToScene @0x822BBC28 (94 insns) --------------------------------------
@@ -177,7 +177,7 @@ namespace BrnReplays
     void PropSerialiserFrame::SetPropAddedToScene(s32 liZoneId, u32 luPropIndex, s32 liAddedToScene)
     {
         PropLoadedZoneRecord* lpZone = GetZone(liZoneId);
-        CGS_ASSERT(lpZone != 0, CgsDev::Assert::MessageAt("lpZone != NULL", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayPropEntitySerialiser.h", 1026));
+        CGS_ASSERT(lpZone != 0, CGS_ASSERT_MESSAGE_AT("lpZone != NULL", CGS_ARTIST_FILE, 1026));
 
         if (static_cast<u8>(liAddedToScene) != 0)
         {
@@ -186,7 +186,7 @@ namespace BrnReplays
         }
         else
         {
-            CGS_ASSERT(luPropIndex < KU_PROPS_PER_ZONE, CgsDev::Assert::MessageAt("luIndex < NUMBITS", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\containers\\./CgsBitArray.h", 241));
+            CGS_ASSERT(luPropIndex < KU_PROPS_PER_ZONE, CGS_ASSERT_MESSAGE_AT("luIndex < NUMBITS", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\containers\\./CgsBitArray.h", 241));
             lpZone->maPropsAddedToScene.UnSetBit(luPropIndex);
         }
     }
@@ -805,3 +805,5 @@ namespace BrnReplays
                               lpStaticLayout->maRecordedCells.muLength);
     }
 }
+
+#undef CGS_ARTIST_FILE

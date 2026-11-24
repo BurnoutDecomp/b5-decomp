@@ -630,7 +630,7 @@ namespace BrnPhysics
         CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer )
     {
         CGS_ASSERT( lpSceneInputBuffer != NULL,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpSceneInputBuffer_Update != NULL",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
                 "../Physics/BrnPhysicsModule.cpp", 617 /* ARTIST 0x8259C39C */));   // :617
@@ -771,7 +771,7 @@ namespace BrnPhysics
     {
         mVehicleManager.CheckState();
         CGS_ASSERT(lpInputBuffer != NULL,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpInputBuffer != NULL",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
                 "../Physics/BrnPhysicsModuleUpdateFunctions.cpp", 1049 /* ARTIST 0x825A153C */));

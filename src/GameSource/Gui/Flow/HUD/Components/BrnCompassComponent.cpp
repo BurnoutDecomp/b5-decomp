@@ -24,7 +24,7 @@
 // real triple. Nothing here is invented; every value is read from the image.
 // ===================================================================================
 #include "GameSource/Gui/Flow/HUD/Components/BrnCompassComponent.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnCompassComponent.cpp"
 #include <cmath>                                            // fabsf (the bearing derivation)
 #include "SDKs/XboxMath/XMVectorACos.h"                      // XboxMath::XMVectorACos (X360 0x821F0980)
 
@@ -168,7 +168,7 @@ namespace BrnGui
     void CompassComponent::UpdatePlayerMarkerState(EPlayerRouteState lePlayerOnTrack)
     {
         CGS_ASSERT((E_PLAYER_ROUTE_ON_COURSE <= lePlayerOnTrack) && (E_PLAYER_ROUTE_COUNT > lePlayerOnTrack),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "(E_PLAYER_ROUTE_ON_COURSE <= lePlayerOnTrack) && (E_PLAYER_ROUTE_COUNT > lePlayerOnTrack)",
                 __FILE__, 255 /* ARTIST 0x8241EBDC */));
 
@@ -186,9 +186,9 @@ namespace BrnGui
     void CompassComponent::SetBearing(f32 lfBearing)
     {
         CGS_ASSERT(lfBearing >= -0.1,
-            CgsDev::Assert::MessageAt("lfBearing >= -0.1", __FILE__, 298 /* ARTIST 0x8241EC78 */));            // BrnCompassComponent.h:298
+            CGS_ASSERT_MESSAGE_AT("lfBearing >= -0.1", __FILE__, 298 /* ARTIST 0x8241EC78 */));            // BrnCompassComponent.h:298
         CGS_ASSERT(lfBearing <= 360.1f,
-            CgsDev::Assert::MessageAt("lfBearing <= 360.1f", __FILE__, 299 /* ARTIST 0x8241ECA4 */));        // BrnCompassComponent.h:299
+            CGS_ASSERT_MESSAGE_AT("lfBearing <= 360.1f", __FILE__, 299 /* ARTIST 0x8241ECA4 */));        // BrnCompassComponent.h:299
 
         // flt_82004920 == 0.0027777778 == 1/360 (degrees -> [0,1] strip fraction).
         Vector2 lPos = mv2InitialViewPos;
@@ -202,10 +202,10 @@ namespace BrnGui
     void CompassComponent::SetMarkerPos(f32 lfMarkerBearing, bool lbShowMarker)
     {
         CGS_ASSERT(lfMarkerBearing >= -180.1,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lfMarkerBearing >= -180.1", __FILE__, 335 /* ARTIST 0x8241ED4C */));     // BrnCompassComponent.h:335
         CGS_ASSERT(lfMarkerBearing <= 180.1f,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lfMarkerBearing <= 180.1f", __FILE__, 336 /* ARTIST 0x8241ED78 */));     // BrnCompassComponent.h:336
 
         if (lbShowMarker)
@@ -416,7 +416,7 @@ namespace BrnGui
     //      running); the other two return with the marker placed.
     void CompassComponent::Update()
     {
-        CGS_ASSERT(mpGuiCache != NULL, CgsDev::Assert::MessageAt("mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnCompassComponent.cpp", 274 /* ARTIST 0x8242E1A0 */));
+        CGS_ASSERT(mpGuiCache != NULL, CGS_ASSERT_MESSAGE_AT("mpGuiCache", CGS_ARTIST_FILE, 274 /* ARTIST 0x8242E1A0 */));
 
         f32 lfBearing = mpGuiCache->GetPlayerOrientation() * KF_RADIANS_TO_DEGREES
                       + KF_DEGREES_HALF_TURN;
@@ -444,11 +444,11 @@ namespace BrnGui
                 case GsmIO::E_MODE_ONLINE_ROAD_RAGE:
                 {
                     GuiTracker* lpTracker = mpGuiCache->GetGuiTracker();
-                    CGS_ASSERT(lpTracker != NULL, CgsDev::Assert::MessageAt("lpTracker", "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnCompassComponent.cpp", 317 /* ARTIST 0x8242E2CC */));
+                    CGS_ASSERT(lpTracker != NULL, CGS_ASSERT_MESSAGE_AT("lpTracker", CGS_ARTIST_FILE, 317 /* ARTIST 0x8242E2CC */));
 
                     const BrnGameState::LandmarkIndex* lpLandmarks =
                         lpTracker->GetActivelyTrackedLandmarks();
-                    CGS_ASSERT(lpLandmarks != NULL, CgsDev::Assert::MessageAt("lpLandmarks", "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnCompassComponent.cpp", 320 /* ARTIST 0x8242E2FC */));
+                    CGS_ASSERT(lpLandmarks != NULL, CGS_ASSERT_MESSAGE_AT("lpLandmarks", CGS_ARTIST_FILE, 320 /* ARTIST 0x8242E2FC */));
 
                     ShowLandmarkOnCompass(lpLandmarks[0], lfBearing);
 
@@ -541,3 +541,5 @@ namespace BrnGui
 
     }
 }
+
+#undef CGS_ARTIST_FILE

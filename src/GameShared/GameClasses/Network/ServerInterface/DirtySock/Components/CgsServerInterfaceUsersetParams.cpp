@@ -43,8 +43,8 @@ namespace
         lStrStream << "String too long: " << (lpcValue ? lpcValue : "<NULLSTRING>");
         CgsDev::Assert::FireAssert(
             lacMessageBuffer,
-            "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h",
-            55);
+            CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h",
+            55));
         CgsDev::Assert::EndAssert();
     }
 }
@@ -114,7 +114,7 @@ namespace CgsNetwork
         const char* const lpcSource =
             "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\"
             "CgsServerInterfaceUsersetParams.cpp";
-        CGS_ASSERT(lpcRecord != 0, CgsDev::Assert::MessageAt("lpcString", lpcSource, 84));
+        CGS_ASSERT(lpcRecord != 0, CGS_ASSERT_MESSAGE_AT("lpcString", lpcSource, 84));
 
         if (macName[0])
         {
@@ -132,7 +132,7 @@ namespace CgsNetwork
         if (GetData() && GetDataSize())
         {
             CGS_ASSERT(std::strlen(GetPattern()) < static_cast<u32>(GetPatternLength()),
-                CgsDev::Assert::MessageAt("strlen( GetPattern()) < (size_t) GetPatternLength()", lpcSource, 102));
+                CGS_ASSERT_MESSAGE_AT("strlen( GetPattern()) < (size_t) GetPatternLength()", lpcSource, 102));
 
             TagFieldSetStructure(lpcRecord, liRecLen, "PARAMS",
                                  GetData(), static_cast<s32>(GetDataSize()), GetPattern());

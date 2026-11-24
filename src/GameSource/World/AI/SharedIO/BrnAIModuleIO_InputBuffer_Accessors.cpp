@@ -1,8 +1,8 @@
 #include "GameSource/World/AI/SharedIO/BrnAIModuleIO.h"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                     // CGS_ASSERT
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\World/AI/BrnAIModuleIO.h"
 #include <cstring>   // std::memcpy (the timer block copy; see SetTimerInterface)
-
+#define CGS_ARTIST_FILE_BRNAIMODULEIO "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\BrnAIModuleIO.h"
 // Out-of-line bodies of BrnAI::AIModuleIO::InputBuffer's Construct and its lock-guarded
 // Get/Set/Append accessors. NAMED LAYOUT since 2026-09-03 (aiwave lane A4): every accessor
 // returns / copies the member it names; the console byte offsets quoted in the comments are
@@ -101,14 +101,14 @@ namespace AIModuleIO
     // X360 0x8276D728 (R, :124) -- the pre-scene race-car AI view (console +0x10).
     const RaceCarAIInterface* InputBuffer::GetRaceCarAIInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\BrnAIModuleIO.h", 366));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE_BRNAIMODULEIO, 366));
         return &mRaceCarAIInterface;
     }
 
     // X360 0x8276D7D0 (R, :127) -- the traffic-AI interface (console +0x43E0).
     const InputBuffer::TrafficAIInterface* InputBuffer::GetTrafficAIInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\BrnAIModuleIO.h", 373));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE_BRNAIMODULEIO, 373));
         return &mTrafficAIInterface;
     }
 
@@ -121,14 +121,14 @@ namespace AIModuleIO
     // X360 0x8276D920 (R, :130) -- the timer-status interface (console +0xFB80).
     const CgsSystem::TimerStatusInterface* InputBuffer::GetTimerInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\BrnAIModuleIO.h", 394));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE_BRNAIMODULEIO, 394));
         return &mTimerInterface;
     }
 
     // X360 0x8276D878 (R, :133) -- the AI-module request interface (console +0xFBB0).
     const AIModuleRequestInterface* InputBuffer::GetAIModuleRequestInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\BrnAIModuleIO.h", 387));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE_BRNAIMODULEIO, 387));
         return &mAIModuleRequestInterface;
     }
 
@@ -144,7 +144,7 @@ namespace AIModuleIO
     // Callers: BrnAI::AIModule::PausedUpdate / Update.
     const InputBuffer::RaceRouteRequestQueue* InputBuffer::GetRaceRouteRequestQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\BrnAIModuleIO.h", 138));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE_BRNAIMODULEIO, 138));
         return &mRaceRouteRequestQueue;
     }
 
@@ -178,7 +178,7 @@ namespace AIModuleIO
     // X360 0x8276D530 (R, :148) -- the game-action queue (console +0x103BC).
     const InputBuffer::GameActionQueue* InputBuffer::GetGameActionQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\BrnAIModuleIO.h", 148));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE_BRNAIMODULEIO, 148));
         return &mGameActionQueue;
     }
 
@@ -187,7 +187,7 @@ namespace AIModuleIO
     // IDA truncates this symbol to "InputBuffer::Get"; Get() below is that spelling.
     InputBuffer::GameActionQueue* InputBuffer::GetGameActionQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/AI/BrnAIModuleIO.h", 149));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 149));
         return &mGameActionQueue;
     }
 
@@ -206,7 +206,7 @@ namespace AIModuleIO
     // X360 0x8276D5D8 (R, :154) -- the player vehicle controls block (console +0x1B9E8).
     const InputBuffer::PlayerVehicleControls* InputBuffer::GetPlayerVehicleControls() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\BrnAIModuleIO.h", 154));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE_BRNAIMODULEIO, 154));
         return &mPlayerVehicleControls;
     }
 
@@ -220,8 +220,8 @@ namespace AIModuleIO
     // operator= (DWARF BrnRaceCarAIInterfaces.h), so the copy is the setter's own XMemCpy.
     void InputBuffer::SetRaceCarAIInterface(const RaceCarAIInterface* lpInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/AI/BrnAIModuleIO.h", 322));
-        CGS_ASSERT(lpInterface != 0, CgsDev::Assert::MessageAt("lpInterface != NULL", "..\\..\\..\\GameSource\\World/AI/BrnAIModuleIO.h", 324));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 322));
+        CGS_ASSERT(lpInterface != 0, CGS_ASSERT_MESSAGE_AT("lpInterface != NULL", CGS_ARTIST_FILE, 324));
         XMemCpy(&mRaceCarAIInterface, lpInterface, sizeof(RaceCarAIInterface));
     }
 
@@ -230,8 +230,8 @@ namespace AIModuleIO
     // exactly as the console's byte copy does; readers see the source buffer's ring.
     void InputBuffer::SetTrafficAIInterface(const TrafficAIInterface* lpInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/AI/BrnAIModuleIO.h", 333));
-        CGS_ASSERT(lpInterface != 0, CgsDev::Assert::MessageAt("lpInterface != NULL", "..\\..\\..\\GameSource\\World/AI/BrnAIModuleIO.h", 335));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 333));
+        CGS_ASSERT(lpInterface != 0, CGS_ASSERT_MESSAGE_AT("lpInterface != NULL", CGS_ARTIST_FILE, 335));
         XMemCpy(&mTrafficAIInterface, lpInterface, sizeof(TrafficAIInterface));   // 0x8279C8B4
     }
 
@@ -265,7 +265,7 @@ namespace AIModuleIO
     // X360 0x827A9560 (W, :140) -- Append the race-route request queue (console +0x137D0).
     void InputBuffer::AppendRaceRouteRequestQueue(const RaceRouteRequestQueue* lpQueue)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/AI/BrnAIModuleIO.h", 140));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 140));
         mRaceRouteRequestQueue.Append(*lpQueue);
     }
 
@@ -273,7 +273,7 @@ namespace AIModuleIO
     // 0x8279C4D0..0x8279C4E8) into the race-distance block (console +0x13860).
     void InputBuffer::SetRaceCarRaceDistanceInterface(const RaceCarRaceDistanceInterface* lpObject)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/AI/BrnAIModuleIO.h", 143));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 143));
         CGS_STATIC_ASSERT((sizeof(RaceCarRaceDistanceInterface) == 40),
                       "RaceCarRaceDistanceInterface is the console's 10-word block");
         mRaceCarRaceDistanceInterface = *lpObject;
@@ -283,14 +283,14 @@ namespace AIModuleIO
     // EventQueue<TakedownEvent,8>::Append (console +0x1B898).
     void InputBuffer::SetTakedownEventQueue(const TakedownEventQueue* lpQueue)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/AI/BrnAIModuleIO.h", 152));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 152));
         mTakedownEventQueue = *lpQueue;   // EventQueue::operator= (DWARF CgsEventQueue.h:194)
     }
 
     // X360 0x8279C5A0 (W, :155) -- memcpy(60) into the player vehicle controls (console +0x1B9E8).
     void InputBuffer::SetPlayerVehicleControls(const PlayerVehicleControls* lpControls)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/AI/BrnAIModuleIO.h", 155));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 155));
         CGS_STATIC_ASSERT((sizeof(PlayerVehicleControls) == 60),
                       "PlayerVehicleControls is the console's 60-byte block");
         mPlayerVehicleControls = *lpControls;
@@ -305,3 +305,6 @@ void BrnAI::AIModuleIO::InputBuffer::Destruct()
 {
     CgsModule::IOBuffer::Destruct();
 }
+
+#undef CGS_ARTIST_FILE
+#undef CGS_ARTIST_FILE_BRNAIMODULEIO

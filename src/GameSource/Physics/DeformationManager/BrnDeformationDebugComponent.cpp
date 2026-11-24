@@ -1137,7 +1137,7 @@ namespace Deformation
         // CgsDev::DebugComponent::Construct is `;`) folded at 0x8284CB38.
         CgsDev::DebugComponent::Construct();
 
-        CGS_ASSERT(lpDeformationManager != 0, CgsDev::Assert::MessageAt("lpDeformationManager != NULL",
+        CGS_ASSERT(lpDeformationManager != 0, CGS_ASSERT_MESSAGE_AT("lpDeformationManager != NULL",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
             "../Physics/DeformationManager/BrnDeformationDebugComponent.cpp", 158 /* ARTIST 0x826064B0 */));
         mpDeformationManager = lpDeformationManager;

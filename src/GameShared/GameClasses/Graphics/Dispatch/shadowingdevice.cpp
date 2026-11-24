@@ -143,7 +143,7 @@ namespace shadow
             renderengine::VertexProgramState::InitializeNoBindX360(
                 sVertexProgramStateResource, lParameters);
         CGS_ASSERT(lpVertexProgramState,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpVertexProgramState",
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\Dispatch/shadowingdevice.cpp", 476 /* ARTIST 0x827E79DC */));
         return lpVertexProgramState;

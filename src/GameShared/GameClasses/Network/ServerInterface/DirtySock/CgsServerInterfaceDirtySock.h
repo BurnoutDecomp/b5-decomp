@@ -1,6 +1,6 @@
 #ifndef CGS_SERVER_INTERFACE_DIRTY_SOCK_H
 #define CGS_SERVER_INTERFACE_DIRTY_SOCK_H
-
+#define CGS_ARTIST_CGSSERVERINTERFACEDIRTYSOCK_FILE "..\\..\\..\\GameShared\\GameClasses\\Network/ServerInterface\\""DirtySock\\CgsServerInterfaceDirtySock.h"
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLogChannelOutput.h"   // CgsDev::Log::LogChannelOutput
@@ -85,7 +85,7 @@ namespace CgsNetwork
         const EComponents leOld = leEnumIndex;
         leEnumIndex = static_cast<EComponents>(leEnumIndex + 1);
         CGS_ASSERT(leEnumIndex <= E_COMPONENTS_COUNT,
-            CgsDev::Assert::MessageAt("leEnumIndex <= E_COMPONENTS_COUNT",
+            CGS_ASSERT_MESSAGE_AT("leEnumIndex <= E_COMPONENTS_COUNT",
                 "..\\..\\..\\GameShared\\GameClasses\\Network/ServerInterface\\"
                 "DirtySock\\CgsServerInterfaceDirtySock.h", 99 /* ARTIST 0x8287617C */));
         return leOld;
@@ -348,7 +348,7 @@ namespace CgsNetwork
         ServerInterfaceComponent* GetComponent(EComponents leComponent)
         {
             CGS_ASSERT(leComponent >= E_COMPONENTS_START && leComponent < E_COMPONENTS_COUNT,
-                CgsDev::Assert::MessageAt(
+                CGS_ASSERT_MESSAGE_AT(
                     "leComponent >= E_COMPONENTS_START && leComponent < E_COMPONENTS_COUNT",
                     "..\\..\\..\\GameShared\\GameClasses\\Network/ServerInterface\\"
                     "DirtySock\\CgsServerInterfaceDirtySock.h", 738 /* ARTIST 0x825416CC */));
@@ -446,3 +446,5 @@ namespace CgsNetwork
 }
 
 #endif // CGS_SERVER_INTERFACE_DIRTY_SOCK_H
+
+#undef CGS_ARTIST_CGSSERVERINTERFACEDIRTYSOCK_FILE

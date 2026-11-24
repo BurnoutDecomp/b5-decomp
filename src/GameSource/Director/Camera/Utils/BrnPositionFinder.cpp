@@ -1,5 +1,5 @@
 #include "GameSource/Director/Camera/Utils/BrnPositionFinder.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Director/Camera/Utils/BrnPositionFinder.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                     // CGS_ASSERT
 #include "GameSource/Director/Camera/Behaviours/Behaviour.h"           // BehaviourSharedInfo (GetWorldMap)
 #include "GameSource/Director/Utils/BrnDirectorWorldMap.h"             // BrnDirector::WorldMap
@@ -35,7 +35,7 @@ void PositionFinder::FindPosition(Vector3 lTarget, Vector3 lDisplacement)
 {
     // Non-gating tripwire (cpp:75).
     CGS_ASSERT(mbConstructed,
-        CgsDev::Assert::MessageAt("mbConstructed", "..\\..\\..\\GameSource\\Director/Camera/Utils/BrnPositionFinder.cpp", 75 /* ARTIST 0x821F8EA8 */));
+        CGS_ASSERT_MESSAGE_AT("mbConstructed", CGS_ARTIST_FILE, 75 /* ARTIST 0x821F8EA8 */));
 
     mTarget          = lTarget;
     mDisplacement    = lDisplacement;
@@ -48,7 +48,7 @@ void PositionFinder::Update(const BehaviourSharedInfo& lrSharedInfo)
 {
     // Non-gating tripwire (cpp:90).
     CGS_ASSERT(mbConstructed,
-        CgsDev::Assert::MessageAt("mbConstructed", "..\\..\\..\\GameSource\\Director/Camera/Utils/BrnPositionFinder.cpp", 90 /* ARTIST 0x8223FD08 */));
+        CGS_ASSERT_MESSAGE_AT("mbConstructed", CGS_ARTIST_FILE, 90 /* ARTIST 0x8223FD08 */));
 
     if (mbIsInitialised && !mbFoundPosition)
     {
@@ -63,3 +63,5 @@ void PositionFinder::Update(const BehaviourSharedInfo& lrSharedInfo)
 }
 }
 }
+
+#undef CGS_ARTIST_FILE

@@ -1,6 +1,6 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Messages/BrnTeamSelectMessage.cpp"
 #include "GameSource/Network/Messages/BrnTeamSelectMessage.h"
 #include "GameSource/Network/BrnNetworkManager.h"             // BrnNetwork::BrnNetworkManager::PackOrUnpack (NetworkPlayerID field primitive)
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT
@@ -78,10 +78,10 @@ namespace BrnNetwork
         if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0)
             mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
 
-        CGS_ASSERT(lpaPlayerTeamInfo != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpaPlayerTeamInfo != 0, CGS_ASSERT_MESSAGE_AT(
             "lpaPlayerTeamInfo",
             __FILE__, 96 /* ARTIST 0x825800D4 */));
-        CGS_ASSERT(sizeof(maPlayerTeamInfo) >= liNumPlayers * sizeof(PlayerTeamInfo), CgsDev::Assert::MessageAt(
+        CGS_ASSERT(sizeof(maPlayerTeamInfo) >= liNumPlayers * sizeof(PlayerTeamInfo), CGS_ASSERT_MESSAGE_AT(
             "sizeof( maPlayerTeamInfo) >= liNumPlayers * sizeof( PlayerTeamInfo )",
             __FILE__, 97 /* ARTIST 0x825800FC */));
 
@@ -92,7 +92,7 @@ namespace BrnNetwork
         mbFinalSelection = lbFinalSelection;    // stb, +0x71
 
         CgsNetwork::ReliableMessage::PrepareForSend(KI_TEAM_SELECT_MESSAGE_TYPE, lu16Frame);
-        CGS_ASSERT(IsReliable(), CgsDev::Assert::MessageAt(
+        CGS_ASSERT(IsReliable(), CGS_ASSERT_MESSAGE_AT(
             "IsReliable()",
             __FILE__, 106 /* ARTIST 0x82580168 */));
     }
@@ -106,21 +106,21 @@ namespace BrnNetwork
     bool TeamSelectMessage::Retrieve(PlayerTeamInfo* lpaPlayerTeamInfo, s32* lpiNumPlayers,
                                      s32* lpiNumTeams, bool* lpbAutobalance, bool* lpbFinalSelection)
     {
-        CGS_ASSERT(lpaPlayerTeamInfo != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpaPlayerTeamInfo != 0, CGS_ASSERT_MESSAGE_AT(
             "lpaPlayerTeamInfo",
-            "..\\..\\..\\GameSource\\Network/Messages/BrnTeamSelectMessage.cpp", 129 /* ARTIST 0x825801C0 */));
-        CGS_ASSERT(lpiNumPlayers != 0, CgsDev::Assert::MessageAt(
+            CGS_ARTIST_FILE, 129 /* ARTIST 0x825801C0 */));
+        CGS_ASSERT(lpiNumPlayers != 0, CGS_ASSERT_MESSAGE_AT(
             "lpiNumPlayers",
-            "..\\..\\..\\GameSource\\Network/Messages/BrnTeamSelectMessage.cpp", 130 /* ARTIST 0x825801E4 */));
-        CGS_ASSERT(lpiNumTeams != 0, CgsDev::Assert::MessageAt(
+            CGS_ARTIST_FILE, 130 /* ARTIST 0x825801E4 */));
+        CGS_ASSERT(lpiNumTeams != 0, CGS_ASSERT_MESSAGE_AT(
             "lpiNumTeams",
-            "..\\..\\..\\GameSource\\Network/Messages/BrnTeamSelectMessage.cpp", 131 /* ARTIST 0x82580208 */));
-        CGS_ASSERT(lpbAutobalance != 0, CgsDev::Assert::MessageAt(
+            CGS_ARTIST_FILE, 131 /* ARTIST 0x82580208 */));
+        CGS_ASSERT(lpbAutobalance != 0, CGS_ASSERT_MESSAGE_AT(
             "lpbAutobalance",
-            "..\\..\\..\\GameSource\\Network/Messages/BrnTeamSelectMessage.cpp", 132 /* ARTIST 0x8258022C */));
-        CGS_ASSERT(lpbFinalSelection != 0, CgsDev::Assert::MessageAt(
+            CGS_ARTIST_FILE, 132 /* ARTIST 0x8258022C */));
+        CGS_ASSERT(lpbFinalSelection != 0, CGS_ASSERT_MESSAGE_AT(
             "lpbFinalSelection",
-            "..\\..\\..\\GameSource\\Network/Messages/BrnTeamSelectMessage.cpp", 133 /* ARTIST 0x82580250 */));
+            CGS_ARTIST_FILE, 133 /* ARTIST 0x82580250 */));
 
         // ARTIST 0x82580264 branches to a trailing `return false` (0x825802D8): the copy-out is the body
         // of the valid test.
@@ -133,9 +133,9 @@ namespace BrnNetwork
             *lpbFinalSelection = mbFinalSelection;    // lbz +0x71
 
             mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
-            CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0, CgsDev::Assert::MessageAt(
+            CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0, CGS_ASSERT_MESSAGE_AT(
                 "!CgsNetwork::ReliableMessage::IsMessageValid()",
-                "..\\..\\..\\GameSource\\Network/Messages/BrnTeamSelectMessage.cpp", 147 /* ARTIST 0x825802C4 */));
+                CGS_ARTIST_FILE, 147 /* ARTIST 0x825802C4 */));
             return true;
         }
         return false;
@@ -226,3 +226,5 @@ namespace BrnNetwork
                       "mbFinalSelection immediately follows mbAutobalance");
     }
 } // namespace BrnNetwork
+
+#undef CGS_ARTIST_FILE

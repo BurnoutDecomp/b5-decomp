@@ -140,7 +140,7 @@ void StuntManager::Construct(BrnProgression::ProgressionManager* lpProgressionMa
     if (!mpProgressionManager)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("mpProgressionManager", KAC_FILE, 62);
+        CgsDev::Assert::FireAssert("mpProgressionManager", CGS_ASSERT_LOCATION(KAC_FILE, 62));
         CgsDev::Assert::EndAssert();
     }
 
@@ -148,7 +148,7 @@ void StuntManager::Construct(BrnProgression::ProgressionManager* lpProgressionMa
     if (!mpTriggerQueryManager)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("mpTriggerQueryManager", KAC_FILE, 65);
+        CgsDev::Assert::FireAssert("mpTriggerQueryManager", CGS_ASSERT_LOCATION(KAC_FILE, 65));
         CgsDev::Assert::EndAssert();
     }
 
@@ -156,7 +156,7 @@ void StuntManager::Construct(BrnProgression::ProgressionManager* lpProgressionMa
     if (!mpModeManager)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("mpModeManager", KAC_FILE, 68);
+        CgsDev::Assert::FireAssert("mpModeManager", CGS_ASSERT_LOCATION(KAC_FILE, 68));
         CgsDev::Assert::EndAssert();
     }
 
@@ -166,7 +166,7 @@ void StuntManager::Construct(BrnProgression::ProgressionManager* lpProgressionMa
     if (!mpTrainingManager)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("mpTrainingManager", KAC_FILE, 71);
+        CgsDev::Assert::FireAssert("mpTrainingManager", CGS_ASSERT_LOCATION(KAC_FILE, 71));
         CgsDev::Assert::EndAssert();
     }
 
@@ -174,7 +174,7 @@ void StuntManager::Construct(BrnProgression::ProgressionManager* lpProgressionMa
     if (!mpGameStateModule)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("mpGameStateModule", KAC_FILE, 74);
+        CgsDev::Assert::FireAssert("mpGameStateModule", CGS_ASSERT_LOCATION(KAC_FILE, 74));
         CgsDev::Assert::EndAssert();
     }
 
@@ -236,13 +236,13 @@ bool StuntManager::Prepare(GameStateModuleIO::OutputBuffer* lpOutput)
     if (!mDistrictMapResourceHandle.mpResourceMemory)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("mDistrictMapResourceHandle.GetResource() != NULL", KAC_FILE, 124);
+        CgsDev::Assert::FireAssert("mDistrictMapResourceHandle.GetResource() != NULL", CGS_ASSERT_LOCATION(KAC_FILE, 124));
         CgsDev::Assert::EndAssert();
     }
     if (!*reinterpret_cast<void* const*>(mDistrictMapResourceHandle.mpResourceMemory))
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("mDistrictMapResourceHandle.GetResource()->GetMemoryResource() != NULL", KAC_FILE, 125);
+        CgsDev::Assert::FireAssert("mDistrictMapResourceHandle.GetResource()->GetMemoryResource() != NULL", CGS_ASSERT_LOCATION(KAC_FILE, 125));
         CgsDev::Assert::EndAssert();
     }
 
@@ -345,7 +345,7 @@ bool StuntManager::Prepare(GameStateModuleIO::OutputBuffer* lpOutput)
                 if (lnCompressedGroupIdCount >= KI_MAX_GROUPS)
                 {
                     CgsDev::Assert::BeginAssert();
-                    CgsDev::Assert::FireAssert("lnCompressedGroupIdCount < KI_MAX_GROUPS", KAC_FILE, 183);
+                    CgsDev::Assert::FireAssert("lnCompressedGroupIdCount < KI_MAX_GROUPS", CGS_ASSERT_LOCATION(KAC_FILE, 183));
                     CgsDev::Assert::EndAssert();
                 }
                 laCompressedGroupIds[lnCompressedGroupIdCount] = lnRawGroupId;
@@ -368,7 +368,7 @@ bool StuntManager::Prepare(GameStateModuleIO::OutputBuffer* lpOutput)
             {
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert("leDistrict < E_DISTRICT_COUNT",
-                                           "..\\..\\..\\SharedClasses\\World/BrnWorldRegion.h", 155);
+                                           CGS_ASSERT_LOCATION("..\\..\\..\\SharedClasses\\World/BrnWorldRegion.h", 155));
                 CgsDev::Assert::EndAssert();
             }
             leCounty = BrnWorld::WorldRegion::DistrictToCounty(static_cast<BrnWorld::EDistrict>(luDistrictValue));
@@ -434,13 +434,13 @@ void StuntManager::Update(GameStateModuleIO::GameActionQueue* lpActionQueue,
     if (!lpActionQueue)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpActionQueue != NULL", KAC_FILE, 273);
+        CgsDev::Assert::FireAssert("lpActionQueue != NULL", CGS_ASSERT_LOCATION(KAC_FILE, 273));
         CgsDev::Assert::EndAssert();
     }
     if (!lpActiveRaceCarInterface)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpActiveRaceCarInterface != NULL", KAC_FILE, 274);
+        CgsDev::Assert::FireAssert("lpActiveRaceCarInterface != NULL", CGS_ASSERT_LOCATION(KAC_FILE, 274));
         CgsDev::Assert::EndAssert();
     }
 
@@ -538,7 +538,7 @@ void StuntManager::OnPropHit(uint16_t luZoneId, uint16_t luPropId, Vector3 lPosi
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("liRegionIndex < miRegionCount",
-                                       "..\\..\\..\\SharedClasses\\Trigger/BrnTriggerData.h", 624);
+                                       CGS_ASSERT_LOCATION("..\\..\\..\\SharedClasses\\Trigger/BrnTriggerData.h", 624));
             CgsDev::Assert::EndAssert();
         }
 
@@ -660,14 +660,14 @@ void StuntManager::UpdateJumps(const BrnWorld::RaceCarEntityModuleIO::RCEntityAc
     if (!mpLastJumpElement)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("mpLastJumpElement != NULL", KAC_FILE, 820);
+        CgsDev::Assert::FireAssert("mpLastJumpElement != NULL", CGS_ASSERT_LOCATION(KAC_FILE, 820));
         CgsDev::Assert::EndAssert();
     }
 
     if (!lpActiveRaceCarInterface->IsPlayerCarActive())
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("How the hell did the player do a jump whilst inactive?", KAC_FILE, 822);
+        CgsDev::Assert::FireAssert("How the hell did the player do a jump whilst inactive?", CGS_ASSERT_LOCATION(KAC_FILE, 822));
         CgsDev::Assert::EndAssert();
     }
 
@@ -898,13 +898,13 @@ bool StuntManager::StuntElementTriggered()
     if (meLastStuntElementType == E_STUNT_ELEMENT_TYPE_COUNT)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("meLastStuntElementType != E_STUNT_ELEMENT_TYPE_COUNT", KAC_FILE, 591);
+        CgsDev::Assert::FireAssert("meLastStuntElementType != E_STUNT_ELEMENT_TYPE_COUNT", CGS_ASSERT_LOCATION(KAC_FILE, 591));
         CgsDev::Assert::EndAssert();
     }
     if (meLastStuntElementType == E_STUNT_ELEMENT_TYPE_JUMP)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("meLastStuntElementType != E_STUNT_ELEMENT_TYPE_JUMP", KAC_FILE, 592);
+        CgsDev::Assert::FireAssert("meLastStuntElementType != E_STUNT_ELEMENT_TYPE_JUMP", CGS_ASSERT_LOCATION(KAC_FILE, 592));
         CgsDev::Assert::EndAssert();
     }
 
@@ -930,7 +930,7 @@ void StuntManager::CheckForTrophyUnlocks(GameStateModuleIO::OnStuntElementComple
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(
-            "lpOnStuntElementAction->miCurrentCount <= lpOnStuntElementAction->miTotalCount", KAC_FILE, 769);
+            "lpOnStuntElementAction->miCurrentCount <= lpOnStuntElementAction->miTotalCount", CGS_ASSERT_LOCATION(KAC_FILE, 769));
         CgsDev::Assert::EndAssert();
     }
 
@@ -955,7 +955,7 @@ void StuntManager::CheckForTrophyUnlocks(GameStateModuleIO::OnStuntElementComple
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert(
                     "I dont know what this stunt type is! Someone has added a new one without thinking about the trophies! What scum!\n",
-                    KAC_FILE, 795);
+                    CGS_ASSERT_LOCATION(KAC_FILE, 795));
                 CgsDev::Assert::EndAssert();
                 // X360 0x8239941C..0x82399428: the unknown-type arm still runs the special-car
                 // check (`lwz r3, 0x5E8(r29) ; bl CheckForSpecialCarUnlocks`) and then returns,
@@ -1002,7 +1002,7 @@ bool StuntManager::LoadDistrictMap(GameStateModuleIO::OutputBuffer* lpOutput)
     if (!lpOutput)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpOutput", KAC_FILE, 960);
+        CgsDev::Assert::FireAssert("lpOutput", CGS_ASSERT_LOCATION(KAC_FILE, 960));
         CgsDev::Assert::EndAssert();
     }
 
@@ -1092,7 +1092,7 @@ bool StuntManager::LoadDistrictMap(GameStateModuleIO::OutputBuffer* lpOutput)
 
         default:
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("Unknown meDistrictMapLoadStage", KAC_FILE, 1030);
+            CgsDev::Assert::FireAssert("Unknown meDistrictMapLoadStage", CGS_ASSERT_LOCATION(KAC_FILE, 1030));
             CgsDev::Assert::EndAssert();
             return false;
     }
@@ -1271,7 +1271,7 @@ void StuntManager::ProcessStuntElement(GameStateModuleIO::GameActionQueue* lpAct
         if (!mpLastJumpElement)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("mpLastJumpElement != NULL", KAC_FILE, 618);
+            CgsDev::Assert::FireAssert("mpLastJumpElement != NULL", CGS_ASSERT_LOCATION(KAC_FILE, 618));
             CgsDev::Assert::EndAssert();
         }
         lpElement     = mpLastJumpElement;                  // X360 lwz r22, 0x608(r31)
@@ -1303,13 +1303,13 @@ void StuntManager::ProcessStuntElement(GameStateModuleIO::GameActionQueue* lpAct
     if (!mpModeManager)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("mpModeManager", KAC_FILE, 636);
+        CgsDev::Assert::FireAssert("mpModeManager", CGS_ASSERT_LOCATION(KAC_FILE, 636));
         CgsDev::Assert::EndAssert();
     }
     if (!mpModeManager->GetScoringSystem())
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("mpModeManager->GetScoringSystem()", KAC_FILE, 637);
+        CgsDev::Assert::FireAssert("mpModeManager->GetScoringSystem()", CGS_ASSERT_LOCATION(KAC_FILE, 637));
         CgsDev::Assert::EndAssert();
     }
 
@@ -1388,7 +1388,7 @@ void StuntManager::ProcessStuntElement(GameStateModuleIO::GameActionQueue* lpAct
         break;
     case E_STUNT_ELEMENT_TYPE_COUNT:
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("leElementType != E_STUNT_ELEMENT_TYPE_COUNT", KAC_FILE, 665);
+        CgsDev::Assert::FireAssert("leElementType != E_STUNT_ELEMENT_TYPE_COUNT", CGS_ASSERT_LOCATION(KAC_FILE, 665));
         CgsDev::Assert::EndAssert();
         break;
     default:
@@ -1404,7 +1404,7 @@ void StuntManager::ProcessStuntElement(GameStateModuleIO::GameActionQueue* lpAct
         if (!lpProfile)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpProfile", KAC_TRAINING_MANAGER_FILE, 382);
+            CgsDev::Assert::FireAssert("lpProfile", CGS_ASSERT_LOCATION(KAC_TRAINING_MANAGER_FILE, 382));
             CgsDev::Assert::EndAssert();
         }
         // The console skips the request on `blt`, so an unordered (NaN) gap still requests.
@@ -1422,7 +1422,7 @@ void StuntManager::ProcessStuntElement(GameStateModuleIO::GameActionQueue* lpAct
     if (!mpModeManager)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("mpModeManager", KAC_FILE, 671);
+        CgsDev::Assert::FireAssert("mpModeManager", CGS_ASSERT_LOCATION(KAC_FILE, 671));
         CgsDev::Assert::EndAssert();
     }
     mpModeManager->HandleWorldStunt(leElementType, lElementKey);
@@ -1464,13 +1464,13 @@ void StuntManager::ProcessStuntElement(GameStateModuleIO::GameActionQueue* lpAct
     if (!mpGameStateModule)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("mpGameStateModule", KAC_FILE, 694);
+        CgsDev::Assert::FireAssert("mpGameStateModule", CGS_ASSERT_LOCATION(KAC_FILE, 694));
         CgsDev::Assert::EndAssert();
     }
     if (!mpGameStateModule->GetDeveloperChallengeManager())
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("mpGameStateModule->GetDeveloperChallengeManager()", KAC_FILE, 695);
+        CgsDev::Assert::FireAssert("mpGameStateModule->GetDeveloperChallengeManager()", CGS_ASSERT_LOCATION(KAC_FILE, 695));
         CgsDev::Assert::EndAssert();
     }
     // Runs for every completion, repeat or first (outside the first-completion block below).
@@ -1486,7 +1486,7 @@ void StuntManager::ProcessStuntElement(GameStateModuleIO::GameActionQueue* lpAct
     if (!mpProgressionManager)
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("mpProgressionManager", KAC_FILE, 706);
+        CgsDev::Assert::FireAssert("mpProgressionManager", CGS_ASSERT_LOCATION(KAC_FILE, 706));
         CgsDev::Assert::EndAssert();
     }
     mpProgressionManager->GetProfile()->AddStuntElement(leElementType, lElementKey, leCounty);
@@ -1494,7 +1494,7 @@ void StuntManager::ProcessStuntElement(GameStateModuleIO::GameActionQueue* lpAct
     if (!mpProgressionManager->GetAchievementManager())
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("mpProgressionManager->GetAchievementManager()", KAC_FILE, 710);
+        CgsDev::Assert::FireAssert("mpProgressionManager->GetAchievementManager()", CGS_ASSERT_LOCATION(KAC_FILE, 710));
         CgsDev::Assert::EndAssert();
     }
     mpProgressionManager->GetAchievementManager()->OnCollectStunt(leElementType);
@@ -1691,7 +1691,7 @@ void StuntManager::CompleteAllStuntType(StuntElementType                    leSt
     else if (static_cast<u32>(leStuntElementType) >= static_cast<u32>(E_STUNT_ELEMENT_TYPE_COUNT))
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("Unknown stunt type.", KAC_FILE, 427);
+        CgsDev::Assert::FireAssert("Unknown stunt type.", CGS_ASSERT_LOCATION(KAC_FILE, 427));
         CgsDev::Assert::EndAssert();
         return;   // X360 `goto LABEL_5` -- straight to the epilogue, nothing else runs
     }

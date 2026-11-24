@@ -11,7 +11,7 @@ const char* const kFile = "..\\..\\..\\GameShared\\GameClasses\\Graphics/Immedia
 void NativeAssert(const char* expression, int line)
 {
     CgsDev::Assert::BeginAssert();
-    CgsDev::Assert::FireAssert(expression, kFile, line);
+    CgsDev::Assert::FireAssert(expression, CGS_ASSERT_LOCATION(kFile, line));
     CgsDev::Assert::EndAssert();
 }
 }
@@ -128,7 +128,7 @@ template<class V> V* ImRenderBuffer<V>::RenderStart(u32 count)
             CgsDev::Assert::BeginAssert();
             CgsDev::StrStream message(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
             message << "Failed to allocate " << count << " in ImRenderBuffer";
-            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, kFile, 765);
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, CGS_ASSERT_LOCATION(kFile, 765));
             CgsDev::Assert::EndAssert();
         }
         --miNumRendersStarted;

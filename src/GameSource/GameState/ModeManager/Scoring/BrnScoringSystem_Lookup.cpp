@@ -1,8 +1,8 @@
 #include <float.h>
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\Scoring/BrnScoringSystem.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
-
+#define CGS_ARTIST_FILE_BRNSCORINGSYSTEM "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp"
 // ============================================================================
 // BrnScoringSystem_Lookup.cpp
 // ============================================================================
@@ -153,11 +153,11 @@ GameStateModuleIO::EPlayerScoringIndex ScoringSystem::GetPlayerScoringIndex(BrnN
 bool ScoringSystem::IsPlayerInScoringSystem(GameStateModuleIO::EPlayerScoringIndex leIndex) const
 {
     CGS_ASSERT(leIndex >= GameStateModuleIO::E_PLAYER_SCORING_INDEX_0,
-        CgsDev::Assert::MessageAt(
-            "lePlayerScoringIndex >= GsmIO::E_PLAYER_SCORING_INDEX_0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\Scoring/BrnScoringSystem.h", 2924 /* ARTIST 0x8231DFF4 */));
+        CGS_ASSERT_MESSAGE_AT(
+            "lePlayerScoringIndex >= GsmIO::E_PLAYER_SCORING_INDEX_0", CGS_ARTIST_FILE, 2924 /* ARTIST 0x8231DFF4 */));
     CGS_ASSERT(leIndex < GameStateModuleIO::E_PLAYER_SCORING_INDEX_COUNT,
-        CgsDev::Assert::MessageAt(
-            "lePlayerScoringIndex < GsmIO::E_PLAYER_SCORING_INDEX_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\Scoring/BrnScoringSystem.h", 2925 /* ARTIST 0x8231E018 */));
+        CGS_ASSERT_MESSAGE_AT(
+            "lePlayerScoringIndex < GsmIO::E_PLAYER_SCORING_INDEX_COUNT", CGS_ARTIST_FILE, 2925 /* ARTIST 0x8231E018 */));
 
     return maCarData[leIndex].GetActiveRaceCarIndex() != E_ACTIVE_RACE_CAR_INDEX_COUNT;
 }
@@ -232,10 +232,10 @@ EActiveRaceCarIndex ScoringSystem::GetNextTeamMember(EActiveRaceCarIndex leRaceC
                                                      GameStateModuleIO::EPlayerTeam leTeam) const
 {
     CGS_ASSERT((leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) || (leRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID),
-               CgsDev::Assert::MessageAt("( leLastActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0 ) || ( leLastActiveRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID )", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 2454));
-    CGS_ASSERT(leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, CgsDev::Assert::MessageAt("leLastActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 2455));
-    CGS_ASSERT(leTeam >= GameStateModuleIO::E_PLAYER_TEAM_NONE, CgsDev::Assert::MessageAt("leTeam >= GsmIO::E_PLAYER_TEAM_START", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 2457));
-    CGS_ASSERT(leTeam < GameStateModuleIO::E_PLAYER_TEAM_COUNT, CgsDev::Assert::MessageAt("leTeam < GsmIO::E_PLAYER_TEAM_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 2458));
+               CGS_ASSERT_MESSAGE_AT("( leLastActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0 ) || ( leLastActiveRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID )", CGS_ARTIST_FILE_BRNSCORINGSYSTEM, 2454));
+    CGS_ASSERT(leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, CGS_ASSERT_MESSAGE_AT("leLastActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE_BRNSCORINGSYSTEM, 2455));
+    CGS_ASSERT(leTeam >= GameStateModuleIO::E_PLAYER_TEAM_NONE, CGS_ASSERT_MESSAGE_AT("leTeam >= GsmIO::E_PLAYER_TEAM_START", CGS_ARTIST_FILE_BRNSCORINGSYSTEM, 2457));
+    CGS_ASSERT(leTeam < GameStateModuleIO::E_PLAYER_TEAM_COUNT, CGS_ASSERT_MESSAGE_AT("leTeam < GsmIO::E_PLAYER_TEAM_COUNT", CGS_ARTIST_FILE_BRNSCORINGSYSTEM, 2458));
 
     s32 liStart = (leRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID) ? 0 : (leRaceCarIndex + 1);
 
@@ -361,14 +361,14 @@ void ScoringSystem::SetBurnoutSkillzData(BrnNetwork::NetworkPlayerID lID, const 
 s32 ScoringSystem::GetOnlineFinishPosition(EActiveRaceCarIndex leRaceCarIndex)
 {
     CGS_ASSERT(mpCurrentOnlineModeScoring != NULL,
-        CgsDev::Assert::MessageAt(
-            "mpCurrentOnlineModeScoring", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\Scoring/BrnScoringSystem.h", 3526 /* ARTIST 0x823112D8 */));
+        CGS_ASSERT_MESSAGE_AT(
+            "mpCurrentOnlineModeScoring", CGS_ARTIST_FILE, 3526 /* ARTIST 0x823112D8 */));
     CGS_ASSERT(leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-        CgsDev::Assert::MessageAt(
-            "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\Scoring/BrnScoringSystem.h", 3527 /* ARTIST 0x823112FC */));
+        CGS_ASSERT_MESSAGE_AT(
+            "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", CGS_ARTIST_FILE, 3527 /* ARTIST 0x823112FC */));
     CGS_ASSERT(leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-        CgsDev::Assert::MessageAt(
-            "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\Scoring/BrnScoringSystem.h", 3528 /* ARTIST 0x82311320 */));
+        CGS_ASSERT_MESSAGE_AT(
+            "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 3528 /* ARTIST 0x82311320 */));
 
     return mpCurrentOnlineModeScoring->GetPlayerPosition(leRaceCarIndex);
 }
@@ -619,3 +619,6 @@ bool ScoringSystem::HasBeatenRoadRageTarget()
 }
 
 }
+
+#undef CGS_ARTIST_FILE
+#undef CGS_ARTIST_FILE_BRNSCORINGSYSTEM

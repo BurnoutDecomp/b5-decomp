@@ -168,7 +168,7 @@ namespace BrnGui
     // ================================================================================
     void OnlinePreEvent::UpdateGetCache()
     {
-        CGS_ASSERT(0 == mpGuiCache, CgsDev::Assert::MessageAt("NULL == mpGuiCache", KAC_BRN_ONLINE_PRE_EVENT_ASSERT_FILE, 188));
+        CGS_ASSERT(0 == mpGuiCache, CGS_ASSERT_MESSAGE_AT("NULL == mpGuiCache", KAC_BRN_ONLINE_PRE_EVENT_ASSERT_FILE, 188));
 
 
 
@@ -183,13 +183,13 @@ namespace BrnGui
                 const GuiEventCachePayload* lpCacheEvent =
                     static_cast<const GuiEventCachePayload*>(lpEvent);
                 CGS_ASSERT(0 != lpCacheEvent->mpCachePointer,
-                    CgsDev::Assert::MessageAt("NULL != lpCacheEvent->mpCachePointer", KAC_BRN_ONLINE_PRE_EVENT_ASSERT_FILE, 198));
+                    CGS_ASSERT_MESSAGE_AT("NULL != lpCacheEvent->mpCachePointer", KAC_BRN_ONLINE_PRE_EVENT_ASSERT_FILE, 198));
                 mpGuiCache = lpCacheEvent->mpCachePointer;
                 break;
             }
         }
 
-        CGS_ASSERT(0 != mpGuiCache, CgsDev::Assert::MessageAt("NULL != mpGuiCache", KAC_BRN_ONLINE_PRE_EVENT_ASSERT_FILE, 207));
+        CGS_ASSERT(0 != mpGuiCache, CGS_ASSERT_MESSAGE_AT("NULL != mpGuiCache", KAC_BRN_ONLINE_PRE_EVENT_ASSERT_FILE, 207));
     }
 
     // ================================================================================

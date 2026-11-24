@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\CgsGuiModuleIO.h"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // CGS_ASSERT
 
 #include <cstddef>   // offsetof
@@ -66,7 +66,7 @@ namespace CgsGuiModuleIO
     // pseudocode tests ((*a1 >> 4) & 1) == read-lock bit, then returns this+0x8020 (32800).
     const ImRendererSet& InputBuffer::GetImRenderers() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\CgsGuiModuleIO.h", 360));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 360));
         return mRendererSet;
     }
 
@@ -100,8 +100,10 @@ namespace CgsGuiModuleIO
     // via CgsGraphics::Camera::operator=. This is the function owned by the CgsGuiModuleIO.h TU.
     void InputBuffer::SetCamera(CgsGraphics::Camera& lrCamera)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\CgsGuiModuleIO.h", 389));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 389));
         mRendererSet.mCamera = lrCamera;
     }
 }
 }
+
+#undef CGS_ARTIST_FILE

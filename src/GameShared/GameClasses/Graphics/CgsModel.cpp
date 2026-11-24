@@ -42,12 +42,12 @@ namespace CgsGraphics
     const Renderable* Model::GetRenderable(State leState) const
     {
         CGS_ASSERT(leState < mu8NumStates,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "leState < mu8NumStates", KAC_ARTIST_ASSERT_FILE, 309 /* ARTIST 0x822A0AF8 */));
 
         const u32 luIndex = mpu8StateRenderableIndices[static_cast<u32>(leState)];
         CGS_ASSERT(!(luIndex == 255u || luIndex >= mu8NumRenderables),
-            CgsDev::Assert::MessageAt("State does not exist", KAC_ARTIST_ASSERT_FILE, 310 /* ARTIST 0x822A0B30 */));
+            CGS_ASSERT_MESSAGE_AT("State does not exist", KAC_ARTIST_ASSERT_FILE, 310 /* ARTIST 0x822A0B30 */));
 
         return mppRenderables[static_cast<u32>(mpu8StateRenderableIndices[static_cast<u32>(leState)])];
     }
@@ -82,7 +82,7 @@ namespace CgsGraphics
     f32 Model::GetLodDistance(u32 luLodIndex) const
     {
         CGS_ASSERT(luLodIndex < mu8NumStates,
-            CgsDev::Assert::MessageAt("Invalid LOD index", KAC_ARTIST_ASSERT_FILE, 367 /* ARTIST 0x822A0C30 */));
+            CGS_ASSERT_MESSAGE_AT("Invalid LOD index", KAC_ARTIST_ASSERT_FILE, 367 /* ARTIST 0x822A0C30 */));
 
         return mpfLodDistances[luLodIndex];
     }

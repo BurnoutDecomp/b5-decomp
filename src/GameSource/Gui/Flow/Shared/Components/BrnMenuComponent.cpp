@@ -7,7 +7,7 @@
 // MenuItem::Update -> GuiComponent::AddOutputAptViewState. Member-by-name access.
 // ===================================================================================
 #include "GameSource/Gui/Flow/Shared/Components/BrnMenuComponent.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnMenuComponent.h"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::SPrintf
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiComponent.h"  // CgsGui::GuiComponent (item base construct/name)
@@ -119,7 +119,7 @@ namespace BrnGui
     // @0x8240FE20 -- bounds-check [0,16), return the row pointer.
     MenuItem* MenuComponent::GetSelectable(s32 liIndex)
     {
-        CGS_ASSERT(liIndex >= 0 && liIndex < KI_MAX_MENU_ITEMS, CgsDev::Assert::StreamMessageAt("MenuComponent::GetSelectable() invalid index specified", "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnMenuComponent.h", 171));
+        CGS_ASSERT(liIndex >= 0 && liIndex < KI_MAX_MENU_ITEMS, CGS_ASSERT_STREAM_MESSAGE_AT("MenuComponent::GetSelectable() invalid index specified", CGS_ARTIST_FILE, 171));
 
         return static_cast<MenuItem*>(SelectableGroup::GetSelectable(liIndex));
     }
@@ -127,7 +127,7 @@ namespace BrnGui
     // @0x82488FC0 -- set the row's id + dirty it.
     MenuItem* MenuComponent::SetId(s32 liIndex, u64 luId)
     {
-        CGS_ASSERT(GetSelectable(liIndex) != 0, CgsDev::Assert::StreamMessageAt("Invalid selectable specified", "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnMenuComponent.h", 156));
+        CGS_ASSERT(GetSelectable(liIndex) != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid selectable specified", CGS_ARTIST_FILE, 156));
         MenuItem* lpItem = GetSelectable(liIndex);
         lpItem->SetId(luId);
         lpItem->SetDirty();
@@ -171,3 +171,5 @@ namespace BrnGui
         }
     }
 }
+
+#undef CGS_ARTIST_FILE

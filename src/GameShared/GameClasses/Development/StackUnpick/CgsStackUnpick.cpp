@@ -26,7 +26,7 @@ namespace CgsDev
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("liIndex >= 0",
-                "..\\..\\..\\GameShared\\GameClasses\\Development/StackUnpick/CgsStackUnpick.cpp", 74);
+                CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Development/StackUnpick/CgsStackUnpick.cpp", 74));
             CgsDev::Assert::EndAssert();
         }
         return liIndex < miNumStackAddresses ? maAdjustedStack[liIndex] : 0;

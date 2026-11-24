@@ -230,7 +230,7 @@ namespace BrnTraffic
     bool TrafficEntityModule::IsPaused()
     {
         CGS_ASSERT(meState == E_STATE_RUNNING,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "meState == E_STATE_RUNNING", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2132 /* ARTIST 0x82707588 */));
         return meRunningState == E_RUNNINGSTATE_PAUSED;
     }
@@ -1723,7 +1723,7 @@ namespace
 void TrafficEntityModule::EnterStartingUpState()
 {
     CGS_ASSERT(meState == E_STATE_INVALID,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "meState == E_STATE_INVALID", KAC_ARTIST_ASSERT_SOURCE, 1697 /* ARTIST 0x82708060 */));
 
     meState           = E_STATE_STARTING_UP;
@@ -1749,7 +1749,7 @@ void TrafficEntityModule::EnterStartingUpState()
 void TrafficEntityModule::EnterRunningState()
 {
     CGS_ASSERT(meState == E_STATE_STARTING_UP && meStartingUpState == E_STARTINGUPSTATE_LAST,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "( meState == E_STATE_STARTING_UP ) && ( meStartingUpState == E_STARTINGUPSTATE_LAST )",
             KAC_ARTIST_ASSERT_SOURCE, 1721 /* ARTIST 0x8270811C */));
 
@@ -1772,7 +1772,7 @@ void TrafficEntityModule::EnterRunningState()
 void TrafficEntityModule::EnterTearingDownState()
 {
     CGS_ASSERT(meState == E_STATE_RUNNING,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "meState == E_STATE_RUNNING", KAC_ARTIST_ASSERT_SOURCE, 1746 /* ARTIST 0x82708190 */));
 
     meState            = E_STATE_TEARING_DOWN;
@@ -1955,8 +1955,8 @@ void TrafficEntityModule::StaticVehicles_UpdatePurgatory()
         if (lrInfo.muDecisionFramesLeft == 0)
         {
             CGS_ASSERT(!maStaticTrafficParams[lrInfo.muIndex].IsAlive(),
-                       CgsDev::Assert::MessageAt("!maStaticTrafficParams[lInfo.muIndex].IsAlive()", __FILE__, 8790));
-            CGS_ASSERT(lrInfo.muIndex <= 0xFFu, CgsDev::Assert::MessageAt("lInfo.muIndex <= 0xff", __FILE__, 8791));
+                       CGS_ASSERT_MESSAGE_AT("!maStaticTrafficParams[lInfo.muIndex].IsAlive()", __FILE__, 8790));
+            CGS_ASSERT(lrInfo.muIndex <= 0xFFu, CGS_ASSERT_MESSAGE_AT("lInfo.muIndex <= 0xff", __FILE__, 8791));
 
             const u8 luFreedSlot = static_cast<u8>(lrInfo.muIndex);
             mFreeStaticParamStack.Push(luFreedSlot);
@@ -4941,7 +4941,7 @@ void TrafficEntityModule::Construct()
 void TrafficEntityModule::GenerateRemovedVehicleEvents(
     BrnWorld::CrashIO::TrafficInputInterface* lpCrashInputInterface)
 {
-    CGS_ASSERT(lpCrashInputInterface != 0, CgsDev::Assert::MessageAt("lpCrashInputInterface", __FILE__, 5240));
+    CGS_ASSERT(lpCrashInputInterface != 0, CGS_ASSERT_MESSAGE_AT("lpCrashInputInterface", __FILE__, 5240));
 
     for (u32 luIndex = 0; luIndex < maRecentlyRemovedVehicles.GetLength(); ++luIndex)
     {
@@ -4966,7 +4966,7 @@ void TrafficEntityModule::GenerateRemovedVehicleEvents(
 void TrafficEntityModule::GenerateSlamRecoveryEvents(
     BrnWorld::CrashIO::TrafficInputInterface* lpCrashInputInterface)
 {
-    CGS_ASSERT(lpCrashInputInterface != 0, CgsDev::Assert::MessageAt("lpCrashInputInterface", __FILE__, 5268));
+    CGS_ASSERT(lpCrashInputInterface != 0, CGS_ASSERT_MESSAGE_AT("lpCrashInputInterface", __FILE__, 5268));
 
     for (u32 luIndex = 0; luIndex < maRecentlyRecoveredSlammedTraffic.GetLength(); ++luIndex)
     {
@@ -7112,7 +7112,7 @@ void TrafficEntityModule::SwapParamsInList(u32 luParam, u32 luNextParam)
 void TrafficEntityModule::RemoveParamFromList(u32 luParam)
 {
     CGS_ASSERT(luParam < KU_MAX_STANDARD_TRAFFIC,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "luParam < KU_MAX_STANDARD_TRAFFIC", KAC_ARTIST_ASSERT_SOURCE, 13002 /* ARTIST 0x8272636C */));
 
     ParamListNode* lpNode = &maParamListNodes[luParam];
@@ -7121,7 +7121,7 @@ void TrafficEntityModule::RemoveParamFromList(u32 luParam)
     {
         ParamListNode* lpNextNode = &maParamListNodes[lpNode->muNextParam];
         CGS_ASSERT(lpNextNode->muPrevParam == luParam,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpNextNode->muPrevParam == luParam", KAC_ARTIST_ASSERT_SOURCE, 13009 /* ARTIST 0x827263B8 */));
 
         lpNextNode->muPrevParam = lpNode->muPrevParam;
@@ -7131,7 +7131,7 @@ void TrafficEntityModule::RemoveParamFromList(u32 luParam)
     {
         ParamListNode* lpPrevNode = &maParamListNodes[lpNode->muPrevParam];
         CGS_ASSERT(lpPrevNode->muNextParam == luParam,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpPrevNode->muNextParam == luParam", KAC_ARTIST_ASSERT_SOURCE, 13017 /* ARTIST 0x827263FC */));
 
         lpPrevNode->muNextParam = lpNode->muNextParam;
@@ -7851,7 +7851,7 @@ void TrafficEntityModule::UpdateParams_UpdateNeighbours(Param* lpParam,
                                                         const Hull* lpHull)
 {
     CGS_ASSERT(lpParam != 0,
-        CgsDev::Assert::MessageAt("lpParam", KAC_ARTIST_ASSERT_SOURCE, 10336 /* ARTIST 0x82708AF0 */));
+        CGS_ASSERT_MESSAGE_AT("lpParam", KAC_ARTIST_ASSERT_SOURCE, 10336 /* ARTIST 0x82708AF0 */));
 
     const u32 luRung = lpParam->muCurrentSegment;
 
@@ -11572,15 +11572,15 @@ void TrafficEntityModule::SendPhysicalRequests(BrnTrafficIO::OutputBuffer_PrePhy
 void TrafficEntityModule::SendEmergencyCrashEvents(BrnTrafficIO::OutputBuffer_PrePhysics* lpOutput,
                                                    TotalTrafficBitArray* lpCreatedBodies)
 {
-    CGS_ASSERT(lpOutput != 0, CgsDev::Assert::MessageAt("lpOutput", __FILE__, 5476));                 // .cpp:5476
-    CGS_ASSERT(lpCreatedBodies != 0, CgsDev::Assert::MessageAt("lpCreatedBodies", __FILE__, 5477));   // .cpp:5477
+    CGS_ASSERT(lpOutput != 0, CGS_ASSERT_MESSAGE_AT("lpOutput", __FILE__, 5476));                 // .cpp:5476
+    CGS_ASSERT(lpCreatedBodies != 0, CGS_ASSERT_MESSAGE_AT("lpCreatedBodies", __FILE__, 5477));   // .cpp:5477
 
     for (u32 luIndex = 0; luIndex < maEmergencyCrashingVehicles.GetLength(); ++luIndex)
     {
         const TrafficCrashInfo* lpInfo = &maEmergencyCrashingVehicles.GetItem(luIndex);
         const u32 luVehicle = EntityIndexOf(lpInfo->mVictimId);
         CGS_ASSERT(lpInfo->mVictimId.muValue != lpInfo->mCauserId.muValue,
-                   CgsDev::Assert::MessageAt("lpInfo->mVictimId != lpInfo->mCauserId", __FILE__, 5485));   // .cpp:5485
+                   CGS_ASSERT_MESSAGE_AT("lpInfo->mVictimId != lpInfo->mCauserId", __FILE__, 5485));   // .cpp:5485
 
         CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "invalid index : ");   // CgsBitArray.h:203
         if (lpCreatedBodies->IsBitSet(luVehicle))
@@ -11641,10 +11641,10 @@ void TrafficEntityModule::SendEmergencyCrashEvents(BrnTrafficIO::OutputBuffer_Pr
 void TrafficEntityModule::CreateBodiesForCrashingNetworkTraffic(BrnTrafficIO::OutputBuffer_PrePhysics* lpOutput,
                                                                 TotalTrafficBitArray* lpCreatedBodies)
 {
-    CGS_ASSERT(lpOutput != 0, CgsDev::Assert::MessageAt("lpOutput != NULL", __FILE__, 5794));
-    CGS_ASSERT(lpCreatedBodies != 0, CgsDev::Assert::MessageAt("lpCreatedBodies", __FILE__, 5795));
+    CGS_ASSERT(lpOutput != 0, CGS_ASSERT_MESSAGE_AT("lpOutput != NULL", __FILE__, 5794));
+    CGS_ASSERT(lpCreatedBodies != 0, CGS_ASSERT_MESSAGE_AT("lpCreatedBodies", __FILE__, 5795));
     CGS_ASSERT(IsPlayingOnlineGameMode() || maNewCrashedNetworkVehicles.GetLength() == 0,
-               CgsDev::Assert::MessageAt("IsPlayingOnlineGameMode() || maNewCrashedNetworkVehicles.GetLength() == 0",
+               CGS_ASSERT_MESSAGE_AT("IsPlayingOnlineGameMode() || maNewCrashedNetworkVehicles.GetLength() == 0",
                                          __FILE__, 5796));
 
     // The inlined EntityId::Set(race car, meLocalPlayerIndex, part 0): only the index bound
@@ -11652,7 +11652,7 @@ void TrafficEntityModule::CreateBodiesForCrashingNetworkTraffic(BrnTrafficIO::Ou
     // constants.
     const u32 luPlayerIndex = static_cast<u32>(meLocalPlayerIndex);
     CGS_ASSERT(luPlayerIndex < (1u << KU_NUM_BITS_FOR_ENTITY_NUM),
-               CgsDev::Assert::MessageAt("luEntityIndex < (1U << KU_NUM_BITS_FOR_ENTITY_NUM)",
+               CGS_ASSERT_MESSAGE_AT("luEntityIndex < (1U << KU_NUM_BITS_FOR_ENTITY_NUM)",
                                          "..\\..\\..\\GameShared\\GameClasses\\SceneManager/CgsEntityId.h", 116));
     EntityId lPlayerId;
     lPlayerId.muValue = (luPlayerIndex << KU_RACE_CAR_PART_INDEX_SHIFT) | KU_RACE_CAR_OWNER_PACKED;
@@ -11798,14 +11798,14 @@ void TrafficEntityModule::MakeVehiclePhysical(
 
     // 0x827472AC: MakeTrafficEntityId inlined (its CgsEntityId.h:116 bound assert is baked).
     CGS_ASSERT(MakeTrafficEntityId(luVehicle).muValue != lTargetEntityId.muValue,
-               CgsDev::Assert::MessageAt("MakeTrafficEntityId( luVehicle ) != lCauserEntityId", __FILE__, 2524));   // .cpp:2524
+               CGS_ASSERT_MESSAGE_AT("MakeTrafficEntityId( luVehicle ) != lCauserEntityId", __FILE__, 2524));   // .cpp:2524
 
     // 0x82747308 / 0x8274735C: the SAME mxFlags byte read twice, once per assert, each with
     // its own inlined GetVehicle bound assert (BrnTrafficEntityModule.h:2459).
     CGS_ASSERT(GetVehicle(luVehicle)->IsAlive(),
-               CgsDev::Assert::MessageAt("GetVehicle( luVehicle )->IsAlive()", __FILE__, 2525));                    // .cpp:2525
+               CGS_ASSERT_MESSAGE_AT("GetVehicle( luVehicle )->IsAlive()", __FILE__, 2525));                    // .cpp:2525
     CGS_ASSERT(!GetVehicle(luVehicle)->IsPhysical(),
-               CgsDev::Assert::MessageAt("!GetVehicle( luVehicle )->IsPhysical()", __FILE__, 2526));                // .cpp:2526
+               CGS_ASSERT_MESSAGE_AT("!GetVehicle( luVehicle )->IsPhysical()", __FILE__, 2526));                // .cpp:2526
 
     // 0x8274738C: the export symbol `OutputBuffer_PrePhysics::G...` is truncated; it is
     // GetVehicleInputInterface (BrnTrafficEntityModuleIO.h:795).
@@ -12039,7 +12039,7 @@ void TrafficEntityModule::RecordTrafficVehicleIsPhysical(
     Vehicle* lpVehicle = GetVehicle(luVehicle);   // 0x82720EF8 bound assert .h:2459
 
     CGS_ASSERT(lEntityId.muValue != lTargetEntityId.muValue,
-               CgsDev::Assert::MessageAt("lVictimId != lCauserId", __FILE__, 6988));                                // .cpp:6988
+               CGS_ASSERT_MESSAGE_AT("lVictimId != lCauserId", __FILE__, 6988));                                // .cpp:6988
 
     // 0x82720F50..0x82720F6C: four explicit equality tests, not a range check.
     CGS_ASSERT(leCrashType == BrnPhysics::Vehicle::eCrashTrafficType_Checked ||
@@ -12077,7 +12077,7 @@ void TrafficEntityModule::RecordTrafficVehicleIsPhysical(
             liPartsIndex = -1;
         }
 
-        CGS_ASSERT(liPartsIndex >= 0, CgsDev::Assert::MessageAt("liPartsIndex >= 0", __FILE__, 7025));                    // .cpp:7025
+        CGS_ASSERT(liPartsIndex >= 0, CGS_ASSERT_MESSAGE_AT("liPartsIndex >= 0", __FILE__, 7025));                    // .cpp:7025
         CGS_ASSERT(static_cast<u32>(liPartsIndex) < KU_MAX_PHYSICAL_TRAFFIC_VEHICLES,
                    "Index: ");                                                 // CgsBitArray.h:222
 
@@ -12520,7 +12520,7 @@ namespace
 // -------------------------------------------------------------------------------------------
 void TrafficEntityModule::UpdateVehicleStuckTimers(void* lpPhysicsInfo, f32 lfReset, f32 lfThreshold)
 {
-    CGS_ASSERT(lpPhysicsInfo != 0, CgsDev::Assert::MessageAt("lpPhysicsInfo", __FILE__, 17412));        // .cpp:17412
+    CGS_ASSERT(lpPhysicsInfo != 0, CGS_ASSERT_MESSAGE_AT("lpPhysicsInfo", __FILE__, 17412));        // .cpp:17412
 
     TrafficPhysicsInfo* const lpInfo = static_cast<TrafficPhysicsInfo*>(lpPhysicsInfo);
 
@@ -12666,12 +12666,12 @@ bool TrafficEntityModule::TryClearupOffscreenTraffic(
 // -------------------------------------------------------------------------------------------
 void TrafficEntityModule::GenerateDriverInputs(BrnTrafficIO::OutputBuffer_PrePhysics* lpOutput)
 {
-    CGS_ASSERT(lpOutput != 0, CgsDev::Assert::MessageAt("lpOutputBuffer != NULL", __FILE__, 15794));                       // .cpp:15794
+    CGS_ASSERT(lpOutput != 0, CGS_ASSERT_MESSAGE_AT("lpOutputBuffer != NULL", __FILE__, 15794));                       // .cpp:15794
 
     BrnPhysics::Vehicle::VehicleDriverInputInterface* const lpDriverInputInterface =
         lpOutput->GetVehicleDriverInterface();                                 // 0x82748EDC
 
-    CGS_ASSERT(lpDriverInputInterface != 0, CgsDev::Assert::MessageAt("lpDriverInputInterface != NULL", __FILE__, 15801)); // .cpp:15801
+    CGS_ASSERT(lpDriverInputInterface != 0, CGS_ASSERT_MESSAGE_AT("lpDriverInputInterface != NULL", __FILE__, 15801)); // .cpp:15801
 
     CgsContainers::FastBitArray<KU_PARAM_MAX_PARAMS> lPhysicalAliveVehicles;
     lPhysicalAliveVehicles.SetAnd(mVehicleSoaData.mAliveVehicles,
@@ -14750,7 +14750,7 @@ namespace
 // -------------------------------------------------------------------------------------------------
 void TrafficEntityModule::HandleExternalResponses(const BrnTrafficIO::InputBuffer_PostPhysics* lpInput)
 {
-    CGS_ASSERT(lpInput != 0, CgsDev::Assert::MessageAt("lpInput != NULL", __FILE__, 6215));                                        // :6215
+    CGS_ASSERT(lpInput != 0, CGS_ASSERT_MESSAGE_AT("lpInput != NULL", __FILE__, 6215));                                        // :6215
     if (lpInput == 0)
     {
         return;
@@ -19306,7 +19306,7 @@ void TrafficEntityModule::GenerateNearMissOutput( BrnTrafficIO::InputBuffer_PreS
         TrafficInterface* lpInterface = lpOutput->GetTrafficToRaceCarInterface_PreScene();
 
         CGS_ASSERT( lpNearMissTrafficCollection != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpNearMissTrafficCollection != NULL", KAC_ARTIST_ASSERT_HEADER, 291 /* ARTIST 0x82715CFC */));
 
         std::memcpy( lpInterface->GetNearMissTrafficCollection(),
@@ -19321,7 +19321,7 @@ void TrafficEntityModule::GenerateNearMissOutput( BrnTrafficIO::InputBuffer_PreS
         TrafficInterface* lpInterface = lpOutput->GetTrafficToRaceCarInterface_PreScene();
 
         CGS_ASSERT( lpNearMissRaceCarCollection != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpNearMissRaceCarCollection != NULL", KAC_ARTIST_ASSERT_HEADER, 305 /* ARTIST 0x82715D40 */));
 
         std::memcpy( lpInterface->GetNearMissRaceCarCollection(),
@@ -19725,7 +19725,7 @@ void TrafficEntityModule::GenerateSympatheticCrasherOutput(const BrnTrafficIO::I
 // ---------------------------------------------------------------------------------------------
 void TrafficEntityModule::ManageTriggers(BrnTrafficIO::OutputBuffer_PreScene* lpOutput)
 {
-    CGS_ASSERT(lpOutput, CgsDev::Assert::MessageAt("lpOutput", __FILE__, 4703));   // .cpp:4703
+    CGS_ASSERT(lpOutput, CGS_ASSERT_MESSAGE_AT("lpOutput", __FILE__, 4703));   // .cpp:4703
 
     for (u32 luIndex = 0; luIndex < mHullsToRemoveTriggersFor.GetLength(); ++luIndex)
     {
@@ -20221,7 +20221,7 @@ namespace BrnTraffic
 
             default:
             {
-                CGS_ASSERT( false, CgsDev::Assert::MessageAt( "0", __FILE__, 1373 ) );   // li r5,0x55D at 0x82714974
+                CGS_ASSERT( false, CGS_ASSERT_MESSAGE_AT( "0", __FILE__, 1373 ) );   // li r5,0x55D at 0x82714974
             }
         }
         return false;

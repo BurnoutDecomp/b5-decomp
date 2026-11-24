@@ -15,7 +15,7 @@
 // "WorldImpact", "CarImpact", "CrashStart", "FrontImpact", "RearImpact" }; the
 // loops start at entry [1] (bit 0), entry [0] being the zero-mask name.
 // ============================================================================
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Director/BrnShotSelector.cpp"
 #include "GameSource/Director/Utils/BrnShotSelector.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                  // CGS_ASSERT
@@ -174,7 +174,7 @@ Camera::Camera::ShotReference* ShotSelector::GetCrashShot(
     EGroup leShotGroup) const
 {
     // Non-gating tripwire (cpp:123).
-    CGS_ASSERT(lpShotSelectionInfoOut != NULL, CgsDev::Assert::MessageAt("lpShotSelectionInfoOut != NULL", "..\\..\\..\\GameSource\\Director/BrnShotSelector.cpp", 123));
+    CGS_ASSERT(lpShotSelectionInfoOut != NULL, CGS_ASSERT_MESSAGE_AT("lpShotSelectionInfoOut != NULL", CGS_ARTIST_FILE, 123));
 
     u32 luIndex = 0;
     s32 liLeastRecentTime = miCurrentTimeID;
@@ -202,7 +202,7 @@ Camera::Camera::ShotReference* ShotSelector::GetCrashShot(
         break;
     }
     // Non-gating (cpp:158): the X360 carries on with the null group after firing.
-    CGS_ASSERT(lpCrashShots != NULL, CgsDev::Assert::MessageAt("lpCrashShots != NULL", "..\\..\\..\\GameSource\\Director/BrnShotSelector.cpp", 158));
+    CGS_ASSERT(lpCrashShots != NULL, CGS_ASSERT_MESSAGE_AT("lpCrashShots != NULL", CGS_ARTIST_FILE, 158));
 
     while (luIndex < lpCrashShots->Num_ShotList())
     {
@@ -290,10 +290,12 @@ Camera::Camera::ShotReference* ShotSelector::GetCrashShot(
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
             *CgsDev::Log::gpDebugPrint << "\n\n";
 
-        CGS_ASSERT(false, CgsDev::Assert::MessageAt("Could not find a suitable shot", "..\\..\\..\\GameSource\\Director/BrnShotSelector.cpp", 305));
+        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Could not find a suitable shot", CGS_ARTIST_FILE, 305));
     }
 
     return lpBestShot;
 }
 
 } // namespace BrnDirector
+
+#undef CGS_ARTIST_FILE

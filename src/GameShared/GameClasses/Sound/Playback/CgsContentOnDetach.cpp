@@ -22,7 +22,7 @@ namespace Playback
     void Content::OnDetach(Voice& arVoice, Slot& arSlot)
     {
         // ARTIST assertion at 0x826A2484.
-        CGS_ASSERT(mu16LoadCount, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(mu16LoadCount, CGS_ASSERT_MESSAGE_AT(
             "mu16LoadCount",
             "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsObject.cpp", 104));
 

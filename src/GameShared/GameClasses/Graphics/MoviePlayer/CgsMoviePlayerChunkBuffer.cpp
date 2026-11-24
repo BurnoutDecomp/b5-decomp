@@ -95,7 +95,7 @@ namespace CgsGraphics
     void* MoviePlayerCoreAllocator::Alloc(size_t /*nSize*/, const char* /*pName*/, unsigned int /*nFlags*/,
                                           unsigned int /*nAlignment*/, unsigned int /*nAlignmentOffset*/)
     {
-        CGS_ASSERT(false, CgsDev::Assert::StreamMessageAt("Invalid allocation\n", "..\\..\\..\\GameShared\\GameClasses\\Graphics/MoviePlayer/CgsMoviePlayer.h", 137));
+        CGS_ASSERT(false, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid allocation\n", "..\\..\\..\\GameShared\\GameClasses\\Graphics/MoviePlayer/CgsMoviePlayer.h", 137));
         return 0;
     }
 

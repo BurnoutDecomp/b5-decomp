@@ -10,7 +10,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include <algorithm>
 #include <cstring>
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Sound/Vehicles/BrnVehicleState.h"
 s32 KI_PRINT_CAR_LOADING_STATES = 0; // X360 dword_82FFB830; menu bool tag aliases this word
 
 // =============================================================================
@@ -213,11 +213,11 @@ void VehicleState::AttachInfo::Construct(
     CGS_ASSERT(
         static_cast<s32>(auVehicleIndex) >= 0
             && static_cast<s32>(auVehicleIndex) < static_cast<s32>(KI_MAX_ACTIVE_RACE_CARS),
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "liVehicleIndex >= 0 && liVehicleIndex < static_cast<int32_t>(BrnWorld::KI_MAX_ACTIVE_RACE_CARS)",
-            "..\\..\\..\\GameSource\\Sound/Vehicles/BrnVehicleState.h", 275));
+            CGS_ARTIST_FILE, 275));
 
-    CGS_ASSERT(apVehicleAsset != 0, CgsDev::Assert::MessageAt("lpVehicleAsset", "..\\..\\..\\GameSource\\Sound/Vehicles/BrnVehicleState.h", 276));
+    CGS_ASSERT(apVehicleAsset != 0, CGS_ASSERT_MESSAGE_AT("lpVehicleAsset", CGS_ARTIST_FILE, 276));
 
     muVehicleIndex = auVehicleIndex; // stw r30, 0x04
     mAttachToken   = aAttachToken;   // std r27, 0x08
@@ -226,3 +226,5 @@ void VehicleState::AttachInfo::Construct(
 
 } // namespace Vehicles
 } // namespace BrnSound
+
+#undef CGS_ARTIST_FILE

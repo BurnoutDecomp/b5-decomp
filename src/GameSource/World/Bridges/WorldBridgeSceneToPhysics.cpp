@@ -74,8 +74,8 @@ namespace WorldModule
         BrnPhysics::PhysicsModuleIO::InputBuffer* lpPhysicsModuleInputBuffer,
         const CgsSceneManager::SceneManagerIO::OutputBuffer* lpSceneModuleOutputBuffer)
     {
-        CGS_ASSERT(lpPhysicsModuleInputBuffer != 0, CgsDev::Assert::MessageAt("lpPhysicsModuleInputBuffer != NULL", __FILE__, 40));  // :40
-        CGS_ASSERT(lpSceneModuleOutputBuffer != 0, CgsDev::Assert::MessageAt("lpSceneModuleOutputBuffer != NULL", __FILE__, 41));   // :41
+        CGS_ASSERT(lpPhysicsModuleInputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpPhysicsModuleInputBuffer != NULL", __FILE__, 40));  // :40
+        CGS_ASSERT(lpSceneModuleOutputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpSceneModuleOutputBuffer != NULL", __FILE__, 41));   // :41
 
         if (lpPhysicsModuleInputBuffer == 0 || lpSceneModuleOutputBuffer == 0)
         {
@@ -194,8 +194,8 @@ namespace WorldModule
         BrnPhysics::PhysicsModuleIO::InputBuffer* lpPhysicsModuleInputBuffer,
         const CgsSceneManager::SceneManagerIO::OutputBuffer* lpSceneModuleOutputBuffer)
     {
-        CGS_ASSERT(lpPhysicsModuleInputBuffer != 0, CgsDev::Assert::MessageAt("lpPhysicsModuleInputBuffer != NULL", __FILE__, 117));  // :117
-        CGS_ASSERT(lpSceneModuleOutputBuffer != 0, CgsDev::Assert::MessageAt("lpSceneModuleOutputBuffer != NULL", __FILE__, 118));   // :118
+        CGS_ASSERT(lpPhysicsModuleInputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpPhysicsModuleInputBuffer != NULL", __FILE__, 117));  // :117
+        CGS_ASSERT(lpSceneModuleOutputBuffer != 0, CGS_ASSERT_MESSAGE_AT("lpSceneModuleOutputBuffer != NULL", __FILE__, 118));   // :118
 
         // ---- leg 1: the culler's potential contacts ------------------------------------
         // Source getter first, destination getter second -- both are lock tripwires, so the

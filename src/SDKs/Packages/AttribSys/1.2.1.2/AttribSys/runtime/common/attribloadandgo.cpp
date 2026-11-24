@@ -4,7 +4,7 @@
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/export/attribexportmanager.h" // Attrib::ExportManager
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/attribsys.h"          // Attrib::Database (Initialize/Deinitialize GC pass)
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/attribsysallochooks.h" // Attrib::Alloc
-
+#define CGS_ARTIST_FILE "..\\..\\..\\SDKs\\Packages\\AttribSys\\1.2.1.2\\AttribSys/runtime/common/attribloadandgo.cpp"
 // Attrib::Vault::DataBlock member functions, reconstructed store-for-store from
 // BURNOUT_X360_ARTIST.XEX (AttribSys v1.2.1.2):
 //
@@ -68,8 +68,8 @@ void* Attrib::Vault_ScalarDeletingDtor(Attrib::Vault* lpVault, int liDeleteFlag)
 void* Attrib::Vault::GetExportData(unsigned int luIndex) const
 {
     CGS_ASSERT(luIndex < mNumExports,
-        CgsDev::Assert::MessageAt("Attrib::Vault given bad index.",
-            "..\\..\\..\\SDKs\\Packages\\AttribSys\\1.2.1.2\\AttribSys/runtime/common/attribloadandgo.cpp",
+        CGS_ASSERT_MESSAGE_AT("Attrib::Vault given bad index.",
+            CGS_ARTIST_FILE,
             526 /* ARTIST 0x82803450 */));
     return mExportData[luIndex].GetData();
 }
@@ -104,9 +104,9 @@ void Attrib::Vault::ResolveDependency(unsigned int luIndex, void* lpData,
 void Attrib::ExportManager::AddExportPolicy(TypeID luType, IExportPolicy* lpPolicy)
 {
     CGS_ASSERT(mNumPolicies < mMaxPolicies,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "ExportManager::AddExportPolicy -- insufficient entries reserved in policy table.",
-            "..\\..\\..\\SDKs\\Packages\\AttribSys\\1.2.1.2\\AttribSys/runtime/common/attribloadandgo.cpp",
+            CGS_ARTIST_FILE,
             46 /* ARTIST 0x82803168 */));
 
     ExportPolicyPair& lrSlot = mpPolicies[mNumPolicies];
@@ -554,3 +554,5 @@ Attrib::Vault::~Vault()
     Attrib::HashMapTablePolicy::FreeWithCensusIf(mDepIDs, sizeof(AssetID) * lnBlockCount,
                                                  "Attrib::AssetIDs");
 }
+
+#undef CGS_ARTIST_FILE

@@ -6,7 +6,7 @@
 //   UpdateInitialising @0x824B5C60, UpdateLoading @0x824CAAA0, UpdatePermanent @0x824C1690,
 //   Update @0x824D8318.
 // ===================================================================================
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavStats.cpp"
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavStats.h"
 
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"        // CGS_ASSERT
@@ -209,13 +209,13 @@ namespace BrnGui
     // ---- HandleTriggers @ 0x824B6370 ----------------------------------------------
     void CrashNavStats::HandleTriggers(const CgsModule::Event* lpEvent)
     {
-        CGS_ASSERT(lpEvent != 0, CgsDev::Assert::StreamMessageAt("Invalid event in CrashNavStats::HandleTriggers", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavStats.cpp", 615));   // cpp:615
+        CGS_ASSERT(lpEvent != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event in CrashNavStats::HandleTriggers", CGS_ARTIST_FILE, 615));   // cpp:615
     }
 
     // ---- SetExpectedAptComponents @ 0x824B6408 ------------------------------------
     void CrashNavStats::SetExpectedAptComponents()
     {
-        CGS_ASSERT(mpGuiCache, CgsDev::Assert::MessageAt("mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavStats.cpp", 628 /* ARTIST 0x824B643C */));
+        CGS_ASSERT(mpGuiCache, CGS_ASSERT_MESSAGE_AT("mpGuiCache", CGS_ARTIST_FILE, 628 /* ARTIST 0x824B643C */));
 
         mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
 
@@ -275,7 +275,7 @@ namespace BrnGui
     // ---- UpdateInitialising @ 0x824B5C60 ------------------------------------------
     bool CrashNavStats::UpdateInitialising()
     {
-        CGS_ASSERT(mpGuiCache, CgsDev::Assert::MessageAt("NULL != mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavStats.cpp", 339 /* ARTIST 0x824B5C9C */));
+        CGS_ASSERT(mpGuiCache, CGS_ASSERT_MESSAGE_AT("NULL != mpGuiCache", CGS_ARTIST_FILE, 339 /* ARTIST 0x824B5C9C */));
 
         if (!mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN))
             return false;
@@ -392,3 +392,5 @@ namespace BrnGui
         }
     }
 }
+
+#undef CGS_ARTIST_FILE

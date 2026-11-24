@@ -1,5 +1,5 @@
 #include "GameSource/GameState/TriggerQueryManager/BrnTriggerQueryManagerDebugComponent.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\SharedClasses\\Trigger/BrnTriggerData.h"
 #include "GameSource/GameState/TriggerQueryManager/BrnTriggerQueryManager.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
@@ -61,8 +61,8 @@ namespace BrnGameState
                     CgsDev::Assert::BeginAssert();
                     CgsDev::Assert::FireAssert(
                         "liRegionIndex < miRegionCount",
-                        "..\\..\\..\\SharedClasses\\Trigger/BrnTriggerData.h",
-                        624);
+                        CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                        624));
                     CgsDev::Assert::EndAssert();
                 }
 
@@ -148,8 +148,8 @@ namespace BrnGameState
                                         CgsDev::Assert::BeginAssert();
                                         CgsDev::Assert::FireAssert(
                                             "lGroupID != 0",
-                                            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TriggerQueryManager/BrnTriggerQueryManagerDebugComponent.cpp",
-                                            260);
+                                            CGS_ASSERT_LOCATION("d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TriggerQueryManager/BrnTriggerQueryManagerDebugComponent.cpp",
+                                            260));
                                         CgsDev::Assert::EndAssert();
                                     }
 
@@ -244,8 +244,8 @@ namespace BrnGameState
                     CgsDev::Assert::BeginAssert();
                     CgsDev::Assert::FireAssert(
                         "liRoamingLocationIndex < miRoamingLocationCount",
-                        "..\\..\\..\\SharedClasses\\Trigger/BrnTriggerData.h",
-                        569);
+                        CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                        569));
                     CgsDev::Assert::EndAssert();
                 }
 
@@ -272,8 +272,8 @@ namespace BrnGameState
                     CgsDev::Assert::BeginAssert();
                     CgsDev::Assert::FireAssert(
                         "liSpawnLocationIndex < miSpawnLocationCount",
-                        "..\\..\\..\\SharedClasses\\Trigger/BrnTriggerData.h",
-                        585);
+                        CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                        585));
                     CgsDev::Assert::EndAssert();
                 }
 
@@ -304,8 +304,8 @@ namespace BrnGameState
                     CgsDev::Assert::BeginAssert();
                     CgsDev::Assert::FireAssert(
                         "liRegionIndex < miRegionCount",
-                        "..\\..\\..\\SharedClasses\\Trigger/BrnTriggerData.h",
-                        624);
+                        CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                        624));
                     CgsDev::Assert::EndAssert();
                 }
 
@@ -343,3 +343,5 @@ namespace BrnGameState
         }
     }
 }
+
+#undef CGS_ARTIST_FILE

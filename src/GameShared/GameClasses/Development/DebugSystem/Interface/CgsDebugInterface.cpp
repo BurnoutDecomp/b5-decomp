@@ -40,7 +40,7 @@ namespace CgsDev
     DebugManager& DebugInterface::GetDebugManager()
     {
         CGS_ASSERT(mpDebugManager,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpDebugManager",
                 "..\\..\\..\\GameShared\\GameClasses\\Development/DebugSystem/Interface/CgsDebugInterface.h", 163 /* ARTIST 0x823A61D8 */));
         return *mpDebugManager;

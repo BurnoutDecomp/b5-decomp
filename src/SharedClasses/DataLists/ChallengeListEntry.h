@@ -11,7 +11,7 @@
 // IMPORTANT layout note: GetAction @ 0x8230F0F8 computes `this + 80 * index`, which
 // PROVES sizeof(ChallengeListEntryAction) == 80 (0x50) and maAction @ offset 0 in
 // ChallengeListEntry.
-
+#define CGS_ARTIST_CHALLENGELISTENTRY_FILE "..\\..\\..\\SharedClasses\\DataLists/ChallengeListEntry.h"
 #pragma once
 
 #include "types.hpp"                                   // u8/s8/u32/s32/f32 widths
@@ -336,8 +336,8 @@ ChallengeListEntryAction::GetActionType() const
 {
     CGS_ASSERT(
         muActionType < E_ACTION_COUNT,
-        CgsDev::Assert::MessageAt( "(ChallengeListEntryAction::EChallengeActionType)muActionType < ChallengeListEntryAction::E_ACTION_COUNT",
-             "..\\..\\..\\SharedClasses\\DataLists/ChallengeListEntry.h", 660 ) );
+        CGS_ASSERT_MESSAGE_AT( "(ChallengeListEntryAction::EChallengeActionType)muActionType < ChallengeListEntryAction::E_ACTION_COUNT",
+             CGS_ARTIST_CHALLENGELISTENTRY_FILE, 660 ) );
 
     return static_cast<EChallengeActionType>( muActionType );
 }
@@ -351,9 +351,9 @@ ChallengeListEntryAction::GetActionType() const
 // out-of-range index).
 inline ChallengeListEntryAction* ChallengeListEntry::GetAction( int32_t liActionIndex )
 {
-    CGS_ASSERT( liActionIndex >= 0, CgsDev::Assert::MessageAt( "liActionIndex >= 0", "..\\..\\..\\SharedClasses\\DataLists/ChallengeListEntry.h", 941 ) );
+    CGS_ASSERT( liActionIndex >= 0, CGS_ASSERT_MESSAGE_AT( "liActionIndex >= 0", CGS_ARTIST_CHALLENGELISTENTRY_FILE, 941 ) );
     CGS_ASSERT( liActionIndex < KI_MAX_ACTIONS_PER_CHALLENGE,
-                CgsDev::Assert::MessageAt( "liActionIndex < KI_MAX_ACTIONS_PER_CHALLENGE", "..\\..\\..\\SharedClasses\\DataLists/ChallengeListEntry.h", 942 ) );
+                CGS_ASSERT_MESSAGE_AT( "liActionIndex < KI_MAX_ACTIONS_PER_CHALLENGE", CGS_ARTIST_CHALLENGELISTENTRY_FILE, 942 ) );
 
     return &maAction[ liActionIndex ];
 }
@@ -484,8 +484,8 @@ inline int32_t ChallengeListEntry::GetOriginalNumPlayers() const
 // GetOriginalNumPlayers above.
 inline void ChallengeListEntry::SetNumPlayers( int32_t liNum )
 {
-    CGS_ASSERT( liNum >= 1, CgsDev::Assert::MessageAt( "liNumPlayers >= 1", "..\\..\\..\\SharedClasses\\DataLists/ChallengeListEntry.h", 874 ) );
-    CGS_ASSERT( liNum <= KI_MAX_PLAYERS, CgsDev::Assert::MessageAt( "liNumPlayers <= KI_MAX_PLAYERS", "..\\..\\..\\SharedClasses\\DataLists/ChallengeListEntry.h", 876 ) );
+    CGS_ASSERT( liNum >= 1, CGS_ASSERT_MESSAGE_AT( "liNumPlayers >= 1", CGS_ARTIST_CHALLENGELISTENTRY_FILE, 874 ) );
+    CGS_ASSERT( liNum <= KI_MAX_PLAYERS, CGS_ASSERT_MESSAGE_AT( "liNumPlayers <= KI_MAX_PLAYERS", CGS_ARTIST_CHALLENGELISTENTRY_FILE, 876 ) );
 
     muNumPlayers = static_cast<uint8_t>( 17 * liNum );
 }
@@ -502,9 +502,9 @@ inline void ChallengeListEntryAction::SetCombineAction( ECombineActionType leTyp
 
 inline const ChallengeListEntryAction* ChallengeListEntry::GetAction( int32_t liActionIndex ) const
 {
-    CGS_ASSERT( liActionIndex >= 0, CgsDev::Assert::MessageAt( "liActionIndex >= 0", "..\\..\\..\\SharedClasses\\DataLists/ChallengeListEntry.h", 865 ) );
+    CGS_ASSERT( liActionIndex >= 0, CGS_ASSERT_MESSAGE_AT( "liActionIndex >= 0", CGS_ARTIST_CHALLENGELISTENTRY_FILE, 865 ) );
     CGS_ASSERT( liActionIndex < KI_MAX_ACTIONS_PER_CHALLENGE,
-                CgsDev::Assert::MessageAt( "liActionIndex < KI_MAX_ACTIONS_PER_CHALLENGE", "..\\..\\..\\SharedClasses\\DataLists/ChallengeListEntry.h", 866 ) );
+                CGS_ASSERT_MESSAGE_AT( "liActionIndex < KI_MAX_ACTIONS_PER_CHALLENGE", CGS_ARTIST_CHALLENGELISTENTRY_FILE, 866 ) );
 
     return &maAction[ liActionIndex ];
 }
@@ -535,9 +535,9 @@ ChallengeListEntryAction::GetCombineAction() const
 inline CgsID ChallengeListEntryAction::GetTriggerID( uint8_t lu8Index ) const
 {
     CGS_ASSERT( lu8Index < KU_MAX_LOCATIONS_PER_ACTION,
-                CgsDev::Assert::MessageAt( "luLocationIndex < KU_MAX_LOCATIONS_PER_ACTION", "..\\..\\..\\SharedClasses\\DataLists/ChallengeListEntry.h", 793 ) );
+                CGS_ASSERT_MESSAGE_AT( "luLocationIndex < KU_MAX_LOCATIONS_PER_ACTION", CGS_ARTIST_CHALLENGELISTENTRY_FILE, 793 ) );
     CGS_ASSERT( (ELocationType) mauLocationType[ lu8Index ] == E_LOCATION_TYPE_TRIGGER,
-                CgsDev::Assert::MessageAt( "(ELocationType) mauLocationType[luLocationIndex] == E_LOCATION_TYPE_TRIGGER", "..\\..\\..\\SharedClasses\\DataLists/ChallengeListEntry.h", 794 ) );
+                CGS_ASSERT_MESSAGE_AT( "(ELocationType) mauLocationType[luLocationIndex] == E_LOCATION_TYPE_TRIGGER", CGS_ARTIST_CHALLENGELISTENTRY_FILE, 794 ) );
 
     return maLocationData[ lu8Index ].mTriggerID;
 }
@@ -609,3 +609,5 @@ inline bool ChallengeListEntryAction::HasTimeLimit() const
 }
 
 } // namespace BrnResource
+
+#undef CGS_ARTIST_CHALLENGELISTENTRY_FILE

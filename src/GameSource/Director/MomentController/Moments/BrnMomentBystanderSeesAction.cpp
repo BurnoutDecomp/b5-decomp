@@ -1,5 +1,5 @@
 #include "GameSource/Director/MomentController/BrnMoment.h"   // MomentBystanderSeesAction (concretely homed there)
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentBystanderSeesAction.cpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                          // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/Camera/BrnBehaviourParameterBank.h"           // the bystander-cam moment blocks
@@ -100,7 +100,7 @@ void MomentBystanderSeesAction::Update(f32 /*lfTimeStep*/, void* lrBehaviourCont
     Camera::BehaviourManager* lpBehaviourManager =
         static_cast<Camera::BehaviourManager*>(lrBehaviourController);
 
-    CGS_ASSERT(mpParameters != 0, CgsDev::Assert::MessageAt("mpParameters != NULL", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentBystanderSeesAction.cpp", 87));   //  (non-gating)
+    CGS_ASSERT(mpParameters != 0, CGS_ASSERT_MESSAGE_AT("mpParameters != NULL", CGS_ARTIST_FILE, 87));   //  (non-gating)
 
     switch (GetState())
     {
@@ -182,7 +182,7 @@ void MomentBystanderSeesAction::Update(f32 /*lfTimeStep*/, void* lrBehaviourCont
         break;   // the shared valid tail
 
     default:
-        CGS_ASSERT(false, CgsDev::Assert::MessageAt("unhandled case in switch", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentBystanderSeesAction.cpp", 196));   //  (non-gating)
+        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("unhandled case in switch", CGS_ARTIST_FILE, 196));   //  (non-gating)
         return;
     }
 
@@ -229,9 +229,11 @@ void MomentBystanderSeesAction::Update(f32 /*lfTimeStep*/, void* lrBehaviourCont
 // the zoom re-snap its FOV band continuously.
 void MomentBystanderSeesAction::SetPerceivedDistanceModificationFactor(f32 lfFactor)
 {
-    CGS_ASSERT(mBystander.IsAllocated(), CgsDev::Assert::MessageAt("IsAllocated()", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 589));
+    CGS_ASSERT(mBystander.IsAllocated(), CGS_ASSERT_MESSAGE_AT("IsAllocated()", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 589));
 
     mBystander.GetBehaviour()->SetPerceivedDistanceModificationFactor(lfFactor);
 }
 
 }
+
+#undef CGS_ARTIST_FILE

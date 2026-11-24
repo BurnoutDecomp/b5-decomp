@@ -11,7 +11,7 @@
 //        @ X360 0x826730B0 / 0x8229D6C8 / 0x826731E8 (generic bodies in the Impl header,
 //        emitted here via explicit member instantiation).
 // ============================================================================
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\attribsys\\CgsAttribSysModuleIO.h"
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysModuleIO.h"
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysSharedIOImpl.h" // generic template method bodies
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"
@@ -46,7 +46,7 @@ namespace AttribSysIO
     // AttribSysEventQueue* so ProcessInputs' generic GetFirstEvent/GetNextEvent path compiles.
     const AttribSysEventQueue* Inp(const InputBuffer* lpInputBuffer)
     {
-        CGS_ASSERT(lpInputBuffer->IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\attribsys\\CgsAttribSysModuleIO.h", 85));
+        CGS_ASSERT(lpInputBuffer->IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 85));
         return reinterpret_cast<const AttribSysEventQueue*>(
             &lpInputBuffer->mVaultRequestInterface.mRequestQueue);
     }
@@ -56,7 +56,7 @@ namespace AttribSysIO
     // non-const writer variant used by the request builders taking the exclusive write lock.
     AttribSysEventQueue* InputBuff(InputBuffer* lpInputBuffer)
     {
-        CGS_ASSERT(lpInputBuffer->IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\attribsys\\CgsAttribSysModuleIO.h", 88));
+        CGS_ASSERT(lpInputBuffer->IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 88));
         return reinterpret_cast<AttribSysEventQueue*>(
             &lpInputBuffer->mVaultRequestInterface.mRequestQueue);
     }
@@ -113,3 +113,5 @@ namespace AttribSysIO
         const AttribSysRequestInterface<32768>*);
 }
 }
+
+#undef CGS_ARTIST_FILE

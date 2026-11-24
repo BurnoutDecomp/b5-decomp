@@ -50,12 +50,12 @@ namespace Playback
 Environment::eAudioMode Environment::GetAudioMode() const
 {
     CGS_ASSERT(mpDacPlugin != 0,
-        CgsDev::Assert::MessageAt("mpDacPlugin", KAC_ARTIST_ASSERT_FILE, 528 /* ARTIST 0x82689BFC */));
+        CGS_ASSERT_MESSAGE_AT("mpDacPlugin", KAC_ARTIST_ASSERT_FILE, 528 /* ARTIST 0x82689BFC */));
 
     XAUDIOSPEAKERCONFIG lXAudioSpeakerConfig;
     const HRESULT lhr = XAudioGetSpeakerConfig(&lXAudioSpeakerConfig);
     CGS_ASSERT(lhr == S_OK,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "XAudioGetSpeakerConfig( &lXAudioSpeakerConfig ) == S_OK",
             KAC_ARTIST_ASSERT_FILE, 533 /* ARTIST 0x82689C28 */));
 
@@ -197,7 +197,7 @@ u32 Environment::AddContent(Environment& arEnvironment, Content* apContent)
 Registry* Environment::GetRegistry()
 {
     CGS_ASSERT(mpRegistry,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "mpRegistry",
             "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsEnvironment.h", 661 /* ARTIST 0x82680EC8 */));
     return mpRegistry;

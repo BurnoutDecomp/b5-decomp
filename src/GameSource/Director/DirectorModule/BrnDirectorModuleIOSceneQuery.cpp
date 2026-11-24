@@ -1,5 +1,5 @@
 #include "types.hpp"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.cpp"
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIOSceneQuery.h" // the two buffer decls (promoted out of this TU)
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"     // CgsModule::IOBuffer base (read/write lock-state queries)
 #include "GameShared/GameClasses/Module/CgsModuleIOHelper.h" // CgsModule::IOHelper<T> (inline ctor/dtor)
@@ -110,9 +110,9 @@ namespace DirectorIO
         mResultsQueue.Construct();
         const bool lbPrepared = mResultsQueue.Prepare();
         CGS_ASSERT(lbPrepared,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mResultsQueue.Prepare()",
-                "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.cpp", 192 /* ARTIST 0x8221B350 */));
+                CGS_ARTIST_FILE, 192 /* ARTIST 0x8221B350 */));
         (void)lbPrepared;
     }
 
@@ -122,9 +122,9 @@ namespace DirectorIO
     {
         const bool lbReleased = mResultsQueue.Release();
         CGS_ASSERT(lbReleased,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mResultsQueue.Release()",
-                "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.cpp", 207 /* ARTIST 0x8221B3B8 */));                        // BrnDirectorModuleIO.cpp:207
+                CGS_ARTIST_FILE, 207 /* ARTIST 0x8221B3B8 */));                        // BrnDirectorModuleIO.cpp:207
         (void)lbReleased;
         mResultsQueue.Destruct();
         CgsModule::IOBuffer::Destruct();
@@ -159,3 +159,5 @@ namespace DirectorIO
 template
 CgsModule::IOHelper<BrnDirector::DirectorIO::SceneQueryInputBuffer>::IOHelper(
     CgsModule::IOBufferStack* lpStack, const char* lpcName);
+
+#undef CGS_ARTIST_FILE

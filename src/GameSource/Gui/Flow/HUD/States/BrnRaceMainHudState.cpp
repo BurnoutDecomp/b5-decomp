@@ -1,5 +1,5 @@
 #include "GameSource/Gui/Flow/HUD/States/BrnRaceMainHudState.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnRaceMainHudState.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                      // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsID.h"                          // CgsID / CgsIDCompress
 #include "GameShared/GameClasses/Containers/CgsHash.h"                  // CgsContainers::CgsHash::CalculateHash
@@ -330,7 +330,7 @@ namespace BrnGui
         else
             DoMugshot(lpEvent);
 
-        CGS_ASSERT(mpCache != 0, CgsDev::Assert::MessageAt("mpCache", "..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnRaceMainHudState.cpp", 3844 /* ARTIST 0x82475D38 */));
+        CGS_ASSERT(mpCache != 0, CGS_ASSERT_MESSAGE_AT("mpCache", CGS_ARTIST_FILE, 3844 /* ARTIST 0x82475D38 */));
         const s32 liGameMode = mpCache->GetGameMode();
         if ((liGameMode == 15 || liGameMode == 16) &&
             (lpEvent->meResponse == E_MUGSHOT_RESPONSE_STOP_MY_MUGSHOT ||
@@ -802,7 +802,7 @@ namespace BrnGui
         SetExpectedComponent(mGeneralTransitionComponentApt.GetName());
 
         CGS_ASSERT(muNumExpectedComponents <= KU_MAX_INIT_COMPONENTS_NUM,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "muNumExpectedComponents <= KU_MAX_INIT_COMPONENTS_NUM",
                 __FILE__, 3527 /* ARTIST 0x82474A18 */));   // cpp:3527
 
@@ -1338,8 +1338,8 @@ namespace BrnGui
                 CgsDev::Assert::BeginAssert();
                 CgsDev::Assert::FireAssert(
                     lacMessage,
-                    "..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnRaceMainHudState.cpp",
-                    1855);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                    1855));
                 CgsDev::Assert::EndAssert();
             }
             break;
@@ -1765,8 +1765,8 @@ namespace BrnGui
                     CgsDev::Assert::BeginAssert();
                     CgsDev::Assert::FireAssert(
                         lacMessage,
-                        "..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnRaceMainHudState.cpp",
-                        3702);
+                        CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+                        3702));
                     CgsDev::Assert::EndAssert();
                 }
                 break;
@@ -2609,9 +2609,9 @@ namespace BrnGui
     void RaceMainHudState::SetupEventInfo()
     {
         CGS_ASSERT(mpCache != 0,
-            CgsDev::Assert::MessageAt("mpCache", __FILE__, 3804 /* ARTIST 0x82474A94 */));           // cpp:3804 (non-gating)
+            CGS_ASSERT_MESSAGE_AT("mpCache", __FILE__, 3804 /* ARTIST 0x82474A94 */));           // cpp:3804 (non-gating)
         CGS_ASSERT(mbEventInfo,
-            CgsDev::Assert::MessageAt("mbEventInfo", __FILE__, 3805 /* ARTIST 0x82474ABC */));        // cpp:3805 (non-gating)
+            CGS_ASSERT_MESSAGE_AT("mbEventInfo", __FILE__, 3805 /* ARTIST 0x82474ABC */));        // cpp:3805 (non-gating)
 
         const s32 liGameMode = mpCache->GetGameMode();
         mEventInfoComponent.SetEventType(
@@ -2718,7 +2718,7 @@ namespace BrnGui
         if (mbPreRaceCountdown && meCurrentEventCountdownState == E_EVENT_COUNTDOWN_STATE_GO)
         {
             CGS_ASSERT(mpCache != 0,
-                CgsDev::Assert::MessageAt("mpCache", __FILE__, 3423 /* ARTIST 0x82474930 */));   // cpp:3423 (non-gating)
+                CGS_ASSERT_MESSAGE_AT("mpCache", __FILE__, 3423 /* ARTIST 0x82474930 */));   // cpp:3423 (non-gating)
             if (mpCache->GetTime() >= mfEventCountdownTimer)
             {
                 const bool lbRenders = mbPreRaceCountdownRenders;
@@ -3027,7 +3027,7 @@ namespace BrnGui
     // record to the sat-nav component under the ORIGINAL event id, so one body serves both.
     void RaceMainHudState::UpdateSatNav(const CgsModule::Event* lpEvent, s32 liEventId)
     {
-        CGS_ASSERT(lpEvent != 0, CgsDev::Assert::StreamMessageAt(" invalid event passed ", "..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnRaceMainHudState.cpp", 3226));                 // cpp:3226
+        CGS_ASSERT(lpEvent != 0, CGS_ASSERT_STREAM_MESSAGE_AT(" invalid event passed ", CGS_ARTIST_FILE, 3226));                 // cpp:3226
         // (the assert string's leading and trailing spaces are the console's, verbatim)
 
         if (mbSatNav)                                                       // lbz 0x150
@@ -3145,8 +3145,8 @@ namespace BrnGui
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 lacMessage,
-                "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsFastBitArray.h",
-                396);
+                CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Containers/CgsFastBitArray.h",
+                396));
             CgsDev::Assert::EndAssert();
         }
         const BrnGameState::GameStateModuleIO::CompletedFburnChallenges* lpCompleted =
@@ -3205,3 +3205,5 @@ namespace BrnGui
         PostTickerCustomMessage537(mpStateInterface, lMessage);
     }
 }
+
+#undef CGS_ARTIST_FILE

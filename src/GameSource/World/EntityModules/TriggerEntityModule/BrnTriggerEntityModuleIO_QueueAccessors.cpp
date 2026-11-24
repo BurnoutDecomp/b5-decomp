@@ -1,7 +1,7 @@
 #include "GameSource/World/EntityModules/TriggerEntityModule/BrnTriggerEntityModuleIO.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // the header-baked lock asserts
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\triggerentitymodule\\BrnTriggerEntityModuleIO.h"
 // Out-of-line bodies of the BrnWorld::TriggerEntityModuleIO buffer queue accessors the X360
 // ARTIST build emitted out-of-line. Each guarded accessor asserts the buffer's lock bit then
 // returns the address of its embedded queue member (this + 4):
@@ -27,7 +27,7 @@ namespace TriggerEntityModuleIO
     // returns &mQueryInputInterface (this + 4). Filled by the input->trigger bridges.
     TriggerQueryQueue* InputBuffer_PostScene::GetQueryInputInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\triggerentitymodule\\BrnTriggerEntityModuleIO.h", 65));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 65));
         return &mQueryInputInterface;
     }
 
@@ -35,7 +35,7 @@ namespace TriggerEntityModuleIO
     // &mSceneResultQueue (this + 4). Read by ProcessSceneQueryResults.
     const SceneResultQueue* InputBuffer_PrePhysics::GetSceneResultQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\triggerentitymodule\\BrnTriggerEntityModuleIO.h", 172));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 172));
         return &mSceneResultQueue;
     }
 
@@ -43,7 +43,7 @@ namespace TriggerEntityModuleIO
     // returns &mOutputInterface (this + 4). Read by BridgeEntityModulesToOutput_PrePhysics.
     const TriggerEntityModuleOutputInterface* OutputBuffer_PrePhysics::GetOutputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\triggerentitymodule\\BrnTriggerEntityModuleIO.h", 198));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 198));
         return &mOutputInterface;
     }
 
@@ -51,7 +51,7 @@ namespace TriggerEntityModuleIO
     // guarded, returns &mOutputInterface (this + 4). Filled by ProcessLineTestFineResult.
     TriggerEntityModuleOutputInterface* OutputBuffer_PrePhysics::GetOutputInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\triggerentitymodule\\BrnTriggerEntityModuleIO.h", 199));
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 199));
         return &mOutputInterface;
     }
 
@@ -62,8 +62,10 @@ namespace TriggerEntityModuleIO
     const InputBuffer_PreScene::InputInterface*
     InputBuffer_PreScene::GetInputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\triggerentitymodule\\BrnTriggerEntityModuleIO.h", 64));
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 64));
         return &mInputInterface;
     }
 }
 }
+
+#undef CGS_ARTIST_FILE

@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Fsm/CgsScriptedFsm.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\FSM/CgsScriptedFsm.cpp"
 #include "GameShared/GameClasses/Fsm/Resources/CgsLuaCodeResource.h"  // CgsResource::LuaCodeResource
 #include "GameShared/GameClasses/Fsm/CgsEvent.h"                       // CgsFsm::Event
 #include "GameShared/GameClasses/Fsm/CgsVariable.h"                    // CgsFsm::Variable
@@ -168,7 +168,7 @@ void ScriptedFsm::GetNextStates(s32 liStateIndex,
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("mLuaState.IsLuaResourceValid()",
-            "..\\..\\..\\GameShared\\GameClasses\\FSM/CgsScriptedFsm.cpp", 263);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 263));
         CgsDev::Assert::EndAssert();
     }
 
@@ -220,9 +220,11 @@ void ScriptedFsm::GetNextStates(s32 liStateIndex,
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("Too many state transitions in FSM\n",
-            "..\\..\\..\\GameShared\\GameClasses\\FSM/CgsScriptedFsm.cpp", 296);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 296));
         CgsDev::Assert::EndAssert();
     }
 }
 
 } // namespace CgsFsm
+
+#undef CGS_ARTIST_FILE

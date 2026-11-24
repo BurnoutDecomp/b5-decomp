@@ -61,7 +61,7 @@ namespace CgsNetwork
                                           MessageWithPlayerIDs::NetworkPlayerID* lpaReceivedClientsIDs)
     {
         CGS_ASSERT(lu16Frame != KU16_INVALID_FRAME,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lu16Frame != KU16_INVALID_FRAME",
                 "..\\..\\..\\GameShared\\GameClasses\\Network\\Time\\CgsStartTimeMessage.cpp", 75 /* ARTIST 0x8288A4C8 */));
 
@@ -91,7 +91,7 @@ namespace CgsNetwork
         }
 
         SetMessageInvalid();
-        CGS_ASSERT(!IsMessageValid(), CgsDev::Assert::MessageAt(
+        CGS_ASSERT(!IsMessageValid(), CGS_ASSERT_MESSAGE_AT(
             "!IsMessageValid()",
             __FILE__, 159 /* ARTIST 0x8288A600 */));
         return true;

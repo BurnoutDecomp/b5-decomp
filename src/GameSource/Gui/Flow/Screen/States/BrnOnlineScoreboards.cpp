@@ -1,7 +1,7 @@
 // BrnGui::OnlineScoreboards -- static-member definitions (X360 rodata values, dumped:
 // scratchpad/waveI/scoreboards_rodata.txt) and the constructor.
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineScoreboards.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineScoreboards.cpp"
 namespace BrnGui
 {
     // the scoreboards screen.
@@ -429,7 +429,7 @@ namespace BrnGui
     // pending-id bookkeeping.
     void OnlineScoreboards::ClearExpectedComponent()
     {
-        CGS_ASSERT(mpGuiCache, CgsDev::Assert::MessageAt("mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineScoreboards.cpp", 430 /* ARTIST 0x82486960 */));   // cpp:430 (non-fatal -- the call below runs regardless)
+        CGS_ASSERT(mpGuiCache, CGS_ASSERT_MESSAGE_AT("mpGuiCache", CGS_ARTIST_FILE, 430 /* ARTIST 0x82486960 */));   // cpp:430 (non-fatal -- the call below runs regardless)
 
         mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
 
@@ -458,7 +458,7 @@ namespace BrnGui
     // GuiCache event (type 64) and latch its carried cache pointer into mpGuiCache.
     void OnlineScoreboards::UpdateGetCache()
     {
-        CGS_ASSERT(mpGuiCache == NULL, CgsDev::Assert::MessageAt("NULL == mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineScoreboards.cpp", 473 /* ARTIST 0x82491818 */));   // cpp:473 (the cache must still be unset here)
+        CGS_ASSERT(mpGuiCache == NULL, CGS_ASSERT_MESSAGE_AT("NULL == mpGuiCache", CGS_ARTIST_FILE, 473 /* ARTIST 0x82491818 */));   // cpp:473 (the cache must still be unset here)
 
         StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
 
@@ -479,14 +479,14 @@ namespace BrnGui
             {
                 // The cache event carries the GuiCache pointer in its leading word.
                 GuiCache* lpCache = *reinterpret_cast<GuiCache* const*>(lpEvent);
-                CGS_ASSERT(lpCache != NULL, CgsDev::Assert::MessageAt("NULL != lpCacheEvent->mpCachePointer", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineScoreboards.cpp", 483 /* ARTIST 0x82491888 */));   // cpp:483
+                CGS_ASSERT(lpCache != NULL, CGS_ASSERT_MESSAGE_AT("NULL != lpCacheEvent->mpCachePointer", CGS_ARTIST_FILE, 483 /* ARTIST 0x82491888 */));   // cpp:483
 
                 // X360 stores unconditionally, after the (non-fatal) assert above.
                 mpGuiCache = lpCache;
             }
         }
 
-        CGS_ASSERT(mpGuiCache != NULL, CgsDev::Assert::MessageAt("NULL != mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineScoreboards.cpp", 492 /* ARTIST 0x824918B8 */));   // cpp:492
+        CGS_ASSERT(mpGuiCache != NULL, CGS_ASSERT_MESSAGE_AT("NULL != mpGuiCache", CGS_ARTIST_FILE, 492 /* ARTIST 0x824918B8 */));   // cpp:492
     }
 }
 
@@ -536,8 +536,8 @@ namespace BrnGui
     int OnlineScoreboards::_RoadQSortFunction(const void* lpRoadData1, const void* lpRoadData2)
     {
         // cpp:173 / cpp:174 -- both non-fatal on the X360: the compare runs regardless.
-        CGS_ASSERT(lpRoadData1 != 0, CgsDev::Assert::MessageAt("lpRoadData1", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineScoreboards.cpp", 173 /* ARTIST 0x82486800 */));
-        CGS_ASSERT(lpRoadData2 != 0, CgsDev::Assert::MessageAt("lpRoadData2", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineScoreboards.cpp", 174 /* ARTIST 0x82486824 */));
+        CGS_ASSERT(lpRoadData1 != 0, CGS_ASSERT_MESSAGE_AT("lpRoadData1", CGS_ARTIST_FILE, 173 /* ARTIST 0x82486800 */));
+        CGS_ASSERT(lpRoadData2 != 0, CGS_ASSERT_MESSAGE_AT("lpRoadData2", CGS_ARTIST_FILE, 174 /* ARTIST 0x82486824 */));
 
         // X360 `addi rN, rN, 4`: the compared field is the record's name, not the record.
         // Reached through the named member so the host's own offset is used.
@@ -1829,3 +1829,5 @@ namespace BrnGui
         reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue)->Clear();
     }
 }
+
+#undef CGS_ARTIST_FILE

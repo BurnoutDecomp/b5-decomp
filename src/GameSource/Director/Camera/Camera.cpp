@@ -177,7 +177,7 @@ Camera::Camera(const Camera& lrOther)
 void Camera::SetFOV(f32 lfFOV)
 {
     CGS_ASSERT(lfFOV > 0.0f,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lfFOV > 0.0f",
             "..\\..\\..\\GameSource\\Director/Camera/Camera.h", 424 /* ARTIST 0x821F26EC */));
     mfFOV = lfFOV;

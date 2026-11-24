@@ -8,7 +8,7 @@
 // BrnGui::RaceMainHudState::SetExpectedComponent.
 // ===================================================================================
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineMarkMan.h"
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineMarkMan.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"        // CGS_ASSERT
 #include "GameShared/GameClasses/Containers/CgsHash.h"    // CgsContainers::CgsHash::CalculateHash
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                         // CgsGui::GuiEvent<N>
@@ -137,7 +137,7 @@ const s32 OnlineMarkMan::miNumEventsObserved = 5;
         muNumExpectedComponents = 0;
 
         CGS_ASSERT(mpGuiCache != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpGuiCache",
                 "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineMarkMan.h", 196 /* ARTIST 0x82483BF0 */));
 
@@ -232,7 +232,7 @@ const s32 OnlineMarkMan::miNumEventsObserved = 5;
     // Latch the cache from the first cache-pointer event in the in-queue.
     void OnlineMarkMan::UpdateGetCache()
     {
-        CGS_ASSERT(mpGuiCache == 0, CgsDev::Assert::MessageAt("NULL == mpGuiCache", KAC_BRN_ONLINE_MARK_MAN_ASSERT_FILE, 227));
+        CGS_ASSERT(mpGuiCache == 0, CGS_ASSERT_MESSAGE_AT("NULL == mpGuiCache", KAC_BRN_ONLINE_MARK_MAN_ASSERT_FILE, 227));
 
 
         const CgsModule::Event* lpEvent;
@@ -244,13 +244,13 @@ const s32 OnlineMarkMan::miNumEventsObserved = 5;
             if (liEventId == KI_EVENT_GUI_CACHE)
             {
                 const GuiEventCachePointer* lpCacheEvent = reinterpret_cast<const GuiEventCachePointer*>(lpEvent);
-                CGS_ASSERT(lpCacheEvent->mpCachePointer != 0, CgsDev::Assert::MessageAt("NULL != lpCacheEvent->mpCachePointer", KAC_BRN_ONLINE_MARK_MAN_ASSERT_FILE, 237));
+                CGS_ASSERT(lpCacheEvent->mpCachePointer != 0, CGS_ASSERT_MESSAGE_AT("NULL != lpCacheEvent->mpCachePointer", KAC_BRN_ONLINE_MARK_MAN_ASSERT_FILE, 237));
                 mpGuiCache = lpCacheEvent->mpCachePointer;
                 break;
             }
         }
 
-        CGS_ASSERT(mpGuiCache != 0, CgsDev::Assert::MessageAt("NULL != mpGuiCache", KAC_BRN_ONLINE_MARK_MAN_ASSERT_FILE, 246));
+        CGS_ASSERT(mpGuiCache != 0, CGS_ASSERT_MESSAGE_AT("NULL != mpGuiCache", KAC_BRN_ONLINE_MARK_MAN_ASSERT_FILE, 246));
     }
 
     // ---- UpdateLoadResources ---------------------------------------------------
@@ -288,9 +288,9 @@ const s32 OnlineMarkMan::miNumEventsObserved = 5;
     void OnlineMarkMan::UpdateSetup()
     {
         CGS_ASSERT(mpGuiCache != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "mpGuiCache != NULL",
-                "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineMarkMan.cpp", 314 /* ARTIST 0x82487220 */));
+                CGS_ARTIST_FILE, 314 /* ARTIST 0x82487220 */));
         mTimeFieldIcon.SetState("idle");
     }
 
@@ -298,7 +298,7 @@ const s32 OnlineMarkMan::miNumEventsObserved = 5;
     // If the local player dropped out of the session, post the advance record and advance.
     bool OnlineMarkMan::UpdateSyncing()
     {
-        CGS_ASSERT(mpGuiCache, CgsDev::Assert::MessageAt("mpGuiCache", __FILE__, 332 /* ARTIST 0x824A0C88 */));
+        CGS_ASSERT(mpGuiCache, CGS_ASSERT_MESSAGE_AT("mpGuiCache", __FILE__, 332 /* ARTIST 0x824A0C88 */));
 
         if (mpGuiCache->GetOnlinePlayerDisconnected(
                 static_cast<EActiveRaceCarIndex>(mpGuiCache->GetPlayerActiveRaceCarIndex())))
@@ -359,10 +359,12 @@ const s32 OnlineMarkMan::miNumEventsObserved = 5;
         ClearExpectedComponent();
         SetExpectedComponent(mTimeFieldIcon.GetName());
         CGS_ASSERT(muNumExpectedComponents <= KU_MAX_INIT_COMPONENTS_NUM,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "muNumExpectedComponents <= KU_MAX_INIT_COMPONENTS_NUM",
-                "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineMarkMan.cpp", 503 /* ARTIST 0x82487298 */));
+                CGS_ARTIST_FILE, 503 /* ARTIST 0x82487298 */));
         mpGuiCache->SetExpectedAptComponentList(E_GUIFLOW_SCREEN, mauExpectedComponentIds,
                                                 muNumExpectedComponents);
     }
 }
+
+#undef CGS_ARTIST_FILE

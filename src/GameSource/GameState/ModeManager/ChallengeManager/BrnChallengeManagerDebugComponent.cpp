@@ -66,8 +66,8 @@ namespace BrnGameState
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 "lpDebugComponent",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/ChallengeManager/BrnChallengeManagerDebugComponent.cpp",
-                148);
+                CGS_ASSERT_LOCATION("d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/ChallengeManager/BrnChallengeManagerDebugComponent.cpp",
+                148));
             CgsDev::Assert::EndAssert();
         }
 
@@ -105,8 +105,8 @@ namespace BrnGameState
 
                 CgsDev::Assert::FireAssert(
                     lMessage.GetBuffer(),
-                    "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsFastBitArray.h",
-                    431);
+                    CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Containers/CgsFastBitArray.h",
+                    431));
                 CgsDev::Assert::EndAssert();
             }
 

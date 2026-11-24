@@ -208,7 +208,7 @@ namespace BrnDirector
         void FireAssert(const char* lpcText, s32 liLine)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lpcText, KPC_SOURCE_FILE, liLine);
+            CgsDev::Assert::FireAssert(lpcText, CGS_ASSERT_LOCATION(KPC_SOURCE_FILE, liLine));
             CgsDev::Assert::EndAssert();
         }
 
@@ -219,7 +219,7 @@ namespace BrnDirector
             CgsDev::StrStream lStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
             lStream << lpcText << liValue;
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lacMessageBuffer, KPC_SOURCE_FILE, liLine);
+            CgsDev::Assert::FireAssert(lacMessageBuffer, CGS_ASSERT_LOCATION(KPC_SOURCE_FILE, liLine));
             CgsDev::Assert::EndAssert();
         }
 

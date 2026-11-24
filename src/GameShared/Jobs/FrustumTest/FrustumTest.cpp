@@ -80,7 +80,7 @@ namespace CgsSceneManager
         miDebugMode = lrSource.miDebugMode;
         return *this;
     }
-
+#define CGS_ARTIST_FRUSTUM_JOB_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\jobs\\frustumtest\\FrustumTestJob.h"
     // Worker assertions use PrintStringed followed by the native MSR break twice.
     static void FrustumJobAssert(const char* lpFile, int liLine, const char* lpMessage)
     {
@@ -98,19 +98,19 @@ namespace CgsSceneManager
     SpatialPartitionEntityLink& FrustumTestJob::GetEntityNode(u16 lu16Entity)
     {
         if (lu16Entity >= SpatialPartition::KI_MAX_NUM_ENTITIES)
-            FrustumJobAssert("d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\jobs\\frustumtest\\FrustumTestJob.h",
-                             317, "luIndex < KI_MAX_NUM_ENTITIES");
+            FrustumJobAssert(CGS_ASSERT_LOCATION(CGS_ARTIST_FRUSTUM_JOB_FILE,
+                             317), "luIndex < KI_MAX_NUM_ENTITIES");
         return mpEntityArray[lu16Entity];
     }
 
     void FrustumTestJob::PushEntityForTesting(u16 lu16Entity)
     {
         if (lu16Entity >= SpatialPartition::KI_MAX_NUM_ENTITIES)
-            FrustumJobAssert("d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\jobs\\frustumtest\\FrustumTestJob.h",
-                             329, "lu16Index<KI_MAX_NUM_ENTITIES");
+            FrustumJobAssert(CGS_ASSERT_LOCATION(CGS_ARTIST_FRUSTUM_JOB_FILE,
+                             329), "lu16Index<KI_MAX_NUM_ENTITIES");
         if (muNumEntitiesToTest >= SpatialPartition::KI_MAX_NUM_ENTITIES)
-            FrustumJobAssert("d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\jobs\\frustumtest\\FrustumTestJob.h",
-                             330, "muNumEntitiesToTest<KI_MAX_NUM_ENTITIES");
+            FrustumJobAssert(CGS_ASSERT_LOCATION(CGS_ARTIST_FRUSTUM_JOB_FILE,
+                             330), "muNumEntitiesToTest<KI_MAX_NUM_ENTITIES");
         mau16EntitiesToTest[muNumEntitiesToTest] = lu16Entity;
         ++muNumEntitiesToTest;
     }
@@ -138,8 +138,8 @@ namespace CgsSceneManager
             mxCurrentEntityTypeFlags = mJobData.mQueryInfo.max32EntityTypeFlags[luQuery];
 
             if (mJobData.muNumNodes > KU_MAX_OCTREE_NODES)
-                FrustumJobAssert("D:\\P4\\B5_MAIN\\Burnout\\MAIN\\Code\\GameShared\\Jobs\\FrustumTest\\FrustumTestJob.cpp",
-                                 212, "KU_MAX_OCTREE_NODES >= mFrustumTestJobData.muNumNodes");
+                FrustumJobAssert(CGS_ASSERT_LOCATION("D:\\P4\\B5_MAIN\\Burnout\\MAIN\\Code\\GameShared\\Jobs\\FrustumTest\\FrustumTestJob.cpp",
+                                 212), "KU_MAX_OCTREE_NODES >= mFrustumTestJobData.muNumNodes");
 
             JobCoarseResultBuffer* lpResultBuffer = mJobData.mpResultBuffer;
             lpResultBuffer->maQueryOffsets[lpResultBuffer->muNumQueries] = lpResultBuffer->muCurrentWriteOffset;
@@ -149,8 +149,8 @@ namespace CgsSceneManager
 
             lpResultBuffer = mJobData.mpResultBuffer;
             if (lpResultBuffer->muNumQueries >= KU_JOB_BUFFER_MAX_NUM_QUERIES)
-                FrustumJobAssert("..\\..\\GameClasses\\SceneManager/SpatialPartitionModule/CgsJobCoarseResultBuffer.h",
-                                 113, "muNumQueries < KU_JOB_BUFFER_MAX_NUM_QUERIES");
+                FrustumJobAssert(CGS_ASSERT_LOCATION("..\\..\\GameClasses\\SceneManager/SpatialPartitionModule/CgsJobCoarseResultBuffer.h",
+                                 113), "muNumQueries < KU_JOB_BUFFER_MAX_NUM_QUERIES");
 
             ++lpResultBuffer->muNumQueries;
         }
@@ -385,9 +385,11 @@ void FrustumTestEntry(EA::Jobs::Param, EA::Jobs::Param lData,
         const u64 luReportedThreadId = static_cast<u64>(reinterpret_cast<u32>(EA::Thread::GetThreadId()));
         lMessage << "SPU Id out of range: " << luReportedThreadId << "\n";
         CgsSceneManager::FrustumJobAssert(
-            "D:\\P4\\B5_MAIN\\Burnout\\MAIN\\Code\\GameShared\\Jobs\\FrustumTest\\FrustumTest.cpp",
-            58, lMessage.GetBuffer());
+            CGS_ASSERT_LOCATION("D:\\P4\\B5_MAIN\\Burnout\\MAIN\\Code\\GameShared\\Jobs\\FrustumTest\\FrustumTest.cpp",
+            58), lMessage.GetBuffer());
     }
     CgsSceneManager::gaFrustumTestJobs[static_cast<u32>(luIndex)].Execute(
         *static_cast<const CgsSceneManager::FrustumTestJobData*>(lData.mpValue));
 }
+
+#undef CGS_ARTIST_FRUSTUM_JOB_FILE

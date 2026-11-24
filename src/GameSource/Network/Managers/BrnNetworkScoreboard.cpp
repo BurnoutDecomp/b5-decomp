@@ -89,10 +89,10 @@ namespace BrnNetwork
     const char* ScoreboardRow::GetData(s32 liColumnNumber) const
     {
         CGS_ASSERT(liColumnNumber < miNumberOfColumns,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "liColumnNumber < miNumberOfColumns", KAC_ARTIST_ASSERT_SOURCE, 402 /* ARTIST 0x82547164 */));
         CGS_ASSERT(liColumnNumber >= 0,
-            CgsDev::Assert::MessageAt("liColumnNumber >= 0", KAC_ARTIST_ASSERT_SOURCE, 403 /* ARTIST 0x82547188 */));
+            CGS_ASSERT_MESSAGE_AT("liColumnNumber >= 0", KAC_ARTIST_ASSERT_SOURCE, 403 /* ARTIST 0x82547188 */));
         return maacData[liColumnNumber];
     }
 
@@ -124,7 +124,7 @@ namespace BrnNetwork
     // Copy a prepared column heading into the next free column slot.
     void Scoreboard::AddColumn(ScoreboardColumn* lpColumn)
     {
-        CGS_ASSERT(miNumberOfColumns < KI_MAX_SCOREBOARD_COLUMNS, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(miNumberOfColumns < KI_MAX_SCOREBOARD_COLUMNS, CGS_ASSERT_MESSAGE_AT(
             "miNumberOfColumns < KI_MAX_SCOREBOARD_COLUMNS",
             __FILE__, 198 /* ARTIST 0x82546E4C */));
         maColumns[miNumberOfColumns] = *lpColumn;
@@ -159,9 +159,9 @@ namespace BrnNetwork
     const ScoreboardRow* Scoreboard::GetRow(s32 liRowNumber) const
     {
         CGS_ASSERT(liRowNumber >= 0,
-            CgsDev::Assert::MessageAt("liRowNumber >= 0", __FILE__, 309 /* ARTIST 0x8240E9D4 */));
+            CGS_ASSERT_MESSAGE_AT("liRowNumber >= 0", __FILE__, 309 /* ARTIST 0x8240E9D4 */));
         CGS_ASSERT(liRowNumber < miNumberOfRows,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "liRowNumber < miNumberOfRows", __FILE__, 310 /* ARTIST 0x8240EA00 */));
         return &maRows[liRowNumber];
     }

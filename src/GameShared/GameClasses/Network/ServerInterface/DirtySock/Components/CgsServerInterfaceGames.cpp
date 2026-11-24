@@ -416,7 +416,7 @@ namespace CgsNetwork
 
     void ServerInterfaceGames::EndAction(s32 liError)
     {
-        CGS_ASSERT(meCurrentAction != E_ACTION_COUNT, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(meCurrentAction != E_ACTION_COUNT, CGS_ASSERT_MESSAGE_AT(
             "meCurrentAction != E_ACTION_COUNT",
             __FILE__, 1013 /* ARTIST 0x82877F88 */));
 
@@ -441,7 +441,7 @@ namespace CgsNetwork
     {
         ServerInterfaceGames* lpSelf = static_cast<ServerInterfaceGames*>(lpUserData);
         CGS_ASSERT(lpSelf != 0,
-            CgsDev::Assert::MessageAt("lpLobbyComponent", __FILE__, 661 /* ARTIST 0x82891384 */));
+            CGS_ASSERT_MESSAGE_AT("lpLobbyComponent", __FILE__, 661 /* ARTIST 0x82891384 */));
         ConnApiControl(lpSelf->mpServerInterface->GetConnAPIRef(),
                        KI_CONN_CTRL_DISCONNECT, 0, 0, "");
         if (lpSelf->IsLocalPlayerInGame())
@@ -539,7 +539,7 @@ namespace CgsNetwork
             lpSelf->ProcessGameManagerPlayRecord();
             return;
         default:
-            CGS_ASSERT(false, CgsDev::Assert::MessageAt(
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
                 "Unknown GameManager event",
                 __FILE__, 764 /* ARTIST 0x82891514 */));
             return;
@@ -710,7 +710,7 @@ namespace CgsNetwork
         for (s32 i = 0; ; ++i)
         {
             CGS_ASSERT(IsLocalPlayerInGame(),
-                CgsDev::Assert::MessageAt(
+                CGS_ASSERT_MESSAGE_AT(
                     "IsLocalPlayerInGame()", __FILE__, 1726 /* ARTIST 0x8289166C */));
             if (i >= mLastGameRecord.iCount)
                 break;
@@ -1016,7 +1016,7 @@ namespace CgsNetwork
     void ServerInterfaceGames::GetGameParameters(ServerInterfaceGameParamsBase* lpOut)
     {
         CGS_ASSERT(IsLocalPlayerInGame(),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "IsLocalPlayerInGame()", __FILE__, 1688 /* ARTIST 0x82887474 */));
         lpOut->SerialiseFromGame(&mLastGameRecord);
     }
@@ -1030,7 +1030,7 @@ namespace CgsNetwork
                 return mLastGameRecord.aOpponents[i].iIdent;
         }
         (void)lacSelf;
-        CGS_ASSERT(false, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
             "Host not found!",
             __FILE__, 1490 /* ARTIST 0x8287837C */));
         return -1;
@@ -1039,14 +1039,14 @@ namespace CgsNetwork
     s32 ServerInterfaceGames::GetNumberOfFoundGames()
     {
         CGS_ASSERT(mpFoundGames != 0,
-            CgsDev::Assert::MessageAt("mpFoundGames", __FILE__, 1337 /* ARTIST 0x82878130 */));
+            CGS_ASSERT_MESSAGE_AT("mpFoundGames", __FILE__, 1337 /* ARTIST 0x82878130 */));
         return DispListCount(mpFoundGames);
     }
 
     s32 ServerInterfaceGames::GetNumberPlayersInGame()
     {
         CGS_ASSERT(IsLocalPlayerInGame(),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "IsLocalPlayerInGame()", __FILE__, 1726 /* ARTIST 0x8288759C */));
         return mLastGameRecord.iCount;
     }
@@ -1054,19 +1054,19 @@ namespace CgsNetwork
     void* ServerInterfaceGames::GetPlayerParametersByIndex(s32 liIndex,
                                                            ServerInterfacePlayerParamsBase* lpOut)
     {
-        CGS_ASSERT(lpOut != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpOut != 0, CGS_ASSERT_MESSAGE_AT(
             "lpPlayerParams",
             __FILE__, 1744 /* ARTIST 0x8288760C */));
-        CGS_ASSERT(IsLocalPlayerInGame(), CgsDev::Assert::MessageAt(
+        CGS_ASSERT(IsLocalPlayerInGame(), CGS_ASSERT_MESSAGE_AT(
             "IsLocalPlayerInGame()",
             __FILE__, 1745 /* ARTIST 0x82887640 */));
         if (liIndex >= 0)
         {
-            CGS_ASSERT(IsLocalPlayerInGame(), CgsDev::Assert::MessageAt(
+            CGS_ASSERT(IsLocalPlayerInGame(), CGS_ASSERT_MESSAGE_AT(
                 "IsLocalPlayerInGame()",
                 __FILE__, 1726 /* ARTIST 0x82887674 */));
         }
-        CGS_ASSERT(liIndex >= 0 && liIndex < mLastGameRecord.iCount, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(liIndex >= 0 && liIndex < mLastGameRecord.iCount, CGS_ASSERT_MESSAGE_AT(
             "Invalid player index",
             __FILE__, 1746 /* ARTIST 0x8288769C */));
         lpOut->SerialiseFromPlayer(&mLastGameRecord.aOpponents[liIndex]); return lpOut;
@@ -1075,15 +1075,15 @@ namespace CgsNetwork
     void* ServerInterfaceGames::GetPlayerParametersByPlayerID(s32 liPlayerID,
                                                              ServerInterfacePlayerParamsBase* lpOut)
     {
-        CGS_ASSERT(lpOut != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpOut != 0, CGS_ASSERT_MESSAGE_AT(
             "lpPlayerParams",
             __FILE__, 1766 /* ARTIST 0x8288770C */));
-        CGS_ASSERT(IsLocalPlayerInGame(), CgsDev::Assert::MessageAt(
+        CGS_ASSERT(IsLocalPlayerInGame(), CGS_ASSERT_MESSAGE_AT(
             "IsLocalPlayerInGame()",
             __FILE__, 1767 /* ARTIST 0x82887740 */));
         for (s32 i = 0; ; ++i)
         {
-            CGS_ASSERT(IsLocalPlayerInGame(), CgsDev::Assert::MessageAt(
+            CGS_ASSERT(IsLocalPlayerInGame(), CGS_ASSERT_MESSAGE_AT(
                 "IsLocalPlayerInGame()",
                 __FILE__, 1726 /* ARTIST 0x82887774 */));
             if (i >= mLastGameRecord.iCount)
@@ -1094,7 +1094,7 @@ namespace CgsNetwork
                 return lpOut;
             }
         }
-        CGS_ASSERT(false, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
             "This player is not in the game",
             __FILE__, 1778 /* ARTIST 0x828877DC */));
         return 0;
@@ -1103,15 +1103,15 @@ namespace CgsNetwork
     void* ServerInterfaceGames::GetPlayerParametersByPlayerName(const char* lpcName,
                                                                ServerInterfacePlayerParamsBase* lpOut)
     {
-        CGS_ASSERT(lpOut != 0, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(lpOut != 0, CGS_ASSERT_MESSAGE_AT(
             "lpPlayerParams",
             __FILE__, 1796 /* ARTIST 0x8288782C */));
-        CGS_ASSERT(IsLocalPlayerInGame(), CgsDev::Assert::MessageAt(
+        CGS_ASSERT(IsLocalPlayerInGame(), CGS_ASSERT_MESSAGE_AT(
             "IsLocalPlayerInGame()",
             __FILE__, 1797 /* ARTIST 0x82887860 */));
         for (s32 i = 0; ; ++i)
         {
-            CGS_ASSERT(IsLocalPlayerInGame(), CgsDev::Assert::MessageAt(
+            CGS_ASSERT(IsLocalPlayerInGame(), CGS_ASSERT_MESSAGE_AT(
                 "IsLocalPlayerInGame()",
                 __FILE__, 1726 /* ARTIST 0x82887894 */));
             if (i >= mLastGameRecord.iCount)
@@ -1122,7 +1122,7 @@ namespace CgsNetwork
                 return lpOut;
             }
         }
-        CGS_ASSERT(false, CgsDev::Assert::MessageAt(
+        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
             "This player is not in the game",
             __FILE__, 1808 /* ARTIST 0x82887904 */));
         return 0;
@@ -1169,7 +1169,7 @@ namespace CgsNetwork
     bool ServerInterfaceGames::IsGameLocked()
     {
         CGS_ASSERT(IsLocalPlayerInGame(),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "IsLocalPlayerInGame()", __FILE__, 1903 /* ARTIST 0x82887D7C */));
         return ((ConvertFlags(mLastGameRecord.uSysflags, E_CONVERSION_FROM_WIRE) >> 5) & 1) != 0;
     }
@@ -1177,7 +1177,7 @@ namespace CgsNetwork
     bool ServerInterfaceGames::IsGameStarted()
     {
         CGS_ASSERT(IsLocalPlayerInGame(),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "IsLocalPlayerInGame()", __FILE__, 1881 /* ARTIST 0x82887D14 */));
         return ((ConvertFlags(mLastGameRecord.uSysflags, E_CONVERSION_FROM_WIRE) >> 11) & 1) != 0;
     }

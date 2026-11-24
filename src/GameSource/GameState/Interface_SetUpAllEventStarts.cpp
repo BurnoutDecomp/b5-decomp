@@ -1,5 +1,5 @@
 #include "GameSource/GameState/BrnGameStateSharedIO.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateSharedIO.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
@@ -57,14 +57,14 @@ SetUpAllEventStartsInterface::AddEventStart(Vector3 lv3Position, s32 liEventInde
         {
             // Found: the event id must match the one already recorded.
             CGS_ASSERT(liEventID == lrExisting.GetEventID(),
-                       CgsDev::Assert::MessageAt("luEventID == maEventStarts.GetItem( luEventIndex ).GetEventID()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateSharedIO.h", 1723));
+                       CGS_ASSERT_MESSAGE_AT("luEventID == maEventStarts.GetItem( luEventIndex ).GetEventID()", CGS_ARTIST_FILE, 1723));
             return &lrExisting;
         }
     }
 
     // Not found: assert room then build a fresh record from the caller's fields and append it.
     CGS_ASSERT(maEventStarts.GetLength() < maEventStarts.GetSize(),
-               CgsDev::Assert::MessageAt("maEventStarts.GetLength() < maEventStarts.GetCapacity()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateSharedIO.h", 1728));
+               CGS_ASSERT_MESSAGE_AT("maEventStarts.GetLength() < maEventStarts.GetCapacity()", CGS_ARTIST_FILE, 1728));
 
     EventStart lEventStart;
     // The X360 stack-builds the record at var_90 in exactly this order: `stvx128 v127` (the
@@ -91,3 +91,5 @@ u32 SetUpAllEventStartsInterface::GetNumEventStarts() const
 
 } // namespace GameStateModuleIO
 } // namespace BrnGameState
+
+#undef CGS_ARTIST_FILE

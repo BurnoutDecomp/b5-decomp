@@ -28,7 +28,7 @@ SpawnLocation::Type SpawnLocation::GetType() const
     if (static_cast<u32>(muType) >= static_cast<u32>(E_TYPE_COUNT))   // X360 cmplwi r11,4 / blt
     {
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("muType < E_TYPE_COUNT", KAC_SPAWNLOC_FILE, 152);
+        CgsDev::Assert::FireAssert("muType < E_TYPE_COUNT", CGS_ASSERT_LOCATION(KAC_SPAWNLOC_FILE, 152));
         CgsDev::Assert::EndAssert();
     }
     return static_cast<Type>(muType);   // X360 re-loads the same u8 at +0x28

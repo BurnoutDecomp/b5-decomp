@@ -144,7 +144,7 @@ namespace BrnTraffic
     void DebugComponent::Construct(TrafficEntityModule* lpModule)
     {
         CgsDev::DebugComponent::Construct();   // ARTIST 0x8274FC8C (folded at 0x8284CB38)
-        CGS_ASSERT(lpModule != 0, CgsDev::Assert::MessageAt("lpModule != NULL", __FILE__, 165));
+        CGS_ASSERT(lpModule != 0, CGS_ASSERT_MESSAGE_AT("lpModule != NULL", __FILE__, 165));
         mpModule = lpModule;                       // +0x0C
 
         mfRenderCullDistance = 200.0f;             // +0x10
@@ -278,7 +278,7 @@ namespace BrnTraffic
     void DebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDisplay)
     {
         CGS_ASSERT(mpModule != 0,
-            CgsDev::Assert::MessageAt("mpModule != NULL", KAC_ARTIST_ASSERT_FILE, 495 /* ARTIST 0x82760AE0 */));
+            CGS_ASSERT_MESSAGE_AT("mpModule != NULL", KAC_ARTIST_ASSERT_FILE, 495 /* ARTIST 0x82760AE0 */));
 
         if (mbDrawPlayerHullId)
             DrawPlayerCarHullId(lpDisplay);
@@ -508,7 +508,7 @@ namespace BrnTraffic
     {
         DebugComponent* const lpComponent = static_cast<DebugComponent*>(lpUserData);
         CGS_ASSERT(lpComponent != 0,
-            CgsDev::Assert::MessageAt("lpComponent", KAC_ARTIST_ASSERT_FILE, 2719 /* ARTIST 0x8275052C */));
+            CGS_ASSERT_MESSAGE_AT("lpComponent", KAC_ARTIST_ASSERT_FILE, 2719 /* ARTIST 0x8275052C */));
         lpComponent->mpModule->meDEBUGAirRamToFire = lpComponent->miAirRamTypeToFire;
     }
 
@@ -547,7 +547,7 @@ namespace BrnTraffic
     {
         DebugComponent* const lpComponent = static_cast<DebugComponent*>(lpUserData);
         CGS_ASSERT(lpComponent != 0,
-            CgsDev::Assert::MessageAt("lpComponent", KAC_ARTIST_ASSERT_FILE, 3593 /* ARTIST 0x827614FC */));
+            CGS_ASSERT_MESSAGE_AT("lpComponent", KAC_ARTIST_ASSERT_FILE, 3593 /* ARTIST 0x827614FC */));
         lpComponent->mpModule->mFuzzyBehaviours.ReloadBehaviours();
     }
 

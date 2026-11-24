@@ -10,7 +10,7 @@
 #include "GameSource/Gui/SatNav/BrnGuiTracker.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT, CgsDev::Assert::MessageAt
 #include "GameSource/Gui/BrnGuiCache.h"              // [FIX1] GuiCache::GetWorldCameraPosition
-
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/SatNav/BrnGuiTracker.cpp"
 #include <cstring>   // [FIX1] std::memcpy (the three register/record copies)
 
 namespace BrnGui
@@ -492,11 +492,11 @@ const BrnGameState::LandmarkIndex* GuiTracker::GetActivelyTrackedLandmarks()
         for (s32 liIndex = miCurrentlyTrackedIndex; liIndex < miTrackerCount; ++liIndex)
         {
             CGS_ASSERT((liIndex >= 0) && (liIndex < KI_TRACKER_STACK_SIZE),
-                       CgsDev::Assert::MessageAt("(liIndex >= 0) && (liIndex < KI_TRACKER_STACK_SIZE)",
-                                                 "..\\..\\..\\GameSource\\Gui/SatNav/BrnGuiTracker.cpp", 347));
+                       CGS_ASSERT_MESSAGE_AT("(liIndex >= 0) && (liIndex < KI_TRACKER_STACK_SIZE)",
+                                                 CGS_ARTIST_FILE, 347));
             CGS_ASSERT((liActiveTrackedCount >= 0) && (liActiveTrackedCount < KI_TRACKER_STACK_SIZE),
-                       CgsDev::Assert::MessageAt("(liActiveTrackedCount >= 0) && (liActiveTrackedCount < KI_TRACKER_STACK_SIZE)",
-                                                 "..\\..\\..\\GameSource\\Gui/SatNav/BrnGuiTracker.cpp", 348));
+                       CGS_ASSERT_MESSAGE_AT("(liActiveTrackedCount >= 0) && (liActiveTrackedCount < KI_TRACKER_STACK_SIZE)",
+                                                 CGS_ARTIST_FILE, 348));
             maActivelyTrackedLandmarks[liActiveTrackedCount++] =
                 BrnGameState::LandmarkIndex(maTrackerRecords[liIndex].mTargetLandmarkIndex);
         }
@@ -614,3 +614,5 @@ namespace BrnGui
         }
     }
 }
+
+#undef CGS_ARTIST_FILE

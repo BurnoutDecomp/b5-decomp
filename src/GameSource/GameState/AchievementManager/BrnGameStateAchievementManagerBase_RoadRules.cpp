@@ -28,7 +28,7 @@ void AchievementManagerBase::OnSetAllRoadRules(BrnStreetData::ScoreType leScoreT
     }
     else
     {
-        CGS_ASSERT(false, CgsDev::Assert::MessageAt("dodgy road rule type!", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/AchievementManager/BrnGameStateAchievementManagerBase.cpp", 290));
+        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("dodgy road rule type!", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/AchievementManager/BrnGameStateAchievementManagerBase.cpp", 290));
     }
 }
 }

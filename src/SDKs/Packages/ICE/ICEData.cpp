@@ -1350,7 +1350,7 @@ ICETakeData& ICETakeData::operator=(const ICETakeData& lrOther)
     rw::core::stdc::MemCopy(&mElementCounts[0], &lrOther.mElementCounts[0], luSize);
 
     CGS_ASSERT(luSize < (2 * 1024),
-        CgsDev::Assert::MessageAt("luSize < (2*1024)",
+        CGS_ASSERT_MESSAGE_AT("luSize < (2*1024)",
             "..\\..\\..\\SDKs\\Packages\\ICE\\ICEData.cpp", 1013 /* ARTIST 0x82532BC0 */));
     return *this;
 }

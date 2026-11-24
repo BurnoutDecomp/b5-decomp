@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Memory/DataStream/CgsDataStreamCommandPoster.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\DataStream/CgsDataStreamCommandPoster.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"  // CGS_ASSERT
 
 #include <cstring>  // std::memcpy (models the Xbox XMemCpy block-copy intrinsic)
@@ -133,11 +133,11 @@ namespace CgsMemory
     s32 DataStreamCommandPoster::AllocateCommand(void** lppOutBuffer)
     {
         // Three X360 assert tripwires (fire-on-failure), in store order.
-        CGS_ASSERT(!mbStreaming, CgsDev::Assert::StreamMessageAt("Streaming has already begun so can't synchronously add commands\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\DataStream/CgsDataStreamCommandPoster.cpp", 242));
+        CGS_ASSERT(!mbStreaming, CGS_ASSERT_STREAM_MESSAGE_AT("Streaming has already begun so can't synchronously add commands\n", CGS_ARTIST_FILE, 242));
 
-        CGS_ASSERT(miNumCommands < miMaxCommands, CgsDev::Assert::StreamMessageAt("No space for more commands\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\DataStream/CgsDataStreamCommandPoster.cpp", 243));
+        CGS_ASSERT(miNumCommands < miMaxCommands, CGS_ASSERT_STREAM_MESSAGE_AT("No space for more commands\n", CGS_ARTIST_FILE, 243));
 
-        CGS_ASSERT(lppOutBuffer != 0, CgsDev::Assert::StreamMessageAt("lppOutBuffer is NULL\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\DataStream/CgsDataStreamCommandPoster.cpp", 244));
+        CGS_ASSERT(lppOutBuffer != 0, CGS_ASSERT_STREAM_MESSAGE_AT("lppOutBuffer is NULL\n", CGS_ARTIST_FILE, 244));
 
 
         *lppOutBuffer = mpcCommandBuffer + miCommandSize * miNumCommands;
@@ -170,9 +170,11 @@ namespace CgsMemory
     // ld r3,0(this)=mEncodedStatus and return it.
     u64 DataStreamCommandPoster::GetEncodedStatus() const
     {
-        CGS_ASSERT(mbStreaming, CgsDev::Assert::StreamMessageAt("Encoded status is only valid during stream\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\datastream\\CgsDataStreamCommandPoster.h", 175));
+        CGS_ASSERT(mbStreaming, CGS_ASSERT_STREAM_MESSAGE_AT("Encoded status is only valid during stream\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\datastream\\CgsDataStreamCommandPoster.h", 175));
 
 
         return mEncodedStatus.GetValue();
     }
 }
+
+#undef CGS_ARTIST_FILE

@@ -227,7 +227,7 @@ namespace BrnTraffic
     s32 TrafficData::GetNumPaintColours() const
     {
         CGS_ASSERT(muNumPaintColours != 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "muNumPaintColours > 0",
                 "..\\..\\..\\SharedClasses\\Traffic/BrnTrafficData.h", 247 /* ARTIST 0x82705F80 */));
         return muNumPaintColours;

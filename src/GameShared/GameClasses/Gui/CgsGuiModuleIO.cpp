@@ -45,7 +45,7 @@ namespace CgsGuiModuleIO
     // AddEvent push ("Not locked for writing\n").
     InputBuffer::GuiEventInputQueue* InputBuffer::GetGuiEvents()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt(
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
             "Not locked for writing\n",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\CgsGuiModuleIO.cpp", 110));
         return &mInputQueue;

@@ -86,8 +86,8 @@ namespace
         lStrStream << "String too long: " << (lpcValue ? lpcValue : "<NULLSTRING>");
         CgsDev::Assert::FireAssert(
             lacMessageBuffer,
-            "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h",
-            55);
+            CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h",
+            55));
         CgsDev::Assert::EndAssert();
     }
 

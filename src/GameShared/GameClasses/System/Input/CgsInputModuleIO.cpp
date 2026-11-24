@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/System/Input/CgsInputModuleIO.h"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\input\\CgsInputModuleIO.h"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"     // CGS_ASSERT
 #include "GameShared/GameClasses/Development/CgsStrStream.h" // streamed assert message buffer
 #include "GameShared/GameClasses/Module/CgsEventQueue.h" // CgsModule::EventQueue<T,N>
@@ -127,7 +127,7 @@ void PostWorldInputBuffer::PostMappingRequest(const ActionMapping* lpMapping, s3
 // Caller: CgsInput::InputModule::PostWorldUpdate (copies the two spring words into its module state).
 const CgsInput::Device::WheelFFSpring* PostWorldInputBuffer::GetWheelFFSpring() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\input\\CgsInputModuleIO.h", 1122));
+    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 1122));
     return &mWheelFFSpring;
 }
 
@@ -136,7 +136,7 @@ const CgsInput::Device::WheelFFSpring* PostWorldInputBuffer::GetWheelFFSpring() 
 // WheelFFSpring sub-record). The X360 body copies the two source words verbatim into this+632/+636.
 void PostWorldInputBuffer::SetWheelFFSpring(const CgsInput::Device::WheelFFSpring& lSpring)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\input\\CgsInputModuleIO.h", 1137));
+    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 1137));
     mWheelFFSpring = lSpring;
 }
 
@@ -193,9 +193,9 @@ const OutputBuffer::UnBindResultQueue* OutputBuffer::GetUnbindResultQueue() cons
 // X360 0x823B1188 (ledger "Outpu") - read-lock accessor for the pad-disconnected queue (this+220).
 const OutputBuffer::PadDisconnectedQueue* OutputBuffer::GetPadDisconnectedQueue() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt(
+    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
         "Not locked for reading\n",
-        "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\input\\CgsInputModuleIO.h", 1185));
+        CGS_ARTIST_FILE, 1185));
     return &mPadDisconnectedQueue;
 }
 
@@ -239,8 +239,8 @@ PadOutputInformation* OutputBuffer::GetPadInfo(s32 iPort)
         lMessage << "Not locked for writing\n";
         CgsDev::Assert::FireAssert(
             CgsDev::Assert::gpcMessageBuffer,
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\input\\CgsInputModuleIO.h",
-            1273);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+            1273));
         CgsDev::Assert::EndAssert();
     }
     if (iPort >= 4)
@@ -251,8 +251,8 @@ PadOutputInformation* OutputBuffer::GetPadInfo(s32 iPort)
         lMessage << "Invalid pad specified\n";
         CgsDev::Assert::FireAssert(
             CgsDev::Assert::gpcMessageBuffer,
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\input\\CgsInputModuleIO.h",
-            1274);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+            1274));
         CgsDev::Assert::EndAssert();
     }
     if (iPort < 0)
@@ -263,8 +263,8 @@ PadOutputInformation* OutputBuffer::GetPadInfo(s32 iPort)
         lMessage << "Port must me positive\n";
         CgsDev::Assert::FireAssert(
             CgsDev::Assert::gpcMessageBuffer,
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\input\\CgsInputModuleIO.h",
-            1275);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
+            1275));
         CgsDev::Assert::EndAssert();
     }
     return &maPadOutputInformation[iPort];
@@ -402,7 +402,7 @@ PreWorldInputBuffer::GetStopRumbleEffectEventQueue() const
 // "GetTimerStatusInt"; it returns the TimerStatusInterface pointer at this+868.)
 const CgsSystem::TimerStatusInterface* PreWorldInputBuffer::GetTimerStatusInt() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\input\\CgsInputModuleIO.h", 969));
+    CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for reading\n", CGS_ARTIST_FILE, 969));
     return &mTimerStatusInterface;
 }
 
@@ -420,3 +420,5 @@ void PreWorldInputBuffer::SetTimerStatusInterface(const CgsSystem::TimerStatusIn
 
 }
 }
+
+#undef CGS_ARTIST_FILE

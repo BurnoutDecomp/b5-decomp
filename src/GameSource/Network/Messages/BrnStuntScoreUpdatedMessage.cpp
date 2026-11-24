@@ -28,7 +28,7 @@ namespace BrnNetwork
     CgsNetwork::PackOrUnpackResult StuntScoreUpdatedMessage::PackOrUnpack()
     {
         CGS_ASSERT(miStuntScore != -1,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "miStuntScore != -1",
                 "..\\..\\..\\GameSource\\Network/Messages/BrnStuntScoreUpdatedMessage.cpp", 91 /* ARTIST 0x8257D108 */));
 
@@ -39,13 +39,13 @@ namespace BrnNetwork
     void StuntScoreUpdatedMessage::PrepareForSend(u16 lu16FrameCount, s32 liStuntScore)
     {
         CGS_ASSERT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lu16FrameCount != KU16_INVALID_FRAME",
                 __FILE__, 141 /* ARTIST 0x8257D18C */));
         CGS_ASSERT(liStuntScore != -1,
-            CgsDev::Assert::MessageAt("liStuntScore != -1", __FILE__, 142 /* ARTIST 0x8257D1B0 */));
+            CGS_ASSERT_MESSAGE_AT("liStuntScore != -1", __FILE__, 142 /* ARTIST 0x8257D1B0 */));
         CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0,
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "!CgsNetwork::ReliableMessage::IsMessageValid()",
                 __FILE__, 145 /* ARTIST 0x8257D1DC */));
 

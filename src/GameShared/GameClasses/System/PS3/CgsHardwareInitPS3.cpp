@@ -1,7 +1,7 @@
 #include <xtl.h>
 #include <cstdio>
 #include <cstring>
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\X360/CgsHardwareInitX360.cpp"
 #include "GameShared/GameClasses/System/CgsHardwareInit.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"
@@ -49,7 +49,7 @@ void CgsSystem::HardwareInit::InitializeHardware(s32 lnArgc, char** lapcArgv,
                                    CgsDev::Assert::giMessageBufferSize);
         lMessage << "Can not override working dir on xbox\n";
         CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\X360/CgsHardwareInitX360.cpp", 64);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 64));
         CgsDev::Assert::EndAssert();
     }
     if (lpcFOpenDirOverride != 0)
@@ -59,7 +59,7 @@ void CgsSystem::HardwareInit::InitializeHardware(s32 lnArgc, char** lapcArgv,
                                    CgsDev::Assert::giMessageBufferSize);
         lMessage << "Can not override fopen dir on xbox\n";
         CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\X360/CgsHardwareInitX360.cpp", 65);
+            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 65));
         CgsDev::Assert::EndAssert();
     }
 
@@ -86,7 +86,7 @@ void CgsSystem::HardwareInit::InitializeHardware(s32 lnArgc, char** lapcArgv,
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("(strlen(lpcSource)+strlen(lpcDest))<luBytes - 1",
-            "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 75);
+            CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 75));
         CgsDev::Assert::EndAssert();
     }
     std::strcat(lacFileName, KAC_AUTOTESTFILENAME);
@@ -99,7 +99,7 @@ void CgsSystem::HardwareInit::InitializeHardware(s32 lnArgc, char** lapcArgv,
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("Failed to select a script for autotesting",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\X360/CgsHardwareInitX360.cpp", 109);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 109));
             CgsDev::Assert::EndAssert();
         }
         mbHasDetectedAutomaticTestingFile = true;
@@ -145,6 +145,8 @@ void CgsSystem::HardwareInit::EnableJobThread()
 {
     CgsDev::Assert::BeginAssert();
     CgsDev::Assert::FireAssert("Not supported on xbox\n",
-        "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\X360/CgsHardwareInitX360.cpp", 247);
+        CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 247));
     CgsDev::Assert::EndAssert();
 }
+
+#undef CGS_ARTIST_FILE

@@ -58,7 +58,7 @@ const char* TrafficState::GetTypeName() const
 void TrafficState::Attach( void* lpvAttachment )
 {
     CGS_ASSERT( lpvAttachment != 0,
-        CgsDev::Assert::MessageAt(
+        CGS_ASSERT_MESSAGE_AT(
             "lpvAttachment",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
             "../Sound/Vehicles/Traffic/BrnTrafficState.cpp", 66 /* ARTIST 0x826CB29C */));

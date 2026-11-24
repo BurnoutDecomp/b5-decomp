@@ -32,7 +32,7 @@ namespace BrnDirector
         // The && short-circuit matches the asm: the class key is only read when the shot is non-null.
         CGS_ASSERT(lpIceAnim != 0 &&
                    static_cast<s64>(lpIceAnim->GetClassKey()) == Attrib::Gen::iceanim::ClassKey(),
-            CgsDev::Assert::MessageAt(
+            CGS_ASSERT_MESSAGE_AT(
                 "lpIceAnim && lpIceAnim->GetClassKey()==Attrib::Gen::iceanim::ClassKey()",
                 "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateTakedown.h", 236 /* ARTIST 0x821F5914 */));
 

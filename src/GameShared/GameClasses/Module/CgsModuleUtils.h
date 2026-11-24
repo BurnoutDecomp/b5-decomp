@@ -1,6 +1,6 @@
 #ifndef CGS_MODULE_UTILS_H
 #define CGS_MODULE_UTILS_H
-
+#define CGS_ARTIST_CGSMODULEUTILS_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"
 
@@ -15,7 +15,7 @@ namespace CgsModule
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(lpcExpression,
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", liLine);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_CGSMODULEUTILS_FILE, liLine));
             CgsDev::Assert::EndAssert();
         }
     }
@@ -217,56 +217,56 @@ namespace CgsModule
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpInputBuffer",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 511);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_CGSMODULEUTILS_FILE, 511));
             CgsDev::Assert::EndAssert();
         }
         if (!lpOutputBuffer0)
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpOutputBuffer0",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 512);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_CGSMODULEUTILS_FILE, 512));
             CgsDev::Assert::EndAssert();
         }
         if (!lpOutputBuffer1)
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpOutputBuffer1",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 513);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_CGSMODULEUTILS_FILE, 513));
             CgsDev::Assert::EndAssert();
         }
         if (!lpOutputBuffer2)
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpOutputBuffer2",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 514);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_CGSMODULEUTILS_FILE, 514));
             CgsDev::Assert::EndAssert();
         }
         if (!lpOutputBuffer3)
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpOutputBuffer3",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 515);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_CGSMODULEUTILS_FILE, 515));
             CgsDev::Assert::EndAssert();
         }
         if (!lpOutputBuffer4)
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpOutputBuffer4",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 516);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_CGSMODULEUTILS_FILE, 516));
             CgsDev::Assert::EndAssert();
         }
         if (!lpOutputBuffer5)
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpOutputBuffer5",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 517);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_CGSMODULEUTILS_FILE, 517));
             CgsDev::Assert::EndAssert();
         }
         if (!lpOutputBuffer6)
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpOutputBuffer6",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 518);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_CGSMODULEUTILS_FILE, 518));
             CgsDev::Assert::EndAssert();
         }
         lpInputBuffer->LockForWrite();
@@ -288,56 +288,56 @@ namespace CgsModule
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpInputBuffer",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 542);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_CGSMODULEUTILS_FILE, 542));
             CgsDev::Assert::EndAssert();
         }
         if (!lpOutputBuffer0)
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpOutputBuffer0",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 543);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_CGSMODULEUTILS_FILE, 543));
             CgsDev::Assert::EndAssert();
         }
         if (!lpOutputBuffer1)
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpOutputBuffer1",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 544);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_CGSMODULEUTILS_FILE, 544));
             CgsDev::Assert::EndAssert();
         }
         if (!lpOutputBuffer2)
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpOutputBuffer2",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 545);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_CGSMODULEUTILS_FILE, 545));
             CgsDev::Assert::EndAssert();
         }
         if (!lpOutputBuffer3)
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpOutputBuffer3",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 546);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_CGSMODULEUTILS_FILE, 546));
             CgsDev::Assert::EndAssert();
         }
         if (!lpOutputBuffer4)
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpOutputBuffer4",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 547);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_CGSMODULEUTILS_FILE, 547));
             CgsDev::Assert::EndAssert();
         }
         if (!lpOutputBuffer5)
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpOutputBuffer5",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 548);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_CGSMODULEUTILS_FILE, 548));
             CgsDev::Assert::EndAssert();
         }
         if (!lpOutputBuffer6)
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpOutputBuffer6",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 549);
+                CGS_ASSERT_LOCATION(CGS_ARTIST_CGSMODULEUTILS_FILE, 549));
             CgsDev::Assert::EndAssert();
         }
         lpOutputBuffer6->UnlockForRead();
@@ -365,3 +365,5 @@ namespace CgsModule
 }
 
 #endif // CGS_MODULE_UTILS_H
+
+#undef CGS_ARTIST_CGSMODULEUTILS_FILE

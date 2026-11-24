@@ -1,5 +1,5 @@
 #include "types.hpp"
-
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModuleIO.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceModuleIO.h"  // the 3 real-shape structs
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
@@ -90,7 +90,7 @@ namespace CgsResource
                 CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
                 lStream << "Not locked for writing\n";
                 CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModuleIO.h", 82);
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 82));
                 CgsDev::Assert::EndAssert();
             }
             mResourceQueue.Append<16384, 16>(*lpResourceQueue);
@@ -100,9 +100,9 @@ namespace CgsResource
         // Read-lock gate, then return the embedded status interface (X360 this+1).
         const FileSystemStatusInterface* OutputBuffer::GetFileSystemStatusInterface() const
         {
-            CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt(
+            CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
                 "Not locked for reading\n",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModuleIO.h", 110));
+                CGS_ARTIST_FILE, 110));
             return &mFileSystemStatusInterface;
         }
 
@@ -112,10 +112,12 @@ namespace CgsResource
         // writing\n" at CgsResourceModuleIO.h:111 when the buffer is not write-locked.
         FileSystemStatusInterface* OutputBuffer::GetFileSystemStatusInterface()
         {
-            CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt(
+            CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
                 "Not locked for writing\n",
                 "..\\..\\..\\GameShared\\GameClasses\\System/Resource/CgsResourceModuleIO.h", 111));
             return &mFileSystemStatusInterface;
         }
     }
 }
+
+#undef CGS_ARTIST_FILE
