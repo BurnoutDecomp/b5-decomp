@@ -1197,17 +1197,21 @@ namespace BrnAI
     //                          the number of steps actually taken (the loop counts BEFORE the
     //                          break, so a finished spread contributes 0).
     // ================================================================================
+    // DWARF locals: liIterations (cpp:360) for the whole body; liRepeatSpread (:364) and the
+    // const KI_STEPS_PER_FRAME (:366) in the HNG block. The FAN pass counts as one iteration:
+    // ARTIST returns `li r3,1` after UpdateWeightings (0x827963BC).
     s32 AIDriver::DoRoundRobinWork(ERoundRobinType leType)
     {
-        s32 liWorkDone = 0;
+        s32 liIterations = 0;
 
         if (leType == E_ROUND_ROBIN_HNG)
         {
-            for (s32 liStep = 0; liStep <= 3; ++liStep)
+            const s32 KI_STEPS_PER_FRAME = 3;   // `cmpwi 3 / ble` at 0x82796388: up to four steps
+            for (s32 liRepeatSpread = 0; liRepeatSpread <= KI_STEPS_PER_FRAME; ++liRepeatSpread)
             {
                 if (mRacingLineGenerator.SpreadHNGBackOneStep(&GetRacingLine()))
                     break;
-                ++liWorkDone;
+                ++liIterations;
             }
         }
         else if (leType == E_ROUND_ROBIN_FAN)
@@ -1218,9 +1222,10 @@ namespace BrnAI
             mSteeringFan.UpdateWeightings(mpCar, &GetRacingLine(), &mRacingLineGenerator,
                                           GetNearbyVehicles(),
                                           static_cast<EGlobalRaceCarIndex>(meAggressionVictim));
+            ++liIterations;
         }
 
-        return liWorkDone;
+        return liIterations;
     }
 
     // ================================================================================

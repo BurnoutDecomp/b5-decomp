@@ -5,11 +5,16 @@
 // interface event queues (EventQueue<T, 160>). Layout and member names from the DecFIGS
 // DWARF (BrnCrashModuleTrafficIOInterfaces.h:60-131); element sizes/strides confirmed
 // against the X360 ARTIST queue Construct/AddEvent spine.
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (the two AddRemove* publishes)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT + MessageAt (the inline publishes)
 #include "BrnCommonTypes.h"                                            // EntityId
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"               // CgsModule::EventQueue<T, N>
 #include "GameShared/GameClasses/Containers/CgsFastBitArray.h"         // CgsContainers::FastBitArray<N>
 #include "GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.h"   // CgsSceneManager::VolumeInstanceId
+
+// The file string ARTIST bakes into this header's inline asserts (0x820BD3C0).
+#define BRN_CRASHMODULETRAFFICIOINTERFACES_H_ASSERT_FILE \
+    "..\\..\\..\\GameSource\\World/CrashModule/SharedIO/BrnCrashModuleTrafficIOInterfaces.h"
+
 #include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"     // BrnPhysics::Vehicle::eCrashTrafficType
 
 namespace BrnWorld
@@ -131,14 +136,18 @@ namespace CrashIO
         // below. Names are consumer-derived (no DWARF accessor row).
         void AddRemoveSlammedTrafficEvent(u32 luVehicleIndex)
         {
-            CGS_ASSERT(luVehicleIndex < 600u, "luVehicleIndex < BrnTraffic::KU_MAX_TOTAL_TRAFFIC");   // :294
+            CGS_ASSERT(luVehicleIndex < 600u,
+                       CgsDev::Assert::MessageAt("luVehicleIndex < BrnTraffic::KU_MAX_TOTAL_TRAFFIC",
+                                                 BRN_CRASHMODULETRAFFICIOINTERFACES_H_ASSERT_FILE, 294));
             RemoveSlammedTrafficEvent lEvent;
             lEvent.muVehicleId = static_cast<u16>(luVehicleIndex);
             mRemoveSlammedTrafficEventQueue.AddEvent(lEvent);
         }
         void AddRemoveCrashedTrafficEvent(u32 luVehicleIndex)
         {
-            CGS_ASSERT(luVehicleIndex < 600u, "luVehicleIndex < BrnTraffic::KU_MAX_TOTAL_TRAFFIC");   // :314
+            CGS_ASSERT(luVehicleIndex < 600u,
+                       CgsDev::Assert::MessageAt("luVehicleIndex < BrnTraffic::KU_MAX_TOTAL_TRAFFIC",
+                                                 BRN_CRASHMODULETRAFFICIOINTERFACES_H_ASSERT_FILE, 314));   // 0x8272079C
             RemoveCrashedTrafficEvent lEvent;
             lEvent.muVehicleId = static_cast<u16>(luVehicleIndex);
             mRemoveCrashedTrafficEventQueue.AddEvent(lEvent);
@@ -181,7 +190,9 @@ namespace CrashIO
         // TrafficEntityModule::HandleCrashingNetworkTraffic drains post-scene.
         void StartNetworkTrafficVehicleCrashing(u32 luVehicleId)
         {
-            CGS_ASSERT(luVehicleId < 600u, "luVehicleId < BrnTraffic::KU_MAX_TOTAL_TRAFFIC");   // :365
+            CGS_ASSERT(luVehicleId < 600u,
+                       CgsDev::Assert::MessageAt("luVehicleId < BrnTraffic::KU_MAX_TOTAL_TRAFFIC",
+                                                 BRN_CRASHMODULETRAFFICIOINTERFACES_H_ASSERT_FILE, 365));
             NetworkTrafficCrashingEvent lEvent;
             lEvent.muVehicleId = static_cast<u16>(luVehicleId);
             mStartCrashingNetworkTrafficQueue.AddEvent(lEvent);

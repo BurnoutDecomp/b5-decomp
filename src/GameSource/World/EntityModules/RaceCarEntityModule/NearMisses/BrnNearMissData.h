@@ -13,13 +13,13 @@
 //
 // LAYOUT (X360-authoritative, recovered store-for-store from the member accessors of both
 // instantiations; A = the "near" capacity, B = the "long" capacity):
-//   +0x00  maNearSections        Array<s32,A>              (count word @ +0x10)
-//   +0x14  maNearSectionsBackup  Array<s32,A>              (count word @ +0x24)
-//   +0x28  maNearMiss            Array<VehicleTimePair,A>  (count word @ +0x48)
-//   +0x4C  maContacted           Array<VehicleTimePair,A>  (count word @ +0x6C)
-//   +0x70  maCrashed             Array<VehicleTimePair,B>  (count word @ +0xA8 for B=7 / +0xB0 for B=8)
-//   +0xAC  maTakenDown           Array<VehicleTimePair,B>  (<4,7>) / +0xB4 (<4,8>)
-//   +0xE8  maChecked             Array<VehicleTimePair,B>  (<4,7>) / +0xF8 (<4,8>)
+//   +0x00  mauCurrentFrameNearTraffic        Array<s32,A>              (count word @ +0x10)
+//   +0x14  mauPreviousFrameNearTraffic  Array<s32,A>              (count word @ +0x24)
+//   +0x28  maRecentTrafficNearMisses            Array<VehicleTimePair,A>  (count word @ +0x48)
+//   +0x4C  maRecentTrafficContacted           Array<VehicleTimePair,A>  (count word @ +0x6C)
+//   +0x70  maRecentlyCrashedTraffic             Array<VehicleTimePair,B>  (count word @ +0xA8 for B=7 / +0xB0 for B=8)
+//   +0xAC  maRecentlyTakenDownTraffic           Array<VehicleTimePair,B>  (<4,7>) / +0xB4 (<4,8>)
+//   +0xE8  maRecentlyCheckedTraffic             Array<VehicleTimePair,B>  (<4,7>) / +0xF8 (<4,8>)
 // The two int arrays are proven by BackupNearArray (int_A_::GetItem/Append on +0x00/+0x14),
 // while every adder/query calls VehicleTimePair_{A,B}_::Append/operator[] on the record
 // lists. The <4,8> instantiation's last three arrays chain 0x70 -> 0xB4 -> 0xF8 exactly
@@ -36,30 +36,32 @@
 
 namespace BrnWorld
 {
-    // One remembered traffic vehicle and the time it was logged. DWARF spells the members
-    // miEntityId (uint32_t) and mfTime (the project f32; DWARF float32_t == 32-bit IEEE).
-    // Namespace-scoped (NOT nested) so the committed Array_VehicleTimePair_{4,7,8}.cpp
-    // explicit instantiations that name BrnWorld::VehicleTimePair bind the same symbol.
-    struct VehicleTimePair
-    {
-        u32 miEntityId;   // BrnNearMissData.h:123  (record id, elem+0)
-        f32 mfTime;       // BrnNearMissData.h:124  (remaining timer, elem+4)
-    };
+    // Remember-timer seconds, namespace-scope per DWARF (BrnNearMissData.h:39/40): 0.5f for
+    // near/contacted/crashed/checked (ARTIST lfs 0x820147FC), 10.0f for taken-down (0x820149B0).
+    const f32 KF_INFORMATION_REMEMBER_TIME_GENERAL   = 0.5f;
+    const f32 KF_INFORMATION_REMEMBER_TIME_TAKEDOWNS = 10.0f;
 
     // Per-race-car near-miss/contact/crash/takedown/check bookkeeping. The bodies below are
     // all inline template definitions (both the <4,7> and <4,8> instantiations force them via
-    // the explicit `template class` instantiations in BrnNearMissData.cpp). Method const-ness
-    // is normalised: every pure-query method is const (they only read), every logging/ageing
-    // method is non-const. The X360 addresses of each instantiation's copy are noted per method.
+    // the explicit `template class` instantiations in BrnNearMissData.cpp). Member names and
+    // method const-ness follow DWARF (BrnNearMissData.h:132..138, cpp:44..545); the query
+    // loops re-test GetLength() each pass as in LegacySrc (ARTIST re-loads the count word and
+    // re-runs its Construct assert per iteration). The X360 addresses of each instantiation's
+    // copy are noted per method.
     template <u32 A, u32 B>
     class NearMissData
     {
     public:
-        // Remember-timer seconds (X360 rodata): 0.5f for near/contacted/crashed/checked
-        // (flt_820147FC), 10.0f for taken-down (flt_820149B0). The C++03 template
-        // definitions below provide their storage.
-        static const f32 KF_NEAR_MISS_REMEMBER_TIME;
-        static const f32 KF_TAKEN_DOWN_REMEMBER_TIME;
+        // One remembered traffic vehicle and the time it was logged. DWARF nests it in each
+        // instantiation (BrnNearMissData.h:122 `struct NearMissData<4u,8u>::VehicleTimePair`),
+        // and ARTIST emits one Array instance per outer type: Array<NearMissData<4,8>::
+        // VehicleTimePair,4>::Erase @0x822AEE48 beside Array<NearMissData<4,7>::VehicleTimePair,4>
+        // ::Erase @0x822AF208. DWARF spells the members miEntityId (uint32_t) and mfTime.
+        struct VehicleTimePair
+        {
+            u32 miEntityId;   // BrnNearMissData.h:123  (record id, elem+0)
+            f32 mfTime;       // BrnNearMissData.h:124  (remaining timer, elem+4)
+        };
 
         // Prepare -- declared at. Empties all seven lists: one `stw 0` into each count word
         // (+0x10, +0x24, +0x48, +0x6C and the three B-sized lists), emitted inline in
@@ -67,13 +69,13 @@ namespace BrnWorld
         // does not test the result.
         bool Prepare()
         {
-            maNearSections.Clear();
-            maNearSectionsBackup.Clear();
-            maNearMiss.Clear();
-            maContacted.Clear();
-            maCrashed.Clear();
-            maTakenDown.Clear();
-            maChecked.Clear();
+            mauCurrentFrameNearTraffic.Clear();
+            mauPreviousFrameNearTraffic.Clear();
+            maRecentTrafficNearMisses.Clear();
+            maRecentTrafficContacted.Clear();
+            maRecentlyCrashedTraffic.Clear();
+            maRecentlyTakenDownTraffic.Clear();
+            maRecentlyCheckedTraffic.Clear();
             return true;
         }
 
@@ -86,106 +88,105 @@ namespace BrnWorld
         {
             VehicleTimePair loRecord;
             loRecord.miEntityId = luEntityId;
-            loRecord.mfTime     = KF_NEAR_MISS_REMEMBER_TIME;
+            loRecord.mfTime     = KF_INFORMATION_REMEMBER_TIME_GENERAL;
 
-            const u32 luCount = maNearMiss.GetLength();
-            for (u32 luIndex = 0; luIndex < luCount; ++luIndex)
+            for (u32 luIndex = 0; luIndex < maRecentTrafficNearMisses.GetLength(); ++luIndex)
             {
-                if (maNearMiss[luIndex].miEntityId == luEntityId)
+                if (maRecentTrafficNearMisses[luIndex].miEntityId == luEntityId)
                 {
-                    maNearMiss.Erase(luIndex);
+                    maRecentTrafficNearMisses.Erase(luIndex);
                     break;
                 }
             }
-            if (maNearMiss.GetLength() == A)
+            if (maRecentTrafficNearMisses.GetLength() == A)
             {
-                maNearMiss.Erase(0);
+                maRecentTrafficNearMisses.Erase(0);
             }
-            maNearMiss.Append(loRecord);
+            maRecentTrafficNearMisses.Append(loRecord);
         }
 
-        // AddContacted -- <4,7> @0x822E4780 / <4,8> @0x822E3E40. (maContacted, cap A.)
+        // AddContacted -- <4,7> @0x822E4780 / <4,8> @0x822E3E40. (maRecentTrafficContacted, cap A.)
         void AddContacted(u32 luEntityId)
         {
             VehicleTimePair loRecord;
             loRecord.miEntityId = luEntityId;
-            loRecord.mfTime     = KF_NEAR_MISS_REMEMBER_TIME;
-            for (u32 luIndex = 0; luIndex < maContacted.GetLength(); ++luIndex)
+            loRecord.mfTime     = KF_INFORMATION_REMEMBER_TIME_GENERAL;
+            for (u32 luIndex = 0; luIndex < maRecentTrafficContacted.GetLength(); ++luIndex)
             {
-                if (maContacted[luIndex].miEntityId == luEntityId)
+                if (maRecentTrafficContacted[luIndex].miEntityId == luEntityId)
                 {
-                    maContacted.Erase(luIndex);
+                    maRecentTrafficContacted.Erase(luIndex);
                     break;
                 }
             }
-            if (maContacted.GetLength() == maContacted.GetSize())
+            if (maRecentTrafficContacted.GetLength() == maRecentTrafficContacted.GetSize())
             {
-                maContacted.Erase(0);
+                maRecentTrafficContacted.Erase(0);
             }
-            maContacted.Append(loRecord);
+            maRecentTrafficContacted.Append(loRecord);
         }
 
-        // AddCrashed -- <4,7> @0x822E4868 / <4,8> @0x822E3F28. (maCrashed, cap B.)
+        // AddCrashed -- <4,7> @0x822E4868 / <4,8> @0x822E3F28. (maRecentlyCrashedTraffic, cap B.)
         void AddCrashed(u32 luEntityId)
         {
             VehicleTimePair loRecord;
             loRecord.miEntityId = luEntityId;
-            loRecord.mfTime     = KF_NEAR_MISS_REMEMBER_TIME;
-            for (u32 luIndex = 0; luIndex < maCrashed.GetLength(); ++luIndex)
+            loRecord.mfTime     = KF_INFORMATION_REMEMBER_TIME_GENERAL;
+            for (u32 luIndex = 0; luIndex < maRecentlyCrashedTraffic.GetLength(); ++luIndex)
             {
-                if (maCrashed[luIndex].miEntityId == luEntityId)
+                if (maRecentlyCrashedTraffic[luIndex].miEntityId == luEntityId)
                 {
-                    maCrashed.Erase(luIndex);
+                    maRecentlyCrashedTraffic.Erase(luIndex);
                     break;
                 }
             }
-            if (maCrashed.GetLength() == maCrashed.GetSize())
+            if (maRecentlyCrashedTraffic.GetLength() == maRecentlyCrashedTraffic.GetSize())
             {
-                maCrashed.Erase(0);
+                maRecentlyCrashedTraffic.Erase(0);
             }
-            maCrashed.Append(loRecord);
+            maRecentlyCrashedTraffic.Append(loRecord);
         }
 
-        // AddTakenDown -- <4,7> @0x822E4950. (maTakenDown, cap B; the longer 10s timer.)
+        // AddTakenDown -- <4,7> @0x822E4950. (maRecentlyTakenDownTraffic, cap B; the longer 10s timer.)
         void AddTakenDown(u32 luEntityId)
         {
             VehicleTimePair loRecord;
             loRecord.miEntityId = luEntityId;
-            loRecord.mfTime     = KF_TAKEN_DOWN_REMEMBER_TIME;
-            for (u32 luIndex = 0; luIndex < maTakenDown.GetLength(); ++luIndex)
+            loRecord.mfTime     = KF_INFORMATION_REMEMBER_TIME_TAKEDOWNS;
+            for (u32 luIndex = 0; luIndex < maRecentlyTakenDownTraffic.GetLength(); ++luIndex)
             {
-                if (maTakenDown[luIndex].miEntityId == luEntityId)
+                if (maRecentlyTakenDownTraffic[luIndex].miEntityId == luEntityId)
                 {
-                    maTakenDown.Erase(luIndex);
+                    maRecentlyTakenDownTraffic.Erase(luIndex);
                     break;
                 }
             }
-            if (maTakenDown.GetLength() == maTakenDown.GetSize())
+            if (maRecentlyTakenDownTraffic.GetLength() == maRecentlyTakenDownTraffic.GetSize())
             {
-                maTakenDown.Erase(0);
+                maRecentlyTakenDownTraffic.Erase(0);
             }
-            maTakenDown.Append(loRecord);
+            maRecentlyTakenDownTraffic.Append(loRecord);
         }
 
-        // AddChecked -- <4,8> @0x822E4010. (maChecked, cap B.)
+        // AddChecked -- <4,8> @0x822E4010. (maRecentlyCheckedTraffic, cap B.)
         void AddChecked(u32 luEntityId)
         {
             VehicleTimePair loRecord;
             loRecord.miEntityId = luEntityId;
-            loRecord.mfTime     = KF_NEAR_MISS_REMEMBER_TIME;
-            for (u32 luIndex = 0; luIndex < maChecked.GetLength(); ++luIndex)
+            loRecord.mfTime     = KF_INFORMATION_REMEMBER_TIME_GENERAL;
+            for (u32 luIndex = 0; luIndex < maRecentlyCheckedTraffic.GetLength(); ++luIndex)
             {
-                if (maChecked[luIndex].miEntityId == luEntityId)
+                if (maRecentlyCheckedTraffic[luIndex].miEntityId == luEntityId)
                 {
-                    maChecked.Erase(luIndex);
+                    maRecentlyCheckedTraffic.Erase(luIndex);
                     break;
                 }
             }
-            if (maChecked.GetLength() == maChecked.GetSize())
+            if (maRecentlyCheckedTraffic.GetLength() == maRecentlyCheckedTraffic.GetSize())
             {
-                maChecked.Erase(0);
+                maRecentlyCheckedTraffic.Erase(0);
             }
-            maChecked.Append(loRecord);
+            maRecentlyCheckedTraffic.Append(loRecord);
         }
 
         // UpdateTimers -- <4,7> @0x822E4330 / <4,8> @0x822E39F0. Age every remembered record
@@ -193,30 +194,30 @@ namespace BrnWorld
         // whose timer has fallen below zero (Erase + re-visit the shifted-down successor).
         void UpdateTimers(f32 lfDeltaTime)
         {
-            for (u32 luIndex = 0; luIndex < maNearMiss.GetLength(); ++luIndex)
+            for (u32 luIndex = 0; luIndex < maRecentTrafficNearMisses.GetLength(); ++luIndex)
             {
-                maNearMiss[luIndex].mfTime -= lfDeltaTime;
-                if (maNearMiss[luIndex].mfTime < 0.0f) { maNearMiss.Erase(luIndex); --luIndex; }
+                maRecentTrafficNearMisses[luIndex].mfTime -= lfDeltaTime;
+                if (maRecentTrafficNearMisses[luIndex].mfTime < 0.0f) { maRecentTrafficNearMisses.Erase(luIndex); --luIndex; }
             }
-            for (u32 luIndex = 0; luIndex < maContacted.GetLength(); ++luIndex)
+            for (u32 luIndex = 0; luIndex < maRecentTrafficContacted.GetLength(); ++luIndex)
             {
-                maContacted[luIndex].mfTime -= lfDeltaTime;
-                if (maContacted[luIndex].mfTime < 0.0f) { maContacted.Erase(luIndex); --luIndex; }
+                maRecentTrafficContacted[luIndex].mfTime -= lfDeltaTime;
+                if (maRecentTrafficContacted[luIndex].mfTime < 0.0f) { maRecentTrafficContacted.Erase(luIndex); --luIndex; }
             }
-            for (u32 luIndex = 0; luIndex < maCrashed.GetLength(); ++luIndex)
+            for (u32 luIndex = 0; luIndex < maRecentlyCrashedTraffic.GetLength(); ++luIndex)
             {
-                maCrashed[luIndex].mfTime -= lfDeltaTime;
-                if (maCrashed[luIndex].mfTime < 0.0f) { maCrashed.Erase(luIndex); --luIndex; }
+                maRecentlyCrashedTraffic[luIndex].mfTime -= lfDeltaTime;
+                if (maRecentlyCrashedTraffic[luIndex].mfTime < 0.0f) { maRecentlyCrashedTraffic.Erase(luIndex); --luIndex; }
             }
-            for (u32 luIndex = 0; luIndex < maTakenDown.GetLength(); ++luIndex)
+            for (u32 luIndex = 0; luIndex < maRecentlyTakenDownTraffic.GetLength(); ++luIndex)
             {
-                maTakenDown[luIndex].mfTime -= lfDeltaTime;
-                if (maTakenDown[luIndex].mfTime < 0.0f) { maTakenDown.Erase(luIndex); --luIndex; }
+                maRecentlyTakenDownTraffic[luIndex].mfTime -= lfDeltaTime;
+                if (maRecentlyTakenDownTraffic[luIndex].mfTime < 0.0f) { maRecentlyTakenDownTraffic.Erase(luIndex); --luIndex; }
             }
-            for (u32 luIndex = 0; luIndex < maChecked.GetLength(); ++luIndex)
+            for (u32 luIndex = 0; luIndex < maRecentlyCheckedTraffic.GetLength(); ++luIndex)
             {
-                maChecked[luIndex].mfTime -= lfDeltaTime;
-                if (maChecked[luIndex].mfTime < 0.0f) { maChecked.Erase(luIndex); --luIndex; }
+                maRecentlyCheckedTraffic[luIndex].mfTime -= lfDeltaTime;
+                if (maRecentlyCheckedTraffic[luIndex].mfTime < 0.0f) { maRecentlyCheckedTraffic.Erase(luIndex); --luIndex; }
             }
         }
 
@@ -225,12 +226,12 @@ namespace BrnWorld
         // Both are Array<s32,A> (section-index ints), distinct from the VehicleTimePair lists.
         void BackupNearArray()
         {
-            maNearSectionsBackup.Clear();
-            for (u32 luIndex = 0; luIndex < maNearSections.GetLength(); ++luIndex)
+            mauPreviousFrameNearTraffic.Clear();
+            for (u32 luIndex = 0; luIndex < mauCurrentFrameNearTraffic.GetLength(); ++luIndex)
             {
-                maNearSectionsBackup.Append(maNearSections.GetItem(luIndex));
+                mauPreviousFrameNearTraffic.Append(mauCurrentFrameNearTraffic.GetItem(luIndex));
             }
-            maNearSections.Clear();
+            mauCurrentFrameNearTraffic.Clear();
         }
 
         // AddNear -- append luEntityId to the current-frame near-section working list (cap A).
@@ -239,38 +240,40 @@ namespace BrnWorld
         // NearMissManager caller (AddNearRaceCar/AddNearTraffic). (DWARF cpp:212)
         void AddNear(u32 luEntityId)
         {
-            if (maNearSections.GetLength() < A) { maNearSections.Append(static_cast<s32>(luEntityId)); }
+            if (mauCurrentFrameNearTraffic.GetLength() < A) { mauCurrentFrameNearTraffic.Append(static_cast<s32>(luEntityId)); }
         }
 
         // IsContainedInNearArray -- is luEntityId already in the current-frame near-section list?
-        // Array<s32,A>::Contains on maNearSections. Non-const per DWARF (cpp:516).
+        // Array<s32,A>::Contains on mauCurrentFrameNearTraffic. Non-const per DWARF (cpp:516).
         bool IsContainedInNearArray(u32 luEntityId)
         {
-            return maNearSections.Contains(static_cast<s32>(luEntityId));
+            return mauCurrentFrameNearTraffic.Contains(static_cast<s32>(luEntityId));
         }
 
         // ---- queries (const) ----
 
         // GetNumPreviousFrameNearElements / GetPreviousFrameNearElement -- read back the
-        // previous frame's near-section working list (the maNearSectionsBackup snapshot that
+        // previous frame's near-section working list (the mauPreviousFrameNearTraffic snapshot that
         // BackupNearArray populated). NearMissManager::Update iterates these to replay each
-        // remembered vehicle. The X360 inlines both as maNearSectionsBackup.GetLength()/GetItem
+        // remembered vehicle. The X360 inlines both as mauPreviousFrameNearTraffic.GetLength()/GetItem
         // (count @ +0x24, GetItem on the +0x14 array) -- see NearMissManager::Update.
         u32 GetNumPreviousFrameNearElements() const
         {
-            return maNearSectionsBackup.GetLength();
+            return mauPreviousFrameNearTraffic.GetLength();
         }
         u32 GetPreviousFrameNearElement(u32 luIndex) const
         {
-            return static_cast<u32>(maNearSectionsBackup.GetItem(luIndex));
+            return static_cast<u32>(mauPreviousFrameNearTraffic.GetItem(luIndex));
         }
 
         // HasRecentlyCrashed -- <4,7> @0x822E46F0 / <4,8> @0x822E3DB0.
-        bool HasRecentlyCrashed(u32 luEntityId) const
+        // Non-const (DWARF cpp:101): ARTIST calls the non-const operator[] instance
+        // (<4,8> sub_822B0608, <4,7> sub_822B0A28, shared with UpdateTimers).
+        bool HasRecentlyCrashed(u32 luEntityId)
         {
-            for (u32 luIndex = 0; luIndex < maCrashed.GetLength(); ++luIndex)
+            for (u32 luIndex = 0; luIndex < maRecentlyCrashedTraffic.GetLength(); ++luIndex)
             {
-                if (luEntityId == maCrashed[luIndex].miEntityId) { return true; }
+                if (luEntityId == maRecentlyCrashedTraffic[luIndex].miEntityId) { return true; }
             }
             return false;
         }
@@ -278,16 +281,15 @@ namespace BrnWorld
         // HasThereBeenARecentNearMiss -- <4,7> @0x822C8988. True iff the near-miss list is non-empty.
         bool HasThereBeenARecentNearMiss() const
         {
-            return maNearMiss.GetLength() != 0;
+            return maRecentTrafficNearMisses.GetLength() > 0;   // LegacySrc; subfic/subfe at 0x822C89CC
         }
 
         // IsRecentNearMiss -- <4,7> @0x822E4AC8 / <4,8> @0x822E40F8.
         bool IsRecentNearMiss(u32 luEntityId) const
         {
-            const u32 luCount = maNearMiss.GetLength();
-            for (u32 luIndex = 0; luIndex < luCount; ++luIndex)
+            for (u32 luIndex = 0; luIndex < maRecentTrafficNearMisses.GetLength(); ++luIndex)
             {
-                if (luEntityId == maNearMiss[luIndex].miEntityId) { return true; }
+                if (luEntityId == maRecentTrafficNearMisses[luIndex].miEntityId) { return true; }
             }
             return false;
         }
@@ -295,50 +297,44 @@ namespace BrnWorld
         // IsRecentContacted -- <4,7> @0x822E4B58 / <4,8> @0x822E4188.
         bool IsRecentContacted(u32 luEntityId) const
         {
-            const u32 luCount = maContacted.GetLength();
-            for (u32 luIndex = 0; luIndex < luCount; ++luIndex)
+            for (u32 luIndex = 0; luIndex < maRecentTrafficContacted.GetLength(); ++luIndex)
             {
-                if (luEntityId == maContacted[luIndex].miEntityId) { return true; }
+                if (luEntityId == maRecentTrafficContacted[luIndex].miEntityId) { return true; }
             }
             return false;
         }
 
-        // IsRecentlyTakeDown -- <4,7> @0x822E4A38. (maTakenDown, cap B.)
-        bool IsRecentlyTakeDown(u32 luEntityId) const
+        // IsRecentlyTakeDown -- <4,7> @0x822E4A38. (maRecentlyTakenDownTraffic, cap B.)
+        // Non-const (DWARF cpp:299): calls the non-const operator[] sub_822B0A28.
+        bool IsRecentlyTakeDown(u32 luEntityId)
         {
-            const u32 luCount = maTakenDown.GetLength();
-            for (u32 luIndex = 0; luIndex < luCount; ++luIndex)
+            for (u32 luIndex = 0; luIndex < maRecentlyTakenDownTraffic.GetLength(); ++luIndex)
             {
-                if (luEntityId == maTakenDown[luIndex].miEntityId) { return true; }
+                if (luEntityId == maRecentlyTakenDownTraffic[luIndex].miEntityId) { return true; }
             }
             return false;
         }
 
-        // IsRecentTrafficCheck -- <4,8> @0x822E4218. (maChecked, cap B.)
+        // IsRecentTrafficCheck -- <4,8> @0x822E4218. (maRecentlyCheckedTraffic, cap B.)
         bool IsRecentTrafficCheck(u32 luEntityId) const
         {
-            const u32 luCount = maChecked.GetLength();
-            for (u32 luIndex = 0; luIndex < luCount; ++luIndex)
+            for (u32 luIndex = 0; luIndex < maRecentlyCheckedTraffic.GetLength(); ++luIndex)
             {
-                if (luEntityId == maChecked[luIndex].miEntityId) { return true; }
+                if (luEntityId == maRecentlyCheckedTraffic[luIndex].miEntityId) { return true; }
             }
             return false;
         }
 
     private:
         // Head: section-index working list (count @ +0x10) and its backup (count @ +0x24).
-        CgsContainers::Array<s32, A>             maNearSections;        // +0x00
-        CgsContainers::Array<s32, A>             maNearSectionsBackup;  // +0x14
+        CgsContainers::Array<s32, A>             mauCurrentFrameNearTraffic;        // +0x00
+        CgsContainers::Array<s32, A>             mauPreviousFrameNearTraffic;  // +0x14
         // Remembered-vehicle record lists.
-        CgsContainers::Array<VehicleTimePair, A> maNearMiss;            // +0x28
-        CgsContainers::Array<VehicleTimePair, A> maContacted;           // +0x4C
-        CgsContainers::Array<VehicleTimePair, B> maCrashed;             // +0x70
-        CgsContainers::Array<VehicleTimePair, B> maTakenDown;           // +0xAC (<4,7>) / +0xB4 (<4,8>)
-        CgsContainers::Array<VehicleTimePair, B> maChecked;             // +0xE8 (<4,7>) / +0xF8 (<4,8>)
+        CgsContainers::Array<VehicleTimePair, A> maRecentTrafficNearMisses;            // +0x28
+        CgsContainers::Array<VehicleTimePair, A> maRecentTrafficContacted;           // +0x4C
+        CgsContainers::Array<VehicleTimePair, B> maRecentlyCrashedTraffic;             // +0x70
+        CgsContainers::Array<VehicleTimePair, B> maRecentlyTakenDownTraffic;           // +0xAC (<4,7>) / +0xB4 (<4,8>)
+        CgsContainers::Array<VehicleTimePair, B> maRecentlyCheckedTraffic;             // +0xE8 (<4,7>) / +0xF8 (<4,8>)
     };
-    template <u32 A, u32 B>
-    const f32 NearMissData<A, B>::KF_NEAR_MISS_REMEMBER_TIME = 0.5f;
-    template <u32 A, u32 B>
-    const f32 NearMissData<A, B>::KF_TAKEN_DOWN_REMEMBER_TIME = 10.0f;
 
 }

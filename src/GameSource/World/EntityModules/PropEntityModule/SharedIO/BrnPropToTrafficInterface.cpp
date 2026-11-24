@@ -16,7 +16,14 @@
 // rodata 'luInstanceID != 0' has no trailing newline. CGS_ASSERT stamps __FILE__/__LINE__, so the
 // X360-baked BrnPropToTrafficInterface.h:149 is not reproduced.
 #include "GameSource/World/EntityModules/PropEntityModule/SharedIO/BrnPropToTrafficInterface.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT + MessageAt
+
+// RequestTrafficLightKnockDown/Restore are declared at BrnPropToTrafficInterface.h:117/:122
+// (DWARF) and ARTIST bakes their bodies' header lines 149 (0x822CD3A4) and 163 (inlined in
+// PropZoneManager::SendTrafficLightRestoreEvents, 0x822CDED4) into the asserts: the original
+// defined them inline in the header, so the asserts carry that file and those lines.
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/SharedIO/BrnPropToTrafficInterface.h";
 
 namespace BrnWorld
 {
@@ -44,7 +51,7 @@ namespace PropEntityIO
     // X360 0x822CD378 (:117) -- queue a knock-down request for the given traffic-light instance.
     void PropToTrafficInterface::RequestTrafficLightKnockDown(u32 luInstanceID)
     {
-        CGS_ASSERT(luInstanceID != 0, "luInstanceID != 0");
+        CGS_ASSERT(luInstanceID != 0, CgsDev::Assert::MessageAt("luInstanceID != 0", KAC_ARTIST_ASSERT_FILE, 149));
 
         TrafficLightKnockDownEvent lEvent = { luInstanceID };
         mTrafficLightKnockDownQueue.AddEvent(lEvent);
@@ -57,7 +64,7 @@ namespace PropEntityIO
     // interface's mTrafficLightRestoreQueue (its 2nd member, +0x8C).
     void PropToTrafficInterface::RequestTrafficLightRestore(u32 luInstanceID)
     {
-        CGS_ASSERT(luInstanceID != 0, "luInstanceID != 0");
+        CGS_ASSERT(luInstanceID != 0, CgsDev::Assert::MessageAt("luInstanceID != 0", KAC_ARTIST_ASSERT_FILE, 163));
 
         TrafficLightRestoreEvent lEvent = { luInstanceID };
         mTrafficLightRestoreQueue.AddEvent(lEvent);

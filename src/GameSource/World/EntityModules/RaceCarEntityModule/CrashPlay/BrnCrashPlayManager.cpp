@@ -56,7 +56,7 @@
 #include "GameSource/GameState/BrnGameActions.h"                                    // the three action records
 #include "GameSource/GameState/BrnGameEvents.h"
 #include "GameSource/Math/BrnMathUtils.h"                                           // BrnMath::Magnitude2D
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint / gxMessageFilterFlags
 #include "rw/math/vpu/vector3_operation.h"
 #include "rw/math/vpu/matrix44affine_operation.h"
@@ -1084,14 +1084,16 @@ void CrashPlayManager::OnVehicleHitConfirmed( s32 liVehicleBaseScore,
 // =================================================================================================
 f32 CrashPlayManager::GetShowtimeTrafficDensityScale() const
 {
-    CGS_ASSERT( mfDifficultyLevel >= 0.0f && mfDifficultyLevel <= 1.0f, "mfDifficultyLevel>=0 && mfDifficultyLevel<=1.0f" );   // X360 :973
+    CGS_ASSERT( mfDifficultyLevel >= 0.0f && mfDifficultyLevel <= 1.0f,
+                CgsDev::Assert::MessageAt( "mfDifficultyLevel>=0 && mfDifficultyLevel<=1.0f", __FILE__, 973 ) );   // 0x822A80E0
 
     // `fsubs f12, 1.0, difficulty` ; `fsubs f13, MAX (0x82CDB558), MIN (0x82CDB554)` ;
     // `fmadds f31, f13, f12, f0(MIN)` @0x822A8110 -- ONE rounding.
     // [FX-AIBUZZ 2026-09-24: was MIN + (MAX - MIN) * (1 - d), two roundings]
     const f32 lfScale = ((KF_MAX_TRAFFIC_DENSITY - KF_MIN_TRAFFIC_DENSITY) * (1.0f - mfDifficultyLevel) + (KF_MIN_TRAFFIC_DENSITY));
 
-    CGS_ASSERT( lfScale >= 0.0f && lfScale <= 1.0f, "lfScale >= 0.0f && lfScale <= 1.0f" );   // X360 :977
+    CGS_ASSERT( lfScale >= 0.0f && lfScale <= 1.0f,
+                CgsDev::Assert::MessageAt( "lfScale >= 0.0f && lfScale <= 1.0f", __FILE__, 977 ) );   // 0x822A812C
 
     return lfScale;
 }

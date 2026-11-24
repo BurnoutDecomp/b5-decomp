@@ -92,8 +92,9 @@ void InternalBaseStreamer::ClearTargetList()
 {
     for ( s32 liEntry = 0; liEntry < miStreamListLength; liEntry++ )
     {
-        mpTargetEntryList[liEntry].mResourceId = 0;
+        // ARTIST store order: mbSafe (stb 8 at 0x827B0B74) before mResourceId (stdx at 0x827B0B7C).
         mpTargetEntryList[liEntry].mbSafe      = false;
+        mpTargetEntryList[liEntry].mResourceId = 0;
     }
 }
 

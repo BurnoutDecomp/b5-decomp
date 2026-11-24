@@ -71,6 +71,7 @@ namespace WorldEntityIO
         {
             CgsModule::IOBuffer::Construct();
             mResourceRequestInterface.mRequestQueue.Construct();
+            mResourceRequestInterface.mRequestQueue.Clear();   // ARTIST 0x822EDF50 (as PostPhysics)
             mSceneInputInterface.Construct();
         }
 

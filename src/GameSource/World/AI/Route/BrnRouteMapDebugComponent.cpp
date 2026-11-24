@@ -113,8 +113,8 @@ void RouteMapDebugComponent::Construct(RouteMapModule* lpRouteMapModule, AIModul
 {
     // The X360 calls the base init first (BaseCollisionGenerator::Destruct is the de-virtualised
     // base two-phase reset that the inliner folded in); reproduce it as the base Construct.
-
-    CGS_ASSERT(lpRouteMapModule != NULL, "lpRouteMapModule != NULL");
+    CgsDev::DebugComponent::Construct();   // ARTIST 0x82767E40 (folded at 0x8284CB38)
+    CGS_ASSERT(lpRouteMapModule != NULL, CgsDev::Assert::MessageAt("lpRouteMapModule != NULL", __FILE__, 88));
 
     mpRouteMapModule = lpRouteMapModule;     // +0x0C
     mpAIModule       = lpAIModule;            // +0x14

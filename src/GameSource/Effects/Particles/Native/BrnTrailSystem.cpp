@@ -348,7 +348,8 @@ namespace Native
 
         TrailEmitter* lpTrailEmitter = mFreeEmitters.Peek();
         mFreeEmitters.Pop();
-        CGS_ASSERT(lpTrailEmitter != 0, "lpTrailEmitter != NULL");
+        CGS_ASSERT(lpTrailEmitter != 0,
+                   CgsDev::Assert::MessageAt("lpTrailEmitter != NULL", __FILE__, 222 /* ARTIST 0x8228BFE0; DWARF fn at cpp:208 */));
 
         lpTrailEmitter->mrTimeLastSegmentAdded = -1.0f;
         lpTrailEmitter->mx8Flags               = 0;

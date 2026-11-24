@@ -138,13 +138,11 @@ void UpdateOutputBuffer::Destruct()
 {
     mGameEventQueue.Destruct();
 
-    // [FLAG] the console's *(this+169104) = 0 is NOT emitted: +169104 is eight bytes into
-    // mSoundWorldLoadInterface (+169096), i.e. a word of that interface's own queue header,
-    // and on the host that offset moves with the widened mpEvents. It belongs to
-    // SoundWorldLoadInterface's own teardown; poking it by console offset here would be the
-    // raw-offset hack the project forbids. Restore it as `mSoundWorldLoadInterface.<member> = 0`
-    // when that interface's Destruct lands.
-    mTriangleCacheInterface.mpTriangleCacheManager = 0;
+    // DWARF (BrnWorldModuleIO.cpp UpdateOutputBuffer::Destruct) calls
+    // BaseEventQueue<SoundWorldLoadEvent>::Destruct here: the miLength store at this+0x29490
+    // (mSoundWorldLoadInterface +8, ARTIST 0x827C4A40).
+    mSoundWorldLoadInterface.Destruct();
+    mTriangleCacheInterface.mpTriangleCacheManager = 0;   // TriangleCacheInterface::Destruct (DWARF)
 
     CgsModule::IOBuffer::Destruct();
 }
@@ -262,13 +260,12 @@ void UpdateOutputBuffer::SetDirectorVehicleInputInterface(const DirectorVehicleI
 // ---- race-car entity / trigger output interfaces ---------------------------------
 
 // X360 0x827A4638 (:539 W) -- copy the source global race-car interface (+52672).
-// The X360 inlines the interface's flat copy as XMemCpy(dst, src, 0x970 == 2416);
-// reversed into the committed RCEntityGlobalRaceCarOutputInterface::operator=.
+// The X360 inlines the interface's flat copy as XMemCpy(dst, src, 0x970 == 2416): the
+// header-inline RCEntityGlobalRaceCarOutputInterface::operator= (DWARF :483).
 void UpdateOutputBuffer::SetRaceCarGlobalOutputInterface(const RCEntityGlobalOutputInterface* lpInterface)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 539));
-    // ARTIST copies the 0x970 bytes through the XDK's XMemCpy (0x827A46E4), not the type's operator=.
-    XMemCpy(&mRaceCarGlobalOutputInterface, lpInterface, sizeof(RCEntityGlobalOutputInterface));
+    mRaceCarGlobalOutputInterface = *lpInterface;   // XMemCpy 0x827A46E4
 }
 
 // X360 0x827A46F0 (:542 W) -- copy the source trigger-entity output (+50816).
@@ -281,13 +278,12 @@ void UpdateOutputBuffer::SetTriggerEntityOutputInterface(const TriggerEntityModu
 }
 
 // X360 0x827A47A8 (:545 W) -- copy the source active-race-car interface (+29856).
-// X360 inlines the flat copy as XMemCpy(dst, src, 0x28F0 == 10480); reversed into the
-// committed RCEntityActiveRaceCarOutputInterface::operator=.
+// X360 inlines the flat copy as XMemCpy(dst, src, 0x28F0 == 10480): the header-inline
+// RCEntityActiveRaceCarOutputInterface::operator= (DWARF :213).
 void UpdateOutputBuffer::SetActiveRaceCarOutputInterface(const RCEntityActiveRaceCarOutputInterface* lpInterface)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 545));
-    // ARTIST copies the 0x28F0 bytes through the XDK's XMemCpy (0x827A4850), not the type's operator=.
-    XMemCpy(&mActiveRaceCarOutputInterface, lpInterface, sizeof(RCEntityActiveRaceCarOutputInterface));
+    mActiveRaceCarOutputInterface = *lpInterface;   // XMemCpy 0x827A4850
 }
 
 // X360 0x827A4860 (:548 W) -- copy the source replay active-race-car interface (+40336;
@@ -295,8 +291,7 @@ void UpdateOutputBuffer::SetActiveRaceCarOutputInterface(const RCEntityActiveRac
 void UpdateOutputBuffer::SetReplayActiveRaceCarOutputInterface(const RCEntityActiveRaceCarOutputInterface* lpInterface)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 548));
-    // ARTIST copies the 0x28F0 bytes through the XDK's XMemCpy (0x827A490C), not the type's operator=.
-    XMemCpy(&mReplayActiveRaceCarOutputInterface, lpInterface, sizeof(RCEntityActiveRaceCarOutputInterface));
+    mReplayActiveRaceCarOutputInterface = *lpInterface;   // operator=: XMemCpy 0x827A490C
 }
 
 // X360 0x823B5C18 (h:544 R) -- const active-race-car interface accessor (+29856).

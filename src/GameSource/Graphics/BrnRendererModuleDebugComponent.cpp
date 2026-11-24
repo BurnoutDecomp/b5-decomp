@@ -1,11 +1,12 @@
 #include "GameSource/Graphics/BrnRendererModule.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 namespace BrnGraphics
 {
     void DebugComponent::Construct(::BrnRendererModule* lpRendererModule)
     {
-        CGS_ASSERT(lpRendererModule != 0, "lpRendererModule != NULL");
+        CgsDev::DebugComponent::Construct();   // ARTIST 0x823F7B2C (folded at 0x8284CB38)
+        CGS_ASSERT(lpRendererModule != 0, CgsDev::Assert::MessageAt("lpRendererModule != NULL", __FILE__, 48));
         mpRendererModule = lpRendererModule;
         mfSunFlareOverrideBrightness = 0.3f;
         mbSunFlareOverrideBrightness = false;

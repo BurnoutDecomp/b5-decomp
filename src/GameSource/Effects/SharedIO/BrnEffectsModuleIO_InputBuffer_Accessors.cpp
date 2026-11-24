@@ -154,7 +154,7 @@ InputBuffer::GameActionQueue* InputBuffer::GetGameActionQueue()
 void InputBuffer::SetActiveRaceCarInterface(const RCEntityActiveRaceCarOutputInterface* lpInterface)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\effects\\EffectsModuleIO.h", 109));
-    std::memcpy(&mActiveRaceCarInterface, lpInterface, sizeof(mActiveRaceCarInterface));
+    mActiveRaceCarInterface = *lpInterface;   // the header-inline operator=: XMemCpy (0x823BA538)
 }
 
 // X360 0x823C96B8 (:91) -- `stw 0, 8(queue)` (Clear) then BaseEventQueue::Append(source).

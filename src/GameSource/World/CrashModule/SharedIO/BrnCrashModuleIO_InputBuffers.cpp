@@ -136,7 +136,9 @@ namespace CrashIO
     void InputBuffer_PreScene::SetGameActionQueue(const GameActionQueue* lpQueue)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\crashmodule\\BrnCrashModuleIO.h", 88));
-        mGameActionQueue.Append(*lpQueue);
+        // The whole queue is assigned: VariableEventQueue declares no operator= (DWARF), and ARTIST
+        // copies its 0x3410 bytes with the implicit assignment's memcpy (0x827A23C4..0x827A23D0).
+        mGameActionQueue = *lpQueue;
     }
 
     const InputBuffer_PreScene::GameActionQueue* InputBuffer_PreScene::GetGameActionQueue() const

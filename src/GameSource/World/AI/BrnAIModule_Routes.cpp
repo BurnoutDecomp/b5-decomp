@@ -150,18 +150,10 @@ void AIModule::UpdateCarRoutes(AIModuleIO::OutputBuffer* lpOutputBuffer,
                                const RouteMapModuleIO::OutputBuffer* lpRouteOutputBuffer)
 {
     CGS_ASSERT(lpRouteOutputBuffer != 0, "lpRouteOutputBuffer != NULL");   // :1503
-    if (lpRouteOutputBuffer == 0)
-    {
-        return;   // [GUARD]
-    }
 
     const RouteMapModuleIO::RouteResponseQueue* lpRouteResponseQueue =
         lpRouteOutputBuffer->GetRouteResponseQueue();
     CGS_ASSERT(lpRouteResponseQueue != 0, "lpRouteResponseQueue != NULL");   // :1507
-    if (lpRouteResponseQueue == 0)
-    {
-        return;   // [GUARD]
-    }
 
     const s32 liResponseCount = lpRouteResponseQueue->GetLength();
     for (s32 liResponse = 0; liResponse < liResponseCount; ++liResponse)
@@ -175,12 +167,7 @@ void AIModule::UpdateCarRoutes(AIModuleIO::OutputBuffer* lpOutputBuffer,
             continue;
         }
 
-        AICar* lpAICar = GetAICar(lpRouteResponse->GetEventId());
-        if (lpAICar == 0)   // [GUARD] GetAICar's PC-only out-of-range bail (see BrnAIModule_ResetPump.cpp)
-        {
-
-            continue;
-        }
+        AICar* lpAICar = GetAICar(static_cast<EGlobalRaceCarIndex>(lpRouteResponse->GetEventId()));
 
         if (!lpAICar->IsActive())
         {
@@ -209,7 +196,7 @@ void AIModule::UpdateCarRoutes(AIModuleIO::OutputBuffer* lpOutputBuffer,
     AIDriver* lpPlayerDriver = GetAIDriver(mePlayerActiveRaceCarIndex);                      // 0x8279577C
     if (lpPlayerDriver->GetCar() != 0)                                                       // 0x82795780 lwz 0x1CE0
     {
-        const AICar* lpPlayerAICar = GetAICar(static_cast<u32>(mePlayerGlobalRaceCarIndex));   // 0x8279579C
+        const AICar* lpPlayerAICar = GetAICar(mePlayerGlobalRaceCarIndex);   // 0x8279579C
         if (lpPlayerAICar->HasValidRoute())                                                   // 0x827957A0..0x827957B8
         {
             CGS_ASSERT(lpOutputBuffer != 0, "lpOutputBuffer != NULL");

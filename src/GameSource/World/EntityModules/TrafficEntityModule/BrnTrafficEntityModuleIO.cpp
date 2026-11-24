@@ -421,8 +421,7 @@ namespace BrnTrafficIO
         CGS_STATIC_ASSERT((offsetof(InputBuffer_PostScene, mActiveRaceCarOutputInterface) == 1648),
                       "mActiveRaceCarOutputInterface @1648");
         CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h", 236));
-        std::memcpy(&mActiveRaceCarOutputInterface, lpInterface,
-                    sizeof(InputBuffer_PostScene::ActiveRaceCarOutputInterface));
+        mActiveRaceCarOutputInterface = *lpInterface;   // header-inline operator=: XMemCpy (0x8279FF50)
     }
 
     // BrnTraffic::BrnTrafficIO::InputBuffer_PostScene::SetCrashTrafficOutputInterface @ 0x827ACDE8.

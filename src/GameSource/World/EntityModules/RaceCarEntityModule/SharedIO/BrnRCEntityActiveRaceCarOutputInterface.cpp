@@ -94,50 +94,6 @@ RCEntityActiveRaceCarOutputInterface::RCEntityActiveRaceCarOutputInterface(
 }
 
 // ============================================================================
-// operator= (DWARF :213). There is NO out-of-line operator= symbol in the image: the
-// only assignment site, BrnWorldIO::UpdateOutputBuffer::SetActiveRaceCarOutputInterface
-// @0x827A47A8, is a flat `XMemCpy(dst, src, 0x28F0)` == the whole 10480-byte object.
-//
-// The body is member-wise (the same one the copy constructor above uses); a byte-copy is not
-// portable to the x64 layout.
-// ============================================================================
-void RCEntityActiveRaceCarOutputInterface::operator=(
-        const RCEntityActiveRaceCarOutputInterface& lrOther)
-{
-    if (this == &lrOther)
-    {
-        return;
-    }
-
-    maCarsInTheRace = lrOther.maCarsInTheRace;
-
-    for (s32 luIndex = 0; luIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++luIndex)
-    {
-        maBoostOutputInfo[luIndex]                = lrOther.maBoostOutputInfo[luIndex];
-        maRaceCarStates[luIndex]                  = lrOther.maRaceCarStates[luIndex];
-        maRivalIds[luIndex]                       = lrOther.maRivalIds[luIndex];
-        maCarModelIds[luIndex]                    = lrOther.maCarModelIds[luIndex];
-        mauActiveRaceCarColourIndex[luIndex]      = lrOther.mauActiveRaceCarColourIndex[luIndex];
-        maiActiveRaceCarPaintFinishIndex[luIndex] = lrOther.maiActiveRaceCarPaintFinishIndex[luIndex];
-        mau16ActiveRaceCarAISections[luIndex]     = lrOther.mau16ActiveRaceCarAISections[luIndex];
-        maRaceCarMaterialColours[luIndex]         = lrOther.maRaceCarMaterialColours[luIndex];
-        maxRaceCarFlags[luIndex]                  = lrOther.maxRaceCarFlags[luIndex];
-        maCurrentInAirRotations[luIndex]          = lrOther.maCurrentInAirRotations[luIndex];
-        mbHasCrashedIntoWater[luIndex]            = lrOther.mbHasCrashedIntoWater[luIndex];
-        maGlobalRaceCarIndices[luIndex]           = lrOther.maGlobalRaceCarIndices[luIndex];
-        maeActiveRaceCarIndex[luIndex]            = lrOther.maeActiveRaceCarIndex[luIndex];
-        maDeformationModelResourceHandles[luIndex]= lrOther.maDeformationModelResourceHandles[luIndex];
-    }
-    mePlayerActiveRaceCarIndex = lrOther.mePlayerActiveRaceCarIndex;
-    mePlayerEngineState        = lrOther.mePlayerEngineState;
-    mbIsPlayerCarActive        = lrOther.mbIsPlayerCarActive;
-    mbAllActiveCarsReady       = lrOther.mbAllActiveCarsReady;
-    mWorldMap2D                = lrOther.mWorldMap2D;
-    mbPlayerWrecked            = lrOther.mbPlayerWrecked;
-    mbCanDriveAwayFromCrash    = lrOther.mbCanDriveAwayFromCrash;
-}
-
-// ============================================================================
 // X360 0x8227D550 -- Clear. Resets the per-car arrays, the per-scoring-index
 // active-car map and the player-scoped scalars to their cleared defaults:
 //   mePlayerActiveRaceCarIndex = -1   (E_ACTIVE_RACE_CAR_INDEX_INVALID)

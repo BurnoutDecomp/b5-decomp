@@ -40,7 +40,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h" // 3D draws
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h" // 2D draws
 #include "GameShared/GameClasses/Development/CgsStrStream.h"                         // CgsDev::StrStream
-#include "GameShared/GameClasses/Core/CgsAssert.h"                                  // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                                  // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                             // CgsCore::SPrintf
 #include "rw/rwcore_structs.h"                                                      // rw::RGBA
 #include "rw/math/vpu/matrix44affine_operation.h"                                   // Matrix44Affine operator*
@@ -97,8 +97,8 @@ namespace BrnWorld
     // COMDAT-folded DebugComponent::Construct.)
     void PropEntityDebugComponent::Construct(PropEntityModule* lpPropEntityModule)
     {
-
-        CGS_ASSERT(lpPropEntityModule != 0, "lpPropEntityModule != NULL");
+        CgsDev::DebugComponent::Construct();   // ARTIST 0x822A96C4 (folded at 0x8284CB38)
+        CGS_ASSERT(lpPropEntityModule != 0, CgsDev::Assert::MessageAt("lpPropEntityModule != NULL", __FILE__, 50));
         mpPropEntityModule = lpPropEntityModule;
 
         mbRenderProps         = false;   // +0x38

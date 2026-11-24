@@ -10,7 +10,7 @@
 // `CrashInterface` (BrnRaceCarEntityModuleIO.h:92/:200) and only holds/returns it by
 // pointer, so a reserved-byte blob suffices here; the full member layout (and the sibling
 // CrashIO Traffic/Network interfaces homed in this DWARF file) belongs to this type's own
-// ledger TU. alignas(16) for the SIMD-aligned EventQueue payload.
+// ledger TU.
 #include "types.hpp"   // u8
 #include "GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.h"   // CgsSceneManager::VolumeInstanceId
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"               // CgsModule::EventQueue<T,N>
@@ -53,9 +53,12 @@ namespace CrashIO
     //
     // ⚠️ The old 256-byte NOMINAL size was a guess and is now gone: the real host size is
     // 16 + 10*16 == 176 (12 + 10*16 == 172 on the console, mpEvents widening 4->8) -- the same
-    // arithmetic the prop buffer's own banner records for the identical queue. alignas(16) is
-    // kept: the EventQueue payload is SIMD-aligned.
-    struct CGS_ALIGN(16) RaceCarOutputInterface
+    // arithmetic the prop buffer's own banner records for the identical queue. No 16-byte
+    // alignment: the element's widest member is the 8-byte VolumeInstanceId, and ARTIST places
+    // this interface at +8 behind an IOBuffer status word (RaceCarEntityModuleIO::
+    // InputBuffer_PostScene::GetCrashInterface 0x822B5410 returns this+8; SetCrashInterface
+    // 0x827ACADC copies to this+8).
+    struct RaceCarOutputInterface
     {
         typedef CgsModule::EventQueue<RaceCarCrashCompleteEvent, 10> RaceCarCrashCompleteEventQueue;
 

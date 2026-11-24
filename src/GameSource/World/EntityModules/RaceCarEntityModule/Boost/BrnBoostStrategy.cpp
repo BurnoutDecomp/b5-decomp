@@ -161,9 +161,14 @@ bool BoostStrategy::IsSpinning() const { return mfSpinAngle > 45.0f; }        //
 
 bool BoostStrategy::IsATrafficCheckPending() // 0x822A5E98
 {
-    const bool lbPending = mbJustTrafficChecked;
-    mbJustTrafficChecked = false;
-    return lbPending;
+    // ARTIST tests first and clears only on the true path (lbz/cmplwi/beq, then li 0 / li 1 /
+    // stb at 0x822A5EA8..0x822A5EB0), unlike HasJustLostBoostChunk's unconditional read-clear.
+    if (mbJustTrafficChecked)
+    {
+        mbJustTrafficChecked = false;
+        return true;
+    }
+    return false;
 }
 
 bool BoostStrategy::HasJustLostBoostChunk() // 0x822A5EC0

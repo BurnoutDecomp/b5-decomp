@@ -1,8 +1,8 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"   // Array<T,N>::Append/Erase (inline generic)
-#include "GameSource/World/EntityModules/RaceCarEntityModule/NearMisses/BrnNearMissData.h" // BrnWorld::VehicleTimePair (8-byte element)
+#include "GameSource/World/EntityModules/RaceCarEntityModule/NearMisses/BrnNearMissData.h" // NearMissData<A,B>::VehicleTimePair (8-byte element)
 
-// Array<BrnWorld::VehicleTimePair, 7>::Append @ 0x822AF2C0
-// Array<BrnWorld::VehicleTimePair, 7>::Erase  @ 0x822AF3E8
+// Array<BrnWorld::NearMissData<4, 7>::VehicleTimePair, 7>::Append @ 0x822AF2C0
+// Array<BrnWorld::NearMissData<4, 7>::VehicleTimePair, 7>::Erase  @ 0x822AF3E8
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. The generic Array<T,N>::Append / Erase bodies
 // are already committed inline in CgsArray.h; this TU is the thin explicit instantiation only
 // (do NOT re-define the generic). Both X360 bodies match the generic store-for-store and are
@@ -20,5 +20,5 @@
 //
 // Append is called by NearMissData<4,7>::AddCrashed / AddTakenDown; Erase by
 // NearMissData<4,7>::UpdateTimers / AddCrashed / AddTakenDown.
-template void CgsContainers::Array<BrnWorld::VehicleTimePair, 7>::Append(const BrnWorld::VehicleTimePair&);
-template void CgsContainers::Array<BrnWorld::VehicleTimePair, 7>::Erase(u32);
+template void CgsContainers::Array<BrnWorld::NearMissData<4, 7>::VehicleTimePair, 7>::Append(const BrnWorld::NearMissData<4, 7>::VehicleTimePair&);
+template void CgsContainers::Array<BrnWorld::NearMissData<4, 7>::VehicleTimePair, 7>::Erase(u32);

@@ -135,7 +135,7 @@ const AICar* RaceBalancingDebugComponent::FindAICar(s32 liRivalIndex) const
 {
     for (s32 liSlot = 0; liSlot < KI_MAX_AI_CARS; ++liSlot)
     {
-        const AICar* lpCar = mpAIModule->GetAICar(static_cast<u32>(liSlot));
+        const AICar* lpCar = mpAIModule->GetAICar(static_cast<EGlobalRaceCarIndex>(liSlot));
 
         const s8 liOpponentIndex = lpCar->GetOpponentIndex();
 

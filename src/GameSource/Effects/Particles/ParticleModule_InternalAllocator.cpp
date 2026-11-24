@@ -81,13 +81,14 @@ void* IInternalAllocator::Alloc(size_t anSize, const EA::TagValuePair& /*arTags*
     return mpHeapMalloc->Malloc(static_cast<s32>(anSize), KI_INTERNAL_ALLOC_ALIGNMENT);
 }
 
-// The name/flags overload. NOT SEPARATELY EMITTED: the X360 image has one body for the 3-arg
-// and 5-arg forms -- 0x82289820 takes (this, size, name, flags, align, alignOffset) -- so the
-// 3-arg form is the same entry point reached with the trailing pair defaulted. Reproduced as
-// the 3-arg forwarding to the 5-arg with the same default alignment the tagged form uses.
-void* IInternalAllocator::Alloc(size_t anSize, const char* apName, u32 auFlags)
+// X360 0x82289810: the name/flags overload. The primary vtable off_82011E14 is
+// {dtor 0x822898A0, 0x82289820, 0x82289810, Free 0x82289888}; MSVC lays the ICoreAllocator::Alloc
+// overload group out in reverse declaration order, so slot 2 (0x82289810) is this 3-arg form:
+// `lwz r3,8(r3); li r5,0x10; b HeapMalloc::Malloc`. The tagged form reached through the IAllocator
+// base is the unexported 0x82289878 (`lwz r3,4(r3)`, this = the +4 sub-object).
+void* IInternalAllocator::Alloc(size_t anSize, const char* /*apName*/, u32 /*auFlags*/)
 {
-    return Alloc(anSize, apName, auFlags, KI_INTERNAL_ALLOC_ALIGNMENT, 0);
+    return mpHeapMalloc->Malloc(static_cast<s32>(anSize), KI_INTERNAL_ALLOC_ALIGNMENT);
 }
 
 // X360 0x82289820. The alignment comes from the CALLER here (r5 -> HeapMalloc::Malloc's third

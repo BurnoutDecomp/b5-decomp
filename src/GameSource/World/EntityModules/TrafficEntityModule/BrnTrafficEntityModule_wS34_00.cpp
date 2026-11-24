@@ -4,7 +4,7 @@
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficDebugComponent.h"   // mpDebugComponent->Destruct()
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT + MessageAt
 
 namespace BrnTraffic
 {
@@ -34,7 +34,7 @@ namespace BrnTraffic
             {
                 if ( !CgsModule::ModuleSingleBuffered::Release() )
                 {
-                    return false;
+                    break;   // to the shared `return false` (its own li r3,0 at 0x827149B0)
                 }
 
                 mReceiverQueue.Clear();
@@ -52,10 +52,10 @@ namespace BrnTraffic
 
             default:
             {
-                CGS_ASSERT( false, "0" );
-                return false;
+                CGS_ASSERT( false, CgsDev::Assert::MessageAt( "0", __FILE__, 1373 ) );   // li r5,0x55D at 0x82714974
             }
         }
+        return false;
     }
 
     // ========================================================================

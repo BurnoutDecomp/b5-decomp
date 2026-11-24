@@ -91,9 +91,8 @@
 // CONSOLE-vs-HOST NOTES (every deviation is flagged at its site as well)
 //
 //  * X360 offsets in the comments are IDENTITY, never host addressing. Everything is by member.
-//  * The console's asserts are reproduced non-gating (CGS_ASSERT) exactly where they fire; a
-//    `[GUARD]` early-out is added ONLY where the console would then dereference a NULL, and each
-//    one says so.
+//  * The console's asserts are reproduced non-gating (CGS_ASSERT) exactly where they fire. The
+//    PC tree's `[GUARD]` null early-outs are not on x360: ARTIST has no such paths.
 //  * `flt_82001CC0` (the f31 both functions preload) is 0.0f -- image.bin file offset 0x1CC0 reads
 //    00000000. Spelled 0.0f here.
 //  * The console's `stfs f31, <int field>` stores into meBehaviour-adjacent INT fields are 4-byte
@@ -190,17 +189,9 @@ namespace
 void AIModule::HandleManagementEvents(const AIModuleIO::InputBuffer* lpInputBuffer)
 {
     CGS_ASSERT(lpInputBuffer != 0, "lpInputBuffer != NULL");                              // :1784
-    if (lpInputBuffer == 0)
-    {
-        return;   // [GUARD] the console dereferences it two instructions later (0x82798664).
-    }
 
     const AIModuleIO::RaceCarAIInterface* const lpCarInterface = lpInputBuffer->GetRaceCarAIInterface();
     CGS_ASSERT(lpCarInterface != 0, "lpCarInterface != NULL");                            // :1789
-    if (lpCarInterface == 0)
-    {
-        return;   // [GUARD] the console then forms lpCarInterface + 0x2F8 and reads through it.
-    }
 
     // asm 0x82798694 `addi r31, r31, 0x2F8` -- the management queue is the interface's own member.
     const CgsModule::VariableEventQueue<16384, 16>* const lpManagementQueue =
@@ -229,11 +220,7 @@ void AIModule::HandleManagementEvents(const AIModuleIO::InputBuffer* lpInputBuff
             CGS_ASSERT(leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT,
                        "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT");           // :1808
 
-            AICar* const lpCar = GetAICar(static_cast<u32>(leGlobalRaceCarIndex));
-            if (lpCar == 0)
-            {
-                break;   // [GUARD] GetAICar's own out-of-range bail; the console has no such path.
-            }
+            AICar* const lpCar = GetAICar(leGlobalRaceCarIndex);
 
             // asm 0x82798864..0x82798884: the assert fires when meCarState is IN_RANGE(0) or
             // OUT_OF_RANGE(1) -- i.e. exactly AICar::IsActive().
@@ -268,19 +255,11 @@ void AIModule::HandleManagementEvents(const AIModuleIO::InputBuffer* lpInputBuff
             CGS_ASSERT(leDriverActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
                        "leDriverActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");     // :1835
 
-            AICar* const lpCar = GetAICar(static_cast<u32>(leGlobalRaceCarIndex));
-            if (lpCar == 0)
-            {
-                break;   // [GUARD] as above.
-            }
+            AICar* const lpCar = GetAICar(leGlobalRaceCarIndex);
             CGS_ASSERT(lpCar->meCarState == E_AI_CAR_STATE_OUT_OF_RANGE,
                        "lpCar->GetState() == E_AI_CAR_STATE_OUT_OF_RANGE");               // :1838
 
             AIDriver* const lpDriver = GetAIDriver(leDriverActiveRaceCarIndex);
-            if (lpDriver == 0)
-            {
-                break;   // [GUARD] GetAIDriver's out-of-range bail (BrnAIModule_Drive.cpp).
-            }
             CGS_ASSERT(!lpDriver->IsActive(), "!lpDriver->IsActive()");                   // :1841
 
             lpDriver->SetAICar(lpCar);                                                    // 0x827989C0
@@ -305,11 +284,7 @@ void AIModule::HandleManagementEvents(const AIModuleIO::InputBuffer* lpInputBuff
             CGS_ASSERT(leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT,
                        "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT");           // :1853
 
-            AICar* const lpCar = GetAICar(static_cast<u32>(leGlobalRaceCarIndex));
-            if (lpCar == 0)
-            {
-                break;   // [GUARD]
-            }
+            AICar* const lpCar = GetAICar(leGlobalRaceCarIndex);
 
             if (lpCar->meCarState == E_AI_CAR_STATE_OUT_OF_RANGE)                         // 0x82798A20
             {
@@ -333,14 +308,6 @@ void AIModule::HandleManagementEvents(const AIModuleIO::InputBuffer* lpInputBuff
             AIDriver* const lpDriver =
                 (lpCar->meCarState == E_AI_CAR_STATE_IN_RANGE) ? lpCar->GetDriver() : 0;
             CGS_ASSERT(lpDriver != 0, "lpDriver");                                        // :1865
-            if (lpDriver == 0)
-            {
-                // [GUARD] the console's assert is non-gating and the very next instruction
-                // (`lbz r11, 0x1D69(r31)`) dereferences it -- an AV here. See the lane report's
-                // `## risks`: AIDriver::SetAICar does not yet call AICar::SetDriver, so
-                // AICar::mpDriverHost is NULL on this build and this guard is LIVE.
-                break;
-            }
 
             CGS_ASSERT(lpDriver->IsActive(), "lpDriver->IsActive()");                     // :1866
             // AIDriver::GetGlobalRaceCarIndex() is inlined on the console as
@@ -378,11 +345,7 @@ void AIModule::HandleManagementEvents(const AIModuleIO::InputBuffer* lpInputBuff
             CGS_ASSERT(leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT,
                        "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT");           // :1887
 
-            AICar* const lpCar = GetAICar(static_cast<u32>(leGlobalRaceCarIndex));
-            if (lpCar == 0)
-            {
-                break;   // [GUARD]
-            }
+            AICar* const lpCar = GetAICar(leGlobalRaceCarIndex);
             CGS_ASSERT(lpCar->meCarState == E_AI_CAR_STATE_OUT_OF_RANGE,
                        "lpCar->GetState() == E_AI_CAR_STATE_OUT_OF_RANGE");               // :1890
 
@@ -414,11 +377,7 @@ void AIModule::HandleManagementEvents(const AIModuleIO::InputBuffer* lpInputBuff
                 lpPlayerDriver->mbIsRacingLineInitialised = 0;                             // 0x82798C94
             }
 
-            AICar* const lpPlayerCar = GetAICar(static_cast<u32>(mePlayerGlobalRaceCarIndex));
-            if (lpPlayerCar == 0)
-            {
-                break;   // [GUARD]
-            }
+            AICar* const lpPlayerCar = GetAICar(mePlayerGlobalRaceCarIndex);
 
             const EAICarState leState = lpPlayerCar->meCarState;                           // 0x82798CA4
             lpPlayerCar->mbIsDrivenByPlayer = lpControlChanged->mbPlayerIsInControl;        // 0x82798CAC
@@ -429,10 +388,6 @@ void AIModule::HandleManagementEvents(const AIModuleIO::InputBuffer* lpInputBuff
             }
 
             AIDriver* const lpCarDriver = lpPlayerCar->GetDriver();                         // 0x82798CB4
-            if (lpCarDriver == 0)
-            {
-                break;   // [GUARD] see the DEACTIVATE arm -- the console derefs unconditionally.
-            }
             lpCarDriver->ResetPIDTuningState();                                             // 0x82798CB8
 
 
@@ -452,11 +407,7 @@ void AIModule::HandleManagementEvents(const AIModuleIO::InputBuffer* lpInputBuff
                        "lpEvent->meGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0 && "
                        "lpEvent->meGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT");   // :1917
 
-            AICar* const lpCar = GetAICar(static_cast<u32>(leGlobalRaceCarIndex));
-            if (lpCar == 0)
-            {
-                break;   // [GUARD]
-            }
+            AICar* const lpCar = GetAICar(leGlobalRaceCarIndex);
             CGS_ASSERT(lpCar->meCarState == E_AI_CAR_STATE_OUT_OF_RANGE,
                        "lpCar->GetState() == E_AI_CAR_STATE_OUT_OF_RANGE");                // :1921
 
@@ -488,11 +439,7 @@ void AIModule::HandleManagementEvents(const AIModuleIO::InputBuffer* lpInputBuff
             const AIModuleIO::AddCarToCurrentModeEvent* const lpAddCar =
                 static_cast<const AIModuleIO::AddCarToCurrentModeEvent*>(lpEvent);
 
-            AICar* const lpCar = GetAICar(static_cast<u32>(lpAddCar->meGlobalRaceCarIndex));
-            if (lpCar == 0)
-            {
-                break;   // [GUARD]
-            }
+            AICar* const lpCar = GetAICar(lpAddCar->meGlobalRaceCarIndex);
 
             // asm 0x82798DD8..0x82798DF8: deviating from the route is only permitted in a RACE.
             bool lbCanDeviateFromRoute = false;
@@ -538,11 +485,7 @@ void AIModule::HandleManagementEvents(const AIModuleIO::InputBuffer* lpInputBuff
             const AIModuleIO::RemoveCarFromCurrentModeEvent* const lpRemoveCar =
                 static_cast<const AIModuleIO::RemoveCarFromCurrentModeEvent*>(lpEvent);
 
-            AICar* const lpCar = GetAICar(static_cast<u32>(lpRemoveCar->meGlobalRaceCarIndex));
-            if (lpCar == 0)
-            {
-                break;   // [GUARD]
-            }
+            AICar* const lpCar = GetAICar(lpRemoveCar->meGlobalRaceCarIndex);
 
             lpCar->mfWrongWayTime            = 0.0f;                                        // 0x82798B8C
             InvalidateRouteInline(lpCar);                                                   // 0x82798B94/98
@@ -593,18 +536,9 @@ void AIModule::HandleGameActions(const AIModuleIO::InputBuffer* lpInputBuffer,
 
     (void)lpOutputBuffer;   // carried for the prototype; the console body never reads r5.
 
-    if (lpInputBuffer == 0)
-    {
-        return;   // [GUARD] the console has no null test here at all (asm 0x82791FF0 calls
-                  // GetGameActionQueue straight away) -- added because every other leg guards.
-    }
 
     const AIModuleIO::InputBuffer::GameActionQueue* const lpGameActionQueue =
         lpInputBuffer->GetGameActionQueue();                                                // 0x8276D530
-    if (lpGameActionQueue == 0)
-    {
-        return;   // [GUARD]
-    }
 
     const CgsModule::Event* lpAction = 0;
     s32 liSize = 0;
@@ -628,12 +562,8 @@ void AIModule::HandleGameActions(const AIModuleIO::InputBuffer* lpInputBuffer,
                 break;
             }
 
-            AICar* const lpPlayerCar = GetAICar(static_cast<u32>(mePlayerGlobalRaceCarIndex));
+            AICar* const lpPlayerCar = GetAICar(mePlayerGlobalRaceCarIndex);
             CGS_ASSERT(lpPlayerCar != 0, "lpPlayerCar");                                    // :1731
-            if (lpPlayerCar == 0)
-            {
-                break;   // [GUARD] the console's assert is non-gating and it derefs next.
-            }
 
             lpPlayerCar->mfBehaviourTimer = 0.0f;                                           // 0x82792578
 
@@ -739,10 +669,6 @@ void AIModule::HandleGameActions(const AIModuleIO::InputBuffer* lpInputBuffer,
         {
             CGS_ASSERT(lpRouteInputBuffer != 0, "lpRouteInputBuffer");                      // :1644
             CGS_ASSERT(lpAction != 0, "lpRouteRequest");                                    // :1649
-            if (lpRouteInputBuffer == 0)
-            {
-                break;   // [GUARD] the console's assert is non-gating and it derefs at 0x82792438.
-            }
 
             const RequestRouteInfoAction* const lpRouteInfo =
                 reinterpret_cast<const RequestRouteInfoAction*>(lpAction);
@@ -773,7 +699,7 @@ void AIModule::HandleGameActions(const AIModuleIO::InputBuffer* lpInputBuffer,
 
             mBuzzBy.SetInJunkyard(lpJunkYard->mbIsInJunkYard);                              // 0x82792510/0x82792518
 
-            AICar* const lpPlayerCar = GetAICar(static_cast<u32>(mePlayerGlobalRaceCarIndex));
+            AICar* const lpPlayerCar = GetAICar(mePlayerGlobalRaceCarIndex);
             if (lpPlayerCar != 0)
             {
                 lpPlayerCar->SetIsInJunkyard(lpJunkYard->mbIsInJunkYard);                   // 0x8279252C
@@ -792,7 +718,7 @@ void AIModule::HandleGameActions(const AIModuleIO::InputBuffer* lpInputBuffer,
                 *CgsDev::Log::gpDebugPrint << "<AI> Is in startup junkyard\n";              // 0x827924E0
             }
 
-            AICar* const lpPlayerCar = GetAICar(static_cast<u32>(mePlayerGlobalRaceCarIndex));
+            AICar* const lpPlayerCar = GetAICar(mePlayerGlobalRaceCarIndex);
             if (lpPlayerCar != 0)
             {
                 lpPlayerCar->SetIsInJunkyard(true);                                         // 0x827924F4
@@ -820,11 +746,7 @@ void AIModule::HandleGameActions(const AIModuleIO::InputBuffer* lpInputBuffer,
         // The player car stops dead and one more car is queued for BuzzBy collection.
         case E_ACTION_SHUTDOWN:
         {
-            AICar* const lpPlayerCar = GetAICar(static_cast<u32>(mePlayerGlobalRaceCarIndex));
-            if (lpPlayerCar == 0)
-            {
-                break;   // [GUARD]
-            }
+            AICar* const lpPlayerCar = GetAICar(mePlayerGlobalRaceCarIndex);
             SetBehaviourInline(lpPlayerCar, E_AI_BEHAVIOUR_STOP);                           // 0x82792464..0x82792474
             mBuzzBy.AddCarAwaitingCollection();                                             // 0x82792478..0x82792480
 
@@ -834,11 +756,7 @@ void AIModule::HandleGameActions(const AIModuleIO::InputBuffer* lpInputBuffer,
         // ---- 122  E_ACTION_AWARD_SEQUENCE_START  (case 115, asm 0x82792488) ---------------
         case E_ACTION_AWARD_SEQUENCE_START:
         {
-            AICar* const lpPlayerCar = GetAICar(static_cast<u32>(mePlayerGlobalRaceCarIndex));
-            if (lpPlayerCar == 0)
-            {
-                break;   // [GUARD]
-            }
+            AICar* const lpPlayerCar = GetAICar(mePlayerGlobalRaceCarIndex);
             SetBehaviourInline(lpPlayerCar, E_AI_BEHAVIOUR_STOP);                           // 0x82792494..0x827924A0
 
             break;
@@ -847,11 +765,7 @@ void AIModule::HandleGameActions(const AIModuleIO::InputBuffer* lpInputBuffer,
         // ---- 123  E_ACTION_AWARD_SEQUENCE_END  (case 116, asm 0x827924A8) -----------------
         case E_ACTION_AWARD_SEQUENCE_END:
         {
-            AICar* const lpPlayerCar = GetAICar(static_cast<u32>(mePlayerGlobalRaceCarIndex));
-            if (lpPlayerCar == 0)
-            {
-                break;   // [GUARD]
-            }
+            AICar* const lpPlayerCar = GetAICar(mePlayerGlobalRaceCarIndex);
             SetBehaviourInline(lpPlayerCar, E_AI_BEHAVIOUR_CRUISING);                       // `stw r14(3), 0x14B4`
 
             break;
@@ -869,10 +783,6 @@ void AIModule::HandleGameActions(const AIModuleIO::InputBuffer* lpInputBuffer,
                 break;
             }
             AICar* const lpCar = lpDriver->GetCar();                                        // 0x82792398
-            if (lpCar == 0)
-            {
-                break;   // [GUARD] the console derefs mpCar unconditionally once mbIsActive is set.
-            }
             lpCar->SetRoadRageMadness(lpMadness->mfMadness);                                // 0x8279239C
 
 
@@ -900,11 +810,7 @@ void AIModule::OnRollingStart()
          leIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT;
          leIndex++)
     {
-        AICar* const lpCar = GetAICar(static_cast<u32>(leIndex));
-        if (lpCar == 0)
-        {
-            continue;   // [GUARD]
-        }
+        AICar* const lpCar = GetAICar(leIndex);
         if (lpCar->mbIsInGameMode)                                                          // car+0x154B
         {
             SetBehaviourInline(lpCar, E_AI_BEHAVIOUR_ROLLING_START);
@@ -932,11 +838,7 @@ void AIModule::OnModeStartRacing(bool lbSkipPlayerCar)
          leIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT;
          leIndex++)
     {
-        AICar* const lpCar = GetAICar(static_cast<u32>(leIndex));
-        if (lpCar == 0)
-        {
-            continue;   // [GUARD]
-        }
+        AICar* const lpCar = GetAICar(leIndex);
         // asm 0x8276E4E8: skip the player's own car when lbSkipPlayerCar is set.
         if (lbSkipPlayerCar && lpCar->mbIsPlayer)
         {
@@ -954,7 +856,7 @@ void AIModule::OnModeStartRacing(bool lbSkipPlayerCar)
     // the AICar POINTER straight in as the source Route because mRoute sits at AICar+0.
     if (!mbIsInOnlineGameMode)
     {
-        AICar* const lpPlayerCar = GetAICar(static_cast<u32>(mePlayerGlobalRaceCarIndex));
+        AICar* const lpPlayerCar = GetAICar(mePlayerGlobalRaceCarIndex);
         if (lpPlayerCar != 0)
         {
             mMasterRoute.Construct(lpPlayerCar->GetRoute());
@@ -981,11 +883,7 @@ void AIModule::OnModeFinished(const BrnGameState::GameStateModuleIO::FinishedMod
          leIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT;
          leIndex++)
     {
-        AICar* const lpCar = GetAICar(static_cast<u32>(leIndex));
-        if (lpCar == 0)
-        {
-            continue;   // [GUARD]
-        }
+        AICar* const lpCar = GetAICar(leIndex);
         if (!lpCar->IsActive())                                                             // 0x8277B994..0x8277B9A8
         {
             continue;
@@ -1021,17 +919,9 @@ void AIModule::OnModeFinished(const BrnGameState::GameStateModuleIO::FinishedMod
 void AIModule::OnRaceCarReachedFinish(
         const BrnGameState::GameStateModuleIO::RaceCarReachedFinishAction* lpAction)
 {
-    if (lpAction == 0)
-    {
-        return;   // [GUARD]
-    }
 
-    AICar* const lpPlayerCar = GetAICar(static_cast<u32>(mePlayerGlobalRaceCarIndex));       // 0x8277B8E4
-    AICar* const lpCar       = GetAICar(static_cast<u32>(lpAction->meGlobalRaceCarIndex));   // 0x8277B8F4
-    if (lpCar == 0)
-    {
-        return;   // [GUARD]
-    }
+    AICar* const lpPlayerCar = GetAICar(mePlayerGlobalRaceCarIndex);       // 0x8277B8E4
+    AICar* const lpCar       = GetAICar(lpAction->meGlobalRaceCarIndex);   // 0x8277B8F4
 
     const bool lbIsPlayer = lpCar->mbIsPlayer;                                               // 0x8277B8FC
     lpCar->mfWrongWayTime = 0.0f;                                                            // 0x8277B908
@@ -1066,10 +956,6 @@ void AIModule::OnRaceCarReachedFinish(
 void AIModule::OnModeStart(const BrnGameState::GameModeParams* lpGameModeParams)
 {
     CGS_ASSERT(lpGameModeParams != 0, "lpGameModeParams != NULL");                            // :911
-    if (lpGameModeParams == 0)
-    {
-        return;   // [GUARD] the console reads params+0x94 two instructions later.
-    }
 
     // +0x94 IS GameModeParams::mbIsOnline (crash parity G04-D2, 2026-09-22 -- the old park said it
     // had no pinned member): GameModeParams::Construct @0x8231C370 zeroes it (`stb 0, 0x94(r3)`),
@@ -1152,11 +1038,7 @@ void AIModule::OnModeEnd(bool lbRestoreDrivingInput)
          leIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT;
          leIndex++)
     {
-        AICar* const lpCar = GetAICar(static_cast<u32>(leIndex));
-        if (lpCar == 0)
-        {
-            continue;   // [GUARD]
-        }
+        AICar* const lpCar = GetAICar(leIndex);
         if (!lpCar->mbIsInGameMode)                                                           // car+0x154B
         {
             continue;
@@ -1262,11 +1144,7 @@ void AIModule::SetupRaceBalancingManager(const BrnGameState::GameModeParams* lpG
 void AIModule::OnPlayerTakedown(
         const BrnGameState::GameStateModuleIO::OnPlayerTakedownAction* lpAction)
 {
-    AICar* const lpCar = GetAICar(static_cast<u32>(lpAction->meVictimGlobalRaceCarIndex));
-    if (lpCar == 0)
-    {
-        return;   // [GUARD]
-    }
+    AICar* const lpCar = GetAICar(lpAction->meVictimGlobalRaceCarIndex);
 
     // The victim has to be one of the mode's numbered rivals and not the player's own car; the
     // console tests the raw +0x153A byte against the 0xFF "no slot" sentinel before sign-extending
@@ -1311,7 +1189,7 @@ void AIModule::OnRaceCarReachedCheckpoint(
         const BrnGameState::GameStateModuleIO::RaceCarReachedCheckpointAction* lpRaceCarReachedCheckpointAction)
 {
     AICar* const lpAICar =
-        GetAICar(static_cast<u32>(lpRaceCarReachedCheckpointAction->meGlobalRaceCarIndex));     // 0x8278A678
+        GetAICar(lpRaceCarReachedCheckpointAction->meGlobalRaceCarIndex);     // 0x8278A678
 
     lpAICar->OnReachedCheckpoint(lpRaceCarReachedCheckpointAction->miCheckPointIndex,
                                  lpRaceCarReachedCheckpointAction->muNextCheckpointAISectionIndex);

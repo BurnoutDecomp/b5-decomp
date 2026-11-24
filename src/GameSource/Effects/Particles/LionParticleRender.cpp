@@ -17,6 +17,7 @@
 #include "GameSource/Effects/Particles/LionParticleRender.h"
 
 #include "GameSource/Effects/Particles/Native/BrnLionBlendRenderer.h"
+#include "GameSource/Effects/Particles/Native/BrnLionBlendVertex.h"   // LionBlendVertex::GetStride (GetVertexStride)
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the [texreg] witness
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"
@@ -486,14 +487,22 @@ cMatrix LionParticleRender::GetCameraMatrix()
 // ----------------------------------------------------------------------------
 // LionParticleRender::GetVertexStride (X360 0x82279DF8)
 // The Lion blend renderer always emits a 36-byte vertex. Two debug asserts guard that the
-// material is a Lion-shader material and that a renderer is bound.
+// material is a Lion-shader material and that a renderer is bound. DWARF locals: lpShader
+// (const LionBlendRenderer* const, cpp:724) and luVertexStride (const uint32_t, cpp:727); the
+// asserts sit on cpp:722 and :725 (li r5 at 0x82279E2C / 0x82279E54). The stride is
+// LionBlendRenderer::GetVertexStride() (DWARF BrnLionBlendRenderer.h:51, no out-of-line copy in
+// ARTIST or the PS3 build) == LionBlendVertex::GetStride() == 36.
 // ----------------------------------------------------------------------------
-U32 LionParticleRender::GetVertexStride(const cParticleMaterial& arMaterial)
+U32 LionParticleRender::GetVertexStride(const cParticleMaterial& lMaterial)
 {
-    CGS_ASSERT(arMaterial.GetShaderType() == cParticleMaterial::eSHADER_LION,
-               "lMaterial.GetShaderType() == cParticleMaterial::eSHADER_LION");
-    CGS_ASSERT(mpRenderer != 0, "NULL != lpShader");
-    return 36;
+    CGS_ASSERT(lMaterial.GetShaderType() == cParticleMaterial::eSHADER_LION,
+               CgsDev::Assert::MessageAt("lMaterial.GetShaderType() == cParticleMaterial::eSHADER_LION", __FILE__, 722));
+
+    const BrnGraphics::LionBlendRenderer* const lpShader = mpRenderer;
+    CGS_ASSERT(NULL != lpShader, CgsDev::Assert::MessageAt("NULL != lpShader", __FILE__, 725));
+
+    const uint32_t luVertexStride = BrnGraphics::LionBlendVertex::GetStride();
+    return luVertexStride;
 }
 
 // ----------------------------------------------------------------------------

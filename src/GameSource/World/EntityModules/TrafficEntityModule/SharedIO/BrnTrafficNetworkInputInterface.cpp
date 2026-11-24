@@ -1,6 +1,6 @@
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficNetworkInterfaces.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficStaticParam.h" // BrnTraffic::KU_INVALID_HULL
-#include "GameShared/GameClasses/Core/CgsAssert.h"                                    // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                           // CGS_ASSERT + MessageAt
 
 // BrnTraffic::BrnTrafficIO::TrafficNetworkInputInterface::ActivateHull @ 0x82558AB8
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. Validates the incoming hull-activation request
@@ -12,20 +12,25 @@
 // then calls AddEventSafe(&mActivateHullQueue, &event). The interface's `this` IS the embedded
 // queue (mActivateHullQueue at offset 0), so passing `&mActivateHullQueue` matches the X360.
 
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficNetworkInterfaces.h";
+
 namespace BrnTraffic
 {
 namespace BrnTrafficIO
 {
+    // DWARF declares ActivateHull at BrnTrafficNetworkInterfaces.h:83 and ARTIST bakes the body's
+    // header lines 218/219/220 into its asserts (li r5 at 0x82558AEC/0x82558B10/0x82558B34), so
+    // the original defined it inline in the header; the asserts carry that file and those lines.
     void TrafficNetworkInputInterface::ActivateHull(
         EActiveRaceCarIndex leActiveRaceCarIndex, u32 luNewActiveHull, u32 luUpdateFrame)
     {
-        // BrnTrafficNetworkInterfaces.h:218/219/220 (non-gating tripwires).
         CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-                   "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+                   CgsDev::Assert::MessageAt("leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 218));
         CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+                   CgsDev::Assert::MessageAt("leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 219));
         CGS_ASSERT(luNewActiveHull < BrnTraffic::KU_INVALID_HULL,
-                   "luNewActiveHull < BrnTraffic::KU_INVALID_HULL");
+                   CgsDev::Assert::MessageAt("luNewActiveHull < BrnTraffic::KU_INVALID_HULL", KAC_ARTIST_ASSERT_FILE, 220));
 
         ActivateHullEvent lEvent;
         lEvent.meActiveRaceCarIndex = leActiveRaceCarIndex;

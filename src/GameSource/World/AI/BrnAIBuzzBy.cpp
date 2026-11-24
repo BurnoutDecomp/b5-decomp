@@ -14,7 +14,7 @@
 #include "GameSource/World/AI/BrnAICar.h"
 #include "GameSource/World/AI/ResetOnTrack/BrnResetOnTrackManager.h"
 #include "GameSource/World/AI/SharedIO/BrnAIModuleRequestInterface.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"
 #include "rw/math/vpu/vector3_operation.h"   // rw::math::vpu::Dot / MagnitudeSquared / Magnitude / Normalize / operator-
 #include "rw/math/fpu/scalar_operation.h"    // rw::math::fpu::KF_IS_ZERO_TOLERANCE (FLT_EPSILON, flt_820C3B70)
@@ -382,13 +382,14 @@ namespace BrnAI
     // ------------------------------------------------------------------------
     void BuzzBy::StartABuzzBy(const AICar* lpPlayerCar, EGlobalRaceCarIndex leGlobalRaceCarToTeleport)
     {
-        CGS_ASSERT(leGlobalRaceCarToTeleport != E_GLOBAL_RACE_CAR_INDEX_INVALID,
-                   "leGlobalRaceCarToTeleport != E_GLOBAL_RACE_CAR_INDEX_INVALID");
-
-        const f32 lfPlayerSpeed = lpPlayerCar->GetSpeed();
-
+        // DWARF: the only local is lRequest (cpp:279); the speed goes straight into the call, and
+        // the assert sits on cpp:281 (li r5 at 0x8278B880).
         AIModuleIO::ResetOnTrackRequest lRequest;
-        ChooseAheadOrBehind(&lRequest, lfPlayerSpeed, leGlobalRaceCarToTeleport);
+
+        CGS_ASSERT(leGlobalRaceCarToTeleport != E_GLOBAL_RACE_CAR_INDEX_INVALID,
+                   CgsDev::Assert::MessageAt("leGlobalRaceCarToTeleport != E_GLOBAL_RACE_CAR_INDEX_INVALID", __FILE__, 281));
+
+        ChooseAheadOrBehind(&lRequest, lpPlayerCar->GetSpeed(), leGlobalRaceCarToTeleport);
 
         // X360 `lwz r3, 0x128(this)` (mpResetOnTrackManager) then
         // ResetOnTrackManager::PushResetOnTrackRequest(mgr, &request) @0x82769E88.

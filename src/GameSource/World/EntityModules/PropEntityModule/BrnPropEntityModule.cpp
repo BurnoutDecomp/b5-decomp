@@ -28,7 +28,7 @@
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"
 
 #include "BrnPropEntityModuleIO.h"                       // PropEntityIO::OutputBuffer_Prepare
-#include "GameShared/GameClasses/Core/CgsAssert.h"       // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"       // CGS_ASSERT
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // PerfMonCpu::AddMonitor
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h" // InSceneUpdateInterface
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"             // CgsSceneManager::EntityId
@@ -587,28 +587,39 @@ namespace BrnWorld
     // ========================================================================
     bool PropEntityModule::Release()
     {
+        // The modules' resumable-stage switch (LegacySrc BrnTriggerEntityModule.cpp shape; ARTIST
+        // 0x822A92F8): a failed base Release breaks out to the shared `return false`, DONE owns the
+        // success tail, the default asserts (line 415) and falls out.
         switch (meReleaseStage)
         {
-        case E_RELEASESTAGE_START:
-        case E_RELEASESTAGE_MANAGER:
-            meReleaseStage = E_RELEASESTAGE_MANAGER;
-            if (!CgsModule::ModuleSingleBuffered::Release())
+            case E_RELEASESTAGE_START:
             {
-                return false;
+            }
+            // fall through
+            case E_RELEASESTAGE_MANAGER:
+            {
+                meReleaseStage = E_RELEASESTAGE_MANAGER;
+
+                if (!CgsModule::ModuleSingleBuffered::Release())
+                {
+                    break;
+                }
+            }
+            // fall through
+            case E_RELEASESTAGE_DONE:
+            {
+                meReleaseStage = E_RELEASESTAGE_MANAGER;
+                mePrepareStage = E_PREPARESTAGE_START;
+                return true;
             }
             break;
 
-        case E_RELEASESTAGE_DONE:
-            break;
-
-        default:
-            CGS_ASSERT(false, "Invalid Stage\n");
-            return false;
+            default:
+            {
+                CGS_ASSERT(false, CgsDev::Assert::MessageAt("Invalid Stage\n", __FILE__, 415));
+            }
         }
-
-        meReleaseStage = E_RELEASESTAGE_MANAGER;
-        mePrepareStage = E_PREPARESTAGE_START;
-        return true;
+        return false;
     }
 
     // ========================================================================

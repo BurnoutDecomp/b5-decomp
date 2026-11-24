@@ -81,7 +81,10 @@ namespace RaceCarEntityModuleIO
     // BaseGameActionQueue<13312>). It was NOT collapsed here because no consumer in this tree
     // has yet been measured to need the base type by pointer; the day one does, the symptom is
     // a hard C2664, not a silent divergence.
-    struct CGS_ALIGN(16) GameActionQueue : public CgsModule::VariableEventQueue<13312, 16>
+    // No 16-byte alignment: ARTIST places this queue at InputBuffer_PreScene+0x22C
+    // (GetGameActionQueue 0x8279D0F8 `addi r3,r28,0x22c`; Construct 0x822EA408) with
+    // meActivePaybackType right after it at +0x363C (0x822EA424, SetActivePaybackType 0x8279D1A4).
+    struct GameActionQueue : public CgsModule::VariableEventQueue<13312, 16>
     {
     };
 

@@ -944,6 +944,7 @@ namespace RaceCarEntityModuleIO
         void Construct()
         {
             CgsModule::IOBuffer::Construct();
+            mCameraInput.Construct();          // ARTIST 0x822D3730 (Camera::Construct on +0x10)
             mSceneResultQueue.Construct();
             mpDispatchFrame            = 0;
             mpBlobbyShadowBuffer       = 0;

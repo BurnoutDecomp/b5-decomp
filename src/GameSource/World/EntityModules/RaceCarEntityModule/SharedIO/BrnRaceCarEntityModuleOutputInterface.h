@@ -158,7 +158,13 @@ namespace RaceCarEntityModuleIO
         RCEntityActiveRaceCarOutputInterface(const RCEntityActiveRaceCarOutputInterface&);
         RCEntityActiveRaceCarOutputInterface() {}
 
-        void operator=(const RCEntityActiveRaceCarOutputInterface&);                         // :213 (own TU)
+        // DWARF :213, header-inline: neither ARTIST nor the PS3 build has an out-of-line copy, and
+        // every ARTIST assignment site is the flat XMemCpy of the whole 0x28F0-byte object
+        // (e.g. BrnTrafficIO::InputBuffer_PreScene::SetActiveRaceCarOutputInterface 0x8279FC84..90).
+        void operator=(const RCEntityActiveRaceCarOutputInterface& lRhs)
+        {
+            XMemCpy(this, &lRhs, sizeof(RCEntityActiveRaceCarOutputInterface));
+        }
         void Clear();                                                                        // :216 (own TU)
         const RaceCarState* GetRaceCarState(EActiveRaceCarIndex) const;                       // :220 (own TU)
         const RwRGBAReal&   GetRaceCarColour(EActiveRaceCarIndex) const;                      // :224 (own TU)
@@ -413,7 +419,13 @@ namespace RaceCarEntityModuleIO
     // (own TUs); only GetActiveCarDataElementAddress is routed to this header's .cpp (0x823101C0).
     struct RCEntityGlobalRaceCarOutputInterface
     {
-        void operator=(const RCEntityGlobalRaceCarOutputInterface&);    // :483 (own TU)
+        // DWARF :483, header-inline: no out-of-line copy in ARTIST or the PS3 build; every ARTIST
+        // assignment site is the flat XMemCpy of the whole 0x970-byte object (e.g.
+        // BrnTrafficIO::InputBuffer_PreScene::SetGlobalRaceCarOutputInterface 0x8279FCA0).
+        void operator=(const RCEntityGlobalRaceCarOutputInterface& lRhs)
+        {
+            XMemCpy(this, &lRhs, sizeof(RCEntityGlobalRaceCarOutputInterface));
+        }
         void Clear();                                                   // :486 (own TU)
         void SetPlayerGlobalRaceCarIndex(EGlobalRaceCarIndex);          // :490 (own TU)
         void SetRaceCarData(Vector3, Vector3, BrnWorld::WorldRegion, CgsID, CgsID, f32, u16,

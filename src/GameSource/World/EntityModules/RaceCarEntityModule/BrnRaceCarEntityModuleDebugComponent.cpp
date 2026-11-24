@@ -21,7 +21,7 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarStreamer.h"
 #include "GameSource/BurnoutConstants.h"                                                  // EActiveRaceCarIndex + range-guarded operator++
 #include "SharedClasses/World/BrnCollisionTag.h"                                          // CollisionTag::GetTrafficInfo
-#include "GameShared/GameClasses/Core/CgsAssert.h"                                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                                        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsID.h"                                            // CgsIDUnCompress
 #include "GameShared/GameClasses/Development/CgsStrStream.h"                              // StrStream / SimpleStrStream
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"            // DebugUI::GetVariableManager
@@ -131,8 +131,8 @@ namespace
 // intersection array are left as they are, exactly as the console leaves them.
 void RaceCarEntityModuleDebugComponent::Construct(RaceCarEntityModule* lpRaceCarEntityModule)
 {
-
-    CGS_ASSERT(lpRaceCarEntityModule != 0, "lpRaceCarEntityModule != NULL");
+    CgsDev::DebugComponent::Construct();   // ARTIST 0x822A7874 (folded at 0x8284CB38)
+    CGS_ASSERT(lpRaceCarEntityModule != 0, CgsDev::Assert::MessageAt("lpRaceCarEntityModule != NULL", __FILE__, 64));
 
     mpRaceCarEntityModule = lpRaceCarEntityModule;
 

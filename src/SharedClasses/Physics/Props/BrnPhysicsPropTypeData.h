@@ -236,7 +236,10 @@ namespace Props
 
         static void _AssertLayout();
 
-    private:
+        // DWARF declares PropTypeData a struct with public data members (BrnPhysicsPropTypeData.h:51,
+        // :124..): callers read them directly, e.g. PropCellManager::CanAddPartVolumes' signed
+        // loop over the uint8_t muNumberOfParts (cmpwi/ble at 0x822A9FB0).
+    public:
         Vector3                  mJointLocator;        // console +0x00
         Vector3                  mCOMOffset;           // console +0x10
         Vector3                  mInertia;             // console +0x20

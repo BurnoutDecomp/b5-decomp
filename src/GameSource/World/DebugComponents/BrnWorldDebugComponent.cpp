@@ -3,7 +3,7 @@
 #include "GameSource/Director/Camera/Camera.h"
 #include "GameSource/Director/Camera/Utils/BrnDebugController.h"
 #include "GameSource/World/BrnWorldModule.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"
@@ -52,7 +52,8 @@ namespace
 // @0x827B1828.
 void WorldDebugComponent::Construct(WorldModule* lpWorldModule)
 {
-    CGS_ASSERT(lpWorldModule != 0, "lpWorldModule != NULL");
+    CgsDev::DebugComponent::Construct();   // ARTIST 0x827B1844 (folded at 0x8284CB38)
+    CGS_ASSERT(lpWorldModule != 0, CgsDev::Assert::MessageAt("lpWorldModule != NULL", __FILE__, 75));
 
     mpWorldModule = lpWorldModule;
     mfVehicleVelocity = 100.0f;

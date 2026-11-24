@@ -4943,7 +4943,7 @@ void TrafficEntityModule::Construct()
 void TrafficEntityModule::GenerateRemovedVehicleEvents(
     BrnWorld::CrashIO::TrafficInputInterface* lpCrashInputInterface)
 {
-    CGS_ASSERT(lpCrashInputInterface != 0, "lpCrashInputInterface");   // baked .cpp 5240
+    CGS_ASSERT(lpCrashInputInterface != 0, CgsDev::Assert::MessageAt("lpCrashInputInterface", __FILE__, 5240));
 
     for (u32 luIndex = 0; luIndex < maRecentlyRemovedVehicles.GetLength(); ++luIndex)
     {
@@ -4968,7 +4968,7 @@ void TrafficEntityModule::GenerateRemovedVehicleEvents(
 void TrafficEntityModule::GenerateSlamRecoveryEvents(
     BrnWorld::CrashIO::TrafficInputInterface* lpCrashInputInterface)
 {
-    CGS_ASSERT(lpCrashInputInterface != 0, "lpCrashInputInterface");   // baked .cpp 5268
+    CGS_ASSERT(lpCrashInputInterface != 0, CgsDev::Assert::MessageAt("lpCrashInputInterface", __FILE__, 5268));
 
     for (u32 luIndex = 0; luIndex < maRecentlyRecoveredSlammedTraffic.GetLength(); ++luIndex)
     {

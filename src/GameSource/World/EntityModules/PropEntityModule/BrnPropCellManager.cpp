@@ -800,8 +800,9 @@ namespace BrnWorld
     {
         // DWARF locals: int32_t liPartIndex (cpp:397), int32_t liNumVolumesNeeded (cpp:400);
         // the loop count compares signed (cmpwi / ble at 0x822A9FB0).
+        // The count is the uint8_t muNumberOfParts (DWARF), promoted to int for the compare.
         s32 liNumVolumesNeeded = 0;
-        for (s32 liPartIndex = 0; liPartIndex < lpType->GetNumberOfParts(); ++liPartIndex)
+        for (s32 liPartIndex = 0; liPartIndex < lpType->muNumberOfParts; ++liPartIndex)
         {
             liNumVolumesNeeded += lpType->GetPartVolumeGroups()[liPartIndex].GetNumberOfVolumes();
         }

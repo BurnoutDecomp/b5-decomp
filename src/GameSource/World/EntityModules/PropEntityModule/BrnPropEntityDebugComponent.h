@@ -137,6 +137,7 @@ namespace BrnWorld
         bool               mbRenderInertiaBoxes;  // +0x3D
         bool               mbRenderTrafficLights; // +0x3E
         f32                mfCellGridZoom;        // +0x40 (default 1.0)
+        u32                muUsedInstances;       // +0x44 (DWARF h:97; puts muUsedProps at a1[18])
         u32                muUsedProps;           // +0x48 (RenderModuleStats popcount scratch)
         u32                muUsedParts;           // +0x4C
         u32                muFrameCountForUpdate; // +0x50 (slow-cadence refresh counter)

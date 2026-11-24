@@ -215,11 +215,14 @@ namespace AIModuleIO
     // X360 0x8279C700 (W, :108) -- copies a RaceCarAIInterface (console XMemCpy 0x43D0) into
     // the member. The type is pointer-free apart from its embedded VariableEventQueue, which
     // is itself an inline byte image, so the member copy IS the console block copy.
+    // ARTIST: the streamed write-lock assert (h:322), the pointer assert (h:324), then
+    // XMemCpy(&member, src, 0x43D0) (0x8279C7C4..0x8279C7D0); RaceCarAIInterface declares no
+    // operator= (DWARF BrnRaceCarAIInterfaces.h), so the copy is the setter's own XMemCpy.
     void InputBuffer::SetRaceCarAIInterface(const RaceCarAIInterface* lpInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-        CGS_ASSERT(lpInterface != 0, "lpInterface != NULL");
-        mRaceCarAIInterface = *lpInterface;
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/AI/BrnAIModuleIO.h", 322));
+        CGS_ASSERT(lpInterface != 0, CgsDev::Assert::MessageAt("lpInterface != NULL", "..\\..\\..\\GameSource\\World/AI/BrnAIModuleIO.h", 324));
+        XMemCpy(&mRaceCarAIInterface, lpInterface, sizeof(RaceCarAIInterface));
     }
 
     // X360 0x8279C7E0 (W, :112) -- copies the traffic-AI interface (console XMemCpy 0xB7A0).
@@ -227,9 +230,9 @@ namespace AIModuleIO
     // exactly as the console's byte copy does; readers see the source buffer's ring.
     void InputBuffer::SetTrafficAIInterface(const TrafficAIInterface* lpInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-        CGS_ASSERT(lpInterface != 0, "lpInterface != NULL");
-        mTrafficAIInterface = *lpInterface;
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/AI/BrnAIModuleIO.h", 333));
+        CGS_ASSERT(lpInterface != 0, CgsDev::Assert::MessageAt("lpInterface != NULL", "..\\..\\..\\GameSource\\World/AI/BrnAIModuleIO.h", 335));
+        XMemCpy(&mTrafficAIInterface, lpInterface, sizeof(TrafficAIInterface));   // 0x8279C8B4
     }
 
     // X360 0x827AC960 (W, :116) -- `Clear(); Append(src);` on the 128-deep ResetOnTrackRequest

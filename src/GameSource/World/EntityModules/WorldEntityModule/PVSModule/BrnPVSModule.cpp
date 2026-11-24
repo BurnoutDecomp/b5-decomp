@@ -1,6 +1,6 @@
 #include "GameSource/World/EntityModules/WorldEntityModule/PVSModule/BrnPVSModule.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameSource/Resource/SharedIO/BrnGameDataEvents.h"   // GameDataIO::GameDataAssetEvent
 
@@ -217,28 +217,39 @@ namespace
     // X360 0x822A8AD8.
     bool PVSModule::Release()
     {
-        const u32 luReleaseStage = static_cast<u32>( meReleaseStage );
-        if ( luReleaseStage < E_RELEASESTAGE_DONE )
+        // The modules' resumable-stage switch (LegacySrc BrnTriggerEntityModule.cpp shape; ARTIST
+        // 0x822A8AD8): a failed base Release breaks out to the shared `return false`, DONE owns the
+        // success tail, the default asserts (line 257) and falls out.
+        switch (meReleaseStage)
         {
-            meReleaseStage = E_RELEASESTAGE_MODULE;
-
-            if ( !CgsModule::ModuleSingleBuffered::Release() )
+            case E_RELEASESTAGE_START:
             {
-                return false;
+            }
+            // fall through
+            case E_RELEASESTAGE_MODULE:
+            {
+                meReleaseStage = E_RELEASESTAGE_MODULE;
+
+                if (!CgsModule::ModuleSingleBuffered::Release())
+                {
+                    break;
+                }
+            }
+            // fall through
+            case E_RELEASESTAGE_DONE:
+            {
+                meReleaseStage = E_RELEASESTAGE_MODULE;
+                mePrepareStage = E_PREPARESTAGE_START;
+                return true;
+            }
+            break;
+
+            default:
+            {
+                CGS_ASSERT(false, CgsDev::Assert::MessageAt("Invalid Stage\n", __FILE__, 257));
             }
         }
-        else if ( luReleaseStage > E_RELEASESTAGE_DONE )
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert( "Invalid Stage\n",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/WorldEntityModule/PVSModule/BrnPVSModule.cpp", 257 );
-            CgsDev::Assert::EndAssert();
-            return false;
-        }
-
-        meReleaseStage = E_RELEASESTAGE_MODULE;
-        mePrepareStage = E_PREPARESTAGE_START;
-        return true;
+        return false;
     }
 
     // =========================================================================

@@ -1091,25 +1091,40 @@ bool EffectsModule::Release()
     if (!mParticleModule.Release())      // vtable +8
         return false;
 
+    // The modules' resumable-stage switch (LegacySrc BrnTriggerEntityModule.cpp shape): a failed
+    // base Release breaks out to the shared `return false` (ARTIST branches back to the early
+    // return's `li r3,0` at 0x8227FCE0), DONE owns the success tail, the default asserts :816.
     switch (meReleaseStage)
     {
-    case E_RELEASESTAGE_START:
-        mReceiverQueue.Clear();
+        case E_RELEASESTAGE_START:
+        {
+            mReceiverQueue.Clear();
+        }
         // fall through
-    case E_RELEASESTAGE_MANAGER:
-        meReleaseStage = E_RELEASESTAGE_MANAGER;
-        if (!CgsModule::ModuleSingleBuffered::Release())
-            return false;
+        case E_RELEASESTAGE_MANAGER:
+        {
+            meReleaseStage = E_RELEASESTAGE_MANAGER;
+
+            if (!CgsModule::ModuleSingleBuffered::Release())
+            {
+                break;
+            }
+        }
+        // fall through
+        case E_RELEASESTAGE_DONE:
+        {
+            meReleaseStage = E_RELEASESTAGE_MANAGER;
+            mePrepareStage = E_PREPARESTAGE_START;
+            return true;
+        }
         break;
-    case E_RELEASESTAGE_DONE:
-        break;
-    default:
-        CGS_ASSERT(false, "Invalid Stage\n");   // EffectsModule.cpp:816
-        return false;
+
+        default:
+        {
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt("Invalid Stage\n", __FILE__, 816));
+        }
     }
-    meReleaseStage = E_RELEASESTAGE_MANAGER;
-    mePrepareStage = E_PREPARESTAGE_START;
-    return true;
+    return false;
 }
 
 // =============================================================================

@@ -63,19 +63,21 @@ namespace BrnAI
 
 // =================================================================================================
 // GetAICar @0x82765AD0: the bounds assertion does not gate the array address.
+// DWARF BrnAIModule.h:442 `AICar * GetAICar(EGlobalRaceCarIndex)`, non-const; both bounds are
+// signed (cmpwi 0 / blt, cmpwi 0x23 / blt at 0x82765AE4..0x82765AF0), as in GetAIDriver.
 // =================================================================================================
-AICar* AIModule::GetAICar(u32 luIndex) const
+AICar* AIModule::GetAICar(EGlobalRaceCarIndex leGlobalRaceCarIndex)
 {
-    if (luIndex >= 35u)
+    if (!(leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0 && leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT))
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
-        lMessage << "Invalid AI car index: " << static_cast<s32>(luIndex);
+        lMessage << "Invalid AI car index: " << static_cast<s32>(leGlobalRaceCarIndex);
         CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
                                   "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\BrnAIModule.h", 445);
         CgsDev::Assert::EndAssert();
     }
-    return const_cast<AICar*>(&maAICars[luIndex]);
+    return &maAICars[static_cast<s32>(leGlobalRaceCarIndex)];
 }
 
 // =================================================================================================
@@ -174,7 +176,7 @@ void AIModule::ProcessRequestInterface(const AIModuleIO::InputBuffer* lpInputBuf
 void AIModule::UpdateResetOnTrackManager(AIModuleIO::AIModuleResultInterface* lpResults,
                                          f32 lfTime)
 {
-    const AICar* lpPlayerAICar = GetAICar(static_cast<u32>(mePlayerGlobalRaceCarIndex));
+    const AICar* lpPlayerAICar = GetAICar(mePlayerGlobalRaceCarIndex);
     if (lpPlayerAICar == 0)
     {
         return;
@@ -195,7 +197,7 @@ void AIModule::UpdateResetOnTrackManager(AIModuleIO::AIModuleResultInterface* lp
     for (s32 liResult = 0; liResult < lpResetResults->GetLength(); ++liResult)
     {
         const AIModuleIO::ResetOnTrackResult& lrResult = lpResetResults->GetEvent(liResult);
-        AICar* lpCar = GetAICar(static_cast<u32>(lrResult.GetGlobalRaceCarIndex()));
+        AICar* lpCar = GetAICar(lrResult.GetGlobalRaceCarIndex());
         if (lpCar->meCarState == E_AI_CAR_STATE_IN_RANGE)
             lpCar->GetDriver()->GetAggression()->Prepare(lpCar);
         if (lrResult.GetState() == AIModuleIO::ResetOnTrackResult::E_STATE_SUCCESS)
@@ -210,7 +212,7 @@ void AIModule::UpdateResetOnTrackManager(AIModuleIO::AIModuleResultInterface* lp
     for (s32 liPlacement = 0; liPlacement < lpPlacements->GetLength(); ++liPlacement)
     {
         const AIModuleIO::PlaceOnTrackRequest& lrPlacement = lpPlacements->GetEvent(liPlacement);
-        AICar* lpCar = GetAICar(static_cast<u32>(lrPlacement.GetGlobalRaceCarIndex()));
+        AICar* lpCar = GetAICar(lrPlacement.GetGlobalRaceCarIndex());
         lpCar->mPosition = lrPlacement.GetResetPosition();
         lpCar->SetDirection(lrPlacement.GetResetDirection());
         // [PC HARNESS, NOT X360] BRN_AI_PAD_PLAYER=pursuit re-targets a re-seated target (BrnAIHarnessPad.h).
@@ -320,7 +322,7 @@ void AIModule::Update(CgsModule::IOBufferStack* lpInputBufferStack,
         // host's `== INVALID ? 0` mapping that stood here is gone (FX-NANPOL, 2026-09-24): the index
         // is never INVALID (row 11 stores -1 only for an active driver without a car, and SetAICar
         // raises mbIsActive and binds the car together), so it only ever fed a dead null guard.
-        AICar* lpPlayerCar = GetAICar(static_cast<u32>(mePlayerGlobalRaceCarIndex));        // row 12
+        AICar* lpPlayerCar = GetAICar(mePlayerGlobalRaceCarIndex);        // row 12
         // row 12's tail, 0x8279B678..0x8279B6C0: RaceBalancingManager::Update inlined off
         // `addis r11,r31,4 ; addi -0x2630` == &mRaceBalancingManager -- THE RACE CLOCK. It was
         // misfiled as an AIDebugComponent accumulator (+270912 == 0x3D9D0 + 0x4870 == mfRaceTime)
@@ -446,10 +448,6 @@ void AIModule::PausedUpdate( CgsModule::IOBufferStack* lpInputBufferStack,
     CGS_ASSERT(lpInputBuffer       != 0, "lpInputBuffer != NULL");         // X360 :769 (0x301)
     CGS_ASSERT(lpOutputBuffer      != 0, "lpOutputBuffer != NULL");        // X360 :770 (0x302)
 
-    if (lpInputBuffer == 0 || lpOutputBuffer == 0)
-    {
-        return;   // [GUARD] the console dereferences both unconditionally
-    }
 
     CgsModule::IOHelper<RouteMapModuleIO::InputBuffer> lRouteIn(lpInputBufferStack, "Route");   // 0x8279A2B4
     RouteMapModuleIO::InputBuffer* lpRouteIn = lRouteIn;

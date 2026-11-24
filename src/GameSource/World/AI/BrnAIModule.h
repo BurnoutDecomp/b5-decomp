@@ -281,7 +281,7 @@ public:
     // AIModule TU (X360 standalone symbols BrnAI::AIModule::GetAICar @0x8276A5C8-region and
     // GetAISectionsData). GetAICar returns the per-slot AI car (FindAICar @0x827676F8 walks indices
     // 0..34); GetAISectionsData returns the loaded section data the speed read-outs query.
-    AICar*          GetAICar(u32 luIndex) const;          // BrnAI::AIModule::GetAICar(this, index)
+    AICar*          GetAICar(EGlobalRaceCarIndex leGlobalRaceCarIndex);   // DWARF BrnAIModule.h:442
     AISectionsData* GetAISectionsData() const;            // BrnAI::AIModule::GetAISectionsData(this)
 
     // RenderHUD reads this scalar at 0x82796EDC and displays it as the difficulty percentage.

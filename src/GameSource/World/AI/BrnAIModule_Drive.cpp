@@ -314,7 +314,7 @@ void AIModule::UpdateCars(f32 lfTimeStep,
     (void)lpRouteInputBuffer;   // console r5 -- unused by the body
     (void)lpOutputBuffer;       // console r6 -- unused by the body
 
-    AICar* lpPlayerCar = GetAICar(static_cast<u32>(mePlayerGlobalRaceCarIndex));
+    AICar* lpPlayerCar = GetAICar(mePlayerGlobalRaceCarIndex);
 
     if (lpPlayerCar->IsActive())
     {
@@ -325,7 +325,7 @@ void AIModule::UpdateCars(f32 lfTimeStep,
              static_cast<s32>(leCar) < liCarCount;
              leCar++)
         {
-            AICar* lpAICar = GetAICar(static_cast<u32>(leCar));
+            AICar* lpAICar = GetAICar(leCar);
             if (lpAICar->IsActive())
             {
                 AISectionsData* lpAISectionsData = GetAISectionsData();
@@ -364,7 +364,7 @@ void AIModule::UpdateCars(f32 lfTimeStep,
 // =================================================================================================
 void AIModule::UpdateOneProximityIndex()
 {
-    AICar* lpCar = GetAICar(static_cast<u32>(meProximityGlobalRaceCarIndexRoundRobin));
+    AICar* lpCar = GetAICar(meProximityGlobalRaceCarIndexRoundRobin);
 
     meProximityGlobalRaceCarIndexRoundRobin++;   // asserts <= E_GLOBAL_RACE_CAR_INDEX_COUNT
     if (meProximityGlobalRaceCarIndexRoundRobin == E_GLOBAL_RACE_CAR_INDEX_COUNT)
@@ -372,7 +372,7 @@ void AIModule::UpdateOneProximityIndex()
         meProximityGlobalRaceCarIndexRoundRobin = E_GLOBAL_RACE_CAR_INDEX_0;
     }
 
-    const AICar* lpPlayerCar = GetAICar(static_cast<u32>(mePlayerGlobalRaceCarIndex));
+    const AICar* lpPlayerCar = GetAICar(mePlayerGlobalRaceCarIndex);
     const s32 liPlayerRaceCarIndex = lpPlayerCar->GetRaceCarIndex();
 
     mfClosestDistance = KF_FLT_MAX;
@@ -383,7 +383,7 @@ void AIModule::UpdateOneProximityIndex()
          leCar < E_GLOBAL_RACE_CAR_INDEX_COUNT;
          leCar++)
     {
-        AICar* lpOther = GetAICar(static_cast<u32>(leCar));
+        AICar* lpOther = GetAICar(leCar);
         if (lpOther->IsActive())
         {
             const f32 lfOtherDistance = lpOther->mfBuzzDistanceToPlayer;
@@ -604,7 +604,7 @@ void AIModule::UpdateDrivers(const AIModuleIO::InputBuffer* lpInputBuffer,
         const AIDriver* lpPlayerDriver = GetAIDriver(mePlayerActiveRaceCarIndex);
         if (lpPlayerDriver != 0 && lpPlayerDriver->mbIsActive)
         {
-            lpPlayerCar = GetAICar(static_cast<u32>(mePlayerGlobalRaceCarIndex));
+            lpPlayerCar = GetAICar(mePlayerGlobalRaceCarIndex);
         }
     }
 
@@ -1027,7 +1027,7 @@ void AIModule::ProcessOutOfRangeVehicles(AIModuleIO::OutputBuffer* lpOutputBuffe
          leCar < E_GLOBAL_RACE_CAR_INDEX_COUNT;
          leCar++)
     {
-        const AICar* lpCar = GetAICar(static_cast<u32>(leCar));
+        const AICar* lpCar = GetAICar(leCar);
         if (lpCar->GetState() == E_AI_CAR_STATE_OUT_OF_RANGE)
         {
             const Vector3 lDirection = lpCar->GetDirection();
@@ -1059,7 +1059,7 @@ void AIModule::ProcessInRangeVehicles(AIModuleIO::OutputBuffer* lpOutputBuffer)
          leCar < E_GLOBAL_RACE_CAR_INDEX_COUNT;
          leCar++)
     {
-        const AICar* lpCar = GetAICar(static_cast<u32>(leCar));
+        const AICar* lpCar = GetAICar(leCar);
         if (!lpCar->IsPlayerCar() && lpCar->GetState() == E_AI_CAR_STATE_IN_RANGE)
         {
             const AIDriver* lpDriver = lpCar->GetDriver();
@@ -1097,7 +1097,7 @@ void AIModule::ExportCarData(AIModuleIO::OutputBuffer* lpOutputBuffer)
 {
     CGS_ASSERT(lpOutputBuffer != 0, "lpOutputBuffer != NULL");   // X360 :2270
 
-    const AICar* lpPlayerCar = GetAICar(static_cast<u32>(mePlayerGlobalRaceCarIndex));
+    const AICar* lpPlayerCar = GetAICar(mePlayerGlobalRaceCarIndex);
     if (lpPlayerCar == 0)
     {
         return;
@@ -1111,7 +1111,7 @@ void AIModule::ExportCarData(AIModuleIO::OutputBuffer* lpOutputBuffer)
          leCar < E_GLOBAL_RACE_CAR_INDEX_COUNT;
          leCar++)
     {
-        const AICar* lpCar = GetAICar(static_cast<u32>(leCar));
+        const AICar* lpCar = GetAICar(leCar);
         if (lpCar->GetRouteFindingStyle() != static_cast<ERouteFindingStyle>(0))
         {
             lpCarOutputInterface->SetAICarDistanceToCheckpoint(static_cast<s32>(leCar), lpCar->mfDistanceToCheckpoint);

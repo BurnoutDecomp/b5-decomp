@@ -55,7 +55,7 @@ namespace WorldEntityIO
     void InputBuffer_PreScene::SetActiveRaceCarInterface(const ActiveRaceCarInterface& lrInterface)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\worldentitymodule\\BrnWorldEntityModuleIO.h", 97));
-        std::memcpy(&mActiveRaceCarInterface, &lrInterface, sizeof(ActiveRaceCarInterface));
+        mActiveRaceCarInterface = lrInterface;   // header-inline operator=: XMemCpy (0x827A2878)
     }
 }
 }

@@ -50,13 +50,14 @@ namespace BrnTrafficIO
     void TrafficNetworkOutputInterface::ActivateHull(
         EActiveRaceCarIndex leActiveRaceCarIndex, u32 luNewActiveHull, u32 luUpdateFrame)
     {
-        // BrnTrafficNetworkInterfaces.h:310/311/312 (non-gating).
+        // Header-inline in the original (DWARF decl h:129, body lines 310/311/312 baked at
+        // 0x8271D26C/0x8271D290/0x8271D2B4).
         CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-                   "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+                   CgsDev::Assert::MessageAt("leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 310));
         CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+                   CgsDev::Assert::MessageAt("leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 311));
         CGS_ASSERT(luNewActiveHull < KU_MAX_HULLS,
-                   "luNewActiveHull < BrnTraffic::KU_MAX_HULLS");
+                   CgsDev::Assert::MessageAt("luNewActiveHull < BrnTraffic::KU_MAX_HULLS", KAC_ARTIST_ASSERT_FILE, 312));
 
         ActivateHullEvent lEvent;
         lEvent.meActiveRaceCarIndex = leActiveRaceCarIndex;

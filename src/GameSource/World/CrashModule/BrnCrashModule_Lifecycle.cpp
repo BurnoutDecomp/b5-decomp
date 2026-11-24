@@ -45,7 +45,7 @@
 
 #include "GameSource/World/CrashModule/BrnCrashModule.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT + MessageAt
 #include "GameSource/BurnoutConstants.h"             // E_ACTIVE_RACE_CAR_INDEX_*
 
 #include <cstring>                                   // memset
@@ -125,25 +125,38 @@ void CrashModule::Construct()
 // =================================================================================================
 bool CrashModule::Prepare()
 {
-    const EPrepareStage lePrepareStage = mePrepareStage;
-
-    if (lePrepareStage <= E_PREPARESTAGE_MANAGER)
+    // The modules' resumable-stage switch (LegacySrc BrnTriggerEntityModule.cpp shape): a failed
+    // base Prepare breaks out to the shared `return false`, DONE owns the success tail.
+    switch (mePrepareStage)
     {
-        mePrepareStage = E_PREPARESTAGE_MANAGER;
-        if (!CgsModule::ModuleSingleBuffered::Prepare())
+        case E_PREPARESTAGE_START:
         {
-            return false;
+        }
+        // fall through
+        case E_PREPARESTAGE_MANAGER:
+        {
+            mePrepareStage = E_PREPARESTAGE_MANAGER;
+
+            if (!CgsModule::ModuleSingleBuffered::Prepare())
+            {
+                break;
+            }
+        }
+        // fall through
+        case E_PREPARESTAGE_DONE:
+        {
+            mePrepareStage = E_PREPARESTAGE_MANAGER;   // see the banner -- 1, not 2, on purpose
+            meReleaseStage = E_RELEASESTAGE_START;
+            return true;
+        }
+        break;
+
+        default:
+        {
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt("Invalid Stage\n", __FILE__, 457));   // BrnCrashModule.cpp:457
         }
     }
-    else if (lePrepareStage > E_PREPARESTAGE_DONE)
-    {
-        CGS_ASSERT(false, "Invalid Stage\n");   // BrnCrashModule.cpp:457
-        return false;
-    }
-
-    mePrepareStage = E_PREPARESTAGE_MANAGER;   // see the banner -- 1, not 2, on purpose
-    meReleaseStage = E_RELEASESTAGE_START;
-    return true;
+    return false;
 }
 
 // =================================================================================================
@@ -152,25 +165,38 @@ bool CrashModule::Prepare()
 // =================================================================================================
 bool CrashModule::Release()
 {
-    const EReleaseStage leReleaseStage = meReleaseStage;
-
-    if (leReleaseStage <= E_RELEASESTAGE_MANAGER)
+    // The modules' resumable-stage switch (LegacySrc BrnTriggerEntityModule.cpp shape): a failed
+    // base Release breaks out to the shared `return false`, DONE owns the success tail.
+    switch (meReleaseStage)
     {
-        meReleaseStage = E_RELEASESTAGE_MANAGER;
-        if (!CgsModule::ModuleSingleBuffered::Release())
+        case E_RELEASESTAGE_START:
         {
-            return false;
+        }
+        // fall through
+        case E_RELEASESTAGE_MANAGER:
+        {
+            meReleaseStage = E_RELEASESTAGE_MANAGER;
+
+            if (!CgsModule::ModuleSingleBuffered::Release())
+            {
+                break;
+            }
+        }
+        // fall through
+        case E_RELEASESTAGE_DONE:
+        {
+            meReleaseStage = E_RELEASESTAGE_MANAGER;
+            mePrepareStage = E_PREPARESTAGE_START;
+            return true;
+        }
+        break;
+
+        default:
+        {
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt("Invalid Stage\n", __FILE__, 508));   // BrnCrashModule.cpp:508
         }
     }
-    else if (leReleaseStage > E_RELEASESTAGE_DONE)
-    {
-        CGS_ASSERT(false, "Invalid Stage\n");   // BrnCrashModule.cpp:508
-        return false;
-    }
-
-    meReleaseStage = E_RELEASESTAGE_MANAGER;
-    mePrepareStage = E_PREPARESTAGE_START;
-    return true;
+    return false;
 }
 
 // =================================================================================================

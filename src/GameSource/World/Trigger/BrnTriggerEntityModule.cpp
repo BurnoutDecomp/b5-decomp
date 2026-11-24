@@ -118,35 +118,45 @@ void TriggerEntityModule::Destruct()
 // ---------------------------------------------------------------------------
 bool TriggerEntityModule::Prepare()
 {
+    // LegacySrc's shape: a failed base Prepare breaks out to the shared `return false`, the DONE
+    // case owns the success tail, and the default case asserts then falls out (ARTIST keeps the
+    // failed-Prepare `li r3,0` beside its test at 0x822A8E90, apart from the assert's).
     switch (mePrepareStage)
     {
         case E_PREPARESTAGE_START:
+        {
             mTriggerEntityModuleDebugComponent.Register();
-            // fall through
+        }
+        // fall through
         case E_PREPARESTAGE_MANAGER:
+        {
             // X360 sets the stage to MANAGER(1) before the base Prepare so a partial Prepare
             // resumes here without re-registering the debug component.
             mePrepareStage = E_PREPARESTAGE_MANAGER;
-            if (!ModuleSingleBuffered::Prepare())
-                return false;
-            break;
 
+            if (!ModuleSingleBuffered::Prepare())
+            {
+                break;
+            }
+        }
+        // fall through
         case E_PREPARESTAGE_DONE:
-            // Already prepared: success no-op (skip base::Prepare, fall through to the success
-            // tail). The X360 gotos the tail for stage == DONE.
-            break;
+        {
+            mePrepareStage = E_PREPARESTAGE_MANAGER;
+            meReleaseStage = E_RELEASESTAGE_START;
+            return true;
+        }
+        break;
 
         default:
+        {
             // Only stage values > DONE(2) are a corrupt resume point.
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("Invalid Stage\n", KAC_FILE, 110);
             CgsDev::Assert::EndAssert();
-            return false;
+        }
     }
-
-    mePrepareStage = E_PREPARESTAGE_MANAGER;
-    meReleaseStage = E_RELEASESTAGE_START;
-    return true;
+    return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -160,25 +170,40 @@ bool TriggerEntityModule::Prepare()
 // ---------------------------------------------------------------------------
 bool TriggerEntityModule::Release()
 {
-    if (meReleaseStage < E_RELEASESTAGE_DONE)
+    // LegacySrc's switch (the same shape as Prepare above).
+    switch (meReleaseStage)
     {
-        meReleaseStage = E_RELEASESTAGE_MANAGER;
-        if (!ModuleSingleBuffered::Release())
-            return false;
-    }
-    else if (meReleaseStage > E_RELEASESTAGE_DONE)
-    {
-        // meReleaseStage > DONE(2) -> invalid resume point.
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("Invalid Stage\n", KAC_FILE, 161);
-        CgsDev::Assert::EndAssert();
-        return false;
-    }
-    // meReleaseStage == DONE falls through here as a success no-op.
+        case E_RELEASESTAGE_START:
+        {
+        }
+        // fall through
+        case E_RELEASESTAGE_MANAGER:
+        {
+            meReleaseStage = E_RELEASESTAGE_MANAGER;
 
-    meReleaseStage = E_RELEASESTAGE_MANAGER;
-    mePrepareStage = E_PREPARESTAGE_START;
-    return true;
+            if (!ModuleSingleBuffered::Release())
+            {
+                break;
+            }
+        }
+        // fall through
+        case E_RELEASESTAGE_DONE:
+        {
+            meReleaseStage = E_RELEASESTAGE_MANAGER;
+            mePrepareStage = E_PREPARESTAGE_START;
+            return true;
+        }
+        break;
+
+        default:
+        {
+            // meReleaseStage > DONE(2) -> invalid resume point.
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("Invalid Stage\n", KAC_FILE, 161);
+            CgsDev::Assert::EndAssert();
+        }
+    }
+    return false;
 }
 
 // ---------------------------------------------------------------------------
