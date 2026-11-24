@@ -96,6 +96,10 @@ int r;
   Bytef *f;             /* pointer to copy strings from */
   inflate_codes_statef *c = s->sub.decode.codes;  /* codes state */
 
+#ifndef SLOW
+  const uInt fast_limit = inflate_fast_min_output(z->state->method);
+#endif
+
   /* copy input/output information to locals (UPDATE macro restores) */
   LOAD
 
@@ -104,7 +108,7 @@ int r;
   {             /* waiting for "i:"=input, "o:"=output, "x:"=nothing */
     case START:         /* x: set up for LEN */
 #ifndef SLOW
-      if (m >= 258 && n >= 10)
+      if (m >= fast_limit && n >= 10)
       {
         UPDATE
         r = inflate_fast(c->lbits, c->dbits, c->ltree, c->dtree, s, z);

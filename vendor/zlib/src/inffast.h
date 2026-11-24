@@ -8,6 +8,18 @@
    subject to change. Applications should only use zlib.h.
  */
 
+#include "inflate_state.h"
+
+/* ARTIST 0x82ACF444 and 0x82ACE3BC read the same private method.
+   This limit does not select which methods the stream accepts. */
+local uInt inflate_fast_min_output(uInt method)
+{
+  uInt limit = MAX_MATCH;
+  if (method == 9)
+    limit = 65535u;
+  return limit;
+}
+
 extern int inflate_fast OF((
     uInt,
     uInt,

@@ -93,6 +93,4 @@ extern int inflate_flush OF((
     z_streamp ,
     int));
 
-struct internal_state      {int dummy;}; /* for buggy compilers */
-
 #endif

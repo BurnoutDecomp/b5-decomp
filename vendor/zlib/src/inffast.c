@@ -46,6 +46,7 @@ z_streamp z;
   uInt c;               /* bytes to copy */
   uInt d;               /* distance back to copy from */
   Bytef *r;             /* copy source pointer */
+  uInt fast_limit;
 
   /* load input, output, bit values */
   LOAD
@@ -53,9 +54,10 @@ z_streamp z;
   /* initialize masks */
   ml = inflate_mask[bl];
   md = inflate_mask[bd];
+  fast_limit = inflate_fast_min_output(z->state->method);
 
   /* do until not enough input or output space for fast loop */
-  do {                          /* assume called with m >= 258 && n >= 10 */
+  do {                          /* assume m >= fast_limit and n >= 10 */
     /* get literal/length code */
     GRABBITS(20)                /* max bits for literal/length code */
     if ((e = (t = tl + ((uInt)b & ml))->exop) == 0)
@@ -75,6 +77,13 @@ z_streamp z;
         /* get extra bits for length */
         e &= HUFT_EXTRA_MASK;
         c = t->base + ((uInt)b & inflate_mask[e]);
+        if (c == 0)             /* ARTIST 0x82ACF52C */
+        {
+          z->msg = (char*)"invalid literal/length code";
+          UNGRAB
+          UPDATE
+          return Z_DATA_ERROR;
+        }
         DUMPBITS(e)
         Tracevv((stderr, "inflate:         * length %u\n", c));
 
@@ -175,7 +184,7 @@ z_streamp z;
         return Z_DATA_ERROR;
       }
     } while (1);
-  } while (m >= 258 && n >= 10);
+  } while (m >= fast_limit && n >= 10);
 
   /* not enough input or output--restore pointers and return */
   UNGRAB

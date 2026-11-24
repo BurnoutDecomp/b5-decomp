@@ -208,8 +208,6 @@ namespace Thread
             kResultTimeout = -2
         };
 
-        // RtlInitializeCriticalSection(&mCRITICAL_SECTION) (X360 init-with-spin-count
-        // on the Microsoft build).
         Futex();
 
         // RtlDeleteCriticalSection(&mCRITICAL_SECTION).
@@ -233,6 +231,17 @@ namespace Thread
         Futex(const Futex&);
         Futex& operator=(const Futex&);
     };
+
+    inline Futex::Futex()
+    {
+        // ARTIST JobScheduler construction at 0x82BC9AB8 calls this XDK primitive directly.
+        InitializeCriticalSection(reinterpret_cast<CRITICAL_SECTION*>(mCRITICAL_SECTION));
+    }
+
+    inline Futex::~Futex()
+    {
+        DeleteCriticalSection(reinterpret_cast<CRITICAL_SECTION*>(mCRITICAL_SECTION));
+    }
 
     inline bool Futex::TryLock()
     {

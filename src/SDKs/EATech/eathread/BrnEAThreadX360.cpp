@@ -322,24 +322,6 @@ namespace Thread
         return ::GetTickCount() + 0x2710u;
     }
 
-    // ---- EA::Thread::Futex -------------------------------------------------
-
-    // The EAThread Microsoft/X360 Futex is a CRITICAL_SECTION wrapper. The X360
-    // JobScheduler ctor/AddThread (@ 0x82BC9AA0 / 0x82BCA5F8) drive exactly these
-    // Rtl* critical-section calls on the embedded section. The XDK API receives
-    // the EAThread spin count of 256.
-
-    Futex::Futex()
-    {
-        InitializeCriticalSectionAndSpinCount(
-            reinterpret_cast<CRITICAL_SECTION*>(mCRITICAL_SECTION), 256);
-    }
-
-    Futex::~Futex()
-    {
-        DeleteCriticalSection(reinterpret_cast<CRITICAL_SECTION*>(mCRITICAL_SECTION));
-    }
-
     // ---- EA::Thread::Thread (this TU) --------------------------------------
 
     // sub_82B43EC8 -- the static thread-entry trampoline _beginthreadex jumps to.
