@@ -52,14 +52,6 @@ namespace
 
 }
 
-// MaybeDrawText (X360 0x82824048) -- the shared "draw debug text iff on-screen" helper used by the HUD
-// readouts. External to this TU (its own TU); declared here so the compile gate sees its shape. The
-// extra register args the decompiler shows are artifacts; the real call is the renderer's
-// DrawText(text, x, y, scale, colour) gated on an on-screen test. Signature recovered from the
-// sibling DebugComponent reconstructions: (display, text, x, y, scale, colour, centred).
-void MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
-                  f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCentred);
-
 namespace CgsResource
 {
     // ================================================================================================
@@ -234,29 +226,29 @@ namespace CgsResource
         f32  lfY = GetY();
 
         CgsCore::SPrintf(lacText, sizeof(lacText), "Texture %d of %d", miTextureIndex, miTotalTextures);
-        MaybeDrawText(lpRender, lacText, GetX(), lfY, KF_TEXT_SCALE, KU_TEXT_COLOUR, false);
+        lpRender->DrawText(lacText, GetX(), lfY, KF_TEXT_SCALE, KU_TEXT_COLOUR);
 
         lfY += KF_TEXT_LINE_STEP;
         CgsCore::SPrintf(lacText, sizeof(lacText), "Width: %d", lpTexture->GetWidth());
-        MaybeDrawText(lpRender, lacText, GetX(), lfY, KF_TEXT_SCALE, KU_TEXT_COLOUR, false);
+        lpRender->DrawText(lacText, GetX(), lfY, KF_TEXT_SCALE, KU_TEXT_COLOUR);
 
         lfY += KF_TEXT_LINE_STEP;
         CgsCore::SPrintf(lacText, sizeof(lacText), "Height: %d", lpTexture->GetHeight());
-        MaybeDrawText(lpRender, lacText, GetX(), lfY, KF_TEXT_SCALE, KU_TEXT_COLOUR, false);
+        lpRender->DrawText(lacText, GetX(), lfY, KF_TEXT_SCALE, KU_TEXT_COLOUR);
 
         lfY += KF_TEXT_LINE_STEP;
         CgsCore::SPrintf(lacText, sizeof(lacText), "Models: %d", miNumModelsThatUseCurrentTexture);
-        MaybeDrawText(lpRender, lacText, GetX(), lfY, KF_TEXT_SCALE, KU_TEXT_COLOUR, false);
+        lpRender->DrawText(lacText, GetX(), lfY, KF_TEXT_SCALE, KU_TEXT_COLOUR);
 
         lfY += KF_TEXT_LINE_STEP;
         CgsCore::SPrintf(lacText, sizeof(lacText), "Instances: %d", miNumInstancesThatUseCurrentTexture);
-        MaybeDrawText(lpRender, lacText, GetX(), lfY, KF_TEXT_SCALE, KU_TEXT_COLOUR, false);
+        lpRender->DrawText(lacText, GetX(), lfY, KF_TEXT_SCALE, KU_TEXT_COLOUR);
 
         // "MM" = main-memory size (descriptor[0]); the X360 reads it straight off the selected entry.
         lfY += KF_TEXT_LINE_STEP;
         const u32 luMainMemSize = lpEntry->mResourceDescriptor.m_baseResourceDescriptors[0].m_size;
         CgsCore::SPrintf(lacText, sizeof(lacText), "MM: %u", luMainMemSize);
-        MaybeDrawText(lpRender, lacText, GetX(), lfY, KF_TEXT_SCALE, KU_TEXT_COLOUR, false);
+        lpRender->DrawText(lacText, GetX(), lfY, KF_TEXT_SCALE, KU_TEXT_COLOUR);
 
         // "VM" = graphics-system (video) memory, formatted MB/KB/B.
         const u32 luVideoMemSize = lpEntry->mResourceDescriptor.m_baseResourceDescriptors[1].m_size;
@@ -266,7 +258,7 @@ namespace CgsResource
         char lacVideoMem[256];
         CgsCore::SPrintf(lacVideoMem, sizeof(lacVideoMem), "%uMB %uKB %uB", luMB, luKB, luB);
         CgsCore::SPrintf(lacText, sizeof(lacText), "VM: %s", lacVideoMem);
-        MaybeDrawText(lpRender, lacText, GetX(), lfY + KF_TEXT_LINE_STEP, KF_TEXT_SCALE, KU_TEXT_COLOUR, false);
+        lpRender->DrawText(lacText, GetX(), lfY + KF_TEXT_LINE_STEP, KF_TEXT_SCALE, KU_TEXT_COLOUR);
 
         // Draw the selected texture into the display box: from (mfX + 100, mfY) to (mfWidth - 100, mfHeight).
         const Vector2 lv2Position = Vector2(GetX() + KF_DISPLAY_INSET, GetY());

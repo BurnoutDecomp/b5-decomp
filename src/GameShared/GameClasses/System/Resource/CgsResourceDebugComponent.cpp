@@ -11,11 +11,6 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
 #include <cmath>
 
-// ARTIST82824048 always disables screen checking; the last native compatibility
-// parameter is ignored by its existing PC wrapper.
-void MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
-                  f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCheckScreen);
-
 // CgsResource::DebugComponent -- Construct, GetPath ("Core"), DumpPoolStatistics, UpdateShareTest.
 
 namespace CgsResource
@@ -31,13 +26,6 @@ namespace CgsResource
         s32 siDefragPoolId = -1;
         bool sbTriggerDefrag = false;
         const s32 KAI_TEXTURE_PAGE_SIZES[5] = {1, 1, 8, 16, 32}; //820F75F4
-
-        // Source homes for mutable ARTIST image words82F34728/2C/30. The
-        // direct reference scan finds only this HUD's reads; indirect writers
-        // remain unclassified. These initial values are present in the image.
-        f32 sfBundleQueuePriorityOffset = 400.0f;
-        f32 sfBundleQueueY = 150.0f;
-        f32 sfBundleQueueX = 300.0f;
     }
 
     // The option tables are filled from the shared mode-name tables: the type-list modes in the
@@ -252,44 +240,40 @@ namespace CgsResource
     // ARTIST828E36C0. Banner, optional three share-test values, then the live
     // load-request queue in priority order. Both queue getters retain their
     // original bounds assertions; callbacks/draws may change the live length.
-    void DebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDisplay)
+    void DebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpRenderer)
     {
-        MaybeDrawText(lpDisplay, "Resource Module Debug Component Active",
-                      30.0f, 30.0f, 10.0f, 0xFFFFFFFFu, false);
+        lpRenderer->DrawText("Resource Module Debug Component Active", 30.0f, 30.0f, 10.0f, 0xFFFFFFFFu);
         if (mbPoolShareTestVisible)
         {
-            MaybeDrawText(lpDisplay, "Share Test Results",
-                          200.0f, 60.0f, 14.0f, 0xFFFFFFFFu, false);
-            for (s32 liHeap = 0; liHeap < 3; ++liHeap)
+            lpRenderer->DrawText("Share Test Results", 200.0f, 60.0f, 14.0f, 0xFFFFFFFFu);
+            for (s32 liIndex = 0; liIndex < 3; ++liIndex)
             {
-                const f32 lfY = static_cast<f32>(liHeap) * 16.0f + 76.0f;
-                lpDisplay->DrawValue(maiPoolShareTestResults[liHeap],
-                                     220.0f, lfY, 14.0f, 0xFFFFFFFFu);
+                lpRenderer->DrawValue(maiPoolShareTestResults[liIndex],
+                                      220.0f, static_cast<f32>(liIndex) * 16.0f + 76.0f, 14.0f, 0xFFFFFFFFu);
             }
         }
         if (mbShowBundleLoaderQueue)
         {
-            const f32 lfHeaderY = sfBundleQueueY;
-            MaybeDrawText(lpDisplay, "FileName", sfBundleQueueX,
-                          lfHeaderY, 18.0f, 0xFFFFFFFFu, false);
-            MaybeDrawText(lpDisplay, "Priority",
-                          sfBundleQueuePriorityOffset + sfBundleQueueX,
-                          lfHeaderY, 18.0f, 0xFFFFFFFFu, false);
-            f32 lfY = lfHeaderY + 20.0f;
-            for (s32 liRequest = 0;
-                 liRequest < mpResourceModule->mBundleLoaderModule.mLoadRequestQueue.GetLength();
-                 ++liRequest)
+            // DWARF cpp:178-180 function statics: ARTIST .data 0x82F34730 (300.0), 0x82F3472C (150.0)
+            // and 0x82F34728 (400.0).
+            static f32 _lfXStart = 300.0f;
+            static f32 _lfYStart = 150.0f;
+            static f32 _lfXGap = 400.0f;
+            f32 lfYPos = _lfYStart;
+            lpRenderer->DrawText("FileName", _lfXStart, lfYPos, 18.0f, 0xFFFFFFFFu);
+            lpRenderer->DrawText("Priority", _lfXStart + _lfXGap, lfYPos, 18.0f, 0xFFFFFFFFu);
+            lfYPos += 20.0f;
+            for (s32 liIndex = 0;
+                 liIndex < mpResourceModule->mBundleLoaderModule.mLoadRequestQueue.GetLength();
+                 ++liIndex)
             {
-                const Events::LoadBundleRequest& lrRequest =
-                    mpResourceModule->mBundleLoaderModule.mLoadRequestQueue.GetEntry(liRequest);
-                const s32 liPriority =
-                    mpResourceModule->mBundleLoaderModule.mLoadRequestQueue.GetEntryPriority(liRequest);
-                MaybeDrawText(lpDisplay, lrRequest.macFileName,
-                              sfBundleQueueX, lfY, 16.0f, 0xFFFFFFFFu, false);
-                lpDisplay->DrawValue(liPriority,
-                                     sfBundleQueuePriorityOffset + sfBundleQueueX,
-                                     lfY, 16.0f, 0xFFFFFFFFu);
-                lfY += 18.0f;
+                const Events::LoadBundleRequest& lRequest =
+                    mpResourceModule->mBundleLoaderModule.mLoadRequestQueue.GetEntry(liIndex);
+                s32 liPriority =
+                    mpResourceModule->mBundleLoaderModule.mLoadRequestQueue.GetEntryPriority(liIndex);
+                lpRenderer->DrawText(lRequest.macFileName, _lfXStart, lfYPos, 16.0f, 0xFFFFFFFFu);
+                lpRenderer->DrawValue(liPriority, _lfXStart + _lfXGap, lfYPos, 16.0f, 0xFFFFFFFFu);
+                lfYPos += 18.0f;
             }
         }
     }

@@ -11,14 +11,14 @@
 
 #pragma intrinsic(_rotl)
 
-// X360 0x82824048. Preserve the native global helper boundary: pack (x,y,0,0), then delegate
-// to the real member overload with screen checking disabled. The helper result is not consumed.
-void MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
-                  f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool /*lbCheckScreen*/)
-{
-    const rw::math::vpu::Vector2 lv2Position = rw::math::vpu::Vector2(lfX, lfY);
-    lpDisplay->DrawText(lpcText, lv2Position, lfScale, lColour, false);
-}
+// ARTIST 0x82824048, which IDA names "MaybeDrawText", is no global helper: it is the member
+// Debug2DImmediateRender::DrawText(const char*, f32, f32, f32, RGBA) (DWARF CgsDebug2DImmediateRender.h:114,
+// cpp:409; PS3 DecFIGS 0xB37B4C, called through the trampolines 0x12970/0x4C09B8 by every HUD caller).
+// Its body is below with the other DrawText overload.
+
+
+
+
 
 namespace CgsDev
 {
@@ -463,18 +463,17 @@ namespace CgsDev
         DrawBox(lv2Min.mV.x, lfTop, lfRight, lfBottom, lForeColour);
     }
 
-    // Faithful port of X360 0x82823DE0 (the pseudocode is VPU-garbled -- the rect setup is reconstructed
-    // from the asm). DrawText branches on whether a font BUNDLE is loaded: if mpFont is set (via
-    // SetDebugFont), it builds a TextObject and renders the string through the bitmap-font TextRenderer
-    // (CgsResource::Font glyph atlas); otherwise it falls back to the built-in debug VECTOR font
-    // (mVectorFont -- the real glyph strokes from the XEX, needing no font resource). lfScale is the
-    // text height in px.
-    void Debug2DImmediateRender::DrawText(const char* lpcText, f32 lfX, f32 lfY, f32 lfScale, RGBA lColour)
+    // ARTIST 0x82823DE0 (DWARF cpp:361; locals lTextObject cpp:364, lBottomRight cpp:365). The font
+    // path builds a TextObject and renders it through the bitmap-font TextRenderer (CgsResource::Font
+    // glyph atlas) when a font bundle is loaded (mpFont set by SetDebugFont); otherwise the built-in
+    // debug VECTOR font draws it. lfSize is the text height in px.
+    void Debug2DImmediateRender::DrawText(const char* lpcText, Vector2 lPosition, f32 lfSize, RGBA lColourRGBA, bool lbCull)
     {
-        if (!lpcText)
+        // PS3 culls through Is2DTextOnScreen (cpp:1056); ARTIST 0x82823E14 calls the point test.
+        if (lbCull && !Is2DPointOnScreen(lPosition))
             return;
 
-        if (HasResourceFont())
+        if (mpFont != CgsResource::NULLResourceHandle)    // DWARF: SafeResourceHandle<Font>::operator!=
         {
             // X360: flush the box batch + switch the renderer to font mode before emitting glyphs.
             if (meDrawingMode != E_DRAWING_FONT)
@@ -488,45 +487,49 @@ namespace CgsDev
             CgsGraphics::TextObject lTextObject;
             lTextObject.Construct(0, 0);                       // defaults: LEFT, white, spacing 1, etc.
             lTextObject.mpFont       = mpFont;                 // the loaded bitmap font handle
-            lTextObject.mfFontHeight = lfScale;               // *mpfCurrentFontHeight (set by Construct) -> this
-            lTextObject.mTextColour  = lColour;
             lTextObject.meAlignment  = CgsGraphics::TextObject::E_ALIGNMENT_LEFT;
+            lTextObject.mfFontHeight = lfSize;
+            // TextObject::SetText (DWARF CgsFontRenderer.h:146, inlined: ARTIST 82823E94..82823EC4).
             lTextObject.mpUtf8String = lpUtf8;
+            if (lTextObject.mbAutosize)
+                lTextObject.CalculateAutosizing();
+            lTextObject.mTextColour  = lColourRGBA;
 
-            // ARTIST 82823EAC writes alignment at +0x2C, not multiline at +0x30.
-            // The object remains single-line. Its box is exactly one font-height
-            // tall; the cached string width is unscaled (82823F84..82823F88).
-            const f32 lfWidth = mpFont->GetStringWidth(lpUtf8) * lfScale;
-            lTextObject.mv2TopLeft.mX = lfX;
-            lTextObject.mv2TopLeft.mY = lfY;
-            lTextObject.mv2BottomRight.mX = lfX + lfWidth;
-            lTextObject.mv2BottomRight.mY = lfY + lfScale;
-            lTextObject.mfStringWidth  = mpFont->GetStringWidth(lpUtf8);
+            // The box is exactly one font-height tall; its width is the scaled string width.
+            const f32 lfWidth = mpFont->GetStringWidth(lpUtf8) * lfSize;
+            lTextObject.mv2TopLeft.mX = lPosition.mV.x;
+            lTextObject.mv2TopLeft.mY = lPosition.mV.y;
+            lTextObject.mv2BottomRight.mX = lPosition.mV.x + lfWidth;
+            lTextObject.mv2BottomRight.mY = lPosition.mV.y + lfSize;
 
+            // TextObject::SetStringWidth (DWARF CgsFontRenderer.h:153, inlined: ARTIST 82823F78..82823F98):
+            // the cached width is unscaled.
+            lTextObject.mfStringWidth = mpFont->GetStringWidth(lTextObject.mpUtf8String);
             if (lTextObject.mbAutosize)
                 lTextObject.CalculateAutosizing();
 
             mTextRenderer.RenderString(mpRenderBuffer, lTextObject);
-            return;
         }
-
-        // No bundle: the built-in vector font.
-        if (meDrawingMode != E_DRAWING_LINES)
+        else
         {
-            DispatchVertices();
-            meDrawingMode = E_DRAWING_LINES;
-            mePrimitiveType = static_cast<renderengine::PrimitiveType>(2);
+            // No bundle: the built-in vector font.
+            if (meDrawingMode != E_DRAWING_LINES)
+            {
+                DispatchVertices();
+                meDrawingMode = E_DRAWING_LINES;
+                mePrimitiveType = static_cast<renderengine::PrimitiveType>(2);
+            }
+            mVectorFont.SetSize(rw::math::vpu::Vector2(lfSize, lfSize));
+            mVectorFont.Print(lPosition.mV.x, lPosition.mV.y, lpcText, lColourRGBA);
         }
-        mVectorFont.SetSize(rw::math::vpu::Vector2( lfScale, lfScale));
-        mVectorFont.Print(lfX, lfY, lpcText, lColour);
     }
 
-    // ARTIST 82823E08..82823E20: the final bool requests origin culling.
-    void Debug2DImmediateRender::DrawText(const char* lpcText, Vector2 lv2Position, f32 lfScale, RGBA lColour, bool lbCheckScreen)
+    // ARTIST 0x82824048 (DWARF cpp:409, local lPosition cpp:411): pack (x, y, 0, 0) and draw
+    // without culling.
+    void Debug2DImmediateRender::DrawText(const char* lpcText, f32 lfX, f32 lfY, f32 lfSize, RGBA lColourRGBA)
     {
-        if (lbCheckScreen && !Is2DPointOnScreen(lv2Position))
-            return;
-        DrawText(lpcText, lv2Position.mV.x, lv2Position.mV.y, lfScale, lColour);
+        const Vector2 lPosition(lfX, lfY);
+        DrawText(lpcText, lPosition, lfSize, lColourRGBA, false);
     }
 
     // ARTIST 0x8282C4C0. Alignment is expressed as 0=left, .5=centre, 1=right.
