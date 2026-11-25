@@ -235,10 +235,7 @@ public:
     // -- slot 30 -- @0x822A5F00: OnCrash() on the false->true edge, then store.
     virtual void SetCrashing(bool lbCrashing);
 
-    // NON-virtual. DecFIGS body @cpp:589; no standalone X360 symbol -- the
-    // body is inlined into BoostManager::SetWrecking @0x822B8E40 (OnWrecked
-    // (slot 8) on the false->true edge, then store mbWrecking). Body belongs
-    // to the .cpp TU wave.
+    // Nonvirtual. Inlined by BoostManager::SetWrecking @0x822B8E40.
     void SetWrecking(bool lbWrecking, bool lbIsInOnlineGameMode);
 
     // -- slot 31 -- @0x822A6110: stores mbIsTailgating + meTailgatedCarIndex.
@@ -575,6 +572,15 @@ inline void BoostStrategy::RemoveBoost(f32 lfBoostAmount)
     {
         mfBoostAmount = 0.0f;
     }
+}
+
+inline void BoostStrategy::SetWrecking(bool lbWrecking, bool lbIsInOnlineGameMode)
+{
+    if (lbWrecking && !mbWrecking)
+    {
+        OnWrecked(lbIsInOnlineGameMode);
+    }
+    mbWrecking = lbWrecking;
 }
 
 } // namespace BrnWorld

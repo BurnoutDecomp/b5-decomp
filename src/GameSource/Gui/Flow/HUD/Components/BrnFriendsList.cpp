@@ -7,6 +7,7 @@
 // regardless). The X360-baked assert file/line are discarded per project convention;
 // the stringized condition matches the X360 assert text.
 #define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnFriendsList.cpp"
+#include "GameSource/Input/GameInputActions.h"
 #include "GameSource/Gui/Flow/HUD/Components/BrnFriendsList.h"
 #include "GameSource/Gui/Flapt/BrnFlaptMovieClipInstance.h"
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"
@@ -1217,20 +1218,45 @@ void FriendsListComponent::HandleDPadRight()
 }
 
 // ARTIST 0x82442E50. Input action IDs are the original GUI D-pad actions.
-void FriendsListComponent::HandleTableInteraction(s32 action)
+void FriendsListComponent::HandleTableInteraction(s32 liAction)
 {
-    if (action == 37 || action == 38)
+    switch (liAction)
     {
-        if (meCurrentState != 2) return;
-        if (action == 37 ? SelectPrevious() : SelectNext())
+    case E_GAMEINPUTACTIONS_GUI_DPAD_UP:
+        if (meCurrentState == 2)
         {
-            SetDirty();
-            FriendsAudio(mpStateInterface);
+            if (SelectPrevious())
+            {
+                SetDirty();
+                GuiAudioTriggerEvent lEvent;
+                lEvent.Construct(2, "", "EasyDriveEntry", "");
+                mpStateInterface->OutputGuiEvent(lEvent);
+            }
+            if (meListType == 3)
+                s_u64SavedChallengeUid = maChallengesAvailable[miCurrentlyHighlightedOption];
         }
-        if (meListType == 3) s_u64SavedChallengeUid = maChallengesAvailable[miCurrentlyHighlightedOption];
+        break;
+    case E_GAMEINPUTACTIONS_GUI_DPAD_DOWN:
+        if (meCurrentState == 2)
+        {
+            if (SelectNext())
+            {
+                SetDirty();
+                GuiAudioTriggerEvent lEvent;
+                lEvent.Construct(2, "", "EasyDriveEntry", "");
+                mpStateInterface->OutputGuiEvent(lEvent);
+            }
+            if (meListType == 3)
+                s_u64SavedChallengeUid = maChallengesAvailable[miCurrentlyHighlightedOption];
+        }
+        break;
+    case E_GAMEINPUTACTIONS_GUI_DPAD_LEFT:
+        HandleDPadLeft();
+        break;
+    case E_GAMEINPUTACTIONS_GUI_DPAD_RIGHT:
+        HandleDPadRight();
+        break;
     }
-    else if (action == 39) HandleDPadLeft();
-    else if (action == 40) HandleDPadRight();
 }
 
 // ARTIST 0x82443280.
@@ -1301,8 +1327,9 @@ void FriendsListComponent::EndWait()
     if (meCurrentState != 0 && miTotalOptions == 0 && !mpGuiCache->IsOnlineStartInProgress())
     {
         meBranchState = 0;
-        miCurrentlyHighlightedSlot = miCurrentlyHighlightedOption = 1;
+        miCurrentlyHighlightedSlot = 1;
         miCurrentlyActiveSlots = 2;
+        miCurrentlyHighlightedOption = 1;
         SetEntryData(0, "FRIENDSLIST_NO_FRIENDS", 2, true);
         SetEntryData(1, "FRIENDSLIST_INSTANT_FREEBURN", 6, true);
         Highlight(miCurrentlyHighlightedSlot);
@@ -1555,11 +1582,11 @@ void FriendsListComponent::SortFullList()
 }
 
 // ARTIST 0x824430D0.
-void FriendsListComponent::ProcessNewEntryData(const void* data)
+void FriendsListComponent::ProcessNewEntryData(const GuiEventOnlineReceiveFriendInfo* lpFriendInfo)
 {
-    CGS_ASSERT(data != 0, CGS_ASSERT_MESSAGE_AT("lpFriendInfo", CGS_ARTIST_FILE, 706 /* ARTIST 0x82443104 */));
+    CGS_ASSERT(lpFriendInfo != 0, CGS_ASSERT_MESSAGE_AT("lpFriendInfo", CGS_ARTIST_FILE, 706 /* ARTIST 0x82443104 */));
     if (meListType != 1) return;
-    const GuiEventOnlineReceiveFriendInfo& event = *static_cast<const GuiEventOnlineReceiveFriendInfo*>(data);
+    const GuiEventOnlineReceiveFriendInfo& event = *lpFriendInfo;
     if (!event.mbConnected) { HandleNotConnected(); meDataCollectionState = 2; return; }
     if (event.miNumberOfBuddiesInEvent == 0) { HandleNoFriends(); meDataCollectionState = 2; return; }
     for (s32 i = 0; i < event.miNumberOfBuddiesInEvent; ++i)
@@ -1569,7 +1596,9 @@ void FriendsListComponent::ProcessNewEntryData(const void* data)
     SortFullList();
     RemoveUnneededFriends();
     if (miTotalOptions == 0) { HandleNoFriends(); return; }
-    const bool reopen = meBranchState != 0 && MoveHighlightDueToBranchOpen();
+    bool reopen = false;
+    if (meBranchState != 0)
+        reopen = MoveHighlightDueToBranchOpen();
     UpdateAllEntryData();
     if (reopen) { meBranchState = 0; HandleTableInteraction(40); }
     else if (s_abStateSavedFlag && s_aiSavedListType == 1)

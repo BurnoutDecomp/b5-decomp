@@ -113,20 +113,6 @@ void cParticleRender::Dispatch(renderengine::VertexBuffer* apVertexBuffer,
 // ================================================================================================
 
 // ------------------------------------------------------------------------------------------------
-// cParticleRender::Instance  (declared in the original header)
-//
-// A function-local static: that is the exact construct MSVC compiles into the guard-word +
-// atexit pair every inlining call site shows -- test the guard's low bit, set it, then register
-// a dynamic atexit destructor for the object. The mangled destructor symbol names both the
-// accessor (Instance) and the object (m_instance). The object sits exactly 0x460 bytes before
-// its own guard word, which is sizeof(cParticleRender): see the layout note in the header.
-// ------------------------------------------------------------------------------------------------
-cParticleRender& cParticleRender::Instance()
-{
-    static cParticleRender m_instance;
-    return m_instance;
-}
-
 // ------------------------------------------------------------------------------------------------
 // cParticleRender::AppInit  (declared in the original header)
 //
@@ -167,20 +153,6 @@ void cParticleRender::AppInit(EA::Allocator::ITaggedAllocator* apAllocator,
 }
 
 // ------------------------------------------------------------------------------------------------
-// cParticleRender::Update  (declared in the original header)
-//
-// ⚠ ATTESTED EMPTY -- this is a transcription, not a stub, and the distinction is the whole point
-// of the trap-stub rule. The original cLionFX::Update makes exactly two calls:
-// cParticleRender::Instance() and cParticleRender::Update(). Its console body is nine
-// instructions long: the magic-static guard, the atexit registration, and a tail call to
-// cParticleEmitterManager::Update. There is no third call, no store, and nothing else
-// between the guard and the tail -- so Update() had nothing in it on this build. A __debugbreak
-// here would fire every frame for a function the console runs every frame and that does nothing.
-// ------------------------------------------------------------------------------------------------
-void cParticleRender::Update(const cTime& /*arTime*/)
-{
-}
-
 // ------------------------------------------------------------------------------------------------
 // cParticleRender::_AssertLayout -- layout pins. Never executed (offsetof folds at compile time in
 // an uncalled function); it is a private static member so it can see the private members it pins.

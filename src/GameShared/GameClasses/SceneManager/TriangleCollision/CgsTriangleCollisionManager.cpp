@@ -15,6 +15,13 @@
 namespace CgsSceneManager
 {
 
+namespace
+{
+const char KAC_ARTIST_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\"
+    "TriangleCollision/CgsTriangleCollisionManager.cpp";
+}
+
 // Construct -- this member's body is inlined into SceneManagerModule::Construct
 // @0x828D09A0. The owner clears the three manager fields at +0x70/+0x74/+0x78,
 // constructs the map at +0x00, then constructs the debug component at +0xA0 with
@@ -42,16 +49,17 @@ void TriangleCollisionManager::Construct()
 // Returns true.
 bool TriangleCollisionManager::Prepare(CgsMemory::LinearMalloc* lpAllocator, s32 liMaxNumPolySoupLists)
 {
-    CGS_ASSERT(lpAllocator != 0, "lpAllocator != NULL");
-    CGS_ASSERT(liMaxNumPolySoupLists >= 0 && liMaxNumPolySoupLists < KI_MAX_NUM_ZONES,
-               "liMaxNumPolySoupLists >= 0 && liMaxNumPolySoupLists < KI_MAX_NUM_ZONES");
+    CGS_ASSERT_AT(lpAllocator != 0, "lpAllocator != NULL", KAC_ARTIST_FILE, 84);
+    CGS_ASSERT_AT(liMaxNumPolySoupLists >= 0 && liMaxNumPolySoupLists < KI_MAX_NUM_ZONES,
+                  "liMaxNumPolySoupLists >= 0 && liMaxNumPolySoupLists < KI_MAX_NUM_ZONES",
+                  KAC_ARTIST_FILE, 85);
 
     miMaxNumSoupLists = liMaxNumPolySoupLists;
 
     // Inlined MallocArray<CgsResource::ResourceHandle>: 8 bytes/handle on the X360.
     mpaPolySoupListHandles = static_cast<CgsResource::ResourceHandle*>(
         lpAllocator->Malloc(sizeof(CgsResource::ResourceHandle) * static_cast<size_t>(liMaxNumPolySoupLists)));
-    CGS_ASSERT(mpaPolySoupListHandles != 0, "mpaPolySoupListHandles != NULL");
+    CGS_ASSERT_AT(mpaPolySoupListHandles != 0, "mpaPolySoupListHandles != NULL", KAC_ARTIST_FILE, 94);
 
     for (s32 liZone = 0; liZone < miMaxNumSoupLists; ++liZone)
     {
@@ -66,10 +74,9 @@ bool TriangleCollisionManager::Prepare(CgsMemory::LinearMalloc* lpAllocator, s32
 
     mSpacialAllocator.Construct();
     u32 luFreeMemory = (static_cast<u32>(lpAllocator->GetFreeMemory()) + 15u) & 0xFFFFFFF0u;
-    CGS_ASSERT(luFreeMemory > 16, "luFreeMemory > 16");
+    CGS_ASSERT_AT(luFreeMemory > 16, "luFreeMemory > 16", KAC_ARTIST_FILE, 113);
 
-    void* lpSpacialMemory = lpAllocator->Malloc(luFreeMemory);
-    mSpacialAllocator.Create(lpSpacialMemory, luFreeMemory);
+    mSpacialAllocator.Create(lpAllocator->Malloc(luFreeMemory), luFreeMemory);
     mSpacialAllocator.SetAlignment(16);
 
     return true;
@@ -85,12 +92,9 @@ bool TriangleCollisionManager::Prepare(CgsMemory::LinearMalloc* lpAllocator, s32
 void TriangleCollisionManager::ProcessAddPolySoupListEvents(
     const InAddPolySoupListQueue& lAddPolySoupListQueue)
 {
-    const char* const lpcAssertFile =
-        "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\"
-        "TriangleCollision/CgsTriangleCollisionManager.cpp";
     CGS_ASSERT(mpaPolySoupListHandles != 0,
         CGS_ASSERT_MESSAGE_AT("mpaPolySoupListHandles != NULL",
-            lpcAssertFile, 171 /* ARTIST 0x828B3190 */));
+            KAC_ARTIST_FILE, 171 /* ARTIST 0x828B3190 */));
 
     bool lbNeedToRebuild = false;
     for (s32 liEventIndex = 0; liEventIndex < lAddPolySoupListQueue.GetLength(); ++liEventIndex)
@@ -100,11 +104,11 @@ void TriangleCollisionManager::ProcessAddPolySoupListEvents(
 
         CGS_ASSERT(miNumSoupListsAdded < miMaxNumSoupLists,
             CGS_ASSERT_MESSAGE_AT("miNumSoupListsAdded < miMaxNumSoupLists",
-                lpcAssertFile, 182 /* ARTIST 0x828B31FC */));
+                KAC_ARTIST_FILE, 182 /* ARTIST 0x828B31FC */));
         CGS_ASSERT(mpaPolySoupListHandles[miNumSoupListsAdded] == CgsResource::NULLResourceHandle,
             CGS_ASSERT_MESSAGE_AT(
                 "mpaPolySoupListHandles[miNumSoupListsAdded] == CgsResource::NULLResourceHandle",
-                lpcAssertFile, 183 /* ARTIST 0x828B3258 */));
+                KAC_ARTIST_FILE, 183 /* ARTIST 0x828B3258 */));
 
         mpaPolySoupListHandles[miNumSoupListsAdded] = lEvent.mPolySoupListHandle;
 
@@ -120,7 +124,7 @@ void TriangleCollisionManager::ProcessAddPolySoupListEvents(
         CGS_ASSERT(miNumSoupListsAdded == mPolySoupListSpacialMap.GetNumPolySoupLists(),
             CGS_ASSERT_MESSAGE_AT(
                 "miNumSoupListsAdded == mPolySoupListSpacialMap.GetNumPolySoupLists()",
-                lpcAssertFile, 198 /* ARTIST 0x828B32E8 */));
+                KAC_ARTIST_FILE, 198 /* ARTIST 0x828B32E8 */));
     }
 
     if (lbNeedToRebuild)

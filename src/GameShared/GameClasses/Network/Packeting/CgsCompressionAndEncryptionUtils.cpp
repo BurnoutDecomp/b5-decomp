@@ -510,7 +510,7 @@ void CompressionAndEncryptionUtils::UnPack(NetworkPlayerID liPlayerID,
         lpMessageToUnpackInto->Construct();
         CGS_ASSERT(lu8GameID != KU8_INVALID_GAME_ID, "lu8GameID != KU8_INVALID_GAME_ID");
         lpMessageToUnpackInto->SetGameID(lu8GameID);
-        lpMessageToUnpackInto->SetType(leMessageType);
+        lpMessageToUnpackInto->SetType(static_cast<::EMessageType>(leMessageType));
         if (lpMessageToUnpackInto->IsReliable())
         {
             MessageWithPlayerIDs* lpReliableMsg = static_cast<MessageWithPlayerIDs*>(lpMessageToUnpackInto);

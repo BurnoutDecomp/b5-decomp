@@ -1130,7 +1130,7 @@ extern "C" s32 LobbyApiControl(LobbyApiRefT* pLobbyApi, s32 iKind, s32 iValue)
 extern "C" LobbyApiUserSetT* LobbyApiGetUserSetInfoByIdent(LobbyApiRefT* pLobbyApi,
                                                              s32 iUserSetIdent)
 {
-    if (pLobbyApi->UserSet.iIdent == iUserSetIdent)
+    if (iUserSetIdent == pLobbyApi->UserSet.iIdent)
     {
         return &pLobbyApi->UserSet;
     }

@@ -173,24 +173,6 @@ void AptValueGC_PoolManager::StaticInitialize()
 #endif
 
 // ---------------------------------------------------------------------------
-// AllocateAptValueGC
-//
-// DOGMA Allocate, then set the MemItem allocated flag. The alloc-side mirror of
-// DeallocateAptValueGC; the X360 inlines this pair into every GC value type's
-// `operator new` (e.g. AptArray @0x82AE6088 / AptGlobalExtensionObject
-// @0x82AE6588: Allocate(off_8324D834, size) ; SetIsAllocated(p, byte_8324D804,
-// 1)). The flag is set unconditionally (unlike the free, which gates the clear
-// on a successful Deallocate).
-// ---------------------------------------------------------------------------
-void* AptValueGC_PoolManager::AllocateAptValueGC(size_t nAllocatedSize)
-{
-    void* pItem = Allocate(nAllocatedSize);
-    reinterpret_cast<AptValueGC_MemItem*>(pItem)
-        ->SetIsAllocated(gAptValueGCSizeOffset, true);
-    return pItem;
-}
-
-// ---------------------------------------------------------------------------
 // DeallocateAptValueGC @ 0x82AE57D8
 //
 // r31 = pItem. DOGMA Deallocate; on success clear the MemItem allocated flag.
@@ -220,24 +202,33 @@ void AptValueGC_PoolManager::DeallocateAptValueGC(void* pItem, size_t nAllocated
 // item with size 0 is impossible here because the loop only advances inside a
 // pool's used range. Returns null when no live item exists.
 // ---------------------------------------------------------------------------
+// The native size path emits the original inline item checks at 0x82AE0DF8.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 AptValue* AptValueGC_PoolManager::GetFirstAptValue()
 {
-    DOGMA_MemPool* pPool = GetFirstPool();
+    DOGMA_MemPool* pPool = mpFirstPool;
     do
     {
-        for (const uint32_t* pItem = PoolItemsBegin(pPool);
-             ItemInPool(pItem, pPool);
-             pItem = AdvanceItem(pItem))
+        AptValueGC_MemItem* pItem = static_cast<AptValueGC_MemItem*>(pPool->GetFirstItem());
+        while (pPool->PtrIsInThisPool(pItem))
         {
-            if (ItemIsAllocated(pItem))
-                return reinterpret_cast<AptValue*>(const_cast<uint32_t*>(pItem));
+            if (pItem->IsAllocated(gAptValueGCSizeOffset))
+                return reinterpret_cast<AptValue*>(pItem);
+
+            const size_t nItemSize = pItem->GetSize(gAptValueGCSizeOffset);
+            pItem = reinterpret_cast<AptValueGC_MemItem*>(reinterpret_cast<uint8_t*>(pItem) + nItemSize);
         }
-        pPool = pPool ? pPool->GetNextPool() : 0;
     }
-    while (pPool);
+    while ((pPool = pPool->GetNextPool()) != 0);
 
     return 0;
 }
+
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // ---------------------------------------------------------------------------
 // GetNextAptValue @ 0x82AE0BE0

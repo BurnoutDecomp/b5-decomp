@@ -108,48 +108,4 @@ void EffectsVertexBufferLocked::EndBatch(
     mpLockedBufferCurrentAddress += luBytesWritten;
 }
 
-// ---------------------------------------------------------------------------------------------
-// EffectsVertexBuffer::Construct(void*, u32) / ::Destruct / ::UnLock
-//
-// No X360 export: all three exist only inlined into EffectsVertexBufferManager (same unity TU).
-// Their bodies are read off those copies:
-//   Construct -- Manager::Lock @0x82279B58..0x82279B8C: current = NULL, flags = 0,
-//                base = address, top = address + size (the cursor is seated by Lock()).
-//   UnLock    -- Manager::UnLock @0x82279BE4..0x82279C2C: assert the LOCKED bit
-//                (EffectsVertexBuffer.cpp:122), clear it, current = NULL.
-//   Destruct  -- Manager::UnLock @0x82279C30..0x82279C60: assert mxFlags == 0
-//                (EffectsVertexBuffer.cpp:78), then base = top = current = NULL.
-// ---------------------------------------------------------------------------------------------
-void EffectsVertexBuffer::Construct(void* lpBuffer, u32 luBufferSize)
-{
-    u8* const lpBase = static_cast<u8*>(lpBuffer);
-    mpLockedBufferCurrentAddress = 0;
-    mxFlags                      = 0;   // neither locked nor in a batch
-    mpLockedBufferBaseAddress    = lpBase;
-    mpLockedBufferTopAddress     = lpBase + luBufferSize;
-}
-
-void EffectsVertexBuffer::Destruct()
-{
-    CGS_ASSERT(mxFlags == 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "mxFlags == 0",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-            "../Effects/Particles/EffectsVertexBuffer.cpp", 78));
-    mpLockedBufferBaseAddress    = 0;
-    mpLockedBufferTopAddress     = 0;
-    mpLockedBufferCurrentAddress = 0;
-}
-
-void EffectsVertexBuffer::UnLock()
-{
-    CGS_ASSERT((mxFlags & KX_FLAG_LOCKED) != 0,
-        CGS_ASSERT_MESSAGE_AT(
-            "( mxFlags & KX_FLAG_LOCKED ) != 0",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-            "../Effects/Particles/EffectsVertexBuffer.cpp", 122));
-    mxFlags = static_cast<u8>(mxFlags & ~KX_FLAG_LOCKED);
-    mpLockedBufferCurrentAddress = 0;
-}
-
 #undef CGS_ARTIST_FILE

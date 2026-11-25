@@ -644,13 +644,14 @@ namespace CgsNetwork
     }
 
     // ---- SetType @ 0x82579C30 --------------------------------------------------
-    Message* Message::SetType(s32 leType)
+    void Message::SetType(::EMessageType leType)
     {
-        CGS_ASSERT(leType >= 0, "leType >= 0");
-        CGS_ASSERT(leType < KI_E_MESSAGE_TYPE_COUNT, "leType < E_MESSAGE_TYPE_COUNT");
-        CGS_ASSERT(leType < 255, "leType < 255");
+        static const char KAC_ARTIST_FILE[] =
+            "..\\..\\..\\GameShared\\GameClasses\\Network/Packeting/Messages/CgsMessage.h";
+        CGS_ASSERT_AT(leType >= 0, "leType >= 0", KAC_ARTIST_FILE, 633);
+        CGS_ASSERT_AT(leType < E_MESSAGE_TYPE_COUNT, "leType < E_MESSAGE_TYPE_COUNT", KAC_ARTIST_FILE, 634);
+        CGS_ASSERT_AT(leType < 255, "leType < 255", KAC_ARTIST_FILE, 635);
         mi8Type = static_cast<s8>(leType);
-        return this;
     }
 
     // ---- PrepareForSend @ 0x8257D5F8 ------------------------------------------
@@ -659,7 +660,7 @@ namespace CgsNetwork
         CGS_ASSERT(lu16Frame != KU16_INVALID_FRAME,
             CGS_ASSERT_MESSAGE_AT(
                 "lu16Frame != KU16_INVALID_FRAME", __FILE__, 594 /* ARTIST 0x8257D624 */));
-        SetType(leType);
+        SetType(static_cast<::EMessageType>(leType));
         mu16Frame = lu16Frame;
         mx8Flags |= KX8_FLAGS_VALID;
     }
@@ -671,7 +672,7 @@ namespace CgsNetwork
             CGS_ASSERT_MESSAGE_AT("!IsMessageValid()", __FILE__, 888 /* ARTIST 0x8286F4BC */));
         mu16Frame = lu16Frame;
         mx8Flags  = KX8_FLAGS_ACK;
-        SetType(leType);
+        SetType(static_cast<::EMessageType>(leType));
         mu8GameID = lu8GameID;
         mx8Flags |= KX8_FLAGS_VALID;
     }
@@ -683,7 +684,7 @@ namespace CgsNetwork
             CGS_ASSERT_MESSAGE_AT("!IsMessageValid()", __FILE__, 915 /* ARTIST 0x8286F53C */));
         mu16Frame = lu16Frame;
         mx8Flags  = KX8_FLAGS_NACK;
-        SetType(leType);
+        SetType(static_cast<::EMessageType>(leType));
         mu8GameID = lu8GameID;
         mx8Flags |= KX8_FLAGS_VALID;
     }

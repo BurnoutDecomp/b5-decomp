@@ -35,13 +35,7 @@
 // ---------------------------------------------------------------------------
 void* AptStringObject::operator new(size_t size)
 {
-    if (gpGCPoolManager == 0)
-        return 0;
-
-    void* lpMem = gpGCPoolManager->Allocate(size);
-    if (lpMem != 0)
-        static_cast<AptValueGC_MemItem*>(lpMem)->SetIsAllocated(gAptValueGCSizeOffset, true);
-    return lpMem;
+    return gpGCPoolManager->AllocateAptValueGC(size);
 }
 
 void AptStringObject::operator delete(void* p, size_t size)

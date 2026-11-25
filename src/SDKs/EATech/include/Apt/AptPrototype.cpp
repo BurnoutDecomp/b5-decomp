@@ -38,11 +38,7 @@
 // ---------------------------------------------------------------------------
 void* AptPrototype::operator new(size_t size)
 {
-    if (gpGCPoolManager == 0)
-        return 0;
-    void* pMem = gpGCPoolManager->Allocate(size);
-    reinterpret_cast<AptValueGC_MemItem*>(pMem)->SetIsAllocated(gAptValueGCSizeOffset, true);
-    return pMem;
+    return gpGCPoolManager->AllocateAptValueGC(size);
 }
 
 void AptPrototype::operator delete(void* p, size_t size)

@@ -71,7 +71,7 @@ namespace CgsNetwork
         CGS_ASSERT(lu16Frame != KU16_INVALID_FRAME,
             CGS_ASSERT_MESSAGE_AT(
                 "lu16Frame != KU16_INVALID_FRAME", __FILE__, 594 /* ARTIST 0x8288216C */));
-        SetType(leType);
+        SetType(static_cast<::EMessageType>(leType));
         mu16Frame = lu16Frame;
         mx8Flags |= KX8_FLAGS_VALID;
     }

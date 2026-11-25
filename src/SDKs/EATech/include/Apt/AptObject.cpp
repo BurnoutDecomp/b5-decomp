@@ -25,11 +25,11 @@ extern AptValue* gpUndefinedValue;
 // GC-pool operator new/delete -- AptObject is a garbage-collected value
 // (AptValueGC base), so its block comes from the GC pool. AllocateAptValueGC =
 // DOGMA Allocate + AptValueGC_MemItem::SetIsAllocated (the X360 inlines that pair
-// into every GC type's operator new). The null guard covers the pre-init window
-// before AptInit's AptAllocatorInitialize @0x82ADD118 wires the pool.
+// into every GC type's operator new). AptAllocatorInitialize at
+// 0x82ADD118 installs gpGCPoolManager before any GC allocation.
 void* AptObject::operator new(size_t size)
 {
-    return (gpGCPoolManager != 0) ? gpGCPoolManager->AllocateAptValueGC(size) : 0;
+    return gpGCPoolManager->AllocateAptValueGC(size);
 }
 
 void AptObject::operator delete(void* p, size_t size)

@@ -861,7 +861,7 @@ void NetworkPlayer::ReceiveMessage(u8* lpacMessageData, s32 liMessageSize,
     {
         Message* lpMsg = maRecvMessageData[liIndex].mpMsg;
         laRecvMessageData[liIndex].mpMessage = lpMsg;
-        lpMsg->SetType(maRecvMessageData[liIndex].meType);
+        lpMsg->SetType(static_cast<::EMessageType>(maRecvMessageData[liIndex].meType));
         laRecvMessageData[liIndex].mpMsgUnpackedCallback = OnMessageUnpackedCallback;
         laRecvMessageData[liIndex].mpCallbackUserData    = this;
         ++liNumRecvMessageData;

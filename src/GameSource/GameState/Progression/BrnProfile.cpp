@@ -117,18 +117,18 @@ void CarData::SetPaletteIndex(s32 liPalette)
 // ------------------------------------------------------------------------------------
 void RivalData::Construct(CgsID lRivalId, CgsID lCarId)
 {
-    mRivalId                     = lRivalId;
-    mCarId                       = lCarId;
     meState                      = E_STATE_LOCKED;
     miEventCount                 = 0;
+    mRivalId                     = lRivalId;
+    mCarId                       = lCarId;
     miTakedownFromCount          = 0;
     miVerticalTakedownFromCount  = 0;
     miTakedownToCount            = 0;
     miVerticalTakedownToCount    = 0;
+    mbHasBeenHit                 = false;
+    miEventMissingCount          = 0;
     miTakedownToInEventCount     = 0;
     miTakedownToInLastEventCount = 0;
-    miEventMissingCount          = 0;
-    mbHasBeenHit                 = false;
 }
 
 // ====================================================================================

@@ -2076,7 +2076,7 @@ namespace BrnGui
             case 102:
                 if (mbFriendsList)
                 {
-                    mFriendsList.ProcessNewEntryData(lpEvent);
+                    mFriendsList.ProcessNewEntryData(reinterpret_cast<const GuiEventOnlineReceiveFriendInfo*>(lpEvent));
                 }
                 break;
             case 103:

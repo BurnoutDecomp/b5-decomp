@@ -14,13 +14,16 @@
 //   BrnProgression::ProgressionData::GetTrophyUnlock             @ 0x823569F0
 //   BrnProgression::ProgressionData::GetInterpolatedAIBalanceGraph @ 0x82676820
 
+#define BRN_PROGRESSION_ARTIST_HEADER "..\\..\\..\\SharedClasses\\Progression/BrnProgressionData.h"
+
 namespace BrnProgression
 {
 
 // X360 0x82311790. Bounds-checked accessor into the progression-rank table (112-byte stride).
 const ProgressionRankData* ProgressionData::GetProgressionRankData(u32 luIndex) const
 {
-    CGS_ASSERT(luIndex < muProgressionRankCount, "luIndex < muProgressionRankCount");
+    CGS_ASSERT_AT(luIndex < muProgressionRankCount, "luIndex < muProgressionRankCount",
+                  BRN_PROGRESSION_ARTIST_HEADER, 330);
     return &GetProgressionRanks()[luIndex];
 }
 
@@ -45,7 +48,7 @@ TrophyUnlockData* ProgressionData::GetTrophyUnlock(u32 luIndex) const
     CGS_ASSERT(luIndex < muTrophyUnlockCount,
         CGS_ASSERT_MESSAGE_AT(
             "luIndex < muTrophyUnlockCount",
-            "..\\..\\..\\SharedClasses\\Progression/BrnProgressionData.h", 302 /* ARTIST 0x82356A20 */));
+            BRN_PROGRESSION_ARTIST_HEADER, 302 /* ARTIST 0x82356A20 */));
     return &GetTrophyUnlocks()[luIndex];
 }
 
@@ -298,3 +301,5 @@ int ProgressionData::FixUp(int liDelta)
 }
 
 }
+
+#undef BRN_PROGRESSION_ARTIST_HEADER

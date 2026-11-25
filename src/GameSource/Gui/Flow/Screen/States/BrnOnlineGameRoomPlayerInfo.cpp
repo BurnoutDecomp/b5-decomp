@@ -3794,28 +3794,31 @@ namespace BrnGui
     // ---- HandleLaunchQuestion @0x82498038 -----------------------------------------
     // DWARF cpp:1587. The answer to the "launch the event?" overlay: OK posts the accept
     // command, CANCEL restores the tab title the question overwrote.
-    void OnlineGameRoomPlayerInfo::HandleLaunchQuestion(s32 liLeaveMethod)
+    void OnlineGameRoomPlayerInfo::HandleLaunchQuestion(GuiOverlayCompleteEvent::LeaveMethod leLeaveMethod)
     {
-        if (liLeaveMethod == GuiOverlayCompleteEvent::E_LEAVEMETHOD_OK)
+        switch (leLeaveMethod)
         {
-            PostCommand16<KI_EVENT_LAUNCH_QUESTION_ACCEPT>(mpStateInterface);
-        }
-        else if (liLeaveMethod == GuiOverlayCompleteEvent::E_LEAVEMETHOD_CANCEL)
-        {
-            // The X360 loads mPlayerStatsDisplay.meState (this+75684) and, on the
-            // non-visible side, mRouteInfoDisplay.meState (this+84312).
+        case GuiOverlayCompleteEvent::E_LEAVEMETHOD_CANCEL:
             if (mPlayerStatsDisplay.IsVisible())
             {
                 mMessageText.SetText(KAC_PLAYER_INFO_STRING_ID);
             }
-            else if (mRouteInfoDisplay.meState != GuiNetworkRouteInfo::E_STATE_VISIBLE)
-            {
-                mMessageText.SetText(KAC_EVENT_MAP_STRING_ID);
-            }
-            else
+            else if (mRouteInfoDisplay.meState == GuiNetworkRouteInfo::E_STATE_VISIBLE)
             {
                 mMessageText.SetText(KAC_EVENT_INFO_STRING_ID);
             }
+            else
+            {
+                mMessageText.SetText(KAC_EVENT_MAP_STRING_ID);
+            }
+            break;
+
+        case GuiOverlayCompleteEvent::E_LEAVEMETHOD_OK:
+        {
+            CgsGui::GuiEvent<KI_EVENT_LAUNCH_QUESTION_ACCEPT> lAccept;
+            mpStateInterface->OutputGuiEvent(lAccept);
+            break;
+        }
         }
     }
 }
@@ -4329,7 +4332,7 @@ namespace BrnGui
         }
         else if (lpOverlayCompleteEvent->mOverlayId == CgsIDCompress("CNLobbyLchQn"))
         {
-            HandleLaunchQuestion(lpOverlayCompleteEvent->miLeaveMethod);
+            HandleLaunchQuestion(static_cast<GuiOverlayCompleteEvent::LeaveMethod>(lpOverlayCompleteEvent->miLeaveMethod));
         }
         else if (lpOverlayCompleteEvent->mOverlayId == CgsIDCompress("CNOnlLvGmQn") ||
                  lpOverlayCompleteEvent->mOverlayId == CgsIDCompress("CNOnlLvChaQn") ||

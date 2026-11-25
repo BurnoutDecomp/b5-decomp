@@ -18,7 +18,6 @@ namespace BrnDirector
 namespace Camera
 {
 
-const f32 DebugMenuSerialiser::KF_DEBUG_ADJUST_STEP = 0.01f;
 const f32 DebugMenuSerialiser::KF_FOV_MIN_DEGS = 1.0f;
 const f32 DebugMenuSerialiser::KF_FOV_MAX_DEGS = 150.0f;
 
@@ -72,13 +71,13 @@ template void DebugMenuSerialiser::Process<bool>(const char* lpcName, bool& lrVa
 void DebugMenuSerialiser::Serialise(const char* lpcName, Vector3& lrValue)
 {
     Process<float>(lpcName, lrValue.mV.v[0]);
-    mpDebugComponent->SetStep(&lrValue.mV.v[0], KF_DEBUG_ADJUST_STEP);
+    mpDebugComponent->SetStep(&lrValue.mV.v[0], 0.01f);
 
     Process<float>(lpcName, lrValue.mV.v[1]);
-    mpDebugComponent->SetStep(&lrValue.mV.v[1], KF_DEBUG_ADJUST_STEP);
+    mpDebugComponent->SetStep(&lrValue.mV.v[1], 0.01f);
 
     Process<float>(lpcName, lrValue.mV.v[2]);
-    mpDebugComponent->SetStep(&lrValue.mV.v[2], KF_DEBUG_ADJUST_STEP);
+    mpDebugComponent->SetStep(&lrValue.mV.v[2], 0.01f);
 }
 
 } // namespace Camera

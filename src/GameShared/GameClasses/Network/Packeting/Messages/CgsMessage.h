@@ -3,6 +3,7 @@
 #include <cstddef>   // offsetof
 
 #include "types.hpp"
+#include "GameSource/Network/MessageTypes.h"
 #include <vectorintrinsics.h> // native VMX-register parameter below
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Core/CgsID.h"
@@ -48,7 +49,7 @@ namespace CgsNetwork
 
     // Message type bounds (CgsMessage.h). The asm hard-codes the upper bound as
     // 44 (E_MESSAGE_TYPE_COUNT) and a separate < 255 fits-in-int8 guard.
-    const s32 KI_E_MESSAGE_TYPE_COUNT = 44;
+    const s32 KI_E_MESSAGE_TYPE_COUNT = E_MESSAGE_TYPE_COUNT;
 
     // PackOrUnpack result (CgsMessage.h:85-88). 0 == success.
     typedef u8 PackOrUnpackResult;
@@ -97,7 +98,7 @@ namespace CgsNetwork
         // Placement-style initialiser the console build calls "Construct" (returns this).
         Message* Construct();
         u8   GetGameID() const;
-        Message* SetType(s32 leType);
+        void SetType(::EMessageType leType);
 
         // --- inline flag/scalar accessors (used by the NetworkPlayer send pump) ------------
         // The "valid" flag (KX8_FLAGS_VALID, bit 0 of mx8Flags) marks a message that has been

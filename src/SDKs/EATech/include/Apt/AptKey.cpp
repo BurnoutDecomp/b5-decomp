@@ -145,14 +145,7 @@ AptNativeFunction* AptKey::spMethod_getAnalogTriggerInfo = 0;   // off_8324E3B4
 // ---------------------------------------------------------------------------
 void* AptKey::operator new(size_t size)
 {
-    if (gpGCPoolManager == 0)
-        return 0;
-
-    void* lpBlock = gpGCPoolManager->Allocate(size);
-    if (lpBlock != 0)
-        reinterpret_cast<AptValueGC_MemItem*>(lpBlock)
-            ->SetIsAllocated(gAptValueGCSizeOffset, true);
-    return lpBlock;
+    return gpGCPoolManager->AllocateAptValueGC(size);
 }
 
 // ---------------------------------------------------------------------------

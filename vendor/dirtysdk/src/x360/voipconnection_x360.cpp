@@ -30,10 +30,9 @@ void VoipStoreBigEndian32(u8* pBytes, u32 value)
     pBytes[3] = static_cast<u8>(value);
 }
 
-s32 VoipConnectionStopRecord(VoipConnectionListT* pList,
+void VoipConnectionStopRecord(VoipConnectionListT* pList,
                              VoipConnectionT* pConnection, s32 iConnID)
 {
-    s32 result = 0;
     NetCritEnter(&pList->NetCrit);
     if (pConnection->eState != 0)
     {
@@ -63,8 +62,6 @@ s32 VoipConnectionStopRecord(VoipConnectionListT* pList,
         pList->uLocalStatus &= ~0x100u;
     }
     NetCritLeave(&pList->NetCrit);
-    result = 0;
-    return result;
 }
 
 s32 VoipConnectionSocketCallback(SocketT*, s32, void* pData)
@@ -124,8 +121,8 @@ extern "C" void VoipConnectionSetCallbacks(VoipConnectionListT* pList,
                                             VoipConnectRegUserCbT* pRegUserCb,
                                             void* pUserData)
 {
-    pList->pVoiceCb = pVoiceCb;
     pList->pRegUserCb = pRegUserCb;
+    pList->pVoiceCb = pVoiceCb;
     pList->pCbUserData = pUserData;
 }
 
@@ -270,20 +267,20 @@ extern "C" s32 VoipConnectionStart(VoipConnectionListT* pList, s32 iConnID,
     return 0;
 }
 
-extern "C" s32 VoipConnectionStop(VoipConnectionListT* pList, s32 iConnID)
+// DecFIGS voipconnection.c:226 declares no return value. ARTIST callers
+// 82B29274, 82B293A0, 82B3A160, 82B3AA0C and 82B3AA34 discard r3.
+extern "C" void VoipConnectionStop(VoipConnectionListT* pList, s32 iConnID)
 {
-    s32 result = 0;
     if (iConnID == -2)
     {
         for (s32 index = 0; index < pList->iMaxConnections; ++index)
-            result = VoipConnectionStopRecord(pList, &pList->pConnections[index], index);
+            VoipConnectionStopRecord(pList, &pList->pConnections[index], index);
     }
     else if (iConnID < 0 || iConnID >= pList->iMaxConnections)
-        return NetPrintfCode("voipconnection: disconnect with iConnID=%d is invalid\n",
-                             iConnID);
+        NetPrintfCode("voipconnection: disconnect with iConnID=%d is invalid\n",
+                      iConnID);
     else
-        result = VoipConnectionStopRecord(pList, &pList->pConnections[iConnID], iConnID);
-    return result;
+        VoipConnectionStopRecord(pList, &pList->pConnections[iConnID], iConnID);
 }
 
 extern "C" void VoipConnectionRemove(VoipConnectionListT* pList, s32 iConnID)
@@ -447,7 +444,9 @@ extern "C" s32 VoipConnectionSendConnectPacket(VoipConnectionListT* pList,
     return result;
 }
 
-extern "C" s32 VoipConnectionUpdate(VoipConnectionListT* pList)
+// ARTIST 82B28E70 calls this for state updates, with no result consumer.
+// DecFIGS voipconnection.c:212 corroborates the void declaration.
+extern "C" void VoipConnectionUpdate(VoipConnectionListT* pList)
 {
     NetCritEnter(&pList->NetCrit);
     while (VoipConnectionReceivePackets(pList) > 0)
@@ -468,7 +467,6 @@ extern "C" s32 VoipConnectionUpdate(VoipConnectionListT* pList)
 
     pList->uRecvVoice = 0;
     const u32 tick = NetTick();
-    s32 result = 0;
     for (s32 index = 0; index < pList->iMaxConnections; ++index)
     {
         VoipConnectionT* pConnection = &pList->pConnections[index];
@@ -478,7 +476,7 @@ extern "C" s32 VoipConnectionUpdate(VoipConnectionListT* pList)
         if (static_cast<u32>(tick - pConnection->uLastSend) > 500)
         {
             if (pConnection->eState == 1)
-                result = VoipConnectionSendConnectPacket(pList, pConnection, tick);
+                VoipConnectionSendConnectPacket(pList, pConnection, tick);
             else
             {
                 u8 pingPacket[14];
@@ -489,7 +487,7 @@ extern "C" s32 VoipConnectionUpdate(VoipConnectionListT* pList)
                 std::memcpy(pingPacket, pingHeader, sizeof(pingHeader));
                 VoipStoreBigEndian32(pingPacket + 6, pList->uClientId);
                 VoipStoreBigEndian32(pingPacket + 10, pConnection->uClientId);
-                result = pList->pSocket
+                const s32 result = pList->pSocket
                     ? SocketSendto(pList->pSocket, pingPacket, sizeof(pingPacket),
                                    0, &pConnection->SendAddr,
                                    sizeof(pConnection->SendAddr))
@@ -499,25 +497,24 @@ extern "C" s32 VoipConnectionUpdate(VoipConnectionListT* pList)
                 pList->uLocalStatus &= ~0x100u;
             }
         }
-        result = VoipConnectionSendQueuedPacket(pList, pConnection, tick, 0);
+        VoipConnectionSendQueuedPacket(pList, pConnection, tick, 0);
         const s32 timeout = pConnection->eState == 2
             ? pList->iDataTimeout : 10000;
         if (static_cast<s32>(tick - pConnection->uLastRecv) > timeout)
         {
             NetPrintfCode("voipconnection: [%d] timing out connection due to inactivity\n",
                           index);
-            result = VoipConnectionStop(pList, index);
+            VoipConnectionStop(pList, index);
         }
         if (pConnection->iLastSendResult == -5)
         {
             NetPrintfCode("voipconnection: [%d] closing connection due to error %d\n",
                           index, pConnection->iLastSendResult);
-            result = VoipConnectionStop(pList, index);
+            VoipConnectionStop(pList, index);
         }
         if (pConnection->uRemoteStatus & 2)
             pList->uRecvVoice |= 1u << (static_cast<u32>(index) & 31);
     }
-    return result;
 }
 
 static u32 VoipLoadBigEndian32(const u8* pBytes)

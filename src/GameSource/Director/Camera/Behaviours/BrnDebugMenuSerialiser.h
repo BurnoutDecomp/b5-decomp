@@ -96,7 +96,8 @@ public:
     void Serialise(const char* lpcName, f32& lrValue)
     {
         Process<float>(lpcName, lrValue);
-        mpDebugComponent->SetStep(&lrValue, KF_DEBUG_ADJUST_STEP);
+        // ARTIST Serialisation.h float visitors load the 0.01 step from 0x82002138.
+        mpDebugComponent->SetStep(&lrValue, 0.01f);
     }
 
     // s32 / u32 / bool: the plain menu variable, no step or range.
@@ -143,8 +144,7 @@ private:
     // Path-stack capacity.
     static const s32 KI_PATHSTACKSIZE = 64;
 
-    // The per-component adjust step and the FOV menu range.
-    static const f32 KF_DEBUG_ADJUST_STEP;
+    // The FOV menu range.
     static const f32 KF_FOV_MIN_DEGS;
     static const f32 KF_FOV_MAX_DEGS;
 

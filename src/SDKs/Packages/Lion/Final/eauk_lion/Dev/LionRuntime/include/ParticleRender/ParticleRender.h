@@ -153,13 +153,21 @@ public:
 class cParticleRender
 {
 public:
+    // DecFIGS ParticleRender.h declares the destructor. The ARTIST singleton atexit
+    // thunk at 0x82C74928 confirms it performs no teardown.
+    ~cParticleRender() {}
+
     // The render singleton (DWARF h:165). NO STANDALONE X360 BODY: every caller inlines it,
     // which is why each shows the same magic-static guard word (dword_82FAD080) and the same
     // `atexit(cParticleRender::Instance::`2'::dynamic atexit destructor for 'm_instance')`
     // registration -- and that mangled symbol is what names the object `m_instance` and its
     // accessor `Instance`. Reproduced as a function-local static, which is the construct that
     // emits exactly that guard + atexit pair.
-    static cParticleRender& Instance();
+    static cParticleRender& Instance()
+    {
+        static cParticleRender m_instance;
+        return m_instance;
+    }
 
     // App lifetime (DWARF h:174). NO STANDALONE X360 BODY -- inlined into cLionFX::Init
     // @0x82914A98 (0x82914B9C..0x82914C08); re-outlined here as the source's own function.
@@ -169,8 +177,8 @@ public:
     // ⚠ ATTESTED EMPTY ON THIS BUILD: cLionFX::Update @0x82915758 emits the Instance()
     // guard and then ONLY `cParticleEmitterManager::Update` -- there is no call and no store
     // between them, so cParticleRender::Update compiled to nothing. The empty body is the
-    // faithful transcription, not a stub; see ParticleRender.cpp.
-    void Update(const cTime& arTime);
+    // faithful transcription.
+    void Update(const cTime&) {}
 
     // DWARF h:217.
     iParticleRender* GetpRenderer() { return mpRenderer; }

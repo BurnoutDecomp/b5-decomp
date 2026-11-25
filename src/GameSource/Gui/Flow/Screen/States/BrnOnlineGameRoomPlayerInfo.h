@@ -165,7 +165,7 @@ namespace BrnGui
         void HandleControllerInputSettingsSubState(const CgsModule::Event* lpEvent);        // @0x824AD248 cpp:2004
         void HandleControllerInputViewEventSubState(const CgsModule::Event* lpEvent);       // @0x824A4F28 cpp:2130
         void HandleControllerInputReleasedMapSubState(const CgsModule::Event* lpEvent);     // @0x824982A8 cpp:2343
-        void HandleLaunchQuestion(s32 liLeaveMethod);               // @0x82498038 cpp:1587 (GuiOverlayCompleteEvent::LeaveMethod)
+        void HandleLaunchQuestion(GuiOverlayCompleteEvent::LeaveMethod leLeaveMethod); // @0x82498038 cpp:1587
         void HandleLeftGameEvent(const CgsModule::Event* lpEvent);          // @0x82498358 cpp:2392
         void HandlePlayerLobbyListEvent(const CgsModule::Event* lpEvent);   // @0x824AD560 cpp:2467
         void HandleAskToLaunchEvent(const CgsModule::Event* lpEvent);       // @0x82498698 cpp:2527

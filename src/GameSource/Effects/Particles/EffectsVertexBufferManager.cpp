@@ -5,6 +5,9 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceType.h" // CgsResource::ResourceDescriptor
 #include "rw/rwcore_structs.h"                                      // rw::IResourceAllocator, rw::Resource
 
+static const char K_EFFECTS_VERTEX_MANAGER_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Effects/Particles/EffectsVertexBufferManager.cpp";
+
 // EffectsVertexBufferManager::GetVertexBuffer  X360 0x82278320
 // Asserts the manager is not locked for write, then returns the vertex buffer
 // for the current double-buffer slot: mapVertexBuffer[muCurrentBuffer].
@@ -82,7 +85,7 @@ void EffectsVertexBufferManager::Construct(rw::IResourceAllocator* lpAllocator,
 // the reconstruction calls them by name (the DWARF source's construct-then-lock).
 EffectsVertexBufferLocked& EffectsVertexBufferManager::Lock()
 {
-    CGS_ASSERT(!mbLocked, "!mbLocked");
+    CGS_ASSERT_AT(!mbLocked, "!mbLocked", K_EFFECTS_VERTEX_MANAGER_ASSERT_FILE, 131);
 
     mbLocked = true;
     mCurrentBuffer.Construct(mapVertexBufferAddress[muCurrentBuffer], muVertexBufferSize);
@@ -96,7 +99,7 @@ EffectsVertexBufferLocked& EffectsVertexBufferManager::Lock()
 // stores), then clears the manager's locked flag.
 void EffectsVertexBufferManager::UnLock()
 {
-    CGS_ASSERT(mbLocked, "mbLocked");
+    CGS_ASSERT_AT(mbLocked, "mbLocked", K_EFFECTS_VERTEX_MANAGER_ASSERT_FILE, 153);
 
     mCurrentBuffer.UnLock();
     mCurrentBuffer.Destruct();

@@ -63,15 +63,14 @@ public:
     // per-VFT object-size table. Run once at Apt allocator init.
     static void StaticInitialize();
 
-    // AllocateAptValueGC -- DOGMA allocate, then mark the AptValueGC_MemItem
-    // allocated flag (the alloc-side mirror of DeallocateAptValueGC). The X360
-    // never emits this out-of-line: it is folded inline into every GC value
-    // type's `operator new` (DOGMA_PoolManager::Allocate(gpGCPoolManager, size)
-    // then AptValueGC_MemItem::SetIsAllocated(p, gAptValueGCSizeOffset, 1) --
-    // e.g. AptArray::operator new @0x82AE6088, AptGlobalExtensionObject::
-    // operator new @0x82AE6588). Restored here as the named GC-allocator
-    // operation so those `operator new`s read as a single call (de-inlining).
-    void* AllocateAptValueGC(size_t nAllocatedSize);
+    // ARTIST 0x82AE6088 and the sibling class allocations use the same
+    // sequence: allocate from DOGMA, then mark the item's allocation bit.
+    void* AllocateAptValueGC(size_t nAllocatedSize)
+    {
+        void* pItem = Allocate(nAllocatedSize);
+        static_cast<AptValueGC_MemItem*>(pItem)->SetIsAllocated(gAptValueGCSizeOffset, true);
+        return pItem;
+    }
 
     // DeallocateAptValueGC @ 0x82AE57D8 -- DOGMA free, then on success clear
     // the AptValueGC_MemItem allocated flag.

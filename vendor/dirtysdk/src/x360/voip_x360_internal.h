@@ -149,7 +149,7 @@ extern "C" void VoipConnectionSetCallbacks(VoipConnectionListT*,
                                             VoipConnectRecvVoiceCbT*,
                                             VoipConnectRegUserCbT*, void*);
 extern "C" s32 VoipConnectionAllocate(VoipConnectionListT*);
-extern "C" s32 VoipConnectionStop(VoipConnectionListT*, s32);
+extern "C" void VoipConnectionStop(VoipConnectionListT*, s32);
 extern "C" s32 VoipConnectionStart(VoipConnectionListT*, s32, VoipUserT*,
                                      u32, u32, u32, u32, u32);
 extern "C" s32 VoipConnectionFlush(VoipConnectionListT*, s32);
@@ -158,7 +158,7 @@ extern "C" u32 VoipConnectionRemoveConnFromMask(u32, s32);
 extern "C" s32 VoipConnectionSetRecvMask(VoipConnectionListT*, u32);
 extern "C" void VoipConnectionSetSendMask(VoipConnectionListT*, u32);
 extern "C" s32 VoipConnectionSend(VoipConnectionListT*, const void*, s32);
-extern "C" s32 VoipConnectionUpdate(VoipConnectionListT*);
+extern "C" void VoipConnectionUpdate(VoipConnectionListT*);
 
 typedef s32 VoipSocketCallbackT(SocketT*, s32, void*);
 extern "C" SocketT* SocketOpen(s32, s32, s32);

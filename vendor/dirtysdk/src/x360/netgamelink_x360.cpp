@@ -300,11 +300,10 @@ extern "C" NetGameLinkRefT* NetGameLinkCreate(void* pCommRef, s32 owner, s32 buf
     ref->m_stats.stattick = tick;
     for (s32 i = 0; i < 32; ++i)
     {
-        NetGameLinkHistT& history = ref->m_stats.pinghist[i];
-        history.min = 200;
-        history.max = 200;
-        history.avg = 200;
-        history.cnt = 1;
+        ref->m_stats.pinghist[i].min = 200;
+        ref->m_stats.pinghist[i].max = 200;
+        ref->m_stats.pinghist[i].avg = 200;
+        ref->m_stats.pinghist[i].cnt = 1;
     }
 
     NetCritInit(&ref->crit, "netgamelink");

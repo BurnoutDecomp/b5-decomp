@@ -61,10 +61,6 @@
 
 #include <cstddef>
 
-// The one budget every monitor in this set is registered with: f31 is loaded once at 0x82279EB8
-// from flt_820049E0 and re-used by all twenty-three calls.
-static const f32 KF_LION_PERFMON_BUDGET_MS = 100.0f;   // flt_820049E0
-
 LionPerfMon gLionPerfMon;
 
 CGS_STATIC_ASSERT((offsetof(LionPerfMon, miRandomSeedBuild) == 0x54), "Lion build monitor offset");
@@ -75,31 +71,30 @@ CGS_STATIC_ASSERT((sizeof(LionPerfMon) == 0x5C), "ARTIST Lion monitor set size")
 // member order. AddMonitor allocates handles in call order.
 void LionPerfMon::Construct()
 {
-    const f32 lfBudget = KF_LION_PERFMON_BUDGET_MS;
     const CgsDev::PerfMonCpuPage lePage = CgsDev::E_PMP_21;   // li r4, 0x15
 
-    miLionRender                   = CgsDev::PerfMonCpu::AddMonitor("Render",                      lePage, false, lfBudget, false);
-    miEmitterRender                = CgsDev::PerfMonCpu::AddMonitor("EmitterRender",               lePage, false, lfBudget, false);
-    miEmitterCubeRender            = CgsDev::PerfMonCpu::AddMonitor("EmitterCubeRender",           lePage, false, lfBudget, false);
-    miParticleEmitterBlend         = CgsDev::PerfMonCpu::AddMonitor("EmitterBlend",                lePage, false, lfBudget, false);
-    miParticleEmitterUpdate        = CgsDev::PerfMonCpu::AddMonitor("EmitterUpdate",               lePage, false, lfBudget, false);
-    miParticleEmitterGenerate      = CgsDev::PerfMonCpu::AddMonitor("EmitterGenerate",             lePage, false, lfBudget, false);
-    miParticleEmitterParticleBuild = CgsDev::PerfMonCpu::AddMonitor("EmitterParticleBuild",        lePage, false, lfBudget, false);
-    miSimulateMatrixParticles      = CgsDev::PerfMonCpu::AddMonitor("SimulateMatrixParticles",     lePage, false, lfBudget, false);
-    miSimulateVectorParticles      = CgsDev::PerfMonCpu::AddMonitor("SimulateVectorParticles",     lePage, false, lfBudget, false);
-    miSimulateLocalParticles       = CgsDev::PerfMonCpu::AddMonitor("SimulateLocalParticles",      lePage, false, lfBudget, false);
-    miBaseColourVarianceBehaviour = CgsDev::PerfMonCpu::AddMonitor("BaseColourVarianceBehaviour", lePage, false, lfBudget, false);
-    miColourStepsBehaviour         = CgsDev::PerfMonCpu::AddMonitor("ColourStepsBehaviour",        lePage, false, lfBudget, false);
-    miWaveRgbBehaviour             = CgsDev::PerfMonCpu::AddMonitor("WaveRgbBehaviour",            lePage, false, lfBudget, false);
-    miWaveBehaviour                = CgsDev::PerfMonCpu::AddMonitor("WaveBehaviour",               lePage, false, lfBudget, false);
-    miAlphaFadeBehaviour           = CgsDev::PerfMonCpu::AddMonitor("AlphaFadeBehaviour",          lePage, false, lfBudget, false);
-    miRotationBehaviour            = CgsDev::PerfMonCpu::AddMonitor("RotationBehaviour",           lePage, false, lfBudget, false);
-    miSizeBehaviour                = CgsDev::PerfMonCpu::AddMonitor("SizeBehaviour",               lePage, false, lfBudget, false);
-    miDragBehaviour                = CgsDev::PerfMonCpu::AddMonitor("DragBehaviour",               lePage, false, lfBudget, false);
-    miMultiFrameBehaviour          = CgsDev::PerfMonCpu::AddMonitor("MultiFrameBehaviour",         lePage, false, lfBudget, false);
-    miParticleBehaviourRADIAL      = CgsDev::PerfMonCpu::AddMonitor("ParticleBehaviourRADIAL",     lePage, false, lfBudget, false);
-    miParticleBehaviourOFFSETROT   = CgsDev::PerfMonCpu::AddMonitor("ParticleBehaviourOFFSETROT",  lePage, false, lfBudget, false);
-    miRandomSeedBuild              = CgsDev::PerfMonCpu::AddMonitor("RandomSeed::Build",           lePage, false, lfBudget, false);
-    miRandomSeedUpdate             = CgsDev::PerfMonCpu::AddMonitor("    RandomSeed::Update",      lePage, false, lfBudget, false);
+    miLionRender                   = CgsDev::PerfMonCpu::AddMonitor("Render",                      lePage, false, 100.0f, false);
+    miEmitterRender                = CgsDev::PerfMonCpu::AddMonitor("EmitterRender",               lePage, false, 100.0f, false);
+    miEmitterCubeRender            = CgsDev::PerfMonCpu::AddMonitor("EmitterCubeRender",           lePage, false, 100.0f, false);
+    miParticleEmitterBlend         = CgsDev::PerfMonCpu::AddMonitor("EmitterBlend",                lePage, false, 100.0f, false);
+    miParticleEmitterUpdate        = CgsDev::PerfMonCpu::AddMonitor("EmitterUpdate",               lePage, false, 100.0f, false);
+    miParticleEmitterGenerate      = CgsDev::PerfMonCpu::AddMonitor("EmitterGenerate",             lePage, false, 100.0f, false);
+    miParticleEmitterParticleBuild = CgsDev::PerfMonCpu::AddMonitor("EmitterParticleBuild",        lePage, false, 100.0f, false);
+    miSimulateMatrixParticles      = CgsDev::PerfMonCpu::AddMonitor("SimulateMatrixParticles",     lePage, false, 100.0f, false);
+    miSimulateVectorParticles      = CgsDev::PerfMonCpu::AddMonitor("SimulateVectorParticles",     lePage, false, 100.0f, false);
+    miSimulateLocalParticles       = CgsDev::PerfMonCpu::AddMonitor("SimulateLocalParticles",      lePage, false, 100.0f, false);
+    miBaseColourVarianceBehaviour = CgsDev::PerfMonCpu::AddMonitor("BaseColourVarianceBehaviour", lePage, false, 100.0f, false);
+    miColourStepsBehaviour         = CgsDev::PerfMonCpu::AddMonitor("ColourStepsBehaviour",        lePage, false, 100.0f, false);
+    miWaveRgbBehaviour             = CgsDev::PerfMonCpu::AddMonitor("WaveRgbBehaviour",            lePage, false, 100.0f, false);
+    miWaveBehaviour                = CgsDev::PerfMonCpu::AddMonitor("WaveBehaviour",               lePage, false, 100.0f, false);
+    miAlphaFadeBehaviour           = CgsDev::PerfMonCpu::AddMonitor("AlphaFadeBehaviour",          lePage, false, 100.0f, false);
+    miRotationBehaviour            = CgsDev::PerfMonCpu::AddMonitor("RotationBehaviour",           lePage, false, 100.0f, false);
+    miSizeBehaviour                = CgsDev::PerfMonCpu::AddMonitor("SizeBehaviour",               lePage, false, 100.0f, false);
+    miDragBehaviour                = CgsDev::PerfMonCpu::AddMonitor("DragBehaviour",               lePage, false, 100.0f, false);
+    miMultiFrameBehaviour          = CgsDev::PerfMonCpu::AddMonitor("MultiFrameBehaviour",         lePage, false, 100.0f, false);
+    miParticleBehaviourRADIAL      = CgsDev::PerfMonCpu::AddMonitor("ParticleBehaviourRADIAL",     lePage, false, 100.0f, false);
+    miParticleBehaviourOFFSETROT   = CgsDev::PerfMonCpu::AddMonitor("ParticleBehaviourOFFSETROT",  lePage, false, 100.0f, false);
+    miRandomSeedBuild              = CgsDev::PerfMonCpu::AddMonitor("RandomSeed::Build",           lePage, false, 100.0f, false);
+    miRandomSeedUpdate             = CgsDev::PerfMonCpu::AddMonitor("    RandomSeed::Update",      lePage, false, 100.0f, false);
 
 }

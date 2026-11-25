@@ -38,7 +38,7 @@
 // ---------------------------------------------------------------------------
 void* AptMovieClip::operator new(size_t size)
 {
-    return (gpGCPoolManager != 0) ? gpGCPoolManager->AllocateAptValueGC(size) : 0;
+    return gpGCPoolManager->AllocateAptValueGC(size);
 }
 
 // ---------------------------------------------------------------------------

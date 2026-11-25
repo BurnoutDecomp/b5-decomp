@@ -41,6 +41,8 @@
 
 namespace BrnGui
 {
+    class GuiEventOnlineReceiveFriendInfo;
+
     const s32 KI_MAX_FRIEND_RECORDS = 100;   // maeDisplayTypes capacity (SortFullList bound)
     const s32 KI_VISIBLE_ROWS       = 5;
 
@@ -98,7 +100,7 @@ namespace BrnGui
         bool SelectPrevious();                                                          // 0x82441988
         bool SelectNext();                                                              // 0x82441A80
         void HandleControllerInput(const s32* lpiInput);                                // 0x82443280
-        void ProcessNewEntryData(const void* lpFriendInfo);                             // 0x824430D0
+        void ProcessNewEntryData(const GuiEventOnlineReceiveFriendInfo* lpFriendInfo);                             // 0x824430D0
         void RequestRefreshedData();                                                    // 0x82439248
         void SetTotalFriends(s32 liCount);                                              // 0x824392B8
         void AttemptStateRestore();                                                     // 0x82441D78

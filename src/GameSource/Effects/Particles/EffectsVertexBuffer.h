@@ -2,6 +2,7 @@
 #define EFFECTS_VERTEX_BUFFER_H
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // =============================================================================
 // GameSource/Effects/Particles/EffectsVertexBuffer.h
@@ -102,6 +103,42 @@ protected:
     u8* mpLockedBufferTopAddress;     // +0x08
     u8  mxFlags;                      // +0x0C
 };
+
+// ARTIST inlines Construct into Manager::Lock at 0x82279B7C and
+// UnLock and Destruct into Manager::UnLock at 0x82279BE8 and 0x82279C30.
+#define CGS_ARTIST_EFFECTS_VERTEX_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Effects/Particles/EffectsVertexBuffer.cpp"
+
+inline void EffectsVertexBuffer::Construct(void* lpBuffer, u32 luBufferSize)
+{
+    u8* const lpBase = static_cast<u8*>(lpBuffer);
+    mpLockedBufferCurrentAddress = 0;
+    mxFlags                      = 0;   // neither locked nor in a batch
+    mpLockedBufferBaseAddress    = lpBase;
+    mpLockedBufferTopAddress     = lpBase + luBufferSize;
+}
+
+inline void EffectsVertexBuffer::Destruct()
+{
+    CGS_ASSERT(mxFlags == 0,
+        CGS_ASSERT_MESSAGE_AT(
+            "mxFlags == 0",
+            CGS_ARTIST_EFFECTS_VERTEX_FILE, 78));
+    mpLockedBufferBaseAddress    = 0;
+    mpLockedBufferTopAddress     = 0;
+    mpLockedBufferCurrentAddress = 0;
+}
+
+inline void EffectsVertexBuffer::UnLock()
+{
+    CGS_ASSERT((mxFlags & KX_FLAG_LOCKED) != 0,
+        CGS_ASSERT_MESSAGE_AT(
+            "( mxFlags & KX_FLAG_LOCKED ) != 0",
+            CGS_ARTIST_EFFECTS_VERTEX_FILE, 122));
+    mxFlags = static_cast<u8>(mxFlags & ~KX_FLAG_LOCKED);
+    mpLockedBufferCurrentAddress = 0;
+}
+
+#undef CGS_ARTIST_EFFECTS_VERTEX_FILE
 
 // -----------------------------------------------------------------------------
 // EffectsVertexBufferLocked -- the locked view; shares EffectsVertexBuffer's

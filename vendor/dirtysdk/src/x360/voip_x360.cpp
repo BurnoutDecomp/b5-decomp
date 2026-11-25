@@ -246,7 +246,7 @@ void VoipUpdateRemoteTalkerRouting(VoipRefT* pVoip)
 
 namespace
 {
-s32 VoipXhvUpdate(VoipRefT* pVoip)
+void VoipXhvUpdate(VoipRefT* pVoip)
 {
     VoipConnectionListT& list = pVoip->Connectionlist;
     ULONG_PTR notificationData[2] = {0, 0};
@@ -304,7 +304,7 @@ s32 VoipXhvUpdate(VoipRefT* pVoip)
                                static_cast<s32>(dataSize));
         }
     }
-    return VoipConnectionUpdate(&list);
+    VoipConnectionUpdate(&list);
 }
 }
 

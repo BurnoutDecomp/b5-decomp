@@ -185,13 +185,6 @@ void BoostStrategy::SetCrashing(bool lbCrashing) // 0x822A5F00
     mbCrashing = lbCrashing;
 }
 
-void BoostStrategy::SetWrecking(bool lbWrecking, bool lbIsInOnlineGameMode)
-{
-    if (lbWrecking && !mbWrecking)
-        OnWrecked(lbIsInOnlineGameMode);
-    mbWrecking = lbWrecking;
-}
-
 void BoostStrategy::SetInfiniteBoost(bool lbInfiniteBoost) // 0x822A5F60
 {
     if (lbInfiniteBoost && !mbInfiniteBoost)
