@@ -135,6 +135,9 @@ public:
                        AptScriptFunction2ByteCode* pByteCode,
                        AptValue* pCIH);
 
+    virtual AptScriptFunction2* Duplicate(AptValue* pCIH) const;
+    virtual const char* GetName() const;
+
     // ---- AptScriptFunctionBase overrides --------------------------------------
     // GetNumArguments / GetByteCodeSize -- the v2 record-field reads the console
     // vtable exposes beside GetByteCodeBase (the record carries the declared arg
@@ -177,5 +180,6 @@ private:
     // +0x30 -- the compiled DefineFunction2 record (owned by the movie data).
     AptScriptFunction2ByteCode* mpByteCode;
 
+    AptScriptFunction2(const AptScriptFunction2& rOther, AptValue* pCIH);
     AptScriptFunction2();   // not defined: a function always needs its record
 };

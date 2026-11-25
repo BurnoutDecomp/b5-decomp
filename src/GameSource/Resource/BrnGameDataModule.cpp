@@ -594,7 +594,7 @@ namespace BrnResource
                     lrLog << "[";
                     const u32 luTypeId = lpEntry->mpResourceType->GetCachedId();
                     CgsResource::SmallResource lMemory;
-                    lpEntry->mpResourceThis->GetResource(&lMemory);
+                    lpEntry->mPtr.GetResource(&lMemory);
                     lrLog << "ID: " << lpEntry->mID << ", Address: ";
                     lrLog.AppendFormat("0x%X", reinterpret_cast<u32>(lMemory.m_baseResources[0]));
                     lrLog << ", TypeID: " << CgsDev::E_PRINTMODE_HEXONCE << luTypeId << "]";

@@ -330,7 +330,7 @@ namespace
                 s32    liNewIndex;
                 if (mpPool->CreateEntry(&lNewResource, &lpNewEntry, &liNewIndex, true) == Pool::CREATERESULT_OK)
                 {
-                    lOutResource = lpNewEntry->mResource;
+                    lOutResource = lpNewEntry->GetResourceMemory();
                     lbHaveResult = true;
                 }
                 else
@@ -444,7 +444,7 @@ namespace
         }
 
         EntryListResourceData* lpData =
-            static_cast<EntryListResourceData*>(lpOutEntry->mResource.GetMemoryResource());
+            static_cast<EntryListResourceData*>(lpOutEntry->GetResourceMemory().GetMemoryResource());
         lpData->muNumEntries = static_cast<u32>(miNumEntries);
         lpData->muHeaderFlag = 0;
         for (s32 i = 0; i < miNumEntries; ++i)

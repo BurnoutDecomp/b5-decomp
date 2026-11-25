@@ -31,28 +31,12 @@
 
 #include <cstring>   // memcpy — models the X360 XMemCpy block copy
 
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsStreamDeviceDiskRead.cpp"
+
 namespace CgsFileSystem
 {
     namespace
     {
-        class StreamLockGuard
-        {
-        public:
-            explicit StreamLockGuard(CRITICAL_SECTION& lrCriticalSection)
-                : mrCriticalSection(lrCriticalSection)
-            {
-                RtlEnterCriticalSection(&mrCriticalSection);
-            }
-
-            ~StreamLockGuard()
-            {
-                RtlLeaveCriticalSection(&mrCriticalSection);
-            }
-
-        private:
-            CRITICAL_SECTION& mrCriticalSection;
-        };
-
         // Asserts that embed a runtime value use the shared formatted assertion path.
         void FireFormattedAssert(const char* lpcMessage)
         {
@@ -145,7 +129,7 @@ namespace CgsFileSystem
 
 
 
-        CGS_ASSERT_STREAM((luBufferSize % luNumBlocks) == 0, "Buffer size must be divisible by number of blocks\n");
+        CGS_ASSERT_STREAM_AT((luBufferSize % luNumBlocks) == 0, "Buffer size must be divisible by number of blocks\n", CGS_ARTIST_FILE, 148);
 
         mpBuffer         = static_cast<char*>(lpBuffer);
         miBufferSize     = static_cast<s32>(luBufferSize);
@@ -155,7 +139,7 @@ namespace CgsFileSystem
         miHighPriority   = liHighPriority;
 
 
-        CGS_ASSERT_STREAM(static_cast<s32>(luNumBlocks) <= KI_MAX_STREAM_BLOCKS, "Maximum blocks per stream is " << KI_MAX_STREAM_BLOCKS << " but you chose " << miNumBlocks << "\n");
+        CGS_ASSERT_STREAM_AT(static_cast<s32>(luNumBlocks) <= KI_MAX_STREAM_BLOCKS, "Maximum blocks per stream is " << KI_MAX_STREAM_BLOCKS << " but you chose " << miNumBlocks << "\n", CGS_ARTIST_FILE, 158);
 
         muOutputPosition        = 0;
         muInputPosition         = 0;
@@ -180,7 +164,7 @@ namespace CgsFileSystem
 
 
 
-            CGS_ASSERT(mpFileSystem != 0, "mpFileSystem\n");
+            CGS_ASSERT_AT(mpFileSystem != 0, "mpFileSystem\n", CGS_ARTIST_FILE, 183);
 
         GetDeviceManager()->Open(macFileName, 1, &StreamDeviceDiskRead::OpenCallback, this, miHighPriority);
 
@@ -238,9 +222,9 @@ namespace CgsFileSystem
     {
 
 
-        CGS_ASSERT_STREAM(!mbIsOutputing, "Can not reset stream while locked for read\n");
-        CGS_ASSERT_STREAM(miInputRequestsPending == 0, "Can not reset while input requests are occuring\n");
-        CGS_ASSERT_STREAM(miPendingOperationCount == 0, "Can not reset while pending operations are occuring\n");
+        CGS_ASSERT_STREAM_AT(!mbIsOutputing, "Can not reset stream while locked for read\n", CGS_ARTIST_FILE, 241);
+        CGS_ASSERT_STREAM_AT(miInputRequestsPending == 0, "Can not reset while input requests are occuring\n", CGS_ARTIST_FILE, 242);
+        CGS_ASSERT_STREAM_AT(miPendingOperationCount == 0, "Can not reset while pending operations are occuring\n", CGS_ARTIST_FILE, 243);
 
 
         for (s32 liIndex = 0; liIndex < miNumBlocks; ++liIndex)
@@ -521,22 +505,6 @@ namespace CgsFileSystem
 
     // Close @ 0x82900238 — request a close (serviced asynchronously); warn (gated by the message
     // filter) if the stream is already closed or a close is already pending.
-    void StreamDeviceDiskRead::Close()
-    {
-        StreamLockGuard lGuard(mFutex.mCriticalSection);
-
-        if (meStatus == E_STATUS_CLOSED || mbWaitingToClose)
-        {
-            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
-                *CgsDev::Log::gpDebugPrint
-                    << "WARNING: Attempt to close a stream that is already closed or closing - ignoring request\n";
-        }
-        else
-        {
-            mbWaitingToClose = true;
-            Service();
-        }
-    }
 
 
 
@@ -555,8 +523,8 @@ namespace CgsFileSystem
     void StreamDeviceDiskRead::Seek(u64 luPosition)
     {
         StreamLockGuard lGuard(mFutex.mCriticalSection);
-        CGS_ASSERT_STREAM(meStatus == E_STATUS_OPEN, "Invalid state to do seek\n");
-        CGS_ASSERT_STREAM(!mbIsOutputing, "Can not seek while locked for read\n");
+        CGS_ASSERT_STREAM_AT(meStatus == E_STATUS_OPEN, "Invalid state to do seek\n", CGS_ARTIST_FILE, 558);
+        CGS_ASSERT_STREAM_AT(!mbIsOutputing, "Can not seek while locked for read\n", CGS_ARTIST_FILE, 559);
 
         mbWaitingToSeek  = true;
         muInputPosition  = luPosition;
@@ -677,8 +645,8 @@ namespace CgsFileSystem
         s32 liIndex;    // DWARF: one function-scope index (cpp:677) walks both loops
 
 
-        CGS_ASSERT_STREAM(meStatus == E_STATUS_OPEN, "Can only start a read if open\n");
-        CGS_ASSERT_STREAM(!mbIsOutputing, "Already reading data\n");
+        CGS_ASSERT_STREAM_AT(meStatus == E_STATUS_OPEN, "Can only start a read if open\n", CGS_ARTIST_FILE, 680);
+        CGS_ASSERT_STREAM_AT(!mbIsOutputing, "Already reading data\n", CGS_ARTIST_FILE, 681);
 
         *lppBuffer     = 0;
         *lpuBufferSize = 0;
@@ -761,9 +729,9 @@ namespace CgsFileSystem
 
 
 
-        CGS_ASSERT_STREAM(meStatus == E_STATUS_OPEN, "Can only start a read if open\n");
-        CGS_ASSERT_STREAM(mbIsOutputing, "Already reading data\n");
-        CGS_ASSERT_STREAM(miBlocksUsed > 0, "No blocks used but somehow started a read operation?\n");
+        CGS_ASSERT_STREAM_AT(meStatus == E_STATUS_OPEN, "Can only start a read if open\n", CGS_ARTIST_FILE, 764);
+        CGS_ASSERT_STREAM_AT(mbIsOutputing, "Already reading data\n", CGS_ARTIST_FILE, 765);
+        CGS_ASSERT_STREAM_AT(miBlocksUsed > 0, "No blocks used but somehow started a read operation?\n", CGS_ARTIST_FILE, 766);
 
 
         s32 liTotalRead = static_cast<s32>(luAmountRead);
@@ -772,8 +740,8 @@ namespace CgsFileSystem
 
 
 
-            CGS_ASSERT_STREAM(miOutputBlock < miNumBlocks, "Gone past end of buffer\n");
-            CGS_ASSERT_STREAM((maBlocks[miOutputBlock].muFlags & KU_RSBFLAG_LOADED) != 0, "Block not loaded\n");
+            CGS_ASSERT_STREAM_AT(miOutputBlock < miNumBlocks, "Gone past end of buffer\n", CGS_ARTIST_FILE, 775);
+            CGS_ASSERT_STREAM_AT((maBlocks[miOutputBlock].muFlags & KU_RSBFLAG_LOADED) != 0, "Block not loaded\n", CGS_ARTIST_FILE, 776);
 
             // ARTIST re-indexes maBlocks[miOutputBlock] for every access (@0x82900654..@0x829006B8).
             s32 liRemainingInCurrentBlock = maBlocks[miOutputBlock].miWritten - maBlocks[miOutputBlock].miRead;
@@ -1155,7 +1123,7 @@ namespace CgsFileSystem
         StreamDeviceDiskRead* lpStream = static_cast<StreamDeviceDiskRead*>(lpContext);
         lpStream->OnOpen(liResult, lHandle, luSize, lpContext);
 
-        CGS_ASSERT_STREAM(lpContext != 0, "Invalid stream\n");
+        CGS_ASSERT_STREAM_AT(lpContext != 0, "Invalid stream\n", CGS_ARTIST_FILE, 1158);
     }
 
 
@@ -1170,8 +1138,8 @@ namespace CgsFileSystem
     {
         ReadStreamBlock* lpBlock = static_cast<ReadStreamBlock*>(lpContext);
 
-        CGS_ASSERT_STREAM(lpContext != 0, "Invalid stream block\n");
-        CGS_ASSERT_STREAM(lpBlock->mpOwner != 0, "Invalid stream\n");
+        CGS_ASSERT_STREAM_AT(lpContext != 0, "Invalid stream block\n", CGS_ARTIST_FILE, 1173);
+        CGS_ASSERT_STREAM_AT(lpBlock->mpOwner != 0, "Invalid stream\n", CGS_ARTIST_FILE, 1174);
 
         lpBlock->mpOwner->OnRead(liResult, lHandle, luSize, lpContext);
     }
@@ -1187,7 +1155,7 @@ namespace CgsFileSystem
     {
         StreamDeviceDiskRead* lpStream = static_cast<StreamDeviceDiskRead*>(lpContext);
 
-        CGS_ASSERT_STREAM(lpContext != 0, "Invalid stream\n");
+        CGS_ASSERT_STREAM_AT(lpContext != 0, "Invalid stream\n", CGS_ARTIST_FILE, 1190);
         lpStream->OnClose(liResult, lHandle, luSize, lpContext);
     }
 
@@ -1236,3 +1204,4 @@ namespace CgsFileSystem
 
 } // namespace CgsFileSystem
 
+#undef CGS_ARTIST_FILE

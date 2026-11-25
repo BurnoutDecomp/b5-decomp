@@ -23,6 +23,7 @@
 #pragma optimize("s", on)
 #endif
 
+#include <new>
 #include "SDKs/EATech/include/Apt/AptScriptFunction2.h"
 #include "SDKs/EATech/include/Apt/AptString/StringPool.h"
 #include "SDKs/EATech/include/Apt/AptObject.h"   // AptValueWithHash (the live _global symbol type)
@@ -103,6 +104,27 @@ AptScriptFunction2::AptScriptFunction2(AptValue* pCallContext,
     : AptScriptFunctionBase(AptVFT_ScriptFunction2, pCallContext, pCIH, true)
     , mpByteCode(pByteCode)
 {
+}
+
+// ARTIST 0x82B01060.
+AptScriptFunction2::AptScriptFunction2(const AptScriptFunction2& rOther, AptValue* pCIH)
+    : AptScriptFunctionBase(AptVFT_ScriptFunction2, rOther, pCIH)
+    , mpByteCode(rOther.mpByteCode)
+{
+}
+
+// ARTIST 0x82B02500, the first vtable slot specific to AptScriptFunction2.
+AptScriptFunction2* AptScriptFunction2::Duplicate(AptValue* pCIH) const
+{
+    void* pMem = AptScriptFunction2::operator new(sizeof(AptScriptFunction2));
+    if (pMem)
+        return ::new (pMem) AptScriptFunction2(*this, pCIH);
+    return 0;
+}
+
+const char* AptScriptFunction2::GetName() const
+{
+    return mpByteCode->mpName;
 }
 
 // ---------------------------------------------------------------------------

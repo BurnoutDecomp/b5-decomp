@@ -24,11 +24,11 @@ namespace renderengine { void WorldGeometry_OnResourceMemoryFreed(const void* lp
 // machinery reconstructed last. Methods not yet bodied here are simply absent (the per-TU
 // gate is cl /c; the link milestone is where the remaining bodies / trap-stubs are needed).
 //
-// NOTE: the X360 Entry stride is 88 bytes (FindResource/GetResource index at 88*i); the
-// PS3-DWARF Entry field list reconstructed in CgsResourceBasePool.h sums to fewer bytes,
-// so the X360 Entry carries ~8 bytes this file's create path must reconcile (resolved when
-// CreateEntryInSlot, which writes Entry fields at explicit offsets, is decompiled). The
-// lookup methods below are unaffected (they use C++ array indexing, i.e. the PC sizeof).
+// The X360 Entry stride is 88 bytes. The owning BaseResourcePtr begins at +0x28,
+// followed by the heap-node indices and debug information pointer. Native layout checks
+// in CgsResourceBasePool.h pin those offsets and the array stride. Pool uses this Entry
+// layout for both management storage sizing and indexed access. InitManagementData
+// binds each initialized resource pointer's handle to its owning entry.
 
 #define CGS_ARTIST_POOL_FILE \
     "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourcePool.cpp"
@@ -157,13 +157,15 @@ namespace CgsResource
     // 0x828F5D58 - FindResourceIndex, then return the Entry* (and the index via lpiOutIndex).
     Entry* Pool::FindResource(ID lID, bool lbCheckRefCount, u16 luStatusMask, s32* lpiOutIndex)
     {
-        CGS_ASSERT(mbIsValid, "Pool is not valid\n");   // :770
+        CGS_ASSERT(mbIsValid, CGS_ASSERT_STREAM_MESSAGE_AT("Pool is not valid\n", CGS_ARTIST_POOL_FILE, 770));
         s32 liIndex = FindResourceIndex(lID, lbCheckRefCount, luStatusMask);
-        if (liIndex < 0)
-            return 0;
-        if (lpiOutIndex)
-            *lpiOutIndex = liIndex;
-        return &mpResourceEntries[liIndex];
+        if (liIndex >= 0)
+        {
+            if (lpiOutIndex)
+                *lpiOutIndex = liIndex;
+            return &mpResourceEntries[liIndex];
+        }
+        return 0;
     }
 
     // 0x828F5E48 - FindResource here, else across each dependency pool; reports which pool the
@@ -406,7 +408,7 @@ namespace CgsResource
             if (luSize == 0)
             {
                 // Nothing in this pool for this resource.
-                lpEntry->mResource.m_baseResources[luMemType] = 0;
+                lpEntry->mPtr.mResourceMemory.m_baseResources[luMemType] = 0;
                 continue;
             }
 
@@ -414,7 +416,7 @@ namespace CgsResource
             void* lpMemory = maHeaps[luMemType].Malloc(luSize, lpcDebugName,
                                                        reinterpret_cast<void*>(static_cast<uintptr_t>(liSlot)),
                                                        0xFFFF, &luFoundIndex, false, lbAllocateFromTop, 0);
-            lpEntry->mResource.m_baseResources[luMemType] = lpMemory;
+            lpEntry->mPtr.mResourceMemory.m_baseResources[luMemType] = lpMemory;
             lpEntry->mauHeapIndices[luMemType]            = luFoundIndex;
 
             if (lpMemory == 0)
@@ -422,8 +424,8 @@ namespace CgsResource
                 // Out of space: hand back the pools allocated so far for this resource.
                 for (u32 luFreeType = 0; luFreeType < luMemType; ++luFreeType)
                 {
-                    if (lpEntry->mResource.m_baseResources[luFreeType] != 0)
-                        maHeaps[luFreeType].Free(lpEntry->mResource.m_baseResources[luFreeType]);
+                    if (lpEntry->mPtr.mResourceMemory.m_baseResources[luFreeType] != 0)
+                        maHeaps[luFreeType].Free(lpEntry->mPtr.mResourceMemory.m_baseResources[luFreeType]);
                 }
                 return false;
             }
@@ -448,9 +450,9 @@ namespace CgsResource
 
         if (!lbAllocateMemory)
         {
-            lpEntry->mResource.m_baseResources[0] = 0;
-            lpEntry->mResource.m_baseResources[1] = 0;
-            lpEntry->mResource.m_baseResources[2] = 0;
+            lpEntry->mPtr.mResourceMemory.m_baseResources[0] = 0;
+            lpEntry->mPtr.mResourceMemory.m_baseResources[1] = 0;
+            lpEntry->mPtr.mResourceMemory.m_baseResources[2] = 0;
         }
         else if (!AllocateMemoryForResource(lpEntry, "", liSlot, lpNewResource->mpResourceType))
         {
@@ -511,18 +513,18 @@ namespace CgsResource
         CGS_ASSERT(mbIsValid, "Pool is not valid\n");   // :687
         for (s32 lt = 0; lt < E_MEMTYPE_NUMTYPES; ++lt)
         {
-            if (lpEntry->mResource.m_baseResources[lt] != 0)
+            if (lpEntry->mPtr.mResourceMemory.m_baseResources[lt] != 0)
             {
 
                 maHeaps[lt].Free(lpEntry->mauHeapIndices[lt]);
-                lpEntry->mResource.m_baseResources[lt] = 0;
+                lpEntry->mPtr.mResourceMemory.m_baseResources[lt] = 0;
                 lpEntry->mauHeapIndices[lt]            = 0;
             }
         }
         // ARTIST 828F5D38-4C clears all three owner words, then publishes the
         // empty resource to its alias ring twice. Cached aliases must not keep
         // pointers to the heap bytes (or native raster) just retired above.
-        BaseResourcePtr* lpOwner = reinterpret_cast<BaseResourcePtr*>(&lpEntry->mResource);
+        BaseResourcePtr* lpOwner = &lpEntry->mPtr;
         lpOwner->Propogate();
         lpOwner->Propogate();
     }
@@ -575,19 +577,22 @@ namespace CgsResource
     // mark every entry free and reset its ResourcePtr owner ring.
     void Pool::InitManagementData()
     {
-        const u32 luLength = GetManagementHashLength(muMaxResources);
-        mHashTable.Initialize(mpHashEntries, static_cast<s32>(luLength));
+        u64 luHashLength = static_cast<u64>(muMaxResources) * 3 - 1;
+        luHashLength |= luHashLength >> 1;
+        luHashLength |= luHashLength >> 2;
+        luHashLength |= luHashLength >> 4;
+        luHashLength |= luHashLength >> 8;
+        const s32 liNumHashEntries = static_cast<s32>(
+            (static_cast<u32>(luHashLength) | static_cast<u32>(luHashLength >> 16)) + 1);
+        mHashTable.Initialize(mpHashEntries, liNumHashEntries);
 
-        for (u32 luIndex = 0; luIndex < muMaxResources; ++luIndex)
+        for (u32 luIndex = 0; luIndex < muNumFreeResources; ++luIndex)
         {
             mpx8ResourceStatuses[luIndex] = 0;
-            Entry* const lpEntry = &mpResourceEntries[luIndex];
-            BaseResourcePtr* const lpOwner =
-                reinterpret_cast<BaseResourcePtr*>(&lpEntry->mResource);
-            lpEntry->mpResourceNext = lpOwner;
-            lpEntry->mpResourcePrev = lpOwner;
-            lpEntry->mpResourceThis = lpOwner;
-            lpEntry->muResourceThreadId = reinterpret_cast<uintptr_t>(lpEntry);
+            BaseResourcePtr& lrPtr = mpResourceEntries[luIndex].mPtr;
+            lrPtr.Reset();
+            Entry& lrEntry = mpResourceEntries[luIndex];
+            lrEntry.mPtr.mHandle.mpSourceEntry = &lrEntry;
         }
 
         miNumResourcesInPurgatory = 0;
@@ -769,17 +774,17 @@ namespace CgsResource
     void Pool::FixUpEntry(Entry* lpEntry)
     {
         rw::Resource lrwResource = rw::Resource();
-        lpEntry->mResource.ConvertToRWResource(lrwResource);
-        lpEntry->mpResourceType->FixUp(lpEntry->mResource.m_baseResources[0], lrwResource);
-        lpEntry->mpResourceType->DeSerialise(lpEntry->mResource.m_baseResources[0]);
+        lpEntry->mPtr.mResourceMemory.ConvertToRWResource(lrwResource);
+        lpEntry->mpResourceType->FixUp(lpEntry->mPtr.mResourceMemory.m_baseResources[0], lrwResource);
+        lpEntry->mpResourceType->DeSerialise(lpEntry->mPtr.mResourceMemory.m_baseResources[0]);
     }
 
     // 0x828EB920 - the post-fixup pass (Type::PostFixUp), run after imports are resolved.
     void Pool::PostFixUpEntry(Entry* lpEntry)
     {
         rw::Resource lrwResource = rw::Resource();
-        lpEntry->mResource.ConvertToRWResource(lrwResource);
-        lpEntry->mpResourceType->PostFixUp(lpEntry->mResource.m_baseResources[0], lrwResource);
+        lpEntry->mPtr.mResourceMemory.ConvertToRWResource(lrwResource);
+        lpEntry->mpResourceType->PostFixUp(lpEntry->mPtr.mResourceMemory.m_baseResources[0], lrwResource);
     }
 
     // 0x828F6068 - resolve one cross-resource import: find the imported resource by id (across
@@ -808,12 +813,12 @@ namespace CgsResource
         // ever hold a sub-4 GB pointer, so a target ABOVE 4 GB must be in a widened slot and
         // needs the full store. Below 4 GB the low-half store is right for BOTH widths --
         // import slots are serialised-null, so a widened slot's high half is already zero.
-        char* lpSlot = static_cast<char*>(lpEntry->mResource.m_baseResources[0]) + lpImport->muOffset;
+        char* lpSlot = static_cast<char*>(lpEntry->mPtr.mResourceMemory.m_baseResources[0]) + lpImport->muOffset;
 
         if (lpFound != 0)
         {
-            CGS_ASSERT(lpFound->mResource.m_baseResources[0] != 0, "Entry to import is NULL - this is insane!\n");   // :1766
-            void* const     lpTarget  = lpFound->mResource.m_baseResources[0];
+            CGS_ASSERT(lpFound->mPtr.mResourceMemory.m_baseResources[0] != 0, "Entry to import is NULL - this is insane!\n");   // :1766
+            void* const     lpTarget  = lpFound->mPtr.mResourceMemory.m_baseResources[0];
             const uintptr_t luTarget  = reinterpret_cast<uintptr_t>(lpTarget);
             if ((luTarget >> 32) != 0)
                 *reinterpret_cast<void**>(lpSlot) = lpTarget;                  // widened slot
@@ -840,7 +845,7 @@ namespace CgsResource
 
         Entry* lpEntry = &mpResourceEntries[liIndex];
         BundleV2::ImportEntry* lpImport =
-            reinterpret_cast<BundleV2::ImportEntry*>(static_cast<char*>(lpEntry->mResource.m_baseResources[0]) + lpEntry->muImportTableOffset);
+            reinterpret_cast<BundleV2::ImportEntry*>(static_cast<char*>(lpEntry->mPtr.mResourceMemory.m_baseResources[0]) + lpEntry->muImportTableOffset);
 
         for (s32 liImport = 0; liImport < liImportCount; ++liImport, ++lpImport)
         {
@@ -887,7 +892,7 @@ namespace CgsResource
                 {
                     lpOwner->SetEntryStatus(liIndex, 2);
                     lpOwner->PostFixUpEntry(lpEntry);
-                    if (!lpEntry->mpResourceType->DebugValidate(lpEntry->mResource.m_baseResources[0]))
+                    if (!lpEntry->mpResourceType->DebugValidate(lpEntry->mPtr.mResourceMemory.m_baseResources[0]))
                     {
                         char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
                         CgsDev::StrStream lMessage(lacMessage, sizeof(lacMessage));
@@ -953,7 +958,7 @@ namespace CgsResource
         CGS_ASSERT(lpEntry != 0, "Failed to find entry to delete memory for\n");
         for (s32 t = 0; t < 3; ++t)
         {
-            void* lpMemory = lpEntry->mResource.m_baseResources[t];
+            void* lpMemory = lpEntry->mPtr.mResourceMemory.m_baseResources[t];
             if (lpMemory)
             {
                 const u32 luSize = lpEntry->mResourceDescriptor.m_baseResourceDescriptors[t].m_size;
@@ -986,12 +991,12 @@ namespace CgsResource
                 lpEntry->mauHeapIndices[t] = luNode;
             }
         }
-        lpEntry->mResource = lResource;
+        lpEntry->mPtr.mResourceMemory = lResource;
         if (liNumImports != mpiResourceImportCounts[liSlot] && (CgsDev::Message::gxMessageFilterFlags & 1))
             *CgsDev::Log::gpDebugPrint << "New entry has different number of imports\n";
         mpiResourceImportCounts[liSlot] = liNumImports;
         mpx8ResourceStatuses[liSlot] = 1;
-        lpEntry->mpResourceThis->Propogate();
+        lpEntry->mPtr.Propogate();
         *lpResource = lResource;
         return true;
     }
@@ -1079,7 +1084,7 @@ namespace CgsResource
             {
                 const u32 luSlot = static_cast<u32>(reinterpret_cast<uintptr_t>(lpSet->mapAllocRequests[t][i].mpOwner));
                 Entry& lrEntry = mpResourceEntries[luSlot];
-                lrEntry.mResource.m_baseResources[t] = lpSet->mapAllocResults[t][i].mpData;
+                lrEntry.mPtr.mResourceMemory.m_baseResources[t] = lpSet->mapAllocResults[t][i].mpData;
                 lrEntry.mauHeapIndices[t] = lpSet->mapAllocResults[t][i].muIndex;
             }
         }
@@ -1087,7 +1092,7 @@ namespace CgsResource
         {
             const u32 luSlot = static_cast<u32>(reinterpret_cast<uintptr_t>(lpSet->mapAllocRequests[0][i].mpOwner));
             Entry& lrEntry = mpResourceEntries[luSlot];
-            lrEntry.mResource.m_baseResources[0] = lpSet->mapAllocResults[0][i].mpData;
+            lrEntry.mPtr.mResourceMemory.m_baseResources[0] = lpSet->mapAllocResults[0][i].mpData;
             lrEntry.mauHeapIndices[0] = lpSet->mapAllocResults[0][i].muIndex;
             const s32 liSourceIndex = mpiResourceImportCounts[luSlot];
             if (liSourceIndex == -1) // the generated entry-list resource has no input bundle entry
@@ -1095,7 +1100,7 @@ namespace CgsResource
             else
             {
                 mpiResourceImportCounts[luSlot] = lpEntries[liSourceIndex].muImportCount;
-                lpResources[liSourceIndex] = lrEntry.mResource;
+                lpResources[liSourceIndex] = lrEntry.mPtr.mResourceMemory;
             }
         }
         return CREATERESULT_OK;
@@ -1259,13 +1264,13 @@ namespace CgsResource
         Entry* lpEntry = &mpResourceEntries[lpScratch->miEntryId];
         rw::Resource lSource, lDest; // Native default constructor clears all five lanes.
         ResourceDescriptor lDescriptor;
-        lpEntry->mResource.ConvertToRWResource(lSource);
+        lpEntry->mPtr.mResourceMemory.ConvertToRWResource(lSource);
         lDest = lSource;
         lpEntry->mResourceDescriptor.ConvertToRWDescriptor(lDescriptor);
         const s32 liRWMemType = GetRelocationRWMemoryType(miDefragMemType);
         lDest.m_baseResources[liRWMemType] = lpScratch->mpTempLocation;
-        lpEntry->mResource.CreateFromRWResource(lDest);
-        reinterpret_cast<BaseResourcePtr*>(&lpEntry->mResource)->Propogate();
+        lpEntry->mPtr.mResourceMemory.CreateFromRWResource(lDest);
+        lpEntry->mPtr.Propogate();
         lpEntry->mpResourceType->ReBase(lDest.m_baseResources[0], lSource, lDest, lDescriptor, liRWMemType);
         return true;
     }
@@ -1278,13 +1283,13 @@ namespace CgsResource
         Entry* lpEntry = &mpResourceEntries[lpScratch->miEntryId];
         rw::Resource lSource, lDest; // Native default constructor clears all five lanes.
         ResourceDescriptor lDescriptor;
-        lpEntry->mResource.ConvertToRWResource(lSource);
+        lpEntry->mPtr.mResourceMemory.ConvertToRWResource(lSource);
         lDest = lSource;
         lpEntry->mResourceDescriptor.ConvertToRWDescriptor(lDescriptor);
         const s32 liRWMemType = GetRelocationRWMemoryType(miDefragMemType);
         lDest.m_baseResources[liRWMemType] = lpScratch->mpDestLocation;
-        lpEntry->mResource.CreateFromRWResource(lDest);
-        reinterpret_cast<BaseResourcePtr*>(&lpEntry->mResource)->Propogate();
+        lpEntry->mPtr.mResourceMemory.CreateFromRWResource(lDest);
+        lpEntry->mPtr.Propogate();
         lpEntry->mpResourceType->ReBase(lDest.m_baseResources[0], lSource, lDest, lDescriptor, liRWMemType);
         return true;
     }
@@ -1334,7 +1339,7 @@ namespace CgsResource
                 continue;
             Entry& lrEntry = mpResourceEntries[lu];
             const BundleV2::ImportEntry* lpImports = reinterpret_cast<const BundleV2::ImportEntry*>(
-                reinterpret_cast<uintptr_t>(lrEntry.mResource.m_baseResources[0]) + lrEntry.muImportTableOffset);
+                reinterpret_cast<uintptr_t>(lrEntry.mPtr.mResourceMemory.m_baseResources[0]) + lrEntry.muImportTableOffset);
             if (lpImports == 0)
                 continue;
             for (s32 liImport = 0; liImport < mpiResourceImportCounts[lu]; ++liImport)
@@ -1353,7 +1358,7 @@ namespace CgsResource
                 continue;
             Entry& lrEntry = mpResourceEntries[lu];
             const BundleV2::ImportEntry* lpImports = reinterpret_cast<const BundleV2::ImportEntry*>(
-                reinterpret_cast<uintptr_t>(lrEntry.mResource.m_baseResources[0]) + lrEntry.muImportTableOffset);
+                reinterpret_cast<uintptr_t>(lrEntry.mPtr.mResourceMemory.m_baseResources[0]) + lrEntry.muImportTableOffset);
             if (lpImports == 0)
                 continue;
             for (s32 liImport = 0; liImport < mpiResourceImportCounts[lu]; ++liImport)
@@ -1460,14 +1465,14 @@ namespace CgsResource
             Entry* lpEntry = &mpResourceEntries[liEntryId];
             rw::Resource lSource, lDest; // Native default constructor clears all five lanes.
             ResourceDescriptor lDescriptor;
-            lpEntry->mResource.ConvertToRWResource(lSource);
+            lpEntry->mPtr.mResourceMemory.ConvertToRWResource(lSource);
             lDest = lSource;
             lpEntry->mResourceDescriptor.ConvertToRWDescriptor(lDescriptor);
             void* lpDestination = lpBase + mpRelocateRequests[lu].muDestOffset;
             lDest.m_baseResources[liRWMemType] = lpDestination;
             lpEntry->mpResourceType->ReBase(lDest.m_baseResources[0], lSource, lDest, lDescriptor, liRWMemType);
-            lpEntry->mResource.CreateFromRWResource(lDest);
-            reinterpret_cast<BaseResourcePtr*>(&lpEntry->mResource)->Propogate();
+            lpEntry->mPtr.mResourceMemory.CreateFromRWResource(lDest);
+            lpEntry->mPtr.Propogate();
             lpEntry->mauHeapIndices[miDefragMemType] = mpRelocateRequests[lu].muNode;
         }
         if (miDefragMemType == 0)

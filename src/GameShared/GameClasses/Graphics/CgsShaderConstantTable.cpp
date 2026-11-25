@@ -1,8 +1,10 @@
 #include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"        // CGS_ASSERT
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsDispatcher.h" // DispatchBin::AllocateMemoryFast
 #include "rw/math/vpu/types.h"                             // rw::math::vpu::Vector4
-#include <cstring>                                         // strlen / strcpy
+#include <cstring>                                         // strlen
+#include <new>
 #define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Graphics/CgsShaderConstants.h"
 static const char KAC_ARTIST_ASSERT_FILE[] =
     "..\\..\\..\\GameShared\\GameClasses\\Graphics/CgsShaderConstants.h";
@@ -26,53 +28,54 @@ static const char KAC_ARTIST_ASSERT_FILE[] =
 // for mapLatestCopyInDispatchBin @ 600, 0x578/0x580/0x581 for the used-count / dirty-count
 // / dirty-list) all resolve to the named members below.
 
-// -----------------------------------------------------------------------------
-// Honest reconstruction note for the name store in AddShaderConstantArray:
-//
-// The X360 inlines a CgsStringUtils bounded string-duplicate: it allocates a buffer sized
-// to strlen(name)+1 (the call to the out-of-scope allocator sub_82C08C00, which the DWARF +
-// LegacySrc reference attest as `new char[strlen(lpName)+1]`), guards the copy against the buffer
-// size (firing the assert at CgsStringUtils.h:65 - reported on the X360 via an inlined
-// CgsDev::StrStream into the assert message buffer; modelled here as the equivalent
-// CGS_ASSERT, since the observable effect is the same FireAssert call), then byte-copies the
-// name (the do/while stbx loop @ 0x823F4710). The allocator itself is homed elsewhere; here
-// we reproduce its documented semantics (allocate + bounded copy) so the member STORE of the
-// duplicated pointer into mapConstantNames[luIndex] is faithful.
-// -----------------------------------------------------------------------------
-
-void ShaderConstantTable::AddShaderConstantArray(u32 luIndex, const char* lpcName, u8 lu8SizeOfEachEntryInBytes, u8 lu8NumEntries)
+// ARTIST 823F44E8: register a named constant array in the native table.
+// Name buffers use the XDK array-allocation entry at 82C08C00.
+void ShaderConstantTable::AddShaderConstantArray(u32 luIndex, const char* lpcName,
+    u8 lu8SizeOfEachEntryInBytes, u8 lu8NumEntries)
 {
-    CGS_ASSERT(luIndex < KU_MAX_SHADER_CONSTANTS, "luIndex < KU_MAX_SHADER_CONSTANTS");
-    CGS_ASSERT(lu8NumEntries, "luNumEntries");
+    CGS_ASSERT_AT(luIndex < KU_MAX_SHADER_CONSTANTS, "luIndex < KU_MAX_SHADER_CONSTANTS",
+                  KAC_ARTIST_ASSERT_FILE, 306);
+    CGS_ASSERT_AT(lu8NumEntries, "luNumEntries", KAC_ARTIST_ASSERT_FILE, 307);
 
-    // Allocate a heap buffer sized to the name (strlen+1) and bounded-copy into it. The
-    // X360 computes the buffer size (luBufferSize == strlen+1) and the source length
-    // (luStringLength == strlen) and asserts the string fits before copying.
-    const u32 luBufferSize = static_cast<u32>(strlen(lpcName)) + 1u;
-    const u32 luStringLength = static_cast<u32>(strlen(lpcName));
-    char* lpHeapName = new char[luBufferSize];
-    CGS_ASSERT(luStringLength < luBufferSize, "luStringLength < luBufferSize");
-    strcpy(lpHeapName, lpcName);
-
+    char* const lpHeapName = static_cast<char*>(::operator new[](strlen(lpcName) + 1));
+    CgsCore::StrCpy(lpHeapName, static_cast<u32>(strlen(lpcName)) + 1, lpcName);
     mapConstantNames[luIndex] = lpHeapName;
     maConstants[luIndex].SetSize(lu8SizeOfEachEntryInBytes);
     maConstants[luIndex].SetNumEntries(lu8NumEntries);
-
     ++mu8NumUsedConstants;
-    CGS_ASSERT(mu8NumUsedConstants < KU_MAX_SHADER_CONSTANTS, "mu8NumUsedConstants < KU_MAX_SHADER_CONSTANTS");
+    CGS_ASSERT_AT(mu8NumUsedConstants < KU_MAX_SHADER_CONSTANTS,
+                  "mu8NumUsedConstants < KU_MAX_SHADER_CONSTANTS", KAC_ARTIST_ASSERT_FILE, 318);
 }
 
-// 16-byte (quad-word) bulk copy of luNumConstants vectors from lpSrc to lpDest. The X360
-// emits a Duff's-device unrolled-by-8 lvx128/stvx128 loop (jump table @ 0x822A0960); the
-// observable effect is luNumConstants whole-Vector4 copies, which we reproduce as a plain
-// loop. Asserts luNumConstants > 0 first (CgsShaderConstants.h:233).
-void ShaderConstantTable::FastNonOverlappedVectorMemcpy(Vector4* lpDest, const rw::math::vpu::Vector4* lpSrc, u32 luNumQw)
+// ARTIST 822A08F8 copies whole vector registers in groups of eight.
+void ShaderConstantTable::FastNonOverlappedVectorMemcpy(Vector4* lpDest,
+    const rw::math::vpu::Vector4* lpSrc, u32 luNumQw)
 {
-    CGS_ASSERT(luNumQw > 0, "luNumConstants > 0");
+    CGS_ASSERT_AT(luNumQw > 0, "luNumConstants > 0", KAC_ARTIST_ASSERT_FILE, 233);
 
-    for (u32 luIndex = 0; luIndex < luNumQw; ++luIndex)
+    u32 luGroups = (luNumQw + 7) >> 3;
+    switch (luNumQw & 7)
     {
-        lpDest[luIndex] = lpSrc[luIndex];
+    case 0:
+        do
+        {
+            *lpDest++ = *lpSrc++;
+        case 7:
+            *lpDest++ = *lpSrc++;
+        case 6:
+            *lpDest++ = *lpSrc++;
+        case 5:
+            *lpDest++ = *lpSrc++;
+        case 4:
+            *lpDest++ = *lpSrc++;
+        case 3:
+            *lpDest++ = *lpSrc++;
+        case 2:
+            *lpDest++ = *lpSrc++;
+        case 1:
+            *lpDest++ = *lpSrc++;
+        }
+        while (--luGroups);
     }
 }
 
@@ -179,6 +182,7 @@ Vector4* ShaderConstantTable::UpdateShaderChangeTableAndGetConstantDestination(u
         CgsDev::Assert::EndAssert();
     }
 
+    const ShaderConstantTableElement* const lpConstant = &maConstants[luIndex];
     const u8 lu8NumDirtyConstants = mu8NumDirtyConstants;
     if (!(lu8NumDirtyConstants < KU_MAX_SHADER_CONSTANTS_DIRTY_LIST))
     {
@@ -187,7 +191,7 @@ Vector4* ShaderConstantTable::UpdateShaderChangeTableAndGetConstantDestination(u
         CgsDev::Assert::EndAssert();
     }
 
-    const u32 luNumQuadWords = maConstants[luIndex].GetSizeOfArrayInQw();
+    const u32 luNumQuadWords = lpConstant->GetSizeOfArrayInQw();
     mau8DirtyConstants[lu8NumDirtyConstants] = static_cast<u8>(luIndex);
 
     Vector4* lpConstantsInDispatchBin =
@@ -212,9 +216,9 @@ ShaderConstantTable::ShaderConstantTable()
     for (u32 luIndex = 0; luIndex < KU_MAX_SHADER_CONSTANTS; ++luIndex)
     {
         mapConstantNames[luIndex]                = 0;
-        maConstants[luIndex].mu16SizeOfArrayInQw = 0;
         maConstants[luIndex].mu8SizeInBytes      = 0;
         maConstants[luIndex].mu8NumEntries       = 1;
+        maConstants[luIndex].mu16SizeOfArrayInQw = 0;
     }
 
     AddShaderConstant(0u, "world",          64);
@@ -229,11 +233,20 @@ ShaderConstantTable::ShaderConstantTable()
     mu8NumDirtyConstants = 0;
 }
 
-// @ 0x823F4260 -- AddShaderConstant: the single-entry form of AddShaderConstantArray
-// (SetSize(luSizeInBytes) + SetNumEntries(1)). Same heap-duplicated debug name.
+// ARTIST 823F4260: register one named constant in the native table.
 void ShaderConstantTable::AddShaderConstant(u32 luIndex, const char* lpcName, u8 lu8SizeInBytes)
 {
-    AddShaderConstantArray(luIndex, lpcName, lu8SizeInBytes, 1);
+    CGS_ASSERT_AT(luIndex < KU_MAX_SHADER_CONSTANTS, "luIndex < KU_MAX_SHADER_CONSTANTS",
+                  KAC_ARTIST_ASSERT_FILE, 285);
+
+    char* const lpHeapName = static_cast<char*>(::operator new[](strlen(lpcName) + 1));
+    CgsCore::StrCpy(lpHeapName, static_cast<u32>(strlen(lpcName)) + 1, lpcName);
+    mapConstantNames[luIndex] = lpHeapName;
+    maConstants[luIndex].SetSize(lu8SizeInBytes);
+    maConstants[luIndex].SetNumEntries(1);
+    ++mu8NumUsedConstants;
+    CGS_ASSERT_AT(mu8NumUsedConstants < KU_MAX_SHADER_CONSTANTS,
+                  "mu8NumUsedConstants < KU_MAX_SHADER_CONSTANTS", KAC_ARTIST_ASSERT_FILE, 296);
 }
 
 // @ 0x822B32E8 -- SetShaderConstantData(u32, Vector4). Bounds-check the slot, take a

@@ -18,12 +18,9 @@
 //   rw::collision::VolumeLineQuery::Initialize                 @ 0x82BB3888
 //   rw::collision::VolumeLineQuery::GetAllIntersections        @ 0x82BB3820
 //
-// At the FineIntersectionTestModule::Construct call sites the descriptor/initialize
-// entry points are invoked with the descriptor-output / buffer-table pointer in r3 and
-// the volume/result counts in r4/r5 (no implicit `this`): they behave as static
-// factory entry points that partition the caller-provided backing buffer. The buffer
-// table (`void** ppBuffer`) holds the backing-store base at [0] with [1..4] zeroed.
-//
+// The factories return a five-lane ResourceDescriptor. Initialize partitions the
+// backing memory supplied in lane zero of a Resource.
+
 // MEMBER NAMES (wave-2 correction): the DecFIGS DWARF DOES carry this class
 // (references/DecFIGS/dwarfdump/SDKs/EATech/include/cmn/rw/collision/
 // volumevolumequery.h:191-220), and every X360 load/store offset of the ctor
@@ -49,6 +46,9 @@
 
 namespace rw
 {
+    struct Resource;
+    struct ResourceDescriptor;
+
 namespace math
 {
 namespace vpu
@@ -84,24 +84,10 @@ namespace collision
     class VolumeVolumeQuery
     {
     public:
-        // --- static factory entry points (called with no implicit `this`) -------
+        static ResourceDescriptor GetResourceDescriptor(u32 luVolumes, u32 luResults);
+        static VolumeVolumeQuery* Initialize(const Resource& lrResource, u32 luVolumes, u32 luResults);
 
-        // @ 0x82BB3A20 -- fills the 5-entry rw::ResourceDescriptor block at lpOut with
-        // the backing-buffer size/alignment needed for liVolumes volumes and liResults
-        // results. lpOut[0] receives the total size, lpOut[1] the 16-byte alignment.
-        static void* GetResourceDescriptor(void* lpOut, int liVolumes, int liResults);
-
-        // @ 0x82BB3980 -- partitions the backing buffer (*lppBuffer at [0]) into the
-        // query's working arrays, constructs it in place, initialises the two embedded
-        // VolumeBBoxQuery sub-queries, and returns the constructed query handle.
-        static void* Initialize(void** lppBuffer, int liVolumes, int liResults);
-
-        // --- in-place construction (this in r3) ---------------------------------
-
-        // @ 0x82BB38F0 -- construct the query in place over the backing buffer that
-        // begins at `this`. Caches the result count, points the two sub-query handles
-        // at this+0x50 / this+0x50+descSize, and lays the report buffer out behind them.
-        VolumeVolumeQuery* Construct(int liVolumes, int liResults);
+        VolumeVolumeQuery(u32 luVolumes, u32 luResults);
 
         // --- runtime pass (this in r3) ------------------------------------------
 
@@ -187,11 +173,9 @@ namespace collision
             NEARESTLINEINTERSECTION = 2
         };
 
-        // @ 0x82BB3838 -- fills the 5-entry descriptor block at lpOut for liVolumes / liResults (see
-        // VolumeQuery.cpp and VolumeQueryHostLayout.hpp for the host total).
-        static void* GetResourceDescriptor(void* lpOut, int liVolumes, int liResults);
-        // @ 0x82BB3888 -- partitions the backing buffer (*lppBuffer at [0]) and returns the query, or null.
-        static void* Initialize(void** lppBuffer, int liVolumes, int liResults);
+        static ResourceDescriptor GetResourceDescriptor(u32 luVolumes, u32 luResults);
+        VolumeLineQuery(u32 luStackMax, u32 luResults, u32 luInstVolMax);
+        static VolumeLineQuery* Initialize(const Resource& lrResource, u32 luVolumes, u32 luResults);
 
         // --- the line walk (DWARF volumelinequery.h:117-213; RwBool is s32 in this directory) --------------------
         // @ 0x82BB3230 -- DWARF :117. Stage one primitive for the line test: the volume, a copy of lpTransform's

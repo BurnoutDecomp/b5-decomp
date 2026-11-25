@@ -20,6 +20,7 @@ namespace CgsDev
 
     extern const char* gpcHexFormat;
     extern const char* gpcSignedFormat;
+    extern const char* gpcUnsignedFormat;
 
     struct StrStreamBase
     {
@@ -39,6 +40,21 @@ namespace CgsDev
         // Formatting overloads (render then forward to the sink).
         StrStreamBase& operator<<(s32 liValue);
         StrStreamBase& operator<<(u32 luValue);
+        StrStreamBase& PrintUnsignedInteger(u32 luValue)
+        {
+            switch (mePrintMode)
+            {
+            case E_PRINTMODE_DECIMAL:
+                AppendFormat(gpcUnsignedFormat, luValue);
+                break;
+            case E_PRINTMODE_HEX:
+            case E_PRINTMODE_HEXONCE:
+                AppendFormat(gpcHexFormat, luValue);
+                mePrintMode = mePrintMode == E_PRINTMODE_HEXONCE ? E_PRINTMODE_DECIMAL : mePrintMode;
+                break;
+            }
+            return *this;
+        }
         StrStreamBase& operator<<(u64 luValue);
         StrStreamBase& operator<<(f32 lfValue);
         StrStreamBase& operator<<(void* lpValue)

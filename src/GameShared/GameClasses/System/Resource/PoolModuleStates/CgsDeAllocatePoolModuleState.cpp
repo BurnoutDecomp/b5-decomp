@@ -40,7 +40,7 @@ namespace CgsResource
         Entry* lpListEntry = lpPool->FindResource(lListId, false, 2, &liListIndex);
         CGS_ASSERT(lpListEntry != 0, "Dynamically created list resource is not loaded\n");
         const EntryListResource* lpList = static_cast<const EntryListResource*>(
-            lpListEntry->mResource.m_baseResources[0]);
+            lpListEntry->GetResourceMemory().m_baseResources[0]);
         CGS_ASSERT(lpPool->GetEntryRefCount(liListIndex) > 0, "Decrementing ref count on zero count resource\n");
         lpPool->DecEntryRefCount(liListIndex);
 

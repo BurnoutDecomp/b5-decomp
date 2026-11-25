@@ -86,6 +86,24 @@ namespace CgsFileSystem
         };
         CGS_STATIC_ASSERT(sizeof(StreamFutex) == 0x20, "ARTIST stream lock extent");
 
+        class StreamLockGuard
+        {
+        public:
+            explicit StreamLockGuard(CRITICAL_SECTION& lrCriticalSection)
+                : mrCriticalSection(lrCriticalSection)
+            {
+                RtlEnterCriticalSection(&mrCriticalSection);
+            }
+
+            ~StreamLockGuard()
+            {
+                RtlLeaveCriticalSection(&mrCriticalSection);
+            }
+
+        private:
+            CRITICAL_SECTION& mrCriticalSection;
+        };
+
         mutable StreamFutex   mFutex;                  // :217
         FileSystem*           mpFileSystem;            // :219
         FileLog*              mpLog;                   // :220

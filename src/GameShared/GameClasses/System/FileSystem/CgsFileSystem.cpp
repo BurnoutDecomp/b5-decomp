@@ -3,6 +3,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/System/FileSystem/Devices/CgsDeviceMemFileSystem.h"
 #include <new>
 #include <cstddef>
@@ -18,6 +19,8 @@
 // line plus that offset; the functions with no line in the DWARF follow the last one.
 #define CGS_FILE_SYSTEM_ARTIST_HEADER "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsFileSystem.h"
 #define CGS_FILE_SYSTEM_ARTIST_SOURCE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsFileSystem.cpp"
+
+#define CGS_FILE_ARTIST_SOURCE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsFile.cpp"
 
 namespace CgsFileSystem
 {
@@ -253,30 +256,116 @@ namespace CgsFileSystem
 
 
 
-    // ARTIST82903880: start closes, retry while anything remains pending, then
+    // Both concrete close operations belong to the original system unity.
+    void File::Release()
+    {
+        FileFutexHelper lGuard(mFutex);
+        mpHandle = 0;
+        muCacheId = 0xffffffffu;
+        CGS_ASSERT_AT(static_cast<FileState>(meFileAccess) == E_FILESTATE_CLOSED,
+            "static_cast<CgsFileSystem::FileState> ( meFileAccess ) == E_FILESTATE_CLOSED",
+            CGS_FILE_ARTIST_SOURCE, 86);
+        meFileAccess = E_FILEACCESS_CLOSED;
+        meFileState = E_FILESTATE_CLOSED;
+        mpcFileName = 0;
+        muSeekPosition = 0;
+        muPendingOperationCount = 0;
+    }
+
+    void StreamDeviceDiskRead::Close()
+    {
+        StreamLockGuard lGuard(mFutex.mCriticalSection);
+
+        if (meStatus == E_STATUS_CLOSED || mbWaitingToClose)
+        {
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                *CgsDev::Log::gpDebugPrint
+                    << "WARNING: Attempt to close a stream that is already closed or closing - ignoring request\n";
+        }
+        else
+        {
+            mbWaitingToClose = true;
+            Service();
+        }
+    }
+
+
+    // ARTIST 82903880 repeats release while any handle still needs work.
     bool FileSystem::Release()
     {
-        // release files before retiring the RW manager and device workers.
         mReleasing.SetValue(1);
-        if (!mbPrepared) return true;
-        bool lbClosed = true;
-        for (u32 lu = 0; lu < KU_MAXNOOFFILES; ++lu)
+        if (!mbPrepared)
+            return true;
+
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+            *CgsDev::Log::gpDebugPrint << "Attempting to release file system...\n";
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+            *CgsDev::Log::gpDebugPrint << "Closing files\n";
+
+        bool lbAllFilesClosed = true;
+        for (u32 luIter = 0; luIter < KU_MAXNOOFFILES; ++luIter)
         {
-            if (maFiles[lu].GetStatus() == E_FILESTATE_CLOSED) continue;
-            if (maFiles[lu].GetStatus() == E_FILESTATE_OPEN) maFiles[lu].Close();
-            lbClosed = false;
+            if (maFiles[luIter].GetStatus() != E_FILESTATE_CLOSED)
+            {
+                if (maFiles[luIter].GetStatus() == E_FILESTATE_OPEN)
+                {
+                    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                        *CgsDev::Log::gpDebugPrint << "Closing file " << luIter << "\n";
+                    maFiles[luIter].Close();
+                }
+                else if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint << "Aborting close of file " << luIter
+                        << " due to pending operations\n";
+                }
+                lbAllFilesClosed = false;
+            }
+            else if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+            {
+                *CgsDev::Log::gpDebugPrint << "File " << luIter << " already closed\n";
+            }
         }
-        for (u32 lu = 0; lu < KU_MAX_READ_STREAMS; ++lu)
+
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+            *CgsDev::Log::gpDebugPrint << "Closing streams\n";
+        for (u32 luIter = 0; luIter < KU_MAX_READ_STREAMS; ++luIter)
         {
-            if (maReadStreams[lu].GetStatus() == StreamDeviceDiskRead::E_STATUS_CLOSED) continue;
-            maReadStreams[lu].Close();
-            lbClosed = false;
+            if (maReadStreams[luIter].GetStatus() != StreamDeviceDiskRead::E_STATUS_CLOSED)
+            {
+                if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                    (*CgsDev::Log::gpDebugPrint << "Closing stream ").PrintUnsignedInteger(luIter) << "\n";
+                maReadStreams[luIter].Close();
+                lbAllFilesClosed = false;
+            }
+            else if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+            {
+                (*CgsDev::Log::gpDebugPrint << "Stream ").PrintUnsignedInteger(luIter) << " already closed\n";
+            }
         }
-        if (!lbClosed) return false;
-        for (u32 lu = 0; lu < KU_MAXNOOFFILES; ++lu) maFiles[lu].Release();
+
+        if (!lbAllFilesClosed)
+        {
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                *CgsDev::Log::gpDebugPrint << "Failed to release file system this frame due to pending operations\n";
+            return false;
+        }
+
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+            *CgsDev::Log::gpDebugPrint << "Releasing files\n";
+        for (u32 luIter = 0; luIter < KU_MAXNOOFFILES; ++luIter)
+        {
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                (*CgsDev::Log::gpDebugPrint << "Releasing file ").PrintUnsignedInteger(luIter) << "\n";
+            maFiles[luIter].Release();
+        }
+
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+            *CgsDev::Log::gpDebugPrint << "Destroying file system\n";
         rw::core::filesys::Manager::DestroyInstance();
         GetDeviceManager()->Shutdown();
         mbPrepared = false;
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+            *CgsDev::Log::gpDebugPrint << "File system shutdown complete\n";
         return true;
     }
 
@@ -346,9 +435,7 @@ namespace CgsFileSystem
 
 
 
-
     // The original system unity compiles the file reset with its filesystem caller.
-#define CGS_FILE_ARTIST_SOURCE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsFile.cpp"
     void File::Destruct()
     {
         FileFutexHelper lGuard(mFutex);
@@ -363,7 +450,6 @@ namespace CgsFileSystem
         muSeekPosition = 0;
         muPendingOperationCount = 0;
     }
-#undef CGS_FILE_ARTIST_SOURCE
 
     // ARTIST 828E8A88 destructs the sixteen file records here.
     void FileSystem::Destruct()
@@ -797,3 +883,4 @@ namespace CgsFileSystem
 
 #undef CGS_FILE_SYSTEM_ARTIST_SOURCE
 #undef CGS_FILE_SYSTEM_ARTIST_HEADER
+#undef CGS_FILE_ARTIST_SOURCE

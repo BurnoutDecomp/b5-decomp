@@ -417,7 +417,7 @@ namespace CgsResource
             Entry* lpEntry = lpPool->FindResource(lpRequest->mResourceId, false, 2, 0);
             if (lpEntry != 0)
             {
-                lResponse.mpResourceMemory = &lpEntry->mResource.m_baseResources[E_MEMTYPE_MAINMEMORY];
+                lResponse.mpResourceMemory = &lpEntry->GetResourceMemory().m_baseResources[E_MEMTYPE_MAINMEMORY];
                 lResponse.mpSourceEntry    = lpEntry;
             }
         }
@@ -461,7 +461,7 @@ namespace CgsResource
             return;
 
         ResourceHandle lListHandle;
-        lListHandle.mpResourceMemory = &lpListEntry->mResource.m_baseResources[E_MEMTYPE_MAINMEMORY];
+        lListHandle.mpResourceMemory = &lpListEntry->GetResourceMemory().m_baseResources[E_MEMTYPE_MAINMEMORY];
         lListHandle.mpSourceEntry    = lpListEntry;
         ResourcePtr<ResourceIdList> lList(lListHandle);
 
@@ -484,7 +484,7 @@ namespace CgsResource
 
             if (lpaHandles != 0 && lpEntry != 0)
             {
-                lpaHandles[lu].mpResourceMemory = &lpEntry->mResource.m_baseResources[E_MEMTYPE_MAINMEMORY];
+                lpaHandles[lu].mpResourceMemory = &lpEntry->GetResourceMemory().m_baseResources[E_MEMTYPE_MAINMEMORY];
                 lpaHandles[lu].mpSourceEntry    = lpEntry;
             }
         }

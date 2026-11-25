@@ -60,9 +60,10 @@ namespace CgsResource
         lrOptions.mbAllowDefragmentation = lrRequest.mbAllowDefragmentation;
         for (s32 li = 0; li < 3; ++li)
         {
+            const rw::BaseResourceDescriptor lDescriptor = lrRequest.mDescriptor.m_baseResourceDescriptors[li];
             lrOptions.maHeapInfo[li].muMaxNodes = 2u * lrRequest.mauMaxResources[li] + 1u;
-            lrOptions.maHeapInfo[li].muHeapMemorySize = lrRequest.mDescriptor.m_baseResourceDescriptors[li].m_size;
-            lrOptions.maHeapInfo[li].muHeapAlignment = lrRequest.mDescriptor.m_baseResourceDescriptors[li].m_alignment;
+            lrOptions.maHeapInfo[li].muHeapAlignment = lDescriptor.m_alignment;
+            lrOptions.maHeapInfo[li].muHeapMemorySize = lDescriptor.m_size;
         }
     }
 
@@ -196,14 +197,14 @@ namespace CgsResource
         Entry* lpEntry = lrPool.FindResource(lpRequest->mListId, false, 3, &liListIndex);
         CGS_ASSERT(lpEntry != 0, "lpResource");
         lrPool.SetEntryStatus(liListIndex, 2);
-        const EntryListResource* lpList = static_cast<const EntryListResource*>(lpEntry->mResource.m_baseResources[0]);
+        const EntryListResource* lpList = static_cast<const EntryListResource*>(lpEntry->GetResourceMemory().m_baseResources[0]);
         lrPool.FixUpAndResolveResourceList(lpList->mIds, lpList->muNumEntries,
             lpRequest->miFirstIndex, lpRequest->miCount, lpRequest->mbFinalFixup, lpRequest->mbFixUpDependencies);
 
         Events::FixUpAndResolveResourceListResponse lResponse = Events::FixUpAndResolveResourceListResponse();
         lResponse.miEventId = lpRequest->miEventId;
         lResponse.miPoolId = lpRequest->miPoolId;
-        lResponse.mListHandle.mpResourceMemory = &lpEntry->mResource.m_baseResources[0];
+        lResponse.mListHandle.mpResourceMemory = &lpEntry->GetResourceMemory().m_baseResources[0];
         lResponse.mListHandle.mpSourceEntry = lpEntry;
         lResponse.mpIds = lpList->mIds;
         lResponse.miNumEntries = lpList->muNumEntries;

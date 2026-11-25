@@ -57,12 +57,6 @@ namespace CgsResource
         return true;
     }
 
-    void BaseResourcePtr::Reset()
-    {
-        mResourceMemory.m_baseResources[0] = 0;
-        mResourceMemory.m_baseResources[1] = 0;
-        mResourceMemory.m_baseResources[2] = 0;
-    }
     void BaseResourcePtr::RemoveFromCurrentList()
     {
         if (mpPrev != 0) mpPrev->mpNext = mpNext;

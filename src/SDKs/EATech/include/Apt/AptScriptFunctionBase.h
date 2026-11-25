@@ -102,17 +102,13 @@ public:
     // vtables differ only in these slots + the GC/teardown slots); the pseudocode
     // renders the calls direct, but three distinct overriding vtables prove they are
     // virtual. Bodies live in each subclass TU.
-    virtual const char* GetName() const;
-    virtual int32_t     GetNumArguments() const;
-    virtual void*       GetByteCodeBase() const;
-    virtual int32_t     GetByteCodeSize() const;
-    virtual AptConstantPool GetConstantPool() const;
-    virtual void        SetArgument(AptValue* pValue, int32_t nArgIndex);
-
-    // Deep-copy this function value, re-binding it to pCIH (used when a closure is
-    // captured into a new character context). Returns null if the pool allocation
-    // fails.
-    virtual AptScriptFunctionBase* Duplicate(AptValue* pCIH) const;
+    // Duplicate the compiled function under a new character scope.
+    virtual AptScriptFunctionBase* Duplicate(AptValue* pCIH) const = 0;
+    virtual const char* GetName() const = 0;
+    virtual int32_t GetNumArguments() const = 0;
+    virtual void* GetByteCodeBase() const = 0;
+    virtual int32_t GetByteCodeSize() const = 0;
+    virtual AptConstantPool GetConstantPool() const = 0;
 
     // ---- per-call execution scaffolding (bodies in class:AptScriptFunctionBase) -
     // SetupBeforeExecution: snapshot the current frame stack + register window into
@@ -128,6 +124,7 @@ public:
                                       AptValue* pArgScope = 0,
                                       AptValue* pPreloadThis = 0,
                                       AptValue* pPreloadArgs = 0);   // @0x82AD6618
+    virtual void SetArgument(AptValue* pValue, int32_t nArgIndex) = 0;
     // CleanupAfterExecution: restore the frame stack (base @0x82AD6630) -- and, in
     // the AptScriptFunction2 override (@0x82AD6708), release this call's registers
     // and restore the saved register window -- from pSaved.

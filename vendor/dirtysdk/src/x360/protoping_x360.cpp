@@ -57,20 +57,28 @@ static ProtoPingRequestT* PingAllocRequest(ProtoPingRefT* ref, s32 type, const u
     return item;
 }
 
-// ARTIST82B38308, export hole: release QoS and pending session search.
+// ARTIST 82B38308 releases the request in its owning link. The native calls
+// precede a fresh load of that link before accessing or unlinking the request.
 static void PingFreeRequest(ProtoPingRefT* ref, ProtoPingRequestT* item)
 {
     ProtoPingRequestT** link = &ref->requests;
-    while (*link && *link != item) link = &(*link)->next;
-    if (!*link) return;
-    if (item->qos) XNetQosRelease(item->qos);
-    if (item->state == 1)
+    for (; *link; link = &(*link)->next)
     {
-        XCancelOverlapped(&item->overlapped);
-        if (item->search) DirtyMemFree(item->search, PING_MEM_ID, ref->memGroup);
+        if (*link == item)
+        {
+            if ((*link)->qos)
+                XNetQosRelease((*link)->qos);
+            if ((*link)->state == 1)
+            {
+                XCancelOverlapped(&(*link)->overlapped);
+                if ((*link)->search)
+                    DirtyMemFree((*link)->search, PING_MEM_ID, ref->memGroup);
+            }
+            *link = (*link)->next;
+            DirtyMemFree(item, PING_MEM_ID, ref->memGroup);
+            return;
+        }
     }
-    *link = item->next;
-    DirtyMemFree(item, PING_MEM_ID, ref->memGroup);
 }
 
 // ARTIST82B383C0: session-id lookup first, then peer QoS query.
@@ -174,12 +182,13 @@ static ProtoPingRequestT* PingPoll(ProtoPingRefT* ref)
         }
         if (item->state == 2 && (item->qos->axnqosinfo[0].bFlags & XNET_XNQOSINFO_COMPLETE))
         {
-            const XNQOSINFO& info = item->qos->axnqosinfo[0];
-            item->ping = info.wRttMedInMsecs;
+            item->ping = item->qos->axnqosinfo[0].wRttMedInMsecs;
             if (!item->ping) item->ping = 1;
             else if (item->ping == 0xffff) item->ping = 0;
             item->state = 3;
             NetPrintfCode("protopingxenon: [%d] ping=%d tick=%d\n", item->sequence, item->ping, NetTick());
+            // ARTIST 82B38868 reloads the QoS pointer after the diagnostic call.
+            const XNQOSINFO& info = item->qos->axnqosinfo[0];
             item->retries = info.cProbesXmit - info.cProbesRecv;
         }
         if (item->state == 3 || item->state == 4)
@@ -207,6 +216,8 @@ extern "C" void ProtoPingDestroy(ProtoPingRefT* ref)
     if (ref->listening) XNetQosListen(&ref->listenKey, 0, 0, 0, 16);
     DirtyMemFree(ref, PING_MEM_ID, ref->memGroup);
 }
+// ARTIST 82B38A3C calls the CRT to clear the listener key.
+#pragma function(memset)
 extern "C" s32 ProtoPingControl(ProtoPingRefT* ref, s32 control, s32 value, void* data)
 {
     if (control == 0x6e707262) { ref->probes = value; return 0; } // nprb
@@ -227,6 +238,8 @@ extern "C" s32 ProtoPingControl(ProtoPingRefT* ref, s32 control, s32 value, void
     if (control == 0x75696478) { ref->userIndex = value; return 0; } // uidx
     return -1;
 }
+#pragma intrinsic(memset)
+
 extern "C" s32 ProtoPingRequest(ProtoPingRefT* ref, DirtyAddrT* address, const u8* data,
                                  s32 length, s32 timeout, s32 ttl)
 {

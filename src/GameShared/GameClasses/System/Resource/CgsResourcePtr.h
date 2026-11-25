@@ -65,6 +65,7 @@ namespace CgsResource
     struct BaseResourcePtr
     {
         friend class Pool;
+        friend struct Entry;
         template <class Type> friend struct ResourcePtr;
     public:
         BaseResourcePtr();
@@ -77,7 +78,13 @@ namespace CgsResource
         bool IsEqual(const void* lpOther) const;
 
     protected:
-        void Reset();
+        void Reset()
+        {
+            mpNext = this;
+            mpPrev = this;
+            mHandle.mpResourceMemory = &mResourceMemory;
+            mHandle.mpSourceEntry = 0;
+        }
         void RemoveFromCurrentList();
         void AddToNewList(BaseResourcePtr* lpList);
         void CreateFromPointer(const BaseResourcePtr* lpOther);

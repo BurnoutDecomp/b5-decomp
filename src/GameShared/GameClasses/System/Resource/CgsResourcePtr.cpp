@@ -30,6 +30,6 @@ namespace CgsResource
 
         Entry* lpEntry = mHandle.mpSourceEntry;
         if (lpEntry != 0)
-            AddToNewList(reinterpret_cast<BaseResourcePtr*>(&lpEntry->mResource));
+            AddToNewList(&lpEntry->mPtr);
     }
 }

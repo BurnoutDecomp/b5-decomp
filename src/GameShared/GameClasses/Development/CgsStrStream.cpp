@@ -14,6 +14,7 @@ namespace CgsDev
 {
     const char* gpcHexFormat = "0x%X";   // ARTIST 0x82F31944
     const char* gpcSignedFormat = "%d"; // ARTIST 0x82F3193C
+    const char* gpcUnsignedFormat = "%u"; // ARTIST 0x82F31940
 
     // The StrStreamBase vtable at 0x82000D00 points to 0x82815E58.
     void StrStreamBase::Reset()
@@ -27,18 +28,11 @@ namespace CgsDev
         return PrintSignedInteger(liValue);
     }
 
-    StrStreamBase& StrStreamBase::operator<<(u32 luValue)
+    // ARTIST LogFileBuffered::Open calls the original unsigned overload at both insertions.
+    __declspec(noinline) StrStreamBase& StrStreamBase::operator<<(u32 luValue)
     {
-        if (mePrintMode == E_PRINTMODE_DECIMAL)
-            AppendFormat("%u", luValue);
-        else if (static_cast<u32>(mePrintMode) < 3)
-        {
-            AppendFormat("0x%X", luValue);
-            if (mePrintMode == E_PRINTMODE_HEXONCE) mePrintMode = E_PRINTMODE_DECIMAL;
-        }
-        return *this;
+        return PrintUnsignedInteger(luValue);
     }
-
     StrStreamBase& StrStreamBase::operator<<(u64 luValue)
     {
         switch (mePrintMode)

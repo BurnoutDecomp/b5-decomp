@@ -1,3 +1,5 @@
+#include "rw/rwcore_structs.h"
+#include <new>
 #include "vendor/renderware/collision/VolumeBBoxQuery.hpp"
 #include "vendor/renderware/collision/Aggregate.hpp"
 #include "vendor/renderware/collision/CollisionVolume.hpp"
@@ -130,278 +132,99 @@ namespace
 }
 
 // ===========================================================================
-// rw::collision::VolumeBBoxQuery::AddVolumeRef @ 0x82BBBC20
-//
-// Push a volume reference: non-aggregate volumes tail-branch straight into
-// AddPrimitiveRef (b rw__collision__VolumeBBoxQuery__AddPrimitiveRef, same
-// argument registers); aggregates are staged as a 0x80-stride VolRef record
-// on the traversal stack. The X360 body is the out-of-line compile of the
-// canonical inline rwccore.h:2825-2851 (verbatim match, including the
-// tm-null branch and the field order), so the reconstruction below is that
-// canonical body spelled in the committed VolRef vocabulary.
-//
-// The only VMX here is the 4x lvx128/stvx128 transform-row copy (a straight
-// 16-byte-per-row block move, no lane math); the 32-byte AABBox copy is four
-// 8-byte integer ld/std pairs.
-//
-// NOTE (Hex-Rays bug, asm authoritative): the pseudocode's final store
-// "...+116 = BYTE3(v16)" claims the tag-bit byte comes from the last bbox
-// qword; the asm stb r8, 0x74(r10) stores the numTagBits ARGUMENT (r8).
-//
-// No rodata: the only constant is the inline immediate 6 (VOLUMETYPEAGGREGATE).
-// ===========================================================================
+// Aggregate refs are traversed via the stack. Primitive refs go to the result buffer.
+// ARTIST reloads the current slot for each field write before advancing the cursor.
 RwBool VolumeBBoxQuery::AddVolumeRef(const Volume*                    lpVol,
                                      const math::vpu::Matrix44Affine* lpTm,
                                      const AABBox&                    arBBox,
                                      u32                              auTag,
                                      u8                               auNumTagBits)
 {
-    // lwz r10,0x40(r4); lwz r10,0(r10); cmpwi cr6,r10,6; beq/b: non-aggregate
-    // volumes divert straight to the primitive-ref buffer (tail branch with
-    // the same argument registers).
-    if (lpVol->GetType() != KU_VOLUMETYPE_AGGREGATE)
+    if (lpVol->GetType() != VOLUMETYPEAGGREGATE)
     {
         return AddPrimitiveRef(lpVol, lpTm, arBBox, auTag, auNumTagBits);
     }
-
-    // lwz 0xC0/0xC4; cmplw cr6; blt: traversal stack full -> reject.
     if (m_stackNext >= m_stackMax)
     {
         return 0;
     }
 
-    // slwi r10, r10, 7: the stack records are 0x80-stride VolRefs
-    // (sizeof(VolRef) static_asserts to 0x80).
-    VolRef& lrRef = m_stackVRefBuffer[m_stackNext];
-
-    // stwx r4 -> record +0x00 (the console's 32-bit pointer word; VolRef
-    // carries it at HOST width since waveQ5 C1, so no truncation here -- the
-    // readers below dereference exactly what was stored).
-    lrRef.volume = lpVol;
-
-    if (lpTm)                                       // cmplwi cr6, r5, 0
+    m_stackVRefBuffer[m_stackNext].volume = lpVol;
+    if (lpTm)
     {
-        // 4x lvx128/stvx128 (tm +0x00/+0x10/+0x20/+0x30 -> record
-        // +0x10..+0x4F): cache the transform rows inline, then aim the
-        // record's transform pointer at that inline copy (stw r9 -> +0x04).
-        lrRef.tmContents = *lpTm;
-        lrRef.tm = &lrRef.tmContents;
+        m_stackVRefBuffer[m_stackNext].tmContents = *lpTm;
+        m_stackVRefBuffer[m_stackNext].tm = &m_stackVRefBuffer[m_stackNext].tmContents;
     }
     else
     {
-        lrRef.tm = 0;                   // stw 0 -> +0x04
+        m_stackVRefBuffer[m_stackNext].tm = 0;
     }
-
-    // 4x ld/std: the 32-byte AABBox block-copied into record +0x50..+0x6F
-    // (the committed VolRef carries those bytes as mu50..mu68).
-    lrRef.bBox = arBBox;
-
-    lrRef.tag        = auTag;                     // stw r7 -> +0x70
-    lrRef.numTagBits = auNumTagBits;              // stb r8 -> +0x74 (arg r8;
-                                                    // the pseudocode's BYTE3(v16)
-                                                    // is a Hex-Rays artefact)
-
-    ++m_stackNext;                                  // lwz/addi/stw +0xC0
-    return 1;                                       // li r3, 1
+    m_stackVRefBuffer[m_stackNext].bBox = arBBox;
+    m_stackVRefBuffer[m_stackNext].tag = auTag;
+    m_stackVRefBuffer[m_stackNext].numTagBits = auNumTagBits;
+    ++m_stackNext;
+    return 1;
 }
 
 // ===========================================================================
-// rw::collision::VolumeBBoxQuery::AddPrimitiveRef @ 0x82BB0478   (waveQ5 C1)
-//
-// Stage ONE primitive volume reference in the result buffer. This is the
-// buffer VolumeVolumeQuery::GetPrimitiveBBoxOverlaps drains and
-// PrimitiveBatchIntersect turns into GPInstances, so it is on the direct path
-// from "the culler asked for a pair query" to "a contact exists".
-//
-// 66 instructions, no VMX arithmetic -- the only vector work is the same 4x
-// lvx128/stvx128 transform-row block move AddVolumeRef does. Structurally the
-// aggregate arm above with three substitutions: the m_primVRefBuffer /
-// m_primNext / m_primBufferSize triple (+0xC8/+0xCC/+0xD0) instead of the
-// stack triple (+0x30/+0xC0/+0xC4), no VOLUMETYPEAGGREGATE test, and the
-// capacity guard placed BEFORE the volume-pointer store.
-//
-//   lwz r10,0xCC(r11) / lwz r9,0xD0(r11) / cmplw / blt   ; full -> li r3,0; blr
-//   lwz r9,0xC8(r11) / slwi r10,r10,7 / stwx r4,r10,r9   ; rec+0x00 = volume
-//   cmplwi cr6, r5, 0                                    ; transform present?
-//     yes: 4x lvx128/stvx128 tm+0x00/0x10/0x20/0x30 -> rec+0x10..+0x4F
-//          stw (rec+0x10), 4(rec)                        ; rec+0x04 = &rec+0x10
-//     no : stw 0, 4(rec)                                 ; rec+0x04 = NULL
-//   4x ld/std from r6                -> rec+0x50..+0x6F  ; the 32-byte AABBox
-//   stw r7, 0x70(rec)                                    ; tag
-//   stb r8, 0x74(rec)                                    ; tag bit count
-//   lwz/addi/stw 0xCC(r11)                               ; ++m_primNext
-//   li r3, 1
-//
-// NOTE (Hex-Rays bug, asm authoritative -- the identical artefact AddVolumeRef
-// already documents): the pseudocode renders the last store as
-// "...+116 = BYTE3(v16)", sourcing the byte from the final bbox qword. The asm
-// is `stb r8, 0x74(r10)`, i.e. the numTagBits ARGUMENT.
-//
-// Canonical inline body: rwccore.h:2796-2818.
-// ===========================================================================
+// ARTIST 0x82BB0478, called by AddVolumeRef and GetOverlaps.
 RwBool VolumeBBoxQuery::AddPrimitiveRef(const Volume*                    lpVol,
                                         const math::vpu::Matrix44Affine* lpTm,
                                         const AABBox&                    arBBox,
                                         u32                              auTag,
                                         u8                               auNumTagBits)
 {
-    // lwz 0xCC/0xD0; cmplw cr6; blt: result buffer full -> reject. The guard
-    // runs before ANY store, so a rejected call leaves the buffer untouched.
     if (m_primNext >= m_primBufferSize)
     {
         return 0;
     }
 
-    // slwi r10, r10, 7: the result records are 0x80-stride VolRefs.
-    VolRef& lrRef = m_primVRefBuffer[m_primNext];
-
-    // stwx r4 -> record +0x00 (the console's 32-bit pointer word; VolRef
-    // carries it at HOST width since waveQ5 C1, so no truncation here -- the
-    // readers below dereference exactly what was stored).
-    lrRef.volume = lpVol;
-
-    if (lpTm)                                       // cmplwi cr6, r5, 0
+    m_primVRefBuffer[m_primNext].volume = lpVol;
+    if (lpTm)
     {
-        // Cache the transform rows inline, then aim the record's transform
-        // pointer at that inline copy (stw r9 -> +0x04).
-        lrRef.tmContents = *lpTm;
-        lrRef.tm = &lrRef.tmContents;
+        m_primVRefBuffer[m_primNext].tmContents = *lpTm;
+        m_primVRefBuffer[m_primNext].tm = &m_primVRefBuffer[m_primNext].tmContents;
     }
     else
     {
-        lrRef.tm = 0;                   // stw 0 -> +0x04
+        m_primVRefBuffer[m_primNext].tm = 0;
     }
-
-    // 4x ld/std: the 32-byte AABBox block-copied into record +0x50..+0x6F.
-    lrRef.bBox = arBBox;
-
-    lrRef.tag        = auTag;                     // stw r7 -> +0x70
-    lrRef.numTagBits = auNumTagBits;              // stb r8 -> +0x74
-
-    ++m_primNext;                                   // lwz/addi/stw +0xCC
-    return 1;                                       // li r3, 1
+    m_primVRefBuffer[m_primNext].bBox = arBBox;
+    m_primVRefBuffer[m_primNext].tag = auTag;
+    m_primVRefBuffer[m_primNext].numTagBits = auNumTagBits;
+    ++m_primNext;
+    return 1;
 }
 
-// ===========================================================================
-// rw::collision::VolumeBBoxQuery::GetResourceDescriptor @ 0x82BBBD38
-//
-// Static factory: fills the 5-entry rw::ResourceDescriptor block at lpOut.
-// Pure scalar/integer code (no VMX). Same shape as the committed
-// VolumeVolumeQuery::GetResourceDescriptor @ 0x82BB3A20 (VolumeQuery.cpp):
-// all five (size, align) entries are first stamped (0, 1), then entry[0] is
-// overwritten with (totalSize, 16).
-//
-// Size decode (add/mulli/slwi/addi chain, cross-checked against the buffer
-// partition in Initialize @ 0x82BBBD90):
-//   r11 = ((stackMax + resBufferSize + 2) << 7) + 0x60*resBufferSize + 0x27E0
-//       =   0x100                        query-object header (the "+2" << 7)
-//         + 0x80 * stackMax             stack VolRef records (0x80 stride)
-//         + 0x60 * resBufferSize        instanced-volume pool (0x60/Volume)
-//         + 0x80 * resBufferSize        result/primitive VolRef records
-//         + 0x27E0 (10208)              spatial-map query workspace tail
-//
-// The 5-entry stamp loop is li r8,4 / addic. r8,-1 / bge: five iterations.
-// The final store builds the (size,16) pair as one 8-byte stack word
-// (stw/stw/ld/std) -- equivalent to the two u32 stores below.
-// ===========================================================================
-// ===========================================================================
-// NOT X360: host layout, the console carves at +0x100.  (2026-09-25, crash parity FX-FOLLOWUPS)
-//
-// The query object sits at the base of its backing store and its stack VolRef records are carved
-// right behind it. That offset is the object's SIZE, not a field offset:
-//   * the DWARF member block (volumebboxquery.h) ends with the u8 m_numTagBits at +0xF0, so the
-//     console object is 0xF1 bytes, padded to its 16-byte alignment (it embeds an AABBox and a
-//     VolRef) -- 0x100;
-//   * Initialize @0x82BBBD90: 0x82BBBD9C `addi r10, r11, 0x100` -> `stw r10, 0x30(r11)`
-//     m_stackVRefBuffer;
-//   * GetResourceDescriptor @0x82BBBD38: 0x82BBBD40 `addi r11, r11, 2` + 0x82BBBD4C `slwi r11, 7`
-//     -- the "+2" of ((stackMax + res + 2) << 7) is that 0x100 header.
-// The native header size and member offsets are checked in VolumeBBoxQuery.hpp.
-// ===========================================================================
-
-void* VolumeBBoxQuery::GetResourceDescriptor(void* lpOut, int liStackMax, int liResBufferSize)
+// The query header, stack and result references precede the spatial-map workspace.
+ResourceDescriptor VolumeBBoxQuery::GetResourceDescriptor(u32 luStackMax, u32 luResBufferSize)
 {
-    // add/addi/slwi/mulli/addi: total backing size for the query object, its
-    // stack + result VolRef buffers, the instanced-volume pool, and the
-    // spatial-map query workspace (breakdown in the banner). The header is
-    // the "+2" of `(stackMax + res + 2) << 7`.
-    u32 luTotalSize = ((static_cast<u32>(liStackMax) + static_cast<u32>(liResBufferSize) + 2u) << 7)
-                     + 96u * static_cast<u32>(liResBufferSize) + 0x27E0u;
-
-    // Initialise all five resource-descriptor entries to (size=0, align=1)
-    // (li r8,4; addic./bge loop -- five iterations).
-    u32* lpEntry = reinterpret_cast<u32*>(lpOut);
-    for (int li = 4; li >= 0; --li)
-    {
-        lpEntry[0] = 0;   // size
-        lpEntry[1] = 1;   // alignment
-        lpEntry += 2;
-    }
-
-    // Entry[0] carries the real (size, alignment=16), stored on the console as
-    // a single 8-byte word built on the stack (stw size / stw 0x10 / ld / std).
-    u32* lpDesc = reinterpret_cast<u32*>(lpOut);
-    lpDesc[0] = luTotalSize;
-    lpDesc[1] = 16;
-
-    return lpOut;
+    const u32 luSize = sizeof(VolumeBBoxQuery) + sizeof(VolRef) * (luStackMax + luResBufferSize)
+                       + sizeof(Volume) * luResBufferSize + 0x27E0;
+    return ResourceDescriptor(luSize, __alignof(VolumeBBoxQuery));
 }
 
-// ===========================================================================
-// rw::collision::VolumeBBoxQuery::Initialize @ 0x82BBBD90
-//
-// Static factory: partitions the caller-owned backing buffer (*lppBuffer)
-// into the query's working regions and returns the query handle (the buffer
-// base interpreted as the query object). Pure scalar/pointer code (no VMX).
-// Null backing base -> returns 0 (beq loc_82BBBDDC; li r3,0).
-//
-// Buffer partition (all offsets attested by the store chain; region sizes
-// cross-check the GetResourceDescriptor total exactly):
-//   base + 0x100                                   -> m_stackVRefBuffer
-//   base + 0x100 + 0x80*stackMax                   -> m_instVolPool
-//   ...          + 0x60*resBufferSize              -> m_primVRefBuffer
-//   ...          + 0x80*resBufferSize              -> m_spatialMapQueryMem
-// (No other member is written -- the cursor/count fields are primed later by
-// the VolumeVolumeQuery driver / InitQuery, exactly as on the console.)
-//
-// Native sizes are checked in the corresponding headers: query 0x100,
-// VolRef 0x80 and instanced Volume 0x60.
-// ===========================================================================
-void* VolumeBBoxQuery::Initialize(void** lppBuffer, int liStackMax, int liResBufferSize)
+inline VolumeBBoxQuery::VolumeBBoxQuery(u32 luStackMax, u32 luResults, u32 luInstVolMax)
 {
-    // lwz r11, 0(r3); cmplwi; beq: null backing base -> no query.
-    VolumeBBoxQuery* lpQuery = reinterpret_cast<VolumeBBoxQuery*>(*lppBuffer);
-    if (!lpQuery)
-    {
-        return 0;                                         // li r3,0
-    }
+    m_stackMax = luStackMax;
+    m_primBufferSize = luResults;
+    m_instVolMax = luInstVolMax;
 
-    const u32 luStackMax = static_cast<u32>(liStackMax);
-    const u32 luResults  = static_cast<u32>(liResBufferSize);
-
-    lpQuery->m_stackMax       = luStackMax;               // stw r4 -> +0xC4
-    lpQuery->m_primBufferSize = luResults;                // stw r5 -> +0xD0
-    lpQuery->m_instVolMax     = luResults;                // stw r5 -> +0xDC
-
-    // addi r10, r11, 0x100: the stack follows the native query header.
-    u8* lpStackBuffer = reinterpret_cast<u8*>(lpQuery) + 0x100;
-    lpQuery->m_stackVRefBuffer = reinterpret_cast<VolRef*>(lpStackBuffer); // stw -> +0x30
-
-    // slwi r9, r4, 7: 0x80-stride stack records, then the instanced-volume
-    // pool (mulli r7, r5, 0x60: native Volume stride 0x60),
-    // then the result VolRef records (slwi r8, r5, 7), then the spatial-map
-    // query workspace tail.
-    u8* lpInstVolPool = lpStackBuffer + (luStackMax << 7);
-    lpQuery->m_instVolPool = reinterpret_cast<Volume*>(lpInstVolPool);     // stw -> +0xD4
-
-    u8* lpPrimBuffer = lpInstVolPool + 96u * luResults;
-    lpQuery->m_primVRefBuffer = reinterpret_cast<VolRef*>(lpPrimBuffer);   // stw -> +0xC8
-
-    lpQuery->m_spatialMapQueryMem = lpPrimBuffer + (luResults << 7);       // stw -> +0xE4
-
-    return lpQuery;                                       // mr r3, r11
+    m_stackVRefBuffer = reinterpret_cast<VolRef*>(this + 1);
+    m_instVolPool = reinterpret_cast<Volume*>(m_stackVRefBuffer + luStackMax);
+    m_primVRefBuffer = reinterpret_cast<VolRef*>(m_instVolPool + luInstVolMax);
+    m_spatialMapQueryMem = m_primVRefBuffer + luResults;
 }
 
+VolumeBBoxQuery* VolumeBBoxQuery::Initialize(const Resource& lrResource, u32 luStackMax, u32 luResults)
+{
+    void* lpMemory = lrResource.m_baseResources[0];
+    if (!lpMemory)
+    {
+        return 0;
+    }
+    return new (lpMemory) VolumeBBoxQuery(luStackMax, luResults, luResults);
+}
 // ===========================================================================
 // rw::collision::VolumeBBoxQuery::GetOverlaps @ 0x82BBBDE8
 // Called by: VolumeVolumeQuery::GetPrimitiveBBoxOverlaps (VolumeQuery.cpp).

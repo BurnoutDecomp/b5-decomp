@@ -350,28 +350,19 @@ void AptActionInterpreter::_FunctionAptActionPushStringGetMember(AptActionInterp
 // ---------------------------------------------------------------------------
 // _FunctionAptActionPushStringGetVar @0x82B05640 -- resolve the inline dictionary
 // string as a variable (getVariable) and push the result. The console builds a
-// scratch EAStringC from the inline string into the global name slot (off_82F733B0)
-// and reads the run scope/target from the context (ctx+4 / ctx+8).
+// name in the Apt lifetime-owned temporary at 0x82F733B0 before lookup.
 // ---------------------------------------------------------------------------
+extern AptNativeString gstrTempString;
+
 void AptActionInterpreter::_FunctionAptActionPushStringGetVar(AptActionInterpreter* pInterp,
                                                               LocalContextT* pCtx)
 {
-    const unsigned char* pAligned =
-        reinterpret_cast<const unsigned char*>(
-            (reinterpret_cast<uintptr_t>(pCtx->mpProgramCounter) + 3u) & ~static_cast<uintptr_t>(3u));
-    const char* szName = *reinterpret_cast<const char* const*>(pAligned);   // native 32-bit pointer
-    pCtx->mpProgramCounter = pAligned + 4;
-
-    // The console assembles the name into the shared scratch EAStringC off_82F733B0
-    // (InitFromBuffer + operator= + DecreaseInternalRefCount) and passes
-    // &off_82F733B0 as the name; a local EAStringC carries the identical value into
-    // getVariable (the global scratch is only the console's allocation dodge).
-    EAStringC name(szName);
-    AptValue* pResult = pInterp->getVariable(pCtx->mpCIH, pCtx->mpPendingReleaseValue,
-                                             &name, 1, 1, 0);
-
-    pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = pResult;      // inlined stackPush (store + advance)
-    pResult->AddRef();
+    const unsigned char* pAligned = reinterpret_cast<const unsigned char*>(
+        (reinterpret_cast<uintptr_t>(pCtx->mpProgramCounter) + 3u) & ~static_cast<uintptr_t>(3u));
+    pCtx->mpProgramCounter = pAligned + sizeof(const char*);
+    gstrTempString = *reinterpret_cast<const char* const*>(pAligned);
+    AptValue* pValue = pInterp->getVariable(pCtx->mpCIH, pCtx->mpPendingReleaseValue, &gstrTempString, 1, 1, 0);
+    pInterp->stackPush(pValue);
 }
 
 // ---------------------------------------------------------------------------

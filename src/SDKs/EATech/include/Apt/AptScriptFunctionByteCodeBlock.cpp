@@ -51,6 +51,21 @@ AptScriptFunctionByteCodeBlock::AptScriptFunctionByteCodeBlock(void* pByteCode,
 {
 }
 
+// Bytecode blocks cannot be duplicated or receive declared arguments.
+AptScriptFunctionBase* AptScriptFunctionByteCodeBlock::Duplicate(AptValue*) const
+{
+    return 0;
+}
+
+const char* AptScriptFunctionByteCodeBlock::GetName() const
+{
+    return mpFunctionName;
+}
+
+void AptScriptFunctionByteCodeBlock::SetArgument(AptValue*, int32_t)
+{
+}
+
 // ---------------------------------------------------------------------------
 // GetByteCodeBase @ 0x82AD4FB0   ( lwz r3, 0x30(r3); blr )
 //

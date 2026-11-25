@@ -134,7 +134,7 @@ namespace CgsResource
             return 0;
         ScratchEntry& lrScratch = mpEntries[muNumEntries];
         lrScratch.miEntryId = liEntryId;
-        lrScratch.mpSrcLocation = lpEntry->mResource.m_baseResources[liMemType];
+        lrScratch.mpSrcLocation = lpEntry->GetResourceMemory().m_baseResources[liMemType];
         lrScratch.mpTempLocation = lpTemp;
         lrScratch.mpDestLocation = lpDestLocation;
         lrScratch.muSize = lrDescriptor.m_size;

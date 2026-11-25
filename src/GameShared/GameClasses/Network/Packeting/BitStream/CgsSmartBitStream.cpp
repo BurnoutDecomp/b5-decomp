@@ -6,69 +6,18 @@
 
 #include "types.hpp"   // uintptr_t
 
-// Reconstructed from BURNOUT_X360_*.XEX
-//   CgsNetwork::SmartBitStream::AddRawData @ 0x82882ED8 — copy a raw byte block
-//                                                         into the bitstream:
-//                                                         emit a byte head until
-//                                                         the data pointer is
-//                                                         8-byte aligned, then a
-//                                                         u64 bulk, then a byte
-//                                                         tail. Returns false on
-//                                                         the first AddBits
-//                                                         overflow.
-//   CgsNetwork::SmartBitStream::GetRawData @ 0x82883028 — inverse: read the
-//                                                         block back with the
-//                                                         same head/bulk/tail
-//                                                         split keyed on the
-//                                                         destination pointer's
-//                                                         alignment.
-//
-// GetRawData was reconstructed from the decoded algorithm rather than the X360
-// pseudocode: Hex-Rays emitted it with "local variable allocation has failed,
-// the output may be wrong!" (register-mangled). It is the inverse of AddRawData.
-// The head loop aligns on the DATA pointer's absolute address, so the sender's and the
-// receiver's head/bulk/tail splits differ whenever their buffers differ in alignment;
-// the bulk words are therefore loaded and stored big-endian, as the console's are, so
-// every data byte lands in the stream in memory order and the split does not matter.
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\BitStream\\CgsSmartBitStream.cpp"
 
 namespace CgsNetwork
 {
-namespace
-{
-    // Big-endian 64-bit access to a raw data block (see CgsBitStream.cpp). Host-port
-    // correction, not console behaviour: the console's word loads and stores are
-    // big-endian natively.
-    inline u64 LoadWord(const u64* lpuWord)
-    {
-        const u8* lpu8 = reinterpret_cast<const u8*>(lpuWord);
-        return (static_cast<u64>(lpu8[0]) << 56) | (static_cast<u64>(lpu8[1]) << 48)
-             | (static_cast<u64>(lpu8[2]) << 40) | (static_cast<u64>(lpu8[3]) << 32)
-             | (static_cast<u64>(lpu8[4]) << 24) | (static_cast<u64>(lpu8[5]) << 16)
-             | (static_cast<u64>(lpu8[6]) << 8)  |  static_cast<u64>(lpu8[7]);
-    }
-
-    inline void StoreWord(u64* lpuWord, u64 luValue)
-    {
-        u8* lpu8 = reinterpret_cast<u8*>(lpuWord);
-        lpu8[0] = static_cast<u8>(luValue >> 56);
-        lpu8[1] = static_cast<u8>(luValue >> 48);
-        lpu8[2] = static_cast<u8>(luValue >> 40);
-        lpu8[3] = static_cast<u8>(luValue >> 32);
-        lpu8[4] = static_cast<u8>(luValue >> 24);
-        lpu8[5] = static_cast<u8>(luValue >> 16);
-        lpu8[6] = static_cast<u8>(luValue >> 8);
-        lpu8[7] = static_cast<u8>(luValue);
-    }
-}
-
     bool SmartBitStream::AddRawData(const char* lpcData, s32 liNumBytes)
     {
         CGS_ASSERT(lpcData != 0, CGS_ASSERT_MESSAGE_AT(
             "lpcData != NULL",
-            __FILE__, 47 /* ARTIST 0x82882F14 */));
+            CGS_ARTIST_FILE, 47 /* ARTIST 0x82882F14 */));
         CGS_ASSERT(liNumBytes >= 0, CGS_ASSERT_MESSAGE_AT(
             "liNumBytes >= 0",
-            __FILE__, 48 /* ARTIST 0x82882F38 */));
+            CGS_ARTIST_FILE, 48 /* ARTIST 0x82882F38 */));
 
         const char* lpcRemaining = lpcData;
 
@@ -88,7 +37,7 @@ namespace
         const u64* lpuData = reinterpret_cast<const u64*>(lpcRemaining);
         while (liNumBytes >= 8)
         {
-            if (!AddUInt(LoadWord(lpuData)))
+            if (!AddUInt(*lpuData))
             {
                 return false;
             }
@@ -108,9 +57,7 @@ namespace
             ++lpcRemaining;
         }
 
-        CGS_ASSERT(liNumBytes == 0, CGS_ASSERT_MESSAGE_AT(
-            "liNumBytes == 0",
-            __FILE__, 85 /* ARTIST 0x82883004 */));
+        CGS_ASSERT_AT(liNumBytes == 0, "liNumBytes == 0", CGS_ARTIST_FILE, 85);
         return true;
     }
 
@@ -118,10 +65,10 @@ namespace
     {
         CGS_ASSERT(lpcBuffer != 0, CGS_ASSERT_MESSAGE_AT(
             "lpcBuffer != NULL",
-            __FILE__, 100 /* ARTIST 0x82883064 */));
+            CGS_ARTIST_FILE, 100 /* ARTIST 0x82883064 */));
         CGS_ASSERT(liNumBytes >= 0, CGS_ASSERT_MESSAGE_AT(
             "liNumBytes >= 0",
-            __FILE__, 101 /* ARTIST 0x82883088 */));
+            CGS_ARTIST_FILE, 101 /* ARTIST 0x82883088 */));
 
         char* lpcDst = lpcBuffer;
 
@@ -133,15 +80,20 @@ namespace
             --liNumBytes;
         }
 
-        // Bulk: 64 bits at a time into the now-aligned pointer.
         u64* lpuDst = reinterpret_cast<u64*>(lpcDst);
-        while (liNumBytes >= 8)
+        const uintptr_t luTailOffset = static_cast<u32>(liNumBytes) & ~7u;
+        lpcDst = reinterpret_cast<char*>(reinterpret_cast<uintptr_t>(lpcDst) + luTailOffset);
+        if (liNumBytes >= 8)
         {
-            StoreWord(lpuDst, GetUInt());
-            ++lpuDst;
-            liNumBytes -= 8;
+            u32 luWordCount = static_cast<u32>(liNumBytes) >> 3;
+            liNumBytes -= static_cast<s32>(luWordCount * 8);
+            do
+            {
+                *lpuDst = GetUInt();
+                ++lpuDst;
+            }
+            while (--luWordCount);
         }
-        lpcDst = reinterpret_cast<char*>(lpuDst);
 
         // Tail: remaining bytes.
         while (liNumBytes > 0)

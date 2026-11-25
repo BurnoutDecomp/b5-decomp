@@ -15,17 +15,14 @@
 
 #include "GameShared/GameClasses/SceneManager/FineIntersectionTestModule/CgsFineIntersectionTestModule.h"
 
+#include "rw/rwcore_structs.h"
 #include <cstddef>  // offsetof
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "vendor/renderware/collision/VolumeQuery.hpp"  // rw::collision::VolumeVolumeQuery / VolumeLineQuery + their host sizes
+#include "vendor/renderware/collision/VolumeQuery.hpp"
 
-namespace CgsSceneManager
-{
-    // The two buffers hold the HOST descriptors Construct asks for (100 volumes / 100 results each):
-    // the VolumeVolumeQuery one at the host size (NOT X360), the VolumeLineQuery one at the console's 67584,
-    // which the host descriptor (0x10470) still fits.
-}
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\FineIntersectionTestModule/CgsFineIntersectionTestModule.cpp";
 
 namespace CgsSceneManager
 {
@@ -45,41 +42,19 @@ void FineIntersectionTestModule::Construct()
     mpVolumeManager = 0;                                      // word 91652 <- 0
     mpEntityManager = 0;                                      // word 91653 <- 0
 
-    // --- volume-volume query ---
-    // The X360 descriptor is a 5-entry rw::ResourceDescriptor block (var_80); only entry[0].size
-    // is consulted here, so a small u32[12] scratch covers it exactly as the asm does.
-    // NOT X360: host GPInstance / VolRef widths -- the :63 assert keeps the console text but compares
-    // against the host buffer (the console's 0x828B0C4C `ori r29, r11, 0x9000`).
-    u32 laVolumeVolumeDesc[12];
-    rw::collision::VolumeVolumeQuery::GetResourceDescriptor(laVolumeVolumeDesc, 100, 100);
-    CGS_ASSERT(laVolumeVolumeDesc[0] <= KU_VOLUME_VOLUME_QUERY_BUFFER_SIZE,
-               "VolumeVolumeQueryMem is too small");
+    const rw::ResourceDescriptor lVolumeVolumeDescriptor =
+        rw::collision::VolumeVolumeQuery::GetResourceDescriptor(100, 100);
+    CGS_ASSERT_AT(lVolumeVolumeDescriptor.m_baseResourceDescriptors[0].m_size <= KU_VOLUME_VOLUME_QUERY_BUFFER_SIZE,
+                  "VolumeVolumeQueryMem is too small", KAC_ARTIST_ASSERT_FILE, 63);
+    const rw::Resource lVolumeVolumeResource(macVolumeVolumeQueryBuffer);
+    mpVolumeVolumeQuery = rw::collision::VolumeVolumeQuery::Initialize(lVolumeVolumeResource, 100, 100);
 
-    void* lpVolumeVolumeBuffer[5];
-    lpVolumeVolumeBuffer[0] = macVolumeVolumeQueryBuffer;  // backing-store base at [0]
-    lpVolumeVolumeBuffer[1] = 0;
-    lpVolumeVolumeBuffer[2] = 0;
-    lpVolumeVolumeBuffer[3] = 0;
-    lpVolumeVolumeBuffer[4] = 0;
-    mpVolumeVolumeQuery = static_cast<rw::collision::VolumeVolumeQuery*>(
-        rw::collision::VolumeVolumeQuery::Initialize(lpVolumeVolumeBuffer, 100, 100));  // word 91654
-
-    // --- volume-line query ---
-    // The whole 5-entry descriptor block (var_50, 0x828B0CC0). Until 2026-09-25 this was ONE u32, which the
-    // descriptor's ten words overran on the stack; the module was not mounted, so it never ran.
-    u32 laVolumeLineDesc[12];
-    rw::collision::VolumeLineQuery::GetResourceDescriptor(laVolumeLineDesc, 100, 100);
-    CGS_ASSERT(laVolumeLineDesc[0] <= KU_VOLUME_LINE_QUERY_MEM_SIZE,
-               "VolumeLineQueryMem is too small");
-
-    void* lpVolumeLineBuffer[5];
-    lpVolumeLineBuffer[0] = macVolumeLineQueryBuffer;  // backing-store base (console this + 299008; host + 0x49600)
-    lpVolumeLineBuffer[1] = 0;
-    lpVolumeLineBuffer[2] = 0;
-    lpVolumeLineBuffer[3] = 0;
-    lpVolumeLineBuffer[4] = 0;
-    mpVolumeLineQuery = static_cast<rw::collision::VolumeLineQuery*>(
-        rw::collision::VolumeLineQuery::Initialize(lpVolumeLineBuffer, 100, 100));  // word 91655
+    const rw::ResourceDescriptor lVolumeLineDescriptor =
+        rw::collision::VolumeLineQuery::GetResourceDescriptor(100, 100);
+    CGS_ASSERT_AT(lVolumeLineDescriptor.m_baseResourceDescriptors[0].m_size <= KU_VOLUME_LINE_QUERY_MEM_SIZE,
+                  "VolumeLineQueryMem is too small", KAC_ARTIST_ASSERT_FILE, 73);
+    const rw::Resource lVolumeLineResource(macVolumeLineQueryBuffer);
+    mpVolumeLineQuery = rw::collision::VolumeLineQuery::Initialize(lVolumeLineResource, 100, 100);
 }
 
 // ---------------------------------------------------------------------------

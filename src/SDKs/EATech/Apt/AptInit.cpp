@@ -107,6 +107,9 @@ unsigned int gAptCommonConfig[17] = { 0 };   // unk_82F733B8
 // (gAptRenderThreadId) since AptTarget.cpp and the AptValue release path read it there.
 EA::Thread::ThreadId gAptSimThreadId = EA::Thread::ThreadId();
 
+// ARTIST 0x82F733B0. Shared temporary for bytecode string lookups.
+AptNativeString gstrTempString;
+
 namespace
 {
     // ---- the once-only init guard (dword_8324E6E0) -------------------------
@@ -127,10 +130,6 @@ namespace
 
     // ---- config-derived flag byte (byte_8324E393) --------------------------
     unsigned char gbAptUpdateFlag393 = 0;   // byte_8324E393
-
-    // ---- off_82F733B0 / unk_82F72FF8 (the config "empty default" sentinel) --
-    unsigned char gAptEmptyDefaultSentinel[8] = { 0 };   // unk_82F72FF8
-    void*         gpAptConfigDefault = 0;           // off_82F733B0
 
     // ---- dword_8324E4F0 (the common-init gAptFuncs self-registration slot) -
     void* gpAptCommonFuncsSlot = 0;   // dword_8324E4F0
@@ -738,9 +737,7 @@ int AptCommonShutdown()
 
     AptValueShutdownRemaining();
 
-    EAStringC::DecreaseInternalRefCount(
-        static_cast<EAStringC::StringDataC*>(gpAptConfigDefault));
-    gpAptConfigDefault = &gAptEmptyDefaultSentinel[0];
+    gstrTempString.Clear();
     StringPool::Teardown();
 
     AptValueVector* lpValuesToRelease = gpValuesToRelease;
@@ -904,9 +901,8 @@ int AptUpdateInitialize(unsigned int* a1, char a2)
     // so the pool build sees the configured count (default 128).
     gAptLookupPoolSize = static_cast<int>(lpParams[13]);
 
-    // if (!off_82F733B0) off_82F733B0 = &unk_82F72FF8.
-    if (gpAptConfigDefault == 0)
-        gpAptConfigDefault = &gAptEmptyDefaultSentinel[0];
+    if (!gstrTempString.IsValid())
+        gstrTempString.ClearConstantValue();
 
     // byte_8324E392 = 0; byte_8324E393 = params byte[0x3D].
     gAptDefaultTextMouseWheelEnabled = false;

@@ -357,7 +357,7 @@ namespace CgsResource
         if (mbCreateEntryListResource)
         {
             EntryListResource* lpData =
-                static_cast<EntryListResource*>(lpResource->mResource.GetMemoryResource());
+                static_cast<EntryListResource*>(lpResource->GetResourceMemory().GetMemoryResource());
 
             lpData->muNumEntries = static_cast<u32>(miNumEntries);
             lpData->macOwnerName[0] = 0;

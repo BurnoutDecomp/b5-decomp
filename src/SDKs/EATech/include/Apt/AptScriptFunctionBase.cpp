@@ -165,66 +165,6 @@ AptScriptFunctionBase::AptScriptFunctionBase(AptVirtualFunctionTable_Indices eTy
 // DestroyGCPointers and the destructor chains to ~AptObject).
 
 // ===========================================================================
-// Pure-virtual script-function interface (base slots are _purecall @0x82C08F60)
-// ===========================================================================
-//
-// The compiled-body accessors (GetName / GetNumArguments / GetByteCodeBase /
-// GetByteCodeSize / GetConstantPool / SetArgument) and Duplicate are PURE VIRTUAL on
-// AptScriptFunctionBase: in the X360 ARTIST.XEX every one of these slots in the base
-// vtable (off_82145C40 slots 15-20, 22) holds _purecall (0x82C08F60), and each
-// concrete subclass (AptScriptFunction1 / AptScriptFunction2 /
-// AptScriptFunctionByteCodeBlock) installs its own override. The base declares them
-// non-pure (so the three subclass vtables share the base layout and the interpreter
-// can name them on an AptScriptFunctionBase*); these out-of-line definitions
-// reproduce the _purecall slot faithfully -- reaching one means a pure base method
-// was dispatched (a subclass forgot to override), which the X360 _purecall handles by
-// aborting. They return a type-appropriate default after the abort so the (never
-// taken) fallthrough type-checks.
-//
-
-const char* AptScriptFunctionBase::GetName() const
-{
-    abort();           // _purecall @0x82C08F60 -- pure virtual; subclass must override
-    return 0;
-}
-
-int32_t AptScriptFunctionBase::GetNumArguments() const
-{
-    abort();           // _purecall
-    return 0;
-}
-
-void* AptScriptFunctionBase::GetByteCodeBase() const
-{
-    abort();           // _purecall
-    return 0;
-}
-
-int32_t AptScriptFunctionBase::GetByteCodeSize() const
-{
-    abort();           // _purecall
-    return 0;
-}
-
-AptConstantPool AptScriptFunctionBase::GetConstantPool() const
-{
-    abort();           // _purecall
-    AptConstantPool pool = { 0, 0 };
-    return pool;
-}
-
-void AptScriptFunctionBase::SetArgument(AptValue* /*pValue*/, int32_t /*nArgIndex*/)
-{
-    abort();           // _purecall
-}
-
-AptScriptFunctionBase* AptScriptFunctionBase::Duplicate(AptValue* /*pCIH*/) const
-{
-    abort();           // _purecall
-    return 0;
-}
-
-// ===========================================================================
 // Per-call frame stack + register window (the interpreter's call machinery)
 // ===========================================================================
 

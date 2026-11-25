@@ -59,6 +59,7 @@
 #include "GameShared/GameClasses/SceneManager/ContactGen/CgsContactGenerationIO.h"  // OverlapCullingIO::InputBuffer / OutputBuffer
 #include "vendor/renderware/collision/CollisionVolume.hpp"                  // native Volume type descriptors
 #include "vendor/renderware/collision/GPInstance.hpp"                       // PrimitivePairIntersect(+Result)
+#include "rw/rwcore_structs.h"
 #include "vendor/renderware/collision/VolumeQuery.hpp"                      // rw::collision::VolumeVolumeQuery
 
 static const char KAC_ARTIST_ASSERT_FILE[] =
@@ -211,39 +212,20 @@ void OverlapCullingModule::Construct()
     meReleaseStage = RELEASESTAGE_DONE;   // *(this+556) = 2
     mePrepareStage = PREPARESTAGE_START;  // *(this+552) = 0
 
-    // The descriptor is copied out as 10 words; the asm then reads copied word 0 as the
-    // size and copied word 1 as the alignment. Mirror the asm's 10-word copy into a local
-    // scratch.
-    u32 laDesc[10];
-    {
-        const u32* lpDesc = static_cast<const u32*>(
-            rw::collision::VolumeVolumeQuery::GetResourceDescriptor(laDesc, 100, 100));
-        for (s32 li = 0; li < 10; ++li)
-        {
-            laDesc[li] = lpDesc[li];
-        }
-    }
-    // The asm consults the FIRST two copied words: lwz r10,var_90 (copied word 0) is the
-    // size compared against 0x62000, and lwz r27,var_8C (var_90+4, copied word 1) is the
-    // alignment compared against 16. (var_90 is the destination of the 10-word copy.)
-    const u32 luQuerySize      = laDesc[0];  // var_90: copied word 0
-    const u32 luQueryAlignment = laDesc[1];  // var_8C: copied word 1
+    rw::ResourceDescriptor lDescriptor;
+    lDescriptor = rw::collision::VolumeVolumeQuery::GetResourceDescriptor(100, 100);
+    const u32 luQuerySize = lDescriptor.m_baseResourceDescriptors[0].m_size;
+    const s32 liQueryAlignment = static_cast<s32>(lDescriptor.m_baseResourceDescriptors[0].m_alignment);
 
-    CGS_ASSERT(luQuerySize <= 0x62000, "VolumeVolumeQueryMem is too small");
-    CGS_ASSERT(luQueryAlignment == 16,
-               "VolumeVolumeMem alignment has changed. Changed the GTALIGN size");
-    CGS_ASSERT(luQueryAlignment != 0 &&
-                   (reinterpret_cast<uintptr_t>(maVolumeVolumeQueryMem) % luQueryAlignment) == 0,
-               "VolumeVolumeQueryMem isn't aligned properly");
+    CGS_ASSERT_AT(luQuerySize <= sizeof(maVolumeVolumeQueryMem), "VolumeVolumeQueryMem is too small",
+                  KAC_ARTIST_ASSERT_FILE, 69);
+    CGS_ASSERT_AT(liQueryAlignment == 16, "VolumeVolumeMem alignment has changed. Changed the GTALIGN size",
+                  KAC_ARTIST_ASSERT_FILE, 70);
+    CGS_ASSERT_AT(reinterpret_cast<uintptr_t>(maVolumeVolumeQueryMem) % liQueryAlignment == 0,
+                  "VolumeVolumeQueryMem isn't aligned properly", KAC_ARTIST_ASSERT_FILE, 71);
 
-    void* lpBuffer[5];
-    lpBuffer[0] = maVolumeVolumeQueryMem;  // this+576: backing-store base
-    lpBuffer[1] = 0;
-    lpBuffer[2] = 0;
-    lpBuffer[3] = 0;
-    lpBuffer[4] = 0;
-    mpVolVolQuery = static_cast<rw::collision::VolumeVolumeQuery*>(
-        rw::collision::VolumeVolumeQuery::Initialize(lpBuffer, 100, 100));  // *(this+572)
+    const rw::Resource lResource(maVolumeVolumeQueryMem);
+    mpVolVolQuery = rw::collision::VolumeVolumeQuery::Initialize(lResource, 100, 100);
 
     mbIsNewModule = true;  // *(this+4) = 1
 }

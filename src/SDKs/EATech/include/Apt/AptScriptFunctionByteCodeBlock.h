@@ -92,6 +92,9 @@ public:
                                    AptValue* pCallContext);
 
     // ---- AptScriptFunctionBase overrides ---------------------------------------
+    virtual AptScriptFunctionBase* Duplicate(AptValue* pCIH) const;
+    virtual const char* GetName() const;
+    virtual void SetArgument(AptValue* pValue, int32_t nArgIndex);
     // GetNumArguments @0x82B0F1B8 -- a byte-code block declares NO parameters (the
     // console body is `li r3,0; blr`). MUST override the Fn1/Fn2 form (which derefs a
     // compiled-record mpByteCode->mnNumArguments) -- on this subclass mpByteCode is the

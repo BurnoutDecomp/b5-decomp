@@ -268,16 +268,14 @@ namespace CgsSceneManager
         // assert (:208, `li r5, 0xD0`), then Initialize with the buffer table {buffer, 0, 0, 0, 0}
         // (var_1E0); the returned handle is stored at +0x8D8C8 (`stwx r8, r30, r7`).
         {
-            u32 lauDescriptor[10];
-            rw::collision::VolumeVolumeQuery::GetResourceDescriptor(lauDescriptor, KI_OCTREE_VOLUME_QUERY_NUM_VOLUMES,
-                                                                    KI_OCTREE_VOLUME_QUERY_NUM_RESULTS);
-            CGS_ASSERT(lauDescriptor[0] <= KU_OCTREE_VOLUME_VOLUME_QUERY_BUFFER_SIZE,
+            const rw::ResourceDescriptor lDescriptor = rw::collision::VolumeVolumeQuery::GetResourceDescriptor(
+                KI_OCTREE_VOLUME_QUERY_NUM_VOLUMES, KI_OCTREE_VOLUME_QUERY_NUM_RESULTS);
+            CGS_ASSERT(lDescriptor.m_baseResourceDescriptors[0].m_size <= KU_OCTREE_VOLUME_VOLUME_QUERY_BUFFER_SIZE,
                        "VolumeVolumeQueryMem is too small");
 
-            void* lapBuffer[5] = { macVolumeVolumeQueryBuffer, 0, 0, 0, 0 };
-            mpVolumeVolumeQuery = static_cast<rw::collision::VolumeVolumeQuery*>(
-                rw::collision::VolumeVolumeQuery::Initialize(lapBuffer, KI_OCTREE_VOLUME_QUERY_NUM_VOLUMES,
-                                                             KI_OCTREE_VOLUME_QUERY_NUM_RESULTS));
+            const rw::Resource lResource(macVolumeVolumeQueryBuffer);
+            mpVolumeVolumeQuery = rw::collision::VolumeVolumeQuery::Initialize(
+                lResource, KI_OCTREE_VOLUME_QUERY_NUM_VOLUMES, KI_OCTREE_VOLUME_QUERY_NUM_RESULTS);
         }
 
         // 0x828C9FE8..0x828CA09C -- the walk's two query volumes, built in place in their buffers with a

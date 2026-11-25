@@ -128,7 +128,7 @@ namespace CgsResource
                 continue;
 
             const CgsGraphics::InstanceList* lpList =
-                static_cast<const CgsGraphics::InstanceList*>(lpEntry->mResource.m_baseResources[0]);
+                static_cast<const CgsGraphics::InstanceList*>(lpEntry->GetResourceMemory().m_baseResources[0]);
             if (lpList->muNumInstances == 0)
                 continue;
 
@@ -169,7 +169,7 @@ namespace CgsResource
                 continue;
 
             const CgsGraphics::Model* lpModel =
-                static_cast<const CgsGraphics::Model*>(lpEntry->mResource.m_baseResources[0]);
+                static_cast<const CgsGraphics::Model*>(lpEntry->GetResourceMemory().m_baseResources[0]);
             if (lpModel->UsesTexture(lpTexture))
                 ++liCount;
         }
@@ -189,7 +189,7 @@ namespace CgsResource
 
         const Entry*           lpEntry = mpPool->GetEntryDirect(luPoolEntryIndex);
         renderengine::Texture* lpTexture =
-            static_cast<renderengine::Texture*>(lpEntry->mResource.m_baseResources[0]);
+            static_cast<renderengine::Texture*>(lpEntry->GetResourceMemory().m_baseResources[0]);
 
         // The X360 takes the graphics-system descriptor's m_size (entry+0x10) as the entry's data size.
         const u32 luDataSize = lpEntry->mResourceDescriptor.m_baseResourceDescriptors[1].m_size;
@@ -220,7 +220,7 @@ namespace CgsResource
 
         const Entry* lpEntry = mpPool->GetEntryDirect(muTextureEntryIndex);
         renderengine::Texture* lpTexture =
-            static_cast<renderengine::Texture*>(lpEntry->mResource.m_baseResources[0]);
+            static_cast<renderengine::Texture*>(lpEntry->GetResourceMemory().m_baseResources[0]);
 
         char lacText[512];
         f32  lfY = GetY();
@@ -276,7 +276,7 @@ namespace CgsResource
     {
         const Entry*           lpEntry   = mpPool->GetEntryDirect(muTextureEntryIndex);
         renderengine::Texture* lpTexture =
-            static_cast<renderengine::Texture*>(lpEntry->mResource.m_baseResources[0]);
+            static_cast<renderengine::Texture*>(lpEntry->GetResourceMemory().m_baseResources[0]);
 
         switch (meRenderMode)
         {

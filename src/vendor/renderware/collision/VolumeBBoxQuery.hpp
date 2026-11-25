@@ -33,6 +33,9 @@
 
 namespace rw
 {
+    struct Resource;
+    struct ResourceDescriptor;
+
 namespace collision
 {
     struct Volume;   // CollisionVolume.hpp
@@ -42,16 +45,9 @@ namespace collision
     public:
         // --- static factory entry points (called with no implicit `this`) ---
 
-        // @ 0x82BBBD38 -- fills the 5-entry rw::ResourceDescriptor block at
-        // lpOut (lpOut[0] = total backing size, lpOut[1] = 16). Canonical
-        // param meaning per DWARF volumebboxquery.h:179 / rwccore.h:2866:
-        // (stackMax, resBufferSize).
-        static void* GetResourceDescriptor(void* lpOut, int liStackMax, int liResBufferSize);
-
-        // @ 0x82BBBD90 -- partitions the backing buffer (*lppBuffer at [0])
-        // into the query's working regions and returns the query handle (the
-        // buffer base interpreted as the query object). Null base -> 0.
-        static void* Initialize(void** lppBuffer, int liStackMax, int liResBufferSize);
+        static ResourceDescriptor GetResourceDescriptor(u32 luStackMax, u32 luResBufferSize);
+        VolumeBBoxQuery(u32 luStackMax, u32 luResults, u32 luInstVolMax);
+        static VolumeBBoxQuery* Initialize(const Resource& lrResource, u32 luStackMax, u32 luResBufferSize);
 
         // @ 0x82BBBDE8 -- the driver loop: consume the remaining input
         // volumes and the aggregate-traversal stack until both are empty or

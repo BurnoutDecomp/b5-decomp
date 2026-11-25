@@ -7,7 +7,9 @@
 #include "vendor/renderware/collision/GPInstance.hpp"        // VolRef1xN / PPIR / PrimitiveBatchIntersect
 #include "vendor/renderware/collision/VolRef.hpp"
 #include "vendor/renderware/collision/VolumeBBoxQuery.hpp"   // the embedded sub-queries
-#include <cstring>  // memset
+#include "rw/rwcore_structs.h"
+#include <new>
+#include <cstring>
 #include <cstdio>   // snprintf ([vvq] / [vlq] DIAG, the [vlq] traps)
 #include <cstdlib>  // getenv   ([vvq] / [vlq] DIAG only)
 
@@ -21,175 +23,45 @@ namespace collision
 CGS_STATIC_ASSERT((sizeof(GPInstance) == 0xc0), "Native GPInstance stride");
 CGS_STATIC_ASSERT((sizeof(VolumeVolumeQuery) == 0x48), "Native VolumeVolumeQuery size");
 CGS_STATIC_ASSERT((sizeof(VolumeLineQuery) == 0x110), "Native VolumeLineQuery size");
-CGS_STATIC_ASSERT((((sizeof(VolumeVolumeQuery) + __alignof(VolumeBBoxQuery) - 1) & ~(__alignof(VolumeBBoxQuery) - 1)) == 0x50), "Native aligned VolumeVolumeQuery size");
-
-// ===========================================================================
-// NOT X360: host layout, the console carves at +0x50.  (2026-09-25, crash parity FX-FOLLOWUPS)
-//
-// The query object is built IN PLACE at the base of its backing store, and the two embedded
-// VolumeBBoxQuery sub-queries are carved right behind it. That offset is the object's SIZE, not a
-// field offset:
-//   * the DWARF member block (volumevolumequery.h:191-220) ends with m_bBoxQueryBtoA at +0x44, so
-//     the console object is 0x48 bytes, and the sub-queries (16-byte aligned: they embed an AABBox
-//     and a VolRef) begin at the next 16-byte boundary, 0x50;
-//   * Construct @0x82BB38F0: 0x82BB390C `addi r11, r31, 0x50` -> `stw r11, 0x40(r31)` m_bBoxQueryAtoB;
-//   * GetResourceDescriptor @0x82BB3A20: 0x82BB3A4C `addi r11, r11, 0x28` + 0x82BB3A58 `slwi r11, 1`
-//     == 2 * (bboxDesc + 0x28) == 2 * bboxDesc + 0x50 -- the same header folded into the per-side term.
-// On x64 the pointer members widen and the object is 0x88 bytes (MEASURED: m_intersectionBuffer @0x50,
-// m_intersectionBufferMaxSize @0x58, m_queryVol @0x60, m_queryMtx @0x68, m_bBoxQueryAtoB @0x70,
-// m_bBoxQueryBtoA @0x78). Carving at +0x50 put sub-query A ON TOP of those members:
-// GetPrimitiveBBoxOverlaps' first-pass priming (A's m_inputVols / m_inputMats / m_numInputs /
-// m_currInput / m_aabb) overwrote them, and its second-pass read of m_bBoxQueryBtoA then wrote
-// through the AABB's float bits -- a silent wild write on this build's below-4GB heap -- before
-// PrimitiveBatchIntersect was handed m_intersectionBuffer == a dead stack slot. The host carve
-// starts at the host size rounded to the same 16-byte alignment, and the descriptor total grows by
-// the same delta; every site that derives a sub-query address or the descriptor total from the
-// header uses this ONE constant (Construct, GetResourceDescriptor; Initialize reads the carved
-// handles back and derives nothing). The constant, and the two report-region sizes that widen the
-// same way (the 1xN staging, the instancing scratch), live in VolumeQueryHostLayout.hpp.
-// ===========================================================================
-
-// ===========================================================================
-// rw::collision::VolumeVolumeQuery::Construct  @ 0x82BB38F0
-//
-// In-place construction over the backing buffer that begins at `this`. Pure
-// pointer/scalar arithmetic (no VMX): caches the result count, points the two
-// embedded VolumeBBoxQuery sub-queries at this+0x50 / this+0x50+descSize, and
-// lays the report buffer out behind them. liResults (a3) drives both the
-// report-buffer stride (1872 bytes/result == the 0x750 PPIR stride) and the
-// sub-query stride.
-//
-//   stw  a3, 0x20(this)                 -> m_volRefPairBufferSize = liResults
-//   addi r11, this, 0x50                -> m_bBoxQueryAtoB = this + 0x50
-//   r10 = VolumeBBoxQuery::GetResourceDescriptor(scratch); descSize = *r10
-//   stw  0,  0x10(this)                 -> m_cullTable                  = 0
-//   stw  a3, 0x34(this)                 -> m_intersectionBufferMaxSize  = liResults
-//   stw  (A + descSize),        0x44    -> m_bBoxQueryBtoA
-//   r10 = A + 2*descSize;  stw r10,0x18 -> m_volRefPairBuffer = A + 2*descSize
-//   stw  (8*a3 + r10),          0x30    -> m_intersectionBuffer
-//   stw  (1872*a3 + 8*a3 + r10),0x2C    -> m_instancingSPR
-// ===========================================================================
-VolumeVolumeQuery* VolumeVolumeQuery::Construct(int liVolumes, int liResults)
+namespace
 {
-    m_volRefPairBufferSize = static_cast<u32>(liResults);         // +0x20
+    const u32 KU_VOLUME_VOLUME_QUERY_HEADER_SIZE =
+        (sizeof(VolumeVolumeQuery) + __alignof(VolumeBBoxQuery) - 1) & ~(__alignof(VolumeBBoxQuery) - 1);
+}
+CGS_STATIC_ASSERT((KU_VOLUME_VOLUME_QUERY_HEADER_SIZE == 0x50), "Native aligned VolumeVolumeQuery size");
 
-    // `addi r11, r31, 0x50` on the console: the sub-queries start right behind the object.
-    // NOT X360: host layout -- see ((sizeof(VolumeVolumeQuery) + __alignof(VolumeBBoxQuery) - 1) & ~(__alignof(VolumeBBoxQuery) - 1)) above.
-    u8* lpSubQueryRegion = reinterpret_cast<u8*>(this) + ((sizeof(VolumeVolumeQuery) + __alignof(VolumeBBoxQuery) - 1) & ~(__alignof(VolumeBBoxQuery) - 1));
-    m_bBoxQueryAtoB = reinterpret_cast<VolumeBBoxQuery*>(lpSubQueryRegion); // +0x40
+VolumeVolumeQuery::VolumeVolumeQuery(u32 luVolumes, u32 luResults)
+{
+    m_volRefPairBufferSize = luResults;
+    m_bBoxQueryAtoB = reinterpret_cast<VolumeBBoxQuery*>(reinterpret_cast<u8*>(this) + KU_VOLUME_VOLUME_QUERY_HEADER_SIZE);
 
-    // The descriptor's first word is the per-side VolumeBBoxQuery backing size.
-    u32 laDescriptor[12];
-    VolumeBBoxQuery::GetResourceDescriptor(laDescriptor, liVolumes, liResults);
-    u32 luDescSize = laDescriptor[0];
+    const u32 luSideSize = VolumeBBoxQuery::GetResourceDescriptor(luVolumes, luResults).m_baseResourceDescriptors[0].m_size;
+    m_cullTable = 0;
+    m_intersectionBufferMaxSize = m_volRefPairBufferSize;
 
-    m_cullTable                 = 0;                        // +0x10
-    m_intersectionBufferMaxSize = liResults;                      // +0x34
-
-    // Side-B sub-query sits one descriptor past side A.
-    m_bBoxQueryBtoA = reinterpret_cast<VolumeBBoxQuery*>(lpSubQueryRegion + luDescSize); // +0x44
-
-    // Report buffer starts two descriptors past side A. The staged VolRef1xN
-    // groups lead it; the 0x750-stride PrimitivePairIntersectResult array sits
-    // behind them, and the GPInstance instancing scratch behind that. The console
-    // stages into 8*results bytes (`8*a3`), the budget GetPrimitiveBBoxOverlaps
-    // meters in console words.
-    // NOT X360: host GPInstance / VolRef widths -- the host 1xN groups are 16 + 8n
-    // bytes against the console's 12 + 4n, so the region is
-    // VolumeVolumeQueryStagingSize(results) == 16*results (VolumeQueryHostLayout.hpp).
-    u8* lpReportBase = lpSubQueryRegion + (2u * luDescSize);
-    m_volRefPairBuffer = reinterpret_cast<VolRef1xN*>(lpReportBase);        // +0x18
-
-    const u32 luStagingSize = (2u * sizeof(void*) * static_cast<u32>(liResults));
+    m_bBoxQueryBtoA = reinterpret_cast<VolumeBBoxQuery*>(reinterpret_cast<u8*>(m_bBoxQueryAtoB) + luSideSize);
+    m_volRefPairBuffer = reinterpret_cast<VolRef1xN*>(reinterpret_cast<u8*>(m_bBoxQueryBtoA) + luSideSize);
     m_intersectionBuffer = reinterpret_cast<PrimitivePairIntersectResult*>(
-        lpReportBase + luStagingSize);                                      // +0x30
-    m_instancingSPR = reinterpret_cast<GPInstance*>(
-        lpReportBase + (sizeof(PrimitivePairIntersectResult) * static_cast<u32>(liResults))
-                     + luStagingSize);                                      // +0x2C
-
-    return this;
+        reinterpret_cast<u8*>(m_volRefPairBuffer) + 2 * sizeof(void*) * m_volRefPairBufferSize);
+    m_instancingSPR = reinterpret_cast<GPInstance*>(m_intersectionBuffer + luResults);
 }
 
-// ===========================================================================
-// rw::collision::VolumeVolumeQuery::Initialize  @ 0x82BB3980
-//
-// Static factory: lppBuffer[0] is the backing-store base. When non-null, the
-// query is constructed in place over it; the two embedded VolumeBBoxQuery
-// sub-queries are then initialised from per-side buffer tables whose [0] slot
-// holds the sub-query handle (this+0x40 / this+0x44) and whose [1..4] slots are
-// zeroed. Returns the constructed query handle.
-// ===========================================================================
-void* VolumeVolumeQuery::Initialize(void** lppBuffer, int liVolumes, int liResults)
+VolumeVolumeQuery* VolumeVolumeQuery::Initialize(const Resource& lrResource, u32 luVolumes, u32 luResults)
 {
-    VolumeVolumeQuery* lpQuery;
-    if (*lppBuffer)
-    {
-        lpQuery = reinterpret_cast<VolumeVolumeQuery*>(*lppBuffer)->Construct(liVolumes, liResults);
-    }
-    else
-    {
-        lpQuery = 0;
-    }
-
-    // --- side-A sub-query ---
-    void* laBufferA[5];
-    laBufferA[0] = lpQuery->m_bBoxQueryAtoB;   // *(this+0x40)
-    std::memset(&laBufferA[1], 0, 4 * sizeof(void*));
-    VolumeBBoxQuery::Initialize(laBufferA, liVolumes, liResults);
-
-    // --- side-B sub-query ---
-    void* laBufferB[5];
-    laBufferB[0] = lpQuery->m_bBoxQueryBtoA;   // *(this+0x44)
-    std::memset(&laBufferB[1], 0, 4 * sizeof(void*));
-    VolumeBBoxQuery::Initialize(laBufferB, liVolumes, liResults);
-
+    // A valid backing buffer is required by both embedded query initializers.
+    VolumeVolumeQuery* lpQuery = new (lrResource.m_baseResources[0]) VolumeVolumeQuery(luVolumes, luResults);
+    VolumeBBoxQuery::Initialize(Resource(lpQuery->m_bBoxQueryAtoB), luVolumes, luResults);
+    VolumeBBoxQuery::Initialize(Resource(lpQuery->m_bBoxQueryBtoA), luVolumes, luResults);
     return lpQuery;
 }
 
-// ===========================================================================
-// rw::collision::VolumeVolumeQuery::GetResourceDescriptor  @ 0x82BB3A20
-//
-// Static factory: fills the 5-entry rw::ResourceDescriptor block at lpOut. Each
-// of the five (size, align) entries is first stamped (0, 1); entry[0] is then
-// overwritten with (totalSize, 16). totalSize = 2*(bboxDescSize + 40) + 2072*a3
-// + 192 on the console, where bboxDescSize is the side sub-query's descriptor size
-// and 2*40 is the 0x50 query header (see ((sizeof(VolumeVolumeQuery) + __alignof(VolumeBBoxQuery) - 1) & ~(__alignof(VolumeBBoxQuery) - 1))).
-// ===========================================================================
-void* VolumeVolumeQuery::GetResourceDescriptor(void* lpOut, int liVolumes, int liResults)
+ResourceDescriptor VolumeVolumeQuery::GetResourceDescriptor(u32 luVolumes, u32 luResults)
 {
-    // Side sub-query descriptor (first word = its backing size).
-    u32 laBBoxDesc[12];
-    VolumeBBoxQuery::GetResourceDescriptor(laBBoxDesc, liVolumes, liResults);
-    u32 luBBoxDescSize = laBBoxDesc[0];
-
-    // Total backing size for the object, the two sub-queries and the report buffer. The console
-    // folds its 0x50 header into `2 * (bboxDesc + 0x28)` (0x82BB3A4C / 0x82BB3A58) and its report
-    // buffer into `2072 * a3 + 192` == 8*a3 staging + 1872*a3 results + 192*(a3 + 1) instancing.
-    // NOT X360: host layout -- the header is ((sizeof(VolumeVolumeQuery) + __alignof(VolumeBBoxQuery) - 1) & ~(__alignof(VolumeBBoxQuery) - 1)), the size Construct
-    // carves behind; the staging and instancing regions are the host GPInstance / VolRef widths
-    // (VolumeQueryHostLayout.hpp). The results stride is native.
-    const u32 luResults   = static_cast<u32>(liResults);
-    u32       luTotalSize = ((sizeof(VolumeVolumeQuery) + __alignof(VolumeBBoxQuery) - 1) & ~(__alignof(VolumeBBoxQuery) - 1))
-                          + 2u * luBBoxDescSize
-                          + (2u * sizeof(void*) * luResults)
-                          + sizeof(PrimitivePairIntersectResult) * luResults
-                          + (sizeof(GPInstance) * (luResults + 1u));
-
-    // Initialise all five resource-descriptor entries to (size=0, align=1).
-    u32* lpEntry = reinterpret_cast<u32*>(lpOut);
-    for (int li = 4; li >= 0; --li)
-    {
-        lpEntry[0] = 0;   // size
-        lpEntry[1] = 1;   // alignment
-        lpEntry += 2;
-    }
-
-    // Entry[0] carries the real (size, alignment=16).
-    u32* lpDesc = reinterpret_cast<u32*>(lpOut);
-    lpDesc[0] = luTotalSize;
-    lpDesc[1] = 16;
-
-    return lpOut;
+    const u32 luSideSize = VolumeBBoxQuery::GetResourceDescriptor(luVolumes, luResults).m_baseResourceDescriptors[0].m_size;
+    const u32 luResultSize = 2 * sizeof(void*) + sizeof(PrimitivePairIntersectResult) + sizeof(GPInstance);
+    const u32 luSize = 2 * (luSideSize + KU_VOLUME_VOLUME_QUERY_HEADER_SIZE / 2)
+                      + luResultSize * luResults + sizeof(GPInstance);
+    return ResourceDescriptor(luSize, __alignof(VolumeBBoxQuery));
 }
 
 // ===========================================================================
@@ -500,55 +372,36 @@ namespace
 }
 
 // ===========================================================================
-// rw::collision::VolumeLineQuery -- the two construction entry points (2026-09-25, crash parity FX-FOLLOWUPS).
-// Their one caller is FineIntersectionTestModule::Construct @0x828B0BF0 (0x828B0CC8 / 0x828B0D28).
-// ===========================================================================
-
-// @ 0x82BB3838 -- the five descriptor entries {0, 1} (the `addic. r8, r8, -1 ; bge` loop), then entry 0 =
-// {0x1B0 * results + 0x80 * volumes + 0x110 + 0x2880, 16} (the `std` of the staged pair).
-// NOT X360: host VolumeLineQuery width -- the header term is sizeof(VolumeLineQuery) (VolumeQueryHostLayout.hpp).
-void* VolumeLineQuery::GetResourceDescriptor(void* lpOut, int liVolumes, int liResults)
+ResourceDescriptor VolumeLineQuery::GetResourceDescriptor(u32 luVolumes, u32 luResults)
 {
-    u32* lpau = static_cast<u32*>(lpOut);
-    for (int liEntry = 0; liEntry < 5; ++liEntry)
-    {
-        lpau[2 * liEntry + 0] = 0;   // m_size
-        lpau[2 * liEntry + 1] = 1;   // m_alignment
-    }
-    lpau[0] = (sizeof(VolumeLineQuery) + sizeof(VolRef) * static_cast<u32>(liVolumes) + (sizeof(VolRef) + sizeof(Volume) + sizeof(VolumeLineSegIntersectResult)) * static_cast<u32>(liResults) + 0x2880u);
-    lpau[1] = 16;
-    return lpOut;
+    const u32 luResultSize = sizeof(VolRef) + sizeof(Volume) + sizeof(VolumeLineSegIntersectResult);
+    const u32 luSize = luResultSize * luResults + sizeof(VolRef) * luVolumes + sizeof(VolumeLineQuery) + 0x2880;
+    return ResourceDescriptor(luSize, __alignof(VolumeLineQuery));
 }
 
-// @ 0x82BB3888 -- `lwz r11, 0(r3)`: null block -> null. Otherwise the four capacities and the five carves,
-// in the console's store order: m_stackMax (+0xD4) = volumes, m_primBufferSize (+0xE0) = results,
-// m_resBufferSize (+0x1C) = results, m_instVolMax (+0xEC) = results; m_stackVRefBuffer (+0x44) = base + header,
-// m_primVRefBuffer (+0xD8) = that + 0x80 * volumes, m_instVolPool (+0xE4) = that + 0x80 * results,
-// m_resBuffer (+0x10) = that + 0x60 * results, m_spatialMapQueryMem (+0xF4) = that + 0xD0 * results. Nothing
-// else is written (the query is primed per test by InitQuery).
-// NOT X360: host VolumeLineQuery width -- the first carve is at sizeof(VolumeLineQuery), console 0x110.
-void* VolumeLineQuery::Initialize(void** lppBuffer, int liVolumes, int liResults)
+inline VolumeLineQuery::VolumeLineQuery(u32 luStackMax, u32 luResults, u32 luInstVolMax)
 {
-    VolumeLineQuery* lpQuery = static_cast<VolumeLineQuery*>(lppBuffer[0]);
-    if (lpQuery == 0)
+    m_stackMax = luStackMax;
+    m_primBufferSize = luResults;
+    m_resBufferSize = luResults;
+    m_instVolMax = luInstVolMax;
+
+    m_stackVRefBuffer = reinterpret_cast<VolRef*>(this + 1);
+    m_primVRefBuffer = m_stackVRefBuffer + luStackMax;
+    m_instVolPool = reinterpret_cast<Volume*>(m_primVRefBuffer + luResults);
+    m_resBuffer = reinterpret_cast<VolumeLineSegIntersectResult*>(m_instVolPool + luInstVolMax);
+    m_spatialMapQueryMem = m_resBuffer + luResults;
+}
+
+VolumeLineQuery* VolumeLineQuery::Initialize(const Resource& lrResource, u32 luStackMax, u32 luResults)
+{
+    void* lpMemory = lrResource.m_baseResources[0];
+    if (!lpMemory)
     {
         return 0;
     }
-
-    lpQuery->m_stackMax       = static_cast<u32>(liVolumes);
-    lpQuery->m_primBufferSize = static_cast<u32>(liResults);
-    lpQuery->m_resBufferSize  = static_cast<u32>(liResults);
-    lpQuery->m_instVolMax     = static_cast<u32>(liResults);
-
-    u8* const lpBase = reinterpret_cast<u8*>(lpQuery);
-    lpQuery->m_stackVRefBuffer    = reinterpret_cast<VolRef*>(lpBase + sizeof(VolumeLineQuery));
-    lpQuery->m_primVRefBuffer     = lpQuery->m_stackVRefBuffer + liVolumes;
-    lpQuery->m_instVolPool        = reinterpret_cast<Volume*>(lpQuery->m_primVRefBuffer + liResults);
-    lpQuery->m_resBuffer          = reinterpret_cast<VolumeLineSegIntersectResult*>(lpQuery->m_instVolPool + liResults);
-    lpQuery->m_spatialMapQueryMem = lpQuery->m_resBuffer + liResults;
-    return lpQuery;
+    return new (lpMemory) VolumeLineQuery(luStackMax, luResults, luResults);
 }
-
 // ---- BEGIN VolumeLineQuery line walk (run_fxfollowups_line_test_nearest compiles this region) ----
 // ===========================================================================
 // rw::collision::VolumeLineQuery -- THE LINE WALK (2026-09-25, crash parity FX-FOLLOWUPS stage a).
@@ -563,24 +416,6 @@ void* VolumeLineQuery::Initialize(void** lppBuffer, int liVolumes, int liResults
 // ===========================================================================
 namespace
 {
-    // The descriptor type id of an aggregate volume: `cmpwi cr6, r10, 6` (0x82BB330C) and `cmpwi cr6, r11, 6`
-    // (0x82BB35EC) against the descriptor's leading word.
-    const u32 KU_LINE_WALK_VOLUMETYPE_AGGREGATE = 6u;
-
-    void FillLineWalkVolRef(VolRef& entry, const Volume* volume,
-                            const math::vpu::Matrix44Affine* transform, u32 tag, u8 tagBits)
-    {
-        entry.volume = volume;
-        if (transform)
-        {
-            entry.tmContents = *transform;
-            entry.tm = &entry.tmContents;
-        }
-        else entry.tm = 0;
-        entry.tag = tag;
-        entry.numTagBits = tagBits;
-    }
-
     void ComposeLineTransform(math::vpu::Matrix44Affine& out,
                               const math::vpu::Matrix44Affine& left,
                               const math::vpu::Matrix44Affine& right)
@@ -618,7 +453,18 @@ s32 VolumeLineQuery::AddPrimitiveRef(const Volume* lpVolume, const math::vpu::Ma
     {
         return 0;
     }
-    FillLineWalkVolRef(m_primVRefBuffer[m_primNext], lpVolume, lpTransform, luTag, luNumTagBits);
+    m_primVRefBuffer[m_primNext].volume = lpVolume;
+    if (lpTransform)
+    {
+        m_primVRefBuffer[m_primNext].tmContents = *lpTransform;
+        m_primVRefBuffer[m_primNext].tm = &m_primVRefBuffer[m_primNext].tmContents;
+    }
+    else
+    {
+        m_primVRefBuffer[m_primNext].tm = 0;
+    }
+    m_primVRefBuffer[m_primNext].tag = luTag;
+    m_primVRefBuffer[m_primNext].numTagBits = luNumTagBits;
     ++m_primNext;
     return 1;
 }
@@ -631,7 +477,7 @@ s32 VolumeLineQuery::AddPrimitiveRef(const Volume* lpVolume, const math::vpu::Ma
 s32 VolumeLineQuery::AddVolumeRef(const Volume* lpVolume, const math::vpu::Matrix44Affine* lpTransform, u32 luTag,
                                   u8 luNumTagBits)
 {
-    if (lpVolume->GetType() != KU_LINE_WALK_VOLUMETYPE_AGGREGATE)
+    if (lpVolume->GetType() != VOLUMETYPEAGGREGATE)
     {
         return AddPrimitiveRef(lpVolume, lpTransform, luTag, luNumTagBits);
     }
@@ -639,7 +485,18 @@ s32 VolumeLineQuery::AddVolumeRef(const Volume* lpVolume, const math::vpu::Matri
     {
         return 0;
     }
-    FillLineWalkVolRef(m_stackVRefBuffer[m_stackNext], lpVolume, lpTransform, luTag, luNumTagBits);
+    m_stackVRefBuffer[m_stackNext].volume = lpVolume;
+    if (lpTransform)
+    {
+        m_stackVRefBuffer[m_stackNext].tmContents = *lpTransform;
+        m_stackVRefBuffer[m_stackNext].tm = &m_stackVRefBuffer[m_stackNext].tmContents;
+    }
+    else
+    {
+        m_stackVRefBuffer[m_stackNext].tm = 0;
+    }
+    m_stackVRefBuffer[m_stackNext].tag = luTag;
+    m_stackVRefBuffer[m_stackNext].numTagBits = luNumTagBits;
     ++m_stackNext;
     return 1;
 }
@@ -731,7 +588,7 @@ u32 VolumeLineQuery::GetIntersections()
             const Volume* lpVolume = m_currVRef.volume;
             m_tag        = m_currVRef.tag;
             m_numTagBits = m_currVRef.numTagBits;
-            if (lpVolume->GetType() != KU_LINE_WALK_VOLUMETYPE_AGGREGATE)
+            if (lpVolume->GetType() != VOLUMETYPEAGGREGATE)
             {
                 if (AddPrimitiveRef(lpVolume,
                                     m_currVRef.tm,
