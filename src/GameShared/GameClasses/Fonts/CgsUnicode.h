@@ -3,6 +3,9 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
+
+#include <cstring>
 
 namespace CgsUnicode
 {
@@ -204,6 +207,21 @@ namespace CgsUnicode
         FloatToString(maBuffer, lfFloat, muDecimalPlaces,
                       maUtf8ThousandsSeparator, maUtf8DecimalPointCharacter);
     }
+
+    // The formatter's Unity build records a relative header path at this site.
+    #define CGS_ARTIST_UNICODE_FORMAT_FILE "..\\..\\..\\GameShared\\GameClasses\\Fonts/CgsUnicode.h"
+
+    inline void UnicodeBuffer::Convert(const CgsUtf8* lUtf8String)
+    {
+        const char* lpcString = reinterpret_cast<const char*>(lUtf8String);
+        CGS_ASSERT_STREAM_AT(std::strlen(lpcString) < sizeof(maBuffer),
+            "Parameter for a string localisation is too large to fit in the parameter buffer : "
+                << std::strlen(lpcString) << " < " << sizeof(maBuffer) << "\n",
+            CGS_ARTIST_UNICODE_FORMAT_FILE, 499);
+        Copy(maBuffer, lUtf8String);
+    }
+
+    #undef CGS_ARTIST_UNICODE_FORMAT_FILE
 
     #define CGS_ARTIST_UNICODE_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\fonts\\CgsUnicode.h"
 

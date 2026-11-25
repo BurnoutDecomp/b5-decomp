@@ -44,12 +44,13 @@ public:
                void *pSeekData, s32 *piAuxOut) ;
     s32 Flush(u8 *pOutput, s32 *piBytesWritten, void *pSeekData, s32 *piAuxOut) ;
 
-    // Code one 32-frame block of iNumChannels interleaved channels from pafFrames into
-    // 19 * iNumChannels bytes at pOutput.
-    void EncodeBlock(const f32 *pafFrames, u8 *pOutput, s32 iNumChannels);
-
     s32 miBufferedSamples;                                          // +0x20
     f32 mafBuffer[KI_BLOCK_SAMPLES * KI_MAX_BUFFERED_CHANNELS];     // +0x24
+
+private:
+    // Code one 32-frame block of iNumChannels interleaved channels from pafFrames into
+    // 19 * iNumChannels bytes at pOutput.
+    void EncodeBlock(f32 *pafFrames, u8 *pOutput, s32 iNumChannels);
 };
 
 } // namespace core

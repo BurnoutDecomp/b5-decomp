@@ -1,6 +1,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePoolModule.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/CgsStrStream.h" // original formatted pool assertions
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "rw/rwcore_structs.h"                        // rw::IResourceAllocator / Resource (CreatePool test driver)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // [5b TEST] trace
 #include "GameShared/GameClasses/Memory/CgsMemoryModuleIO.h"  // CreateResourceRequest/Response + MemoryIO buffers (async dispatch)
@@ -13,6 +14,11 @@
 #include <new>
 // Original pool manager lifecycle and native storage. The resource-list
 // dispatch is integrated separately from construction of its working state.
+#define CGS_ARTIST_POOL_MODULE_FILE \
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsPoolModule.cpp"
+#define CGS_ARTIST_POOL_MODULE_HEADER \
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsPoolModule.h"
+
 namespace CgsResource
 {
     s32 PoolModule::_miAllocateListTraceId = -1;
@@ -22,9 +28,6 @@ namespace CgsResource
 
     namespace
     {
-        const char* const KPC_POOLMODULE_CREATE_SRC =
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsPoolModule.cpp";
-
         // ARTIST828FC0B8 uses the caller's five-lane allocator for each work array.
         void* AllocateWorkingMemory(rw::IResourceAllocator* lpAllocator,
                                     size_t luSize, u32 luAlignment)
@@ -38,7 +41,7 @@ namespace CgsResource
         void FirePoolCreateAssert(const char* lpcMessage, int liLine)
         {
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lpcMessage, CGS_ASSERT_LOCATION(KPC_POOLMODULE_CREATE_SRC, liLine));
+            CgsDev::Assert::FireAssert(lpcMessage, CGS_ASSERT_LOCATION(CGS_ARTIST_POOL_MODULE_FILE, liLine));
             CgsDev::Assert::EndAssert();
         }
 
@@ -48,7 +51,7 @@ namespace CgsResource
             CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
             lStream << "Pool id " << liPoolId << " is invalid\n";
             CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                                       CGS_ASSERT_LOCATION(KPC_POOLMODULE_CREATE_SRC, 916));
+                                       CGS_ASSERT_LOCATION(CGS_ARTIST_POOL_MODULE_FILE, 916));
             CgsDev::Assert::EndAssert();
         }
 
@@ -58,7 +61,7 @@ namespace CgsResource
             CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
             lStream << "Pool id " << liPoolId << "is already in use\n";
             CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                                       CGS_ASSERT_LOCATION(KPC_POOLMODULE_CREATE_SRC, 922));
+                                       CGS_ASSERT_LOCATION(CGS_ARTIST_POOL_MODULE_FILE, 922));
             CgsDev::Assert::EndAssert();
         }
 
@@ -68,7 +71,7 @@ namespace CgsResource
             CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
             lStream << "Failed to find dependency pool with id " << liDependencyId << "\n";
             CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                                       CGS_ASSERT_LOCATION(KPC_POOLMODULE_CREATE_SRC, 1281));
+                                       CGS_ASSERT_LOCATION(CGS_ARTIST_POOL_MODULE_FILE, 1281));
             CgsDev::Assert::EndAssert();
         }
     }
@@ -76,7 +79,8 @@ namespace CgsResource
     // @ 0x828D80E8 - linear search of the 128 pools for the one with this id; -1 if absent.
     s32 PoolModule::GetPoolIndex(s32 liPoolId)
     {
-        CGS_ASSERT(liPoolId >= 0, "Invalid pool id");
+        CGS_ASSERT_STREAM_AT(liPoolId >= 0, "Invalid pool id: " << liPoolId << "\n",
+            CGS_ARTIST_POOL_MODULE_HEADER, 409);
         for (s32 li = 0; li < KI_MAX_POOLS; ++li)
         {
             if (maPools[li].GetId() == liPoolId)
@@ -88,11 +92,23 @@ namespace CgsResource
     // @ 0x828D8268 - linear search of the registered types for this id; null if absent.
     const Type* PoolModule::FindResourceType(u32 luTypeId)
     {
+        const s32 liMonitor = Pool::_miPoolFindTypePerfMon;
+        if (liMonitor > -1)
+            CgsDev::PerfMonCpu::StartMonitor(liMonitor);
+
         for (s32 li = 0; li < mNumTypes; ++li)
         {
             if (maTypes[li].muTypeId == luTypeId)
-                return maTypes[li].mpType;
+            {
+                const Type* lpType = maTypes[li].mpType;
+                if (liMonitor > -1)
+                    CgsDev::PerfMonCpu::StopMonitor(liMonitor);
+                return lpType;
+            }
         }
+
+        if (liMonitor > -1)
+            CgsDev::PerfMonCpu::StopMonitor(liMonitor);
         return 0;
     }
 
@@ -135,10 +151,11 @@ namespace CgsResource
     // sub-step is not yet ready.
     bool PoolModule::Prepare()
     {
-        mbIsNewModule = true;   // [reliable] see ResourceModule::Prepare -- set before base Prepare
         switch (mePoolPrepareStage)
         {
         case E_POOLPREPARE_START:
+            mePoolPrepareStage = E_POOLPREPARE_START;
+            // fall through
         case E_POOLPREPARE_BASE:
             mePoolPrepareStage = E_POOLPREPARE_BASE;
             if (!CgsModule::ModuleSingleBuffered::Prepare())
@@ -150,8 +167,7 @@ namespace CgsResource
             bool lbAllReady = true;
             for (s32 li = 0; li < KI_MAX_POOLS; ++li)
             {
-                if (!maPools[li].Prepare())
-                    lbAllReady = false;
+                lbAllReady = maPools[li].Prepare() && lbAllReady;
             }
             if (!lbAllReady)
                 return false;
@@ -163,7 +179,7 @@ namespace CgsResource
             mePoolPrepareStage = E_POOLPREPARE_DONE;
             return true;
         default:
-            CGS_ASSERT(false, "Invalid prepare stage");
+            CGS_ASSERT_AT(false, "Invalid prepare stage\n", CGS_ARTIST_POOL_MODULE_FILE, 247);
             return false;
         }
     }
@@ -175,14 +191,15 @@ namespace CgsResource
         switch (mePoolReleaseStage)
         {
         case E_POOLRELEASE_START:
+            mePoolReleaseStage = E_POOLRELEASE_START;
+            // fall through
         case E_POOLRELEASE_POOLS:
         {
             mePoolReleaseStage = E_POOLRELEASE_POOLS;
             bool lbAllReleased = true;
             for (s32 li = 0; li < KI_MAX_POOLS; ++li)
             {
-                if (!maPools[li].Release())
-                    lbAllReleased = false;
+                lbAllReleased = maPools[li].Release() && lbAllReleased;
             }
             if (!lbAllReleased)
                 return false;
@@ -199,7 +216,7 @@ namespace CgsResource
             mePoolReleaseStage = E_POOLRELEASE_DONE;
             return true;
         default:
-            CGS_ASSERT(false, "Invalid release stage");
+            CGS_ASSERT_AT(false, "Invalid release stage\n", CGS_ARTIST_POOL_MODULE_FILE, 315);
             return false;
         }
     }
@@ -641,3 +658,6 @@ namespace CgsResource
     }
 
 }
+
+#undef CGS_ARTIST_POOL_MODULE_HEADER
+#undef CGS_ARTIST_POOL_MODULE_FILE

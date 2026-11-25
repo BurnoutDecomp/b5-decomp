@@ -91,7 +91,7 @@ namespace CgsContainers
         // Bind every bucket to the shared element array and mark constructed (DWARF Init
         // @h:213; used by EntityManager::Prepare, whose inlined bucket loop
         // pins this @0x828C6010..).
-        void Init(Element* lpElements)
+        __forceinline void Init(Element* lpElements)
         {
             Node* lpNodes = lpElements->GetListNode();
             for (u32 luBin = 0; luBin < BINS; ++luBin)

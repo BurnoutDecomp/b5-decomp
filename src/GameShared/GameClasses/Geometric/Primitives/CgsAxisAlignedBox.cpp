@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Geometric/Primitives/CgsAxisAlignedBox.h"
+#include "SDKs/EATech/include/rw/math/vpu/vector_intrinsic_operation.h"
 
 // ============================================================================
 // CgsGeometric::AxisAlignedBox -- reconstructed from BURNOUT_X360_ARTIST.XEX.
@@ -6,10 +7,7 @@
 //   CgsGeometric::AxisAlignedBox::Set           @ 0x823A6108   (this TU)
 //   CgsGeometric::AxisAlignedBox::ContainsPoint @ 0x828AA398   (this TU)
 //
-// ContainsPoint's X360 body is hand-vectorised VMX (lvx128 of min/max,
-// vcmpgtfp / vcmpgefp per-lane compares, vnot, then a vrlimi128 cross-lane AND
-// reduction tested with three vcmpeqfp. self-branches). It carries NO .rdata
-// constants -- it is a pure point-in-box predicate, scalarised faithfully here.
+// The point predicate preserves the original VMX mask and lane operations.
 // ============================================================================
 
 namespace CgsGeometric
@@ -32,31 +30,33 @@ namespace CgsGeometric
         mMax = lvMax;   // stvx128 v2 -> this+0x10
     }
 
-    // ------------------------------------------------------------------------
-    // ContainsPoint @ 0x828AA398
-    //
-    //   li        r10, 0x10
-    //   lvx128    v0, r0, r3      ; v0  = mMin            (this+0x00)
-    //   vcmpgtfp  v0, v1, v0      ; v0  = (point >  mMin) per lane   (strict >)
-    //   lvx128    v13, r3, r10    ; v13 = mMax            (this+0x10)
-    //   vcmpgefp  v13, v1, v13    ; v13 = (point >= mMax) per lane
-    //   vnot      v13, v13        ; v13 = !(point >= mMax) = (point < mMax)
-    //   vand ...                  ; per lane: (point > mMin) & (point < mMax)
-    //   vrlimi128 ...             ; pack lanes x,y,z; three vcmpeqfp.-vs-0 tests
-    //   ...                       ; return 1 iff all three axes are inside
-    //
-    // Boundary sense read straight off the opcodes: the min edge is a strict
-    // vcmpgtfp (> mMin); the max edge is vcmpgefp (>= mMax) NEGATED by vnot,
-    // i.e. (< mMax) -- so BOTH edges are strict and the point must lie in the
-    // open interval (mMin, mMax) on each of the three axes. (The earlier header
-    // note said `<= max`; the asm is strict on the max edge.) NaN on any lane
-    // makes both VMX compares false, so a NaN coordinate yields false here too,
-    // exactly as the scalar `>` / `<` do. The w lane is unused.
-    // ------------------------------------------------------------------------
+    // ARTIST 0x828AA398 uses ordered lower bounds and the complement
+    // of the ordered upper-bound compare before checking x, y and z.
     bool AxisAlignedBox::ContainsPoint(Vector3 lvPoint) const
     {
-        return lvPoint.mV.x > mMin.mV.x && lvPoint.mV.x < mMax.mV.x    // vcmpgtfp / !vcmpgefp, x lane
-            && lvPoint.mV.y > mMin.mV.y && lvPoint.mV.y < mMax.mV.y    // y lane
-            && lvPoint.mV.z > mMin.mV.z && lvPoint.mV.z < mMax.mV.z;   // z lane
+        using rw::math::vpu::VectorIntrinsic;
+        using rw::math::vpu::_asmIsEqualV4;
+        const VectorIntrinsic lvLower = __vcmpgtfp(lvPoint.mV, mMin.mV);
+        const VectorIntrinsic lvZero = __vspltisw(0);
+        const VectorIntrinsic lvTooHigh = __vcmpgefp(lvPoint.mV, mMax.mV);
+        const VectorIntrinsic lvLowerX = __vspltw(lvLower, 0);
+        const VectorIntrinsic lvLowerY = __vspltw(lvLower, 1);
+        const VectorIntrinsic lvLowerZ = __vspltw(lvLower, 2);
+        const VectorIntrinsic lvUpper = __vnor(lvTooHigh, lvTooHigh);
+        const VectorIntrinsic lvUpperX = __vspltw(lvUpper, 0);
+        const VectorIntrinsic lvUpperY = __vspltw(lvUpper, 1);
+        const VectorIntrinsic lvUpperZ = __vspltw(lvUpper, 2);
+
+        const VectorIntrinsic lvInsideX = __vand(lvLowerX, lvUpperX);
+        const VectorIntrinsic lvInsideY = __vand(lvLowerY, lvUpperY);
+        const VectorIntrinsic lvInsideZ = __vand(lvLowerZ, lvUpperZ);
+        // Assemble each splatted mask with the original x/y/z lane inserts.
+        VectorIntrinsic lvInside = __vrlimi(lvZero, lvInsideX, 8, 0);
+        lvInside = __vrlimi(lvInside, lvInsideY, 4, 3);
+        lvInside = __vrlimi(lvInside, lvInsideZ, 2, 2);
+        return !_asmIsEqualV4(__vspltw(lvInside, 0), lvZero) &&
+               !_asmIsEqualV4(__vspltw(lvInside, 1), lvZero) &&
+               !_asmIsEqualV4(__vspltw(lvInside, 2), lvZero);
     }
+
 }

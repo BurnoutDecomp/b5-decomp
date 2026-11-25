@@ -5,6 +5,7 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceEvents.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySockErrorHelpers.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "lobbyapi.h"                                                                              // LobbyApiMsgT
 
 // The rankings component over the DirtySDK LobbyRank module. The getters are thin
@@ -342,18 +343,24 @@ namespace CgsNetwork
 
     void ServerInterfaceRankings::EndAction(s32 liError)
     {
-        const DSErrorToServerInterfaceErrorTable& lrTable = KA_DS_ERROR_TABLE_LOOKUP[meCurrentAction];
-        ServerInterfaceComponent::EndActionCore(
-            ConvertError(liError, lrTable.mpMappingTable, lrTable.miNumMappings));
+        ServerInterfaceComponent::EndActionCore(ConvertError(liError, meCurrentAction));
         meCurrentAction = E_ACTION_COUNT;
+    }
+
+    EServerInterfaceError ServerInterfaceRankings::ConvertError(s32 liError, EAction leAction)
+    {
+        const DSErrorToServerInterfaceError* lpMappingTable = KA_DS_ERROR_TABLE_LOOKUP[leAction].mpMappingTable;
+        const s32 liNumMappings = KA_DS_ERROR_TABLE_LOOKUP[leAction].miNumMappings;
+        return ServerInterfaceComponent::ConvertError(liError, lpMappingTable, liNumMappings);
     }
 
     void ServerInterfaceRankings::FetchCategoriesCallback(DirtySock::LobbyRankT* /*lpLobbyRank*/,
                                                           LobbyApiMsgT* lpMsg, void* lpUserData)
     {
         ServerInterfaceRankings* lpThis = static_cast<ServerInterfaceRankings*>(lpUserData);
-        CGS_ASSERT(lpMsg->kind == KI_MSG_KIND_CATEGORIES,
-                   "Oh dear, ServerInterfaceRankings got a message that wasn't for me!");
+        CGS_ASSERT_STREAM_AT(lpMsg->kind == KI_MSG_KIND_CATEGORIES,
+                             "Oh dear, ServerInterfaceRankings got a message that wasn't for me!",
+                             CGS_ARTIST_FILE, 440);
         lpThis->EndAction(lpMsg->code);
     }
 
@@ -361,8 +368,9 @@ namespace CgsNetwork
                                                     LobbyApiMsgT* lpMsg, void* lpUserData)
     {
         ServerInterfaceRankings* lpThis = static_cast<ServerInterfaceRankings*>(lpUserData);
-        CGS_ASSERT(lpMsg->kind == KI_MSG_KIND_LIST,
-                   "Wrong messge sent to ServerInterfaceRankings::FetchRankCallback");
+        CGS_ASSERT_STREAM_AT(lpMsg->kind == KI_MSG_KIND_LIST,
+                             "Wrong messge sent to ServerInterfaceRankings::FetchRankCallback",
+                             CGS_ARTIST_FILE, 526);
         lpThis->EndAction(lpMsg->code);
     }
 }

@@ -20205,6 +20205,9 @@ namespace BrnTraffic
     //   DONE     mePrepareStage = E_PREPARESTAGE_START (+0x2F0); return true
     //   other    assert "0"; return false
     // ========================================================================
+    #define CGS_ARTIST_TRAFFIC_ENTITY_FILE \
+        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.cpp"
+
     bool TrafficEntityModule::Release()
     {
         switch ( meReleaseStage )
@@ -20237,11 +20240,13 @@ namespace BrnTraffic
 
             default:
             {
-                CGS_ASSERT( false, CGS_ASSERT_MESSAGE_AT( "0", __FILE__, 1373 ) );   // li r5,0x55D at 0x82714974
+                CGS_ASSERT_AT( false, "0", CGS_ARTIST_TRAFFIC_ENTITY_FILE, 1373 );
             }
         }
         return false;
     }
+
+    #undef CGS_ARTIST_TRAFFIC_ENTITY_FILE
 
     // ========================================================================
     // TrafficEntityModule::Destruct (vtable slot 3, 26 insns).

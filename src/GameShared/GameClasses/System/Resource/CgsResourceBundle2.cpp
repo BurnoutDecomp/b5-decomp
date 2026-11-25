@@ -38,17 +38,20 @@ namespace CgsResource
 
     u32 BundleV2::ResourceEntry::GetUncompressedSize(u32 luMemType) const
     {
-        CGS_ASSERT(luMemType < BundleV2::E_MEMTYPE_NUMTYPES, "luMemType < E_MEMTYPE_NUMTYPES");
+        CGS_ASSERT_AT(luMemType < BundleV2::E_MEMTYPE_NUMTYPES,
+                      "luMemType < E_MEMTYPE_NUMTYPES",
+                      "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceBundle2.h", 328);
         return mauUncompressedSizeAndAlignment[luMemType] & BundleV2::KU_SIZE_MASK;
     }
 
     u32 BundleV2::ResourceEntry::GetUncompresssedAlignment(u32 luMemType) const
     {
-        CGS_ASSERT(luMemType < BundleV2::E_MEMTYPE_NUMTYPES, "luMemType < E_MEMTYPE_NUMTYPES");
+        CGS_ASSERT_AT(luMemType < BundleV2::E_MEMTYPE_NUMTYPES,
+                      "luMemType < E_MEMTYPE_NUMTYPES",
+                      "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceBundle2.h", 311);
         return 1u << (mauUncompressedSizeAndAlignment[luMemType] >> 28);
     }
 
-    // 0x828E0B10 - fill the rw resource descriptor (size + alignment per memory pool) from the entry.
     void BundleV2::ResourceEntry::GetDiskResourceDescriptor(ResourceDescriptor* lpDescriptor) const
     {
         for (u32 luMemType = 0; luMemType < BundleV2::E_MEMTYPE_NUMTYPES; ++luMemType)
@@ -58,12 +61,13 @@ namespace CgsResource
         }
     }
 
+    // ARTIST 0x828E0B10 uses signed pool induction and each packed-word getter.
     void BundleV2::ResourceEntry::GetUncompresssedResourceDescriptor(ResourceDescriptor* lpDescriptor) const
     {
-        for (u32 luMemType = 0; luMemType < BundleV2::E_MEMTYPE_NUMTYPES; ++luMemType)
+        for (s32 liMemType = 0; liMemType < static_cast<s32>(BundleV2::E_MEMTYPE_NUMTYPES); ++liMemType)
         {
-            lpDescriptor->m_baseResourceDescriptors[luMemType].m_size      = GetUncompressedSize(luMemType);
-            lpDescriptor->m_baseResourceDescriptors[luMemType].m_alignment = GetUncompresssedAlignment(luMemType);
+            lpDescriptor->m_baseResourceDescriptors[liMemType].m_size      = GetUncompressedSize(liMemType);
+            lpDescriptor->m_baseResourceDescriptors[liMemType].m_alignment = GetUncompresssedAlignment(liMemType);
         }
     }
 

@@ -577,8 +577,7 @@ namespace CgsSceneManager
             lEdgeCentre.mV.y = (lrPointA.mV.y + lrPointB.mV.y) * 0.5f;
             lEdgeCentre.mV.z = (lrPointA.mV.z + lrPointB.mV.z) * 0.5f;
             lEdgeCentre.mV.w = 0.0f;
-            const f32 lfEdgeCosine = static_cast<f32>(
-                lpPoly->GetEdgeCosineUncompressed(static_cast<u32>(liEdge)));
+            const f32 lfEdgeCosine = lpPoly->GetEdgeCosineUncompressed(liEdge);
             const f32 lfEdgeAngle = XboxMath::XMVectorACos(lfEdgeCosine);
             f32 lfSine;
             f32 lfCosine;

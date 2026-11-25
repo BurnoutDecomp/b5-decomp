@@ -289,10 +289,10 @@ int StuntModeScoringOnline::_ChainableMultipliersSort(const void* lpData1, const
     const GameStateModuleIO::ChainableMultiplierInfo* lp2 =
         static_cast<const GameStateModuleIO::ChainableMultiplierInfo*>(lpData2);
 
-    // X360 compares the +0x0C word (maField[3]) of each row; higher sorts first (returns -1 when
+    // X360 compares the +0x0C word of each row; higher sorts first (returns -1 when
     // lp1 > lp2, +1 when lp1 < lp2, else 0).
-    const s32 li1 = lp1->maField[3];
-    const s32 li2 = lp2->maField[3];
+    const s32 li1 = lp1->miMultiplier;
+    const s32 li2 = lp2->miMultiplier;
     if (li1 > li2)
     {
         return -1;
@@ -338,7 +338,7 @@ s32 StuntModeScoringOnline::CalculateChainedMultipliers(u32 luStuntTypeMask,
     for (u32 lu = 0; lu < luCount; ++lu)
     {
         const GameStateModuleIO::ChainableMultiplierInfo& lrInfo = maChainableMultiplierInfo[lu]; // operator[]
-        const u32 luCarBit = static_cast<u32>(lrInfo.maField[2]);   // *(info + 8) -- the car index/bit
+        const u32 luCarBit = static_cast<u32>(lrInfo.miRaceCarIndex);   // *(info + 8) -- the car index/bit
         CGS_ASSERT(luCarBit < 8u, "invalid index : < 8");
 
         // Include this row only when its car is in the takeoff snapshot bitset (X360 bit test on a3).
@@ -347,7 +347,7 @@ s32 StuntModeScoringOnline::CalculateChainedMultipliers(u32 luStuntTypeMask,
             continue;
         }
 
-        luRunningMask &= static_cast<u32>(lrInfo.maField[0]);   // *info -- AND in this row's type mask
+        luRunningMask &= lrInfo.mMultiplierInfo.muMultiplierStuntTypes;   // *info -- AND in this row's type mask
         if (luRunningMask == 0)
         {
             break;

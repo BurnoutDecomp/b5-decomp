@@ -6,7 +6,10 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Variables/CgsVariable.h"  // Variable::Prepare
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Variables/CgsMenuItemVariable.h"  // MenuItemVariable::Prepare
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                                 // gpDebugPrint, gxMessageFilterFlags
-#include "GameShared/GameClasses/Core/CgsAssert.h"                                         // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
+#include "rw/core/debug/DebugCriticalSection.h"
+
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Development/DebugSystem/Core/UI/Variables/CgsVariableManager.cpp"                                         // CGS_ASSERT
 
 #include <string.h>
 // CgsDev::DebugUI::VariableManager::RegisterVariable - the shared core every typed RegisterVariable
@@ -62,7 +65,13 @@ namespace CgsDev
             }
 
             MenuItemVariable* lpMenuItem = mMenuItemPool.Allocate();
-            CGS_ASSERT(lpMenuItem, "lpMenuItem");
+            if (!lpMenuItem)
+            {
+                // ARTIST 0x82829B48 enters the mutex directly for this assertion.
+                Assert::gAssertMutex.Enter();
+                Assert::FireAssert("lpMenuItem", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 609));
+                Assert::gAssertMutex.Leave();
+            }
 
             lpMenu->AddMenuItem(lpMenuItem);
             lpVariable->Prepare(lrVariant, lpcName);
@@ -281,3 +290,5 @@ namespace CgsDev
         }
     }
 }
+
+#undef CGS_ARTIST_FILE

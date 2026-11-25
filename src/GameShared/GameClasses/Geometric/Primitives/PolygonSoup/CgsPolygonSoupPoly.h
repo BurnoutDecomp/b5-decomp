@@ -73,7 +73,7 @@ namespace CgsGeometric
 
         // GetEdgeCosineUncompressed @ 0x82839568 -- decode the cosine of the
         // angle across edge `liEdge`. Asserts liEdge in [0,4). Returns a double.
-        double GetEdgeCosineUncompressed(u32 liEdge) const;
+        f32 GetEdgeCosineUncompressed(s32 liEdge) const;
 
         // LoadEdgeCosines @0x8283A120 -- decode all four at once into broadcast
         // VecFloats. Same formula as GetEdgeCosineUncompressed, computed in VMX.

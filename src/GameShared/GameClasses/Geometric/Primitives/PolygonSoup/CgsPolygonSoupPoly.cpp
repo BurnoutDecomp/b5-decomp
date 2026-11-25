@@ -88,12 +88,12 @@ namespace CgsGeometric
     //   fdivs f13, f0, f13         ; numerator / value
     //   lfs   f0, flt_82001C98     ; 1.0f
     //   fsubs f1, f0, f13          ; 1.0f - (numerator / value)
-    //   blr                        ; returns the f32 result widened to double in f1
+    //   blr                        ; returns the f32 result in f1
     //
     // The single byte at +0x08+liEdge is a compressed exponent: its low 5 bits
     // give a power-of-two scale applied to 8, and the cosine is recovered as
     // 1 - K / (8 << shift). All float arithmetic is single-precision (frsp/
-    // fdivs/fsubs); the result is returned as a double.
+    // fdivs/fsubs); the result is returned as f32.
     //
     // ⭐ A logarithmic angle quantisation: code 0 gives -0.2337, 1 gives 0.3831,
     // 2 gives 0.6916, 3 gives 0.8458 ... tending to 1.0. Fine resolution near
@@ -105,9 +105,11 @@ namespace CgsGeometric
     // its `vminuw` at 28. Both land within FLT_EPSILON of 1.0, which is why the
     // console's own cross-check tolerates the difference.
     // ------------------------------------------------------------------------
-    double PolygonSoupPoly::GetEdgeCosineUncompressed(u32 liEdge) const
+    f32 PolygonSoupPoly::GetEdgeCosineUncompressed(s32 liEdge) const
     {
-        CGS_ASSERT(liEdge < 4u, "liEdge >= 0 && liEdge < 4");
+        CGS_ASSERT_AT(liEdge >= 0 && liEdge < 4, "liEdge >= 0 && liEdge < 4",
+                      "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\geometric\\primitives\\polygonsoup\\CgsPolygonSoupPoly.h",
+                      156);
 
         const u32 luShift = mauCompressedEdgeCosines[liEdge] & KU32_EDGE_COSINE_CODE_MASK;
         const u64 luValue = static_cast<u64>(KU32_EDGE_COSINE_SHIFT_BASE) << luShift;
@@ -115,7 +117,7 @@ namespace CgsGeometric
         const f32 lfValue  = static_cast<f32>(luValue);                          // u64tod + frsp
         const f32 lfCosine = 1.0f - (KF_EDGE_COSINE_NUMERATOR / lfValue);        // fdivs + fsubs
 
-        return static_cast<double>(lfCosine);
+        return lfCosine;
     }
 
     // ------------------------------------------------------------------------
@@ -182,7 +184,7 @@ namespace CgsGeometric
         f32 lafScalar[4];
         for (s32 liEdge = 0; liEdge < 4; ++liEdge)
         {
-            lafScalar[liEdge] = static_cast<f32>(GetEdgeCosineUncompressed(static_cast<u32>(liEdge)));
+            lafScalar[liEdge] = GetEdgeCosineUncompressed(liEdge);
         }
 
         // `fcmpu cr6, fN, fN` + `bne` -- a value equals itself iff it is not NaN.

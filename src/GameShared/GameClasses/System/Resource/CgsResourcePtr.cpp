@@ -6,8 +6,9 @@ namespace CgsResource
     // ARTIST828D9418 broadcasts the handle and complete three-word resource value.
     void BaseResourcePtr::Propogate()
     {
-        CGS_ASSERT(mHandle.mpSourceEntry != 0,
-            "ERROR: Resource pointer has not been initialized\n");
+        CGS_ASSERT_STREAM_AT(mHandle.mpSourceEntry != 0,
+            "ERROR: Resource pointer has not been initialized\n",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourcePtr.cpp", 72);
         for (BaseResourcePtr* lpNode = mpNext; lpNode != this; lpNode = lpNode->mpNext)
         {
             lpNode->mHandle = mHandle;

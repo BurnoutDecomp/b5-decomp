@@ -42,25 +42,6 @@ void VolumeStore<tiCapacity>::Construct()
     mVolumePool.Construct();
 }
 
-// h:208. VolumeManager::Prepare @0x828CFD38 opens with TWO back-to-back
-// `ObjectPool<VolumeSlot,4608,int>::Clear(this)` calls -- the DWARF names them
-// VolumeStore<4608>::Prepare followed by VolumeStore<4608>::Clear -- so each of the pair
-// is exactly one pool Clear(). The caller ignores the result (`li r3,1` unconditionally),
-// and this body has no failure path.
-template <s32 tiCapacity>
-bool VolumeStore<tiCapacity>::Prepare()
-{
-    mVolumePool.Clear();
-    return true;
-}
-
-// h:227. The second of the pair above.
-template <s32 tiCapacity>
-void VolumeStore<tiCapacity>::Clear()
-{
-    mVolumePool.Clear();
-}
-
 // h:267 (inlined into VolumeManager::AddDynamicVolume @0x828D1CB8-0x828D1CEC, recovered
 // store-for-store):
 //     bl  ObjectPool<VolumeSlot,4608,int>::AllocateObject   ; r29 = slot

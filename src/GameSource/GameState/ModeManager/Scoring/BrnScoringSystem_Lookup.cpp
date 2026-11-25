@@ -1,4 +1,5 @@
 #include <float.h>
+#include "GameShared/GameClasses/Network/CgsNetworkConstants.h"
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"
 #define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\Scoring/BrnScoringSystem.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
@@ -18,51 +19,45 @@
 // player id; the optimizer's pointer-stride form (++ptr by 86 dwords == 344 bytes ==
 // sizeof(CarData) on X360) is reconstructed back to a clean indexed loop.
 //
-// CgsNetwork::K_INVALID_PLAYER_ID has no committed home in the tree; the file-local -1
-// (the BrnGameStateSharedIO.cpp / FlybyManager precedent) stands in for it in the asserts.
-// ============================================================================
-
 namespace BrnGameState
 {
-namespace
-{
-    // CgsNetwork::K_INVALID_PLAYER_ID stand-in (no committed home; -1 per existing precedent).
-    const BrnNetwork::NetworkPlayerID K_INVALID_PLAYER_ID = -1;
-}
-
 // ----------------------------------------------------------------------------
 // per-car record lookup -- the keystone surface the cluster-1 scorers call.
 // ----------------------------------------------------------------------------
 
-// X360 0x8231DC18 (non-const). Linear search over maCarData[] for the slot whose stored
+// X360 0x8231DCD0 (mutable). Linear search over maCarData[] for the slot whose stored
 // active-race-car index matches leActiveRaceCarIndex; NULL if none. The X360 bound assert
 // is the combined "(>= 0) && (< COUNT)" form on the unsigned argument.
 CarData* ScoringSystem::GetCarData(EActiveRaceCarIndex leActiveRaceCarIndex)
 {
-    CGS_ASSERT((leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
-               "(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)");
+    CGS_ASSERT_AT((leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
+                  "(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)",
+                  CGS_ARTIST_FILE, 2813);
 
-    for (s32 liSlot = 0; liSlot < GameStateModuleIO::E_PLAYER_SCORING_INDEX_COUNT; ++liSlot)
+    for (GameStateModuleIO::EPlayerScoringIndex leSlot = GameStateModuleIO::E_PLAYER_SCORING_INDEX_0;
+         leSlot < GameStateModuleIO::E_PLAYER_SCORING_INDEX_COUNT; leSlot++)
     {
-        if (maCarData[liSlot].GetActiveRaceCarIndex() == leActiveRaceCarIndex)
+        if (maCarData[leSlot].GetActiveRaceCarIndex() == leActiveRaceCarIndex)
         {
-            return &maCarData[liSlot];
+            return &maCarData[leSlot];
         }
     }
     return NULL;
 }
 
-// X360 0x8231DCD0 (const twin of the above).
+// X360 0x8231DC18 (const).
 const CarData* ScoringSystem::GetCarData(EActiveRaceCarIndex leActiveRaceCarIndex) const
 {
-    CGS_ASSERT((leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
-               "(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)");
+    CGS_ASSERT_AT((leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
+                  "(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)",
+                  CGS_ARTIST_FILE, 2793);
 
-    for (s32 liSlot = 0; liSlot < GameStateModuleIO::E_PLAYER_SCORING_INDEX_COUNT; ++liSlot)
+    for (GameStateModuleIO::EPlayerScoringIndex leSlot = GameStateModuleIO::E_PLAYER_SCORING_INDEX_0;
+         leSlot < GameStateModuleIO::E_PLAYER_SCORING_INDEX_COUNT; leSlot++)
     {
-        if (maCarData[liSlot].GetActiveRaceCarIndex() == leActiveRaceCarIndex)
+        if (maCarData[leSlot].GetActiveRaceCarIndex() == leActiveRaceCarIndex)
         {
-            return &maCarData[liSlot];
+            return &maCarData[leSlot];
         }
     }
     return NULL;
@@ -72,13 +67,15 @@ const CarData* ScoringSystem::GetCarData(EActiveRaceCarIndex leActiveRaceCarInde
 // player id matches lID; NULL if none.
 CarData* ScoringSystem::GetCarData(BrnNetwork::NetworkPlayerID lID)
 {
-    CGS_ASSERT(lID != K_INVALID_PLAYER_ID, "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
+    CGS_ASSERT_AT(lID != CgsNetwork::K_INVALID_PLAYER_ID,
+                  "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", CGS_ARTIST_FILE, 2832);
 
-    for (s32 liSlot = 0; liSlot < GameStateModuleIO::E_PLAYER_SCORING_INDEX_COUNT; ++liSlot)
+    for (GameStateModuleIO::EPlayerScoringIndex leSlot = GameStateModuleIO::E_PLAYER_SCORING_INDEX_0;
+         leSlot < GameStateModuleIO::E_PLAYER_SCORING_INDEX_COUNT; leSlot++)
     {
-        if (maCarData[liSlot].GetNetworkPlayerID() == lID)
+        if (maCarData[leSlot].GetNetworkPlayerID() == lID)
         {
-            return &maCarData[liSlot];
+            return &maCarData[leSlot];
         }
     }
     return NULL;
@@ -87,13 +84,15 @@ CarData* ScoringSystem::GetCarData(BrnNetwork::NetworkPlayerID lID)
 // X360 0x8231DD88 (const twin, by network id).
 const CarData* ScoringSystem::GetCarData(BrnNetwork::NetworkPlayerID lID) const
 {
-    CGS_ASSERT(lID != K_INVALID_PLAYER_ID, "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
+    CGS_ASSERT_AT(lID != CgsNetwork::K_INVALID_PLAYER_ID,
+                  "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", CGS_ARTIST_FILE, 2832);
 
-    for (s32 liSlot = 0; liSlot < GameStateModuleIO::E_PLAYER_SCORING_INDEX_COUNT; ++liSlot)
+    for (GameStateModuleIO::EPlayerScoringIndex leSlot = GameStateModuleIO::E_PLAYER_SCORING_INDEX_0;
+         leSlot < GameStateModuleIO::E_PLAYER_SCORING_INDEX_COUNT; leSlot++)
     {
-        if (maCarData[liSlot].GetNetworkPlayerID() == lID)
+        if (maCarData[leSlot].GetNetworkPlayerID() == lID)
         {
-            return &maCarData[liSlot];
+            return &maCarData[leSlot];
         }
     }
     return NULL;
@@ -134,7 +133,7 @@ GameStateModuleIO::EPlayerScoringIndex ScoringSystem::GetPlayerScoringIndex(EAct
 // lID; fires the "not found in scoring system" assert and returns slot 0 if absent.
 GameStateModuleIO::EPlayerScoringIndex ScoringSystem::GetPlayerScoringIndex(BrnNetwork::NetworkPlayerID lID) const
 {
-    CGS_ASSERT(lID != K_INVALID_PLAYER_ID, "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
+    CGS_ASSERT(lID != CgsNetwork::K_INVALID_PLAYER_ID, "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
 
     for (s32 liSlot = 0; liSlot < GameStateModuleIO::E_PLAYER_SCORING_INDEX_COUNT; ++liSlot)
     {
@@ -304,7 +303,7 @@ void ScoringSystem::AddPlayerBurnoutSkillz(BrnNetwork::NetworkPlayerID lID, BrnN
 
     for (s32 liSlot = 0; liSlot < GameStateModuleIO::E_PLAYER_SCORING_INDEX_COUNT; ++liSlot)
     {
-        if (maBurnoutSkillzPlayerIDs[liSlot] == K_INVALID_PLAYER_ID)
+        if (maBurnoutSkillzPlayerIDs[liSlot] == CgsNetwork::K_INVALID_PLAYER_ID)
         {
             maBurnoutSkillzPlayerIDs[liSlot] = lID;
             maBurnoutSkillzData[liSlot].Clear();
@@ -321,7 +320,7 @@ void ScoringSystem::ClearAllBurnoutSkillzData()
     for (s32 liSlot = 0; liSlot < GameStateModuleIO::E_PLAYER_SCORING_INDEX_COUNT; ++liSlot)
     {
         maBurnoutSkillzData[liSlot].Clear();
-        maBurnoutSkillzPlayerIDs[liSlot] = K_INVALID_PLAYER_ID;
+        maBurnoutSkillzPlayerIDs[liSlot] = CgsNetwork::K_INVALID_PLAYER_ID;
     }
 }
 
@@ -333,7 +332,7 @@ void ScoringSystem::ClearPlayersBurnoutSkillzData(BrnNetwork::NetworkPlayerID lI
         if (maBurnoutSkillzPlayerIDs[liSlot] == lID)
         {
             maBurnoutSkillzData[liSlot].Clear();
-            maBurnoutSkillzPlayerIDs[liSlot] = K_INVALID_PLAYER_ID;
+            maBurnoutSkillzPlayerIDs[liSlot] = CgsNetwork::K_INVALID_PLAYER_ID;
             return;
         }
     }
@@ -397,7 +396,7 @@ void ScoringSystem::SaveNetworkRoundData(BrnNetwork::NetworkPlayerID lID, CgsSys
                                          EActiveRaceCarIndex leRaceCarIndex,
                                          GameStateModuleIO::EGameModeType leGameMode)
 {
-    CarData* lpCarData = (lID == K_INVALID_PLAYER_ID) ? GetCarData(leRaceCarIndex) : GetCarData(lID);
+    CarData* lpCarData = (lID == CgsNetwork::K_INVALID_PLAYER_ID) ? GetCarData(leRaceCarIndex) : GetCarData(lID);
     CGS_ASSERT(lpCarData != NULL, "lpCarData");
 
     if (lpCarData != NULL)
@@ -532,7 +531,7 @@ void ScoringSystem::ClearData(bool lbResetCarData)
             lCar.SetTeam(GameStateModuleIO::E_PLAYER_TEAM_NONE);       // ASM stw r30 (=0)
             lCar.SetRoundStartTeam(GameStateModuleIO::E_PLAYER_TEAM_NONE);
             lCar.SetActiveRaceCarIndex(E_ACTIVE_RACE_CAR_INDEX_COUNT); // ASM stw r25 (=8)  the COUNT free-slot sentinel
-            lCar.SetNetworkPlayerID(K_INVALID_PLAYER_ID);              // ASM stw r27 (=-1)
+            lCar.SetNetworkPlayerID(CgsNetwork::K_INVALID_PLAYER_ID);              // ASM stw r27 (=-1)
             lCar.SetCurrentCheckPoint(0);                              // ASM stb r30 (=0)
         }
 

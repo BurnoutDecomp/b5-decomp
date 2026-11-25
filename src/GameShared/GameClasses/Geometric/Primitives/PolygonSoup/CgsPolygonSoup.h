@@ -76,6 +76,15 @@ namespace CgsGeometric
         u8  mu8NumQuads;      // +0x1B  how many of them are QUADS (they come first)
         u8  mu8NumVertices;   // +0x1C  vertex count
 
+        // DecFIGS CgsPolygonSoup.h:109. The stored offsets become typed
+        // pointers relative to the load base (ARTIST 0x82845E84..0x82845E98).
+        void FixUp(const void* lpLoadBase)
+        {
+            const uintptr_t luBase = reinterpret_cast<uintptr_t>(lpLoadBase);
+            mpPolygons = reinterpret_cast<u8*>(luBase + reinterpret_cast<uintptr_t>(mpPolygons));
+            mpVertices = reinterpret_cast<u8*>(luBase + reinterpret_cast<uintptr_t>(mpVertices));
+        }
+
         // GetPolygon @ 0x8283A978 — bounds-asserted accessor; returns &polygon[index].
         // The X360 index arg is an unsigned __int8 (clrlwi r,24).
         u8* GetPolygon(u8 lu8PolyIndex) const;

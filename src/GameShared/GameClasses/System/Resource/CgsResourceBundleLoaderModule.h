@@ -66,8 +66,9 @@ public:
     void Destruct();
     void Update(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack,
                 const BundleLoaderIO::InputBuffer_Update* lpInput, BundleLoaderIO::OutputBuffer* lpOutput);
-    void ProcessReceiverQueue();
-    void ProcessPoolResponses();
+    void ProcessReceiverQueue(const BundleLoaderIO::InputBuffer_Update* lpInput,
+                              BundleLoaderIO::OutputBuffer* lpOutput);
+    void ProcessPoolResponses(BundleLoaderIO::OutputBuffer* lpOutput);
     void RecordPostUpdateEvents(const BundleLoaderIO::InputBuffer_Record* lpInput);
     void ProcessBundleLoadRequests(const BundleLoaderIO::InputBuffer_Update* lpInput,
                                    BundleLoaderIO::OutputBuffer* lpOutput);

@@ -153,7 +153,7 @@ namespace PhysicsSimulationIO
     // (console +16 / +38432 / +128048 / +131136, reached BY NAME -- host offsets differ because
     // OutUpdateRigidBody widened), then the scalar+length zeroing tail
     // (+4 mfTimeStepUsed, +131144 / +24 / +38440 / +128056 == the four miLengths, +8
-    // muMaxIterationsUsed -- console store order kept).
+    // muMaxIterationsUsed).
     // ---------------------------------------------------------------------------------------------
     void OutputBuffer::Construct()
     {
@@ -167,8 +167,8 @@ namespace PhysicsSimulationIO
         mfTimeStepUsed = 0.0f;                 // *(a1+4)      = 0.0
         mDriveSpyQueue.Clear();                // *(a1+131144) = 0
         mUpdateRigidBodyQueue.Clear();         // *(a1+24)     = 0
-        mContactSpyQueue.Clear();              // *(a1+38440)  = 0
         mJointSpyQueue.Clear();                // *(a1+128056) = 0
+        mContactSpyQueue.Clear();              // *(a1+38440)  = 0
         muMaxIterationsUsed = 0;               // *(a1+8)      = 0
     }
 }

@@ -444,7 +444,7 @@ extern "C" ProtoTunnelRefT* ProtoTunnelCreate(s32 iMaxTunnels,s32 iTunnelPort)
     memset(pRef,0,size);
     pRef->iMemGroup=group; pRef->iMaxTunnels=(s8)iMaxTunnels;
     pRef->uTunnelPort=iTunnelPort; pRef->uVirtualAddr=0x01000000; pRef->eMode=2;
-    if (ProtoTunnelSocketInit(pRef,iTunnelPort)<0) { DirtyMemFree(pRef,0x7074756e,group); return 0; }
+    if (ProtoTunnelSocketInit(pRef,iTunnelPort)<0) { DirtyMemFree(pRef,0x7074756e,pRef->iMemGroup); return 0; }
     NetCritInit(&pRef->TunnelsCritS,"prototunnel-global-send");
     NetCritInit(&pRef->TunnelsCritR,"prototunnel-global-recv");
     SocketControl(0,0x73646362,0,reinterpret_cast<void*>(ProtoTunnelSendCallback),pRef);

@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 
 namespace CgsContainers
 {
@@ -14,9 +15,8 @@ namespace CgsContainers
 // into StreamedVaultAllocator::GetSlotMemory/ReleaseSlot); the semantics here
 // match that inlined bit math (field = index / 64, bit = index % 64).
 //
-// Bounds asserts that the DWARF shows guarding these methods (CgsBitArray.h:203,
-// :241) are emitted at the call sites by callers that own the CgsDev::Assert API,
-// so this header stays free of the assert-system dependency.
+// Recovered callers provide their ARTIST diagnostic context. ObjectPool passes
+// its known BitArray source path when clearing an occupied slot.
 template <u32 tuNumBits>
 class BitArray
 {
@@ -79,10 +79,26 @@ public:
 
     void UnSetBit(u32 luIndex)
     {
+        UnSetBit(luIndex, 0);
+    }
+
+private:
+    template <typename T, s32 N, typename TIndex> friend class ObjectPool;
+
+    // ObjectPool supplies the nested include spelling found in ARTIST. The
+    // original inlined bit clear selects the guard at that call site.
+    __forceinline void UnSetBit(u32 luIndex, const char* lpcAssertFile)
+    {
+        if (lpcAssertFile)
+        {
+            CGS_ASSERT_AT(luIndex < tuNumBits, "luIndex < NUMBITS", lpcAssertFile, 241);
+        }
         const u32 luField = luIndex / kuNumberOfBitsInBitField;
         const u64 lu64Mask = (u64)1 << (luIndex & kuBitsInBitFieldMask);
         maxBits[luField] &= ~lu64Mask;
     }
+
+public:
 
     u32 GetCapacity() const
     {
@@ -157,10 +173,7 @@ public:
     // Clear every bit (the X360 `*this = 0` of the single-field BitArray<16>).
     void UnSetAll()
     {
-        for (u32 luField = 0; luField < kuNumberOfBitFields; ++luField)
-        {
-            maxBits[luField] = 0;
-        }
+        memset(maxBits, 0, sizeof(maxBits));
     }
 
     // DecFIGS CgsBitArray.h:342 and :360. Both lifecycle operations clear the

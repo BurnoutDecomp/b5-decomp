@@ -243,29 +243,33 @@ extern "C" s32 ProtoMangleStatus(ProtoMangleRefT* ref, s32 select, void* buffer,
 
 extern "C" s32 ProtoMangleComplete(ProtoMangleRefT* ref, s32* address, s32* port)
 {
-    if (ref->eState != 0) return ref->eState == 5 ? 0 : -1;
-    const char* pEncoded = std::strchr(ref->strPeerAddress, '^');
-    if (!pEncoded)
+    if (ref->eState == 0)
     {
+        const char* pEncoded = std::strchr(ref->strPeerAddress, '^');
+        if (pEncoded)
+        {
+            XNADDR peer;
+            DecodeAddress(&peer, 36, reinterpret_cast<const u8*>(pEncoded + 1));
+            NetPrintfCode("protomanglexenon: XnAddr.ina=%s\n", SocketInAddrGetText(peer.ina.s_addr));
+            NetPrintfCode("protomanglexenon: XnAddr.inaOnline=%s\n", SocketInAddrGetText(peer.inaOnline.s_addr));
+            NetPrintfCode("protomanglexenon: XnAddr.wPortOnline=%d\n", peer.wPortOnline);
+            IN_ADDR secure;
+            const s32 result = XNetXnAddrToInAddr(&peer, &ref->SessionInfo.sessionID, &secure);
+            if (result)
+            {
+                NetPrintfCode("protomanglexenon: XNetXnAddrToInAddr() = 0x%08x\n", result);
+                return -1;
+            }
+            NetPrintfCode("protomanglexenon: secure addr=%s\n", SocketInAddrGetText(secure.s_addr));
+            *address = static_cast<s32>(SocketHtonl(secure.s_addr));
+            if (port) *port = ref->iPeerPort;
+            return 1;
+        }
         NetPrintfCode("protomanglexenon: no xnaddr specified with peer address - cannot connect\n");
-        return -1;
     }
-    XNADDR peer;
-    DecodeAddress(&peer, 36, reinterpret_cast<const u8*>(pEncoded + 1));
-    NetPrintfCode("protomanglexenon: XnAddr.ina=%s\n", SocketInAddrGetText(peer.ina.s_addr));
-    NetPrintfCode("protomanglexenon: XnAddr.inaOnline=%s\n", SocketInAddrGetText(peer.inaOnline.s_addr));
-    NetPrintfCode("protomanglexenon: XnAddr.wPortOnline=%d\n", peer.wPortOnline);
-    IN_ADDR secure;
-    const s32 result = XNetXnAddrToInAddr(&peer, &ref->SessionInfo.sessionID, &secure);
-    if (result)
-    {
-        NetPrintfCode("protomanglexenon: XNetXnAddrToInAddr() = 0x%08x\n", result);
-        return -1;
-    }
-    NetPrintfCode("protomanglexenon: secure addr=%s\n", SocketInAddrGetText(secure.s_addr));
-    *address = static_cast<s32>(SocketHtonl(secure.s_addr));
-    if (port) *port = ref->iPeerPort;
-    return 1;
+    else if (ref->eState == 5)
+        return 0;
+    return -1;
 }
 
 extern "C" void ProtoMangleConnect(ProtoMangleRefT* ref, s32 port, const char* peer)

@@ -145,8 +145,15 @@ namespace CgsSceneManager
         // h:208 / h:227 -- both reduce to the pool's Clear() on the X360 (VolumeManager::
         // Prepare @0x828CFD38 emits ObjectPool<VolumeSlot,4608,int>::Clear TWICE, back to
         // back, for exactly this pair).
-        bool Prepare();
-        void Clear();
+        bool Prepare()
+        {
+            mVolumePool.Clear();
+            return true;
+        }
+        void Clear()
+        {
+            mVolumePool.Clear();
+        }
         // h:246 -- declaration-only (no X360 body, no caller). See Destruct.
         bool Release();
 

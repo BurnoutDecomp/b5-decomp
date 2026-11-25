@@ -29,10 +29,10 @@ Texture2D::ResourceDescriptor Texture2D::GetResourceDescriptor(const Parameters&
 // ARTIST 82B610D8 passes the remaining four SDK parameters on the stack.
 u32 Texture2D::Xbox2GetPhysicalMemorySize(const Parameters& parameters)
 {
-    const Parameters* lpParameters = &parameters;
-    return XGSetTextureHeader(lpParameters->muWidth, lpParameters->muHeight,
-        lpParameters->muNumLevels, 0, static_cast<D3DFORMAT>(lpParameters->meFormat),
-        D3DPOOL_DEFAULT, 0, XGHEADER_CONTIGUOUS_MIP_OFFSET, 0, 0, 0, 0);
+    UINT luBaseSize;
+    return XGSetTextureHeader(parameters.muWidth, parameters.muHeight,
+        parameters.muNumLevels, 0, static_cast<D3DFORMAT>(parameters.meFormat),
+        D3DPOOL_DEFAULT, 0, XGHEADER_CONTIGUOUS_MIP_OFFSET, 0, NULL, &luBaseSize, NULL);
 }
 
 // ARTIST 82B62E78 expands the five-word 2D parameters into the seven-word

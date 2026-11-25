@@ -974,7 +974,7 @@ namespace
 // ARTIST 823F5EA0. Both key addresses describe the flat in-place sort buffer.
 void PrepareRadixSortJob(EA::Jobs::Job* job, SortInfo* data, CgsGraphics::DispatchList* list)
 {
-    list->PrepareSortJobInfo(&data->mInputOutputInfo);
+    list->PrepareSortJobInfo(data->mInputOutputInfo);
     const char* const file = "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Graphics/BrnRendererModule.cpp";
     if (!data)
     {

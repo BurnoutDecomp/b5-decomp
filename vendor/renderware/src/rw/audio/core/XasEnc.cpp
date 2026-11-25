@@ -125,7 +125,7 @@ XasEnc *XasEnc::CreateInstance(s32 iNumChannels, s32 iSampleRate, System *pSyste
 // error, then quantise the stored open-loop errors against a closed-loop history that
 // starts from zero. The selected predictor index is NOT reset between channels.
 // -------------------------------------------------------------------------------------
-void XasEnc::EncodeBlock(const f32 *pafFrames, u8 *pOutput, s32 iNumChannels)
+void XasEnc::EncodeBlock(f32 *pafFrames, u8 *pOutput, s32 iNumChannels)
 {
     s32 liPredictor = 0;
     u8 *lpHeader1 = pOutput + 2 * iNumChannels;   // the second header-word row
@@ -225,7 +225,6 @@ void XasEnc::EncodeBlock(const f32 *pafFrames, u8 *pOutput, s32 iNumChannels)
 s32 XasEnc::Encode(f32 *pafInput, u8 *pOutput, s32 iNumSamples, s32 *piBytesWritten,
                    void * /*pSeekData*/, s32 *piAuxOut)
 {
-    u8 *lpOut = pOutput;
     if (piAuxOut)
         *piAuxOut = 0;
     *piBytesWritten = 0;
@@ -244,11 +243,11 @@ s32 XasEnc::Encode(f32 *pafInput, u8 *pOutput, s32 iNumSamples, s32 *piBytesWrit
 
         if (miBufferedSamples == KI_BLOCK_SAMPLES)
         {
-            EncodeBlock(mafBuffer, lpOut, mNumChannels);
+            EncodeBlock(mafBuffer, pOutput, mNumChannels);
             liCoded = KI_BLOCK_SAMPLES;
             const s32 liBytes = KI_BLOCK_BYTES * mNumChannels;
             *piBytesWritten += liBytes;
-            lpOut += liBytes;
+            pOutput += liBytes;
             miBufferedSamples = 0;
         }
     }
@@ -260,9 +259,9 @@ s32 XasEnc::Encode(f32 *pafInput, u8 *pOutput, s32 iNumSamples, s32 *piBytesWrit
         liCoded += liBlocks * KI_BLOCK_SAMPLES;
         do
         {
-            EncodeBlock(pafInput, lpOut, mNumChannels);
+            EncodeBlock(pafInput, pOutput, mNumChannels);
             const s32 liBytes = KI_BLOCK_BYTES * mNumChannels;
-            lpOut += liBytes;
+            pOutput += liBytes;
             pafInput += KI_BLOCK_SAMPLES * mNumChannels;
             *piBytesWritten += liBytes;
         } while (--liBlocks);

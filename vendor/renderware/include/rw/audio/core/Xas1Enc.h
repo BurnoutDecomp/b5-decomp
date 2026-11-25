@@ -46,17 +46,18 @@ public:
                void *pSeekData, s32 *piAuxOut) ;
     s32 Flush(u8 *pOutput, s32 *piBytesWritten, void *pSeekData, s32 *piAuxOut) ;
 
+    s32 miBufferedSamples;                                          // +0x20
+    f32 mafBuffer[KI_BLOCK_SAMPLES * KI_MAX_BUFFERED_CHANNELS];     // +0x24
+
+private:
     // Code one 128-frame block of iNumChannels interleaved channels from pafFrames into
     // 76 * iNumChannels bytes at pOutput.
-    void EncodeBlock(const f32 *pafFrames, u8 *pOutput, s32 iNumChannels);
+    void EncodeBlock(f32 *pafFrames, u8 *pOutput, s32 iNumChannels);
 
     // Reorder one channel's four 19-byte sub-blocks (pSubBlocks) into the XAS1 layout at
     // pOutput: the four 4-byte headers, then residual byte i of sub-blocks 0..3 for
     // i = 0..14.
-    void CustomInterleaveXAS(const u8 *pSubBlocks, u8 *pOutput);
-
-    s32 miBufferedSamples;                                          // +0x20
-    f32 mafBuffer[KI_BLOCK_SAMPLES * KI_MAX_BUFFERED_CHANNELS];     // +0x24
+    void CustomInterleaveXAS(u8 *pSubBlocks, u8 *pOutput);
 };
 
 } // namespace core

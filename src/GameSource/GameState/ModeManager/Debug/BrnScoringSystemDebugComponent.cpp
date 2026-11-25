@@ -26,7 +26,7 @@
 namespace BrnGameState
 {
     typedef GameStateModuleIO::CarScoreData                         CarScoreData;
-    typedef CarScoreData::ChainableMultiplierInfo                   ChainableMultiplierInfo;
+    typedef GameStateModuleIO::ChainableMultiplierInfo                   ChainableMultiplierInfo;
     typedef BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface ActiveCarOutput;
     typedef BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusInterface PlayerStatusInterface;
 
@@ -148,14 +148,15 @@ namespace BrnGameState
         // Gather this car's chainable-multiplier table for the current band, then test the band's bit.
         const CarScoreData* lpScoreData = lpCarData->GetScoreData();
         CgsContainers::Array<ChainableMultiplierInfo, 8> laMultiplierInfo;
+        laMultiplierInfo.Clear();
         lpScoreData->GetChainableStuntMultipliers(liMaxMultiplier, -1, &laMultiplierInfo);
 
-        if (laMultiplierInfo.GetCount() == 0)
+        if (laMultiplierInfo.GetLength() == 0)
             return;
 
-        const ChainableMultiplierInfo& lEntry = laMultiplierInfo.Ge(0);
+        const ChainableMultiplierInfo& lEntry = laMultiplierInfo.GetItem(0);
         const s32 liBit = 1 << KAI_ROW_BIT_INDEX[liRow - 1];
-        if ((lEntry.miChainableScore & liBit) != liBit)
+        if ((lEntry.mMultiplierInfo.muMultiplierStuntTypes & liBit) != liBit)
             return;
 
         const BrnPhysics::Vehicle::RaceCarState* lpLocalPlayersCarState =

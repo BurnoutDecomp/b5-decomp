@@ -25,36 +25,19 @@
 
 namespace CgsGeometric
 {
-    // ------------------------------------------------------------------------
-    // TestAxisAlignedBoxAxisAlignedBox @ 0x82812460
-    //
-    //   li        r11, 0x10
-    //   lvx128    v0,  r0, r4    ; v0  = lrBoxB.mMin   (r4+0x00)
-    //   lvx128    v13, r0, r3    ; v13 = lrBoxA.mMin   (r3+0x00)
-    //   lvx128    v12, r3, r11   ; v12 = lrBoxA.mMax   (r3+0x10)
-    //   lvx128    v11, r4, r11   ; v11 = lrBoxB.mMax   (r4+0x10)
-    //   vcmpgefp  v0,  v12, v0   ; v0  = (A.max >= B.min) per lane
-    //   vcmpgefp  v13, v11, v13  ; v13 = (B.max >= A.min) per lane
-    //   vand      v0,  v13, v0   ; v0  = per-axis overlap
-    //   vpermwi128 v13, v0, 0x4B ; cross-lane rotate
-    //   vpermwi128 v12, v0, 0x87 ; cross-lane rotate
-    //   vand      v0,  v0,  v13  ; AND lanes together ...
-    //   vand      v0,  v0,  v12  ; ... reducing x,y,z to one boolean
-    //   vspltw    v1,  v0,  0    ; broadcast the all-axes-overlap result
-    //   blr
-    //
-    // Standard separating-axis AABB/AABB overlap test: two boxes overlap iff on
-    // every axis A.max >= B.min AND B.max >= A.min. Both edges are non-strict
-    // (vcmpgefp), so boxes that merely touch (share a face) count as overlapping.
-    // The two vpermwi128 rotates + two vand fold the three per-axis lanes into a
-    // single all-true predicate. A NaN coordinate makes its VMX compare false,
-    // matching the scalar >= here. The w lane is unused.
-    // ------------------------------------------------------------------------
+    // ARTIST 0x82812460 compares the bounds as VMX masks. The x lane of the
+    // two permutes carries the y and z comparisons for the three-axis test.
     rw::math::vpu::MaskScalar TestAxisAlignedBoxAxisAlignedBox(const AxisAlignedBox& lrBoxA, const AxisAlignedBox& lrBoxB)
     {
-        return rw::math::vpu::MaskScalar(lrBoxA.mMax.mV.x >= lrBoxB.mMin.mV.x && lrBoxB.mMax.mV.x >= lrBoxA.mMin.mV.x    // x axis
-            && lrBoxA.mMax.mV.y >= lrBoxB.mMin.mV.y && lrBoxB.mMax.mV.y >= lrBoxA.mMin.mV.y    // y axis
-            && lrBoxA.mMax.mV.z >= lrBoxB.mMin.mV.z && lrBoxB.mMax.mV.z >= lrBoxA.mMin.mV.z);   // z axis
+        const rw::math::vpu::VectorIntrinsic lvMinB = lrBoxB.mMin.mV;
+        const rw::math::vpu::VectorIntrinsic lvMinA = lrBoxA.mMin.mV;
+        const rw::math::vpu::VectorIntrinsic lvMaxA = lrBoxA.mMax.mV;
+        const rw::math::vpu::VectorIntrinsic lvMaxB = lrBoxB.mMax.mV;
+        const rw::math::vpu::VectorIntrinsic lvOverlap = __vand(__vcmpgefp(lvMaxB, lvMinA), __vcmpgefp(lvMaxA, lvMinB));
+        const rw::math::vpu::VectorIntrinsic lvYOverlap = __vpermwi(lvOverlap, 0x4B);
+        const rw::math::vpu::VectorIntrinsic lvZOverlap = __vpermwi(lvOverlap, 0x87);
+        const rw::math::vpu::VectorIntrinsic lvAll = __vand(__vand(lvOverlap, lvYOverlap), lvZOverlap);
+        return rw::math::vpu::MaskScalar(__vspltw(lvAll, 0));
     }
 
     namespace

@@ -1,5 +1,8 @@
 #include "GameShared/GameClasses/System/Resource/CgsSmallResource.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
+
+#define CGS_ARTIST_SMALL_RESOURCE_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsSmallResourceX360.h"
 
 // SmallResource / SmallResourceDescriptor method bodies.
 //
@@ -60,10 +63,18 @@ namespace CgsResource
     // m_alignment>1 (cmplwi 1; ble-skip), so the PASS predicate is (m_size==0 && m_alignment<=1).
     void SmallResourceDescriptor::CreateFromRWDescriptor(const ResourceDescriptor& lrDescriptor)
     {
-        CGS_ASSERT(lrDescriptor.m_baseResourceDescriptors[3].m_size == 0 && lrDescriptor.m_baseResourceDescriptors[3].m_alignment <= 1u, "Can not convert from rw descriptor with unitialized memory\n");
-        CGS_ASSERT(lrDescriptor.m_baseResourceDescriptors[4].m_size == 0 && lrDescriptor.m_baseResourceDescriptors[4].m_alignment <= 1u, "Can not convert from rw descriptor with unitialized memory\n");
-        CGS_ASSERT(lrDescriptor.m_baseResourceDescriptors[1].m_size == 0 && lrDescriptor.m_baseResourceDescriptors[1].m_alignment <= 1u, "Can not convert from rw descriptor with unitialized memory\n");
+        CGS_ASSERT_STREAM_AT(lrDescriptor.m_baseResourceDescriptors[3].m_size == 0 && lrDescriptor.m_baseResourceDescriptors[3].m_alignment <= 1u,
+            "Can not convert from rw descriptor with unitialized memory\n",
+            CGS_ARTIST_SMALL_RESOURCE_FILE, 101);
+        CGS_ASSERT_STREAM_AT(lrDescriptor.m_baseResourceDescriptors[4].m_size == 0 && lrDescriptor.m_baseResourceDescriptors[4].m_alignment <= 1u,
+            "Can not convert from rw descriptor with unitialized memory\n",
+            CGS_ARTIST_SMALL_RESOURCE_FILE, 102);
+        CGS_ASSERT_STREAM_AT(lrDescriptor.m_baseResourceDescriptors[1].m_size == 0 && lrDescriptor.m_baseResourceDescriptors[1].m_alignment <= 1u,
+            "Can not convert from rw descriptor with unitialized memory\n",
+            CGS_ARTIST_SMALL_RESOURCE_FILE, 103);
         m_baseResourceDescriptors[0] = lrDescriptor.m_baseResourceDescriptors[0];   // main     <- serialised[0]
         m_baseResourceDescriptors[1] = lrDescriptor.m_baseResourceDescriptors[2];   // graphics <- serialised[2]
     }
 }
+
+#undef CGS_ARTIST_SMALL_RESOURCE_FILE

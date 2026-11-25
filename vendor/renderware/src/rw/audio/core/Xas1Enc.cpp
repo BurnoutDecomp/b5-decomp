@@ -21,7 +21,8 @@
 #include "rw/audio/core/Xas1Enc.h"
 #include "rw/audio/core/PlugIn.h" // System::Alloc
 
-#include <cstring> // std::memcpy (the console's XMemCpy / memcpy)
+#include <cstring> // std::memcpy
+#include <xtl.h>   // XMemCpy
 #include <new>     // placement new (the v-table install over the System allocation)
 
 namespace rw
@@ -126,18 +127,29 @@ Xas1Enc *Xas1Enc::CreateInstance(s32 iNumChannels, s32 iSampleRate, System *pSys
 // CustomInterleaveXAS -- the four 4-byte sub-block headers first (one XMemCpy each), then
 // for each residual byte position i, that byte of sub-blocks 0, 1, 2, 3.
 // -------------------------------------------------------------------------------------
-void Xas1Enc::CustomInterleaveXAS(const u8 *pSubBlocks, u8 *pOutput)
+void Xas1Enc::CustomInterleaveXAS(u8 *pSubBlocks, u8 *pOutput)
 {
-    for (s32 liSub = 0; liSub < KI_SUBBLOCKS; ++liSub)
-        std::memcpy(pOutput + KI_HEADER_BYTES * liSub, pSubBlocks + KI_SUBBLOCK_BYTES * liSub,
-                    KI_HEADER_BYTES);
-
-    u8 *lpDst = pOutput + KI_HEADER_BYTES * KI_SUBBLOCKS;
-    for (s32 liByte = 0; liByte < KI_RESIDUAL_BYTES; ++liByte)
+    const u8 *pHeaderSource = pSubBlocks;
+    u8 *pHeaderDestination = pOutput;
+    for (s32 header = 0; header < KI_SUBBLOCKS; ++header)
     {
-        for (s32 liSub = 0; liSub < KI_SUBBLOCKS; ++liSub)
-            lpDst[liSub] = pSubBlocks[KI_HEADER_BYTES + KI_SUBBLOCK_BYTES * liSub + liByte];
-        lpDst += KI_SUBBLOCKS;
+        XMemCpy(pHeaderDestination, pHeaderSource, KI_HEADER_BYTES);
+        pHeaderSource += KI_SUBBLOCK_BYTES;
+        pHeaderDestination += KI_HEADER_BYTES;
+    }
+
+    const u8 *const pResiduals = pSubBlocks + KI_HEADER_BYTES;
+    u8 *pDestination = pOutput + KI_HEADER_BYTES * KI_SUBBLOCKS;
+    for (s32 byte = 0; byte < KI_RESIDUAL_BYTES; ++byte)
+    {
+        s32 subBlock = 0;
+        const u8 *pSubBlock = pResiduals + byte;
+        do
+        {
+            pDestination[subBlock] = *pSubBlock;
+            pSubBlock += KI_SUBBLOCK_BYTES;
+        } while (++subBlock < KI_SUBBLOCKS);
+        pDestination += KI_SUBBLOCKS;
     }
 }
 
@@ -150,7 +162,7 @@ void Xas1Enc::CustomInterleaveXAS(const u8 *pSubBlocks, u8 *pOutput)
 // assembled in a local block and reordered by CustomInterleaveXAS into the channel's 76
 // output bytes. The selected predictor index is NOT reset between sub-blocks or channels.
 // -------------------------------------------------------------------------------------
-void Xas1Enc::EncodeBlock(const f32 *pafFrames, u8 *pOutput, s32 iNumChannels)
+void Xas1Enc::EncodeBlock(f32 *pafFrames, u8 *pOutput, s32 iNumChannels)
 {
     s32 liPredictor = 0;
 
@@ -262,7 +274,6 @@ void Xas1Enc::EncodeBlock(const f32 *pafFrames, u8 *pOutput, s32 iNumChannels)
 s32 Xas1Enc::Encode(f32 *pafInput, u8 *pOutput, s32 iNumSamples, s32 *piBytesWritten,
                     void * /*pSeekData*/, s32 *piAuxOut)
 {
-    u8 *lpOut = pOutput;
     s32 liCoded = 0;
     *piBytesWritten = 0;
     if (piAuxOut)
@@ -281,11 +292,11 @@ s32 Xas1Enc::Encode(f32 *pafInput, u8 *pOutput, s32 iNumSamples, s32 *piBytesWri
 
         if (miBufferedSamples == KI_BLOCK_SAMPLES)
         {
-            EncodeBlock(mafBuffer, lpOut, mNumChannels);
+            EncodeBlock(mafBuffer, pOutput, mNumChannels);
             liCoded = KI_BLOCK_SAMPLES;
             const s32 liBytes = KI_BLOCK_BYTES * mNumChannels;
             *piBytesWritten += liBytes;
-            lpOut += liBytes;
+            pOutput += liBytes;
             miBufferedSamples = 0;
         }
     }
@@ -297,9 +308,9 @@ s32 Xas1Enc::Encode(f32 *pafInput, u8 *pOutput, s32 iNumSamples, s32 *piBytesWri
         liCoded += liBlocks * KI_BLOCK_SAMPLES;
         do
         {
-            EncodeBlock(pafInput, lpOut, mNumChannels);
+            EncodeBlock(pafInput, pOutput, mNumChannels);
             const s32 liBytes = KI_BLOCK_BYTES * mNumChannels;
-            lpOut += liBytes;
+            pOutput += liBytes;
             pafInput += KI_BLOCK_SAMPLES * mNumChannels;
             *piBytesWritten += liBytes;
         } while (--liBlocks);

@@ -155,8 +155,8 @@ public:
     DispatchList* AllocateKeyBlock();
     // @ 0x827FA7D0 -- flatten every key block into one 128-aligned array carved from
     // the list's bin, collapse the chain onto it, publish it as mpSortedKeys, and
-    // fill lpJobInfo for the RadixSort job.
-    DispatchList* PrepareSortJobInfo(SortJobInfo* lpJobInfo);
+    // fill lrJobInfo for the RadixSort job.
+    void PrepareSortJobInfo(SortJobInfo& lrJobInfo);
     // @0x82AD2020) between PrepareSortJobInfo and the dispatch walk. The PC
     // bring-up has no job scheduler yet, so this member runs the same
     // prepare-then-sort synchronously. Despite the job name, ARTIST

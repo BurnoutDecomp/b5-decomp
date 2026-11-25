@@ -152,7 +152,7 @@ namespace BrnGameState
         void UpdateCarsAroundPlayerAtTakeoff(const ActiveRaceCarOutputInterface* lpRaceCar);
 
         // X360 0x823136B8. qsort comparator over GameStateModuleIO::ChainableMultiplierInfo: ranks the
-        // higher sort-key (maField[3]) first. Emitted non-static on X360 (no `this` use); reconstructed
+        // higher sort-key (miMultiplier) first. Emitted non-static on X360 (no `this` use); reconstructed
         // `static` for the (const void*, const void*) free-function shape qsort requires.
         static int _ChainableMultipliersSort(const void* lpData1, const void* lpData2);
 
@@ -190,12 +190,10 @@ namespace BrnGameState
         // 0x8234CE48 reads the cached-ended flag at +0x2515 and copies the
         // 132-byte chainable table to +0x23F0 in this derived object.
         bool IsOnlineChainableUpdateSuppressed() const { return mbStuntModeEndedCached; }
-        static const s32 KI_ONLINE_CHAINABLE_DISPLAY_BYTES = 132;
-        void SetOnlineChainableMultiplierDisplay(const void* lpData, s32 liSizeInBytes)
+        void SetOnlineChainableMultiplierDisplay(
+            const CgsContainers::Array<GameStateModuleIO::ChainableMultiplierInfo, KI_MAX_ACTIVE_RACE_CARS>& lrInfo)
         {
-            CGS_ASSERT(lpData != NULL, "lpData");
-            CGS_ASSERT(liSizeInBytes <= KI_ONLINE_CHAINABLE_DISPLAY_BYTES, "liSizeInBytes <= KI_ONLINE_CHAINABLE_DISPLAY_BYTES");
-            memcpy(&maChainableMultiplierInfo, lpData, static_cast<size_t>(liSizeInBytes));
+            memcpy(&maChainableMultiplierInfo, &lrInfo, sizeof(maChainableMultiplierInfo));
         }
 
         bool GetStuntModeEndedCached() const { return mbStuntModeEndedCached; }

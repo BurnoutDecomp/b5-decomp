@@ -408,7 +408,7 @@ IndexedLinkedListNode<DataType,IndexType>::operator*() const
 
 
 template<class DataType, class IndexType>
-inline void
+__forceinline void
 IndexedLinkedList<DataType,IndexType>::Init( IndexedLinkedListNode<DataType,IndexType>* lpNodeBase, IndexType liNodeCount )
 {
     mpBase = lpNodeBase;

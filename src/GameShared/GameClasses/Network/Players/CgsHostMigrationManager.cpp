@@ -52,7 +52,8 @@ namespace CgsNetwork
     // QSortCallback runs through the C qsort with no user-data channel, so the comparator's
     // reference host id is published through this file-scope global (set/cleared around the
     // qsort call in Enable). DWARF CgsHostMigrationManager.cpp:49.
-    static HostMigrationManager::NetworkPlayerID gQuickSortHostPlayerID = KI_INVALID_PLAYER_ID;
+    // ARTIST 0x8307A198 is zero-initialized, then bracketed around qsort by Enable.
+    static HostMigrationManager::NetworkPlayerID gQuickSortHostPlayerID;
 
     // -------------------------------------------------------------------------------
     void HostMigrationManager::Construct()
@@ -251,10 +252,10 @@ namespace CgsNetwork
                                       const CgsSystem::TimerStatus* lpTimerStatus,
                                       u16 lu16CurrentFrame)
     {
+        s32 liNumPlayers = 0;
         SetNewHost(liGameRoomHostID, lpTimerStatus, lu16CurrentFrame);
 
         // Snapshot the current player set into the election list, then sort it.
-        s32 liNumPlayers = 0;
         NetworkPlayerID liPlayerID = KI_INVALID_PLAYER_ID;
         if (mpPlayerManager->GetNextPlayerID(&liPlayerID,
                                              PlayerManager::E_CONSIDER_PLAYERS_WHO_HAVE_FINALISED))

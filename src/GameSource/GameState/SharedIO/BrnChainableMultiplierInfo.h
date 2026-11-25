@@ -1,22 +1,20 @@
 #pragma once
 
-#include "types.hpp"
+#include "GameSource/Network/Messages/BrnStuntMultiplierMessage.h"
 
-// Home of BrnGameState::GameStateModuleIO::ChainableMultiplierInfo -- the element of the online stunt
-// scorer's Array<ChainableMultiplierInfo,8> (StuntModeScoringOnline +0x23F0) and of the
-// Array_ChainableMultiplierInfo_8.cpp explicit instantiation. PROVISIONAL minimal record: sized to the
-// X360 element stride (16); real field names land with the type's own TU. X360-only (the DecFIGS DWARF
-// has no such type).
-//
-// [FX-GS 2026-09-23] Moved verbatim out of BrnGameStateLeafContainers.h (which still includes it), so
-// BrnStuntModeScoringOnline.h -- now embedded by value in ScoringSystem -- can name its element type
-// without dragging that header's other provisional leaf stubs (BufferedNewHighScore,
-// OnlineFlybyManager) into every ScoringSystem includer, where they collide with the real
-// BrnGameStateStreetManager.h / BrnGameStateOnlineFlybyManager.h definitions.
+// ARTIST 0x8231C170 and 0x8234CE48 populate this 16-byte online scoring record.
+// Both copy the multiplier-message payload, then record the car slot and multiplier time.
 namespace BrnGameState
 {
 namespace GameStateModuleIO
 {
-struct ChainableMultiplierInfo { s32 maField[4]; };  // X360 stride 16 (provisional)
+struct ChainableMultiplierInfo
+{
+    BrnNetwork::StuntMultiplierMessage::MultiplierInfo mMultiplierInfo;
+    s32 miRaceCarIndex;
+    s32 miMultiplier;
+};
+
+CGS_STATIC_ASSERT((sizeof(ChainableMultiplierInfo) == 16), "ChainableMultiplierInfo stride");
 }
 }

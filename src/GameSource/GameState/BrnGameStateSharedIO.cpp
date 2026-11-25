@@ -4,7 +4,6 @@
 #include "GameShared/GameClasses/Network/CgsNetworkConstants.h"   // CgsNetwork::K_INVALID_PLAYER_ID
 #include "GameShared/GameClasses/Development/CgsStrStream.h"  // CgsDev::StrStream (AddMessage dynamic assert text)
 #include <cstring>  // memcpy, memset, strncpy, strlen
-#include <new>      // placement construction of the Time pairs in maStorage8C
 #define CGS_ARTIST_FILE_BRNGAMESTATESHAREDIO "..\\..\\..\\GameSource\\GameState/BrnGameStateSharedIO.h"
 static const char KAC_ARTIST_ASSERT_FILE[] =
     "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateSharedIO.cpp";
@@ -399,12 +398,9 @@ bool IsOnlineFreeBurnLobby(EGameModeType leGameMode)
 
 // ===== CarScoreData =====
 
-// X360 0x822A45A8: the Time members default-construct to zero. The six
-// remaining Time pairs are still represented by the byte storage at +0x8C.
+// X360 0x822A45A8. The stored Time members default-construct to zero.
 CarScoreData::CarScoreData()
 {
-    for (u32 i = 0; i < 6; ++i)
-        new (&maStorage8C[i * sizeof(CgsSystem::Time)]) CgsSystem::Time;
 }
 
 // X360 0x821F2B28 resets only the named fields below, preserving the rest of the score record.
@@ -438,15 +434,16 @@ void CarScoreData::ClearData()
     mfDistanceToNextCheckpointLive = 0.0f;
     miCumulativeCheckpoints = 0;
     mfDistanceToFinish = 0.0f;
-    miChainableScore = 0;
+    mStuntMultiplierInfo.muMultiplierStuntTypes = 0;
     mfDistanceAccumulator = 0.0f;
-    miChainableField = 0;
+    mStuntMultiplierInfo.mu16FlatSpins = 0;
+    mStuntMultiplierInfo.mu16BarrelRolls = 0;
     mfLongestDrift = 0.0f;
     miCurrentChainableMultiplier = 0;
     miOnlineStuntScore = 0;
     mbChainActive = 0;
-    // These existing eight storage bytes are the two words cleared at100/104.
-    memset(maStoragePad100, 0, sizeof(maStoragePad100));
+    mauScoreFields100[0] = 0;
+    mauScoreFields100[1] = 0;
     miMarkedManTakedownEventsFor = 0;
     miMarkedManTakedownEventsAgainst = 0;
     miPaybackTakedownsType2For = 0;
@@ -495,17 +492,13 @@ CarScoreData& CarScoreData::operator=(const CarScoreData& lOther)
     maStorage6A[0] = lOther.maStorage6A[0];
     mbHasNetworkResults = lOther.mbHasNetworkResults;
     mTimeInCurrentTeam = lOther.mTimeInCurrentTeam;
-    maTimeInTeam[0] = lOther.maTimeInTeam[0];
-    maTimeInTeam[1] = lOther.maTimeInTeam[1];
-    mTimeAsRunner = lOther.mTimeAsRunner;
-    for (u32 luByte = 0; luByte < sizeof(maStorage8C); ++luByte)
-        maStorage8C[luByte] = lOther.maStorage8C[luByte];
+    for (s32 liTeam = 0; liTeam < E_PLAYER_TEAM_COUNT; ++liTeam)
+        maTimeInTeam[liTeam] = lOther.maTimeInTeam[liTeam];
     mbCompletedBurningHomeRun = lOther.mbCompletedBurningHomeRun;
 
     muOnlinePostEventValueC0 = lOther.muOnlinePostEventValueC0;
     miCumulativeCheckpoints = lOther.miCumulativeCheckpoints;
-    miChainableScore = lOther.miChainableScore;
-    miChainableField = lOther.miChainableField;
+    mStuntMultiplierInfo = lOther.mStuntMultiplierInfo;
     miCurrentChainableMultiplier = lOther.miCurrentChainableMultiplier;
     miOnlineStuntScore = lOther.miOnlineStuntScore;
     mbChainActive = lOther.mbChainActive;
@@ -517,8 +510,8 @@ CarScoreData& CarScoreData::operator=(const CarScoreData& lOther)
     mTimeBoosting = lOther.mTimeBoosting;
     mfLongestDrift = lOther.mfLongestDrift;
     miBarrelRollCount = lOther.miBarrelRollCount;
-    for (u32 luByte = 0; luByte < sizeof(maStoragePad100); ++luByte)
-        maStoragePad100[luByte] = lOther.maStoragePad100[luByte];
+    mauScoreFields100[0] = lOther.mauScoreFields100[0];
+    mauScoreFields100[1] = lOther.mauScoreFields100[1];
     miMarkedManTakedownEventsFor = lOther.miMarkedManTakedownEventsFor;
     miMarkedManTakedownEventsAgainst = lOther.miMarkedManTakedownEventsAgainst;
     miPaybackTakedownsType2For = lOther.miPaybackTakedownsType2For;
@@ -548,12 +541,11 @@ void CarScoreData::GetChainableStuntMultipliers(s32 liMaxMultiplier, s32 liSuppl
 {
     if (mbChainActive && miCurrentChainableMultiplier < liMaxMultiplier)
     {
-        ChainableMultiplierInfo* lpInfo = lpaMultiplierInfo->AddNew();
+        ChainableMultiplierInfo* lpInfo = lpaMultiplierInfo->Grow();
         CGS_ASSERT(lpInfo != 0, CGS_ASSERT_MESSAGE_AT("lpChainableMultiplierInfo", CGS_ARTIST_FILE_BRNGAMESTATESHAREDIO, 1547));
-        lpInfo->miChainableScore = miChainableScore;
-        lpInfo->miChainableField = miChainableField;
-        lpInfo->miSuppliedValue  = liSuppliedValue;
-        lpInfo->miMultiplier     = miCurrentChainableMultiplier;
+        lpInfo->mMultiplierInfo = mStuntMultiplierInfo;
+        lpInfo->miRaceCarIndex = liSuppliedValue;
+        lpInfo->miMultiplier = miCurrentChainableMultiplier;
     }
 }
 }

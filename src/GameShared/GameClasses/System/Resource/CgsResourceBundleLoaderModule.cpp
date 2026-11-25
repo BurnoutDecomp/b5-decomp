@@ -3,11 +3,15 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePoolModule.h"  // PoolModule::GetPool (resolve poolId)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                  // [stream] trace
 #include "GameShared/GameClasses/System/CgsHardwareInit.h"
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include <new>
 #include <cstddef>
 
 // Bundle loader lifetime and native adapters. ResourceModule drives the staged
 // protocol in CgsBundleLoaderModule.cpp with allocator-backed stream buffers.
+#define CGS_ARTIST_BUNDLE_LOADER_FILE \
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsBundleLoaderModule.cpp"
+
 namespace CgsResource
 {
     namespace
@@ -33,10 +37,10 @@ namespace CgsResource
     // receiver + load/unload queues, then bring up the base module.
     bool BundleLoaderModule::Prepare()
     {
-        mbIsNewModule = true;   // [reliable] see ResourceModule::Prepare -- set before base Prepare
         switch (mePrepareStage)
         {
         case E_STAGE_START:
+            mePrepareStage = E_STAGE_START;
             maStreams[0] = 0;
             maStreams[1] = 0;
             meStreamStage = STREAMSTAGE_IDLE;
@@ -60,7 +64,7 @@ namespace CgsResource
             mePrepareStage = E_STAGE_DONE;
             return true;
         default:
-            CGS_ASSERT(false, "Invalid stage");
+            CGS_ASSERT_AT(false, "Invalid stage\n", CGS_ARTIST_BUNDLE_LOADER_FILE, 195);
             return false;
         }
     }
@@ -72,6 +76,7 @@ namespace CgsResource
         switch (meReleaseStage)
         {
         case E_STAGE_START:
+            meReleaseStage = E_STAGE_START;
             mReceiverQueue.Clear();
             // fall through
         case E_STAGE_RUNNING:
@@ -84,7 +89,7 @@ namespace CgsResource
             meReleaseStage = E_STAGE_DONE;
             return true;
         default:
-            CGS_ASSERT(false, "Invalid stage");
+            CGS_ASSERT_AT(false, "Invalid stage\n", CGS_ARTIST_BUNDLE_LOADER_FILE, 243);
             return false;
         }
     }
@@ -175,14 +180,20 @@ namespace CgsResource
         const BundleLoaderIO::InputBuffer_Update* lpInput, BundleLoaderIO::OutputBuffer* lpOutput)
     {
         // ARTIST82907638: stacks are forwarded in the native module ABI but unused here.
+        if (_miUpdatePerfMon > -1)
+            CgsDev::PerfMonCpu::StartMonitor(_miUpdatePerfMon);
+
         lpOutput->LockForWrite();
         lpInput->LockForRead();
-        ProcessReceiverQueue();
+        ProcessReceiverQueue(lpInput, lpOutput);
         ProcessBundleLoadRequests(lpInput, lpOutput);
-        ProcessPoolResponses();
+        ProcessPoolResponses(lpOutput);
         lpInput->UnlockForRead();
         UpdateStream(lpOutput);
         lpOutput->UnlockForWrite();
+
+        if (_miUpdatePerfMon > -1)
+            CgsDev::PerfMonCpu::StopMonitor(_miUpdatePerfMon);
     }
 
     void BundleLoaderModule::AssertNativeLayout()
@@ -201,3 +212,5 @@ namespace CgsResource
     }
 
 }
+
+#undef CGS_ARTIST_BUNDLE_LOADER_FILE

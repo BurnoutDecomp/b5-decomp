@@ -256,7 +256,7 @@ extern "C" s32 NetConnDisconnect(void)
 extern "C" s32 NetConnControl(s32 iControl, s32 iValue, s32 /*iValue2*/, void* pValue, void* pValue2)
 {
     NetConnX360State* pState = gNetConnX360;
-    if (pState == 0)
+    if (gNetConnX360 == NULL)
     {
         NetPrintfCode("netconnxenon: warning - calling NetConnControl() while module is not initialized\n");
         return -1;

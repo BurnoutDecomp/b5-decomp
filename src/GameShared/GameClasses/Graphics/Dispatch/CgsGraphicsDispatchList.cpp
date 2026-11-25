@@ -1,5 +1,6 @@
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsDispatcher.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+#include <cstring>
 #include <algorithm>   // std::sort (ARTIST RadixSortJob::Execute uses std::_Sort)
 #include "types.hpp"     // uintptr_t (128-byte alignment of the flat key array)
 // =============================================================================
@@ -22,6 +23,8 @@
 
 namespace CgsGraphics
 {
+
+static const char KAC_ARTIST_ASSERT_CPP[] = "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\Dispatch/CgsDispatcher.cpp";
 
 // @ 0x822A0788
 // Ensure the tail key block can hold one more record: allocate a fresh block when
@@ -105,11 +108,11 @@ DispatchList* DispatchList::AllocateKeyBlock()
 // list's own bin, collapse the block chain onto that array (the head block is
 // rewritten to cover it: count == capacity == muCount, next == NULL, tail == head),
 // publish it as mpSortedKeys and fill the sort-job parameter block.
-DispatchList* DispatchList::PrepareSortJobInfo(SortJobInfo* lpJobInfo)
+void DispatchList::PrepareSortJobInfo(SortJobInfo& lrJobInfo)
 {
-    lpJobInfo->mpaFlatKeys     = 0;
-    lpJobInfo->muKeyCount      = muCount;
-    lpJobInfo->mpBlockListHead = mpBlockListHead;
+    lrJobInfo.mpaFlatKeys     = 0;
+    lrJobInfo.muKeyCount      = muCount;
+    lrJobInfo.mpBlockListHead = mpBlockListHead;
 
     mpSortedKeys = 0;
 
@@ -120,27 +123,25 @@ DispatchList* DispatchList::PrepareSortJobInfo(SortJobInfo* lpJobInfo)
         void* lpRaw = mpDispatchBin->AllocateMemoryFast((8u * muCount + 399u) >> 4);
         u64*  lpaFlat = reinterpret_cast<u64*>(
             (reinterpret_cast<uintptr_t>(lpRaw) + 127u) & ~static_cast<uintptr_t>(127u));
-        lpJobInfo->mpaFlatKeys = lpaFlat;
+        lrJobInfo.mpaFlatKeys = lpaFlat;
 
         u32 luKeysCopied = 0;
         for (KeyBlock* lpBlock = mpBlockListHead; lpBlock != 0; lpBlock = lpBlock->mpNext)
         {
-            for (u32 luKey = 0; luKey < lpBlock->muCount; ++luKey)
-            {
-                lpaFlat[luKeysCopied + luKey] = lpBlock->mpKeys[luKey];
-            }
+            std::memcpy(lrJobInfo.mpaFlatKeys + luKeysCopied, lpBlock->mpKeys,
+                lpBlock->muCount * sizeof(*lpBlock->mpKeys));
             luKeysCopied += lpBlock->muCount;
         }
-        CGS_ASSERT(luKeysCopied == muCount, "luKeysCopied == muTotalKeyCount");
+        CGS_ASSERT(luKeysCopied == muCount,
+            CGS_ASSERT_MESSAGE_AT("luKeysCopied == muTotalKeyCount", KAC_ARTIST_ASSERT_CPP, 317));
 
-        mpBlockListHead->mpKeys     = lpaFlat;
+        mpBlockListHead->mpKeys     = lrJobInfo.mpaFlatKeys;
         mpBlockListHead->muCount    = muCount;
         mpBlockListHead->muCapacity = muCount;
         mpBlockListHead->mpNext     = 0;
         mpBlockListTail = mpBlockListHead;
-        mpSortedKeys    = lpaFlat;
+        mpSortedKeys    = lrJobInfo.mpaFlatKeys;
     }
-    return this;
 }
 
 // @0x82AD2020, packaged by BrnRendererModule sub_823F5EA0). This remains the
@@ -151,7 +152,7 @@ DispatchList* DispatchList::PrepareSortJobInfo(SortJobInfo* lpJobInfo)
 void DispatchList::SortForDispatch()
 {
     SortJobInfo lJobInfo;
-    PrepareSortJobInfo(&lJobInfo);
+    PrepareSortJobInfo(lJobInfo);
     if (mpSortedKeys != 0 && muCount > 1)
     {
         std::sort(mpSortedKeys, mpSortedKeys + muCount);
@@ -199,27 +200,36 @@ void DispatchList::RelocateForMainMemory(uintptr_t luBinBase, uintptr_t luBinOut
 // the conversion jobs. Each chain still contains ordinary 64-key blocks.
 void DispatchList::ReconnectChainBlocks()
 {
-    CGS_ASSERT(mpBlockListHead == 0, "mpBlockListHead == NULL");
-    CGS_ASSERT(mpBlockListTail == 0, "mpBlockListTail == NULL");
+    CGS_ASSERT(mpBlockListHead == NULL,
+        CGS_ASSERT_MESSAGE_AT("mpBlockListHead == NULL", KAC_ARTIST_ASSERT_CPP, 237));
+    CGS_ASSERT(mpBlockListTail == NULL,
+        CGS_ASSERT_MESSAGE_AT("mpBlockListTail == NULL", KAC_ARTIST_ASSERT_CPP, 238));
+
     muCount = 0;
-    for (u32 luChain = 0; luChain < muChainBlockCount; ++luChain)
+    if (muChainBlockCount != 0)
     {
-        KeyBlock* lpBlock = mapChainBlockArray[luChain];
-        for (;;)
+        for (u32 luChain = 0; luChain < muChainBlockCount; ++luChain)
         {
-            CGS_ASSERT(lpBlock->muCapacity <= KU_KEYBLOCK_CAPACITY,
-                       "lpBlockWithinChain->muKeyCapacity <= KU_MAX_KEYS_PER_BLOCK");
-            muCount += lpBlock->muCount;
-            if (!lpBlock->mpNext) break;
-            lpBlock = lpBlock->mpNext;
+            KeyBlock* lpBlockWithinChain = mapChainBlockArray[luChain];
+            CGS_ASSERT(lpBlockWithinChain->muCapacity <= KU_KEYBLOCK_CAPACITY,
+                CGS_ASSERT_MESSAGE_AT("lpBlockWithinChain->muKeyCapacity <= KU_MAX_KEYS_PER_BLOCK",
+                    KAC_ARTIST_ASSERT_CPP, 249));
+            while (lpBlockWithinChain->mpNext != NULL)
+            {
+                CGS_ASSERT(lpBlockWithinChain->muCapacity <= KU_KEYBLOCK_CAPACITY,
+                    CGS_ASSERT_MESSAGE_AT("lpBlockWithinChain->muKeyCapacity <= KU_MAX_KEYS_PER_BLOCK",
+                        KAC_ARTIST_ASSERT_CPP, 253));
+                muCount += lpBlockWithinChain->muCount;
+                lpBlockWithinChain = lpBlockWithinChain->mpNext;
+            }
+            muCount += lpBlockWithinChain->muCount;
+            if (luChain + 1 < muChainBlockCount)
+                lpBlockWithinChain->mpNext = mapChainBlockArray[luChain + 1];
+            else
+                mpBlockListTail = lpBlockWithinChain;
         }
-        if (luChain + 1u < muChainBlockCount)
-            lpBlock->mpNext = mapChainBlockArray[luChain + 1u];
-        else
-            mpBlockListTail = lpBlock;
-    }
-    if (muChainBlockCount)
         mpBlockListHead = mapChainBlockArray[0];
+    }
 }
 
 // ARTIST827E9590..96A0: Append transfers ownership of the source chain.

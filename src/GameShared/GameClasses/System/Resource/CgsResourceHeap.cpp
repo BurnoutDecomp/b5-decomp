@@ -5,6 +5,9 @@
 #include "types.hpp"   // uintptr_t (heap-memory alignment check)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the node-exhaustion boot gate
 
+#define CGS_ARTIST_RESOURCE_HEAP_FILE \
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceHeap.cpp"
+
 // CgsResource::Heap method bodies, decompiled from the X360 ARTIST IDA (addresses noted).
 // Built up incrementally: Prepare (setup) first; the live allocator (Reprepare/GetNewNode/
 // Malloc/Free + FindFreeNode* + the HeapEntry size/status packing) follows. Methods not yet
@@ -91,9 +94,12 @@ namespace CgsResource
         mbPrepared = true;
 
 
-        CGS_ASSERT((luHeapMemorySize % luHeapAlignment) == 0, "(luHeapMemorySize % luHeapAlignment) == 0");
-        CGS_ASSERT((reinterpret_cast<uintptr_t>(lpHeapMemory) % luHeapAlignment) == 0, "(reinterpret_cast<int>(lpHeapMemory) % luHeapAlignment) == 0");
-        CGS_ASSERT(luMaxNodes < 0xFFFF, "luMaxNodes < 0xFFFF");
+        CGS_ASSERT_AT((luHeapMemorySize % luHeapAlignment) == 0,
+                      "(luHeapMemorySize % luHeapAlignment) == 0", CGS_ARTIST_RESOURCE_HEAP_FILE, 94);
+        CGS_ASSERT_AT((reinterpret_cast<uintptr_t>(lpHeapMemory) % luHeapAlignment) == 0,
+                      "(reinterpret_cast<int>(lpHeapMemory) % luHeapAlignment) == 0",
+                      CGS_ARTIST_RESOURCE_HEAP_FILE, 95);
+        CGS_ASSERT_AT(luMaxNodes < 0xFFFF, "luMaxNodes < 0xFFFF", CGS_ARTIST_RESOURCE_HEAP_FILE, 96);
 
         // X360 hardcodes 16 bytes/node; the x64 HeapEntryNode is wider, so size by sizeof.
         mpNodes            = static_cast<HeapEntryNode*>(lpOverheadAllocator->Malloc(sizeof(HeapEntryNode) * luMaxNodes));
@@ -167,11 +173,8 @@ namespace CgsResource
         if (mbPrepared)
         {
             mbPrepared = false;
-
-
-
-
-            CGS_ASSERT(mUsedNodes.CountElements() == 1, "mUsedNodes.CountElements() == 1");
+            CGS_ASSERT_AT(mUsedNodes.CountElements() == 1, "mUsedNodes.CountElements() == 1",
+                          CGS_ARTIST_RESOURCE_HEAP_FILE, 174);
             mUsedNodes.Init(mpNodes, 0);
             mUnusedNodes.Init(mpNodes, 0);
         }
@@ -1628,4 +1631,6 @@ namespace CgsResource
 
     char* Heap::GetBaseAddress() const { return mpcAddress; }
 }
+
+#undef CGS_ARTIST_RESOURCE_HEAP_FILE
 

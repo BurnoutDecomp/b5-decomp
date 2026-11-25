@@ -30,6 +30,9 @@ namespace renderengine { void WorldGeometry_OnResourceMemoryFreed(const void* lp
 // CreateEntryInSlot, which writes Entry fields at explicit offsets, is decompiled). The
 // lookup methods below are unaffected (they use C++ array indexing, i.e. the PC sizeof).
 
+#define CGS_ARTIST_POOL_FILE \
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourcePool.cpp"
+
 namespace CgsResource
 {
     s32 Pool::_miPoolModuleStatePerfMon = -1;
@@ -295,21 +298,37 @@ namespace CgsResource
     // arms release-start and marks prepared). The PoolModule drives this for all 128 pools.
     bool Pool::Prepare()
     {
-        CGS_ASSERT(mePrepareStage == E_PREPARESTAGE_START || mePrepareStage == E_PREPARESTAGE_DONE,
-                   "Should never get here!");
-        meReleaseStage = E_RELEASESTAGE_START;
-        mePrepareStage = E_PREPARESTAGE_DONE;
-        return true;
+        switch (mePrepareStage)
+        {
+        case E_PREPARESTAGE_START:
+            mePrepareStage = E_PREPARESTAGE_START;
+            // fall through
+        case E_PREPARESTAGE_DONE:
+            meReleaseStage = E_RELEASESTAGE_START;
+            mePrepareStage = E_PREPARESTAGE_DONE;
+            return true;
+        default:
+            CGS_ASSERT_AT(false, "Should never get here!\n", CGS_ARTIST_POOL_FILE, 173);
+            return false;
+        }
     }
 
     // @ 0x828D8600 - one-shot release stage flip (mirror of Prepare).
     bool Pool::Release()
     {
-        CGS_ASSERT(meReleaseStage == E_RELEASESTAGE_START || meReleaseStage == E_RELEASESTAGE_DONE,
-                   "Should never get here!");
-        mePrepareStage = E_PREPARESTAGE_START;
-        meReleaseStage = E_RELEASESTAGE_DONE;
-        return true;
+        switch (meReleaseStage)
+        {
+        case E_RELEASESTAGE_START:
+            meReleaseStage = E_RELEASESTAGE_START;
+            // fall through
+        case E_RELEASESTAGE_DONE:
+            mePrepareStage = E_PREPARESTAGE_START;
+            meReleaseStage = E_RELEASESTAGE_DONE;
+            return true;
+        default:
+            CGS_ASSERT_AT(false, "Should never get here!\n", CGS_ARTIST_POOL_FILE, 210);
+            return false;
+        }
     }
 
 
@@ -1460,3 +1479,5 @@ namespace CgsResource
 }
 
 #undef CGS_ARTIST_FILE
+
+#undef CGS_ARTIST_POOL_FILE

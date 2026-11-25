@@ -5,9 +5,8 @@ namespace CgsResource
     // ARTIST82204E20. The last member at1C is not initialized.
     BaseResourcePtr::BaseResourcePtr()
     {
+        // SmallResource initializes every lane. ARTIST explicitly clears main memory again.
         mResourceMemory.m_baseResources[0] = 0;
-        mResourceMemory.m_baseResources[1] = 0;
-        mResourceMemory.m_baseResources[2] = 0;
         mpNext = this;
         mpPrev = this;
         mHandle.mpResourceMemory = &mResourceMemory;
@@ -75,8 +74,9 @@ namespace CgsResource
     // ARTIST828D6230 inserts this detached node immediately before lpList.
     void BaseResourcePtr::AddToNewList(BaseResourcePtr* lpList)
     {
-        CGS_ASSERT(mpNext == this && mpPrev == this,
-            "ERROR: Must remove from current list before adding to new list\n");
+        CGS_ASSERT_STREAM_AT(mpNext == this && mpPrev == this,
+            "ERROR: Must remove from current list before adding to new list\n",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourcePtr.h", 384);
         mpNext = lpList;
         mpPrev = lpList->mpPrev;
         lpList->mpPrev = this;

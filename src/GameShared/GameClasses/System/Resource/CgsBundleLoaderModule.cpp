@@ -6,10 +6,14 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"   // _miStreamEntryCopy timing
 
+#define CGS_ARTIST_BUNDLE_LOADER_FILE \
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsBundleLoaderModule.cpp"
+
 // ARTIST streaming stages. Native event sizes and pointers replace the console
 // record strides; resource payload bytes retain the converted native bundle ABI.
 namespace CgsResource {
-void BundleLoaderModule::ProcessReceiverQueue() // 828E2888
+void BundleLoaderModule::ProcessReceiverQueue(
+    const BundleLoaderIO::InputBuffer_Update*, BundleLoaderIO::OutputBuffer*) // 828E2888
 {
     const CgsModule::Event* lpEvent = 0;
     s32 liSize = 0;
@@ -387,7 +391,7 @@ void BundleLoaderModule::ProcessReceiverQueue() // 828E2888
 // These remaining stages are still explicit activation gates. The resource
 // module continues using its existing synchronous intake until the full
 // allocation/failure/IO/job lifetime is connected and tested.
-void BundleLoaderModule::ProcessPoolResponses()
+void BundleLoaderModule::ProcessPoolResponses(BundleLoaderIO::OutputBuffer*)
 {
     // ARTIST828EC148. Partial-fixup replies during DATA are intentionally
     // ignored; the final reply publishes the bundle's retained handle.
@@ -725,7 +729,7 @@ void BundleLoaderModule::ProcessBundleEntryList(void* lpOutputBuffer) // 828FAF5
 void BundleLoaderModule::PostLoadFinishedEvent(BundleLoaderIO::OutputBuffer* lpOutput,
     const Events::LoadBundleRequest* lpLoadRequest, Events::LoadBundleResponse::EResult leResult) // 828EC3C8
 {
-    CGS_ASSERT(lpOutput, "lpOutput");
+    CGS_ASSERT_AT(lpOutput, "lpOutput", CGS_ARTIST_BUNDLE_LOADER_FILE, 728);
 
     Events::LoadBundleResponse lResponse;   // DWARF cpp:705 (ARTIST +25)
     lResponse.Construct(lpLoadRequest->GetUser(), lpLoadRequest->GetEventId(), lpLoadRequest->GetFileName(),
@@ -854,7 +858,9 @@ void BundleLoaderModule::UpdateStream(BundleLoaderIO::OutputBuffer* lpOutput) //
 
 
 
-            CGS_ASSERT_STREAM(mCurrentBundle.IsMainMemOptimised() && mCurrentBundle.IsGraphicsMemOptimised(), "Compressed data must be main and graphics mem optmised to use with decompression job\n");
+            CGS_ASSERT_STREAM_AT(mCurrentBundle.IsMainMemOptimised() && mCurrentBundle.IsGraphicsMemOptimised(),
+                "Compressed data must be main and graphics mem optmised to use with decompression job\n",
+                CGS_ARTIST_BUNDLE_LOADER_FILE, 857);
             if (!StreamCompressedDataAsJobFunc(lpOutput)) break;
         }
 
@@ -946,7 +952,7 @@ void BundleLoaderModule::UpdateStream(BundleLoaderIO::OutputBuffer* lpOutput) //
 
 
 
-        CGS_ASSERT(false, "Should never happen.");
+        CGS_ASSERT_AT(false, "Should never happen.", CGS_ARTIST_BUNDLE_LOADER_FILE, 949);
         break;
     default:
         break;
@@ -974,7 +980,7 @@ bool BundleLoaderModule::StreamIdleFunc(void* lpOutputBuffer)
 
 
 
-    CGS_ASSERT(lpOutputBuffer, "lpOutputBuffer");
+    CGS_ASSERT_AT(lpOutputBuffer, "lpOutputBuffer", CGS_ARTIST_BUNDLE_LOADER_FILE, 977);
     BundleLoaderIO::OutputBuffer* lpOutput = static_cast<BundleLoaderIO::OutputBuffer*>(lpOutputBuffer);
     mLoadRequestQueue.Tick(1);
     mUnloadRequestQueue.Tick(1);
@@ -1129,7 +1135,9 @@ bool BundleLoaderModule::StreamEntryListFunc(void* lpOutputBuffer) // 82904478
     int32_t liResourceDataOffset = mCurrentBundle.mauResourceDataOffset[0];
 
 
-    CGS_ASSERT_STREAM(liResourceDataOffset - liResourceEntriesOffset <= miBundleHeaderBufferSize, "Bundle " << mLoadRequest.GetFileName() << " entry list will not fit in header buffer - need " << (liResourceDataOffset - liResourceEntriesOffset) << " bytes\n");
+    CGS_ASSERT_STREAM_AT(liResourceDataOffset - liResourceEntriesOffset <= miBundleHeaderBufferSize,
+        "Bundle " << mLoadRequest.GetFileName() << " entry list will not fit in header buffer - need "
+        << (liResourceDataOffset - liResourceEntriesOffset) << " bytes\n", CGS_ARTIST_BUNDLE_LOADER_FILE, 1132);
     if (_miStreamEntryCopy > -1)
         CgsDev::PerfMonCpu::StartMonitor(_miStreamEntryCopy);
     miHeaderPos += maStreams[miCurrentStream].Read(liResourceDataOffset - miHeaderPos, mpcHeaderBuffer + miHeaderPos - liResourceEntriesOffset);
@@ -1571,7 +1579,7 @@ bool BundleLoaderModule::StreamClose(void* lpOutputBuffer) // 828FB260
     // @0x828FB27C..0x828FB29C, ahead of the null test of the buffer.
     Events::CloseReadStreamRequest lCloseStreamRequest;
     lCloseStreamRequest.Construct(&mReceiverQueue, miCurrentStream, maStreams[miCurrentStream]);
-    CGS_ASSERT(lpOutputBuffer, "lpOutputBuffer");
+    CGS_ASSERT_AT(lpOutputBuffer, "lpOutputBuffer", CGS_ARTIST_BUNDLE_LOADER_FILE, 1574);
     const bool lbAdded = static_cast<BundleLoaderIO::OutputBuffer*>(lpOutputBuffer)->GetStreamRequestQueue()->CloseReadStream(
         lCloseStreamRequest);
     maStreams[miCurrentStream] = 0;
@@ -2184,3 +2192,4 @@ void BundleLoaderModule::RecordPostUpdateEvents(const BundleLoaderIO::InputBuffe
 }
 }
 
+#undef CGS_ARTIST_BUNDLE_LOADER_FILE

@@ -40,23 +40,26 @@ namespace CgsGraphics
 // head, returning the command and recording it as the packet's last command.
 DispatchCommand* DispatchBin::AllocateCommand(u32 luNumExtraQwords)
 {
-    CGS_ASSERT(m_pPacketStart != NULL, "m_pPacketStart != NULL");
+    CGS_ASSERT(m_pPacketStart != NULL,
+        CGS_ASSERT_MESSAGE_AT("m_pPacketStart != NULL", KAC_ARTIST_ASSERT_FILE, 476));
     CGS_ASSERT(m_pActiveAllocateMemoryBlock == NULL,
-               "m_pActiveAllocateMemoryBlock == NULL");
+        CGS_ASSERT_MESSAGE_AT("m_pActiveAllocateMemoryBlock == NULL", KAC_ARTIST_ASSERT_FILE, 477));
 
-    if (static_cast<u32>(m_pNextWord - m_pBin) + luNumExtraQwords + 1u >= m_uSize)
+    const u32 luNumQwords = luNumExtraQwords + 1;
+    if (static_cast<u32>(m_pNextWord - m_pBin) + luNumQwords >= m_uSize)
     {
-        HandleMemoryOverflow(luNumExtraQwords);
+        HandleMemoryOverflow(luNumQwords);
     }
 
     CGS_ASSERT(m_pLastCommandInPacket == NULL
                    || m_pLastCommandInPacket->GetPacketLength() == m_uSizeUsedLastTime,
-               "m_pLastCommandInPacket->GetPacketLength() == m_uLastAllocationSize");
+        CGS_ASSERT_MESSAGE_AT("m_pLastCommandInPacket->GetPacketLength() == m_uLastAllocationSize",
+            KAC_ARTIST_ASSERT_FILE, 489));
 
     DispatchCommand* lpCommand = m_pNextWord;
-    m_uSizeUsedLastTime    = luNumExtraQwords;
+    m_uSizeUsedLastTime = luNumExtraQwords;
     m_pLastCommandInPacket = lpCommand;
-    m_pNextWord            = lpCommand + (luNumExtraQwords + 1u);
+    m_pNextWord = lpCommand + (luNumExtraQwords + 1);
     return lpCommand;
 }
 

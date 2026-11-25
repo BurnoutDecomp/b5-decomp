@@ -229,24 +229,28 @@ extern "C" s32 ProtoSSLDisconnect(ProtoSSLRefT* state)
 
 extern "C" s32 ProtoSSLStat(ProtoSSLRefT* state, s32 selector, void* buffer, s32 length)
 {
+    s32 result = -1;
     if (selector == 0x736f636b)
     {
-        if (!buffer || length != 4)
-            return -1;
-        std::memcpy(buffer, &state->pSock, 4);
-        return 0;
-    }
-    if (!state->pSock)
-        return -1;
-    s32 result = SocketInfo(state->pSock, selector, 0, buffer, length);
-    if (selector == 0x73746174)
-    {
-        if (state->iState >= 4096)
-            result = -1;
-        if (state->iState == 1)
-            result = 0;
-        if (result > 0 && state->iState != 31 && state->iState != 30)
+        if (buffer && length == sizeof(state->pSock))
+        {
+            std::memcpy(buffer, &state->pSock, sizeof(state->pSock));
             return 0;
+        }
+        return -1;
+    }
+    if (state->pSock)
+    {
+        result = SocketInfo(state->pSock, selector, 0, buffer, length);
+        if (selector == 0x73746174)
+        {
+            if (state->iState >= 4096)
+                result = -1;
+            if (state->iState == 1)
+                result = 0;
+            if (result > 0 && state->iState != 31 && state->iState != 30)
+                result = 0;
+        }
     }
     return result;
 }

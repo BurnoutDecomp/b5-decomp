@@ -85,6 +85,7 @@ namespace CgsNetwork
 
     private:
         void EndAction(s32 liError);
+        EServerInterfaceError ConvertError(s32 liError, EAction leAction);
         static void FetchCategoriesCallback(DirtySock::LobbyRankT* lpLobbyRank, LobbyApiMsgT* lpMsg,
                                             void* lpUserData);
         static void FetchRankCallback(DirtySock::LobbyRankT* lpLobbyRank, LobbyApiMsgT* lpMsg,

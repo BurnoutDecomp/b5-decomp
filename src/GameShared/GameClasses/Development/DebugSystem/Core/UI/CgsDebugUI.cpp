@@ -76,17 +76,11 @@ namespace CgsDev
         // X360 CgsDebugUI.cpp:345 is empty (the debug allocator owns the managers' pool backing).
         void DebugUI::Destruct() {}
 
-        // Window-stack membership (the Console toggle/slide path drives these). AddWindow appends the
-        // window to the stack then auto-shows the UI (X360 stb r11=1,0x10(r31) -> mbVisible = true);
-        // RemoveWindow unlinks it; IsWindowAdded queries membership. The full X360 AddWindow also, when
-        // there is no active window and the window can take focus (flags & 0x40 clear), promotes it via
-        // SetActiveWindow, then calls UpdateCascadePosition(true) - both are DebugUI window-stack
-        // follow-on methods that are declared but not yet reconstructed (no bodies exist to call), so
-        // only the modelled mbVisible auto-show store is applied here.
+        // ARTIST 0x82828ED8 checks the added window's no-focus flag before activating it.
         void DebugUI::AddWindow(Window* lpWindow)
         {
             mWindowList.Add(lpWindow);
-            if (!mpActiveWindow && lpWindow->CanActivate())
+            if (!mpActiveWindow && !(lpWindow->GetFlags() & Window::KX_FLAGNOFOCUS))
                 SetActiveWindow(lpWindow);
             UpdateCascadePosition(true);
             mbVisible = true;

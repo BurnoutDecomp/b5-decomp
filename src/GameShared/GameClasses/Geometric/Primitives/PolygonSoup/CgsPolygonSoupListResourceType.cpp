@@ -55,6 +55,6 @@ namespace CgsResource
     void PolygonSoupListResourceType::FixUp(void* lpResource, const rw::Resource& lrResource) const
     {
         static_cast<CgsGeometric::PolygonSoupList*>(lpResource)->FixUp(
-            static_cast<int>(CgsResource::GetLoadBase(lrResource)));
+            lrResource.m_baseResources[0]);
     }
 }

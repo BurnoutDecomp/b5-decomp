@@ -378,12 +378,12 @@ namespace PhysicsSimulationIO
         mfTimeStep = 0.0f;                            // *(a1+4) = 0.0
 
         mAddRigidBodyQueue.Clear();                   // +24     (16+8)
-        mChangeRigidBodyInertiaQueue.Clear();         // +84872
         mUpdateRigidBodyQueue.Clear();                // +38440
+        mChangeRigidBodyInertiaQueue.Clear();         // +84872
         mApplyForceQueue.Clear();                     // +76856
         mSetRigidBodySpyQueue.Clear();                // +100888
-        mRemoveAllRigidBodiesQueue.Clear();           // +107320
         mRemoveRigidBodyQueue.Clear();                // +104104
+        mRemoveAllRigidBodiesQueue.Clear();           // +107320
         mAddContactQueue.Clear();                     // +107352
         mAddJointQueue.Clear();                       // +189288
         mRemoveJointQueue.Clear();                    // +196216

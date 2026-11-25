@@ -587,11 +587,9 @@ namespace BrnGameState
         // slot, SetNetworkStuntScore by network player id; both store via CarData::GetScoreData().
         void SetPlayerStuntScore(EActiveRaceCarIndex leRaceCarIndex, s32 liScore);                         // 0x8231F0C8
         void SetNetworkStuntScore(BrnNetwork::NetworkPlayerID lID, s32 liScore);                           // 0x8231FC20
-        // SetNetworkStuntMultiplier (0x8231FC50) arms the per-car "chainable stunt multiplier" trio
-        // (CarScoreData +0xC8 miChainableScore / +0xD0 miCurrentChainableMultiplier / +0xD8 mbChainActive)
-        // on GetCarData(lID); reconciled arg order from the X360 register setup (r5->+0xD0, r6->+0xC8).
-        // Body in BrnScoringSystem_UpdateB.cpp (writes via the CarScoreData chainable-trio accessors).
-        void SetNetworkStuntMultiplier(BrnNetwork::NetworkPlayerID lID, s32 liMultiplier, s32 liChainableScore); // 0x8231FC50
+        // 0x8231FC50 receives the complete eight-byte multiplier payload.
+        void SetNetworkStuntMultiplier(BrnNetwork::NetworkPlayerID lID, s32 liMultiplier,
+                                       BrnNetwork::StuntMultiplierMessage::MultiplierInfo lMultiplierInfo);
 
         // PlayerPerformedBarrelRolls (0x823634D0) adds liCount to the per-car barrel-roll tally at
         // CarScoreData +0xFC (carved as miBarrelRollCount). Body in BrnScoringSystem_UpdateB.cpp.
@@ -732,8 +730,8 @@ namespace BrnGameState
         // X360 0x8231DC18 (non-const) / 0x8231DCD0 (const). Returns &maCarData[slot] whose
         // meRaceCarIndex matches leActiveRaceCarIndex, else NULL. Declare-only (search loop body
         // lands in this TU); the signatures the online scorers depend on are PRESERVED.
-        const CarData* GetCarData(EActiveRaceCarIndex leActiveRaceCarIndex) const;            // :1057
-        CarData*       GetCarData(EActiveRaceCarIndex leActiveRaceCarIndex);                  // :1061 / 0x8231DC18
+        const CarData* GetCarData(EActiveRaceCarIndex leActiveRaceCarIndex) const;            // :1057 / 0x8231DC18
+        CarData*       GetCarData(EActiveRaceCarIndex leActiveRaceCarIndex);                  // :1061 / 0x8231DCD0
         CarData*       GetCarData(BrnNetwork::NetworkPlayerID lID);                           // :1065
         const CarData* GetCarData(BrnNetwork::NetworkPlayerID lID) const;                     // :1069
 
