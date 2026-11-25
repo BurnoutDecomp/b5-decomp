@@ -256,9 +256,8 @@ private:
     // same internal access the console code uses. Friended rather than widening
     // the public API.
     friend struct AptNativeHash;
-    // AptCommonShutdown releases the raw StringDataC pointer stored in the
-    // config-default slot (off_82F733B0); it is not an EAStringC object.
-    friend int AptCommonShutdown();
+    // Release the common lookup scratch string during Apt teardown.
+    friend void AptCommonShutdown();
 
     DebugDataC* m_pData;
 

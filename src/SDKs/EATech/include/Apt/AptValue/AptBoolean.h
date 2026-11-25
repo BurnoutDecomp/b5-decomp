@@ -14,7 +14,7 @@
 #include "SDKs/EATech/Apt/DogmaAllocator.h"              // DOGMA_PoolManager::Allocate/Deallocate
 
 int AptValueInitialize();          // AptInit.cpp @0x82B02800 -- the designated singleton bootstrap
-void AptValueShutdownRemaining();   // AptInit.cpp @0x82AE3170 -- the teardown counterpart
+void AptValueShutdownRemaining();   // AptValue.cpp @0x82AE3170 -- the teardown counterpart
 
 class AptBoolean : public AptValueNoGC
 {

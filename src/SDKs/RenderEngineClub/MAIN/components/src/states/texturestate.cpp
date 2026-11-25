@@ -1,6 +1,5 @@
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/texturestate.h"
 
-#include <cstring>            // memcpy
 #include "rw/rwcore_structs.h"  // rw::BaseResourceDescriptors<5> + its operator+=
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
@@ -21,33 +20,17 @@ namespace renderengine
 {
     // X360 0x82B635C8: build {0x20,4}+{0,1}x4 (the SamplerState descriptor) on the stack, copy it
     // into the out descriptor, then accumulate the trailing-raster addend {4,1}+{0,1}x4 with +=.
+    // Retain ARTIST's compact constructor loops and by-value descriptor copy.
+#pragma optimize("s", on)
     rw::ResourceDescriptor TextureState::GetResourceDescriptor(const Parameters&)
     {
-        // The accumulated addend: slot0 = {size=4, align=1} (the raster pointer), slots 1..4 = {0,1}.
-        rw::BaseResourceDescriptors<5> lAddend;
-        for (u32 luIndex = 0; luIndex < 5; ++luIndex)
-        {
-            lAddend.m_baseResourceDescriptors[luIndex].m_size = 0;
-            lAddend.m_baseResourceDescriptors[luIndex].m_alignment = 1;
-        }
-        lAddend.m_baseResourceDescriptors[0].m_size = 4;
-        lAddend.m_baseResourceDescriptors[0].m_alignment = 1;
-
-        // The base (SamplerState) descriptor: slot0 = {size=0x20, align=4}, slots 1..4 = {0,1}.
-        rw::BaseResourceDescriptors<5> lBase;
-        for (u32 luIndex = 0; luIndex < 5; ++luIndex)
-        {
-            lBase.m_baseResourceDescriptors[luIndex].m_size = 0;
-            lBase.m_baseResourceDescriptors[luIndex].m_alignment = 1;
-        }
-        lBase.m_baseResourceDescriptors[0].m_size = 0x20;    // X360 64-bit store: low=0x20 (size), high=4 (align)
-        lBase.m_baseResourceDescriptors[0].m_alignment = 4;
-
-        rw::ResourceDescriptor lDescriptor;
-        std::memcpy(&lDescriptor, &lBase, sizeof(lDescriptor));
-        lDescriptor += lAddend;
-        return lDescriptor;
+        rw::ResourceDescriptor addend(sizeof(Texture*), 1);
+        rw::ResourceDescriptor sampler(sizeof(SamplerState), __alignof(SamplerState));
+        rw::ResourceDescriptor descriptor(sampler);
+        descriptor += addend;
+        return descriptor;
     }
+#pragma optimize("s", off)
 
 
 }

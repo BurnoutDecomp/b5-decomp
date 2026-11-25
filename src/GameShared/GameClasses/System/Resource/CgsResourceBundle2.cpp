@@ -1,8 +1,10 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceBundle2.h"
-#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT (mem-type bounds)
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (mem-type bounds)
 #include "rw/rwcore_structs.h"                        // rw::BaseResourceDescriptor (descriptor fill)
 
 #include <cstdlib>   // _byteswap_ushort / _byteswap_ulong / _byteswap_uint64
+
+#define CGS_ARTIST_BUNDLE_HEADER "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceBundle2.h"
 
 namespace CgsResource
 {
@@ -23,10 +25,9 @@ namespace CgsResource
 
     u32 BundleV2::ResourceEntry::GetDiskSize(u32 luMemType) const   // 0x828D62F8
     {
-        CGS_ASSERT(luMemType < BundleV2::E_MEMTYPE_NUMTYPES,
-            CGS_ASSERT_MESSAGE_AT(
-                "luMemType < E_MEMTYPE_NUMTYPES",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceBundle2.h", 294 /* ARTIST 0x828D6324 */));
+        CGS_ASSERT_AT(luMemType < BundleV2::E_MEMTYPE_NUMTYPES,
+                      "luMemType < E_MEMTYPE_NUMTYPES",
+                      CGS_ARTIST_BUNDLE_HEADER, 294);
         return mauSizeAndAlignmentOnDisk[luMemType] & BundleV2::KU_SIZE_MASK;
     }
 
@@ -40,7 +41,7 @@ namespace CgsResource
     {
         CGS_ASSERT_AT(luMemType < BundleV2::E_MEMTYPE_NUMTYPES,
                       "luMemType < E_MEMTYPE_NUMTYPES",
-                      "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceBundle2.h", 328);
+                      CGS_ARTIST_BUNDLE_HEADER, 328);
         return mauUncompressedSizeAndAlignment[luMemType] & BundleV2::KU_SIZE_MASK;
     }
 
@@ -48,7 +49,7 @@ namespace CgsResource
     {
         CGS_ASSERT_AT(luMemType < BundleV2::E_MEMTYPE_NUMTYPES,
                       "luMemType < E_MEMTYPE_NUMTYPES",
-                      "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceBundle2.h", 311);
+                      CGS_ARTIST_BUNDLE_HEADER, 311);
         return 1u << (mauUncompressedSizeAndAlignment[luMemType] >> 28);
     }
 
@@ -95,3 +96,5 @@ namespace CgsResource
         muOffset = _byteswap_ulong(muOffset);
     }
 }
+
+#undef CGS_ARTIST_BUNDLE_HEADER

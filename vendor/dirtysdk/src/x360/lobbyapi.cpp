@@ -91,8 +91,8 @@ extern "C"
     const char* SocketInAddrGetText(u32 uAddress);
 }
 
-static void _LobbyApiResponseLog(LobbyApiRefT* pLobbyApi, s32 iKind, s32 iCode,
-                                 const u8* pData, const char* pDirection);
+static void _LobbyApiDebug(LobbyApiRefT* pLobbyApi, s32 iKind, s32 iCode,
+                                 const char* pData, const char* pDirection);
 static void _LobbyApiPingCallback(void* pPingRef, u32 uResult, void* pUserData);
 static void _LobbyApiConnectCallback(LobbyApiRefT* pLobbyApi, LobbyApiMsgT* pMsg,
                                      void* pUserData);
@@ -315,35 +315,35 @@ extern "C" void LobbyApiListUpdate(LobbyApiRefT* pLobbyApi)
 // DecFIGS lobbyapi.c:404 identifies this ARTIST 82B1A8D8 queue operation
 // and its 32-bit status result, used by the queue-draining callers.
 static s32 _LobbyApiDequeueRequestCallback(LobbyApiRefT* pLobbyApi,
-                                     LobbyCBQueueRefT* pRequest, s32 iKind)
+                                           LobbyCBQueueRefT* pRequest, s32 iKind)
 {
     memset(pRequest, 0, sizeof(*pRequest));
 
-    s32 iQueueCount = pLobbyApi->iQueueTail;
-    if (iQueueCount > 0)
+    if (pLobbyApi->iQueueTail != 0)
     {
         s32 iOldest = 0;
+        s32 iIndex = 0;
         s32 iSmallestSequence = 0x7fffffff;
-        for (s32 iIndex = 0; iIndex < iQueueCount; ++iIndex)
+        for (; iIndex < pLobbyApi->iQueueTail; ++iIndex)
         {
             const LobbyCBQueueRefT* pCandidate = &pLobbyApi->CallbackQueue[iIndex];
-            if ((pCandidate->iSeqn != -1) && (pCandidate->iSeqn < iSmallestSequence))
+            if ((iSmallestSequence > pCandidate->iSeqn) && (pCandidate->iSeqn != -1))
             {
                 iSmallestSequence = pCandidate->iSeqn;
                 iOldest = iIndex;
             }
         }
 
-        const LobbyCBQueueRefT* pCandidate = &pLobbyApi->CallbackQueue[iOldest];
-        if ((pCandidate->iKind == iKind) || ((u32)iKind == 0x44515545)) // DQUE
+        if ((pLobbyApi->CallbackQueue[iOldest].iKind == iKind) || (iKind == 0x44515545)) // DQUE
         {
-            memcpy(pRequest, pCandidate, sizeof(*pRequest));
-            for (s32 iIndex = iOldest; iIndex < iQueueCount - 1; ++iIndex)
+            memcpy(pRequest, &pLobbyApi->CallbackQueue[iOldest], sizeof(*pRequest));
+            // ARTIST advances the same removal cursor through the compacted records.
+            for (; iOldest < pLobbyApi->iQueueTail - 1; ++iOldest)
             {
-                memcpy(&pLobbyApi->CallbackQueue[iIndex],
-                       &pLobbyApi->CallbackQueue[iIndex + 1], sizeof(*pRequest));
+                memcpy(&pLobbyApi->CallbackQueue[iOldest],
+                       &pLobbyApi->CallbackQueue[iOldest + 1], sizeof(*pRequest));
             }
-            memset(&pLobbyApi->CallbackQueue[iQueueCount - 1], 0, sizeof(*pRequest));
+            memset(&pLobbyApi->CallbackQueue[iOldest], 0, sizeof(*pRequest));
             --pLobbyApi->iQueueTail;
         }
     }
@@ -407,17 +407,17 @@ static void _LobbyApiDumpLines(LobbyApiRefT* pLobbyApi, const u8* pData, s32 iLi
     }
 }
 
-static void _LobbyApiResponseLog(LobbyApiRefT* pLobbyApi, s32 iKind, s32 iCode,
-                                 const u8* pData, const char* pDirection)
+static void _LobbyApiDebug(LobbyApiRefT* pLobbyApi, s32 iKind, s32 iCode,
+                                 const char* pData, const char* pDirection)
 {
-    if ((pLobbyApi->debugflt != NULL) && (pLobbyApi->debugflt(pLobbyApi->debugref) != 0))
+    if ((pLobbyApi->debugflt != NULL) && (pLobbyApi->debugflt(pLobbyApi->debugref, iKind, iCode, pData) != 0))
     {
         return;
     }
 
     if (pData == NULL)
     {
-        pData = (const u8*)"";
+        pData = "";
     }
     if (iCode == 0)
     {
@@ -442,7 +442,7 @@ static void _LobbyApiResponseLog(LobbyApiRefT* pLobbyApi, s32 iKind, s32 iCode,
 
     s32 iLength = 0;
     bool bBinary = false;
-    for (const u8* pScan = pData; *pScan != 0; ++pScan)
+    for (const u8* pScan = reinterpret_cast<const u8*>(pData); *pScan != 0; ++pScan)
     {
         if ((*pScan < 0x20) && (*pScan != '\t') && (*pScan != '\n') && (*pScan != '\r'))
         {
@@ -466,7 +466,7 @@ static void _LobbyApiResponseLog(LobbyApiRefT* pLobbyApi, s32 iKind, s32 iCode,
     }
     else
     {
-        _LobbyApiDumpLines(pLobbyApi, pData, 80);
+        _LobbyApiDumpLines(pLobbyApi, reinterpret_cast<const u8*>(pData), 80);
     }
 }
 
@@ -496,13 +496,14 @@ extern "C" void LobbyApiGlobalCallback(LobbyApiRefT* pLobbyApi, s32 iId, s32 iTy
     }
 }
 
-static bool _LobbyApiDisconnect(LobbyApiRefT* pLobbyApi, s32 iCode, const char* pData)
+// DecFIGS lobbyapi.c:1036 identifies the private void teardown helper.
+static void _LobbyApiDisconnect(LobbyApiRefT* pLobbyApi, s32 iCode, const char* pData)
 {
     memset(&pLobbyApi->user, 0, sizeof(pLobbyApi->user));
     if (pLobbyApi->state != 0x6f66666c) // offl
     {
         pLobbyApi->state = 0x6f66666c;
-        _LobbyApiResponseLog(pLobbyApi, 0x64697363, iCode, (const u8*)pData, "locl");
+        _LobbyApiDebug(pLobbyApi, 0x64697363, iCode, pData, "locl");
         LobbyApiGlobalCallback(pLobbyApi, 0, LOBBYAPI_CBTYPE_CONN,
                                0x64697363, iCode, pData);
     }
@@ -519,7 +520,6 @@ static bool _LobbyApiDisconnect(LobbyApiRefT* pLobbyApi, s32 iCode, const char* 
     pLobbyApi->nFailedServerPings = 0;
     pLobbyApi->numpingreq = 0;
     pLobbyApi->iCallbackID = 1;
-    return false;
 }
 
 static void _LobbyApiBeginRedirect(LobbyApiRefT* pLobbyApi)
@@ -776,7 +776,7 @@ extern "C" void LobbyApiUpdate(LobbyApiRefT* pLobbyApi)
             }
             else
             {
-                _LobbyApiResponseLog(pLobbyApi, iKind, iCode, (const u8*)pData, "recv");
+                _LobbyApiDebug(pLobbyApi, iKind, iCode, pData, "recv");
                 LobbyCBQueueRefT Request;
                 _LobbyApiDequeueRequestCallback(pLobbyApi, &Request, iKind);
                 LobbyApiGlobalCallback(pLobbyApi, Request.iId, LOBBYAPI_CBTYPE_RESP,
@@ -1001,7 +1001,7 @@ extern "C" void LobbyApiUpdate(LobbyApiRefT* pLobbyApi)
 extern "C" void LobbyApiAriesRequest(LobbyApiRefT* pLobbyApi, s32 iKind,
                                       const char* pRequest, s32 iCallbackID)
 {
-    _LobbyApiResponseLog(pLobbyApi, iKind, 0, (const u8*)pRequest, "send");
+    _LobbyApiDebug(pLobbyApi, iKind, 0, pRequest, "send");
 
     s32 iIndex = 0;
     while ((iIndex < pLobbyApi->iQueueTail) &&
@@ -1015,9 +1015,10 @@ extern "C" void LobbyApiAriesRequest(LobbyApiRefT* pLobbyApi, s32 iKind,
     const s32 iResult = ProtoAriesSend(pLobbyApi->net, iKind, 0, pRequest, -1);
     if (iResult != 0)
     {
+        // ARTIST 82B1B7DC shifts the signed selector before narrowing its diagnostic bytes.
         NetPrintfCode("lobbyapi: error sending '%c%c%c%c' request to server\n",
-                      ((u32)iKind >> 24) & 0xff, ((u32)iKind >> 16) & 0xff,
-                      ((u32)iKind >> 8) & 0xff, (u32)iKind & 0xff);
+                      static_cast<u8>(iKind >> 24), static_cast<u8>(iKind >> 16),
+                      static_cast<u8>(iKind >> 8), static_cast<u8>(iKind));
     }
 }
 
@@ -1272,7 +1273,7 @@ extern "C" void LobbyApiResume(LobbyApiRefT* pLobbyApi)
 // tail-calls it with no debug filter.
 extern "C" LobbyApiRefT* LobbyApiCreate2(const char* pTagField, void* pDebugRef,
                                          void (*pDebugFnc)(void*, const char*),
-                                         u32 (*pDebugFilter)(void*), s32 iRefMemGroup)
+                                         u32 (*pDebugFilter)(void*, s32, s32, const char*), s32 iRefMemGroup)
 {
     const s32 iMemGroup = DirtyMemGroupQuery();
     if ((TagFieldFind(pTagField, "SKU") == NULL) ||
@@ -2887,16 +2888,18 @@ extern "C" void LobbyApiXenonDisconnect(LobbyApiXenonRefT* pXenon)
     {
         ProtoFilterRequestCancel(pXenon->pProtoFilter, -1);
     }
-    memset(pXenon->aFilterRequests, 0, 2144);
-    if (pXenon->Search.bPending != 0)
+    memset(pXenon->aFilterRequests, 0, sizeof(pXenon->aFilterRequests));
+    LobbyApiXenonSearchStateT* pSearch = &pXenon->Search;
+    if (pSearch->bPending != 0)
     {
-        if (XCancelOverlapped((PXOVERLAPPED)pXenon->Search.aOverlapped) != 0)
+        if (XCancelOverlapped((PXOVERLAPPED)pSearch->aOverlapped) != 0)
         {
             NetPrintfCode("lobbyapixenon: error cancelling overlapped operation\n");
         }
-        pXenon->Search.bPending = 0;
+        pSearch->bPending = 0;
     }
-    memset(&pXenon->Search, 0, 2144);
+    // ARTIST 82B31F58 clears the native trailing state from the Search base.
+    memset(pSearch, 0, 0x860);
 }
 
 extern "C" s32 LobbyApiXenonSnoopRequest(LobbyApiXenonRefT* pXenon, s32 iKind,

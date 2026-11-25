@@ -36,12 +36,9 @@ void* AptAllocatorInitialize(int nGcMain, int nGcOvf, int nDogmaMain, int nDogma
 // is the CgsGui::AptAux instance (the console's a1); the create-target result is stored
 // into it. Homed in CgsAptAux.cpp (where AptAux::Construct/ConstructApt live).
 
-// AptSetSimulationThreadID @0x82AD8F90 / AptSetRenderThreadID @0x82AD8EF0 -- record
-// the calling thread's id into the sim/render thread-id slot (dword_8324E500 /
-// dword_8324E504) under the shared thread-id spin lock. `a1` is the X360 pointer arg
-// EA::Thread::GetThreadId(a1) reads (0 == the current thread). Returns the id.
-int AptSetSimulationThreadID(int a1);
-int AptSetRenderThreadID(int a1);
+// ARTIST 0x82AD8F90 and 0x82AD8EF0. Record the current EA thread IDs.
+void AptSetSimulationThreadID();
+void AptSetRenderThreadID();
 
 // ARTIST 0x82AE91F0. Initialize the shared animation and string data.
 void AptCommonInitialize(const AptInitParmsT* pConfig);

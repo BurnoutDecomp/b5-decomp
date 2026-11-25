@@ -143,7 +143,7 @@ int CMassiveAdObject::AssetIDRemove(unsigned int uAssetID)
 
             CMassiveAsset* lpAsset = mpZone->AssetFind(uAssetID);
             if (lpAsset)
-                lpAsset->mnRefCount = lpAsset->mnRefCount ? lpAsset->mnRefCount - 1 : 0;
+                lpAsset->muRefCount = lpAsset->muRefCount ? lpAsset->muRefCount - 1 : 0;
             return 1;
         }
         mAssetIDList.GoToNext();
@@ -513,7 +513,7 @@ int CMassiveAdObject::SubscriberRemove(XMassiveAdClientSubscriber* pSubscriber)
         if (pSubscriber == mSubscriberList.GetCurrData())
         {
             if (mpDownloadAsset)
-                mpDownloadAsset->mnRefCount = mpDownloadAsset->mnRefCount ? mpDownloadAsset->mnRefCount - 1 : 0;
+                mpDownloadAsset->muRefCount = mpDownloadAsset->muRefCount ? mpDownloadAsset->muRefCount - 1 : 0;
 
             mSubscriberList.Remove(mSubscriberList.GetCurrent(), 1);
             if (!mSubscriberList.GetSize())

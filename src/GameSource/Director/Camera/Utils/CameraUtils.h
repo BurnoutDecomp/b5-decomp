@@ -18,7 +18,7 @@
 // The Director namespace imports the genuine SDK VecFloat value type.
 #include "GameSource/Director/Utils/BrnDirectorTimestep.h"
 
-namespace CgsSceneManager { namespace SceneManagerIO { struct OutEventLineTestNearestResult; } }
+namespace CgsSceneManager { namespace SceneManagerIO { class OutEventLineTestNearestResult; } }
 namespace BrnDirector { template <class Type> class PostBox; }   // BrnPostBox.h (ResolveLineTestNearest...)
 
 namespace BrnDirector

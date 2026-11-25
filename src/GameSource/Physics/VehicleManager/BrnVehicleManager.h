@@ -89,7 +89,7 @@ namespace BrnPhysics { class PhysicsModule; }
 namespace BrnPhysics { namespace PhysicsModuleIO { struct PotentialContactInterface; } }
 namespace BrnPhysics { namespace Vehicle { struct VehicleInputInterface; } }
 namespace CgsSceneManager { namespace SceneManagerIO { class PotentialContact; struct TriangleCacheInterface;
-                                                       struct OutEventLineTestNearestResult;  // line-test result queue element (UpdateVehiclePhysics wave)
+                                                       class OutEventLineTestNearestResult;  // line-test result queue element (UpdateVehiclePhysics wave)
                                                       struct InputBuffer_Update; } }
 // Class key `struct`, matching rw/rwcore_structs.h -- a `class` here mangles differently.
 namespace rw { struct IResourceAllocator; }

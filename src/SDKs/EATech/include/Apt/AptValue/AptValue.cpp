@@ -24,6 +24,11 @@
 #include "SDKs/EATech/include/Apt/AptNativeHash.h"              // mp__Proto__ (the MC parent-chain walk)
 #include "eathread/eathread.h"                                    // EA::Thread::GetThreadId / ThreadId
 
+#include "SDKs/EATech/include/Apt/AptValue/AptBoolean.h"
+#include "SDKs/EATech/include/Apt/AptValue/AptLookup.h"
+#include "SDKs/EATech/include/Apt/AptValue/AptRegister.h"
+#include "SDKs/EATech/include/Apt/AptCharacterHelper.h"
+
 #include <xtl.h>   // _InterlockedCompareExchange / _InterlockedExchange
 
 // The Apt GC reference-registration callback. The GC value types' RegisterReferences
@@ -430,4 +435,19 @@ int AptValue::isMCInParentChain() const
             break;
     }
     return 0;
+}
+
+
+extern AptValue* gpUndefinedValue;
+extern AptValue* gpAptExternObject;
+
+// ARTIST 0x82AE3170. Release the value singletons and their static pools.
+void AptValueShutdownRemaining()
+{
+    gpUndefinedValue->ForceDelete();
+    AptBoolean::Shutdown();
+    AptLookup::Shutdown();
+    AptRegister::Shutdown();
+    AptCharacterHelper::Shutdown();
+    gpAptExternObject->ForceDelete();
 }

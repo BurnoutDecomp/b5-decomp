@@ -34,12 +34,6 @@ namespace CgsSceneManager
         Matrix44              maViewProjection[KU_FRUSTUM_JOB_MAX_NUM_QUERIES];     // +0x500
         u32                   max32EntityTypeFlags[KU_FRUSTUM_JOB_MAX_NUM_QUERIES]; // +0x780
         u32                   muNumQueries;                                         // +0x7A8
-
-        // operator= @ 0x82BDF950 — full memberwise copy of all 0x7AC live bytes (the X360
-        // lowers it as memcpy(0x80) x10 over maFrustum, then VMX lvx128/stvx128 lane copies
-        // over maViewProjection, then 11 lwz/stw word copies over max32EntityTypeFlags +
-        // muNumQueries). No field is skipped; semantic parity == a complete struct copy.
-        FrustumJobQueryInfo& operator=(const FrustumJobQueryInfo& lrSource);
     };
 
     // ARTIST 82BDFC48 copies these six header and three trailer members.
@@ -55,8 +49,6 @@ namespace CgsSceneManager
         JobCoarseResultBuffer* mpResultBuffer;
         u32 muMaxResults;
         s32 miDebugMode;
-
-        FrustumTestJobData& operator=(const FrustumTestJobData& lrSource);
     };
 
     // ========================================================================

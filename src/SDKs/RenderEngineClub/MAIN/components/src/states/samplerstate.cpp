@@ -13,18 +13,14 @@
 
 namespace renderengine
 {
+    // ARTIST retains the compact five-lane constructor loop here.
+#pragma optimize("s", on)
     rw::ResourceDescriptor SamplerState::GetResourceDescriptor(const Parameters&)
     {
-        rw::ResourceDescriptor lDescriptor;
-        for (u32 i = 0; i < 5; ++i)
-        {
-            lDescriptor.m_baseResourceDescriptors[i].m_size = 0;
-            lDescriptor.m_baseResourceDescriptors[i].m_alignment = 1;
-        }
-        lDescriptor.m_baseResourceDescriptors[0].m_size = 0x20;
-        lDescriptor.m_baseResourceDescriptors[0].m_alignment = 4;
-        return lDescriptor;
+        rw::ResourceDescriptor descriptor(sizeof(SamplerState), __alignof(SamplerState));
+        return descriptor;
     }
+#pragma optimize("s", off)
 
     SamplerState* SamplerState::Initialize(const rw::Resource& lrResource, const Parameters& lrParams)
     {

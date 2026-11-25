@@ -202,12 +202,8 @@ extern DOGMA_PoolManager* gpAptSingleListPool;     // off_8324D808
 // set stays out of this TU.
 namespace AptMath { intptr_t ClipStackShutdown(); }
 
-// AptCommonShutdown -- the once-only shared static-data teardown (counterpart of
-// AptCommonInitialize @0x82AE91F0). Recovered signature takes no args; the X360
-// leaves ClipStackShutdown's r3 result live across the call (a dead leftover --
-// the emitted machine code is identical either way). HOMED below (@0x82B0AC08);
-// forward-declared here for AptRenderShutdown, which precedes the definition.
-int AptCommonShutdown();
+// ARTIST 0x82B0AC08. Tear down the shared Apt runtime.
+void AptCommonShutdown();
 
 // The render-item / deferred-release pool count (dword_8324E508, homed in
 // AptGlobals.cpp); the shutdown drain hands each pooled slot to gAptFuncs.pfnFreeTexture.
@@ -288,24 +284,22 @@ void* AptAllocatorInitialize(int nGcMain, int nGcOvf, int nDogmaMain, int nDogma
     return s_pGCPool;
 }
 
-int AptSetRenderThreadID(int /*a1*/)
+void AptSetRenderThreadID()
 {
     // X360 unk_8324E724 reservation lock protects both recorded thread ids.
     while (_InterlockedCompareExchange(&gAptThreadIdLock, 1, 0) != 0) {}
     EA::Thread::ThreadId id = EA::Thread::GetThreadId();
     gAptRenderThreadId = id;                    // dword_8324E504 = result
     _InterlockedExchange(&gAptThreadIdLock, 0);
-    return static_cast<int>(reinterpret_cast<intptr_t>(id));
 }
 
-int AptSetSimulationThreadID(int /*a1*/)
+void AptSetSimulationThreadID()
 {
     // ARTIST 0x82AD8F90 calls the zero-argument GetThreadId and stores dword_8324E500.
     while (_InterlockedCompareExchange(&gAptThreadIdLock, 1, 0) != 0) {}
     EA::Thread::ThreadId id = EA::Thread::GetThreadId();
     gAptSimThreadId = id;
     _InterlockedExchange(&gAptThreadIdLock, 0);
-    return static_cast<int>(reinterpret_cast<intptr_t>(id));
 }
 
 // ARTIST 0x82AE91F0. Initialize the shared animation and string data, then
@@ -611,16 +605,6 @@ int AptValueInitialize()
     return 0;
 }
 
-// ARTIST 0x82AE3170. Release the value singletons and their static pools.
-void AptValueShutdownRemaining()
-{
-    gpUndefinedValue->ForceDelete();
-    AptBoolean::Shutdown();
-    AptLookup::Shutdown();
-    AptRegister::Shutdown();
-    AptCharacterHelper::Shutdown();
-    gpAptExternObject->ForceDelete();
-}
 
 // ---------------------------------------------------------------------------
 // Un-homed siblings/globals the shutdown paths (AptCommonShutdown +
@@ -649,9 +633,10 @@ extern void* AptUpdateZombieVector(char bClear);
 // drain/free the common deferred-release vector, then clear the integer/float
 // pools and temporary strings before resetting the common-init latch.
 // ===========================================================================
-int AptCommonShutdown()
+void AptCommonShutdown()
 {
-    AptSetSimulationThreadID(AptSetRenderThreadID(0));
+    AptSetRenderThreadID();
+    AptSetSimulationThreadID();
     gbAptRenderInitDone = 0;
     AptAnimationTarget::CleanupStaticData();
 
@@ -659,7 +644,7 @@ int AptCommonShutdown()
     if (lpTarget != 0)
     {
         lpTarget->Shutdown();
-        gpAptPseudoDataPool->Deallocate(lpTarget, sizeof(AptTarget));
+        gpNonGCPoolManager->Deallocate(lpTarget, sizeof(AptTarget));
     }
 
     gpAptTarget = 0;
@@ -669,19 +654,20 @@ int AptCommonShutdown()
 
     AptValueShutdownRemaining();
 
-    gstrTempString.Clear();
+    EAStringC::DecreaseInternalRefCount(gstrTempString.m_pData);
+    gstrTempString.m_pData = reinterpret_cast<EAStringC::DebugDataC*>(EAStringC::s_EmptyInternalData);
     StringPool::Teardown();
 
+    gpValuesToRelease->ReleaseValues();
     AptValueVector* lpValuesToRelease = gpValuesToRelease;
-    lpValuesToRelease->ReleaseValues();
     if (lpValuesToRelease != 0)
     {
         // The X360 family-B vector has capacity at +0, live top at +4, and
         // items at +8. In this shared named struct, family-B capacity is mnTop.
-        gpAptPseudoDataPool->Deallocate(
+        gpNonGCPoolManager->Deallocate(
             lpValuesToRelease->mppItems,
             sizeof(AptValue*) * static_cast<size_t>(lpValuesToRelease->mnTop));
-        gpAptPseudoDataPool->Deallocate(lpValuesToRelease, sizeof(AptValueVector));
+        gpNonGCPoolManager->Deallocate(lpValuesToRelease, sizeof(AptValueVector));
     }
     gpValuesToRelease = 0;
 
@@ -691,7 +677,6 @@ int AptCommonShutdown()
 
     EAStringC::sAptCallbacks = 0;
     _InterlockedExchange(&gbAptCommonInitDone, 0);
-    return 0;
 }
 
 // ===========================================================================
@@ -716,9 +701,9 @@ void* AptRenderInitialize(int /*a1*/)
     if (!gbAptCommonInitDone)
         AptCommonInitialize(&gAptCommonConfig);
 
-    intptr_t liTop = AptMath::ClipStackInit(128);    // x64: pointer-width (the AptMath.h clip-stack widening)
+    AptMath::ClipStackInit(128);
     gbAptRenderInitDone = 1;                          // dword_8324E510 = 1
-    AptSetRenderThreadID(static_cast<int>(liTop));    // console passes the clip-top ptr; the arg is unused
+    AptSetRenderThreadID();
 
     AptUpdateRenderMutex().Unlock();
 
@@ -751,7 +736,7 @@ int AptRenderShutdown()
 
     AptMath::ClipStackShutdown();            // free the render clip stack (X360 r3 -> v0)
     if (!gbAptUpdateInitDone)                // dword_8324E50C: skip the common teardown while the sim side is up
-        AptCommonShutdown();                 // (X360 carries the ClipStackShutdown result in r3; recovered sig takes none)
+        AptCommonShutdown();
 
     if (gAptDeferredReleaseCount)            // dword_8324E508
     {
@@ -806,7 +791,7 @@ int AptUpdateInitialize(unsigned int* a1, char a2)
 {
     AptUpdateRenderMutex().Lock();
 
-    AptSetSimulationThreadID(0);   // console r3 == the sim-thread-id arg (0 == current)
+    AptSetSimulationThreadID();
 
     // The built-in default AptUpdateParams (v13[15]) the console uses when a1 is null.
     // Transcribed from the asm store set (0x82B02D38..0x82B02DB0):
@@ -951,7 +936,7 @@ volatile LONG gAptGlobalExtensionLock = 0;
 // singleton. The extension object is protected by the original reservation lock.
 // ARTIST uses the size-mode hash deleting thunk at this release site.
 #pragma optimize("s", on)
-void AptValueShutdown()
+void AptValueShutdown(int /*bQuiet*/)
 {
     if (gpAptClassRegistry)
     {
@@ -1016,12 +1001,9 @@ void AptValueShutdown()
 // interpreter down, and -- when the render side is already down -- run the shared common
 // teardown.
 //
-// NB (no lock is elided here -- the console itself brackets nothing on this path).
-// `a1` is AptValueShutdown's unused arg (threaded r3). The return is AptCommonShutdown's
-// result, or the interpreter-shutdown r3 leftover (void) when the common teardown is
-// skipped -> 0.
+// ARTIST forwards the quiet flag to the value teardown.
 // ===========================================================================
-int AptUpdateShutdown(int /*a1*/)
+void AptUpdateShutdown(int bQuiet)
 {
     gbAptInShutdown     = 1;   // byte_8324E7C9 = 1
     gbAptUpdateInitDone = 0;   // dword_8324E50C = 0
@@ -1062,7 +1044,7 @@ int AptUpdateShutdown(int /*a1*/)
     }
 
     // The AS value-singleton teardown (mirror of AptValueInitialize).
-    AptValueShutdown();
+    AptValueShutdown(bQuiet);
 
     // Reap every zombie this pass (the r3 result is the dead leftover carried into
     // AptGC::CleanAll below).
@@ -1098,15 +1080,12 @@ int AptUpdateShutdown(int /*a1*/)
     }
     gpAptZombieVector = 0;   // off_8324E528 = 0
 
-    // Shut the interpreter (operand stack) down; the console keeps its r3 (void -> 0).
+    // Shut the interpreter down once its values have been released.
     gAptActionInterpreter.shutdown();   // AptActionInterpreter::shutdown(&dword_8324E760)
-    int liResult = 0;
 
     // When the render side is already down, run the shared common teardown too.
     if (!gbAptRenderInitDone)   // dword_8324E510
-        liResult = AptCommonShutdown();
-
-    return liResult;
+        AptCommonShutdown();
 }
 
 // ===========================================================================

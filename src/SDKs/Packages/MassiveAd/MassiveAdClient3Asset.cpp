@@ -71,7 +71,7 @@ CMassiveAsset::CMassiveAsset(int nAssetId, int nCrex, int nMediaType, int nField
       msField5E(sField5E),   // *(this + 0x5E) = a32
       mfField60(fField60),   // *(this + 0x60) = a9 (stfs)
       mfField64(fField64),   // *(this + 0x64) = a10 (stfs)
-      mnRefCount(0),         // *(this + 0x68) = 0
+      muRefCount(0),         // *(this + 0x68) = 0
       mpcUrl(0),             // *(this + 0x6C) = 0
       mpHash(0),             // *(this + 0x70) = 0
       mpMediaBuffer(0)       // *(this + 0x74) = 0
@@ -226,8 +226,7 @@ int CMassiveAsset::HandleError(CRequestObject* pRequest, int /*nErrorCode*/)
         SetValid(23);  // *(this + 0x10) = 23
     }
 
-    if (mnRefCount)     // v5 = *(this + 0x68); v6 = v5 - 1; if (!v5) v6 = 0
-        --mnRefCount;
+    muRefCount = muRefCount ? muRefCount - 1 : 0;
 
     return RemoveFromRequestCollect(pRequest);
 }
@@ -241,18 +240,18 @@ int CMassiveAsset::HandleError(CRequestObject* pRequest, int /*nErrorCode*/)
 // ---------------------------------------------------------------------------
 void CMassiveAsset::ClearMediaBuffer(int bForce)
 {
-    if (mnRefCount)          // v3 = *(this + 0x68); if (v3)
-        --mnRefCount;
+    if (muRefCount)
+        --muRefCount;
     else
-        mnRefCount = 0;      // *(this + 0x68) = 0 (explicit X360 store; already 0)
+        muRefCount = 0;
 
-    if (bForce || mnRefCount == 0)  // if (a2 || !*(this + 0x68))
+    if (!bForce && muRefCount > 0)
+        return;
+
+    if (mpMediaBuffer)
     {
-        if (mpMediaBuffer)  // *(this + 0x74)
-        {
-            MassiveFree(mpMediaBuffer); // off_82F91C18 -- the free hook
-            mpMediaBuffer = 0;          // *(this + 0x74) = 0
-        }
+        MassiveFree(mpMediaBuffer);
+        mpMediaBuffer = 0;
     }
 }
 
@@ -380,12 +379,12 @@ int CMassiveAsset::RequestDownloadBinary()
 
     // Already downloading / buffered / referenced -> re-arm and count, don't
     // issue a second request.
-    if (GetValid() == 19 || mpMediaBuffer || mnRefCount)
+    if (GetValid() == 19 || mpMediaBuffer || muRefCount)
     {
         const char* pcReason;
         if (mpMediaBuffer)
             pcReason = "Buffer Exists";
-        else if (mnRefCount)
+        else if (muRefCount)
             pcReason = "Reference Count";
         else
             pcReason = "In Download State";
@@ -393,7 +392,7 @@ int CMassiveAsset::RequestDownloadBinary()
 
         // `((cntlzw(mpMediaBuffer) & 0x20) == 0) + 19` == (mpMediaBuffer ? 20 : 19).
         SetValid(mpMediaBuffer ? 20 : 19);
-        ++mnRefCount;
+        ++muRefCount;
         return 0;
     }
 
@@ -426,7 +425,7 @@ int CMassiveAsset::RequestDownloadBinary()
     }
 
     SetValid(19);  // *(this + 0x10) = 19 (downloading)
-    ++mnRefCount;
+    ++muRefCount;
     return lnSubmit;  // 0 on a clean submit
 }
 

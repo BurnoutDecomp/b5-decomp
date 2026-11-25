@@ -252,7 +252,8 @@ struct LobbyApiRefT
     s32                  numpingreq;        // +0x1f68
     void*                debugref;          // +0x1f6c
     void (*debugptr)(void*, const char*);   // +0x1f70
-    u32 (*debugflt)(void*);              // +0x1f74 (ARTIST calls with debugref only)
+    // The ARTIST call at 82B1B24C keeps the original kind, code, and text arguments in r4-r6.
+    u32 (*debugflt)(void*, s32, s32, const char*); // +0x1f74
     s32                  iCallbackID;       // +0x1f78
     s32                  iCallbackSeqn;     // +0x1f7c
     s32                  iAutoRoomID;       // +0x1f80

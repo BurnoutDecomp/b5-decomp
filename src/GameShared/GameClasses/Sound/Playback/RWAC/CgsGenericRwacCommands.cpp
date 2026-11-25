@@ -99,14 +99,12 @@ RwacCommandPluginGetAttribute::RwacCommandPluginGetAttribute(
 //     (read + 1) & 0xFFF (addi r11,r11,1; clrlwi r11,r11,20; stw r11,0x4000(this)).
 //   Returns `this` (r3 holds the queue pointer on the normal path).
 // ---------------------------------------------------------------------------
-RwacCommandQueue* RwacCommandQueue::GetCommand(uintptr_t* apOutWord)
+void RwacCommandQueue::GetCommand(uintptr_t& arWord)
 {
-    CGS_ASSERT(mu32Read != mu32Write, "Reading whent there's nothing to Read.");
-
-    *apOutWord = mauCommandQueue[mu32Read];
-    mu32Read   = (mu32Read + 1u) & 0xFFFu;
-
-    return this;
+    CGS_ASSERT(!IsEmpty(), CGS_ASSERT_STREAM_MESSAGE_AT(
+        "Reading whent there's nothing to Read.", CGS_RWAC_FACTORY_H_ASSERT_FILE, 737));
+    arWord = mauCommandQueue[mu32Read];
+    mu32Read = (mu32Read + 1u) & (E_QUEUE_LENGTH - 1u);
 }
 
 // ---------------------------------------------------------------------------

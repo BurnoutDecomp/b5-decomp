@@ -1222,27 +1222,19 @@ namespace CgsSceneManager
                                         const Matrix44* lpViewProjection,
                                         u32 luJobIndex)
     {
-        CGS_ASSERT(luJobIndex < KU_NUM_FRUSTUM_TEST_JOBS, "luJobIndex < KU_NUM_FRUSTUM_TEST_JOBS");
-        if (luJobIndex >= KU_NUM_FRUSTUM_TEST_JOBS)
-        {
-            return;
-        }
+        CGS_ASSERT_AT(luJobIndex < KU_NUM_FRUSTUM_TEST_JOBS,
+                      "luJobIndex < KU_NUM_FRUSTUM_TEST_JOBS", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\SpatialPartitionModule/SpatialPartitions/CgsLooseOctree.cpp", 3067);
+        const u32 luQueryIndex = maFrustumTestJobData[luJobIndex].mQueryInfo.muNumQueries;
+        // The query dispatcher fits every worker's payload slots. ARTIST's
+        // diagnostic compares against the staging result buffer's run limit.
+        CGS_ASSERT_AT(luQueryIndex < KU_JOB_BUFFER_MAX_NUM_QUERIES,
+                      "luQueryIndex < KU_JOB_BUFFER_MAX_NUM_QUERIES", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\SpatialPartitionModule/SpatialPartitions/CgsLooseOctree.cpp", 3069);
 
         FrustumJobQueryInfo& lrQueryInfo = maFrustumTestJobData[luJobIndex].mQueryInfo;
-        const u32 luQueryIndex = lrQueryInfo.muNumQueries;
-
-        CGS_ASSERT(luQueryIndex < KU_MAX_QUERIES_PER_JOB,
-                   "luQueryIndex < KU_JOB_BUFFER_MAX_NUM_QUERIES");
-        if (luQueryIndex >= KU_MAX_QUERIES_PER_JOB)
-        {
-            return;
-        }
-
-        lrQueryInfo.maFrustum[luQueryIndex]            = *lpFrustum;
-        lrQueryInfo.maViewProjection[luQueryIndex]     = *lpViewProjection;
-        lrQueryInfo.max32EntityTypeFlags[luQueryIndex]  = lx32EntityTypeMask;
+        lrQueryInfo.maViewProjection[luQueryIndex] = *lpViewProjection;
+        lrQueryInfo.max32EntityTypeFlags[luQueryIndex] = lx32EntityTypeMask;
+        lrQueryInfo.maFrustum[luQueryIndex] = *lpFrustum;
         ++lrQueryInfo.muNumQueries;
-
         mabFrustumJobRequested[luJobIndex] = true;
     }
 

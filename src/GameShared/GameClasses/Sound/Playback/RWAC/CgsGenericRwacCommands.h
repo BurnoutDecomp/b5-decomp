@@ -319,10 +319,8 @@ struct RwacCommandQueue
 
     RwacCommandQueue() : mu32Read(0), mu32Write(0) {}
 
-    // @ 0x82681888. Pop one command word into *apOutWord and advance the read
-    // cursor (with wrap). Asserts the ring is non-empty before reading. Returns
-    // `this` (the X360 leaves the queue pointer in r3 on the normal path).
-    RwacCommandQueue* GetCommand(uintptr_t* apOutWord);
+    // CgsGenericRwacFactory.h:657. Pop one command word and advance the read cursor.
+    void GetCommand(uintptr_t& arWord);
 
     bool IsEmpty() const { return mu32Read == mu32Write; }
 

@@ -599,13 +599,13 @@ void GenericRwacFactory::HandlePluginEvent(
     CGS_ASSERT(!mCommandQueue.IsEmpty(),
                "Parameterized plug-in event has no parameter command");
     uintptr_t luParamCount = 0;
-    mCommandQueue.GetCommand(&luParamCount);
+    mCommandQueue.GetCommand(luParamCount);
     CGS_ASSERT(luParamCount > 0u && luParamCount <= 16u,
                "luCommandCount > 0 && luCommandCount <= 16");
 
     uintptr_t lauParamWords[16] = {};
     for (u32 luWord = 0; luWord < static_cast<u32>(luParamCount); ++luWord)
-        mCommandQueue.GetCommand(&lauParamWords[luWord]);
+        mCommandQueue.GetCommand(lauParamWords[luWord]);
 
     switch (static_cast<ERwacCommandType>(lauParamWords[0]))
     {
@@ -675,12 +675,12 @@ void GenericRwacFactory::DoUpdate(f32 /*af32DeltaTime*/)
     while (!mCommandQueue.IsEmpty())
     {
         uintptr_t luWordCount = 0;
-        mCommandQueue.GetCommand(&luWordCount);
+        mCommandQueue.GetCommand(luWordCount);
         CGS_ASSERT(luWordCount > 0 && luWordCount <= 16,
                    "luCommandCount > 0 && luCommandCount <= 16");
         uintptr_t lauWords[16] = {};
         for (u32 luWord = 0; luWord < static_cast<u32>(luWordCount); ++luWord)
-            mCommandQueue.GetCommand(&lauWords[luWord]);
+            mCommandQueue.GetCommand(lauWords[luWord]);
 
         switch (static_cast<ERwacCommandType>(lauWords[0]))
         {

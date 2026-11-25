@@ -72,7 +72,7 @@
 //   +0x5E  msField5E     (a32; u16)
 //   +0x60  mfField60     (a9; stored as a 32-bit float from the f1 double)
 //   +0x64  mfField64     (a10; stored as a 32-bit float from the f2 double)
-//   +0x68  mnRefCount    (0; media-buffer reference count)
+//   +0x68  muRefCount    (0; media-buffer reference count)
 //   +0x6C  mpcUrl        (0 or a MassiveMalloc'd copy of a38)
 //   +0x70  mpHash        (0 or a MassiveMalloc'd 32-byte copy of a40)
 //   +0x74  mpMediaBuffer (0; the downloaded media, taken from the request)
@@ -218,7 +218,8 @@ private:
     unsigned short msField5E;     // +0x5E (a32)
     float          mfField60;     // +0x60 (a9)
     float          mfField64;     // +0x64 (a10)
-    int            mnRefCount;    // +0x68 (media-buffer reference count)
+    // ARTIST 0x82BDA144 compares the media-buffer reference count as unsigned.
+    unsigned int   muRefCount;    // +0x68
     char*          mpcUrl;        // +0x6C (owned URL copy, or 0)
     void*          mpHash;        // +0x70 (owned 32-byte hash copy, or 0)
     void*          mpMediaBuffer; // +0x74 (downloaded media, or 0)

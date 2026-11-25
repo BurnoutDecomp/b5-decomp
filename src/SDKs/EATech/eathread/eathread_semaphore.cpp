@@ -15,6 +15,32 @@
 
 #include "SDKs/EATech/eathread/eathread_semaphore.h"
 
+// ARTIST 0x82B42870. Return cancelled permits to waiters before banking the remainder.
+void EASemaphoreData::UpdateCancelCount(int iAdjustment)
+{
+    int32_t oldCount, newCount, cmpCount;
+    if (iAdjustment > 0)
+    {
+        oldCount = mnCount;
+        while (oldCount < 0)
+        {
+            if ((newCount = oldCount + iAdjustment) > 0)
+                newCount = 0;
+
+            cmpCount = oldCount;
+            oldCount = _InterlockedCompareExchange(reinterpret_cast<volatile long*>(&mnCount), newCount, cmpCount);
+            if (oldCount == cmpCount)
+            {
+                iAdjustment -= newCount - oldCount;
+                break;
+            }
+        }
+
+        if (iAdjustment > 0)
+            _InterlockedExchangeAdd(reinterpret_cast<volatile long*>(&mnCancelCount), iAdjustment);
+    }
+}
+
 namespace EA
 {
 namespace Thread
@@ -57,16 +83,15 @@ Semaphore::Semaphore(const SemaphoreParameters* pParameters, bool bInitialize)
     mSemaphoreData.mnCancelCount = 0;
     mSemaphoreData.mbIntraProcess = true;  // stb 1, 0xC(r3)
 
-    SemaphoreParameters lDefault;  // {mInitialCount=0, mbIntraProcess=true, mName=""}
-    if (pParameters == 0 && bInitialize)
+    if (!pParameters && bInitialize)
     {
-        lDefault.mInitialCount  = 0;     // stw 0
-        lDefault.mbIntraProcess = true;  // stb 1
-        lDefault.mName[0]       = '\0';  // stb 0
-        pParameters = &lDefault;
+        SemaphoreParameters lDefault;
+        Init(&lDefault);
     }
-
-    Init(pParameters);
+    else
+    {
+        Init(pParameters);
+    }
 }
 
 // The integer overload initializes the same native handle, using the caller's permit count.
@@ -170,68 +195,39 @@ bool Semaphore::Init(const SemaphoreParameters* pParameters)
 // ---------------------------------------------------------------------------
 int Semaphore::Wait(const u32* pTimeoutAbsolute)
 {
-    // ---- absolute deadline -> relative Win32 timeout ------------------------
     DWORD dwTimeout;
-    const u32 uDeadline = *pTimeoutAbsolute;
-    if (uDeadline == 0xFFFFFFFFu || uDeadline == 0u)
+    if (*pTimeoutAbsolute == INFINITE || *pTimeoutAbsolute == 0)
     {
-        // INFINITE (-1) and poll (0) pass through unchanged.
-        dwTimeout = uDeadline;
+        dwTimeout = *pTimeoutAbsolute;
     }
     else
     {
-        const DWORD dwRef = ::GetTickCount() + 0x2710u; // + 10000 ms
-        if (uDeadline <= dwRef)
-            dwTimeout = 0;
-        else
-            dwTimeout = uDeadline - dwRef;
+        const DWORD dwReferenceTime = ::GetTickCount() + 10000;
+        dwTimeout = *pTimeoutAbsolute > dwReferenceTime ? *pTimeoutAbsolute - dwReferenceTime : 0;
     }
 
-    volatile long* const lpCount =
-        reinterpret_cast<volatile long*>(&mSemaphoreData.mnCount); // r30+4
-
-    if (mSemaphoreData.mbIntraProcess)  // lbz 0xC(r30) != 0
+    if (mSemaphoreData.mbIntraProcess)
     {
-        // atomically mnCount -= 1; r11 = post-decrement value.
-        const long lPost = _InterlockedDecrement(lpCount);
-
-        if (lPost < 0)  // count went negative -> there were no free permits
+        const long lRemaining = _InterlockedDecrement(
+            reinterpret_cast<volatile long*>(&mSemaphoreData.mnCount));
+        if (lRemaining < 0 && ::WaitForSingleObject(mSemaphoreData.mhSemaphore, dwTimeout) != WAIT_OBJECT_0)
         {
-            if (::WaitForSingleObject(mSemaphoreData.mhSemaphore, dwTimeout) != 0)
-            {
-                // OS wait failed/timed out: hand the borrowed permit back.
-                mSemaphoreData.UpdateCancelCount(1);
-                return kResultError;  // -2
-            }
+            mSemaphoreData.UpdateCancelCount(1);
+            return kResultError;
         }
 
-        // Acquired (either immediately or after the OS wait): publish and report
-        // the remaining count, clamped at 0.
-        // lwsync -- acquire barrier (modelled as the interlocked op's ordering).
-        const long lRemaining = mSemaphoreData.mnCount; // lwz 0(r31)
-        if (lRemaining <= 0)
-            return 0;
-        return static_cast<int>(lRemaining);
+        MemoryBarrier();
+        return GetCount();
     }
-    else
-    {
-        const DWORD dwResult = ::WaitForSingleObject(mSemaphoreData.mhSemaphore, dwTimeout);
-        if (dwResult == 0)  // WAIT_OBJECT_0
-        {
-            // success: atomically mnCount -= 1, return the post-decrement value.
-            return static_cast<int>(_InterlockedDecrement(lpCount));
-        }
 
-        // failure: reproduce the X360 bit-test verbatim --
-        //   ((cntlzw(dwResult - 258) & 0x20) == 0) - 2
-        // dwResult == WAIT_TIMEOUT (258) -> (258-258)==0 -> cntlzw==32 -> &0x20!=0
-        //   -> (==0) is false (0) -> 0 - 2 = -2.
-        // dwResult != 258 -> non-zero -> cntlzw < 32 -> &0x20==0 -> true (1)
-        //   -> 1 - 2 = -1.
-        const unsigned int uDelta = dwResult - 258u;
-        const unsigned int uLeadingZeros = _CountLeadingZeros(static_cast<long>(uDelta));
-        return ((uLeadingZeros & 0x20u) == 0u ? 1 : 0) - 2;
+    const DWORD dwResult = ::WaitForSingleObject(mSemaphoreData.mhSemaphore, dwTimeout);
+    if (dwResult == WAIT_OBJECT_0)
+    {
+        return _InterlockedDecrement(reinterpret_cast<volatile long*>(&mSemaphoreData.mnCount));
     }
+
+    // The inter-process path returns -2 for a timeout and -1 for other failures.
+    return (dwResult != WAIT_TIMEOUT) - 2;
 }
 
 // ARTIST 0x82B42B70. Publish permits and, where needed, wake kernel waiters.
@@ -281,10 +277,8 @@ int Semaphore::Post(int iCount)
 // ---------------------------------------------------------------------------
 int Semaphore::GetCount() const
 {
-    const s32 iCount = mSemaphoreData.mnCount;
-    if (iCount > 0)
-        return iCount;
-    return 0;
+    const int iCount = mSemaphoreData.mnCount;
+    return iCount > 0 ? iCount : 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -300,9 +294,7 @@ int Semaphore::GetCount() const
 // ---------------------------------------------------------------------------
 Semaphore* SemaphoreFactory::ConstructSemaphore(void* pMemory)
 {
-    if (pMemory == 0)
-        return 0;
-    return new (pMemory) Semaphore();  // Semaphore(pParameters = 0, bInitialize = true)
+    return new (pMemory) Semaphore;
 }
 
 } // namespace Thread

@@ -35,8 +35,9 @@ namespace SceneManagerIO
     // (muId u64): 16+16+8 = +0x28, +mQueryId(4) = +0x2C, +mEntityId(4) = +0x30. mbIntersection
     // trails the tag pair at +0x38; sizeof rounds to 0x40 under alignas(16). The _AssertLayout()
     // below pins the producer-attested offsets.
-    struct CGS_ALIGN(16) OutEventLineTestNearestResult : public Event
+    class CGS_ALIGN(16) OutEventLineTestNearestResult : public Event
     {
+    public:
         Vector3          mPosition;          // +0x00 (16B lane)
         Vector3          mNormal;            // +0x10 (16B lane)
         VolumeInstanceId mVolumeInstanceId;  // +0x20 (u64)
@@ -67,8 +68,9 @@ namespace SceneManagerIO
     // @ 0x828D0780 forwards to the three-arg AddEvent with liSize == sizeof(EventT) == 8
     // (asm loads r6 = 8), which pins sizeof to 8: mQueryId(4) + mbIntersection(1) padded to 8.
     // No Vector3 -> default (4-byte) alignment, unlike OutEventLineTestNearestResult.
-    struct OutEventLineTestFastDoubleSidedResult : public Event
+    class OutEventLineTestFastDoubleSidedResult : public Event
     {
+    public:
         SceneQueryId mQueryId;        // +0x00
         bool         mbIntersection;  // +0x04
         // +0x05..+0x07 trailing pad -> sizeof == 8

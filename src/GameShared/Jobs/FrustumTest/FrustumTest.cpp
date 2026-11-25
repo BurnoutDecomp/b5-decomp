@@ -28,58 +28,8 @@ namespace
                   "mpResultBuffer must be at +0x7D0");
 }
 
-// CgsSceneManager::FrustumJobQueryInfo::operator= @ 0x82BDF950
-//
-// Reconstructed from BURNOUT_X360_ARTIST.XEX (semantic parity). The X360 build lowers this
-// assignment as a full, contiguous copy of the struct's 0x7AC live bytes, in three regions:
-//
-//   maFrustum[10]            (0x000..0x500): ten memcpy(dst, src, 0x80) calls
-//                                            (addi r3/r4 by 0x80; li r5,0x80; bl memcpy x10)
-//   maViewProjection[10]     (0x500..0x780): VMX lvx128/stvx128 16-byte lane copies (40 lanes;
-//                                            10 Matrix44 * 4 Vector4 rows)
-//   max32EntityTypeFlags[10] + muNumQueries  (0x780..0x7AC): eleven lwz/stw 32-bit word copies
-//
-// No field is skipped and no byte outside [0,0x7AC) is written (the 4 trailing alignment pad
-// bytes at 0x7AC..0x7B0 are left untouched), so this is exactly a complete memberwise copy.
-// Reproduced here as the three per-region member copies (memcpy stands in for the Xbox block /
-// VMX intrinsic copies), returning *this -- matching the X360 `return this`.
-//
-// (This assignment operator is invoked by CgsSceneManager::FrustumTestJobData::operator=,
-// which copies its embedded mQueryInfo member.)
-
 namespace CgsSceneManager
 {
-    FrustumJobQueryInfo& FrustumJobQueryInfo::operator=(const FrustumJobQueryInfo& lrSource)
-    {
-        // Region 1 (0x000..0x500): the 10 swizzled frustums.
-        std::memcpy(maFrustum, lrSource.maFrustum, sizeof(maFrustum));
-        // Region 2 (0x500..0x780): the 10 view-projection matrices.
-        std::memcpy(maViewProjection, lrSource.maViewProjection, sizeof(maViewProjection));
-        // Region 3 (0x780..0x7A8): the 10 entity-type filter flag words.
-        std::memcpy(max32EntityTypeFlags, lrSource.max32EntityTypeFlags, sizeof(max32EntityTypeFlags));
-        // (0x7A8): the live query count.
-        muNumQueries = lrSource.muNumQueries;
-        return *this;
-    }
-
-    // CgsSceneManager::FrustumTestJobData::operator= @ 0x82BDFC48
-    //
-    // ARTIST copies the six typed header members, the query info, and three trailer members.
-    FrustumTestJobData& FrustumTestJobData::operator=(const FrustumTestJobData& lrSource)
-    {
-        // +0x00..+0x14: the six job-control header words (6 lwz/stw).
-        mpNodes = lrSource.mpNodes;
-        mpNodeTypeMasks = lrSource.mpNodeTypeMasks;
-        mpEntityLinks = lrSource.mpEntityLinks;
-        mpEntitySpheres = lrSource.mpEntitySpheres;
-        muNumNodes = lrSource.muNumNodes;
-        muMaxEntities = lrSource.muMaxEntities;
-        mQueryInfo = lrSource.mQueryInfo;
-        mpResultBuffer = lrSource.mpResultBuffer;
-        muMaxResults = lrSource.muMaxResults;
-        miDebugMode = lrSource.miDebugMode;
-        return *this;
-    }
 #define CGS_ARTIST_FRUSTUM_JOB_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\jobs\\frustumtest\\FrustumTestJob.h"
     // Worker assertions use PrintStringed followed by the native MSR break twice.
     static void FrustumJobAssert(const char* lpFile, int liLine, const char* lpMessage)

@@ -10,10 +10,20 @@
 #include <xtl.h>
 #include <stddef.h>
 #include <string.h>
+enum CommTCPState
+{
+    DEAD,
+    IDLE,
+    CONN,
+    LIST,
+    OPEN,
+    CLOSE
+};
+
 struct CommTCPRef {
     CommRef common;
     CommTCPRef* link; SocketT* socket; sockaddr_in peeraddr;
-    s32 state; u32 connident;
+    CommTCPState state; u32 connident;
     s32 rcvoff, rcvwid, rcvlen, rcvinp, rcvout; char* rcvbuf; u32 rcvseq;
     s32 sndoff, sndwid, sndlen, sndinp, sndout; char* sndbuf; u32 sndseq;
     u32 sendtick, recvtick, dnsid; char dnsquery[256]; char* dnsbuf; s32 dnslen; char dnsdiv;
@@ -53,7 +63,6 @@ struct CommUDPRef;
 u32 CommUDPTick(CommUDPRef*); // native shared body 82B2A960
 }
 static const s32 kCommTCPMem=0x63746370;
-static CommTCPRef* Tcp(CommRef* p) { return reinterpret_cast<CommTCPRef*>(p); }
 static s32 CommTCPEvent(SocketT*,s32,void*);
 static void CommTCPSetAddrInfo(CommTCPRef* ref)
 {
@@ -78,15 +87,15 @@ static s32 CommTCPEventExclusive(CommTCPRef* ref,u32 tick)
     s32 len;
     RawTCPPacketT* packet;
     char* buffer;
-    if (ref->state==2 && SocketInfo(ref->socket,0x73746174,0,0,0)>0) { ref->state=4; CommTCPSetAddrInfo(ref); }
-    if (ref->state==3) {
+    if (ref->state==CONN && SocketInfo(ref->socket,0x73746174,0,0,0)>0) { ref->state=OPEN; CommTCPSetAddrInfo(ref); }
+    if (ref->state==LIST) {
         sockaddr addr; s32 size=16; SocketT* accepted=SocketAccept(ref->socket,&addr,&size);
         if (accepted) {
             SocketClose(ref->socket); _CommTCPSetSocket(ref, accepted);
-            SocketCallback(ref->socket,2,100,ref,CommTCPEvent); ref->state=4; CommTCPSetAddrInfo(ref);
+            SocketCallback(ref->socket,2,100,ref,CommTCPEvent); ref->state=OPEN; CommTCPSetAddrInfo(ref);
         }
     }
-    while (ref->state==4 && (ref->rcvwid+ref->rcvinp)%ref->rcvlen!=ref->rcvout) {
+    while (ref->state==OPEN && (ref->rcvwid+ref->rcvinp)%ref->rcvlen!=ref->rcvout) {
         packet=reinterpret_cast<RawTCPPacketT*>(ref->rcvbuf+ref->rcvinp);
         buffer=reinterpret_cast<char*>(&packet->body)+ref->rcvoff;
         len=sizeof(packet->body.len);
@@ -94,7 +103,7 @@ static s32 CommTCPEventExclusive(CommTCPRef* ref,u32 tick)
         len-=ref->rcvoff;
         len=SocketRecvfrom(ref->socket,buffer,len,0,0,0);
         if (!len) break;
-        if (len<0) { ref->state=5; break; }
+        if (len<0) { ref->state=CLOSE; break; }
         ref->recvtick=NetTick();
         if (!ref->rcvoff) packet->head.when=ref->recvtick;
         count+=len; ref->rcvoff+=len;
@@ -107,11 +116,11 @@ static s32 CommTCPEventExclusive(CommTCPRef* ref,u32 tick)
             }
         }
     }
-    if (ref->state==4 && ref->sndoff<0 && ref->sndinp==ref->sndout && NetTick()>ref->sendtick+50) {
+    if (ref->state==OPEN && ref->sndoff<0 && ref->sndinp==ref->sndout && NetTick()>ref->sendtick+50) {
         packet=reinterpret_cast<RawTCPPacketT*>(ref->sndbuf+ref->sndinp);
         packet->head.when=NetTick(); packet->body.len=0; ref->sndinp=(ref->sndwid+ref->sndinp)%ref->sndlen;
     }
-    while (ref->state==4) {
+    while (ref->state==OPEN) {
         if (ref->sndoff<0) {
             if (ref->sndinp==ref->sndout) break;
             ref->sndoff=0;
@@ -142,31 +151,60 @@ static s32 CommTCPEvent(SocketT*,s32,void* p)
     if (NetCritTry(&ref->crit)) { u32 tick=NetTick(); CommTCPEventExclusive(ref,tick); NetCritLeave(&ref->crit); }
     return 0;
 }
-extern "C" void CommTCPDestroy(CommRef* common)
+static s32 _CommTCPClose(CommTCPRef* ref)
 {
-    CommTCPRef* ref=Tcp(common);
-    if (ref->state==4) { ref->connident=0; ref->state=5; }
-    if (ref->socket) { SocketClose(ref->socket); ref->socket=0; ref->common.sockptr=0; }
-    NetCritKill(&ref->crit); DirtyMemFree(ref->rcvbuf,kCommTCPMem,common->memgroup);
-    DirtyMemFree(ref->sndbuf,kCommTCPMem,common->memgroup); DirtyMemFree(ref,kCommTCPMem,common->memgroup);
+    if (ref->state == OPEN)
+    {
+        ref->connident = 0;
+        ref->state = CLOSE;
+    }
+    return 0;
 }
-extern "C" void CommTCPCallback(CommRef* common,void (*callback)(CommRef*,s32)) { CommTCPRef* ref=Tcp(common); ref->callproc=callback; ref->gotevent|=2; }
-extern "C" s32 CommTCPResolve(CommRef*,const char*,char*,s32,char) { NetPrintfCode("commtcp: resolve functionality not supported\n"); return -1; }
+
+extern "C" void CommTCPDestroy(CommTCPRef* ref)
+{
+    if (ref->state == OPEN)
+        _CommTCPClose(ref);
+    if (ref->socket)
+    {
+        SocketClose(ref->socket);
+        _CommTCPSetSocket(ref, 0);
+    }
+    NetCritKill(&ref->crit); DirtyMemFree(ref->rcvbuf,kCommTCPMem,ref->common.memgroup);
+    DirtyMemFree(ref->sndbuf,kCommTCPMem,ref->common.memgroup); DirtyMemFree(ref,kCommTCPMem,ref->common.memgroup);
+}
+extern "C" void CommTCPCallback(CommTCPRef* ref,void (*callback)(CommRef*,s32)) { ref->callproc=callback; ref->gotevent|=2; }
+extern "C" s32 CommTCPResolve(CommTCPRef*,const char*,char*,s32,char) { NetPrintfCode("commtcp: resolve functionality not supported\n"); return -1; }
 // ARTIST's Unresolve slot points to the shared return-only instruction 82AD5078.
-static void CommTCPUnresolve(CommRef*) {}
-static s32 CommTCPClose(CommRef* common)
+static void CommTCPUnresolve(CommTCPRef*) {}
+extern "C" s32 CommTCPUnlisten(CommTCPRef* ref)
 {
-    CommTCPRef* ref=Tcp(common);
-    if (ref->state==3) { ref->socket=0; common->sockptr=0; }
-    if (ref->socket) { SocketClose(ref->socket); ref->socket=0; common->sockptr=0; }
-    ref->state=1; return 0;
+    if (ref->state == LIST)
+        _CommTCPSetSocket(ref, 0);
+    if (ref->socket)
+    {
+        SocketClose(ref->socket);
+        _CommTCPSetSocket(ref, 0);
+    }
+    ref->state = IDLE;
+    return 0;
 }
-extern "C" s32 CommTCPUnlisten(CommRef* common) { return CommTCPClose(common); }
-extern "C" s32 CommTCPUnconnect(CommRef* common) { return CommTCPClose(common); }
-extern "C" s32 CommTCPSend(CommRef* common,const void* buffer,s32 length,u32)
+
+extern "C" s32 CommTCPUnconnect(CommTCPRef* ref)
 {
-    CommTCPRef* ref=Tcp(common);
-    if (ref->state!=4) return -2;
+    if (ref->state == LIST)
+        _CommTCPSetSocket(ref, 0);
+    if (ref->socket)
+    {
+        SocketClose(ref->socket);
+        _CommTCPSetSocket(ref, 0);
+    }
+    ref->state = IDLE;
+    return 0;
+}
+extern "C" s32 CommTCPSend(CommTCPRef* ref,const void* buffer,s32 length,u32)
+{
+    if (ref->state!=OPEN) return -2;
     if ((ref->sndwid+ref->sndinp)%ref->sndlen==ref->sndout) { NetPrintfCode("TCP: output buffer full\n"); return 0; }
     if (length>ref->sndwid-8) { NetPrintfCode("CommTCP: Oversized packet send (%d bytes)\n",length); return -6; }
     if (!length) return ((ref->sndlen-ref->sndout+ref->sndinp)%ref->sndlen)/ref->sndwid+1;
@@ -176,16 +214,16 @@ extern "C" s32 CommTCPSend(CommRef* common,const void* buffer,s32 length,u32)
     s32 queued=((ref->sndlen-ref->sndout+ref->sndinp)%ref->sndlen)/ref->sndwid;
     return queued>0?queued:1;
 }
-extern "C" s32 CommTCPPeek(CommRef* common,void* data,s32 length,u32* tick)
+extern "C" s32 CommTCPPeek(CommTCPRef* ref,void* data,s32 length,u32* tick)
 {
-    CommTCPRef* ref=Tcp(common); if (ref->rcvout==ref->rcvinp) return -7;
+    if (ref->rcvout==ref->rcvinp) return -7;
     RawTCPPacketT* packet=reinterpret_cast<RawTCPPacketT*>(ref->rcvbuf+ref->rcvout);
     if (packet->body.len<length) length=packet->body.len;
     memcpy(data,packet->body.data,length); if (tick) *tick=packet->head.when; return packet->body.len;
 }
-extern "C" s32 CommTCPRecv(CommRef* common,void* data,s32 length,u32* tick)
+extern "C" s32 CommTCPRecv(CommTCPRef* ref,void* data,s32 length,u32* tick)
 {
-    CommTCPRef* ref=Tcp(common); s32 result=CommTCPPeek(common,data,length,tick);
+    s32 result=CommTCPPeek(ref,data,length,tick);
     if (result>=0) ref->rcvout=(ref->rcvwid+ref->rcvout)%ref->rcvlen;
     return result;
 }
@@ -209,20 +247,21 @@ static void CommTCPResetTransfer(CommTCPRef* ref)
     ref->rcvoff = 0;
     ref->sndoff=-1; ref->sendtick=NetTick()-5000;
 }
-extern "C" s32 CommTCPListen(CommRef* common,const char* text)
+extern "C" s32 CommTCPListen(CommTCPRef* ref,const char* text)
 {
-    CommTCPRef* ref=Tcp(common); if (ref->state!=1 || ref->socket) return -2;
+    if (ref->state!=IDLE || ref->socket) return -2;
     sockaddr_in addr;
     CommTCPInitAddress(addr);
     if (!(SockaddrInParse(reinterpret_cast<sockaddr*>(&addr), text) & 2)) return -3;
-    CommTCPResetTransfer(ref); ref->socket=SocketOpen(2,1,0); common->sockptr=ref->socket;
+    CommTCPResetTransfer(ref);
+    _CommTCPSetSocket(ref, SocketOpen(AF_INET, SOCK_STREAM, 0));
     if (!ref->socket) return -4;
-    if (SocketBind(ref->socket,reinterpret_cast<const sockaddr*>(&addr),16)<0) { SocketClose(ref->socket); ref->socket=0; common->sockptr=0; return -5; }
-    SocketListen(ref->socket,5); SocketCallback(ref->socket,2,100,ref,CommTCPEvent); ref->state=3; return 0;
+    if (SocketBind(ref->socket,reinterpret_cast<const sockaddr*>(&addr),16)<0) { SocketClose(ref->socket); _CommTCPSetSocket(ref, 0); return -5; }
+    SocketListen(ref->socket,5); SocketCallback(ref->socket,2,100,ref,CommTCPEvent); ref->state=LIST; return 0;
 }
-extern "C" s32 CommTCPConnect(CommRef* common,const char* text)
+extern "C" s32 CommTCPConnect(CommTCPRef* ref,const char* text)
 {
-    CommTCPRef* ref=Tcp(common); if (ref->state!=1 || ref->socket) return -2;
+    if (ref->state!=IDLE || ref->socket) return -2;
     ref->peeraddr.sin_port = 0;
     ref->peeraddr.sin_family = AF_INET;
     ref->peeraddr.sin_addr.s_addr = 0;
@@ -230,9 +269,10 @@ extern "C" s32 CommTCPConnect(CommRef* common,const char* text)
     memcpy(ref->peeraddr.sin_zero, &clearWord, sizeof(clearWord));
     memcpy(ref->peeraddr.sin_zero + sizeof(clearWord), &clearWord, sizeof(clearWord));
     if (SockaddrInParse(reinterpret_cast<sockaddr*>(&ref->peeraddr),text)!=3) return -3;
-    CommTCPResetTransfer(ref); ref->socket=SocketOpen(2,1,0); common->sockptr=ref->socket;
+    CommTCPResetTransfer(ref);
+    _CommTCPSetSocket(ref, SocketOpen(AF_INET, SOCK_STREAM, 0));
     if (!ref->socket) return -4;
-    SocketConnect(ref->socket,reinterpret_cast<const sockaddr*>(&ref->peeraddr),16); SocketCallback(ref->socket,2,100,ref,CommTCPEvent); ref->state=2; return 0;
+    SocketConnect(ref->socket,reinterpret_cast<const sockaddr*>(&ref->peeraddr),16); SocketCallback(ref->socket,2,100,ref,CommTCPEvent); ref->state=CONN; return 0;
 }
 extern "C" CommTCPRef* CommTCPConstruct(s32 width,s32 input,s32 output)
 {
@@ -243,11 +283,21 @@ extern "C" CommTCPRef* CommTCPConstruct(s32 width,s32 input,s32 output)
     CommRef& c=ref->common;
     c.memgroup=group;
     c.Construct=reinterpret_cast<CommRef* (*)(s32,s32,s32)>(CommTCPConstruct);
-    c.Destroy=CommTCPDestroy; c.Resolve=CommTCPResolve; c.Unresolve=CommTCPUnresolve;
-    c.Listen=CommTCPListen; c.Unlisten=CommTCPUnlisten; c.Connect=CommTCPConnect; c.Unconnect=CommTCPUnconnect;
-    c.Callback=CommTCPCallback; c.Status=CommTCPStatus;
-    c.Tick=reinterpret_cast<u32 (*)(CommRef*)>(CommUDPTick);
-    c.Send=CommTCPSend; c.Peek=CommTCPPeek; c.Recv=CommTCPRecv;
+    // Callers dispatch through CommRef at offset zero. The SDK slots
+    // point directly at the typed CommTCP functions.
+    c.Destroy = reinterpret_cast<void (*)(CommRef*)>(CommTCPDestroy);
+    c.Resolve = reinterpret_cast<s32 (*)(CommRef*, const char*, char*, s32, char)>(CommTCPResolve);
+    c.Unresolve = reinterpret_cast<void (*)(CommRef*)>(CommTCPUnresolve);
+    c.Listen = reinterpret_cast<s32 (*)(CommRef*, const char*)>(CommTCPListen);
+    c.Unlisten = reinterpret_cast<s32 (*)(CommRef*)>(CommTCPUnlisten);
+    c.Connect = reinterpret_cast<s32 (*)(CommRef*, const char*)>(CommTCPConnect);
+    c.Unconnect = reinterpret_cast<s32 (*)(CommRef*)>(CommTCPUnconnect);
+    c.Callback = reinterpret_cast<void (*)(CommRef*, void (*)(CommRef*, s32))>(CommTCPCallback);
+    c.Status = CommTCPStatus;
+    c.Tick = reinterpret_cast<u32 (*)(CommRef*)>(CommUDPTick);
+    c.Send = reinterpret_cast<s32 (*)(CommRef*, const void*, s32, u32)>(CommTCPSend);
+    c.Peek = reinterpret_cast<s32 (*)(CommRef*, void*, s32, u32*)>(CommTCPPeek);
+    c.Recv = reinterpret_cast<s32 (*)(CommRef*, void*, s32, u32*)>(CommTCPRecv);
     c.maxwid=(u16)width; c.maxinp=(u8)input; c.maxout=(u8)output;
     NetCritInit(&ref->crit,"commtcp");
     ref->rcvwid=width+8;
@@ -259,5 +309,5 @@ extern "C" CommTCPRef* CommTCPConstruct(s32 width,s32 input,s32 output)
     ref->sndlen=ref->sndwid*output;
     ref->sndbuf=(char*)DirtyMemAlloc(ref->sndlen,kCommTCPMem,ref->common.memgroup);
     _CommTCPSetSocket(ref, 0);
-    ref->state=1; ref->connident=0; return ref;
+    ref->state=IDLE; ref->connident=0; return ref;
 }

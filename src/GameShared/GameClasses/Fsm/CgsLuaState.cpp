@@ -33,8 +33,8 @@ const char* LuaState::KPC_GET_STATE_FUNCTION_NAME = "GetCurrentState";
 // @ 0x82835D50
 void LuaState::Construct()
 {
-    mpLuaState   = 0;
     mpHeapMalloc = 0;
+    mpLuaState   = 0;
 }
 
 // @ 0x82835D60 -- the Lua allocator. lua_Alloc contract: nsize==0 frees, else (re)allocates.
