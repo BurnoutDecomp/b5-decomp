@@ -575,7 +575,7 @@ namespace BrnNetwork
     s32 LiveRevengeManager::FindPlayerInTableByName(const char* lpcName)
     {
         LiveRevengeProfile* lpProfile = GetProfile();
-        CGS_ASSERT(lpProfile, "lpProfile");
+        CGS_ASSERT_AT(lpProfile, "lpProfile", CGS_ARTIST_FILE, 525);
 
         const s32 liNumberOfRivals = static_cast<s32>(lpProfile->maRelationshipTable.GetLength());
         for (s32 liRivalIndex = 0; liRivalIndex < liNumberOfRivals; ++liRivalIndex)

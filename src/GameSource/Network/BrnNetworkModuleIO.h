@@ -149,7 +149,8 @@ namespace BrnNetworkModuleIO
         // OutputPlayerResultsInfo, carries the one assert and the 28-byte stride itself).
         PlayerResultsData* GetPlayerResultsDataForWriting(s32 liIndex)
         {
-            CGS_ASSERT(liIndex >= 0, "liIndex >= 0");
+            CGS_ASSERT_AT(liIndex >= 0, "liIndex >= 0",
+                          "..\\..\\..\\GameSource\\Network/SharedIO/BrnNetworkModulePlayerResultsInterface.h", 156);
             return &maPlayerResultsData[liIndex];
         }
 

@@ -538,7 +538,8 @@ namespace BrnNetworkModuleIO
 
     PlayerResultsInterface* OutputBuffer::GetPlayerResultsInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
+            "Not locked for writing\n", CGS_ARTIST_FILE, 957 /* ARTIST 0x82588528 */));
         return &mPlayerResultsInterface;
     }
 

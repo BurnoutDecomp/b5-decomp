@@ -22,6 +22,7 @@
 // ===================================================================================
 
 #include "types.hpp"
+#include "lobbyname.h"
 
 namespace CgsNetwork
 {
@@ -40,8 +41,12 @@ namespace CgsNetwork
     // Ledger func @ 0x8286EFF8.
     void IPAddressIntToString(char* lacIPAddress, s32 liIPAddress);
 
-    // Compare two usernames; forwards to the DirtySDK lobby name comparator.
-    s32  UsernameCompare(const char* lpacName1, const char* lpacName2);
+    // DecFIGS declares UsernameCompare at the call site. ARTIST 0x8255ACF0
+    // inlines the forwarding helper and calls the DirtySDK comparator directly.
+    inline s32 UsernameCompare(const char* lpacName1, const char* lpacName2)
+    {
+        return ::LobbyNameCmp(lpacName1, lpacName2);
+    }
 
     // In-place (de)compression of an uncompressed CgsID string. Bodies live in their
     // own TUs; declared here so callers can reference them by name.

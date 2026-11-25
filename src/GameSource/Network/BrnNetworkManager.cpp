@@ -2157,7 +2157,7 @@ namespace BrnNetwork
     // ----------------------------------------------------------------------------------------
     void BrnNetworkManager::OutputPlayerResultsInfo(BrnNetworkModuleIO::OutputBuffer* lpOutput)
     {
-        CGS_ASSERT(lpOutput != NULL, "lpOutput");
+        CGS_ASSERT_AT(lpOutput != NULL, "lpOutput", CGS_ARTIST_FILE, 2844);
 
         NetworkPlayerID lPlayerID            = CgsNetwork::K_INVALID_PLAYER_ID;
         s32             liPlayerResultsIndex = 0;

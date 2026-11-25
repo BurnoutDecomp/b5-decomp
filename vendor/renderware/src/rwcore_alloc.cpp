@@ -116,16 +116,17 @@ namespace rw
         return lEmpty;
     }
 
-    // ARTIST @0x82666128. The convenience
-    // Free(pointer) entry constructs a resource with the pointer in lane zero,
-    // clears every other lane, and dispatches virtual DoFree. This dispatch is
-    // essential: TestBed allocators inherit this function and override DoFree.
+    // DecFIGS resourceallocator.h:129 and :151 distinguish the virtual
+    // Free(pointer, size) at 0x82666128 and the direct Free(pointer) at
+    // 0x8227D048. Both pass the pointer in lane zero to virtual DoFree.
     void IResourceAllocator::Free(void* lpBlock, size_t /*luSizeOrFlags*/)
     {
-        Resource lResource;
-        lResource.m_baseResources[0] = lpBlock;
-        for (uint32_t luLane = 1; luLane < KU_RESOURCE_LANE_COUNT; ++luLane)
-            lResource.m_baseResources[luLane] = 0;
+        Free(lpBlock);
+    }
+
+    void IResourceAllocator::Free(void* lpBlock)
+    {
+        Resource lResource(lpBlock);
         DoFree(lResource);
     }
 
@@ -133,11 +134,16 @@ namespace rw
     // temporary Resource, cleared in the caller's Resource, then released through DoFree.
     void IResourceAllocator::DoFreeDisposable(Resource& lrResource)
     {
-        Resource lDisposable;
-        lDisposable.m_baseResources[1] = lrResource.m_baseResources[1];
-        lDisposable.m_baseResources[4] = lrResource.m_baseResources[4];
-        lrResource.m_baseResources[1] = 0;
-        lrResource.m_baseResources[4] = 0;
+        Resource lDisposable(0);
+        for (uint32_t luLane = 0; luLane < KU_RESOURCE_LANE_COUNT; ++luLane)
+        {
+            const bool lbDisposable = luLane == 1u || luLane == 4u;
+            if (lbDisposable)
+            {
+                lDisposable.m_baseResources[luLane] = lrResource.m_baseResources[luLane];
+                lrResource.m_baseResources[luLane] = 0;
+            }
+        }
         DoFree(lDisposable);
     }
 

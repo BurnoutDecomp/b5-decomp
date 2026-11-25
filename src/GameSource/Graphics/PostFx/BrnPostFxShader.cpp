@@ -976,14 +976,10 @@ void BrnPostFxShader::Shader::Construct(rw::IResourceAllocator* lpAllocator,
 void BrnPostFxShader::Shader::Destruct(rw::IResourceAllocator* lpAllocator)
 {
     renderengine::ProgramBuffer::Release(mpVertexProgram);
-    rw::Resource lVertexProgramResource;
-    lVertexProgramResource.m_baseResources[0] = mpVertexProgram;
-    lpAllocator->DoFree(lVertexProgramResource);
+    lpAllocator->FreeMemoryResource(mpVertexProgram);
     mpVertexProgram = 0;
     renderengine::ProgramBuffer::Release(mpPixelProgram);
-    rw::Resource lPixelProgramResource;
-    lPixelProgramResource.m_baseResources[0] = mpPixelProgram;
-    lpAllocator->DoFree(lPixelProgramResource);
+    lpAllocator->FreeMemoryResource(mpPixelProgram);
     mpPixelProgram = 0;
 }
 

@@ -983,12 +983,14 @@ void DebugComponent::DrawAllKillZones(CgsDev::Debug3DImmediateRender* lpDisplay)
 // ARTIST 0x827611A8.
 void DebugComponent::DrawRecentKillZones(CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
-    CGS_ASSERT(mpModule != 0, "mpModule");
+    static const char KAC_ARTIST_SOURCE_FILE[] =
+        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/TrafficEntityModule/BrnTrafficDebugComponent.cpp";
+    CGS_ASSERT_AT(mpModule != 0, "mpModule", KAC_ARTIST_SOURCE_FILE, 2545);
     for (u32 luZone = 0; luZone < mpModule->mDEBUGRecentlyFiredKillZones.GetLength(); ++luZone)
     {
         const u64 luId = mpModule->mDEBUGRecentlyFiredKillZones.GetItem(luZone).mKillZoneId;
         const KillZone* lpZone = mpModule->mpData->FindKillZone(luId);
-        CGS_ASSERT(lpZone != 0, "lpKillZone");
+        CGS_ASSERT_AT(lpZone != 0, "lpKillZone", KAC_ARTIST_SOURCE_FILE, 2551);
         DrawKillZone(lpZone, luId, lpDisplay);
     }
 }

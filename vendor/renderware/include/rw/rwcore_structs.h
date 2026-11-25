@@ -45,6 +45,12 @@ RW_SIZE_ASSERT(rw::BaseResourceDescriptor, 8);
 
 template <uint32_t Count>
 struct BaseResources {
+    BaseResources()
+    {
+        for (uint32_t luIndex = 0; luIndex < Count; ++luIndex)
+            m_baseResources[luIndex] = 0;
+    }
+
     void* m_baseResources[Count];
 };
 
@@ -74,10 +80,15 @@ struct BaseResourceDescriptors {
 };
 
 struct Resource : public BaseResources<KU_RESOURCE_LANE_COUNT> {
-    Resource()
+    Resource() {}
+
+    // DecFIGS resourcetarget.h:298 constructs the base resources then
+    // installs the memory lane. ARTIST 0x8227D06C..0x8227D080 shows the
+    // same five zero stores followed by the lane-zero pointer.
+    explicit Resource(void* const& lrMemoryResource)
+        : BaseResources<KU_RESOURCE_LANE_COUNT>()
     {
-        for (uint32_t luIndex = 0; luIndex < KU_RESOURCE_LANE_COUNT; ++luIndex)
-            m_baseResources[luIndex] = 0;
+        m_baseResources[0] = lrMemoryResource;
     }
 };
 RW_SIZE_ASSERT(rw::Resource, 40);
@@ -174,7 +185,8 @@ struct IResourceAllocator : EA::Allocator::ICoreAllocator {  // one host vptr
     void* Alloc(size_t luSize, const char* lpcName, uint32_t luFlags,
                 uint32_t luAlignment, uint32_t luAlignmentOffset = 0) ;
     void* Alloc(size_t luSize, const char* lpcName, uint32_t luFlags) ;
-    void Free(void* lpBlock, size_t luSizeOrFlags = 0) ;
+    void Free(void* lpBlock, size_t luSizeOrFlags);
+    void Free(void* lpBlock);
 
     // DecFIGS resourceallocator.h:91/139; ARTIST callers dispatch these
     // directly through DoAllocate (+0x10) / DoFree (+0x14).
@@ -204,6 +216,14 @@ struct IResourceAllocator : EA::Allocator::ICoreAllocator {  // one host vptr
 
         Resource lResource = DoAllocate(lDescriptor, lpcName);
         return lResource.m_baseResources[0];
+    }
+
+    // DecFIGS resourceallocator.h:188 declares the single-lane wrapper.
+    void FreeMemoryResource(void* lpMemoryResource)
+    {
+        Resource lResource;
+        lResource.m_baseResources[0] = lpMemoryResource;
+        DoFree(lResource);
     }
 
     virtual ::rw::Resource DoAllocate(const ::rw::ResourceDescriptor& lrDescriptor,

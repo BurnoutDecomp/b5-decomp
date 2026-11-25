@@ -1,4 +1,5 @@
 #include "GameSource/Network/Debug Components/BrnNetworkBuddyManagerDebugComponent.h"
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Debug Components/BrnNetworkBuddyManagerDebugComponent.cpp"
 
 #include <string.h>   // memcpy / strncpy (the X360 bodies call the CRT primitives directly)
 
@@ -295,8 +296,8 @@ namespace BrnNetwork
     {
         BuddyManagerDebugComponent* lpBuddyDebug = static_cast<BuddyManagerDebugComponent*>(lpData);
 
-        CGS_ASSERT(lpBuddyDebug->mInviteBuddy.macName[0] != '\0',
-                   "AcceptInvite: no invite buddy has been set");
+        CGS_ASSERT_AT(lpBuddyDebug->mInviteBuddy.macName[0] != '\0',
+                      "!lpBuddyDebug->mInviteBuddy.IsEmpty()", CGS_ARTIST_FILE, 336);
 
         // Remove this one-shot action from the menu (matches the X360 UnregisterFunction(this,
         // &AcceptInvite, NULL)).
@@ -479,3 +480,5 @@ namespace BrnNetwork
         }
     }
 }
+
+#undef CGS_ARTIST_FILE
