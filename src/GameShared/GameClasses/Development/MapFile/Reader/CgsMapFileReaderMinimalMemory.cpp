@@ -1,6 +1,7 @@
 #include "GameShared/GameClasses/Development/MapFile/Reader/CgsMapFileReaderMinimalMemory.h"
 #include "GameShared/GameClasses/Development/StackUnpick/CgsStackUnpick.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
+#include "rw/core/debug/DebugCriticalSection.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include <cstring>
 
@@ -125,10 +126,11 @@ namespace MapFile
     {
         if (liIndex < 0)
         {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("liIndex >= 0",
+            // ARTIST 0x82820C8C calls the critical section directly.
+            Assert::gAssertMutex.Enter();
+            Assert::FireAssert("liIndex >= 0",
                 CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Development/MapFile/Reader/CgsMapFileReaderMinimalMemory.cpp", 135));
-            CgsDev::Assert::EndAssert();
+            Assert::gAssertMutex.Leave();
         }
         if (liIndex >= KI_MAX_STACK_RESULTS || maacStackNames[liIndex][0] == '\0')
             return 0;

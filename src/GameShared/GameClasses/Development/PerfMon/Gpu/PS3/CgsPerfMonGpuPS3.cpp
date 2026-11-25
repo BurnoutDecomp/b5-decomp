@@ -1,5 +1,6 @@
 #include "GameShared/GameClasses/Development/PerfMon/Gpu/CgsPerfMonGpu.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
+#include "rw/core/debug/DebugCriticalSection.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/device.h"
 #include <cstring>
@@ -121,9 +122,10 @@ namespace CgsDev
     {
         if (mbProfilingRunning)
         {
-            Assert::BeginAssert();
+            // ARTIST 0x82825CE8 calls the critical section directly.
+            Assert::gAssertMutex.Enter();
             Assert::FireAssert("mbProfilingRunning == false", CGS_ASSERT_LOCATION(KAC_ASSERTFILE, 0xF8));
-            Assert::EndAssert();
+            Assert::gAssertMutex.Leave();
         }
         gValues.miCurrentCPUReadBuffer = (gValues.miCurrentCPUReadBuffer + 1) % KI_NUMBUFFERS;
     }

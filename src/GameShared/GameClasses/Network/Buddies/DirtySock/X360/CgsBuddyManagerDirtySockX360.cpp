@@ -1,9 +1,11 @@
 #include "GameShared/GameClasses/Network/Buddies/DirtySock/X360/CgsBuddyManagerDirtySockX360.h"
 #define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Network\\Buddies\\DirtySock\\X360\\CgsBuddyManagerDirtySockX360.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "GameShared/GameClasses/Network/CgsNetworkManager.h"   // NetworkManager::GetActiveControllerPort
 #include "GameShared/GameClasses/Network/ServerInterface/CgsServerInterface.h"   // GetGameComponent / GetConnAPIRef
 #include "GameShared/GameClasses/Network/Texture/CgsNetworkTexture.h"
+#include "GameShared/GameClasses/System/CgsXOverlapped.h"
 #include "GameSource/GameState/BrnCgsPlayerName.h"
 
 #include <cstddef>   // offsetof
@@ -17,75 +19,18 @@
 // gamer-picture download pipeline on top.
 // =============================================================================
 
-// ---- XDK / Xbox-LIVE entry points -------------------------------------------
-// Real prototypes live in the Xbox 360 XDK (<xapi.h>/<xboxmath.h>/<xonline.h>);
-// declared here as extern "C" free functions, mirroring the System/X360 glue
-// precedent (CgsXOverlappedX360.cpp / CgsGuiKeyboard.cpp). The argument shapes
-// are taken from the X360 call sites (register usage), not from the PPC Hex-Rays.
-extern "C"
-{
-    // XGetOverlappedResult(pOverlapped, pdwResult, bWait); 0 == success/complete.
-    u32 XGetOverlappedResult(void* lpOverlapped, u32* lpdwResult, u32 bWait);
-    u32 XCancelOverlapped(void* lpOverlapped);
-
-    // Guide UI -- all keyed by the signed-in controller/user index.
-    u32 XShowMessagesUI(u32 luUserIndex);
-    u32 XShowGamerCardUI(u32 luUserIndex, u64 luXuid);
-
-    // Sign-in state: 2 == XUserSigninState_SignedInToLive.
-    s32 XUserGetSigninState(u32 luUserIndex);
-
-    // Live invite: (user, xuidCount, pXuids, pszText, pOverlapped). 997 == pending.
-    u32 XInviteSend(u32 luUserIndex, u32 luXuidCount, const u64* lpaXuids,
-                    const wchar_t* lpwcText, void* lpOverlapped);
-
-    // Profile-settings + gamer-picture async reads (997 == ERROR_IO_PENDING).
-    u32 XUserReadProfileSettingsByXuid(u32 luTitleId, u32 luUserIndexRequester,
-                                       u32 luNumXuids, const u64* lpaXuids,
-                                       u32 luNumSettingIds, const u32* lpaSettingIds,
-                                       u32* lpcbResults, void* lpResults, void* lpOverlapped);
-    u32 XUserReadGamerPictureByKey(const void* lpPictureKey, s32 lbSmall,
-                                   u8* lpTextureBuffer, u32 luPitch, u32 luHeight,
-                                   void* lpOverlapped);
-}
-
 // ConnApiStatus 'sess' copies the game session text into the buffer: empty until the ConnApi
 // session is up.
 #include "connapi.h"
-
-// Win32/XDK winerror.h codes consumed by the polling logic.
-#ifndef ERROR_IO_INCOMPLETE
-#define ERROR_IO_INCOMPLETE 996u
-#endif
-#ifndef ERROR_IO_PENDING
-#define ERROR_IO_PENDING    997u
-#endif
 
 // ConnApiStatus 'sess' selector and the session-text buffer Update hands it.
 static const s32 KI_CONNAPI_STATUS_SESSION    = ('s' << 24) | ('e' << 16) | ('s' << 8) | 's';
 static const s32 KI_CONNAPI_SESSION_TEXT_SIZE = 128;
 
-// XPROFILE_GAMERCARD_PICTURE_KEY -- the single profile setting id requested per
-// buddy (dwNumSettingIds = 1; the value is read from the image's rodata).
-static const u32 KU_PROFILE_GAMERCARD_PICTURE_KEY = 0x4064000Fu;
-
-// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameShared\\GameClasses\\Network\\Buddies\\DirtySock\\X360\\CgsBuddyManagerDirtySockX360.cpp".
-
-namespace CgsSystem
-{
-    // The 28-byte XOVERLAPPED wrapper. Construct() / GetResultString() are defined
-    // out-of-line in System/X360/CgsXOverlappedX360.cpp; re-declared here (matching
-    // that TU's local declaration, exactly as CgsGuiKeyboard.cpp does) only so this
-    // TU can name them. The definitions are resolved at link time.
-    class CgsXOverlapped
-    {
-    public:
-        void Construct();
-        static const char* GetResultString(void* lpOverlapped);
-    private:
-        u8 maOverlapped[28];
-    };
-}
+CGS_STATIC_ASSERT(sizeof(XUSER_PROFILE_SETTING) == 40, "ARTIST profile setting stride");
+CGS_STATIC_ASSERT(offsetof(XUSER_PROFILE_SETTING, data) == 0x18, "ARTIST gamer-picture key offset");
+CGS_STATIC_ASSERT(offsetof(XUSER_READ_PROFILE_SETTING_RESULT, pSettings) == 4,
+                  "ARTIST pSettings follows dwSettingsLen at +0x2C");
 
 namespace CgsNetwork
 {
@@ -153,7 +98,7 @@ namespace CgsNetwork
     bool BuddyManagerX360::IsConnectedToNetworkService() const
     {
         const u32 luUserIndex = mpNetworkManager->GetActiveControllerPort();
-        return XUserGetSigninState(luUserIndex) == 2;
+        return XUserGetSigninState(luUserIndex) == eXUserSigninState_SignedInToLive;
     }
 
     // =========================================================================
@@ -231,17 +176,19 @@ namespace CgsNetwork
     }
 
     // =========================================================================
-    // HasBuddyInvitedMe (virtual)
+    // HasBuddyInvitedMe @ 0x8287FCD8 (virtual)
     //
     // The buddy's "has invited me" flag: bit 27 of its game-invite flag word.
     // =========================================================================
     bool BuddyManagerX360::HasBuddyInvitedMe(const PlayerName* lpPlayerName)
     {
-        CGS_ASSERT(lpPlayerName, "lpPlayerName");
+        CGS_ASSERT(lpPlayerName,
+            CGS_ASSERT_MESSAGE_AT("lpPlayerName", CGS_ARTIST_FILE, 584 /* ARTIST 0x8287FD10 */));
 
         DirtySock::HLBBudT* lpBuddy =
             DirtySock::HLBListGetBuddyByName(mpBuddies, lpPlayerName->GetPlayerName());
-        CGS_ASSERT(lpBuddy, "lpBuddy");
+        CGS_ASSERT(lpBuddy,
+            CGS_ASSERT_MESSAGE_AT("lpBuddy", CGS_ARTIST_FILE, 587 /* ARTIST 0x8287FD44 */));
 
         return (lpBuddy->uFlags & HLB_BUDFLAG_INVITE_RECV) != 0;
     }
@@ -255,12 +202,12 @@ namespace CgsNetwork
     bool BuddyManagerX360::HaveIInvitedMyBuddy(const PlayerName* lpPlayerName)
     {
         CGS_ASSERT(lpPlayerName,
-            CGS_ASSERT_MESSAGE_AT("lpPlayerName", __FILE__, 616 /* ARTIST 0x8287FD8C */));
+            CGS_ASSERT_MESSAGE_AT("lpPlayerName", CGS_ARTIST_FILE, 616 /* ARTIST 0x8287FD98 */));
 
         DirtySock::HLBBudT* lpBuddy =
             DirtySock::HLBListGetBuddyByName(mpBuddies, lpPlayerName->GetPlayerName());
         CGS_ASSERT(lpBuddy,
-            CGS_ASSERT_MESSAGE_AT("lpBuddy", __FILE__, 619 /* ARTIST 0x8287FDC0 */));
+            CGS_ASSERT_MESSAGE_AT("lpBuddy", CGS_ARTIST_FILE, 619 /* ARTIST 0x8287FDCC */));
 
         // The "I have invited this buddy" flag is bit 26 of the buddy record's flag
         // word (+0x18).
@@ -309,18 +256,18 @@ namespace CgsNetwork
     // =========================================================================
     // SendInvite @ 0x8287FDE8 (virtual)
     //
-    // If we have not already received an invite from this buddy (HasBuddyInvitedMe
-    // vtable slot +0x58 returns false), look up their XUID and append it to the
+    // If we have not already invited this buddy (HaveIInvitedMyBuddy, vtable slot
+    // +0x58 at ARTIST 0x8287FE38), look up their XUID and append it to the
     // pending-invite buffer (deduping against entries already queued). The async
     // XInviteSend that actually drains the queue runs in Update.
     // =========================================================================
     void BuddyManagerX360::SendInvite(const PlayerName* lpBuddyName)
     {
-        CGS_ASSERT(lpBuddyName && lpBuddyName->GetPlayerName()[0] != '\0', CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT(lpBuddyName->GetPlayerName()[0] != '\0', CGS_ASSERT_MESSAGE_AT(
             "!lpBuddyName->IsEmpty()",
             CGS_ARTIST_FILE, 676 /* ARTIST 0x8287FE24 */));
 
-        if (HasBuddyInvitedMe(lpBuddyName))
+        if (HaveIInvitedMyBuddy(lpBuddyName))
         {
             return;
         }
@@ -367,7 +314,7 @@ namespace CgsNetwork
         CGS_ASSERT(mpServerInterface->GetGameComponent(), "mpServerInterface->GetGameComponent()");
 
         // Is an overlapped invite op still pending? (997 == pending, 996 == incomplete)
-        const u32 luInviteResult = XGetOverlappedResult(mInviteOverlapped, 0, 0);
+        const u32 luInviteResult = XGetOverlappedResult(reinterpret_cast<PXOVERLAPPED>(mInviteOverlapped), 0, 0);
         const bool lbInviteInFlight =
             (luInviteResult == ERROR_IO_PENDING) || (luInviteResult == ERROR_IO_INCOMPLETE);
 
@@ -376,7 +323,7 @@ namespace CgsNetwork
         // followed by mInviteOverlapped.GetResultString() via a StrStream before firing.
         if (mbSendingInvite && !lbInviteInFlight)
         {
-            CGS_ASSERT(XGetOverlappedResult(mInviteOverlapped, 0, 0) == 0,
+            CGS_ASSERT(XGetOverlappedResult(reinterpret_cast<PXOVERLAPPED>(mInviteOverlapped), 0, 0) == 0,
                        "XOverlapped operation failed: %s "
                        "(mInviteOverlapped.GetResultString())");
             mbSendingInvite = false;
@@ -404,12 +351,12 @@ namespace CgsNetwork
             const u32 luUserIndex = mpNetworkManager->GetActiveControllerPort();
             const u32 luResult = XInviteSend(luUserIndex,
                                              static_cast<u32>(miNumberOfInvitesToBeSent),
-                                             maInvitesToBeSent, 0, mInviteOverlapped);
+                                             maInvitesToBeSent, NULL, reinterpret_cast<PXOVERLAPPED>(mInviteOverlapped));
             if (luResult == 0)
             {
                 // Completed synchronously.
                 miNumberOfInvitesToBeSent = 0;
-                CGS_ASSERT(XGetOverlappedResult(mInviteOverlapped, 0, 0) == 0,
+                CGS_ASSERT(XGetOverlappedResult(reinterpret_cast<PXOVERLAPPED>(mInviteOverlapped), 0, 0) == 0,
                            "mInviteOverlapped.DidOperationCompleteSuccessfully()");
             }
             else if (luResult == ERROR_IO_PENDING)
@@ -471,8 +418,8 @@ namespace CgsNetwork
         reinterpret_cast<CgsSystem::CgsXOverlapped*>(mGamerPicOverlapped)->Construct();
 
         const u32 luUserIndex = mpNetworkManager->GetActiveControllerPort();
-        const u32 luSettingId = KU_PROFILE_GAMERCARD_PICTURE_KEY;
-        u32 luResultsSize = 80000;   // pcbResults seed (asm: v6 = 0x13880 == 80000)
+        const DWORD luSettingId = XPROFILE_GAMERCARD_PICTURE_KEY;
+        DWORD luResultsSize = 80000;   // pcbResults seed (asm: v6 = 0x13880 == 80000)
 
         const u32 luResult = XUserReadProfileSettingsByXuid(
             0,
@@ -482,8 +429,8 @@ namespace CgsNetwork
             1,
             &luSettingId,
             &luResultsSize,
-            &muProfileResultsSettingsLen,    // pResults (+0x28)
-            mGamerPicOverlapped);
+            reinterpret_cast<PXUSER_READ_PROFILE_SETTING_RESULT>(&muProfileResultsSettingsLen),
+            reinterpret_cast<PXOVERLAPPED>(mGamerPicOverlapped));
         CGS_ASSERT(luResult == ERROR_IO_PENDING, CGS_ASSERT_MESSAGE_AT(
             "dwRet == ERROR_IO_PENDING",
             __FILE__, 426 /* ARTIST 0x8288CCD8 */));
@@ -503,38 +450,35 @@ namespace CgsNetwork
     // =========================================================================
     void BuddyManagerX360::UpdatePictureDownload()
     {
+        // Both ARTIST completion paths poll the same embedded gamer-picture block
+        // (+0x138D4 at 0x82894174 and 0x828941F0).
         if (meCurrentStatus == E_BUDDY_ACTION_IDLE)
-        {
             return;
-        }
 
-        if (meCurrentStatus == E_BUDDY_ACTION_DOWNLOADING_PROFILE)
+        if (meCurrentStatus != E_BUDDY_ACTION_DOWNLOADING_PROFILE)
         {
-            const u32 luResult = XGetOverlappedResult(mGamerPicOverlapped, 0, 0);
-            if (luResult == ERROR_IO_PENDING || luResult == ERROR_IO_INCOMPLETE)
-            {
+            if (meCurrentStatus != E_BUDDY_ACTION_DOWNLOADING_PIC)
                 return;
-            }
-            if (XGetOverlappedResult(mGamerPicOverlapped, 0, 0) != 0 && mpGamerPicKeys != 0)
-            {
-                static_cast<u8*>(mpGamerPicKeys)[miCurrentProfile] = 0;
-            }
-            DownloadNextPicture(true);
-            return;
-        }
 
-        if (meCurrentStatus == E_BUDDY_ACTION_DOWNLOADING_PIC)
-        {
-            const u32 luResult = XGetOverlappedResult(mGamerPicOverlapped, 0, 0);
-            if (luResult == ERROR_IO_PENDING || luResult == ERROR_IO_INCOMPLETE)
-            {
+            CgsSystem::CgsXOverlapped* lpPictureOperation =
+                reinterpret_cast<CgsSystem::CgsXOverlapped*>(mGamerPicOverlapped);
+            if (lpPictureOperation->IsOperationInProgress())
                 return;
-            }
-            if (XGetOverlappedResult(mGamerPicOverlapped, 0, 0) == 0 && mpGamerPicKeys != 0)
-            {
+            PXOVERLAPPED lpOverlapped = reinterpret_cast<PXOVERLAPPED>(mGamerPicOverlapped);
+            if (XGetOverlappedResult(lpOverlapped, NULL, FALSE) == ERROR_SUCCESS && mpGamerPicKeys != NULL)
                 static_cast<u8*>(mpGamerPicKeys)[miCurrentProfile] = 1;
-            }
             DownloadNextPicture(false);
+        }
+        else
+        {
+            CgsSystem::CgsXOverlapped* lpPictureOperation =
+                reinterpret_cast<CgsSystem::CgsXOverlapped*>(mGamerPicOverlapped);
+            if (lpPictureOperation->IsOperationInProgress())
+                return;
+            PXOVERLAPPED lpOverlapped = reinterpret_cast<PXOVERLAPPED>(mGamerPicOverlapped);
+            if (XGetOverlappedResult(lpOverlapped, NULL, FALSE) != ERROR_SUCCESS && mpGamerPicKeys != NULL)
+                static_cast<u8*>(mpGamerPicKeys)[miCurrentProfile] = 0;
+            DownloadNextPicture(true);
         }
     }
 
@@ -551,15 +495,16 @@ namespace CgsNetwork
     {
         if (!lbContinueCurrent)
         {
-            const s32 liNext = miCurrentProfile + 1;
-            miCurrentProfile = liNext;
+            // The unsigned comparisons at ARTIST 0x8288CD44 and 0x8288CD6C
+            // use the indices as picture counts.
+            const u32 luNext = static_cast<u32>(++miCurrentProfile);
 
-            if (liNext >= miNumberOfPicturesToDownload)
+            if (luNext >= static_cast<u32>(miNumberOfPicturesToDownload))
             {
                 meCurrentStatus = E_BUDDY_ACTION_IDLE;
                 return;
             }
-            if (liNext >= miNextProfileToRequest)
+            if (luNext >= static_cast<u32>(miNextProfileToRequest))
             {
                 RequestNextProfilePictures();
                 return;
@@ -580,12 +525,11 @@ namespace CgsNetwork
         // == mpProfileSettings), NOT the caller's per-picture flag array (mpGamerPicKeys
         // @+0x20, which UpdatePictureDownload writes). Records are 40 bytes, with the
         // gamercard picture key at +0x18 (asm: 40*(cur-first) + *(this+0x2C) + 0x18).
-        const u8* lpKeyRecord = reinterpret_cast<const u8*>(mpProfileSettings)
-                              + 40 * (miCurrentProfile - miFirstProfileInThisRequest);
-        const void* lpPictureKey = lpKeyRecord + 0x18;
+        PXUSER_PROFILE_SETTING lpProfileSettings = static_cast<PXUSER_PROFILE_SETTING>(mpProfileSettings);
+        PXUSER_DATA lpPictureKey = &lpProfileSettings[miCurrentProfile - miFirstProfileInThisRequest].data;
 
         const u32 luResult = XUserReadGamerPictureByKey(
-            lpPictureKey, 0, lpPixels, luPitch, luHeight, mGamerPicOverlapped);
+            lpPictureKey, FALSE, lpPixels, luPitch, luHeight, reinterpret_cast<PXOVERLAPPED>(mGamerPicOverlapped));
         CGS_ASSERT(luResult == ERROR_IO_PENDING, CGS_ASSERT_MESSAGE_AT(
             "lDwErr == ERROR_IO_PENDING",
             CGS_ARTIST_FILE, 481 /* ARTIST 0x8288CE20 */));
@@ -602,7 +546,7 @@ namespace CgsNetwork
         if (meCurrentStatus != E_BUDDY_ACTION_IDLE)
         {
             meCurrentStatus = E_BUDDY_ACTION_IDLE;
-            const u32 luResult = XCancelOverlapped(mGamerPicOverlapped);
+            const u32 luResult = XCancelOverlapped(reinterpret_cast<PXOVERLAPPED>(mGamerPicOverlapped));
             CGS_ASSERT(luResult == 0,
                 CGS_ASSERT_MESSAGE_AT(
                     "mGamerPicOverlapped.CancelXOverlapped()", __FILE__, 316 /* ARTIST 0x8287FAA0 */));

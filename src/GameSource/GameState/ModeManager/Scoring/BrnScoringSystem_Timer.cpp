@@ -156,9 +156,7 @@ void ScoringSystem::SetTimeLimitPerKm(f32 lfSecondsPerKm)
     // Round up to the nearest 30-second multiple.
     const s32 liRoundedSeconds = 30 * ((liRawSeconds + 29) / 30);
 
-    CgsSystem::Time lLimit;
-    lLimit.SetSeconds(liRoundedSeconds);
-    lLimit.SetFraction(0.0f);
+    const CgsSystem::Time lLimit(liRoundedSeconds, 0.0f);
 
     mEndTime = mStartTime + lLimit;
 }

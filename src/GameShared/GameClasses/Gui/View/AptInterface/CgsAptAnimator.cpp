@@ -148,7 +148,8 @@ namespace CgsGui
 
         for (s32 liChannel = 0; liChannel < AnimData::ANIMATOR_CHANNEL_MAX; ++liChannel)
         {
-            AnimChannelData* lpChannelData = lpAnimData->GetChannelData(liChannel);
+            const AnimData::AnimatorChannel leChannel = static_cast<AnimData::AnimatorChannel>(liChannel);
+            const AnimChannelData* lpChannelData = lpAnimData->GetChannelData(leChannel);
             AnimChannel* lpChannel = &maAnimChannels.GetItem(static_cast<u32>(liChannel));
 
             if (lpChannel->IsActive())
@@ -158,8 +159,7 @@ namespace CgsGui
 
             if (lpChannelData != 0)
             {
-                SetAnimationChannel(static_cast<AnimData::AnimatorChannel>(liChannel),
-                                    lpChannelData, lStartTime);
+                SetAnimationChannel(leChannel, lpChannelData, lStartTime);
             }
         }
     }

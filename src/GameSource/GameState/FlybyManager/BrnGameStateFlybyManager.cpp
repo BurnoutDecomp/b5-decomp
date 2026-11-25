@@ -41,12 +41,8 @@ s32 FlybyManager::RivalRating::SortRivalsCallback(const void* lpData0, const voi
 
     if (lpRival0->mPlayerID == lpRival1->mPlayerID)
     {
-        if (lpRival0->mPlayerID != CgsNetwork::K_INVALID_PLAYER_ID
-            || lpRival1->mPlayerID != CgsNetwork::K_INVALID_PLAYER_ID)
-        {
-            CGS_ASSERT((lpRival0->mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID) && (lpRival1->mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID),
-                       CGS_ASSERT_MESSAGE_AT("( lpRival0->mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID ) && ( lpRival1->mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID )", CGS_ARTIST_FILE, 83));
-        }
+        CGS_ASSERT((lpRival0->mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID) && (lpRival1->mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID),
+                   CGS_ASSERT_MESSAGE_AT("( lpRival0->mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID ) && ( lpRival1->mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID )", CGS_ARTIST_FILE, 83));
 
         return 0;
     }

@@ -2,6 +2,7 @@
 
 #include "types.hpp"
 #include <cstddef>
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h"
@@ -189,7 +190,13 @@ namespace CgsGui
         void Clear();
 
         rw::IResourceAllocator*       GetAllocator();
-        GuiAccessPointers*            GetAccessPointers();
+        // Inline at the original call sites, with the standalone ARTIST body at 0x8240E3E0.
+        GuiAccessPointers* GetAccessPointers()
+        {
+            CGS_ASSERT_AT(mpAccessPointers != 0, "mpAccessPointers != NULL",
+                          "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/State/CgsGuiStateInterface.h", 344);
+            return mpAccessPointers;
+        }
         CgsLanguage::LanguageManager* GetLanguageManager();
         bool                          IsUsingMetricUnits();
     };

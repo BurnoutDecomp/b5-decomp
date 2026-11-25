@@ -59,48 +59,28 @@ CgsID CgsIDCompress(const char* lpcString)
     return lID;
 }
 
-// @ 0x82815C78. Expand a CgsID into KI_CGSID_STRING_LEN-1 (=12) characters plus a
-// terminating NUL. The base-40 digits are pulled out least-significant first and
-// written from the last character position backwards, so the printable string reads
-// most-significant-digit first. The letter slots (13..38) always reproduce uppercase.
+// ARTIST 0x82815C78. Decode the current digit before dividing for the next one.
 void CgsIDUnCompress(CgsID lID, char* lpcString)
 {
     for (s32 liIndex = KI_CGSID_STRING_LEN - 2; liIndex >= 0; --liIndex)
     {
-        s32 liDigit = static_cast<s32>(lID % 40);
-        lID /= 40;
-
+        const char lcDigit = static_cast<char>(lID % 40);
         char lcChar;
-        if (liDigit == 39)
-        {
+        if (lcDigit == 39)
             lcChar = '_';
-        }
-        else if (liDigit < 13)
-        {
-            if (liDigit < 3)
-            {
-                if (liDigit == 2)
-                    lcChar = '/';
-                else if (liDigit == 1)
-                    lcChar = '-';
-                else
-                    lcChar = ' ';   // slot 0
-            }
-            else
-            {
-                // 3..12 -> '0'..'9'
-                lcChar = static_cast<char>(liDigit + ('0' - 3));
-            }
-        }
+        else if (lcDigit >= 13)
+            lcChar = static_cast<char>(lcDigit + ('A' - 13));
+        else if (lcDigit >= 3)
+            lcChar = static_cast<char>(lcDigit + ('0' - 3));
+        else if (lcDigit == 2)
+            lcChar = '/';
+        else if (lcDigit == 1)
+            lcChar = '-';
         else
-        {
-            // 13..38 -> 'A'..'Z'
-            lcChar = static_cast<char>(liDigit + ('A' - 13));
-        }
-
+            lcChar = lcDigit == 0 ? ' ' : '\0';
         lpcString[liIndex] = lcChar;
+        lID /= 40;
     }
-
     lpcString[KI_CGSID_STRING_LEN - 1] = '\0';
 }
 

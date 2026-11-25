@@ -90,8 +90,8 @@ public:
     void SafePop(int32_t nCount);
 
     // pop @ 0x82ADBBD0 -- Release and remove the single top value
-    // (unconditional; no bounds check). Returns the Release result.
-    AptValue* pop();
+    // (unconditional; no bounds check).
+    void pop();
 
     // PopValue -- the x64 export's pop-WITHOUT-Release twin of pop() (phase-0
     // signature-parity item): pre-decrement the live top and hand the popped

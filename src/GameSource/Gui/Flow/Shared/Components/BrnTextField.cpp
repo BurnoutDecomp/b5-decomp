@@ -3,6 +3,7 @@
 #include <cstring>                                                    // std::memset / std::strlen
 #include <cstdarg>                                                    // va_list (the positional-parameter SetLocalisedText)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT
+#include "GameShared/GameClasses/Development/CgsStrStream.h"          // CGS_ASSERT_STREAM_AT
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"                  // CgsGui::GuiAccessPointers (mpLanguageManager @+4)
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // CgsGui::StateInterface (GetAccessPointers)
 
@@ -21,18 +22,13 @@
 // (SetColour @0x82481E48 / operator= @0x824470F0 are their own ledger functions --
 // not part of this TU's export set.)
 
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnTextField.cpp"
+
 namespace BrnGui
 {
 
-// Resolve the interface's language manager the way the X360 inlines it: read the
-// access-pointer block (guarded by the CgsGuiStateInterface.h:344 tripwire) and
-// take its +4 manager pointer.
-static CgsLanguage::LanguageManager* TextFieldGetLanguageManager(CgsGui::StateInterface* lpStateInterface)
-{
-    CgsGui::GuiAccessPointers* lpAccessPointers = lpStateInterface->GetAccessPointers();
-    CGS_ASSERT(lpAccessPointers != 0, "mpAccessPointers != NULL");   // CgsGuiStateInterface.h:344 (non-gating)
-    return lpAccessPointers->mpLanguageManager;
-}
+const s32 KI_MAX_STRING_LENGTH = 1024;
+const s32 KI_MAX_PARAMS = 4;
 
 // @ 0x824E4FA8 -- base component Construct, wipe the text/colour state (default
 // colour string = "%u" of the zeroed colour word). Store order per the asm.
@@ -64,7 +60,7 @@ void TextField::SetDatabaseText(const char* lpcActualText)
         CgsCore::SPrintf(macText, KU_MAX_TEXTFIELD_LEN, "$%s", macName);
         macText[KU_MAX_TEXTFIELD_LEN - 1] = 0;
         CgsLanguage::LanguageManager* lpLanguageManager =
-            TextFieldGetLanguageManager(mpStateInterface);
+            mpStateInterface->GetAccessPointers()->mpLanguageManager;
         lpLanguageManager->AddString(macName, reinterpret_cast<const u8*>(lpcActualText));
     }
     else
@@ -113,18 +109,18 @@ void TextField::OutputAptData()
 bool TextField::SetLocalisedText(const char* lpacText,
                                  CgsLanguage::LanguageManager::ParameterFormatType leFormat)
 {
-    CGS_ASSERT(lpacText != 0,
-               "Text field is invalid in TextField::SetLocalisedText");                 // :156 (streamed; folded)
-    CGS_ASSERT(std::strlen(lpacText) < KU_MAX_TEXTFIELD_LEN,
-               "Text string too long in TextField::SetLocalisedText");                  // :157 (streamed; folded)
-    CGS_ASSERT(leFormat < CgsLanguage::LanguageManager::E_FORMAT_COUNT,
-               "Invalid Localisation Format supplied to TextField::SetLocalisedText");  // :158 (streamed; folded)
+    CGS_ASSERT_STREAM_AT(lpacText != 0,
+                         "Text field is invalid in TextField::SetLocalisedText", CGS_ARTIST_FILE, 156);
+    CGS_ASSERT_STREAM_AT(std::strlen(lpacText) < KU_MAX_TEXTFIELD_LEN,
+                         "Text string too long in TextField::SetLocalisedText", CGS_ARTIST_FILE, 157);
+    CGS_ASSERT_STREAM_AT(leFormat < CgsLanguage::LanguageManager::E_FORMAT_COUNT,
+                         "Invalid Localisation Format supplied to TextField::SetLocalisedText", CGS_ARTIST_FILE, 158);
 
     CgsLanguage::LanguageManager* lpLanguageManager =
-        TextFieldGetLanguageManager(mpStateInterface);
+        mpStateInterface->GetAccessPointers()->mpLanguageManager;
 
-    char lacFormatted[1120];   // X360 sp+0x80 local (the formatter writes through a 1024 cap)
-    lpLanguageManager->FormatText(lacFormatted, 1024, lpacText, leFormat);
+    char lacFormatted[KI_MAX_STRING_LENGTH];
+    lpLanguageManager->FormatText(lacFormatted, KI_MAX_STRING_LENGTH, lpacText, leFormat);
 
     SetDatabaseText(lacFormatted);
     OutputAptData();
@@ -132,13 +128,15 @@ bool TextField::SetLocalisedText(const char* lpacText,
 }
 
 // @ 0x824E7240 -- cpp:86/:87. Adopt literal text (fits-in-field asserted) into
-// macText via the "%s" print, then push the apt data. Both asserts stream the
-// component name / offending text on the console; folded static per convention.
+// macText via the "%s" print, then push the apt data. The original diagnostics
+// stream the component name and the offending text.
 void TextField::SetText(const char* lpacText)
 {
-    CGS_ASSERT(lpacText != 0, "Text passed in is invalid for : ");                       // :86 (streamed; folded)
-    CGS_ASSERT(std::strlen(lpacText) < KU_MAX_TEXTFIELD_LEN - 1,
-               "Text string too long : ");                                               // :87 (streamed; folded)
+    CGS_ASSERT_STREAM_AT(lpacText != 0, "Text passed in is invalid for : " << GetName(),
+                         CGS_ARTIST_FILE, 86);
+    CGS_ASSERT_STREAM_AT(std::strlen(lpacText) < KU_MAX_TEXTFIELD_LEN - 1,
+                         "Text string too long : \"" << lpacText << "\" in " << GetName(),
+                         CGS_ARTIST_FILE, 87);
 
     CgsCore::SPrintf(macText, KU_MAX_TEXTFIELD_LEN, "%s", lpacText);
     OutputAptData();
@@ -151,11 +149,11 @@ void TextField::SetText(const char* lpacText)
 bool TextField::SetLocalisedText(s32 liValue,
                                  CgsLanguage::LanguageManager::ParameterFormatType leFormat)
 {
-    CGS_ASSERT(leFormat < CgsLanguage::LanguageManager::E_FORMAT_COUNT,
-               "Invalid Localisation Format supplied to TextField::SetLocalisedText");  // :224 (streamed; folded)
+    CGS_ASSERT_STREAM_AT(leFormat < CgsLanguage::LanguageManager::E_FORMAT_COUNT,
+                         "Invalid Localisation Format supplied to TextField::SetLocalisedText", CGS_ARTIST_FILE, 224);
 
     CgsLanguage::LanguageManager* lpLanguageManager =
-        TextFieldGetLanguageManager(mpStateInterface);
+        mpStateInterface->GetAccessPointers()->mpLanguageManager;
 
     lpLanguageManager->FormatText(macText, KU_MAX_TEXTFIELD_LEN, liValue, leFormat);
     OutputAptData();
@@ -174,11 +172,11 @@ bool TextField::SetLocalisedText(s32 liValue,
 bool TextField::SetLocalisedText(f32 lfValue,
                                  CgsLanguage::LanguageManager::ParameterFormatType leFormat)
 {
-    CGS_ASSERT(leFormat < CgsLanguage::LanguageManager::E_FORMAT_COUNT,
-               "Invalid Localisation Format supplied to TextField::SetLocalisedText");  // :194 (streamed; folded)
+    CGS_ASSERT_STREAM_AT(leFormat < CgsLanguage::LanguageManager::E_FORMAT_COUNT,
+                         "Invalid Localisation Format supplied to TextField::SetLocalisedText", CGS_ARTIST_FILE, 194);
 
     CgsLanguage::LanguageManager* lpLanguageManager =
-        TextFieldGetLanguageManager(mpStateInterface);
+        mpStateInterface->GetAccessPointers()->mpLanguageManager;
 
     lpLanguageManager->FormatText(macText, KU_MAX_TEXTFIELD_LEN, lfValue, leFormat);
     OutputAptData();
@@ -196,17 +194,17 @@ bool TextField::SetLocalisedText(const char* lpacText,
                                  s32 liValue,
                                  CgsLanguage::LanguageManager::ParameterFormatType leValueFormat)
 {
-    CGS_ASSERT(lpacText != 0,
-               "Text field is invalid in TextField::SetLocalisedText");                 // :356 (streamed; folded)
-    CGS_ASSERT(std::strlen(lpacText) < KU_MAX_TEXTFIELD_LEN - 1,
-               "Text string too long in TextField::SetLocalisedText");                  // :357 (streamed; folded)
+    CGS_ASSERT_STREAM_AT(lpacText != 0,
+                         "Text field is invalid in TextField::SetLocalisedText", CGS_ARTIST_FILE, 356);
+    CGS_ASSERT_STREAM_AT(std::strlen(lpacText) < KU_MAX_TEXTFIELD_LEN - 1,
+                         "Text string too long in TextField::SetLocalisedText", CGS_ARTIST_FILE, 357);
 
     CgsLanguage::LanguageManager* lpLanguageManager =
-        TextFieldGetLanguageManager(mpStateInterface);
+        mpStateInterface->GetAccessPointers()->mpLanguageManager;
 
-    char lacFormatted[1136];   // X360 sp+0x70 local (the formatter writes through a 1024 cap)
+    char lacFormatted[KI_MAX_STRING_LENGTH];
 
-    lpLanguageManager->FormatTextFromInt(lacFormatted, 1024, lpacText, leFormat,
+    lpLanguageManager->FormatTextFromInt(lacFormatted, KI_MAX_STRING_LENGTH, lpacText, leFormat,
                                          liValue, leValueFormat);
 
     SetDatabaseText(lacFormatted);
@@ -227,17 +225,17 @@ bool TextField::SetLocalisedText(const char* lpacText,
                                  f32 lfValue,
                                  CgsLanguage::LanguageManager::ParameterFormatType leValueFormat)
 {
-    CGS_ASSERT(lpacText != 0,
-               "Text field is invalid in TextField::SetLocalisedText");                 // :386 (streamed; folded)
-    CGS_ASSERT(std::strlen(lpacText) < KU_MAX_TEXTFIELD_LEN - 1,
-               "Text string too long in TextField::SetLocalisedText");                  // :387 (streamed; folded)
+    CGS_ASSERT_STREAM_AT(lpacText != 0,
+                         "Text field is invalid in TextField::SetLocalisedText", CGS_ARTIST_FILE, 386);
+    CGS_ASSERT_STREAM_AT(std::strlen(lpacText) < KU_MAX_TEXTFIELD_LEN - 1,
+                         "Text string too long in TextField::SetLocalisedText", CGS_ARTIST_FILE, 387);
 
     CgsLanguage::LanguageManager* lpLanguageManager =
-        TextFieldGetLanguageManager(mpStateInterface);
+        mpStateInterface->GetAccessPointers()->mpLanguageManager;
 
-    char lacFormatted[1136];   // X360 sp+0x70 local (the formatter writes through a 1024 cap)
+    char lacFormatted[KI_MAX_STRING_LENGTH];
 
-    lpLanguageManager->FormatTextFromFloat(lacFormatted, 1024, lpacText, leFormat,
+    lpLanguageManager->FormatTextFromFloat(lacFormatted, KI_MAX_STRING_LENGTH, lpacText, leFormat,
                                            lfValue, leValueFormat);
 
     SetDatabaseText(lacFormatted);
@@ -255,21 +253,21 @@ bool TextField::SetLocalisedText(const char* lpacText,
                                  CgsLanguage::LanguageManager::ParameterFormatType leFormat,
                                  s32 liNumParams, ...)
 {
-    CGS_ASSERT(lpacText != 0,
-               "Text field is invalid in TextField::SetLocalisedText");                 // :264 (streamed; folded)
-    CGS_ASSERT(std::strlen(lpacText) < KU_MAX_TEXTFIELD_LEN - 1,
-               "Text string too long in TextField::SetLocalisedText");                  // :265 (streamed; folded)
-    CGS_ASSERT(liNumParams > 0 && liNumParams < 4,
-               "Wrong number of Parameters int SetLocalisedText");                      // :266 (streamed; folded)
+    CGS_ASSERT_STREAM_AT(lpacText != 0,
+                         "Text field is invalid in TextField::SetLocalisedText", CGS_ARTIST_FILE, 264);
+    CGS_ASSERT_STREAM_AT(std::strlen(lpacText) < KU_MAX_TEXTFIELD_LEN - 1,
+                         "Text string too long in TextField::SetLocalisedText", CGS_ARTIST_FILE, 265);
+    CGS_ASSERT_STREAM_AT(liNumParams < KI_MAX_PARAMS && liNumParams > 0,
+                         "Wrong number of Parameters int SetLocalisedText", CGS_ARTIST_FILE, 266);
 
     CgsLanguage::LanguageManager* lpLanguageManager =
-        TextFieldGetLanguageManager(mpStateInterface);
+        mpStateInterface->GetAccessPointers()->mpLanguageManager;
 
-    char lacFormatted[1136];   // X360 sp+0x90 local (the formatter writes through a 1024 cap)
+    char lacFormatted[KI_MAX_STRING_LENGTH];
 
     va_list lArguments;
     va_start(lArguments, liNumParams);
-    lpLanguageManager->FormatTextV(lacFormatted, 1024, lpacText, leFormat, liNumParams, lArguments);
+    lpLanguageManager->FormatTextV(lacFormatted, KI_MAX_STRING_LENGTH, lpacText, leFormat, liNumParams, lArguments);
     va_end(lArguments);
 
     SetDatabaseText(lacFormatted);
@@ -285,18 +283,18 @@ bool TextField::SetLocalisedText(const char* lpacText,
                                  s32 liNumParams, const char* const* lppacParams,
                                  const CgsLanguage::LanguageManager::ParameterFormatType* lpeParamFormats)
 {
-    CGS_ASSERT(lpacText != 0,
-               "Text field is invalid in TextField::SetLocalisedText");                 // :314 (streamed; folded)
-    CGS_ASSERT(std::strlen(lpacText) < KU_MAX_TEXTFIELD_LEN - 1,
-               "Text string too long in TextField::SetLocalisedText");                  // :315 (streamed; folded)
-    CGS_ASSERT(liNumParams > 0 && liNumParams < 4,
-               "Wrong number of Parameters int SetLocalisedText");                      // :316 (streamed; folded)
+    CGS_ASSERT_STREAM_AT(lpacText != 0,
+                         "Text field is invalid in TextField::SetLocalisedText", CGS_ARTIST_FILE, 314);
+    CGS_ASSERT_STREAM_AT(std::strlen(lpacText) < KU_MAX_TEXTFIELD_LEN - 1,
+                         "Text string too long in TextField::SetLocalisedText", CGS_ARTIST_FILE, 315);
+    CGS_ASSERT_STREAM_AT(liNumParams < KI_MAX_PARAMS && liNumParams > 0,
+                         "Wrong number of Parameters int SetLocalisedText", CGS_ARTIST_FILE, 316);
 
     CgsLanguage::LanguageManager* lpLanguageManager =
-        TextFieldGetLanguageManager(mpStateInterface);
+        mpStateInterface->GetAccessPointers()->mpLanguageManager;
 
-    char lacFormatted[1152];   // X360 sp+0x80 local (the formatter writes through a 1024 cap)
-    lpLanguageManager->Obsolete_FormatTextByArray(lacFormatted, 1024, lpacText, leFormat,
+    char lacFormatted[KI_MAX_STRING_LENGTH];
+    lpLanguageManager->Obsolete_FormatTextByArray(lacFormatted, KI_MAX_STRING_LENGTH, lpacText, leFormat,
                                                   liNumParams, lppacParams, lpeParamFormats);
 
     SetDatabaseText(lacFormatted);
@@ -318,3 +316,5 @@ int sub_824E7708(TextField* lpField, s32 liValue, s32 liFormatType)
 }
 
 }
+
+#undef CGS_ARTIST_FILE

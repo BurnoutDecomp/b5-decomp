@@ -6,15 +6,11 @@
 #include "GameShared/GameClasses/SceneManager/CacheManager/CgsTriangleCacheManager.h"  // TriangleCacheManager / CacheSlot
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO.h"                     // SceneManagerIO::OutputBuffer
 
-// =============================================================================
-// Small SceneManagerIO interface members reconstructed from BURNOUT_X360_ARTIST.XEX
-// (semantic parity, not byte match):
-//   * SceneQueryInterface::HasData                        @ 0x82204E48
-//   * OutputBuffer::Construct                             @ 0x828C7CA0   (wave Q5)
-//   * OutputBuffer::Destruct                              @ 0x828BAD38   (wave Q5)
-// This IS the console's own CgsSceneManagerModuleIO.cpp: the two OutputBuffer bodies
-// bake "...\\scenemanager\\CgsSceneManagerModuleIO.cpp" at lines 224 / 256.
-// =============================================================================
+namespace
+{
+    const char KAC_SCENE_MANAGER_IO_ARTIST_FILE[] =
+        "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\CgsSceneManagerModuleIO.cpp";
+}
 
 // -----------------------------------------------------------------------------
 // CgsSceneManager::SceneManagerIO::SceneQueryInterface::HasData (X360 0x82204E48).
@@ -63,34 +59,8 @@ bool CgsSceneManager::SceneManagerIO::SceneQueryInterface::HasData()
 // (TriangleCacheInterface::GetNumCachedTriangleBatches @ 0x82277880 is header-inline, as in the
 // original: see CgsSceneManagerIO_TriangleCache.h.)
 
-// -----------------------------------------------------------------------------
-// CgsSceneManager::SceneManagerIO::OutputBuffer::Construct (X360 0x828C7CA0).
-//
-// Store-for-store against the asm (console byte offsets in parentheses; on the host
-// every one of these is reached BY NAME -- see the layout table in CgsSceneManagerIO.h):
-//
-//   stb   r11=1, 0(r31)                        -> CgsModule::IOBuffer::Construct()
-//   bl    VariableEventQueue<32768,16>::Construct(r31+4)          -> mResultsQueue
-//   bl    PotentialContact,2048>::Construct(r31+0x8020  = 32800)  -> mPotentialContactQueue
-//   bl    ErrorEvent,128>::Construct     (r31+0x30C40 = 199744)   -> mErrorQueue
-//   bl    OutOverlapPair,128>::Construct (r31+0x30030 = 196656)   -> mOverlapPairsQueue
-//   stwx  0, r31+0x3504C (=217164)                                -> mTriangleCacheInterface
-//                                                                    .mpTriangleCacheManager
-//   bl    VariableEventQueue<32768,16>::Prepare(r31+4)  + the FireAssert triplet
-//         ("mResultsQueue.Prepare()", CgsSceneManagerModuleIO.cpp:224)
-//   stw   0, +0x8028 / +0x30C48 / +0x30038      (= the three fixed queues' miLength)
-//   bl    VariableEventQueue<32768,16>::Clear(r31+4)
-//   stw   0, +0x8028 / +0x30C48 / +0x30038      (again)
-//
-// The three fixed queues are cleared TWICE: the console emits one Clear alongside the
-// results queue's Prepare and one alongside its Clear (each fixed queue's Prepare/Clear
-// inline to the single `miLength = 0` store -- BaseEventQueue<T>::Clear). Both rounds are
-// reproduced rather than collapsed; the store is idempotent, so this is parity, not cost.
-//
-// ⭐ The mpTriangleCacheManager = 0 store is the one recovered in the 2026-08-15 zero-fill
-// audit: with CreateIOBuffer<T> no longer value-initialising, the slot would otherwise hold
-// the previous IO-stack tenant's bytes and sail past GetCache()'s NULL tripwire.
-// -----------------------------------------------------------------------------
+// ARTIST 0x828C7CA0 prepares the results queue, clears all fixed queues,
+// clears the results data, then resets all three fixed queues again.
 void CgsSceneManager::SceneManagerIO::OutputBuffer::Construct()
 {
     CgsModule::IOBuffer::Construct();                        // *(this) = 1
@@ -102,11 +72,9 @@ void CgsSceneManager::SceneManagerIO::OutputBuffer::Construct()
 
     mTriangleCacheInterface.mpTriangleCacheManager = 0;      // this + 217164
 
-    // The console CALLS Prepare and asserts its result; the call is a side effect, not a
-    // diagnostic, so it is made outside the macro (CGS_ASSERT happens to evaluate its
-    // condition today, but a body must not depend on that).
     const bool lbResultsQueuePrepared = mResultsQueue.Prepare();
-    CGS_ASSERT(lbResultsQueuePrepared, "mResultsQueue.Prepare()");   // :224
+    CGS_ASSERT(lbResultsQueuePrepared,
+               CGS_ASSERT_MESSAGE_AT("mResultsQueue.Prepare()", KAC_SCENE_MANAGER_IO_ARTIST_FILE, 224));
 
     mPotentialContactQueue.Clear();
     mErrorQueue.Clear();
@@ -121,33 +89,22 @@ void CgsSceneManager::SceneManagerIO::OutputBuffer::Construct()
 // -----------------------------------------------------------------------------
 // CgsSceneManager::SceneManagerIO::OutputBuffer::Destruct (X360 0x828BAD38).
 //
-// The mirror of Construct, same two-round shape (the console schedules the independent
-// stores out of source order; the word indices in the Hex-Rays listing decode as):
-//   a1[49938] = 0   -> +199752 = mErrorQueue.miLength            (Clear)
-//   a1[8202]  = 0   -> +32808  = mPotentialContactQueue.miLength (Clear)
-//   VariableEventQueue<32768,16>::Release(a1+1 == this+4) + the FireAssert triplet
-//         ("mResultsQueue.Release()", CgsSceneManagerModuleIO.cpp:256)
-//   a1[49938] = 0 ; a1[8202] = 0 ; a1[49166] = 0  -> +196664 = mOverlapPairsQueue.miLength
-//   VariableEventQueue<32768,16>::Destruct(this+4)
-//   a1[49166] = 0
-//   a1[54291] = 0   -> +217164 = mTriangleCacheInterface.mpTriangleCacheManager
-//   CgsModule::IOBuffer::Destruct(a1)
-// i.e. each fixed queue is cleared once with the Release round and once with the Destruct
-// round, exactly as in Construct.
-// -----------------------------------------------------------------------------
+// ARTIST clears the error and contact queues before releasing mResultsQueue,
+// then clears all three counts before Destruct and clears overlap pairs again afterwards.
 void CgsSceneManager::SceneManagerIO::OutputBuffer::Destruct()
 {
-    // Same rule as Construct: Release() is a side effect, evaluated outside the macro.
-    const bool lbResultsQueueReleased = mResultsQueue.Release();
-    CGS_ASSERT(lbResultsQueueReleased, "mResultsQueue.Release()");   // :256
-
-    mPotentialContactQueue.Clear();
     mErrorQueue.Clear();
+    mPotentialContactQueue.Clear();
+
+    const bool lbResultsQueueReleased = mResultsQueue.Release();
+    CGS_ASSERT(lbResultsQueueReleased,
+               CGS_ASSERT_MESSAGE_AT("mResultsQueue.Release()", KAC_SCENE_MANAGER_IO_ARTIST_FILE, 256));
+
+    mErrorQueue.Clear();
+    mPotentialContactQueue.Clear();
     mOverlapPairsQueue.Clear();
 
     mResultsQueue.Destruct();
-    mPotentialContactQueue.Clear();
-    mErrorQueue.Clear();
     mOverlapPairsQueue.Clear();
 
     mTriangleCacheInterface.mpTriangleCacheManager = 0;

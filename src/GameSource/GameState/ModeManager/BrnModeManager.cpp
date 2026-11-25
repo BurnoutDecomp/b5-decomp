@@ -7112,7 +7112,7 @@ void ModeManager::CheckCountdownDisplay(GameStateModuleIO::GameActionQueue* lpGa
     // predicate, so it is de-inlined back into the real call.
     CGS_ASSERT(IsInGameMode(), CGS_ASSERT_MESSAGE_AT("IsInGameMode()", CGS_ARTIST_FILE, 2449));   // BrnModeManager.cpp:2449
 
-    s32 liNewCountdownDisplay = 0;
+    s32 liNewCountdownDisplay;
     if (mpCurrentGameMode->HasCountdownDisplayChanged(&liNewCountdownDisplay))
     {
         // The console copies the out-param into a SECOND stack slot and posts that; the action
@@ -7234,19 +7234,16 @@ void ModeManager::HandleCheckpointDistanceResponse(const GameStateModuleIO::Mode
         mScoringSystem.SetCheckpointDistances(muNextDistanceRequestCheckpoint, lpRouteInfoEvent->mfRouteDistance);
 
         ++muNextDistanceRequestCheckpoint;
-        if (muNextDistanceRequestCheckpoint < muNumLandmarks - 1)
-        {
-            mbNeedToSendNextRequest = true;
-        }
-        else
+        if (muNextDistanceRequestCheckpoint >= muNumLandmarks - 1)
         {
             mScoringSystem.ProcessFinishDistances(static_cast<s32>(muNumLandmarks));
             mbIsCalculatingCheckpointDistances = false;
             mbNeedToSendNextRequest            = false;
         }
-
-        // [DIAG] NOT IN THE X360 BINARY -- BRN_ROUTE_INFO_DIAG: every accepted leg (first 40).
-        static s32 siRouteLinesLeft = 40;
+        else
+        {
+            mbNeedToSendNextRequest = true;
+        }
     }
 }
 

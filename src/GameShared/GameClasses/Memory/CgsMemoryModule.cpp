@@ -20,7 +20,8 @@ namespace CgsMemory
     // the named array index. Asserts the sentinel index 255 is never passed.)
     MemoryBank* MemoryModule::GetBank(u8 lu8BankId)
     {
-        CGS_ASSERT(lu8BankId != MemoryBank::KU_INVALID_BANK, "Bank index out of range\n");
+        CGS_ASSERT_STREAM_AT(lu8BankId < MemoryBank::KU_INVALID_BANK, "Bank index out of range\n",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\CgsMemoryModule.h", 377);
         return &mpBanks[lu8BankId];
     }
 
@@ -264,14 +265,21 @@ namespace CgsMemory
     {
         switch (lpRequest->GetEventType())
         {
-        case MemoryIO::E_EVENT_TYPE_CREATE_BANK:                 ProcessCreateBankRequest(lpRequest, lpOutput);             break;
-        case MemoryIO::E_EVENT_TYPE_DESTROY_BANK:                ProcessDestroyBankRequest(lpRequest, lpOutput);            break;
+        // ARTIST's switch at 0x8286DE90 emits the handlers in this order.
+        case MemoryIO::E_EVENT_TYPE_CREATE_BANK:
+            ProcessCreateBankRequest(static_cast<const MemoryIO::CreateBankRequest*>(lpRequest), lpOutput);
+            break;
+        case MemoryIO::E_EVENT_TYPE_CREATE_RESOURCE:             ProcessCreateResourceRequest(lpRequest, lpOutput);         break;
         case MemoryIO::E_EVENT_TYPE_CREATE_RW_LINEAR_ALLOCATOR:  ProcessCreateLinearAllocatorRequest(lpRequest, lpOutput);  break;
         case MemoryIO::E_EVENT_TYPE_CREATE_RW_GENERAL_ALLOCATOR: ProcessCreateGeneralAllocatorRequest(lpRequest, lpOutput); break;
+        case MemoryIO::E_EVENT_TYPE_DESTROY_BANK:
+            ProcessDestroyBankRequest(static_cast<const MemoryIO::DestroyBankRequest*>(lpRequest), lpOutput);
+            break;
         case MemoryIO::E_EVENT_TYPE_CREATE_ALLOCATOR:            ProcessCreateAllocatorRequest(lpRequest, lpOutput);        break;
         case MemoryIO::E_EVENT_TYPE_DESTROY_ALLOCATOR:           ProcessDestroyAllocatorRequest(lpRequest, lpOutput);       break;
-        case MemoryIO::E_EVENT_TYPE_CREATE_RESOURCE:             ProcessCreateResourceRequest(lpRequest, lpOutput);         break;
-        default:                                                 CGS_ASSERT(false, "Unhandled memory request type");       break;
+        default:
+            CGS_ASSERT_AT(false, "Unkown memory request type", CGS_ARTIST_FILE, 333);
+            break;
         }
     }
 
@@ -280,25 +288,23 @@ namespace CgsMemory
     // response queue. Reconstructed next (they need the remaining request/response payload types); inert
     // stubs close the link (the dispatch is not driven yet -- nothing calls Update).
     // @ 0x8286CD20 - create the requested bank and reply with the result code on the response queue.
-    void MemoryModule::ProcessCreateBankRequest(const MemoryIO::MemoryRequest* lpRequest, MemoryIO::OutputBuffer* lpOutput)
+    void MemoryModule::ProcessCreateBankRequest(const MemoryIO::CreateBankRequest* lpRequest, MemoryIO::OutputBuffer* lpOutput)
     {
-        const MemoryIO::CreateBankRequest* lpReq = static_cast<const MemoryIO::CreateBankRequest*>(lpRequest);
         MemoryIO::CreateBankResponse lResponse;
         lResponse.Construct(lpRequest->GetUser(), lpRequest->GetEventId());
-        lResponse.SetResult(static_cast<MemoryIO::ResultCodes>(CreateBank(lpReq->GetParams())));
-        lpOutput->GetMemoryResponseQueue()->AddEvent(&lResponse, lResponse.GetEventType(),
+        lResponse.SetResult(static_cast<MemoryIO::ResultCodes>(CreateBank(lpRequest->GetParams())));
+        lpOutput->GetMemoryResponseQueue()->AddEvent(&lResponse, lpRequest->GetEventType(),
                                                      static_cast<s32>(sizeof(lResponse)));
     }
 
     // @ 0x8286D970 - destroy the requested bank and reply with the result code.
-    void MemoryModule::ProcessDestroyBankRequest(const MemoryIO::MemoryRequest* lpRequest, MemoryIO::OutputBuffer* lpOutput)
+    void MemoryModule::ProcessDestroyBankRequest(const MemoryIO::DestroyBankRequest* lpRequest, MemoryIO::OutputBuffer* lpOutput)
     {
-        const MemoryIO::DestroyBankRequest* lpReq = static_cast<const MemoryIO::DestroyBankRequest*>(lpRequest);
         MemoryIO::DestroyBankResponse lResponse;
         lResponse.Construct(lpRequest->GetUser(), lpRequest->GetEventId());
         // X360 passes the non-leaf/validate mode (a3 = 0) here.
-        lResponse.SetResult(static_cast<MemoryIO::ResultCodes>(DestroyBank(lpReq->GetBankId(), false)));
-        lpOutput->GetMemoryResponseQueue()->AddEvent(&lResponse, lResponse.GetEventType(),
+        lResponse.SetResult(static_cast<MemoryIO::ResultCodes>(DestroyBank(lpRequest->GetBankId(), false)));
+        lpOutput->GetMemoryResponseQueue()->AddEvent(&lResponse, lpRequest->GetEventType(),
                                                      static_cast<s32>(sizeof(lResponse)));
     }
     // ARTIST 0x8286D130: create the backing bank and construct the requested allocator.

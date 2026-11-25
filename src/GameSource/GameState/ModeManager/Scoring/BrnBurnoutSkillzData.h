@@ -50,12 +50,13 @@ struct BurnoutSkillzData
         E_BURNOUT_SKILL_COUNT                   = 14,
     };
 
-    // Declare-only -- bodies live in this type's own TU. Signatures verbatim from DWARF
+    // Bodies live in this type's own TU. DecFIGS describes the parameter and scalar types.
     // (float32_t -> f32 per project scalar types).
     void Clear();                                              // BrnBurnoutSkillzData.h:85
     f32  GetBurnoutSkill(EBurnoutSkillType eSkill) const;      // BrnBurnoutSkillzData.h:90
     void SetBurnoutSkill(EBurnoutSkillType eSkill, f32 fVal);  // BrnBurnoutSkillzData.h:96
-    f32  GetSkillAccuracy(EBurnoutSkillType eSkill);           // BrnBurnoutSkillzData.h:101
+    // ARTIST 0x8231CA10 passes the skill in r3 without a this pointer.
+    static f32 GetSkillAccuracy(EBurnoutSkillType eSkill);           // BrnBurnoutSkillzData.h:101
 
 private:
     // GROWN (FLAG): array sized to E_BURNOUT_SKILL_COUNT == 14 to match the X360 asm.

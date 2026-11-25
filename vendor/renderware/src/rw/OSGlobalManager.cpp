@@ -46,12 +46,13 @@ OSGlobalManager* AllocateAndConstructOSGlobalManager()
 
 OSGlobalManager* s_pOSGlobalManager = 0; // off_8327F024
 HANDLE s_hGlobalSemaphore = 0;          // dword_8327F020
-volatile LONG s_initRefCount = 0;       // unk_8327F05C
+// ARTIST 82BBC954 compares this 32-bit atomic decrement result unsigned.
+EA::Thread::AtomicUint32 s_initRefCount;  // unk_8327F05C
 
 // ARTIST 82BBC918. This counter is distinct from the manager's share count.
 void ShutdownOSGlobalSystem()
 {
-    if (_InterlockedDecrement(&s_initRefCount) == 0)
+    if (s_initRefCount.Decrement() == 0)
     {
         if (s_pOSGlobalManager)
         {
@@ -111,7 +112,7 @@ int InitOSGlobalSystem()
             return 0;
         }
     }
-    _InterlockedIncrement(&s_initRefCount);
+    s_initRefCount.Increment();
     return 1;
 }
 

@@ -172,21 +172,18 @@ bool RichPresenceManagerBase::SetPositionParameter()
     CGS_ASSERT(mpScoringSystem, CGS_ASSERT_MESSAGE_AT("mpScoringSystem", CGS_ARTIST_FILE, 265));
     CGS_ASSERT(mpGameStateModule, CGS_ASSERT_MESSAGE_AT("mpGameStateModule", CGS_ARTIST_FILE, 266));
 
-    if (mpScoringSystem->GetNumberOfActiveCars() == 0)
+    if (mpScoringSystem->GetNumberOfActiveCars() > 0)
     {
-        return false;
+        const EActiveRaceCarIndex leRaceCarIndex = mpGameStateModule->GetPlayerActiveRaceCarIndex();
+        const s32 liPosition = static_cast<s32>(mpScoringSystem->GetCarRacePosition(leRaceCarIndex));
+        if (liPosition != miOldPosition)
+        {
+            miOldPosition = liPosition;
+            SetCurrentPosition(liPosition);
+            return true;
+        }
     }
-
-    const EActiveRaceCarIndex leRaceCarIndex = mpGameStateModule->GetPlayerActiveRaceCarIndex();
-    const s32 liPosition = static_cast<s32>(mpScoringSystem->GetCarRacePosition(leRaceCarIndex));
-    if (liPosition == miOldPosition)
-    {
-        return false;
-    }
-
-    miOldPosition = liPosition;
-    SetCurrentPosition(liPosition);
-    return true;
+    return false;
 }
 
 // X360 0x8235A6C8. Push the current round and total round count if either changed. The X360 reads the

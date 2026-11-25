@@ -13,16 +13,6 @@
 
 namespace CgsGui
 {
-    // @ 0x8240E3E0
-    GuiAccessPointers* StateInterface::GetAccessPointers()
-    {
-        CGS_ASSERT(mpAccessPointers != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpAccessPointers != NULL",
-                CGS_ARTIST_FILE, 344 /* ARTIST 0x8240E408 */));
-        return mpAccessPointers;
-    }
-
     // [map arm 2026-08-27] The allocator accessor -- console-INLINED at every call site
     // (its own "mpAllocator != NULL" assert carries the header line, h:337: e.g.
     // MapManager::Construct @0x82458590's `lwz r11, 8(r30)` bracketed by that assert).
@@ -40,8 +30,8 @@ namespace CgsGui
     // exact assert sequence.
     CgsLanguage::LanguageManager* StateInterface::GetLanguageManager()
     {
-        CGS_ASSERT(GetAccessPointers()->mpLanguageManager != 0,
-                   "GetAccessPointers()->mpLanguageManager != NULL");
+        CGS_ASSERT_AT(GetAccessPointers()->mpLanguageManager != 0,
+                      "GetAccessPointers()->mpLanguageManager != NULL", CGS_ARTIST_FILE, 351);
         return GetAccessPointers()->mpLanguageManager;
     }
 
@@ -49,9 +39,8 @@ namespace CgsGui
     // through the access pointers.
     bool StateInterface::IsUsingMetricUnits()
     {
-        CGS_ASSERT(mpAccessPointers != 0, "mpAccessPointers != NULL");
-        CGS_ASSERT(GetAccessPointers()->mpLanguageManager != 0,
-                   "GetAccessPointers()->mpLanguageManager != NULL");
+        CGS_ASSERT_AT(GetAccessPointers()->mpLanguageManager != 0,
+                      "GetAccessPointers()->mpLanguageManager != NULL", CGS_ARTIST_FILE, 358);
         return GetAccessPointers()->mpLanguageManager->IsUsingMetricUnits();
     }
 
@@ -129,8 +118,8 @@ namespace CgsGui
         for (s32 liIndex = 0; liIndex < liCount; ++liIndex)
         {
             GuiEventRegisterForEvents lRecord;
-            lRecord.miEventType     = lpiEventIds[liIndex];
             lRecord.lpEventObserver = mpObserver;
+            lRecord.miEventType     = lpiEventIds[liIndex];
             mOutEventQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lRecord),
                                     34, static_cast<s32>(sizeof(lRecord)));
         }
@@ -142,8 +131,8 @@ namespace CgsGui
         for (s32 liIndex = 0; liIndex < liCount; ++liIndex)
         {
             GuiEventUnRegisterForEvents lRecord;
-            lRecord.miEventType     = lpiEventIds[liIndex];
             lRecord.lpEventObserver = mpObserver;
+            lRecord.miEventType     = lpiEventIds[liIndex];
             mOutEventQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lRecord),
                                     35, static_cast<s32>(sizeof(lRecord)));
         }

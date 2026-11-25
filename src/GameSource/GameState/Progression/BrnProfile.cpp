@@ -829,11 +829,11 @@ MugshotInfo* Profile::GetMugshotInfo(s32 leMugshotType, s32 liImageIndex)
     CGS_ASSERT(leMugshotType < 5, CGS_ASSERT_MESSAGE_AT("leMugshotType < GsmIO::E_IMAGE_GALLERY_TYPE_COUNT", CGS_ARTIST_FILE, 999));  // X360 BrnProfile.cpp:999
 
     CgsContainers::Array<MugshotInfo, 20u>& lrGallery = maaMugshotInfo[leMugshotType];
-    if (liImageIndex >= static_cast<s32>(lrGallery.GetLength()))    // X360 `cmpw ; bge -> li r3,0`
+    if (liImageIndex < static_cast<s32>(lrGallery.GetLength()))
     {
-        return 0;
+        return &lrGallery.GetItem(static_cast<u32>(liImageIndex));
     }
-    return &lrGallery.GetItem(static_cast<u32>(liImageIndex));
+    return NULL;
 }
 
 // ====================================================================================

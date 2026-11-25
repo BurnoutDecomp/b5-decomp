@@ -1,8 +1,11 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
-#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
+#include "rw/core/debug/DebugCriticalSection.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Console/CgsConsole.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/ScriptInterface/CgsScriptInterface.h"
+
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Development/DebugSystem/Interface/CgsDebugInterface.cpp"
 
 #include <cstdarg>
 #include <stdio.h>  // _vsnprintf (native XDK va_list formatter)
@@ -48,8 +51,14 @@ namespace CgsDev
 
     DebugUI::DebugUI& DebugInterface::GetUI()
     {
-        CGS_ASSERT(mpDebugManager, "mpDebugManager");
-        return mpDebugManager->GetUI();
+        if (!mpDebugManager)
+        {
+            // ARTIST 0x82822684 enters the mutex directly for this assertion.
+            Assert::gAssertMutex.Enter();
+            Assert::FireAssert("mpDebugManager", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 158));
+            Assert::gAssertMutex.Leave();
+        }
+        return *mpDebugManager->mpUI;
     }
 
     DebugRender& DebugInterface::GetRender()
@@ -65,7 +74,13 @@ namespace CgsDev
     // readout both draw through.
     DebugRender& DebugInterface::Get2dRender()
     {
-        CGS_ASSERT(mpDebugManager, "mpDebugManager");
+        if (!mpDebugManager)
+        {
+            // ARTIST 0x82822774 enters the mutex directly for this assertion.
+            Assert::gAssertMutex.Enter();
+            Assert::FireAssert("mpDebugManager", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 190));
+            Assert::gAssertMutex.Leave();
+        }
         return mpDebugManager->mBufferedRenderer;
     }
 
@@ -167,3 +182,5 @@ namespace CgsDev
         GetUI().GetScriptInterface().ExecuteScript(lpcFileName);
     }
 }
+
+#undef CGS_ARTIST_FILE

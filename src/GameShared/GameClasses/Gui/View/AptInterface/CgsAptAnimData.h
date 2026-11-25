@@ -49,7 +49,7 @@ namespace CgsGui
     //   AnimData::AnimData            @ 0x824E8FC8  (ctor: stores the -1 unconstructed
     //                                                sentinel into the two embedded
     //                                                Array count words @ +0x90 / +0xAC)
-    //   AnimData::AnimatorChan        @ 0x8284D940  (Array<AnimatorChannel,6>::operator[]:
+    //   Array<AnimatorChannel,6>::GetItem @ 0x8284D940  (const array accessor:
     //                                                array-local count @ +0x18, stride 4)
     //   Array<AnimData,2>::Append     @ 0x824E5BD0  (outer container memcpy's 0xB0 == 176)
     // Member set / order / names and the AnimatorChannel enum are from the DecFIGS
@@ -92,10 +92,10 @@ namespace CgsGui
         const AnimatorChannel& AnimatorChan(u32 luIndex) const;
 
         // X360 AnimData::GetChannelData: return the keyframe payload for the animator
-        // channel at luIndex, or null when this animation does not drive that channel.
+        // channel, or null when this animation does not drive that channel.
         // Walked by CgsGui::Animator::SetAnimation across all six animator channels.
         // Bodied by its own ledger TU; declared here for the Animator caller surface.
-        AnimChannelData* GetChannelData(s32 liChannel);
+        const AnimChannelData* GetChannelData(AnimatorChannel leChannel) const;
 
         // ADDITIVE GROW (BrnGui::Animator::Construct @0x824EA318): the two builder
         // methods that caller drives. Bodies land with their own ledger TUs; the X360

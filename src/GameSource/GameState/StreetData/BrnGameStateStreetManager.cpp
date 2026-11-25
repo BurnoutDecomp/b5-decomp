@@ -892,7 +892,7 @@ StreetManager::HasPlayerBeatenFriendScore( BrnStreetData::ChallengeIndex liIndex
 
     // ⓘ the friend record's second out-param is the friend's NAME, not a CgsID -- the
     // ChallengeHighScoreEntry twin of the par record's rival id (BrnChallengeHighScoreEntry.h:40).
-    s32                     liFriendScore = 0;
+    s32                     liFriendScore;
     CgsNetwork::PlayerName  lFriendName;
     lFriendScore.GetScore( leScoreType, &liFriendScore, &lFriendName );
 

@@ -130,33 +130,13 @@ const PreUpdateOutput& RootPreUpdateOutputBuffer::GetPreUpdateOutput() const
     return mPreUpdateOutput;
 }
 
-// X360 0x826E0C10. Write-lock setter: assert write-locked ("Not locked for writing\n"),
-// then copy the source PreUpdateOutput into mPreUpdateOutput exactly as the X360 body:
-//   1. memcpy the leading GuiOut-queue region (0x110 bytes, dst+0x08 <- src+0x00),
-//   2. reset the audio-car-loaded queue's live count then Append all of the source's
-//      events (the queue owns a self-referential mpEvents pointer, so it is merged by
-//      Clear()+Append rather than block-copied),
-//   3. memcpy the trailing AudioEffects-queue region (0x90 bytes, dst+0x2A8 <- src+0x2A0).
+// ARTIST 0x826E0C10 copies the two variable queues by value and inlines
+// EventQueue::operator= for the car-data queue, preserving its own event storage.
 void RootPreUpdateOutputBuffer::SetPreUpdateOutput(const PreUpdateOutput& lPreUpdateOutput)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 609));
 
-    // (1) leading GuiOut queue region: PreUpdateOutput +0x000 .. +0x110.
-    std::memcpy(&mPreUpdateOutput.mGuiOutEventQueue,
-                &lPreUpdateOutput.mGuiOutEventQueue,
-                sizeof(mPreUpdateOutput.mGuiOutEventQueue));
-
-    // (2) audio-car-loaded queue: zero the destination count (X360 `stw 0, 8(queue)`),
-    //     then merge all live source events.
-    mPreUpdateOutput.mAudioCarDataLoadedQueue.Clear();
-    mPreUpdateOutput.mAudioCarDataLoadedQueue.Append(lPreUpdateOutput.mAudioCarDataLoadedQueue);
-
-    // (3) trailing AudioEffects queue region: PreUpdateOutput +0x2A0 .. +0x330.
-    //     (whole-object memcpy stays X360-faithful: the queue is pointer-free --
-    //      inline buffer + s32 cursors -- so the byte copy relocates cleanly)
-    std::memcpy(&mPreUpdateOutput.mAudioEffectsMessageQueue,
-                &lPreUpdateOutput.mAudioEffectsMessageQueue,
-                sizeof(mPreUpdateOutput.mAudioEffectsMessageQueue));
+    mPreUpdateOutput = lPreUpdateOutput;
 }
 
 // =============================================================================

@@ -243,6 +243,9 @@ namespace MemoryIO
     {
         void Construct(CgsModule::BaseEventReceiverQueue* lpUser, s32 liEventId)
         {
+            // ARTIST 0x8286CD60 and DecFIGS BCC2FC clear the first resource slot
+            // during Construct, including when this response has already been used.
+            mResources.m_baseResources[0] = 0;
             MemoryResponse::Construct(lpUser, liEventId, E_EVENT_TYPE_CREATE_BANK);
         }
     private:

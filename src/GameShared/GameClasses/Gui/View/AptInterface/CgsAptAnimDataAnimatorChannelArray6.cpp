@@ -9,9 +9,8 @@
 //   unconstructed (-1) and out-of-space (>= 6) asserts (CgsArray.h:225/226), the single-dword
 //   store `v2[v2[6]++] = *a2`, and the post-increment of the count.
 //
-// Instantiating Append only -- the comparison-dependent members (FindFirstInstanceOf/Contains)
-// are not exercised here. (Enums are trivially comparable, but keeping to Append matches the
-// single out-of-line method the X360 emitted for this instantiation.)
+// ARTIST 0x8284D940 emits the const GetItem, as shown by the line 538/539
+// array diagnostics and the typed call at 0x828534AC.
 //
 // Spelled unqualified Array<...> to match the committed container convention (CgsArrayInt8.cpp);
 // the DWARF spells the type CgsContainers::Array<CgsGui::AnimData::AnimatorChannel,6u>.
@@ -19,3 +18,6 @@
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptAnimData.h"
 
 template void CgsContainers::Array<CgsGui::AnimData::AnimatorChannel, 6>::Append(const CgsGui::AnimData::AnimatorChannel&);
+
+template const CgsGui::AnimData::AnimatorChannel&
+CgsContainers::Array<CgsGui::AnimData::AnimatorChannel, 6>::GetItem(u32) const;

@@ -30,13 +30,13 @@
 
 namespace rw {
 
-// The platform-native allocator has static storage, matching the ARTIST lifetime.
-static Xbox2NativeSystemAllocator s_systemAllocator;
-
 // X360 0x82BBD160 -- the lazy installer. a1 (r3) is the `this` of the
 // DefaultSystemAllocatorInitializer; the ctor returns it unchanged.
 DefaultSystemAllocatorInitializer::DefaultSystemAllocatorInitializer()
 {
+    // ARTIST 0x82BBD174-0x82BBD1AC constructs this once and registers its destructor.
+    static Xbox2NativeSystemAllocator s_systemAllocator;
+
     if (!ResourceAllocatorRegistry::s_defaultAllocator)
     {
         ResourceAllocatorRegistry::s_defaultAllocator = &s_systemAllocator;

@@ -142,12 +142,8 @@ namespace SceneManagerIO
     //   CgsSceneManager::ErrorEvent,128>::Construct(this + 199744)   (@0x828C4B10)
     // whose `addi r30, r31, 0xC` proves the plain 12-byte BaseEventQueue header with no
     // padding before maEvents (ErrorEvent alignment <= 4).
-    // ⚠️ FLAG (reported, not fixed here -- CgsSceneManagerErrorEvent.h is not this TU's file):
-    // the console ErrorEvent element is 136 bytes, not the 16 the placeholder models. It is
-    // pinned by this queue's console EXTENT inside OutputBuffer: the queue runs from +199744
-    // to the next member (mTriangleCacheInterface @ +217164), i.e. 17420 bytes, and
-    // 17420 == 12 (header) + 128 * 136. Nothing addresses the element by offset on the host,
-    // so the size is cosmetic here -- but the placeholder's "16 bytes" is a wrong fact.
+    // The element's 0x88-byte stride follows from its original fields in
+    // CgsSceneManagerErrorEvent.h and the next output-buffer member at +0x3504C.
     // ------------------------------------------------------------------------
     template <s32 N>
     class OutErrorQueue : public CgsModule::EventQueue<CgsSceneManager::ErrorEvent, N>

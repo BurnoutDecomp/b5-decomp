@@ -92,25 +92,14 @@ void AptValueVector::SafePop(int32_t nCount)
 }
 
 // ---------------------------------------------------------------------------
-// pop @ 0x82ADBBD0
-//
-// asm:
-//   r31=this
-//   item = mppItems[mnTop - 1]   ( *(4*mnTop + items - 4) )
-//   r3 = item->vtbl[+4](item)    // Release
-//   --mnTop
-//   return r3
-// No bounds check (the caller guarantees a live top); store order: Release
-// then decrement.
+// pop @ 0x82ADBBD0 -- release the top value before decrementing.
+// The virtual Release is void. The ARTIST callers, including
+// AptIntervalTimer::CleanParams at 0x82ADF148, discard r3 after the call.
 // ---------------------------------------------------------------------------
-AptValue* AptValueVector::pop()
+void AptValueVector::pop()
 {
-    // X360 returns the r3 left by the (void) Release virtual; faithfully this
-    // is the popped item pointer (Release is declared void in the reference).
-    AptValue* pItem = mppItems[mnTop - 1];
-    pItem->Release();
+    mppItems[mnTop - 1]->Release();
     --mnTop;
-    return pItem;
 }
 
 // ---------------------------------------------------------------------------

@@ -37,9 +37,14 @@ AptIntervalTimer::AptIntervalTimer()
 // count), leaving the stack empty.
 void AptIntervalTimer::CleanParams()
 {
-    for (s32 liRemaining = mParams.mnTop; liRemaining > 0; --liRemaining)
+    s32 liRemaining = mParams.mnTop;
+    if (liRemaining > 0)
     {
-        mParams.pop();
+        do
+        {
+            mParams.pop();
+        }
+        while (--liRemaining != 0);
     }
 }
 

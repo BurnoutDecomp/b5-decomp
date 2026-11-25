@@ -2,7 +2,7 @@
 // (Append / GetItem / operator[] + siblings) is fully inline in CgsArray.h, so this TU is
 // just the explicit member instantiations the X360 emits out-of-line for this element type:
 //   Array<AnimChannelData,6>::Append  @ 0x8284D338  (called by AnimData::AddAnimationChannel)
-//   Array<AnimChannelData,6>::GetItem @ 0x8284D830  (called by AnimData::GetChannelData)
+//   Array<AnimChannelData,6>::GetItem const @ 0x8284D830  (called by AnimData::GetChannelData)
 //
 // Byte-parity check against the X360 pseudocode for this instantiation:
 //   element stride 24 (sizeof AnimChannelData == 0x18: 6 dwords), capacity 6, miCount @
@@ -26,3 +26,6 @@ CGS_STATIC_ASSERT((sizeof(CgsGui::AnimChannelData) == 24), "AnimChannelData stri
 
 template void                  CgsContainers::Array<CgsGui::AnimChannelData, 6>::Append(const CgsGui::AnimChannelData&);
 template CgsGui::AnimChannelData& CgsContainers::Array<CgsGui::AnimChannelData, 6>::GetItem(u32);
+
+template const CgsGui::AnimChannelData&
+CgsContainers::Array<CgsGui::AnimChannelData, 6>::GetItem(u32) const;

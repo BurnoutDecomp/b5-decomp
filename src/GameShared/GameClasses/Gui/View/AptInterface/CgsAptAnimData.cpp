@@ -38,7 +38,7 @@ namespace CgsGui
 
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptAnimData.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 
 namespace CgsGui
 {
@@ -49,12 +49,12 @@ namespace CgsGui
         meChannels.Construct();
     }
 
-    // the keyframe data this animation holds for liChannel, or 0.
-    AnimChannelData* AnimData::GetChannelData(s32 liChannel)
+    // ARTIST 0x828534AC and 0x828534CC check both const arrays.
+    const AnimChannelData* AnimData::GetChannelData(AnimatorChannel leChannel) const
     {
         for (u32 luIndex = 0; luIndex < meChannels.GetLength(); ++luIndex)
         {
-            if (AnimatorChan(luIndex) == liChannel)
+            if (meChannels.GetItem(luIndex) == leChannel)
                 return &mChannelData.GetItem(luIndex);
         }
         return 0;
@@ -63,7 +63,9 @@ namespace CgsGui
     // add one channel's keyframe data.
     void AnimData::AddAnimationChannel(AnimatorChannel leChannel, AnimChannelData lChannelData)
     {
-        CGS_ASSERT(GetChannelData(leChannel) == 0, "We already have data for this channel");
+        CGS_ASSERT(GetChannelData(leChannel) == 0,
+            CGS_ASSERT_STREAM_MESSAGE_AT("We already have data for this channel",
+                "..\\..\\..\\GameShared\\GameClasses\\Gui/View/AptInterface/CgsAptAnimData.cpp", 98));
 
         mChannelData.Append(lChannelData);
         meChannels.Append(leChannel);

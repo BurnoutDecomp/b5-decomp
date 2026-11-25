@@ -1496,10 +1496,10 @@ void CarSelectManager::ForceExitJunkyard(GameStateModuleIO::GameActionQueue* lpA
     UpdateExitState(lpActionQueue);
 
     {
-        u8 lacAbort[1];
-        lacAbort[0] = lbToOnlineEvent ? 1 : 0;
+        const bool lbAbortToOnlineEvent = lbToOnlineEvent;
         AsActionQueue(lpActionQueue)->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(lacAbort), KI_ACTION_FORCE_EXIT, 1);
+            reinterpret_cast<const CgsModule::Event*>(&lbAbortToOnlineEvent),
+            KI_ACTION_FORCE_EXIT, sizeof(lbAbortToOnlineEvent));
     }
 
     mbCarUnlockEnabled = true;   // X360 *(this+117) = 1 == byte 0x75 == mbCarUnlockEnabled (re-enable car unlock on exit)

@@ -330,9 +330,6 @@ namespace SceneManagerIO
     // `addis 3 / addi 0xC40` = +0x30C40) and sizeof from the CreateIOBuffer<OutputBuffer>
     // instantiation @0x823AF668 (`IOBufferStack::Alloc(this, 0x35050, name)`).
     //
-    // ⚠️ CONSOLE OFFSETS ARE COMMENTS, NOT LAYOUT. On this LLP64 host the queues are wider
-    // (VolumeInstanceId/pointers), so the members land wherever the compiler puts them --
-    // every access here and downstream is BY NAME. Do NOT re-pad to hit +32800.
     // ========================================================================
     class OutputBuffer : public CgsModule::IOBuffer
     {

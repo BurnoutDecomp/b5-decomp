@@ -144,6 +144,15 @@ namespace Io
 
     struct PreUpdateOutput
     {
+        // BrnPreUpdateSharedIo.h:158. ARTIST inlines this into
+        // RootPreUpdateOutputBuffer::Construct at 0x826C835C.
+        void Construct()
+        {
+            mGuiOutEventQueue.Construct();
+            mAudioCarDataLoadedQueue.Construct();
+            mAudioEffectsMessageQueue.Construct();
+        }
+
         // GetCarDataLoadedQueue() const (BrnPreUpdateSharedIo.h:193); referenced by
         // SetPreUpdateOutput to merge the source's audio-car-loaded events.
         const AudioCarLoadedDataQueue& GetCarDataLoadedQueue() const { return mAudioCarDataLoadedQueue; }
@@ -545,9 +554,7 @@ namespace Io
         void Construct()
         {
             CgsModule::IOBuffer::Construct();
-            (&mPreUpdateOutput.mGuiOutEventQueue)->Construct();
-            mPreUpdateOutput.mAudioCarDataLoadedQueue.Construct();
-            mPreUpdateOutput.mAudioEffectsMessageQueue.Construct();
+            mPreUpdateOutput.Construct();
         }
 
         // BrnRootSoundModuleIo.h:338 (DWARF). X360 0x823B8BB8.

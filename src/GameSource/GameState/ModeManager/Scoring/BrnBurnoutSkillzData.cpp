@@ -78,16 +78,13 @@ namespace BrnGameState
     // "cell/ppu" phantom dep is this libm-style constant return; no math call is
     // actually performed, so a plain literal matches the console.
     //
-    // RETURN-TYPE FLAG: the console's calling convention and the declared shape both
-    // make this a `double`, while the home commits the return as `f32`. Bodied against
-    // the committed `f32` here -- the constant the console loads is single-precision
-    // either way; FLAGGED for the consolidator rather than retyping the committed home.
+    // DecFIGS declares float32_t. ARTIST 0x8230FD44 loads the result with lfs.
     f32 BurnoutSkillzData::GetSkillAccuracy(EBurnoutSkillType eSkill)
     {
         CGS_ASSERT(eSkill >= E_BURNOUT_SKILL_START, CGS_ASSERT_MESSAGE_AT("leSkillType >= E_BURNOUT_SKILL_START", CGS_ARTIST_FILE, 161));
         CGS_ASSERT(eSkill < E_BURNOUT_SKILL_COUNT, CGS_ASSERT_MESSAGE_AT("leSkillType < E_BURNOUT_SKILL_COUNT", CGS_ARTIST_FILE, 162));
 
-        return 0.0049999999f;
+        return 0.005f;
     }
 
     // ------------------------------------------------------------------------
@@ -126,14 +123,14 @@ namespace BrnGameState
     // is a real parameter. The sole caller
     // (BrnGameState::BurnoutSkillzManager::SetNewSkillIfGreater) sets up exactly those
     // three, confirming the home's (EBurnoutSkillType eSkill, f32 fVal) signature.
-    void BurnoutSkillzData::SetBurnoutSkill(EBurnoutSkillType eSkill, f32 fVal)
+    void BurnoutSkillzData::SetBurnoutSkill(EBurnoutSkillType eSkill, f32 lfVal)
     {
         CGS_ASSERT(eSkill >= E_BURNOUT_SKILL_START, CGS_ASSERT_MESSAGE_AT("leSkillType >= E_BURNOUT_SKILL_START", CGS_ARTIST_FILE, 147));
         CGS_ASSERT(eSkill < E_BURNOUT_SKILL_COUNT, CGS_ASSERT_MESSAGE_AT("leSkillType < E_BURNOUT_SKILL_COUNT", CGS_ARTIST_FILE, 148));
 
+        // ARTIST 0x8231CA18 rounds the incoming sample in its parameter slot.
         const f32 lfAccuracy = GetSkillAccuracy(eSkill);
 
-        f32 lfVal = fVal;
         BrnNetwork::NetworkRounder::RoundFloatToAccuracy(&lfVal, lfAccuracy);
 
         mafBurnoutSkilz[eSkill] = lfVal;
