@@ -12,7 +12,7 @@
 // also carries the lexical/scope state needed to execute its compiled body: the
 // character-instance handle it is bound to (mpCIH), the timeline animation it was
 // defined on (mpParentAnim), and a snapshot of the enclosing call frame
-// (mpParentScope) so closures resolve free variables. The compiled body itself
+// (mpCreatorScope) so closures resolve free variables. The compiled body itself
 // (name / argument names / bytecode / constant pool) is supplied by the concrete
 // subclass; this base owns only the scope machinery and the static frame-stack /
 // register-array execution state.
@@ -45,9 +45,9 @@
 //                                              value ("CIH" in RegisterReferences)
 //   mpParentAnim  AptValue* .......... +0x24  the timeline animation it was defined
 //                                              on ("ParentAnim")
-//   mpParentScope AptValue* .......... +0x28  the captured enclosing call frame
+//   mpCreatorScope AptValue* .......... +0x28  the captured enclosing call frame
 //                                              (an AptFrameStack value, "ParentScope")
-//   mnCreatingNestedFunction uint16_t  +0x2C  set while a nested DefineFunction is
+//   mnFrameStackReserve uint16_t  +0x2C  set while a nested DefineFunction is
 //                                              being built (read by CreateFrameStack)
 //
 // vtable object-type index is supplied by the subclass (li r4, 34/35/36 to the ctor).
@@ -132,6 +132,7 @@ public:
     // the AptScriptFunction2 override (@0x82AD6708), release this call's registers
     // and restore the saved register window -- from pSaved.
     virtual void CleanupAfterExecution(SavedExecutionState* pSaved);  // @0x82AD6630
+    virtual void CreatingNestedFunction();  // @0x82AF12F0
 
     // ---- GC virtual overrides (this TU's base owns the scope-pointer marks) -----
     virtual void RegisterReferences();        // @0x82AE27B0
@@ -146,7 +147,6 @@ public:
     AptValue* GetInScopeChain(const EAStringC& key);            // @0x82AE1990
     void      SetInLocalScope(const EAStringC& key, AptValue* pValue);  // @0x82AF52C0
     bool      SetWhereExistsInScopeChain(const EAStringC& key, AptValue* pValue);  // @0x82AF5308
-    bool      CreatingNestedFunction() const; // @0x82AF12F0
 
     // Store pValue into flat register slot nRegister (the AS "register" file the
     // bytecode addresses), growing the live-register high-water mark. @0x82AD6690
@@ -180,14 +180,14 @@ public:
     // Raw mpCIH write (no ref-count change) -- the console callFunction reduced path drops a
     // dead-bound function's CIH via an explicit Release + this raw store to the pinned EmptyCIH.
     void      SetCIH(AptValue* pCIH)  { mpCIH = pCIH; }
-    AptValue* GetParentScope() const  { return mpParentScope; }
+    AptFrameStack* GetParentScope() const  { return mpCreatorScope; }
     // +0x24 ParentAnim accessor (the global-object frame the interpreter's variable
     // fallback resolves _level / global members through -- getVariable @0x82B03430
     // reads it as *(mpCurrentFunction+36)).
     AptValue* GetParentAnim() const   { return mpParentAnim; }
 
     // The current live local-variable frame stack (off_8324E3DC); the interpreter's
-    // scope-chain walkers consult it before falling back to mpParentScope.
+    // scope-chain walkers consult it before falling back to mpCreatorScope.
     static AptFrameStack* GetActiveFrameStack() { return spFrameStack; }
 
 protected:
@@ -215,9 +215,9 @@ protected:
     // +0x24 -- the timeline animation this function was defined on ("ParentAnim").
     AptValue* mpParentAnim;
     // +0x28 -- the captured enclosing call frame ("ParentScope"); null at top level.
-    AptValue* mpParentScope;
-    // +0x2C -- non-zero while a nested DefineFunction is mid-construction.
-    uint16_t  mnCreatingNestedFunction;
+    AptFrameStack* mpCreatorScope;
+    // +0x2C -- reusable hash capacity from the last activation.
+    uint16_t  mnFrameStackReserve;
 
 public:
     // ARTIST 0x82AF1058..0x82AF1080 stores the native scope fields at these offsets.
@@ -225,8 +225,8 @@ public:
     {
         CGS_STATIC_ASSERT((offsetof(AptScriptFunctionBase, mpCIH) == 0x20), "ARTIST CIH");
         CGS_STATIC_ASSERT((offsetof(AptScriptFunctionBase, mpParentAnim) == 0x24), "ARTIST parent animation");
-        CGS_STATIC_ASSERT((offsetof(AptScriptFunctionBase, mpParentScope) == 0x28), "ARTIST parent scope");
-        CGS_STATIC_ASSERT((offsetof(AptScriptFunctionBase, mnCreatingNestedFunction) == 0x2C), "ARTIST nested function flag");
+        CGS_STATIC_ASSERT((offsetof(AptScriptFunctionBase, mpCreatorScope) == 0x28), "ARTIST parent scope");
+        CGS_STATIC_ASSERT((offsetof(AptScriptFunctionBase, mnFrameStackReserve) == 0x2C), "ARTIST frame stack reserve");
         CGS_STATIC_ASSERT((sizeof(AptScriptFunctionBase) == 0x30), "ARTIST script function base");
     }
 

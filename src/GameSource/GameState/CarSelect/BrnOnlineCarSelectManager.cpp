@@ -173,7 +173,7 @@ void OnlineCarSelectManager::EnterOnlineCarSelect(GameStateModuleIO::GameActionQ
     lCars.Construct();
     mpGameStateModule.Get()->GetListOfPlayerSelectableVehicles(lCars);
 
-    if (lCars.FindFirstInstanceOf(mStartCarId) == -1)
+    if (lCars.FindFirstInstanceOf(mStartCarId) == lCars.KU_INVALID)
     {
         const BrnResource::VehicleListEntry* lpCurrentVehicleData = mpVehicleList.Get()->GetVehicleData(mStartCarId);
         CGS_ASSERT(lpCurrentVehicleData != 0, CGS_ASSERT_MESSAGE_AT("lpCurrentVehicleData != NULL", CGS_ARTIST_FILE, 210));
@@ -184,7 +184,7 @@ void OnlineCarSelectManager::EnterOnlineCarSelect(GameStateModuleIO::GameActionQ
             CGS_ASSERT(lpCurrentVehicleData->GetParentId() != 0,
                        CGS_ASSERT_MESSAGE_AT("lpCurrentVehicleData->GetParentId() != kCGSID_NULL", CGS_ARTIST_FILE, 214));
             const CgsID lParentId = lpCurrentVehicleData->GetParentId();
-            lbParentIsSelectable = lCars.FindFirstInstanceOf(lParentId) != -1;
+            lbParentIsSelectable = lCars.FindFirstInstanceOf(lParentId) != lCars.KU_INVALID;
         }
 
         if (!lbParentIsSelectable)

@@ -683,7 +683,7 @@ namespace Logic
                         //   v25 = the requested node v8) then AddNodeToRemoveResourceCandidateList.
                         //   The refcount==0 guard is enforced inside AddNode itself; the caller's
                         //   guard is the not-contained test. Previously used GetNumberOfReferences()==0.
-                        if (mapRemovalCandidates.FindFirstInstanceOf(lpRequested) == -1)
+                        if (mapRemovalCandidates.FindFirstInstanceOf(lpRequested) == mapRemovalCandidates.KU_INVALID)
                         {
                             AddNodeToRemoveResourceCandidateList(lpRequested);
                         }
@@ -715,10 +715,10 @@ namespace Logic
                         lpRequested->mData.mRequesterList.AddTail(lpQueued->mData.mpRequester);
 
                         // Drop the requested node from the removal candidates if it was queued for GC.
-                        s32 liCandidateIndex = mapRemovalCandidates.FindFirstInstanceOf(lpRequested);
-                        if (liCandidateIndex != -1)
+                        const u32 luCandidateIndex = mapRemovalCandidates.FindFirstInstanceOf(lpRequested);
+                        if (luCandidateIndex != mapRemovalCandidates.KU_INVALID)
                         {
-                            mapRemovalCandidates.EraseFast(static_cast<u32>(liCandidateIndex));
+                            mapRemovalCandidates.EraseFast(luCandidateIndex);
                         }
                         bool lbRequesterStillQueued = false;
                         for (QueuedNode* lpOther = mLoadingQueuedResourceList.GetHead();

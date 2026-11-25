@@ -47,7 +47,7 @@ namespace CgsFileSystem
         rw::ResourceDescriptor lDescriptor;
         lDescriptor.m_baseResourceDescriptors[0].m_size = KU_PATCH_FILE_MAP_SIZE * sizeof(u32);
         lDescriptor.m_baseResourceDescriptors[0].m_alignment = 16;
-        u32* lpKeys = static_cast<u32*>(mpAllocator->DoAllocate(lDescriptor, 0).m_baseResources[0]);
+        s32* lpKeys = static_cast<s32*>(mpAllocator->DoAllocate(lDescriptor, 0).m_baseResources[0]);
         s32* lpValues = static_cast<s32*>(mpAllocator->DoAllocate(lDescriptor, 0).m_baseResources[0]);
         mPatchFileMap.Initialize(lpKeys, lpValues, KU_PATCH_FILE_MAP_SIZE);
 
@@ -87,17 +87,11 @@ namespace CgsFileSystem
 
         // ARTIST allocates a lane-0 scratch resource through the manager's allocator, keeps its
         // pointer in the +0x89C slot for the duration of the walk, then frees that lane afterward.
-        rw::ResourceDescriptor lScratchDescriptor;
-        lScratchDescriptor.m_baseResourceDescriptors[0].m_size = 26000;
-        lScratchDescriptor.m_baseResourceDescriptors[0].m_alignment = 0x10;
-        rw::Resource lScratchResource = lpThis->mpAllocator->DoAllocate(lScratchDescriptor, 0);
-        lpThis->mpSearchScratch = lScratchResource.m_baseResources[0];
+        lpThis->mpSearchScratch = lpThis->mpAllocator->AllocateMemoryResource(26000u, 16u, 0);
 
         lpThis->SearchFolder(lpThis->maPatches[lpThis->muCurrentPatchIndex].miacFolder, "");
 
-        rw::Resource lScratchToFree;
-        lScratchToFree.m_baseResources[0] = lpThis->mpSearchScratch;
-        lpThis->mpAllocator->DoFree(lScratchToFree);
+        lpThis->mpAllocator->FreeMemoryResource(lpThis->mpSearchScratch);
 
         // Scan finished: advance to the next patch slot and clear the patching flag.
         lpThis->mbPatching = false;
@@ -150,13 +144,13 @@ namespace CgsFileSystem
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
         {
             *CgsDev::Log::gpDebugPrint << "Add patch file: "
-                                       << (lpcFile ? lpcFile : "<NULLSTRING>")
+                                       << lpcFile
                                        << "\n";
         }
 
-        const u32 luHash = HashPath(lpcFile);
+        const s32 liHash = static_cast<s32>(HashPath(lpcFile));
 
-        s32* lpExisting = mPatchFileMap.FindEntry(luHash);
+        s32* lpExisting = mPatchFileMap.FindEntry(liHash);
         if (lpExisting)
         {
             // The path is already claimed. The patch with the LARGER priority key wins the clash
@@ -168,7 +162,7 @@ namespace CgsFileSystem
         }
         else
         {
-            mPatchFileMap.AddEntry(luHash, &muCurrentPatchIndex);
+            mPatchFileMap.AddEntry(liHash, &muCurrentPatchIndex);
         }
     }
 
@@ -191,9 +185,9 @@ namespace CgsFileSystem
     // @0x828E9488.
     bool PatchManager::RemapFilename(const char* lpcSource, char* lpcDest, u32 luDestSize)
     {
-        const u32 luHash = HashPath(lpcSource);
+        const s32 liHash = static_cast<s32>(HashPath(lpcSource));
 
-        s32* lpEntry = mPatchFileMap.FindEntry(luHash);
+        s32* lpEntry = mPatchFileMap.FindEntry(liHash);
         if (lpEntry)
         {
             // Claimed by a patch: rewrite to "<patchFolder>/<sourcePath>".

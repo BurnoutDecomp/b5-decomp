@@ -1488,7 +1488,7 @@ int AptQueueClipEventsRunMatched(AptCIH* pNode, int nEventMask, unsigned int nFr
                 AptConstantPool lEmptyPool = { 0, 0 };
 
                 AptScriptFunctionByteCodeBlock* pBlock = new AptScriptFunctionByteCodeBlock(
-                    const_cast<unsigned char*>(rRec.mpActionStream), -1, lEmptyPool,
+                    rRec.mActions.aActionStream, -1, lEmptyPool,
                     pName->GetBuffer(), static_cast<AptValue*>(pNode), 0);
                 if (pBlock != 0)
                 {
@@ -1522,7 +1522,7 @@ int AptQueueClipEventsRunMatched(AptCIH* pNode, int nEventMask, unsigned int nFr
             {
                 // enterFrame: queued at the FRONT with the null-input context id.
                 nResult = 1;
-                pQueue->AddActionFront(&rRec.mpActionStream, pNode, gAptNullInputId);
+                pQueue->AddActionFront(&rRec.mActions, pNode, gAptNullInputId);
             }
             else if (nEventMask == 0x20000)
             {
@@ -1531,7 +1531,7 @@ int AptQueueClipEventsRunMatched(AptCIH* pNode, int nEventMask, unsigned int nFr
                 if (rRec.mnKeyFrameId == (nFrameId >> 17))
                 {
                     nResult = 1;
-                    pQueue->AddActionFront(&rRec.mpActionStream, pNode,
+                    pQueue->AddActionFront(&rRec.mActions, pNode,
                                            static_cast<s32>(nFrameId));
                 }
             }
@@ -1539,7 +1539,7 @@ int AptQueueClipEventsRunMatched(AptCIH* pNode, int nEventMask, unsigned int nFr
             {
                 // Everything else (incl. mask 1 construct/load): queued at the BACK.
                 nResult = 1;
-                pQueue->AddActionBack(&rRec.mpActionStream, pNode,
+                pQueue->AddActionBack(&rRec.mActions, pNode,
                                       static_cast<s32>(nFrameId));
             }
         }
@@ -1591,10 +1591,10 @@ int AptQueueClipEventsRunMatched(AptCIH* pNode, int nEventMask, unsigned int nFr
             // Found on this node: masks 0x4000/0x2000 queue at the BACK, the rest
             // jump the queue at the FRONT (the console's two exits).
             if (nPairMask == 0x4000u || nPairMask == 0x2000u)
-                pQueue->AddFunctionBack(static_cast<AptValue*>(pNode), pHandler,
+                pQueue->AddFunctionBack(pNode, pHandler,
                                         0, static_cast<s32>(nFrameId));
             else
-                pQueue->AddFunctionFront(static_cast<AptValue*>(pNode), pHandler,
+                pQueue->AddFunctionFront(pNode, pHandler,
                                          0, static_cast<s32>(nFrameId));
             return 1;
         }
@@ -1613,10 +1613,10 @@ int AptQueueClipEventsRunMatched(AptCIH* pNode, int nEventMask, unsigned int nFr
         // its own follow-on; the SAME-CIH handler (the common case) queues below.
 
         if (nPairMask == 0x4000u || nPairMask == 0x2000u || nPairMask == 0x001u)
-            pQueue->AddFunctionBack(static_cast<AptValue*>(pNode), pChild,
+            pQueue->AddFunctionBack(pNode, pChild,
                                     0, static_cast<s32>(nFrameId));
         else
-            pQueue->AddFunctionFront(static_cast<AptValue*>(pNode), pChild,
+            pQueue->AddFunctionFront(pNode, pChild,
                                      0, static_cast<s32>(nFrameId));
         return 1;
     }

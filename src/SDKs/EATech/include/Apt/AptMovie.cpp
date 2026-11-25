@@ -182,23 +182,21 @@ const AptMovie* AptMovie::runFrameActions(AptCIH* pCIH, int nFrame) const
         if (command->mnTag != 1) continue;
         void* saved = AptScriptFunctionBase::PushStaticData();
         AptCharacterInst* inst = pCIH ? pCIH->GetRootAnimation()->GetCharacterInst() : 0;
-        gAptActionInterpreter.runStream(command->mpStream, pCIH, -1, inst);
+        gAptActionInterpreter.runStream(command->mActions.aActionStream, pCIH, -1, inst);
         gAptActionInterpreter.CleanupAfterExecution(saved);
     }
     return this;
 }
 
 // ARTIST 0x82AE0228: enqueue addresses of each tag-1 stream slot.
-void* AptMovie::queueFrameActions(void* pCIH, int nFrame)
+void AptMovie::queueFrameActions(AptCIH* pCIH, int nFrame) const
 {
-    void* result = this;
     for (int32_t i = 0; i < mpFrames[nFrame].mnCommandCount; ++i)
     {
         AptTimelineAction* command = static_cast<AptTimelineAction*>(mpFrames[nFrame].mpCommands[i]);
         if (command->mnTag == 1)
-            result = gpAptTarget->mpAnimationTarget->mpActionQueue->AddActionBack(&command->mpStream, static_cast<AptCIH*>(pCIH), gnAptActionFrameId);
+            gpAptTarget->mpAnimationTarget->mpActionQueue->AddActionBack(&command->mActions, pCIH, gnAptActionFrameId);
     }
-    return result;
 }
 
 // ARTIST 0x82B0B7A0: run pending init actions first, then place/remove.
@@ -332,15 +330,15 @@ void AptMovie::resolve(int nBase, AptConstFile* pConstFile, int32_t* pValueCount
             case 1:
             {
                 AptTimelineAction* action = reinterpret_cast<AptTimelineAction*>(command);
-                AptTimelineRelocate(action->mpStream, nBase, false);
-                AptActionInterpreter::_parseStream(action->mpStream, nBase, pConstFile, pValueCount);
+                AptTimelineRelocate(action->mActions.aActionStream, nBase, false);
+                AptActionInterpreter::_parseStream(action->mActions.aActionStream, nBase, pConstFile, pValueCount);
                 break;
             }
             case 2:
             {
-                AptTimelineAction* label = reinterpret_cast<AptTimelineAction*>(command);
-                AptTimelineRelocate(label->mpStream, nBase, false);
-                EAStringC name(reinterpret_cast<const char*>(label->mpStream));
+                AptTimelineLabel* label = reinterpret_cast<AptTimelineLabel*>(command);
+                AptTimelineRelocate(label->mpLabel, nBase, false);
+                EAStringC name(label->mpLabel);
                 mpLabelHash->Set(name, AptInteger::Create(f));
                 break;
             }
@@ -355,8 +353,8 @@ void AptMovie::resolve(int nBase, AptConstFile* pConstFile, int32_t* pValueCount
                     AptTimelineRelocate(list->mpHandlers, nBase, false);
                     for (int32_t k = 0; k < list->mnCount; ++k)
                     {
-                        AptTimelineRelocate(list->mpHandlers[k].mpActionStream, nBase, false);
-                        AptActionInterpreter::_parseStream(const_cast<unsigned char*>(list->mpHandlers[k].mpActionStream), nBase, pConstFile, pValueCount);
+                        AptTimelineRelocate(list->mpHandlers[k].mActions.aActionStream, nBase, false);
+                        AptActionInterpreter::_parseStream(list->mpHandlers[k].mActions.aActionStream, nBase, pConstFile, pValueCount);
                     }
                 }
                 break;
@@ -387,12 +385,12 @@ void AptMovie::unresolve(int nBase, int32_t* pValueCount)
             case 1:
             {
                 AptTimelineAction* action = reinterpret_cast<AptTimelineAction*>(command);
-                AptActionInterpreter::_parseStream(action->mpStream, nBase, 0, pValueCount);
-                AptTimelineRelocate(action->mpStream, nBase, true);
+                AptActionInterpreter::_parseStream(action->mActions.aActionStream, nBase, 0, pValueCount);
+                AptTimelineRelocate(action->mActions.aActionStream, nBase, true);
                 break;
             }
             case 2:
-                AptTimelineRelocate(reinterpret_cast<AptTimelineAction*>(command)->mpStream, nBase, true);
+                AptTimelineRelocate(reinterpret_cast<AptTimelineLabel*>(command)->mpLabel, nBase, true);
                 break;
             case 3:
             {
@@ -402,8 +400,8 @@ void AptMovie::unresolve(int nBase, int32_t* pValueCount)
                 {
                     for (int32_t k = 0; k < list->mnCount; ++k)
                     {
-                        AptActionInterpreter::_parseStream(const_cast<unsigned char*>(list->mpHandlers[k].mpActionStream), nBase, 0, pValueCount);
-                        AptTimelineRelocate(list->mpHandlers[k].mpActionStream, nBase, true);
+                        AptActionInterpreter::_parseStream(list->mpHandlers[k].mActions.aActionStream, nBase, 0, pValueCount);
+                        AptTimelineRelocate(list->mpHandlers[k].mActions.aActionStream, nBase, true);
                     }
                     AptTimelineRelocate(list->mpHandlers, nBase, true);
                 }

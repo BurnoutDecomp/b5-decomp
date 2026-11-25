@@ -4181,7 +4181,7 @@ void ModeManager::SetupOnlineStartingGrid(GameModeParams* lpGameModeParams, s32 
          ++liCarIndex)
     {
         const u32 luStartPositionIndex =
-            static_cast<u32>(laiRaceCarOrder.FindFirstInstanceOf(liCarIndex));
+            laiRaceCarOrder.FindFirstInstanceOf(liCarIndex);
 
         // Direction first: that is the console's order, and the direction is what the start
         // location's own IsNormal guard (inside AddStartLocation) tests.

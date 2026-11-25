@@ -26,7 +26,7 @@ CgsContainers::Array< CgsContainers::LinkedListNode<BrnSound::Logic::ResourceReg
     ::Append(
         CgsContainers::LinkedListNode<BrnSound::Logic::ResourceRegistrar::RequestedResource>* const& );
 
-template s32
+template u32
 CgsContainers::Array< CgsContainers::LinkedListNode<BrnSound::Logic::ResourceRegistrar::RequestedResource>*, 124 >
     ::FindFirstInstanceOf(
         CgsContainers::LinkedListNode<BrnSound::Logic::ResourceRegistrar::RequestedResource>* const& ) const;

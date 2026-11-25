@@ -62,6 +62,7 @@
 
 #include <cstddef>   // offsetof (_AssertLayout)
 #include "types.hpp"
+#include "SDKs/EATech/include/Apt/AptActionBlock.h"
 
 #include "SDKs/EATech/include/Apt/AptCharacterInst.h"   // AptCharacterInst base
 #include "SDKs/EATech/include/Apt/AptDisplayList.h"      // embedded child display list (by value)
@@ -71,13 +72,13 @@
 // into mpClipEventHandlers): console 12-byte {mask, keyId, streamPtr}; GUIAPT64
 // stride-16 with the 8-byte relocated+parsed action-stream pointer at +0x08 (the
 // exact records AptMovie::resolve64 case-3 relocates + _parseStream parses).
-// queueClipEvents scans the masks and enqueues &mpActionStream (the slot ADDRESS)
+// queueClipEvents scans the masks and enqueues the embedded action block
 // as the action's event-stream slot; RunActions dereferences it at drain time.
 struct AptClipEventHandler
 {
     uint32_t mnEventFlags;                 // +0x00  packed event mask (tested & 0x201C7 / & 0x200C0)
     uint32_t mnKeyFrameId;                 // +0x04  keyframe id (mask 0x20000: matches frameId>>17)
-    const unsigned char* mpActionStream;   // +0x08  the parsed action stream (native-8 slot)
+    AptActionBlock mActions;               // +0x08  the parsed action stream slot
 };
 
 // The sprite instance's registered-clip-event-handler list -- the placement's

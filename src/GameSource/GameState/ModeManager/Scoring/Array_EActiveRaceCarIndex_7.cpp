@@ -10,4 +10,4 @@
 // Element type is the GLOBAL EActiveRaceCarIndex enum (BurnoutConstants.h); the DWARF key is the
 // unqualified Array<EActiveRaceCarIndex,7u>.
 // Sole caller in the boot trace: BrnGameState::ScoringSystem::UpdateRacePositions.
-template s32 CgsContainers::Array<EActiveRaceCarIndex, 7>::FindFirstInstanceOf(const EActiveRaceCarIndex&) const;
+template u32 CgsContainers::Array<EActiveRaceCarIndex, 7>::FindFirstInstanceOf(const EActiveRaceCarIndex&) const;

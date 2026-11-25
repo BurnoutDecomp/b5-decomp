@@ -43,16 +43,14 @@ void Environment::Destruct()
 
 bool Environment::AddStateManager(StateManager* apStateManager)
 {
-    CGS_ASSERT(apStateManager != 0, "lpStateManager");
+    const char* const lpcAssertFile = "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/CgsEnvironment.h";
+    CGS_ASSERT(apStateManager, CGS_ASSERT_MESSAGE_AT("lpStateManager", lpcAssertFile, 475));
+    CGS_ASSERT(apStateManager->GetStateType() < KI_MAX_NUMBER_OF_STATES,
+        CGS_ASSERT_MESSAGE_AT("lpStateManager->GetStateType() < KI_MAX_NUMBER_OF_STATES", lpcAssertFile, 476));
+    CGS_ASSERT(mapStateManagers[apStateManager->GetStateType()] == 0,
+        CGS_ASSERT_MESSAGE_AT("mapStateManagers[lpStateManager->GetStateType()] == NULL", lpcAssertFile, 477));
 
-    const s32 liStateType = apStateManager->GetStateType();
-    CGS_ASSERT(liStateType < KI_MAX_NUMBER_OF_STATES,
-               "lpStateManager->GetStateType() < KI_MAX_NUMBER_OF_STATES");
-
-    CGS_ASSERT(mapStateManagers[liStateType] == 0,
-               "mapStateManagers[lpStateManager->GetStateType()] == NULL");
-
-    mapStateManagers[liStateType] = apStateManager;
+    mapStateManagers[apStateManager->GetStateType()] = apStateManager;
     return true;
 }
 

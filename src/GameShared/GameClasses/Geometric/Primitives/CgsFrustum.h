@@ -103,6 +103,6 @@ namespace CgsGeometric
         // Inverse of VectorToPlane: pack a Plane into its stored (negated) lane
         // form. Declared here (sibling ledger func, its own TU); called by
         // SetPlaneByIndex @ 0x827BAA48.
-        Vector4 PlaneToVector(const rw::collision::Plane& lrPlane) const;
+        Vector4 PlaneToVector(const rw::collision::Plane& lrPlane);
     };
 }

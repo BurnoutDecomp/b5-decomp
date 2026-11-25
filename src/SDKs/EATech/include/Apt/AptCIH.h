@@ -227,7 +227,7 @@ struct AptCIH : public AptValueGC
     // skipped frame into a scratch AptPseudoDisplayList and merging the result
     // (mergeState). Finishes by queueing the landed frame's actions. No-op on a
     // string-value placeholder, a negative frame, or a frame past the clip's end.
-    int jumpToFrame(int nFrame);   // @0x82B0BD50
+    void jumpToFrame(int nFrame);   // @0x82B0BD50
 
     // _gotoAndX @0x82B0D2F0 -- the AS gotoAndPlay/gotoAndStop core (the original
     // source declares it exactly so). Static: pThis carries the receiver. Body in

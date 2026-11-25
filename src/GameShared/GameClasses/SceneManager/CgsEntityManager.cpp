@@ -99,10 +99,10 @@ bool EntityManager::Prepare()
 const VolumeInstance* EntityManager::GetFirstEntityVolumeInstance(
     u16 lu16EntityIndex, s32* lpiFirstVolumeInstanceIndex) const
 {
-    CGS_ASSERT(static_cast<s32>(lu16EntityIndex) < KI_MAX_NUM_ENTITIES,
-               "(int32_t)lu16EntityIndex < KI_MAX_NUM_ENTITIES");
-    CGS_ASSERT(mEntityPool.IsObjectAllocated(lu16EntityIndex),
-               "mEntityPool.IsObjectAllocated( lu16EntityIndex )");
+    CGS_ASSERT_AT(static_cast<s32>(lu16EntityIndex) < KI_MAX_NUM_ENTITIES,
+                  "(int32_t)lu16EntityIndex < KI_MAX_NUM_ENTITIES", KAC_ENTITY_MANAGER_ARTIST_HEADER, 439);
+    CGS_ASSERT_AT(mEntityPool.IsObjectAllocated(lu16EntityIndex),
+                  "mEntityPool.IsObjectAllocated( lu16EntityIndex )", KAC_ENTITY_MANAGER_ARTIST_HEADER, 440);
 
     const s32 liFirstVolumeInstance = mEntityPool[lu16EntityIndex].miFirstVolumeInstance;
     if (lpiFirstVolumeInstanceIndex != NULL)
@@ -306,12 +306,8 @@ u16 EntityManager::AddEntity(EntityId lEntityId)
 // ===========================================================================
 void EntityManager::RemoveEntity(u16 lu16Index)
 {
-    if (!mEntityPool.IsObjectAllocated(lu16Index))
-    {
-        CGS_ASSERT(false, "mEntityPool.IsObjectAllocated( (int32_t)lu16Index )");
-        return;
-    }
-
+    CGS_ASSERT_AT(mEntityPool.IsObjectAllocated(lu16Index),
+                  "mEntityPool.IsObjectAllocated( (int32_t)lu16Index )", CGS_ARTIST_FILE, 166);
     mEntityIdToIndex.Remove(mEntityPool[lu16Index].mUserID);
     mEntityPool.FreeObject(lu16Index);
 }

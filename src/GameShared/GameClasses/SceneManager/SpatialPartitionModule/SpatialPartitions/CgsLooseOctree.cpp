@@ -1630,7 +1630,7 @@ namespace CgsSceneManager
             bool lbSeparatingAxis = true;
             CGS_ALIGN(16) const rw::collision::Plane lPlane =
                 lpFrustum->GetPlane(static_cast<CgsGeometric::Frustum::PlaneId>(liPlane));
-            const f32 lfDistance = lPlane.w;
+            const f32 lfDistance = lPlane.GetDistance();
             const __vector4 lvNormal = __lvx(&lPlane, 0);
             for (s32 liCorner = 0; liCorner < 8; ++liCorner)
             {
@@ -1649,7 +1649,7 @@ namespace CgsSceneManager
         {
             CGS_ALIGN(16) const rw::collision::Plane lPlane =
                 lpFrustum->GetPlane(static_cast<CgsGeometric::Frustum::PlaneId>(liPlane));
-            const f32 lfDistance = lPlane.w;
+            const f32 lfDistance = lPlane.GetDistance();
             const __vector4 lvNormal = __lvx(&lPlane, 0);
             for (s32 liCorner = 0; liCorner < 8; ++liCorner)
             {

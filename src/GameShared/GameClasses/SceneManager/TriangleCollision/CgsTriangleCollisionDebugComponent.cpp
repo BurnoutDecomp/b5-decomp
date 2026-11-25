@@ -1220,12 +1220,13 @@ namespace CgsSceneManager
         for (u32 luPlane = 0; luPlane < 6; ++luPlane)
         {
             const rw::collision::Plane& lrPlane = lrFrustum.GetPlane(0);
+            const rw::math::vpu::Vector3 lPlaneNormal = lrPlane.GetNormal();
             const f32 lfNormalLength = std::sqrt(
-                lrPlane.x * lrPlane.x + lrPlane.y * lrPlane.y + lrPlane.z * lrPlane.z);
+                lPlaneNormal.mV.x * lPlaneNormal.mV.x + lPlaneNormal.mV.y * lPlaneNormal.mV.y + lPlaneNormal.mV.z * lPlaneNormal.mV.z);
             const f32 lfInverseNormalLength = 1.0f / lfNormalLength;
-            const f32 lfNormalX = lrPlane.x * lfInverseNormalLength;
-            const f32 lfNormalY = lrPlane.y * lfInverseNormalLength;
-            const f32 lfNormalZ = lrPlane.z * lfInverseNormalLength;
+            const f32 lfNormalX = lPlaneNormal.mV.x * lfInverseNormalLength;
+            const f32 lfNormalY = lPlaneNormal.mV.y * lfInverseNormalLength;
+            const f32 lfNormalZ = lPlaneNormal.mV.z * lfInverseNormalLength;
 
             s32 liVerticesBehindPlane = 0;
             for (s32 liVertex = 0; liVertex < liNumVertices; ++liVertex)

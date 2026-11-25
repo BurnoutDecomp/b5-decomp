@@ -4,6 +4,7 @@
 #include "types.hpp"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // =============================================================================
 // CgsBranchlessOperations.h  (OWNING HEADER for CgsNumeric branchless min/max)
@@ -15,29 +16,12 @@
 //   CgsBranchlessOperations.h:55  int32_t  Min(int32_t, int32_t);
 //   CgsBranchlessOperations.h:79  uint32_t Min(uint32_t, uint32_t);
 //
-// The bodies are reconstructed from the X360 inlining of these helpers inside
-// CgsSound::Utils::IntClamp @ 0x826895D0 (the using-TU this dossier covers). In
-// that TU the signed Max/Min are inlined as the sign-mask trick AND each result is
-// CGS_ASSERTed against the branchy reference rw::core::stdc::Max/Min. The asserts
-// fire from CgsBranchlessOperations.h lines 50 (Max) and 62 (Min), so the inline
-// helpers carry those asserts:
-//
-//   Max(li0, li1):  liDiff   = li0 - li1;
-//                   liResult = li0 - ((liDiff >> 31) & liDiff);   // arith shift
-//                   CGS_ASSERT(liResult == ((li0 > li1) ? li0 : li1), ...);   // L50
-//   Min(li0, li1):  liDiff   = li0 - li1;
-//                   liResult = li1 + ((liDiff >> 31) & liDiff);
-//                   CGS_ASSERT(liResult == ((li0 < li1) ? li0 : li1), ...);   // L62
-//
-// The branchless trick: (liDiff >> 31) is 0 when liDiff >= 0 and -1 (all ones)
-// when liDiff < 0, so (mask & liDiff) is either 0 or liDiff. The reference
-// "rw::core::stdc::Max/Min" the assert strings name is the plain ternary; we
-// stringize that ternary into the CGS_ASSERT message verbatim.
-//
-// All three helpers are inline (header-only -- they have no out-of-line address;
-// the X360 only ever inlines them into callers like IntClamp). The uint32_t Min
-// (DWARF line 79) is declared/defined for shape completeness; its body mirrors the
-// signed Min using the same sign-of-difference mask.
+// ARTIST's IntClamp (0x826895D0) and SetMixerInputValue (0x82680610) inline
+// both signed helpers and their diagnostics. The XDK needs __forceinline to
+// retain this inlining in SetMixerInputValue. The original subtracts in 64
+// bits, then sign-extends the low 32 bits of the difference and shift result
+// before masking. The debug checks compare with the corresponding signed Min
+// or Max and use the original source lines 62 and 50.
 // =============================================================================
 
 namespace CgsNumeric
@@ -45,26 +29,36 @@ namespace CgsNumeric
 
 // CgsBranchlessOperations.h:43. Branchless signed maximum (asserts against the
 // branchy reference, firing at line 50).
-inline s32 Max(s32 li0, s32 li1)
+__forceinline s32 Max(s32 li0, s32 li1)
 {
-    const s32 liDiff   = li0 - li1;
-    const s32 liResult = li0 - ((liDiff >> 31) & liDiff);
+    const s64 liWide0 = li0;
+    const s64 liWide1 = li1;
+    const s64 liDiff = liWide0 - liWide1;
+    const s64 liMask = static_cast<s32>(liDiff >> 31);
+    const s64 liLowDiff = static_cast<s32>(liDiff);
+    const s32 liResult = static_cast<s32>(liWide0 - (liMask & liLowDiff));
 
     CGS_ASSERT(liResult == ((li0 > li1) ? li0 : li1),
-               "liResult == rw::core::stdc::Max( li0, li1 )");
+               CGS_ASSERT_MESSAGE_AT("liResult == rw::core::stdc::Max( li0, li1 )",
+                   "..\\..\\..\\GameShared\\GameClasses\\Numeric/CgsBranchlessOperations.h", 50));
 
     return liResult;
 }
 
 // CgsBranchlessOperations.h:55. Branchless signed minimum (asserts against the
 // branchy reference, firing at line 62).
-inline s32 Min(s32 li0, s32 li1)
+__forceinline s32 Min(s32 li0, s32 li1)
 {
-    const s32 liDiff   = li0 - li1;
-    const s32 liResult = li1 + ((liDiff >> 31) & liDiff);
+    const s64 liWide0 = li0;
+    const s64 liWide1 = li1;
+    const s64 liDiff = liWide0 - liWide1;
+    const s64 liMask = static_cast<s32>(liDiff >> 31);
+    const s64 liLowDiff = static_cast<s32>(liDiff);
+    const s32 liResult = static_cast<s32>(liWide1 + (liMask & liLowDiff));
 
     CGS_ASSERT(liResult == ((li0 < li1) ? li0 : li1),
-               "liResult == rw::core::stdc::Min( li0, li1 )");
+               CGS_ASSERT_MESSAGE_AT("liResult == rw::core::stdc::Min( li0, li1 )",
+                   "..\\..\\..\\GameShared\\GameClasses\\Numeric/CgsBranchlessOperations.h", 62));
 
     return liResult;
 }

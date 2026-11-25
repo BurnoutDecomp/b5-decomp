@@ -372,22 +372,21 @@ void AptCIH::SetDirtyState(bool bDirty, bool bPropagate)
 // ===========================================================================
 
 // jumpToFrame @0x82B0BD50 -- seek the clip's play-head to nFrame.
-int AptCIH::jumpToFrame(int nFrame)
+void AptCIH::jumpToFrame(int nFrame)
 {
     // No-op on the empty AptCIHNone placeholder (vtbl index 37).
     if (getVtblIndex() == AptVFT_CIHNone)
-        return 0;
+        return;
 
     AptCharacterSpriteInstBase* pInst =
         static_cast<AptCharacterSpriteInstBase*>(mpCharacterInst);
     if (nFrame < 0)
-        return 0;
+        return;
 
     AptMovie* pMovie = AptGetClipMovie(pInst);
     if (nFrame >= pMovie->mnFrameCount)
-        return 0;
+        return;
 
-    int nResult = 0;
     const int nCurrent = pInst->mnGotoFrame;
     if (nFrame != nCurrent)
     {
@@ -457,10 +456,8 @@ int AptCIH::jumpToFrame(int nFrame)
         }
 
         pInst->mnLastActionFrame = pInst->mnGotoFrame;
-        // ARTIST returns queueFrameActions' r3 value.
-        nResult = static_cast<int>(reinterpret_cast<intptr_t>(pMovie->queueFrameActions(this, pInst->mnGotoFrame)));
+        pMovie->queueFrameActions(this, pInst->mnGotoFrame);
     }
-    return nResult;
 }
 
 // tick @0x82B0BED8 -- advance the movie-clip node one frame.

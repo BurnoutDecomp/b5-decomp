@@ -36,8 +36,7 @@ namespace CgsContainers
 // STILL DIFFERENT from ARTIST (recorded, not yet restored):
 // - The DWARF signatures differ where explicit instantiations in other directories depend on
 //   ours: AppendArray is a member template on the other array's capacity
-//   (??$AppendArray@$0CA@@...), FindFirstInstanceOf returns uint32_t (KU_INVALID),
-//   InsertBefore takes a T&, QSort returns void.
+//   (??$AppendArray@$0CA@@...), InsertBefore takes a T&, QSort returns void.
 // - h:201 Construct(uint32_t) is declared by the DWARF; no ARTIST copy attests its body, so it
 //   is not reconstructed.
 //
@@ -47,7 +46,8 @@ class Array
 {
 public:
     static const s32 KI_UNCONSTRUCTED = -1; // DWARF h:49 KU_INVALID (uint32_t 0xFFFFFFFF)
-    static const u32 KU_SIZE          = N;
+    static const u32 KU_INVALID = 0xFFFFFFFFu;
+    static const u32 KU_SIZE = N;
 
     Array() { miCount = KI_UNCONSTRUCTED; }
 
@@ -90,7 +90,7 @@ public:
 
     // CountInstancesOf h:443, FindFirstInstanceOf h:470, Contains h:496, IsFull h:512.
     inline u32 CountInstancesOf(const T& lrElement) const;
-    inline s32 FindFirstInstanceOf(const T& lrElement) const;
+    inline u32 FindFirstInstanceOf(const T& lrElement) const;
     inline bool Contains(const T& lrElement) const;
     inline bool IsFull() const;
 
@@ -466,12 +466,10 @@ Array<T, N>::CountInstancesOf(const T& lrElement) const
 
 
 template <typename T, u32 N>
-inline s32
+inline u32
 Array<T, N>::FindFirstInstanceOf(const T& lrElement) const
 {
-    // The index of the first element equal to lrElement, else -1 (ARTIST
-    // Array<int,8>::FindFirstInstanceOf @0x823184F8 returns -1 literally; the DWARF spells
-    // the return uint32_t with KU_INVALID 0xFFFFFFFF, the same bits).
+    // Return the first matching index or the original unsigned KU_INVALID sentinel.
     //
     //
     //
@@ -482,10 +480,10 @@ Array<T, N>::FindFirstInstanceOf(const T& lrElement) const
     {
         if (lrElement == maElements[luIndex])
         {
-            return static_cast<s32>(luIndex);
+            return luIndex;
         }
     }
-    return KI_UNCONSTRUCTED;
+    return KU_INVALID;
 }
 
 
@@ -504,7 +502,7 @@ Array<T, N>::Contains(const T& lrElement) const
     //
     //
     CGS_ASSERT_AT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called", CGS_ARTIST_CGSARRAY_FILE, 506);
-    return (FindFirstInstanceOf(lrElement) != KI_UNCONSTRUCTED);
+    return (FindFirstInstanceOf(lrElement) != KU_INVALID);
 }
 
 template <typename T, u32 N>

@@ -496,7 +496,7 @@ namespace BrnTraffic
             };
             const Vector3 lProbe(lProbeLanes);
             const u16 luHull = static_cast<u16>(mpPvs->GetHullIndexForPoint(lProbe));
-            if (lHulls.FindFirstInstanceOf(luHull) == -1)
+            if (lHulls.FindFirstInstanceOf(luHull) == lHulls.KU_INVALID)
                 lHulls.Append(luHull);
         }
 

@@ -21,6 +21,7 @@
 // ===========================================================================
 
 #include "types.hpp"
+#include "SDKs/EATech/include/Apt/AptActionBlock.h"
 
 struct AptConstFile;   // the serialised const chunk (the resolve64 parse ctx)
 
@@ -36,7 +37,8 @@ struct AptCIH;
 // kept opaque here.
 // ARTIST timeline command headers; all pointers are native 32-bit slots.
 struct AptTimelineCommand { int32_t mnTag; };
-struct AptTimelineAction { int32_t mnTag; unsigned char* mpStream; };
+struct AptTimelineAction { int32_t mnTag; AptActionBlock mActions; };
+struct AptTimelineLabel { int32_t mnTag; const char* mpLabel; };
 struct AptTimelineInitAction { int32_t mnTag; int32_t mnIndicator; unsigned char* mpStream; };
 struct AptTimelineWord { int32_t mnTag; int32_t mnValue; };
 
@@ -75,7 +77,7 @@ struct AptMovie
     void doFrameControls(AptDisplayList* pDisplayList, AptCIH* pParent, int nFrame);
 
     // @0x82AE0228 -- queue frame nFrame's action commands onto the director queue.
-    void* queueFrameActions(void* pCIH, int nFrame);
+    void queueFrameActions(AptCIH* pCIH, int nFrame) const;
 
     // @PS3 0x820FA4 -- run frame nFrame's tag-1 action commands IMMEDIATELY on the
     // VM singleton (push a register-block window, runStream each action stream with

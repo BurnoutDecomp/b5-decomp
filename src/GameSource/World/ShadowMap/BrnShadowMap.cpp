@@ -2556,11 +2556,15 @@ namespace BrnWorld
             for (u32 luI = 0; luI < 6; ++luI)                                  // :1712
             {
                 const rw::collision::Plane lPlane = lCameraFrustum.GetPlaneByIndex(luI); // :1715
-                const f32 lNDotL = Dot3(MakeShadowVector4( lPlane.x, lPlane.y, lPlane.z, lPlane.w ),
+                const Vector3 lPlaneNormal = lPlane.GetNormal();
+                const f32 lfPlaneDistance = lPlane.GetDistance();
+                const f32 lNDotL = Dot3(MakeShadowVector4(lPlaneNormal.mV.x, lPlaneNormal.mV.y,
+                                                        lPlaneNormal.mV.z, lfPlaneDistance),
                                         lLightVector);                         // :1716
                 if (0.0f > lNDotL)
                 {
-                    const Vector3Plus lCandidatePlane = Vector3Plus( lPlane.x, lPlane.y, lPlane.z, lPlane.w );
+                    const Vector3Plus lCandidatePlane(lPlaneNormal.mV.x, lPlaneNormal.mV.y, lPlaneNormal.mV.z,
+                                                      lfPlaneDistance);
                     laCandidatePlanes[luNumCandidatePlanes].mPlane = lCandidatePlane;
                     const f32 lfScore = 2.0f - lNDotL;    // vspltisw 2 + vcfsx
                     {

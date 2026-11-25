@@ -27,5 +27,5 @@
 //
 template void CgsContainers::Array<u16, 32>::Append(const u16&);
 template u32  CgsContainers::Array<u16, 32>::GetLength() const;
-template s32  CgsContainers::Array<u16, 32>::FindFirstInstanceOf(const u16&) const;
+template u32  CgsContainers::Array<u16, 32>::FindFirstInstanceOf(const u16&) const;
 template u16& CgsContainers::Array<u16, 32>::GetItem(u32);

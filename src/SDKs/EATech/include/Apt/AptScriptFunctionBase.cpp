@@ -79,18 +79,15 @@ AptScriptFunctionBase::AptScriptFunctionBase(AptVirtualFunctionTable_Indices eTy
     : AptObject(eType, 8)   // -> AptValueWithHash(eType, 8); clears the class-flags word
     , mpCIH(pCIH)
     , mpParentAnim(0)
-    , mpParentScope(0)
-    , mnCreatingNestedFunction(0)
+    , mpCreatorScope(0)
+    , mnFrameStackReserve(0)
 {
     // Defined inside a live call -> capture the current frame stack as the closure scope.
     if (pCallContext)
     {
-        // The console dispatches pCallContext's vtbl+0x60 -- the slot after
-        // CleanupAfterExecution (+0x5C) -- then immediately captures spFrameStack:
-        // it is CreateFrameStack (@0x82AF1260, lazily build the caller's activation
-        // frame so the nested function has a live frame to close over).
-        static_cast<AptScriptFunctionBase*>(pCallContext)->CreateFrameStack();
-        mpParentScope = reinterpret_cast<AptValue*>(spFrameStack);
+        // ARTIST dispatches CreatingNestedFunction at virtual slot +0x60.
+        static_cast<AptScriptFunctionBase*>(pCallContext)->CreatingNestedFunction();
+        mpCreatorScope = spFrameStack;
         if (spFrameStack)
             spFrameStack->AddRef();
     }
@@ -122,7 +119,7 @@ AptScriptFunctionBase::AptScriptFunctionBase(AptVirtualFunctionTable_Indices eTy
 // _ZN21AptScriptFunctionBaseC2E31AptVirtualFunctionTable_IndicesPS_P6AptCIH @0xF5A94C)
 // -- duplicate rOther's scope/prototype state while re-binding to pCIH. Used by the
 // subclass Duplicate paths (AptScriptFunction1::Duplicate -> its own copy ctor ->
-// this base copy ctor). Unlike the primary ctor it takes rOther.mpParentScope
+// this base copy ctor). Unlike the primary ctor it takes rOther.mpCreatorScope
 // directly (no PrepareCallContextScope -- the enclosing frame is inherited verbatim
 // from the original) and copies the prototype / __proto__ from rOther's embedded
 // hash instead of optionally building a fresh prototype.
@@ -132,8 +129,8 @@ AptScriptFunctionBase::AptScriptFunctionBase(AptVirtualFunctionTable_Indices eTy
     : AptObject(eType, 8)   // -> AptValueWithHash(eType, 8); clears the class-flags word
     , mpCIH(pCIH)
     , mpParentAnim(0)
-    , mpParentScope(rOther.mpParentScope)   // a3[10]: inherit the enclosing frame verbatim
-    , mnCreatingNestedFunction(0)
+    , mpCreatorScope(rOther.mpCreatorScope)   // a3[10]: inherit the enclosing frame verbatim
+    , mnFrameStackReserve(0)
 {
     // Derive the owning timeline animation from the (re-bound) CIH -- identical walk to
     // the primary ctor (the X360 starts from a4 == pCIH, which is what we store at +0x20).
@@ -147,8 +144,8 @@ AptScriptFunctionBase::AptScriptFunctionBase(AptVirtualFunctionTable_Indices eTy
     // AddRef the inherited scope (when present) + the CIH + the owning animation, then
     // bump the animation's zombie-count field (the same IncZombieCount the primary
     // ctor performs).
-    if (mpParentScope)
-        mpParentScope->AddRef();
+    if (mpCreatorScope)
+        mpCreatorScope->AddRef();
     mpCIH->AddRef();
     mpParentAnim->AddRef();
     // The +0x0C "character ref" the console bumps IS the CIH zombie-count field
@@ -235,10 +232,11 @@ AptScriptFunctionBase* AptScriptFunctionBase::Duplicate(AptValue* /*pCIH*/) cons
 // this function's captured scope, as the process-wide current frame.
 void AptScriptFunctionBase::CreateFrameStack()
 {
-    AptFrameStack* pEnclosing = reinterpret_cast<AptFrameStack*>(mpParentScope);
-    AptFrameStack* pFrame = new AptFrameStack(pEnclosing);
-    spFrameStack = pFrame;
-    pFrame->AddRef();
+    if (mnFrameStackReserve != 0)
+        spFrameStack = new AptFrameStack(mpCreatorScope, mnFrameStackReserve);
+    else
+        spFrameStack = new AptFrameStack(mpCreatorScope);
+    spFrameStack->AddRef();
 }
 
 // SetupBeforeExecution @0x82AD6618 (base) -- snapshot the current frame stack into
@@ -259,10 +257,7 @@ void AptScriptFunctionBase::CleanupAfterExecution(SavedExecutionState* pSaved)
 {
     if (spFrameStack)
     {
-        // FLAG: the console also stashes the low halfword of the frame's hash header
-        // into mnCreatingNestedFunction here -- an opaque side-effect of this
-        // degenerate base (the real teardown is the AptScriptFunction2 override);
-        // the essential action is releasing the frame.
+        mnFrameStackReserve = static_cast<uint16_t>(spFrameStack->GetNativeHashVirtual()->GetHashSize());
         spFrameStack->Release();
     }
     spFrameStack = pSaved->mpSavedFrameStack;
@@ -329,40 +324,49 @@ AptValue** AptScriptFunctionBase::PushStaticData()
 
 // CreatingNestedFunction @0x82AF12F0 -- ensure a live frame exists (used while a
 // nested DefineFunction is being built so its captured scope is materialised).
-bool AptScriptFunctionBase::CreatingNestedFunction() const
+void AptScriptFunctionBase::CreatingNestedFunction()
 {
     if (!spFrameStack)
-        const_cast<AptScriptFunctionBase*>(this)->CreateFrameStack();
-    return mnCreatingNestedFunction != 0;
+        CreateFrameStack();
 }
 
 // GetInScopeChain @0x82AE1990 -- resolve key by walking the live frame (or this
 // function's captured scope) outward.
 AptValue* AptScriptFunctionBase::GetInScopeChain(const EAStringC& key)
 {
-    AptFrameStack* pFrame = spFrameStack
-        ? spFrameStack
-        : reinterpret_cast<AptFrameStack*>(mpParentScope);
-    return pFrame ? pFrame->GetInScopeChain(key) : 0;
+    if (spFrameStack == 0)
+    {
+        if (mpCreatorScope != 0)
+            return mpCreatorScope->GetInScopeChain(key);
+        return 0;
+    }
+    return spFrameStack->GetInScopeChain(key);
 }
 
 // SetWhereExistsInScopeChain @0x82AF5308 -- store key where it already exists up the
 // chain; returns false if it is nowhere in scope.
 bool AptScriptFunctionBase::SetWhereExistsInScopeChain(const EAStringC& key, AptValue* pValue)
 {
-    AptFrameStack* pFrame = spFrameStack
-        ? spFrameStack
-        : reinterpret_cast<AptFrameStack*>(mpParentScope);
-    return pFrame ? pFrame->SetWhereExistsInScopeChain(key, pValue) : false;
+    if (spFrameStack == 0)
+    {
+        if (mpCreatorScope != 0)
+            return mpCreatorScope->SetWhereExistsInScopeChain(key, pValue);
+        return false;
+    }
+    return spFrameStack->SetWhereExistsInScopeChain(key, pValue);
 }
 
 // ExistsInLocalScope @0x82AE1938 -- is key a local of the innermost frame?
 bool AptScriptFunctionBase::ExistsInLocalScope(const EAStringC& key)
 {
-    AptFrameStack* pFrame = spFrameStack
-        ? spFrameStack
-        : reinterpret_cast<AptFrameStack*>(mpParentScope);
-    return pFrame && pFrame->GetNativeHashVirtual()->Lookup(key) != 0;
+    AptFrameStack* pFrame = spFrameStack;
+    if (pFrame == 0)
+    {
+        pFrame = mpCreatorScope;
+        if (pFrame == 0)
+            return false;
+    }
+    return pFrame->Lookup(key) != 0;
 }
 
 // SetInLocalScope @0x82AF52C0 -- define key in the innermost frame (creating one if
@@ -371,7 +375,7 @@ void AptScriptFunctionBase::SetInLocalScope(const EAStringC& key, AptValue* pVal
 {
     if (!spFrameStack)
         CreateFrameStack();
-    spFrameStack->GetNativeHashVirtual()->Set(key, pValue);
+    spFrameStack->Set(key, pValue);
 }
 
 // ===========================================================================
@@ -405,8 +409,8 @@ void AptScriptFunctionBase::ShutdownStaticData()
 void AptScriptFunctionBase::RegisterReferences()
 {
     GetNativeHashVirtual()->RegisterReferences(this);
-    if (mpParentScope)
-        AptValue::sReferenceRegistrationCb(this, &mpParentScope, "ParentScope", 0);
+    if (mpCreatorScope)
+        AptValue::sReferenceRegistrationCb(this, reinterpret_cast<AptValue**>(&mpCreatorScope), "ParentScope", 0);
     if (mpCIH)
         AptValue::sReferenceRegistrationCb(this, &mpCIH, "CIH", 0);
     if (mpParentAnim)
@@ -417,9 +421,9 @@ void AptScriptFunctionBase::RegisterReferences()
 // animation's character reference) and tear down the hash.
 void AptScriptFunctionBase::DestroyGCPointers()
 {
-    if (mpParentScope)
-        mpParentScope->Release();
-    mpParentScope = 0;
+    if (mpCreatorScope)
+        mpCreatorScope->Release();
+    mpCreatorScope = 0;
 
     mpCIH->Release();
     mpCIH = 0;

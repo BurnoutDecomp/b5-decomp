@@ -200,6 +200,19 @@ namespace CgsSceneManager
         const VolumeInstance* GetFirstEntityVolumeInstance(u16 lu16EntityIndex,
                                                            s32* lpiFirstVolumeInstanceIndex) const;
 
+        // DecFIGS CgsEntityManager.h:195. ARTIST 828CDA4C–828CDA58 advances
+        // the link and reads the next slot through the const volume getter.
+        const VolumeInstance* GetNextEntityVolumeInstance(
+            const VolumeInstance* lpVolumeInstance, s32* lpiNextVolumeInstanceIndex) const
+        {
+            const s32 liNextVolumeInstanceIndex = lpVolumeInstance->miNextEntityVolumeInstance;
+            if (lpiNextVolumeInstanceIndex != NULL)
+            {
+                *lpiNextVolumeInstanceIndex = liNextVolumeInstanceIndex;
+            }
+            return GetVolumeInstance(liNextVolumeInstanceIndex);
+        }
+
         // @ 0x828B9E10 (DWARF h:154) -- the public id of the volume instance at a pool index.
         VolumeInstanceId GetVolumeInstanceIdByIndex(s32 liIndex) const;
 

@@ -492,7 +492,7 @@ void TriggerQueryManager::PreWorldUpdate(
         }
         lAction.miRegionIndex = static_cast<s32>(luRegionIndex);
         // `subf r11, r11, r27(-1) ; cntlzw ; extrwi 1,26` == (FindFirstInstanceOf(..) == -1).
-        lAction.mbFirstFrame  = (maLastFrameTriggers.FindFirstInstanceOf(luRegionIndex) == -1);
+        lAction.mbFirstFrame  = (maLastFrameTriggers.FindFirstInstanceOf(luRegionIndex) == maLastFrameTriggers.KU_INVALID);
 
         lpGameActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lAction),
                                     KI_GAME_ACTION_PLAYER_TRIGGER,

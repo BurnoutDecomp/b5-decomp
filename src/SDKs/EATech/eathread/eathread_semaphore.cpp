@@ -11,6 +11,7 @@
 
 #include <xtl.h>  // native semaphore APIs, atomics and _CountLeadingZeros
 #include <new>        // placement new (SemaphoreFactory::ConstructSemaphore)
+#include <cstring>
 
 #include "SDKs/EATech/eathread/eathread_semaphore.h"
 
@@ -18,6 +19,22 @@ namespace EA
 {
 namespace Thread
 {
+
+// ARTIST 0x82B42910. The EAThread semaphore implementation also owns its parameters.
+SemaphoreParameters::SemaphoreParameters(int initialCount, bool bIntraProcess, const char* pName)
+{
+    mInitialCount  = initialCount;
+    mbIntraProcess = bIntraProcess;
+    if (pName)
+    {
+        std::strncpy(mName, pName, 15);
+        mName[15] = 0;
+    }
+    else
+    {
+        mName[0] = 0;
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Semaphore::Semaphore @ 0x82B43960
@@ -50,6 +67,18 @@ Semaphore::Semaphore(const SemaphoreParameters* pParameters, bool bInitialize)
     }
 
     Init(pParameters);
+}
+
+// The integer overload initializes the same native handle, using the caller's permit count.
+Semaphore::Semaphore(int iInitialCount)
+{
+    mSemaphoreData.mhSemaphore = 0;
+    mSemaphoreData.mnCount = 0;
+    mSemaphoreData.mnCancelCount = 0;
+    mSemaphoreData.mbIntraProcess = true;
+
+    SemaphoreParameters lParameters(iInitialCount);
+    Init(&lParameters);
 }
 
 // ---------------------------------------------------------------------------

@@ -1,7 +1,8 @@
 #pragma once
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 
 // CgsContainers::LinearSOAHashTable<ValueType, KeyType> - an open-addressed (linear-probed) hash
 // table stored as Structure-of-Arrays: a parallel key array and a value array, both sized to the
@@ -27,9 +28,24 @@
 //   FindEntry  @ 0x828DF3E0  (LinearSOAHashTable<int,int>)
 namespace CgsContainers
 {
+    // A signed 32-bit hash key carries the same unsigned hash bits as a u32.
+    template <typename KeyType>
+    struct LinearSOAHashKeyBits
+    {
+        typedef KeyType Type;
+    };
+
+    template <>
+    struct LinearSOAHashKeyBits<s32>
+    {
+        typedef u32 Type;
+    };
+
     template <typename ValueType, typename KeyType = u64>
     struct LinearSOAHashTable
     {
+        typedef typename LinearSOAHashKeyBits<KeyType>::Type HashBits;
+
         // The invalid/empty-slot sentinel: an all-ones key. A slot whose key equals this is free.
         static const KeyType KU_EMPTY_KEY = static_cast<KeyType>(~static_cast<KeyType>(0));
 
@@ -52,67 +68,57 @@ namespace CgsContainers
         // (X360 0x828DF260, LinearSOAHashTable<int,int>.)
         ValueType* AddEntry(KeyType luKey, const ValueType* lpValue)
         {
-            CGS_ASSERT(luKey != miInvalidKey,
-                       "Can not add entry with invalid key value to table\n");   // :242
+            CGS_ASSERT_STREAM_AT(static_cast<HashBits>(luKey) != static_cast<HashBits>(miInvalidKey),
+                "Can not add entry with invalid key value to table\n",
+                "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsLinearSOAHashTable.h", 242);
 
-            const KeyType luStart = luKey % miLength;
-            KeyType       luPos   = luStart;
-            if (luStart < miLength)
+            const HashBits luLength = static_cast<HashBits>(miLength);
+            const HashBits luStart = static_cast<HashBits>(luKey) % luLength;
+            HashBits luPos;
+            for (luPos = luStart; luPos < luLength; ++luPos)
             {
-                KeyType* lpKey = &mpKeys[luStart];
-                while (*lpKey != miInvalidKey)
+                if (static_cast<HashBits>(mpKeys[luPos]) == static_cast<HashBits>(miInvalidKey))
                 {
-                    ++luPos;
-                    ++lpKey;
-                    if (luPos >= miLength)
-                        goto WrapScan;
+                    mpKeys[luPos] = luKey;
+                    if (lpValue)
+                        mpValues[luPos] = *lpValue;
+                    return &mpValues[luPos];
                 }
-                mpKeys[luPos] = luKey;
-                if (lpValue)
-                    mpValues[luPos] = *lpValue;
-                return &mpValues[luPos];
             }
-
-        WrapScan:
-            luPos = 0;
-            if (luStart != 0)
+            for (luPos = 0; luPos < luStart; ++luPos)
             {
-                KeyType* lpKey = mpKeys;
-                while (*lpKey != miInvalidKey)
+                if (static_cast<HashBits>(mpKeys[luPos]) == static_cast<HashBits>(miInvalidKey))
                 {
-                    ++luPos;
-                    ++lpKey;
-                    if (luPos >= luStart)
-                        return 0;
+                    mpKeys[luPos] = luKey;
+                    if (lpValue)
+                        mpValues[luPos] = *lpValue;
+                    return &mpValues[luPos];
                 }
-                mpKeys[luPos] = luKey;
-                if (lpValue)
-                    mpValues[luPos] = *lpValue;
-                return &mpValues[luPos];
             }
             return 0;
         }
 
         // ARTIST 0x828DF3E0 searches from the hash position to the end and then
-        // wraps to the start. The 32-bit instance uses an unsigned key (divwu).
+        // wraps to the start. The 32-bit instance probes using unsigned key bits (divwu).
         ValueType* FindEntry(KeyType luKey)
         {
-            const KeyType luStart = luKey % miLength;
-            KeyType luPos;
-            for (luPos = luStart; luPos < miLength; ++luPos)
+            const HashBits luLength = static_cast<HashBits>(miLength);
+            const HashBits luStart = static_cast<HashBits>(luKey) % luLength;
+            HashBits luPos;
+            for (luPos = luStart; luPos < luLength; ++luPos)
             {
-                const KeyType luSlotKey = mpKeys[luPos];
-                if (luSlotKey == luKey)
+                const HashBits luSlotKey = static_cast<HashBits>(mpKeys[luPos]);
+                if (luSlotKey == static_cast<HashBits>(luKey))
                     return &mpValues[luPos];
-                if (luSlotKey == miInvalidKey)
+                if (luSlotKey == static_cast<HashBits>(miInvalidKey))
                     return 0;
             }
             for (luPos = 0; luPos < luStart; ++luPos)
             {
-                const KeyType luSlotKey = mpKeys[luPos];
-                if (luSlotKey == luKey)
+                const HashBits luSlotKey = static_cast<HashBits>(mpKeys[luPos]);
+                if (luSlotKey == static_cast<HashBits>(luKey))
                     return &mpValues[luPos];
-                if (luSlotKey == miInvalidKey)
+                if (luSlotKey == static_cast<HashBits>(miInvalidKey))
                     return 0;
             }
             return 0;

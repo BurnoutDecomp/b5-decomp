@@ -35,25 +35,6 @@
 // ---------------------------------------------------------------------------
 extern DOGMA_PoolManager* gpAptPseudoDataPool;   // off_8324D808
 
-namespace
-{
-    // The slot stride the X360 uses everywhere (20 == sizeof one slot's five
-    // dwords). On PC AptAnimationPoolData is wider (8-byte pointers), so element
-    // arithmetic is done on the typed pointer; this literal is documented for the
-    // X360 cross-reference only.
-    const u32 KU_X360_SLOT_STRIDE = 20u;
-
-    // The X360 "wrap-around" guard the deque arithmetic shares: when a slot
-    // pointer reaches one past the last physical slot it folds back to mpBegin.
-    // (X360: cmp against `mnCapacity*20 + *mpBegin`.)
-    inline AptAnimationPoolData* WrapForward(AptAnimationPoolData* pSlot,
-                                             AptAnimationPoolData* pBegin,
-                                             u32                   nCapacity)
-    {
-        return (pSlot == pBegin + nCapacity) ? pBegin : pSlot;
-    }
-}
-
 // ---- AptActionQueueC @ 0x82AE6780 ----------------------------------------
 // Allocate the ring and its leading size word from the shared DOGMA pool.
 // The 20-byte element product is bounded by the unsigned 32-bit size limit.
@@ -109,134 +90,69 @@ void AptActionQueueC::ClearActions()
     mpFront = mpBack = mpBegin;
 }
 
-namespace
+// The queued action captures the frame on its bound sprite instance.
+void AptActionQueueC::AddActionBack(AptActionBlock* pActionBlock, AptCIH* pCIH, s32 iContext)
 {
-    // The action-slot stamp both enqueues snapshot: the CIH's bound sprite
-    // instance's mnLastActionFrame (charInst word[8] +0x20; the console reads it
-    // blind -- every queued-action CIH is sprite-family).
-    inline s32 AptQueueStampOf(AptCIH* pCIH)
+    AptAnimationPoolData* lpNewBack = GetNextItem(mpBack);
+    if (lpNewBack != mpFront)
     {
-        AptCharacterInst* pInst = pCIH->mpCharacterInst;
-        return pInst ? static_cast<AptCharacterSpriteInstBase*>(pInst)->mnLastActionFrame : 0;
+        mpBack->mnType = AptAnimationPoolData::E_ACTION_TYPE_ACTION;
+        mpBack->action.miDepth = static_cast<AptCharacterSpriteInstBase*>(pCIH->mpCharacterInst)->mnLastActionFrame;
+        mpBack->action.mpActionBlock = pActionBlock;
+        mpBack->action.mpCIH = pCIH;
+        pCIH->AddRef();
+        mpBack->mnInput = iContext;
+        mpBack = lpNewBack;
     }
 }
 
-// ---- AddActionBack @ 0x82AD94B0 ------------------------------------------
-// Enqueue a clip-event action at the back. No-op if advancing the back cursor
-// would collide with the front (ring full). Snapshots the instance depth, stores
-// the CIH + event id + context, and AddRefs the CIH. Returns the CIH.
-AptValue* AptActionQueueC::AddActionBack(const void* pEventStreamSlot, AptCIH* pCIH, s32 iContext)
+void AptActionQueueC::AddActionFront(AptActionBlock* pActionBlock, AptCIH* pCIH, s32 iContext)
 {
-    AptAnimationPoolData* lpBack = mpBack;
-
-    AptAnimationPoolData* lpNextBack = lpBack + 1;
-    lpNextBack = WrapForward(lpNextBack, mpBegin, mnCapacity);
-
-    if (lpNextBack == mpFront)
+    AptAnimationPoolData* lpNewFront = DecrementDequeLocation(mpFront);
+    if (lpNewFront != mpBack)
     {
-        return pCIH;   // ring full -- drop the action (X360 returns `this`)
+        mpFront = lpNewFront;
+        mpFront->action.miDepth = static_cast<AptCharacterSpriteInstBase*>(pCIH->mpCharacterInst)->mnLastActionFrame;
+        mpFront->mnType = AptAnimationPoolData::E_ACTION_TYPE_ACTION;
+        mpFront->action.mpActionBlock = pActionBlock;
+        mpFront->action.mpCIH = pCIH;
+        pCIH->AddRef();
+        mpFront->mnInput = iContext;
     }
-
-    lpBack->mnType         = AptAnimationPoolData::E_ACTION_TYPE_ACTION;
-    // The queue stamp: the sprite's mnLastActionFrame (charInst word[8] +0x20 --
-    // PS3 asm `slot[+8] = *(a3[8] + 0x20)`). The tick NEGATES it around
-    // queueFrameActions, so a queued frame action carries -frame; RunActions'
-    // gate then runs it only while the inst is still AT that frame.
-    lpBack->action.miDepth   = AptQueueStampOf(pCIH);
-    lpBack->action.mpEventStreamSlot = pEventStreamSlot;
-    lpBack->action.mpCIH     = pCIH;
-    pCIH->AddRef();
-    lpBack->mnInput = iContext;
-
-    mpBack = lpNextBack;
-    return pCIH;
 }
 
-// ---- AddActionFront @ 0x82AD9548 -----------------------------------------
-// Enqueue a clip-event action at the front (push onto the head). Mirrors
-// AddActionBack but steps the front cursor back one slot first; no-op if that
-// would collide with the back.
-AptValue* AptActionQueueC::AddActionFront(const void* pEventStreamSlot, AptCIH* pCIH, s32 iContext)
+void AptActionQueueC::AddFunctionBack(AptCIH* pContext, AptValue* pFuncDef,
+                                     s32 nParams, s32 iInput)
 {
-    AptAnimationPoolData* lpNewFront = mpFront - 1;
-    if (lpNewFront < mpBegin)
+    AptAnimationPoolData* lpNewBack = GetNextItem(mpBack);
+    if (lpNewBack != mpFront)
     {
-        lpNewFront = mpBegin + mnCapacity - 1;
+        mpBack->mnType = AptAnimationPoolData::E_ACTION_TYPE_FUNCTION;
+        mpBack->mnInput = iInput;
+        mpBack->function.mpContext = pContext;
+        mpBack->function.mpContext->AddRef();
+        mpBack->function.mpFuncDef = pFuncDef;
+        mpBack->function.mpFuncDef->AddRef();
+        mpBack->function.miReturnReg = nParams;
+        mpBack = lpNewBack;
     }
-
-    if (lpNewFront == mpBack)
-    {
-        return pCIH;   // ring full -- drop the action
-    }
-
-    mpFront = lpNewFront;
-    // The same mnLastActionFrame stamp as AddActionBack (see there).
-    lpNewFront->action.miDepth   = AptQueueStampOf(pCIH);
-    lpNewFront->mnType           = AptAnimationPoolData::E_ACTION_TYPE_ACTION;
-    lpNewFront->action.mpEventStreamSlot = pEventStreamSlot;
-    lpNewFront->action.mpCIH     = pCIH;
-    pCIH->AddRef();
-    lpNewFront->mnInput = iContext;
-
-    return pCIH;
 }
 
-// ---- AddFunctionBack @ 0x82AD95F8 ----------------------------------------
-// Enqueue an ActionScript function call at the back. No-op if the ring is full.
-// Stores the arg count, the context + func-def values (AddRefing both), and the
-// return register. Returns the func-def.
-AptValue* AptActionQueueC::AddFunctionBack(AptValue* pContext, AptValue* pFuncDef,
-                                           s32 iReturnReg, s32 iArgCount)
+void AptActionQueueC::AddFunctionFront(AptCIH* pContext, AptValue* pFuncDef,
+                                      s32 nParams, s32 iInput)
 {
-    AptAnimationPoolData* lpBack = mpBack;
-
-    AptAnimationPoolData* lpNextBack = lpBack + 1;
-    lpNextBack = WrapForward(lpNextBack, mpBegin, mnCapacity);
-
-    if (lpNextBack == mpFront)
+    AptAnimationPoolData* lpNewFront = DecrementDequeLocation(mpFront);
+    if (lpNewFront != mpBack)
     {
-        return pFuncDef;   // ring full -- drop the call (X360 returns `this`)
+        mpFront = lpNewFront;
+        mpFront->mnType = AptAnimationPoolData::E_ACTION_TYPE_FUNCTION;
+        mpFront->mnInput = iInput;
+        mpFront->function.mpContext = pContext;
+        mpFront->function.mpContext->AddRef();
+        mpFront->function.mpFuncDef = pFuncDef;
+        mpFront->function.mpFuncDef->AddRef();
+        mpFront->function.miReturnReg = nParams;
     }
-
-    lpBack->mnType             = AptAnimationPoolData::E_ACTION_TYPE_FUNCTION;
-    lpBack->mnInput = iArgCount;
-    lpBack->function.mpContext  = pContext;
-    pContext->AddRef();
-    lpBack->function.mpFuncDef  = pFuncDef;
-    pFuncDef->AddRef();
-    lpBack->function.miReturnReg = iReturnReg;
-
-    mpBack = lpNextBack;
-    return pFuncDef;
-}
-
-// ---- AddFunctionFront @ 0x82AD96A8 ---------------------------------------
-// Enqueue an ActionScript function call at the front. Mirrors AddFunctionBack
-// but steps the front cursor back one slot first.
-AptValue* AptActionQueueC::AddFunctionFront(AptValue* pContext, AptValue* pFuncDef,
-                                            s32 iReturnReg, s32 iArgCount)
-{
-    AptAnimationPoolData* lpNewFront = mpFront - 1;
-    if (lpNewFront < mpBegin)
-    {
-        lpNewFront = mpBegin + mnCapacity - 1;
-    }
-
-    if (lpNewFront == mpBack)
-    {
-        return pFuncDef;   // ring full -- drop the call
-    }
-
-    mpFront = lpNewFront;
-    lpNewFront->mnType             = AptAnimationPoolData::E_ACTION_TYPE_FUNCTION;
-    lpNewFront->mnInput = iArgCount;
-    lpNewFront->function.mpContext  = pContext;
-    pContext->AddRef();
-    lpNewFront->function.mpFuncDef  = pFuncDef;
-    pFuncDef->AddRef();
-    lpNewFront->function.miReturnReg = iReturnReg;
-
-    return pFuncDef;
 }
 
 // RemoveActionFor @0x82ADF2A0. Leave the executing slot in place and move

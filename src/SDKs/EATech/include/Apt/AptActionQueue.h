@@ -58,6 +58,7 @@
 
 class AptValue;
 struct AptCIH;
+struct AptActionBlock;
 
 // ---------------------------------------------------------------------------
 // AptAnimationPoolData -- one 20-byte (5-dword) queue slot. The slot is a small
@@ -93,17 +94,15 @@ struct AptAnimationPoolData
         struct
         {
             s32       miDepth;     // +0x08  instance depth snapshot at queue time (B4 nFrame)
-            // The queued "event id" is really the ADDRESS of the command record's
-            // action-stream pointer slot (console: queueFrameActions passes cmd+4;
-            // RunActions dereferences it TWICE -- `**(v3+12)`).
-            const void* mpEventStreamSlot;   // +0x10 (B4 pBlock)
-            AptValue* mpCIH;       // +0x18  the CIH (GC ref; B4 pCIH)
+            // Read the command's stream slot when the action runs.
+            AptActionBlock* mpActionBlock;  // +0x0C
+            AptCIH*   mpCIH;       // +0x18  the CIH (GC ref; B4 pCIH)
         } action;
 
         // ---- function view (mnType == E_ACTION_TYPE_FUNCTION) -------------
         struct
         {
-            AptValue* mpContext;   // +0x08  call "this"/context value (GC ref)
+            AptCIH*   mpContext;   // +0x08  call "this"/context value (GC ref)
             AptValue* mpFuncDef;   // +0x10  the function-definition value (GC ref)
             s32       miReturnReg; // +0x18  result register / handle (B4 nParams)
         } function;
@@ -134,26 +133,13 @@ public:
     // func-def for a function), mark it empty, and reset front == back == begin.
     void ClearActions();
 
-    // @ 0x82AD94B0 -- enqueue an action at the back. No-op if the ring is full
-    // (advancing back would collide with front). AddRefs the CIH. Returns the CIH
-    // (X360 fastcall return value).
-    // pEventStreamSlot = the command record's action-stream pointer slot address
-    // (console s32 event id; pointer-width on x64 -- see AptAnimationPoolData).
-    AptValue* AddActionBack(const void* pEventStreamSlot, AptCIH* pCIH, s32 iContext);
+    // Enqueue an action and retain its sprite instance control handle.
+    void AddActionBack(AptActionBlock* pActionBlock, AptCIH* pCIH, s32 iContext);
+    void AddActionFront(AptActionBlock* pActionBlock, AptCIH* pCIH, s32 iContext);
 
-    // @ 0x82AD9548 -- enqueue an action at the front (push onto the head). Mirrors
-    // AddActionBack but decrements front. AddRefs the CIH.
-    AptValue* AddActionFront(const void* pEventStreamSlot, AptCIH* pCIH, s32 iContext);
-
-    // @ 0x82AD95F8 -- enqueue a function call at the back. No-op if the ring is
-    // full. AddRefs both the context and the func-def values.
-    AptValue* AddFunctionBack(AptValue* pContext, AptValue* pFuncDef,
-                              s32 iReturnReg, s32 iArgCount);
-
-    // @ 0x82AD96A8 -- enqueue a function call at the front. AddRefs both held
-    // values.
-    AptValue* AddFunctionFront(AptValue* pContext, AptValue* pFuncDef,
-                               s32 iReturnReg, s32 iArgCount);
+    // Enqueue a function call and retain both held references.
+    void AddFunctionBack(AptCIH* pContext, AptValue* pFuncDef, s32 nParams, s32 iInput);
+    void AddFunctionFront(AptCIH* pContext, AptValue* pFuncDef, s32 nParams, s32 iInput);
 
     // @ 0x82ADF2A0 -- remove the first live action queued for a given CIH context
     // The executing action remains queued until it finishes.

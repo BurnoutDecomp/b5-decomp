@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"
 
+#include "SDKs/EATech/include/rw/math/vpu/detail/vector4_operation_inline.h"
 #include <cmath>   // std::fabs (IntersectionOf3Planes)
 
 // ============================================================================
@@ -77,14 +78,6 @@ namespace CgsGeometric
         // name or semantic use is established.
         u32 guUnidentifiedFrustumDebugWord_830390E4 = 0;
 
-        inline Vector3 MakeFrustumDebugVector(f32 lfX, f32 lfY, f32 lfZ, f32 lfW)
-        {
-            Vector3 lResult;
-            lResult.mV.x = lfX; lResult.mV.y = lfY;
-            lResult.mV.z = lfZ; lResult.mV.w = lfW;
-            return lResult;
-        }
-
         inline Vector3 AddFrustumDebugVectors(const Vector3& lrA, const Vector3& lrB)
         {
             return Vector3(__vaddfp(lrA.mV, lrB.mV));
@@ -98,7 +91,7 @@ namespace CgsGeometric
         inline Vector3 AddFrustumDebugPlane(const Vector3& lrA, const rw::collision::Plane& lrPlane)
         {
             return AddFrustumDebugVectors(lrA,
-                MakeFrustumDebugVector(lrPlane.x, lrPlane.y, lrPlane.z, lrPlane.w));
+                lrPlane.GetNormal());
         }
 
         // Preserve the X360 vadd order: (A+B)+C+D, then multiply by 1/4.
@@ -240,16 +233,12 @@ namespace CgsGeometric
     // recovering the plane is a whole-vector negate. `this` is never touched --
     // the method is const and ignores it (the stack lfs/stfs shuffle in the asm
     // is just the compiler's 16-byte copy of the negated result into the return
-    // slot). Lowered to a clean per-lane arithmetic negation.
+    // slot). The native SDK negation flips the sign bit in all four lanes.
     // ------------------------------------------------------------------------
     rw::collision::Plane Frustum::VectorToPlane(const Vector4& lrVector) const
     {
-        Vector4 lNegated;
-        lNegated.mV.x = -lrVector.mV.x;
-        lNegated.mV.y = -lrVector.mV.y;
-        lNegated.mV.z = -lrVector.mV.z;
-        lNegated.mV.w = -lrVector.mV.w;
-        return rw::collision::Plane(lNegated);
+        const Vector4 lVecNegated = rw::math::vpu::Negate(lrVector);
+        return rw::collision::Plane(Vector3(lVecNegated.mV), lVecNegated.W().GetFloat());
     }
 
     // ------------------------------------------------------------------------
@@ -260,16 +249,10 @@ namespace CgsGeometric
     // splat, same idiom as 0x82840DB0); declared out-of-line by the header, so it
     // is homed here beside its only caller. `this` is untouched.
     // ------------------------------------------------------------------------
-    Vector4 Frustum::PlaneToVector(const rw::collision::Plane& lrPlane) const
+    Vector4 Frustum::PlaneToVector(const rw::collision::Plane& lrPlane)
     {
         const Vector4& lrPlaneVector = *reinterpret_cast<const Vector4*>(&lrPlane);
-
-        Vector4 lNegated;
-        lNegated.mV.x = -lrPlaneVector.mV.x;
-        lNegated.mV.y = -lrPlaneVector.mV.y;
-        lNegated.mV.z = -lrPlaneVector.mV.z;
-        lNegated.mV.w = -lrPlaneVector.mV.w;
-        return lNegated;
+        return rw::math::vpu::Negate(lrPlaneVector);
     }
 
     // ------------------------------------------------------------------------
@@ -631,8 +614,8 @@ namespace CgsGeometric
 
                         const rw::collision::Plane& lrPlane = laPlanes[luOtherPlane];
                         // ARTIST82845CE4..D20: dot3(plane, point) - plane.w.
-                        const Vector3 lPlaneNormal = MakeFrustumDebugVector(lrPlane.x, lrPlane.y, lrPlane.z, lrPlane.w);
-                        const f32 lfSignedDistance = __vmsum3fp(lPlaneNormal.mV, lIntersection.mV).x - lrPlane.w;
+                        const Vector3 lPlaneNormal = lrPlane.GetNormal();
+                        const f32 lfSignedDistance = __vmsum3fp(lPlaneNormal.mV, lIntersection.mV).x - lrPlane.GetDistance();
 
                         if (-0.001f > lfSignedDistance)
                         {
@@ -715,9 +698,9 @@ namespace CgsGeometric
         const f32 KF_MIN_PLANE_TRIPLE_DETERMINANT = 0.001f;
 
         // ARTIST82841618..82841734: fused crosses and both reciprocal refinements.
-        const Vector3 l0 = MakeFrustumDebugVector(lPlane0.x, lPlane0.y, lPlane0.z, lPlane0.w);
-        const Vector3 l1 = MakeFrustumDebugVector(lPlane1.x, lPlane1.y, lPlane1.z, lPlane1.w);
-        const Vector3 l2 = MakeFrustumDebugVector(lPlane2.x, lPlane2.y, lPlane2.z, lPlane2.w);
+        const Vector3 l0 = lPlane0.GetNormal();
+        const Vector3 l1 = lPlane1.GetNormal();
+        const Vector3 l2 = lPlane2.GetNormal();
         const Vector3 l12 = rw::math::vpu::Cross(l1, l2);
         const rw::math::vpu::VectorIntrinsic lDeterminant = __vmsum3fp(l0.mV, l12.mV);
         if (KF_MIN_PLANE_TRIPLE_DETERMINANT > std::fabs(lDeterminant.x))

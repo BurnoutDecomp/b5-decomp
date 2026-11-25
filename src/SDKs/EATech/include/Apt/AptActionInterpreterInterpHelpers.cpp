@@ -256,10 +256,10 @@ bool AptActionInterpreter::SetInScopeChain(const EAStringC* pName, AptValue* pVa
     if (!pFunction)
         return false;
 
-    // console: v23 = off_8324E3DC (spFrameStack); else *(v22 + 40) (mpParentScope).
+    // console: v23 = off_8324E3DC (spFrameStack); else *(v22 + 40) (mpCreatorScope).
     AptFrameStack* pFrame = AptScriptFunctionBase::GetActiveFrameStack();
     if (!pFrame)
-        pFrame = reinterpret_cast<AptFrameStack*>(pFunction->GetParentScope());
+        pFrame = pFunction->GetParentScope();
     if (!pFrame)
         return false;
 

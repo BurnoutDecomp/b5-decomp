@@ -3190,8 +3190,8 @@ void GameStateModule::RequestStreamingForVehicleSelection(GameStateModuleIO::Gam
     lRequestAction.maiPriorities[0]     = 0;
     lRequestAction.mauExtraInfoFlags[0] = 5;
 
-    s32 liCurrentVehicleIndex = lCars.FindFirstInstanceOf(lCurrentVehicle);
-    if (liCurrentVehicleIndex == -1)
+    u32 luCurrentVehicleIndex = lCars.FindFirstInstanceOf(lCurrentVehicle);
+    if (luCurrentVehicleIndex == lCars.KU_INVALID)
     {
         // A colour livery is not in the list itself: look up its parent car instead.
         const BrnResource::VehicleListEntry* lpCurrentVehicleData = mpVehicleList->GetVehicleData(lCurrentVehicle);
@@ -3200,16 +3200,15 @@ void GameStateModule::RequestStreamingForVehicleSelection(GameStateModuleIO::Gam
         {
             CGS_ASSERT(lpCurrentVehicleData->GetParentId() != 0,
                        CGS_ASSERT_MESSAGE_AT("lpCurrentVehicleData->GetParentId() != kCGSID_NULL", CGS_ARTIST_FILE, 7465));
-            liCurrentVehicleIndex = lCars.FindFirstInstanceOf(lpCurrentVehicleData->GetParentId());
+            luCurrentVehicleIndex = lCars.FindFirstInstanceOf(lpCurrentVehicleData->GetParentId());
         }
     }
 
     // The console streams "<id> was not found in the vehicle list" into the assert buffer.
     char lacUncompressedID[KI_CGSID_STRING_LEN];
     CgsIDUnCompress(lCurrentVehicle, lacUncompressedID);
-    CGS_ASSERT(liCurrentVehicleIndex != -1, " was not found in the vehicle list");
+    CGS_ASSERT(luCurrentVehicleIndex != lCars.KU_INVALID, " was not found in the vehicle list");
 
-    const u32 luCurrentVehicleIndex = static_cast<u32>(liCurrentVehicleIndex);
     const u32 luMaxNeighbours       = E_ACTIVE_RACE_CAR_INDEX_COUNT - 1;
     const u32 luMaxCountPerSide     = E_ACTIVE_RACE_CAR_INDEX_COUNT / 2;
 

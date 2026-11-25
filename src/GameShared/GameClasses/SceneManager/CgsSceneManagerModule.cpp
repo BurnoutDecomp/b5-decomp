@@ -1843,8 +1843,8 @@ void SceneManagerModule::RemoveAllEntityVolumeInstances(
             }
 
             mEntityManager.RemoveVolumeInstanceByIndex(lpVolumeInstance->mUserID, liVolumeInstanceIndex);
-            liVolumeInstanceIndex = lpVolumeInstance->miNextEntityVolumeInstance;
-            lpVolumeInstance = lrEntityManager.GetVolumeInstance(liVolumeInstanceIndex);
+            lpVolumeInstance =
+                lrEntityManager.GetNextEntityVolumeInstance(lpVolumeInstance, &liVolumeInstanceIndex);
         }
         while (lpVolumeInstance != NULL);
     }

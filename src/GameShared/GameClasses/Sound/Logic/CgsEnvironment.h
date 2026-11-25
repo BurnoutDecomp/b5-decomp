@@ -112,6 +112,8 @@ struct Environment
     // Host-safety default state (the X360 has no distinct Environment ctor -- the
     // owning Logic::Module's ctor stores + Construct() establish everything; this
     // zero-init only guards the pre-Construct window on the host).
+    void SetModuleParams(const ModuleParams& arParams) { mModuleParams = arParams; }
+
     Environment()
         : mpAllocator(0)
         , mu32StateManagerCount(0)

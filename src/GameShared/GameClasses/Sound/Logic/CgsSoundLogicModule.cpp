@@ -174,7 +174,7 @@ bool Module::Prepare(rw::IResourceAllocator* apAllocator,
     case eModuleCreateEnvironment:
     {
         EnvironmentSpec lSpec;
-        lSpec.mpAllocator           = mpAllocator;
+        lSpec.mpAllocator           = apAllocator;
         lSpec.mu32StateManagerCount = static_cast<u32>(GetNumberOfStates());
         mEnvironment.Construct(lSpec);
         mePrepareStage++;
@@ -187,9 +187,7 @@ bool Module::Prepare(rw::IResourceAllocator* apAllocator,
         mePrepareStage++;   // empty stage (console shape)
         // fall through
     case eModulePrepareProxies:
-        mEnvironment.mModuleParams.mu16MaxVoiceProxies   = akrModuleParams.mu16MaxVoiceProxies;
-        mEnvironment.mModuleParams.mu16MaxContentProxies = akrModuleParams.mu16MaxContentProxies;
-        mEnvironment.mModuleParams.mu16MaxStateManagers  = akrModuleParams.mu16MaxStateManagers;
+        mEnvironment.SetModuleParams(akrModuleParams);
         mePrepareStage++;
         // fall through
     case eModulePrepareDone:

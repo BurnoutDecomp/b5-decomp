@@ -94,6 +94,7 @@ struct AptNativeHash
     AptValue* Lookup(const EAStringC& key) const;
     // X360 @0x82AD51D0 -- true when no table has been allocated yet.
     bool IsEmpty() const;
+    int GetHashSize() const { return mnCapacity; }
 
     // @0x82ADA3C0 -- the GC mark walk: register every held AptValue reference (the
     // proto slots + each bucket value) with the collector, owned by pOwner.

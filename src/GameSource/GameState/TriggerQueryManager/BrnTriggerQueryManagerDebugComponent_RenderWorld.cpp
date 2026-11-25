@@ -172,10 +172,10 @@ namespace BrnGameState
                             bool lbHighlighted = lbHighlightedGroup;
                             if (!lbHighlighted)
                             {
-                                const s32 liPreviousFrameIndex =
+                                const u32 luPreviousFrameIndex =
                                     mpTriggerQueryManager->maLastFrameTriggers.FindFirstInstanceOf(
                                         luRegionIndex);
-                                lbHighlighted = static_cast<u32>(liPreviousFrameIndex) <
+                                lbHighlighted = luPreviousFrameIndex <
                                     mpTriggerQueryManager->maLastFrameTriggers.GetLength();
                             }
                             if (lbHighlighted)
@@ -184,11 +184,11 @@ namespace BrnGameState
                             }
                             else if (leRegionType == BrnTrigger::TriggerRegion::E_TYPE_GENERIC_REGION)
                             {
-                                const s32 liActiveIndex =
+                                const u32 luActiveIndex =
                                     mpTriggerQueryManager->maActiveTriggers.FindFirstInstanceOf(
                                         luRegionIndex);
                                 // ARTIST82365250 skips dark gray on an active-list hit.
-                                if (static_cast<u32>(liActiveIndex) >=
+                                if (luActiveIndex >=
                                     mpTriggerQueryManager->maActiveTriggers.GetLength())
                                 {
                                     lColour = rw::RGBA(64, 64, 64, 255);

@@ -23,6 +23,7 @@
 
 #include "GameShared/GameClasses/Sound/Logic/CgsEffectBase.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+#include "GameShared/GameClasses/Numeric/CgsBranchlessOperations.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsState.h"        // the REAL State (mpStateManager @ X360 +0x24)
 #include "GameShared/GameClasses/Sound/Logic/CgsStateManager.h" // the REAL StateManager (GetLogicModule / +0x2C)
 
@@ -126,15 +127,10 @@ s32 EffectBase::GetInstanceId() const
 // ---------------------------------------------------------------------------
 f32 EffectBase::GetMixerOutputValue(int aiSlot, int aiPreset)
 {
-    if (mpDynamicMixIo == 0) // lwz r3,0x30(this); cmplwi cr6,r3,0; beq
-    {
-        return 0.0f;               // lfs f1, flt_82001CC0
-    }
+    if (mpDynamicMixIo)
+        return static_cast<f32>(mpDynamicMixIo->GetDMixOutput(aiSlot, aiPreset));
 
-    // extsw r11,r3 -> the GetDMixOutput result is a SIGNED 32-bit value; fcfid/frsp
-    // convert it to single precision.
-    const s32 liOutput = mpDynamicMixIo->GetDMixOutput(aiSlot, aiPreset);
-    return static_cast<f32>(liOutput);
+    return 0.0f;
 }
 
 // ---------------------------------------------------------------------------
@@ -154,7 +150,9 @@ f32 EffectBase::GetRWACMixerOutputValue(int aiSlot, int aiPreset)
     case Nicotine::DMixIO::DMX_PITCH:
         return static_cast<f32>(liOutput) * 0.00024414062f;
     case Nicotine::DMixIO::DMX_FREQ:
-        return liOutput <= 24900 ? static_cast<f32>(liOutput) : 96000.0f;
+        if (liOutput > 24900)
+            return 96000.0f;
+        return static_cast<f32>(liOutput);
     case Nicotine::DMixIO::DMX_AZIM:
         return static_cast<f32>(liOutput) * 0.0054932479f;
     default:
@@ -205,15 +203,13 @@ ClassTypeInfo<EffectControl>* EffectControl::AddToClassTypeInfoArray(ClassTypeIn
 void EffectBase::SetMixerInputValue(int aiSlot, int aiValue)
 {
     CGS_ASSERT(aiSlot >= 0 && aiSlot < KI_MAX_SFX_CTLS,
-               "( liIndex >= 0 ) && ( liIndex < KI_MAX_SFX_CTLS )");
-    if (!mpDynamicMixIo)
-        return;
-
-    if (aiValue < 0)
-        aiValue = 0;
-    else if (aiValue > 0x7FFF)
-        aiValue = 0x7FFF;
-    mpDynamicMixIo->SetDMixInput(aiSlot, aiValue);
+        CGS_ASSERT_MESSAGE_AT("lSlotIndex >= 0 && lSlotIndex < 32",
+            "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/CgsEffectBase.h", 812));
+    if (mpDynamicMixIo)
+    {
+        const s32 liClamped = CgsNumeric::Min(CgsNumeric::Max(aiValue, 0), 0x7fff);
+        mpDynamicMixIo->SetDMixInput(aiSlot, liClamped);
+    }
 }
 
 ClassTypeInfo<EffectControl>* EffectControl::GetRegisteredTypeInfo(u32 auIndex)

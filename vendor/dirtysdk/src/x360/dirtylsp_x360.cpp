@@ -80,41 +80,52 @@ extern "C" s32 DirtyLSPQueryDone(DirtyLSPRefT*, HostentT* host)
     host->done = -1;
     host->addr = 0;
     DWORD count;
+    DWORD index;
+    IN_ADDR address;
+    const char* errorFormat;
+    const char* errorName;
     if (XGetOverlappedResult(&query->Overlapped, &count, TRUE) != 0)
     {
-        NetPrintfCode("dirtylspxenon: XGetOverlappedResult failed (err=%s)\n",
-            DirtyErrGetName(XGetOverlappedExtendedError(&query->Overlapped)));
-        return host->done;
+        errorName = DirtyErrGetName(XGetOverlappedExtendedError(&query->Overlapped));
+        errorFormat = "dirtylspxenon: XGetOverlappedResult failed (err=%s)\n";
+        goto reportError;
     }
-    if (count == 0)
+    if (count != 0)
+    {
+        NetPrintfCode("dirtylspxenon: got %d title service results\n", count);
+        for (DWORD i = 0; i < count; ++i)
+            NetPrintfCode("dirtylspxenon: [%d] %s\n", i, SocketInAddrGetText(query->aServers[i].inaServer.s_addr));
+        if (count > 1)
+        {
+            XNetRandom(reinterpret_cast<BYTE*>(&index), sizeof(index));
+            index %= count;
+            NetPrintfCode("dirtylspxenon: choosing server %d\n", index);
+        }
+        else
+            index = 0;
+        // ARTIST 82B3B088 through 82B3B0A8 prepares the IN_ADDR output
+        // before looking up the service argument for this XDK call.
+        const u32 result = XNetServerToInAddr(query->aServers[index].inaServer,
+            static_cast<DWORD>(NetConnStatus(0x74737276, 0, 0, 0)), &address);
+        if (result == 0)
+        {
+            host->addr = SocketNtohl(address.s_addr);
+            host->done = 1;
+            NetPrintfCode("dirtylspxenon: resolved secure address %s for name %s\n",
+                SocketInAddrGetText(host->addr), host->name);
+            return host->done;
+        }
+        errorName = DirtyErrGetName(result);
+        errorFormat = "dirtylspxenon: XNetServerToInAddr failed (err=%s)\n";
+    }
+    else
     {
         NetPrintfCode("dirtylspxenon: title server address query returned no results\n");
         return host->done;
     }
-    NetPrintfCode("dirtylspxenon: got %d title service results\n", count);
-    for (DWORD i = 0; i < count; ++i)
-        NetPrintfCode("dirtylspxenon: [%d] %s\n", i, SocketInAddrGetText(query->aServers[i].inaServer.s_addr));
-    DWORD index;
-    if (count > 1)
-    {
-        XNetRandom(reinterpret_cast<BYTE*>(&index), sizeof(index));
-        index %= count;
-        NetPrintfCode("dirtylspxenon: choosing server %d\n", index);
-    }
-    else
-        index = 0;
-    const DWORD service = static_cast<DWORD>(NetConnStatus(0x74737276, 0, 0, 0));
-    IN_ADDR address;
-    const s32 result = XNetServerToInAddr(query->aServers[index].inaServer, service, &address);
-    if (result != 0)
-    {
-        NetPrintfCode("dirtylspxenon: XNetServerToInAddr failed (err=%s)\n", DirtyErrGetName(result));
-        return host->done;
-    }
-    host->addr = SocketNtohl(address.s_addr);
-    host->done = 1;
-    NetPrintfCode("dirtylspxenon: resolved secure address %s for name %s\n",
-        SocketInAddrGetText(host->addr), host->name);
+// Both SDK errors share the diagnostic call at ARTIST 82B3B0F8.
+reportError:
+    NetPrintfCode(errorFormat, errorName);
     return host->done;
 }
 

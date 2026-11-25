@@ -122,39 +122,40 @@ void NetGameUtilReset(NetGameUtilRefT* ref)
 // ARTIST 0x82B2F620
 void NetGameUtilControl(NetGameUtilRefT* ref, s32 selector, s32 value)
 {
-    switch (selector)
+    if (selector == 0x636c6964) // clid
     {
-    case 0x636c6964: // clid
         ref->clientid = value;
         NetPrintfCode("netgameutil: setting clid=0x%08x\n", (u32)value);
-        break;
-    case 0x72636964: // rcid
+    }
+    if (selector == 0x72636964) // rcid
+    {
         ref->rclientid = value;
         NetPrintfCode("netgameutil: setting rcid=0x%08x\n", (u32)value);
-        break;
-    case 0x6d776964: // mwid
+    }
+    if (selector == 0x6d776964) // mwid
+    {
         if (value <= 1200)
         {
             ref->maxwid = value + 12;
             NetPrintfCode("netgameutil: setting mwid=%d\n", ref->maxwid);
+            return;
         }
-        else
-        {
-            NetPrintfCode("netgameutil: mwid value of %d is too large\n", value);
-        }
-        break;
-    case 0x6d696e70: // minp
+        NetPrintfCode("netgameutil: mwid value of %d is too large\n", value);
+    }
+    if (selector == 0x6d696e70) // minp
+    {
         ref->maxinp = value;
         NetPrintfCode("netgameutil: setting minp=%d\n", value);
-        break;
-    case 0x6d6f7574: // mout
+    }
+    if (selector == 0x6d6f7574) // mout
+    {
         ref->maxout = value;
         NetPrintfCode("netgameutil: setting mout=%d\n", value);
-        break;
-    case 0x61647666: // advf
+    }
+    if (selector == 0x61647666) // advf
+    {
         ref->advtfreq = value;
         NetPrintfCode("netgameutil: setting advf=%d\n", value);
-        break;
     }
 }
 
@@ -171,7 +172,7 @@ s32 NetGameUtilConnect(NetGameUtilRefT* ref, s32 connection, const char* address
     }
 
     strcpy(ref->addr, address);
-    ref->hosting = (connection >> 1) & 1;
+    ref->hosting = ((u32)connection >> 1) & 1;
     ref->proto = connection & ~3u;
     NetPrintfCode("netgameutil: connect %d %s\n", connection, address);
 
@@ -215,23 +216,28 @@ s32 NetGameUtilConnect(NetGameUtilRefT* ref, s32 connection, const char* address
         ref->port[2].wait = (ref->port[0].comm || ref->port[1].comm) ? 5000 : 0;
     }
 
+    // ARTIST 82B2F8BC through 82B2F8DC enters transport dispatch at the
+    // first populated slot. Exhausting the scan goes to the group exit.
+    i = 0;
     result = 0;
-    for (i = 0; i < 4; ++i)
+    do
     {
-        if (!ref->port[i].comm)
-            continue;
-        if (ref->port[i].comm->Control)
-        {
-            ref->port[i].comm->Control(ref->port[i].comm, 0x636c6964, ref->clientid, 0); // clid
-            ref->port[i].comm->Control(ref->port[i].comm, 0x72636964, ref->rclientid, 0); // rcid
-        }
-        if (mode & 2)
-            result = ref->port[i].comm->Connect(ref->port[i].comm, address);
-        else if (mode & 1)
-            result = ref->port[i].comm->Listen(ref->port[i].comm, address);
-        ref->pSocket = ref->port[i].comm->sockptr;
-        break;
+        if (ref->port[i].comm)
+            goto selected;
+    } while (++i < 4);
+    goto leave;
+selected:
+    if (ref->port[i].comm->Control)
+    {
+        ref->port[i].comm->Control(ref->port[i].comm, 0x636c6964, ref->clientid, 0); // clid
+        ref->port[i].comm->Control(ref->port[i].comm, 0x72636964, ref->rclientid, 0); // rcid
     }
+    if (connection & 2)
+        result = ref->port[i].comm->Connect(ref->port[i].comm, address);
+    else if (connection & 1)
+        result = ref->port[i].comm->Listen(ref->port[i].comm, address);
+    ref->pSocket = ref->port[i].comm->sockptr;
+leave:
     DirtyMemGroupLeave();
     return result;
 }

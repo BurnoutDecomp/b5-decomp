@@ -74,6 +74,9 @@ public:
     // SemaphoreParameters{count=0, intraProcess=1, name=""} built on the stack.
     Semaphore(const SemaphoreParameters* pParameters = 0, bool bInitialize = true);
 
+    // ARTIST 0x82B439D0 initializes a semaphore with the given permit count.
+    Semaphore(int iInitialCount);
+
     // @ 0x82B42970 -- if the OS HANDLE is non-null, CloseHandle it.
     ~Semaphore();
 

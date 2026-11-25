@@ -209,35 +209,40 @@ int AptAnimationTarget::AddInput(int nPackedInput)
 // ProcessAptInput @0x82B01F78 -- decode one packed input word and run it through the
 // input set then the listener set. The word packs: event-id in bits [31..17], a 7-bit
 // code in bits [16..10] and an 8-bit sub field in bits [9..2].
-int AptAnimationTarget::ProcessAptInput(unsigned int nPackedInput, int bFirstThisFrame)
+void AptAnimationTarget::ProcessAptInput(unsigned int nPackedInput, int bFirstThisFrame)
 {
     const int nEventId = (int)(nPackedInput >> 17);          // srwi 17
     const int nCode    = (int)((nPackedInput >> 10) & 0x7F); // extrwi 7,15
     const int nSub     = (int)((nPackedInput >> 2) & 0xFF);  // extrwi 8,22
 
     ProcessInputSet(nEventId, nCode, nPackedInput, nSub, bFirstThisFrame);
-    return ProcessListenerEvents(nEventId, (unsigned int)nCode, (int)nPackedInput, nSub);
+    ProcessListenerEvents(nEventId, (unsigned int)nCode, (int)nPackedInput, nSub);
 }
 
 // ProcessInputs @0x82B01FD0 -- drain the queued-input ring this frame: dispatch each
 // packed event (the first event of the frame flagged), then reset the fill counter.
-int AptAnimationTarget::ProcessInputs()
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+void AptAnimationTarget::ProcessInputs()
 {
-    int result = 0;
     int nIndex = 0;   // v2/r30: 0-based event ordinal (drives the "first this frame" flag)
     if ((int)mnQueuedInputsCount > 0)
     {
         do
         {
             // bFirstThisFrame == (v2++ == 0); the X360 forms it via cntlzw/extrwi.
-            result = ProcessAptInput(mpQueuedInputs[nIndex], nIndex == 0 ? 1 : 0);
+            ProcessAptInput(mpQueuedInputs[nIndex], nIndex == 0 ? 1 : 0);
             ++nIndex;
         }
         while (nIndex < (int)mnQueuedInputsCount);
     }
     mnQueuedInputsCount = 0;
-    return result;
 }
+
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // ===========================================================================
 //  The timer / listener / GC / queue machinery (ctor/dtor + per-frame drains +
@@ -661,26 +666,26 @@ void AptAnimationTarget::PreDestroy()
 // ===========================================================================
 //  Deferred-action queue thunks (each tail-jumps into mpActionQueue) @0x82ADC608..
 // ===========================================================================
-AptValue* AptAnimationTarget::AddActionBack(const void* pEventStreamSlot, AptCIH* pCIH, s32 iContext)
+void AptAnimationTarget::AddActionBack(AptActionBlock* pActionBlock, AptCIH* pCIH, s32 iContext)
 {
-    return mpActionQueue->AddActionBack(pEventStreamSlot, pCIH, iContext);
+    mpActionQueue->AddActionBack(pActionBlock, pCIH, iContext);
 }
 
-AptValue* AptAnimationTarget::AddActionFront(const void* pEventStreamSlot, AptCIH* pCIH, s32 iContext)
+void AptAnimationTarget::AddActionFront(AptActionBlock* pActionBlock, AptCIH* pCIH, s32 iContext)
 {
-    return mpActionQueue->AddActionFront(pEventStreamSlot, pCIH, iContext);
+    mpActionQueue->AddActionFront(pActionBlock, pCIH, iContext);
 }
 
-AptValue* AptAnimationTarget::AddFunctionBack(AptValue* pContext, AptValue* pFuncDef,
-                                              s32 iReturnReg, s32 iArgCount)
+void AptAnimationTarget::AddFunctionBack(AptCIH* pContext, AptValue* pFuncDef,
+                                              s32 nParams, s32 iInput)
 {
-    return mpActionQueue->AddFunctionBack(pContext, pFuncDef, iReturnReg, iArgCount);
+    mpActionQueue->AddFunctionBack(pContext, pFuncDef, nParams, iInput);
 }
 
-AptValue* AptAnimationTarget::AddFunctionFront(AptValue* pContext, AptValue* pFuncDef,
-                                               s32 iReturnReg, s32 iArgCount)
+void AptAnimationTarget::AddFunctionFront(AptCIH* pContext, AptValue* pFuncDef,
+                                               s32 nParams, s32 iInput)
 {
-    return mpActionQueue->AddFunctionFront(pContext, pFuncDef, iReturnReg, iArgCount);
+    mpActionQueue->AddFunctionFront(pContext, pFuncDef, nParams, iInput);
 }
 
 // ---------------------------------------------------------------------------
@@ -1091,7 +1096,7 @@ void* AptAnimationTarget::RemoveCIHReferences()
 //   handler whose mask intersects nEventMask, resolve the named handler child; when
 //   it is a script function, (re)bind its "this" to the listener (a GC-root handoff
 //   via the zombie-vector accounting) and enqueue a deferred function call for it on
-//   the action queue. Returns the last enqueue / lookup result.
+//   the action queue.
 //
 //   FLAG (un-homed value-graph mechanics): the X360 reaches through several AptValue
 //   virtual slots (vtbl index 2 = "resolve listener object", 15 = "clone+rebind to
@@ -1101,7 +1106,7 @@ void* AptAnimationTarget::RemoveCIHReferences()
 //   are not yet modelled by name, so these accesses are reproduced verbatim through
 //   the recovered console slot/word offsets, each flagged here.
 // ---------------------------------------------------------------------------
-AptValue* AptAnimationTarget::AddListenerToQueue(AptValue* pListener, int nEventMask,
+void AptAnimationTarget::AddListenerToQueue(AptValue* pListener, int nEventMask,
                                                  int nPacked)
 {
     typedef AptValue* (*VFn0)(AptValue*);              // vtbl(self)
@@ -1142,7 +1147,7 @@ AptValue* AptAnimationTarget::AddListenerToQueue(AptValue* pListener, int nEvent
 
     if (!lbProceed)
     {
-        return lpResult;
+        return;
     }
 
     // Resolve the listener object (vtbl index 2) and decide whether to walk handlers.
@@ -1193,7 +1198,7 @@ AptValue* AptAnimationTarget::AddListenerToQueue(AptValue* pListener, int nEvent
 
     if (!lbDispatch)
     {
-        return lpResult;
+        return;
     }
 
     for (int liDesc = 0; liDesc < gAptListenerEventDescriptorCount; ++liDesc)
@@ -1263,10 +1268,9 @@ AptValue* AptAnimationTarget::AddListenerToQueue(AptValue* pListener, int nEvent
         // Get the callable (vtbl index 17) and enqueue the deferred function call.
         const s32 liReturnReg = static_cast<s32>(reinterpret_cast<intptr_t>(
             (*reinterpret_cast<VFn0*>(*reinterpret_cast<char**>(lpTarget) + 68))(lpTarget)));
-        lpResult = mpActionQueue->AddFunctionBack(pListener, lpTarget, liReturnReg, nPacked);
+        mpActionQueue->AddFunctionBack(static_cast<AptCIH*>(pListener), lpTarget, liReturnReg, nPacked);
     }
 
-    return lpResult;
 }
 
 // ---------------------------------------------------------------------------
@@ -1469,41 +1473,34 @@ int AptAnimationTarget::ProcessInputSet(int nEventId, int nCode, unsigned int nP
 //   mListenerSet entry via AddListenerToQueue (clip-event mask 64 for rollover, 128
 //   for press). Only nCode + nPacked of the forwarded args are consumed.
 // ---------------------------------------------------------------------------
-int AptAnimationTarget::ProcessListenerEvents(int nEventId, unsigned int nCode,
-                                              int nPacked, int nSub)
+void AptAnimationTarget::ProcessListenerEvents(int nEventId, unsigned int nCode,
+                                               int nPacked, int nSub)
 {
-    (void)nEventId; (void)nSub;
-
-    int liResult = reinterpret_cast<intptr_t>(this);   // X360 returns this when no dispatch
-    if (nCode > 1u)
+    (void)nEventId;
+    (void)nSub;
+    int nDispatched = 0;
+    if (nCode == 0 || nCode == 1)
     {
-        return liResult;   // only rollover(0)/press(1) phases drive listeners
-    }
-
-    if (mListenerSet.mnCapacity == 0)
-    {
-        return liResult;
-    }
-
-    u32 liDispatched = 0;   // v7: live entries handled (vs mnCount)
-    for (u32 liSlot = 0; liSlot < mListenerSet.mnCapacity; ++liSlot)
-    {
-        if (liDispatched == mListenerSet.mnCount)
+        for (int i = 0; i < mListenerSet.mnCapacity; ++i)
         {
-            break;
-        }
+            if (nDispatched == mListenerSet.mnCount)
+                break;
+            AptValue* pListener = mListenerSet.mppSlots[i];
+            if (!pListener)
+                continue;
 
-        AptValue* lpEntry = mListenerSet.mppSlots[liSlot];
-        if (lpEntry != 0)
-        {
-            const int liMask = (nCode == 1u) ? 128 : 64;
-            liResult = reinterpret_cast<intptr_t>(
-                AddListenerToQueue(lpEntry, liMask, nPacked));
-            ++liDispatched;
+            switch (nCode)
+            {
+            case 0:
+                AddListenerToQueue(pListener, 64, nPacked);
+                break;
+            case 1:
+                AddListenerToQueue(pListener, 128, nPacked);
+                break;
+            }
+            ++nDispatched;
         }
     }
-
-    return liResult;
 }
 
 // ---------------------------------------------------------------------------
@@ -1650,8 +1647,7 @@ int AptAnimationTarget::RunActions()
                         // double indirection lets a re-resolved/mutated command record
                         // supply the CURRENT stream pointer at run time).
                         const unsigned char* lpStream =
-                            *static_cast<const unsigned char* const*>(
-                                lpSlot->action.mpEventStreamSlot);   // v4_arg = *(*(v3+12))
+                            lpSlot->action.mpActionBlock->aActionStream;   // v4_arg = *(*(v3+12))
                         // FLAG (converter data boundary): a straddled/unrelocated stream
                         // slot (see queueFrameActions' enqueue guard) -- skip the run
                         // rather than hand runStream a wild PC. Belt-and-braces with the

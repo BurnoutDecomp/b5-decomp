@@ -402,7 +402,7 @@ namespace BrnGameState
                 continue;
 
             // Skip cars already eliminated (X360 EActiveRaceCarIndex_7_::FindFirstInstanceOf != -1).
-            if (maEliminatedActiveRaceCarIndexs.FindFirstInstanceOf(leIdx) != -1)
+            if (maEliminatedActiveRaceCarIndexs.FindFirstInstanceOf(leIdx) != maEliminatedActiveRaceCarIndexs.KU_INVALID)
                 continue;
 
             ++liPosition;   // 1-based race position

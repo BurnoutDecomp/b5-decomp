@@ -257,8 +257,12 @@ void AptScriptFunction2::CleanupAfterExecution(SavedExecutionState* pSaved)
 {
     AptScriptFunctionBase::CleanupAfterExecution(pSaved);
 
-    // Pop this call's register window back to the saved base (the inlined console
-    // sequence -- release each bound slot + reset it to `undefined`, then restore the
-    // base with the count spanning [savedBase, oldBase) -- is exactly PopStaticData).
-    AptScriptFunctionBase::PopStaticData(pSaved->mpSavedRegisters);
+    for (int i = 0; i < snRegBlockCurrentFrameCount; ++i)
+    {
+        AptValue* pValue = spRegBlockCurrentFrameBase[i];
+        spRegBlockCurrentFrameBase[i] = gpUndefinedValue;
+        pValue->Release();
+    }
+    snRegBlockCurrentFrameCount = spRegBlockCurrentFrameBase - pSaved->mpSavedRegisters;
+    spRegBlockCurrentFrameBase = pSaved->mpSavedRegisters;
 }

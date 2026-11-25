@@ -48,6 +48,7 @@
 
 class AptValue;           // GC value (slots / input-event objects held as AptValue*)
 class AptActionQueueC;    // +0x0C -- the deferred-action queue (AptActionQueue.h; held by ptr)
+struct AptActionBlock;
 
 // ---------------------------------------------------------------------------
 // AptAnimationTargetSet -- one of the two inline 8-byte (console) "set" sub-objects
@@ -153,11 +154,11 @@ struct AptAnimationTarget
 
     // ProcessInputs @0x82B01FD0 -- drain the queued-input ring this frame, decoding
     // each packed event and dispatching it, then reset the fill counter.
-    int  ProcessInputs();
+    void ProcessInputs();
 
     // ProcessAptInput @0x82B01F78 -- decode one packed input word into its
     // (event-id, code, raw) fields and run it through the input + listener sets.
-    int  ProcessAptInput(unsigned int nPackedInput, int bFirstThisFrame);
+    void ProcessAptInput(unsigned int nPackedInput, int bFirstThisFrame);
 
     // ProcessInputSet @0x82AF4478 / ProcessListenerEvents @0x82B01ED0 -- the two
     // ProcessAptInput dispatches: each walks the live AptValue* entries of
@@ -166,26 +167,26 @@ struct AptAnimationTarget
     // (the packed event word) of the args ProcessAptInput passes; nEventId / nSub /
     // bFirstThisFrame are forwarded for signature parity but not re-read here.
     int  ProcessInputSet(int nEventId, int nCode, unsigned int nPacked, int nSub, int bFirstThisFrame);
-    int  ProcessListenerEvents(int nEventId, unsigned int nCode, int nPacked, int nSub);
+    void ProcessListenerEvents(int nEventId, unsigned int nCode, int nPacked, int nSub);
 
     // AddListenerToQueue @0x82B01C88 -- if pListener is an event-bearing value (an
     // AS object/CIH-none whose __proto__ chain or own hash carries one of the input
     // event handlers in nEventMask), resolve each matching handler child, (re)bind
     // its "this" to pListener (a GC-root handoff), and enqueue a deferred function
-    // call for it on the action queue. Returns the last enqueue/lookup result.
-    AptValue* AddListenerToQueue(AptValue* pListener, int nEventMask, int nPacked);
+    // call for it on the action queue.
+    void AddListenerToQueue(AptValue* pListener, int nEventMask, int nPacked);
 
     void AddToRemList(AptCIH* pItem);   // ARTIST @0x82AEE418
 
     // ---- deferred-action queue thunks (each tail-jumps into mpActionQueue) ------
     // The four X360 one-liners at 0x82ADC608..0x82ADC620 load mpActionQueue (+0x0C)
     // and tail-call the matching AptActionQueueC enqueue method on it.
-    AptValue* AddActionBack  (const void* pEventStreamSlot, AptCIH* pCIH, s32 iContext);   // @0x82ADC608
-    AptValue* AddActionFront (const void* pEventStreamSlot, AptCIH* pCIH, s32 iContext);   // @0x82ADC610
-    AptValue* AddFunctionBack (AptValue* pContext, AptValue* pFuncDef,
-                               s32 iReturnReg, s32 iArgCount);                  // @0x82ADC618
-    AptValue* AddFunctionFront(AptValue* pContext, AptValue* pFuncDef,
-                               s32 iReturnReg, s32 iArgCount);                  // @0x82ADC620
+    void AddActionBack  (AptActionBlock* pActionBlock, AptCIH* pCIH, s32 iContext);   // @0x82ADC608
+    void AddActionFront (AptActionBlock* pActionBlock, AptCIH* pCIH, s32 iContext);   // @0x82ADC610
+    void AddFunctionBack (AptCIH* pContext, AptValue* pFuncDef,
+                               s32 nParams, s32 iInput);                  // @0x82ADC618
+    void AddFunctionFront(AptCIH* pContext, AptValue* pFuncDef,
+                               s32 nParams, s32 iInput);                  // @0x82ADC620
 
     // ---- analog-stick input (bodies in AptAnimationTarget.cpp) -----------------
     // AptAnalogInputEvent -- the 16-byte by-value analog sample AddAnalogInput takes

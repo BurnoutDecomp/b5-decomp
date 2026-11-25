@@ -86,22 +86,6 @@ namespace Thread
         }
     }
 
-    // 0x82B42910 -- NOTE: no mMaxCount on X360 (see header FLAG).
-    SemaphoreParameters::SemaphoreParameters(int initialCount, bool bIntraProcess, const char* pName)
-    {
-        mInitialCount  = initialCount;
-        mbIntraProcess = bIntraProcess;
-        if (pName)
-        {
-            strncpy(mName, pName, 15);
-            mName[15] = 0;
-        }
-        else
-        {
-            mName[0] = 0;
-        }
-    }
-
     // 0x82B42710 -- X360 copies pName (unlike the modern vendor ctor).
     MutexParameters::MutexParameters(bool bIntraProcess, const char* pName)
     {

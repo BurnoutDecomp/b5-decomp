@@ -1,49 +1,37 @@
 #pragma once
 
 #include "types.hpp"
-#include "rw/math/vpu/types.h"   // rw::math::vpu::Vector4 (16-byte SIMD lane)
-
-// ===========================================================================
-// rw::collision::Plane -- a plane packed into a single 16-byte VMX lane:
-// xyz is the (inward) normal, w the signed offset. The frustum code stores /
-// loads a plane as one `vector float` register, so the on-disk layout is
-// exactly a 4-lane {x,y,z,w}.
-//
-// MINIMAL / INCREMENTAL: only the members grounded by the X360 asm are homed
-// here -- the packed 4-lane layout and the from-Vector4 constructor that
-// CgsGeometric::Frustum::VectorToPlane @ 0x82840DB0 lowers to (it lvx-loads the
-// arg vector and stvx-stores it verbatim as the returned Plane). The richer
-// accessor surface the DecFIGS DWARF attests (GetNormal / GetDistance and the
-// Vector3Plus/VecFloat-returning helpers used by IntersectionOf3Planes) is left
-// for the Plane-owning TU to add additively -- their exact sign convention is
-// not exercised by VectorToPlane and is not pinned by this TU's asm.
-// ===========================================================================
+#include "SDKs/EATech/include/rw/math/vpu/vector3plus.h"
+#include "SDKs/EATech/include/rw/math/vpu/vector4.h"
 
 namespace rw
 {
 namespace collision
 {
-
-struct Plane
-{
-    // Packed plane lane: xyz = normal, w = signed offset. Matches the 16-byte
-    // register the frustum asm loads/stores.
-    f32 x;
-    f32 y;
-    f32 z;
-    f32 w;
-
-    // ARTIST SceneManager constructor 0x827E1E30 and Frustum debug plane
-    // array construction 0x82845BB8 leave these lanes uninitialized.
-    Plane() {}
-
-    // Build a plane straight from a packed 4-lane vector (verbatim lane copy) --
-    // this is what VectorToPlane's stvx128 of the (negated) arg vector produces.
-    explicit Plane(const rw::math::vpu::Vector4& lrPacked)
-        : x(lrPacked.mV.x), y(lrPacked.mV.y), z(lrPacked.mV.z), w(lrPacked.mV.w)
+    // DecFIGS plane.h:33..49 and ARTIST 0x82839550. A plane occupies
+    // one aligned Vector3Plus containing its normal and signed offset.
+    struct Plane
     {
-    }
-};
+        Plane() {}
 
-} // namespace collision
-} // namespace rw
+        Plane(math::vpu::Vector3 lNormal, f32 lfDistance)
+            : m_data(lNormal.X().GetFloat(), lNormal.Y().GetFloat(), lNormal.Z().GetFloat(), lfDistance)
+        {
+        }
+
+        explicit Plane(const math::vpu::Vector4& lrPacked)
+            : m_data(lrPacked.mV)
+        {
+        }
+
+        math::vpu::Vector3 GetNormal() const { return m_data.GetVector3(); }
+        f32 GetDistance() const { return m_data.GetPlus().GetFloat(); }
+
+    private:
+        math::vpu::Vector3Plus m_data;
+    };
+
+    CGS_STATIC_ASSERT((sizeof(Plane) == 16), "A RenderWare plane occupies one VMX vector");
+    CGS_STATIC_ASSERT((__alignof(Plane) == 16), "RenderWare planes use aligned VMX access");
+}
+}
