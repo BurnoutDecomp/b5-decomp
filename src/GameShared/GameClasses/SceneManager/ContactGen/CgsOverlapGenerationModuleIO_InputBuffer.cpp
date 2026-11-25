@@ -1,3 +1,4 @@
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 // ===========================================================================
 // CgsSceneManager::OverlapGenerationIO::InputBuffer -- lifetime, producers, accessors.
 //
@@ -170,24 +171,6 @@ void InputBuffer::UpdateBody(u32 luIndex, const rw::collision::AABBox* lpAabb,
 }
 
 // ---------------------------------------------------------------------------------
-// InputBuffer::ForceNoPadding   (CgsOverlapGenerationModuleIO.h:216)
-//   Queue "drop this object's sweep padding for one frame". No out-of-line symbol: the
-//   X360 inlines it into SceneManagerModule::ProcessForceNoPaddingEvent @0x828CFC80,
-//   which stacks the single word (`v9 = VolumeInstanceIndexByID`), calls
-//   `sub_828B0380(inputBuffer)` (== the non-const GetForceNoPaddingQueue, this+2359360,
-//   write-lock assert) and appends through
-//   BaseEventQueue<InForceNoPadding>::AddEvent @0x828B89D0 (a single 32-bit move).
-// ---------------------------------------------------------------------------------
-void InputBuffer::ForceNoPadding(u32 luVolInstIndex)
-{
-    InForceNoPadding lEvent;
-
-    lEvent.muVolInstIndex = luVolInstIndex;
-
-    GetForceNoPaddingQueue()->AddEvent(lEvent);
-}
-
-// ---------------------------------------------------------------------------------
 // The eight queue accessors. Each is a one-line `return &member` guarded by the matching
 // IOBuffer lock tripwire; the X360 emits a separate out-of-line copy of each, and each
 // copy bakes CgsOverlapGenerationModuleIO.h + its own line number into the assert, which
@@ -203,51 +186,54 @@ void InputBuffer::ForceNoPadding(u32 luVolInstIndex)
 // "Not locked for writing\n", trailing newline included -- they are streamed into the
 // assert message buffer).
 // ---------------------------------------------------------------------------------
+static const char KAC_OVERLAP_IO_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\contactgen\\CgsOverlapGenerationModuleIO.h";
+
 const InAddBodyQueue* InputBuffer::GetAddBodyQueue() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", KAC_OVERLAP_IO_ASSERT_FILE, 222);
     return &mAddBodyQueue;
 }
 
 const InUpdateBodyQueue* InputBuffer::GetUpdateBodyQueue() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", KAC_OVERLAP_IO_ASSERT_FILE, 223);
     return &mUpdateBodyQueue;
 }
 
 const InRemoveBodyQueue* InputBuffer::GetRemoveBodyQueue() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", KAC_OVERLAP_IO_ASSERT_FILE, 224);
     return &mRemoveBodyQueue;
 }
 
 const InForceNoPaddingQueue* InputBuffer::GetForceNoPaddingQueue() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", KAC_OVERLAP_IO_ASSERT_FILE, 225);
     return &mForceNoPaddingQueue;
 }
 
 InAddBodyQueue* InputBuffer::GetAddBodyQueue()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", KAC_OVERLAP_IO_ASSERT_FILE, 227);
     return &mAddBodyQueue;
 }
 
 InUpdateBodyQueue* InputBuffer::GetUpdateBodyQueue()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", KAC_OVERLAP_IO_ASSERT_FILE, 228);
     return &mUpdateBodyQueue;
 }
 
 InRemoveBodyQueue* InputBuffer::GetRemoveBodyQueue()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", KAC_OVERLAP_IO_ASSERT_FILE, 229);
     return &mRemoveBodyQueue;
 }
 
 InForceNoPaddingQueue* InputBuffer::GetForceNoPaddingQueue()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", KAC_OVERLAP_IO_ASSERT_FILE, 230);
     return &mForceNoPaddingQueue;
 }
 

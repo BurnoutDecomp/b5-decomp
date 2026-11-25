@@ -63,7 +63,7 @@ namespace BrnFlapt
         // GetFile @ 0x82473078 : index maFlaptFileInstances[luFile], assert the
         // entry IsActive(), and return a FileRef {&entry} by value into the
         // caller-provided out buffer.
-        FileRef* GetFile(FileRef* lpOutRef, u32 luFile);
+        FileRef GetFile(FlaptFiles leFile);
 
         // --- Lifecycle / per-frame methods (declared for the BrnGui::ViewModule caller;
         // bodies live in this class's own ledger TUs -- the per-TU `cl /c` gate does not

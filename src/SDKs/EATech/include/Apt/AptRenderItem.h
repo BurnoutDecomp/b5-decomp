@@ -139,8 +139,8 @@ struct AptRenderItem
 
     virtual ~AptRenderItem();                                       // @0x80F860
 
-    int16_t GetDepth() const;       void SetDepth(int nDepth) { mDepth = static_cast<int16_t>(nDepth); }          // @0x7DEE14/0x7DEEA0 (x64 ?SetDepth@...@@QEAAXH@Z: void)
-    int16_t GetClipDepth() const;   void SetClipDepth(int nClipDepth) { mClipDepth = static_cast<int16_t>(nClipDepth); }  // @0x7DEDF8/0x7DEEA8 (x64 ?SetClipDepth@...@@QEAAXH@Z: void)
+    int32_t GetDepth() const { return mDepth; }       void SetDepth(int nDepth) { mDepth = static_cast<int16_t>(nDepth); }          // @0x7DEE14/0x7DEEA0 (x64 ?SetDepth@...@@QEAAXH@Z: void)
+    int32_t GetClipDepth() const { return mClipDepth; }   void SetClipDepth(int nClipDepth) { mClipDepth = static_cast<int16_t>(nClipDepth); }  // @0x7DEDF8/0x7DEEA8 (x64 ?SetClipDepth@...@@QEAAXH@Z: void)
 
     // SetIsVisible @0x82AE0708 -- set the is-visible flag (x64 bit 0) + recompute the
     // subtree's mask-driven visibility (PropagateTreeIsVisible) when the bit changes.

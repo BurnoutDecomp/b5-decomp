@@ -190,7 +190,7 @@ namespace CgsDev
 
             const size_t luPathLength = std::strlen(lacPath);
             if (!luPathLength || lacPath[luPathLength - 1] != '/')
-                GetUI().SafeStringCat(lacPath, "/", sizeof(lacPath));
+                DebugUI::SafeStringCat(lacPath, "/", sizeof(lacPath));
 
             if (std::strchr(lacPath, ' ') || std::strchr(lacItem, ' '))
                 CgsCore::SPrintf(lpcBuffer, liBufferLen, "\"%s%s\"", lacPath, lacItem);

@@ -21,8 +21,9 @@ const char RivalTableCell::KAC_RIVAL_VEHICLE_VAR[18] = "apt_rivalCarState";
 // @ 0x82418E80 -- both base Constructs (the selectable gets the invalid id
 // 0xFFFFFFFF, asm `li r7,-1; clrldi r7,32`), clear the rival binding, reset the
 // selectable gates through the live vtable (slots 0..3 in call order), mark empty.
+// ARTIST 0x82418EA4 replaces the caller's Apt id with the invalid id before the base call.
 void RivalTableCell::Construct(const char* lpacName, CgsGui::StateInterface* lpStateInterface,
-                               const char* lpacParentName)
+                               const char* lpacParentName, u64)
 {
     CgsGui::GuiComponent::Construct(lpacName, lpStateInterface, lpacParentName);
     Selectable::Construct(lpacName, lpStateInterface, lpacParentName, 0xFFFFFFFFull);

@@ -63,17 +63,16 @@ static int FlaptNameLength(const char* lpcName)
 // Assert the handle and the name, hash the name, then forward to the instance,
 // which writes the matched child's MovieClipRef into lpOutRef and (via this Ref)
 // returns it.
-MovieClipRef* MovieClipRef::FindChildMovieClip(MovieClipRef* lpOutRef,
-                                               const char* lpcName) const
+MovieClipRef MovieClipRef::FindChildMovieClip(const char* lpcName) const
 {
-    CGS_ASSERT(mpMovieClipInst != 0, "mpMovieClipInst");
-    CGS_ASSERT(lpcName != 0, "lpcName");
-
-    u32 luHash = CgsContainers::CgsHash::CalculateHash(const_cast<char*>(lpcName),
-                                                       FlaptNameLength(lpcName));
-
-    mpMovieClipInst->FindChildMovieClip(luHash, lpOutRef, lpcName);
-    return lpOutRef;
+    CGS_ASSERT_AT(mpMovieClipInst != 0, "mpMovieClipInst", "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptMovieClipRef.cpp", 44);
+    CGS_ASSERT_AT(lpcName != 0, "lpcName", "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptMovieClipRef.cpp", 45);
+    const char* lpEnd = lpcName;
+    while (*lpEnd++) {}
+    const u32 luHash = CgsContainers::CgsHash::CalculateHash(const_cast<char*>(lpcName), lpEnd - lpcName - 1);
+    MovieClipRef lClip;
+    mpMovieClipInst->FindChildMovieClip(luHash, &lClip, lpcName);
+    return lClip;
 }
 
 // ---- FindChildMovieClipOnFrame @ 0x8246C8B0 ------------------------------

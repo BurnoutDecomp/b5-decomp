@@ -139,15 +139,6 @@ namespace BrnNetwork
         CGS_STATIC_ASSERT((sizeof(void*) != 4 || sizeof(SelectedRoutesManager) == 0x1B8 + KI_MAX_PLAYERS * sizeof(SelectedRoutesData) + 0x10), "SelectedRoutesManager tail is 0x10 bytes");
     }
 
-    // ---- Release @ 0x82548B98 -------------------------------------------------------------
-    // X360: mbRoutesChanged = false; return true;  (single-byte store of 0 at the trailing
-    // flag, then r3 = 1).
-    inline bool SelectedRoutesManager::Release()
-    {
-        mbRoutesChanged = false;
-        return true;
-    }
-
     inline bool SelectedRoutesManager::HaveRoutesChanged() const
     {
         return mbRoutesChanged;

@@ -40,6 +40,9 @@
 
 namespace BrnGui
 {
+    const char* CarSelectMain::mpacTitleTextFieldName = "TitleText";
+    const char* CarSelectMain::mpacWaitingTextFieldName = "Waiting";
+
     namespace
     {
 

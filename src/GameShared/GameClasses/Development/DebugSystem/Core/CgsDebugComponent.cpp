@@ -2,8 +2,10 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"        // GetUI().GetXManager(), SafeStringCat
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"       // DebugManager::ThreadSafeAquire/RegisterComponent
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"// DebugInterface (RAII manager accessor)
-#include "GameShared/GameClasses/Core/CgsAssert.h"                                     // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                                     // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                                // CgsCore::SPrintf
+#include "rw/core/debug/DebugCriticalSection.h"
+#include <cstring>
 
 // CgsDev::DebugComponent method bodies. Reconstructed from the X360 ARTIST build (the thin
 // per-overload wrappers sub_8282D560 / sub_8282D800 / sub_8282F598 / sub_8282F720, the named
@@ -83,7 +85,14 @@ namespace CgsDev
         const char* lpcPath = GetPath();
         const char* lpcName = GetName();
 
-        CGS_ASSERT(lpcName, "lpcName");
+        if (!lpcName)
+        {
+            // ARTIST 0x82822264 uses the assert mutex directly.
+            Assert::gAssertMutex.Enter();
+            Assert::FireAssert("lpcName", CGS_ASSERT_LOCATION(
+                "..\\..\\..\\GameShared\\GameClasses\\Development/DebugSystem/Core/CgsDebugComponent.cpp", 262));
+            Assert::gAssertMutex.Leave();
+        }
 
         if (!lpcPath)
             lpcPath = "";
@@ -105,18 +114,15 @@ namespace CgsDev
 
         if (lpcLeaf)
         {
-            if (*lpcLeaf != '\\' && *lpcLeaf != '/')
-            {
-                s32 liLength = 0;
-                while (lpcBuffer[liLength])
-                    ++liLength;
+            const s32 liLength = static_cast<s32>(std::strlen(lpcBuffer));
 
-                const char lcLast = lpcBuffer[liLength];   // X360: lpcBuffer[strlen] == the NUL byte
-                if (lcLast != '\\' && lcLast != '/')
-                    GetUI().SafeStringCat(lpcBuffer, "/", liBufferLen);
+            if (*lpcLeaf != '\\' && *lpcLeaf != '/' &&
+                lpcBuffer[liLength] != '\\' && lpcBuffer[liLength] != '/')
+            {
+                DebugUI::DebugUI::SafeStringCat(lpcBuffer, "/", liBufferLen);
             }
 
-            GetUI().SafeStringCat(lpcBuffer, lpcLeaf, liBufferLen);
+            DebugUI::DebugUI::SafeStringCat(lpcBuffer, lpcLeaf, liBufferLen);
         }
     }
 
@@ -124,33 +130,33 @@ namespace CgsDev
 
     void DebugComponent::RegisterVariable(f32* lpfValue, const char* lpcGroup, const char* lpcName)
     {
-        DebugUI::Variant variant(lpfValue);     // E_TYPE_PTR_FLOAT
         char acPath[256];
         MakeFullPath(acPath, 256, lpcGroup);
+        DebugUI::Variant variant(lpfValue);     // E_TYPE_PTR_FLOAT
         GetUI().GetVariableManager().RegisterVariable(variant, acPath, lpcName);
     }
 
     void DebugComponent::RegisterVariable(s32* lpiValue, const char* lpcGroup, const char* lpcName)
     {
-        DebugUI::Variant variant(lpiValue);     // E_TYPE_PTR_INT32 (X360 v7[0] = 6)
         char acPath[256];
         MakeFullPath(acPath, 256, lpcGroup);
+        DebugUI::Variant variant(lpiValue);     // E_TYPE_PTR_INT32 (X360 v7[0] = 6)
         GetUI().GetVariableManager().RegisterVariable(variant, acPath, lpcName);
     }
 
     void DebugComponent::RegisterVariable(u32* lpuValue, const char* lpcGroup, const char* lpcName)
     {
-        DebugUI::Variant variant(lpuValue);     // E_TYPE_PTR_UINT32
         char acPath[256];
         MakeFullPath(acPath, 256, lpcGroup);
+        DebugUI::Variant variant(lpuValue);     // E_TYPE_PTR_UINT32
         GetUI().GetVariableManager().RegisterVariable(variant, acPath, lpcName);
     }
 
     void DebugComponent::RegisterVariable(bool* lpbValue, const char* lpcGroup, const char* lpcName)
     {
-        DebugUI::Variant variant(lpbValue);     // E_TYPE_PTR_BOOL
         char acPath[256];
         MakeFullPath(acPath, 256, lpcGroup);
+        DebugUI::Variant variant(lpbValue);     // E_TYPE_PTR_BOOL
         GetUI().GetVariableManager().RegisterVariable(variant, acPath, lpcName);
     }
 
@@ -192,22 +198,22 @@ namespace CgsDev
 
     void DebugComponent::SetRange(f32* lpfValue, f32 lfMin, f32 lfMax)
     {
-        DebugUI::Variant minVariant(lfMin);
         DebugUI::Variant maxVariant(lfMax);
+        DebugUI::Variant minVariant(lfMin);
         GetUI().GetVariableManager().SetRange(lpfValue, minVariant, maxVariant);
     }
 
     void DebugComponent::SetRange(s32* lpiValue, s32 liMin, s32 liMax)
     {
-        DebugUI::Variant minVariant(liMin);
         DebugUI::Variant maxVariant(liMax);
+        DebugUI::Variant minVariant(liMin);
         GetUI().GetVariableManager().SetRange(lpiValue, minVariant, maxVariant);
     }
 
     void DebugComponent::SetRange(u32* lpuValue, u32 luMin, u32 luMax)
     {
-        DebugUI::Variant minVariant(luMin);
         DebugUI::Variant maxVariant(luMax);
+        DebugUI::Variant minVariant(luMin);
         GetUI().GetVariableManager().SetRange(lpuValue, minVariant, maxVariant);
     }
 

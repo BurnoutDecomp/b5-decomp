@@ -335,10 +335,8 @@ namespace BrnGui
             maPlayerComponents[liBar].Prepare(lacRowName, lFile);
         }
 
-        BrnFlapt::MovieClipRef lPageIcon;
-        mPageIconMCR = *mAptRef.FindChildMovieClip(&lPageIcon, "pageIcon_mc");
-        BrnFlapt::MovieClipRef lTitleBar;
-        mTitleBarMCR = *mAptRef.FindChildMovieClip(&lTitleBar, "TitleBar_mc");
+        mPageIconMCR = mAptRef.FindChildMovieClip("pageIcon_mc");
+        mTitleBarMCR = mAptRef.FindChildMovieClip("TitleBar_mc");
     }
 }
 

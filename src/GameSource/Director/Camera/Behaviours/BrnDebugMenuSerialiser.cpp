@@ -44,12 +44,15 @@ void DebugMenuSerialiser::AddToPath(const char* lpacPath)
 template<class T>
 void DebugMenuSerialiser::Process(const char* lpcName, T& lrValue)
 {
-    if (meMode == E_MODE_ADD_TO_MENU)
-        mpDebugComponent->RegisterVariable(&lrValue, macPathStack, lpcName);
-    else if (meMode == E_MODE_REMOVE_FROM_MENU)
-        mpDebugComponent->UnregisterVariable(&lrValue);
-    else
+    switch (meMode)
     {
+    case E_MODE_ADD_TO_MENU:
+        mpDebugComponent->RegisterVariable(&lrValue, macPathStack, lpcName);
+        break;
+    case E_MODE_REMOVE_FROM_MENU:
+        mpDebugComponent->UnregisterVariable(&lrValue);
+        break;
+    default:
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(
             "unhandled case",

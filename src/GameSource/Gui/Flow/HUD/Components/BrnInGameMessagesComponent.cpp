@@ -681,7 +681,7 @@ namespace
 
         mAptRef.FindChildMovieClipOnFrame(&mAnimationRef, "SpecificMessage_mc");
         mAnimationRef.GotoAndPlayLabel(lpcAnimName);
-        mAnimationRef.FindChildMovieClip(&mIconRef, "Icon_mc");
+        mIconRef = mAnimationRef.FindChildMovieClip("Icon_mc");
 
         s32 liIter = 0;
         BrnFlapt::MovieClipRef lFound;

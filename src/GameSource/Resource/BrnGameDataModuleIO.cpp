@@ -64,7 +64,8 @@ namespace GameDataIO
     // ARTIST823B16E0 /82663EE0: read/write lock gates, one status byte at +9.
     const CgsResource::ResourceIO::FileSystemStatusInterface* OutputBuffer::GetFileSystemStatusInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
+            "Not locked for reading\n", CGS_ARTIST_FILE, 178));
         return &mFileSystemStatusInterface;
     }
 
@@ -161,11 +162,11 @@ namespace GameDataIO
     // the source queue into mRequestInterface's VariableEventQueue<32768,16>.
     //   <256>  @ 0x823EDED8   <512>  @ 0x823CEAC0   <1024> @ 0x823EE038
     //   <3072> @ 0x823EDF88   <4096> @ 0x823C76B8
-    template bool InputBuffer::AppendRequestInterface<256>(const RequestInterface<256>&);
-    template bool InputBuffer::AppendRequestInterface<512>(const RequestInterface<512>&);
-    template bool InputBuffer::AppendRequestInterface<1024>(const RequestInterface<1024>&);
-    template bool InputBuffer::AppendRequestInterface<3072>(const RequestInterface<3072>&);
-    template bool InputBuffer::AppendRequestInterface<4096>(const RequestInterface<4096>&);
+    template void InputBuffer::AppendRequestInterface<256>(const RequestInterface<256>*);
+    template void InputBuffer::AppendRequestInterface<512>(const RequestInterface<512>*);
+    template void InputBuffer::AppendRequestInterface<1024>(const RequestInterface<1024>*);
+    template void InputBuffer::AppendRequestInterface<3072>(const RequestInterface<3072>*);
+    template void InputBuffer::AppendRequestInterface<4096>(const RequestInterface<4096>*);
 }
 }
 

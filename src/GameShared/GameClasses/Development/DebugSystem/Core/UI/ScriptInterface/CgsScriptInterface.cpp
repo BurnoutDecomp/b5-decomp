@@ -145,8 +145,8 @@ namespace CgsDev
                 return;
 
             GetUI().GetMenuManager().GetMenuItemPath(lpMenuItem, lpcBuffer, liBufferLen);
-            GetUI().SafeStringCat(lpcBuffer, "/", liBufferLen);
-            GetUI().SafeStringCat(lpcBuffer, lpcName, liBufferLen);
+            DebugUI::SafeStringCat(lpcBuffer, "/", liBufferLen);
+            DebugUI::SafeStringCat(lpcBuffer, lpcName, liBufferLen);
         }
 
         void ScriptInterface::OutputMessage(const char* lpcMessage)
@@ -498,14 +498,14 @@ namespace CgsDev
                             const char* lpcValue = lppcParameters[liParameter];
                             if (strchr(lpcValue, ' '))
                             {
-                                lpThis->GetUI().SafeStringCat(lpcBinding, "\"", KU_MAX_BINDING_LENGTH);
-                                lpThis->GetUI().SafeStringCat(lpcBinding, lpcValue, KU_MAX_BINDING_LENGTH);
-                                lpThis->GetUI().SafeStringCat(lpcBinding, "\" ", KU_MAX_BINDING_LENGTH);
+                                DebugUI::SafeStringCat(lpcBinding, "\"", KU_MAX_BINDING_LENGTH);
+                                DebugUI::SafeStringCat(lpcBinding, lpcValue, KU_MAX_BINDING_LENGTH);
+                                DebugUI::SafeStringCat(lpcBinding, "\" ", KU_MAX_BINDING_LENGTH);
                             }
                             else
                             {
-                                lpThis->GetUI().SafeStringCat(lpcBinding, lpcValue, KU_MAX_BINDING_LENGTH);
-                                lpThis->GetUI().SafeStringCat(lpcBinding, " ", KU_MAX_BINDING_LENGTH);
+                                DebugUI::SafeStringCat(lpcBinding, lpcValue, KU_MAX_BINDING_LENGTH);
+                                DebugUI::SafeStringCat(lpcBinding, " ", KU_MAX_BINDING_LENGTH);
                             }
                         }
                     }

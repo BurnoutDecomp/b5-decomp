@@ -787,7 +787,7 @@ namespace BrnGui
     // DELETED rather than left to shadow it, for the same reason as GuiCrashScoreUpdate above:
     // GuiCache::RecEvent (its only consumer) cannot include THIS header. sizeof (8) and
     // GetEventType (426) are unchanged, so CgsGuiModule_AddGuiEvent_Inst.cpp:263 is unaffected.
-    class GuiSetEasyDriveNotAllowedEvent { public: u8 maData[1]; s32 GetEventType() const { return 96; } };  // id 96 size 1 (raw; size not GuiEvent-shaped)
+    struct GuiSetEasyDriveNotAllowedEvent : CgsGui::GuiEvent<96> { bool mbAllowed; };
     // [showtime-score wave 2026-08-29] RECOVERED (was `u8 maData[2]`). DWARF
     // BrnGuiEventTypeDefs.h:4519/:4520 (PS3 GuiEvent<397>; X360 id 402, record 2 bytes --
     // AddGuiEvent @0x823D98A8). The producer is TranslateShowtimeActionToGuiEvent's case 144,
@@ -1402,4 +1402,10 @@ namespace BrnGui
 
         s32 GetEventType() const { return 559; }
     };  // id 559, X360 payload 24 -> wrapped record 40 on channel 41
+}
+
+namespace BrnGui
+{
+    struct GuiEventFriendListShowing : CgsGui::GuiEvent<94> { bool mbNowShowing; };
+    typedef CgsGui::GuiEvent<580> GuiEventFreeburnChallengeRequestEveryPlayerStatus;
 }

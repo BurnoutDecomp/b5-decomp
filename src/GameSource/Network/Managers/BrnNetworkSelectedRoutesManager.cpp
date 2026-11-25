@@ -103,6 +103,13 @@ namespace BrnNetwork
         return true;
     }
 
+    // ARTIST 0x82548B98 is called out of line by BrnNetworkManager::Release.
+    bool SelectedRoutesManager::Release()
+    {
+        SetRoutesChanged(false);
+        return true;
+    }
+
     // ---------------------------------------------------------------------------------
     // Destruct @ 0x8255BD18
     //   Mirror of Construct's per-slot reset (zero frame stamps, free the slot, Construct both

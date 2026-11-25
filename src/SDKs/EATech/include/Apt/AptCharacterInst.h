@@ -158,8 +158,8 @@ struct AptCharacterInst
 
     // ---- const reads (straight through the render item) -------------------
     const AptCharacter* GetCharacterConst() const;       // @0x7E8784
-    int16_t  GetDepth() const;                           // @0x7E8868
-    int16_t  GetClipDepth() const;                       // @0x7E8774
+    int32_t GetDepth() const { return mpRenderItem->GetDepth(); }
+    int32_t GetClipDepth() const { return mpRenderItem->GetClipDepth(); }
     bool     GetIsVisible() const;                       // @0x7E83C4
     bool     GetIsMask() const;                          // @0x7E8790
     bool     GetHasMask() const;                         // @0x7EABA0

@@ -21,25 +21,6 @@ namespace Camera
 namespace Utils
 {
 
-namespace
-{
-    // The current code version of the OrientationLag::Parameters block.
-    const u32 KU_ORIENTATION_LAG_PARAMETERS_VERSION = 1u;
-} // namespace
-
-template<class TSerialiser>
-void OrientationLag::Parameters::Serialise(TSerialiser& lrSerialiser)
-{
-    muVersion.muVersion = KU_ORIENTATION_LAG_PARAMETERS_VERSION;
-    lrSerialiser.Serialise("Version Number (dont change)", muVersion);
-
-    if (muVersion.muVersion == KU_ORIENTATION_LAG_PARAMETERS_VERSION)
-    {
-        lrSerialiser.Serialise("Slerp spring", mfSlerpSpring);
-        lrSerialiser.Serialise("Use slerp spring", mbUseSlerpSpring);
-    }
-}
-
 template void OrientationLag::Parameters::Serialise<TextFileReadSerialiser>(TextFileReadSerialiser&);
 template void OrientationLag::Parameters::Serialise<TextFileWriteSerialiser>(TextFileWriteSerialiser&);
 template void OrientationLag::Parameters::Serialise<DebugMenuSerialiser>(DebugMenuSerialiser&);

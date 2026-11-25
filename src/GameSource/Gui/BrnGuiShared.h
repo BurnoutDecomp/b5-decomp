@@ -59,6 +59,8 @@ namespace BrnGui
         E_GUI_RESOURCEID_APT_COMPONENT_LICENSE_RANK_ELITE         = 103,  // "B5LicenseElite"
         E_GUI_RESOURCEID_APT_COMPONENT_LICENSE_RANK_ELITE_COMPLETE = 104, // "B5LicenseEliteFinal"
 
+        E_GUI_RESOURCEID_APT_CARSELECT_MAIN = 149,
+
         // Terminating count. X360-gated (see the drift note above).
         E_GUI_RESOURCEID_NUM = 237,
     };

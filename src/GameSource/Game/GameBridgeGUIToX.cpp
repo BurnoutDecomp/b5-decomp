@@ -910,7 +910,7 @@ namespace BrnGame
             liEventType = lpGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize);
         }
 
-        lpGDMInput->AppendRequestInterface(lRequestInterface);
+        lpGDMInput->AppendRequestInterface(&lRequestInterface);
     }
 
     // GameBridgeGUIToX.cpp. Turn the GUI's collision-world requests (493) into the

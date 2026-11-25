@@ -79,10 +79,10 @@ namespace
 
 // ---- statics -----------------------------------------------------------------
 // X360 .rdata: the observed outro GUI event id array (&unk_82066A58, count 1) and the outro's
-// static resource list (&unk_82066A60, count 1). FLAG: the id/tuple VALUES were not decoded in
-// this packet (only the base addresses + the count of 1 are attested); placeholders so the
-// state links, adopted with the XEX-recovered ids when decoded.
-const s32                    ReplayOutro::KAI_OBSERVED_EVENTS[]  = { 0 };   // @0x82066A58
+// static resource list (&unk_82066A60, count 1). The observer word is the same
+// event accepted by UpdateRunning. ARTIST stores it as a single s32.
+// The resource tuple still needs its IDs decoded.
+const s32                    ReplayOutro::KAI_OBSERVED_EVENTS[]  = { KI_EVENT_ACCEPT };   // @0x82066A58
 const s32                    ReplayOutro::KI_NUM_OBSERVED_EVENTS = 1;
 const CgsGui::sResourceTuple ReplayOutro::maResourcesToLoad[]    =
 {

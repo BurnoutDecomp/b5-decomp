@@ -61,6 +61,11 @@ public:
         mObjectsAllocated.UnSetAll();
     }
 
+    void Destruct()
+    {
+        mObjectsAllocated.Destruct();
+    }
+
     // Lowest ALLOCATED slot index, or -1 when the pool is empty. The X360 body
     // (0x828C3538) inlines the occupancy-BitArray lowest-set-bit scan; forwarding to
     // BitArray<N>::GetFirstNonZeroBit is value-identical. DWARF CgsObjectPool.h:298.

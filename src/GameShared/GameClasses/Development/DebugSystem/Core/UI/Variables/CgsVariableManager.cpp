@@ -106,8 +106,8 @@ namespace CgsDev
                 if (!lpMenu)
                     continue;
                 lpMenu->GetPath(lacPath, sizeof(lacPath));
-                GetUI().SafeStringCat(lacPath, "/", sizeof(lacPath));
-                GetUI().SafeStringCat(lacPath, lpMenuItem->GetVariable()->GetName(), sizeof(lacPath));
+                DebugUI::SafeStringCat(lacPath, "/", sizeof(lacPath));
+                DebugUI::SafeStringCat(lacPath, lpMenuItem->GetVariable()->GetName(), sizeof(lacPath));
                 const char* lpcCompare = lacPath[0] == '/' ? lacPath + 1 : lacPath;
                 if (_stricmp(lpcCompare, lpcPath) == 0)
                     return lpMenuItem->GetVariable();

@@ -171,8 +171,8 @@ void FriendsListEntry::Prepare(const char* lpacName, const BrnFlapt::FileRef& lr
 
     BrnFlapt::MovieClipRef lEntryClip;
     BrnFlapt::MovieClipRef lArrowClip;
-    mAptRef.FindChildMovieClip(&lEntryClip, "Entry");
-    lEntryClip.FindChildMovieClip(&lArrowClip, "branch_arrow_mc");
+    lEntryClip = mAptRef.FindChildMovieClip("Entry");
+    lArrowClip = lEntryClip.FindChildMovieClip("branch_arrow_mc");
     mBarArrowRef = lArrowClip;
 
     BrnFlapt::TextFieldRef lTextField;

@@ -116,8 +116,8 @@ namespace CgsDev
 
             if (mpcCaption && mpcCaption[0])
             {
-                GetUI().SafeStringCat(lpcBuffer, "/", liBufferLen);
-                GetUI().SafeStringCat(lpcBuffer, mpcCaption, liBufferLen);
+                DebugUI::SafeStringCat(lpcBuffer, "/", liBufferLen);
+                DebugUI::SafeStringCat(lpcBuffer, mpcCaption, liBufferLen);
             }
         }
     }

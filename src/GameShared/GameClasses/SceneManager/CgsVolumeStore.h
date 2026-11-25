@@ -138,10 +138,10 @@ namespace CgsSceneManager
         // refill; Prepare does that). DWARF VolumeManager::Construct's call list is
         // {VolumeStore<4608>::Construct, ObjectPool<VolumeManagerVolume,5048,int>::Construct}.
         void Construct();
-        // h:190 -- declaration-only: the console emits no body and nothing in the tree calls
-        // it (its DWARF twin is ObjectPool::Destruct, which this tree's ObjectPool does not
-        // declare). Left undefined deliberately rather than invented.
-        void Destruct();
+        void Destruct()
+        {
+            mVolumePool.Destruct();
+        }
         // h:208 / h:227 -- both reduce to the pool's Clear() on the X360 (VolumeManager::
         // Prepare @0x828CFD38 emits ObjectPool<VolumeSlot,4608,int>::Clear TWICE, back to
         // back, for exactly this pair).

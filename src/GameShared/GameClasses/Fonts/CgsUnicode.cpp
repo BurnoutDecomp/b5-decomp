@@ -267,14 +267,10 @@ namespace CgsUnicode
     // leading zeroes prints unpadded, exactly as the console does. The console's power table
     // (flt_820DE4E8[10]) is the plain powers-of-ten run reproduced below. Asserts
     // CgsUnicode.cpp:606 (luDecimalPlaces < 10) and :620 (the lead-byte tripwire, streamed
-    // on the console, folded static per convention). lu8MinimumDigits is never forwarded
-    // (the console passes literal 0 to both IntToString calls); see the header note.
-    CgsUtf8* FloatToString(CgsUtf8* lpUtf8TargetString, f32 lfValue, u8 lu8MinimumDigits,
-                           u8 lu8DecimalPlaces, const CgsUtf8* lpUtf8ThousandsSeparator,
+    // on the console, folded static per convention).
+    CgsUtf8* FloatToString(CgsUtf8* lpUtf8TargetString, f32 lfValue, u8 lu8DecimalPlaces, const CgsUtf8* lpUtf8ThousandsSeparator,
                            const CgsUtf8* lpUtf8DecimalPointCharacter)
     {
-        (void)lu8MinimumDigits;
-
         // flt_820DE4E8 -- 10^n for the fraction scale, indexed by lu8DecimalPlaces.
         static const f32 KAF_DECIMAL_SCALE[10] =
         {

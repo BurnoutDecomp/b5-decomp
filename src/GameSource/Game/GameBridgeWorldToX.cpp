@@ -746,7 +746,7 @@ namespace BrnGame
     void BrnGameModule::BridgeWorldToResource(BrnResource::GameDataIO::InputBuffer* lpGDMInput,
                                               const BrnWorldIO::UpdateOutputBuffer* lpWorldOutput)
     {
-        lpGDMInput->AppendRequestInterface(*lpWorldOutput->GetResourceRequestResourceInterface());
+        lpGDMInput->AppendRequestInterface(lpWorldOutput->GetResourceRequestResourceInterface());
         lpGDMInput->GetAttribSysRequestInterface()->mRequestQueue.Append(
             lpWorldOutput->GetAttribSysVaultRequestInterface()->mRequestQueue);
     }

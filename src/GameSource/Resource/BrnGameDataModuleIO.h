@@ -3,7 +3,8 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/System/Resource/CgsResourceModuleIO.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT (AppendRequestInterface<N> template body)
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"                 // CgsModule::IOBuffer base + IsBufferLockedFor{Reading,Writing}()
 #include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h"      // BrnResource::GameDataIO::RequestInterface<N>
 #include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"     // BrnResource::GameDataIO::AllocatorList (OutputBuffer member)
@@ -118,14 +119,10 @@ namespace GameDataIO
         //   AppendRequestInterface<256>  @ 0x823EDED8   AppendRequestInterface<512>  @ 0x823CEAC0
         //   AppendRequestInterface<1024> @ 0x823EE038   AppendRequestInterface<3072> @ 0x823EDF88
         //   AppendRequestInterface<4096> @ 0x823C76B8
-        // The asm asserts write-locked, then calls VariableEventQueue<32768,16>::Append<N,16> on
-        // &mRequestInterface (this+4). Because RequestInterface<N> holds its RequestQueue<N> (a
-        // VariableEventQueue<N,16>) at offset 0, the source interface reference IS its queue
-        // reference (no null check in the asm -> a reference param). The bulk Append body is the
-        // committed VariableEventQueue<BUFSIZE,ALIGN>::Append<SRCBUF,SRCALIGN> (memcpy of the
-        // source's packed bytes; see CgsVariableEventQueue.h). Generic body out-of-line below.
+        // ARTIST's decorated entry points and DecFIGS declare the source as a
+        // pointer and the operation as void. The queue is the interface's first member.
         template <s32 N>
-        bool AppendRequestInterface(const RequestInterface<N>& lrSourceInterface);
+        void AppendRequestInterface(const RequestInterface<N>* lpSourceInterface);
 
         // Inlined in ARTIST DoDispatch 823DC6B4: the destination input is
         // already write-locked while the renderer's debug buffer is published.
@@ -150,13 +147,14 @@ namespace GameDataIO
     // -------- InputBuffer::AppendRequestInterface<N> (generic body; instances in the .cpp) --------
     // Assert the buffer is write-locked, then bulk-append the source interface's queue into the
     // embedded request queue. mRequestInterface.mRequestQueue is the destination
-    // VariableEventQueue<32768,16>; lrSourceInterface.mRequestQueue is the source
+    // VariableEventQueue<32768,16>; lpSourceInterface->mRequestQueue is the source
     // VariableEventQueue<N,16> (Append<SRCBUF,SRCALIGN> deduces SRCBUF=N, SRCALIGN=16).
     template <s32 N>
-    bool InputBuffer::AppendRequestInterface(const RequestInterface<N>& lrSourceInterface)
+    void InputBuffer::AppendRequestInterface(const RequestInterface<N>* lpSourceInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-        return mRequestInterface.mRequestQueue.Append(lrSourceInterface.mRequestQueue);
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
+            "Not locked for writing\n", "..\\..\\..\\GameSource\\Resource/BrnGameDataModuleIO.h", 204));
+        mRequestInterface.mRequestQueue.Append(lpSourceInterface->mRequestQueue);
     }
 
     // BrnResource::GameDataIO::OutputBuffer : public IOBuffer -- the GameData module's per-frame output

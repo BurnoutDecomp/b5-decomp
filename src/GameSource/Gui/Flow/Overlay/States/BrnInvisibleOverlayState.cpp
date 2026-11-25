@@ -45,8 +45,7 @@ namespace BrnGui
         BrnFlapt::FlaptManager* lpFlaptManager =
             mpStateInterface->GetAccessPointers()->GetFlaptManager();
 
-        BrnFlapt::FileRef lFlaptFile;
-        lpFlaptManager->GetFile(&lFlaptFile, 0);
+        BrnFlapt::FileRef lFlaptFile = lpFlaptManager->GetFile(BrnFlapt::E_FLAPTFILE_HUD);
 
         mOverlayComponent.Prepare(macOverlayComponentName, lFlaptFile, NULL);
         mOverlayComponent.RunOverlay("invisible");

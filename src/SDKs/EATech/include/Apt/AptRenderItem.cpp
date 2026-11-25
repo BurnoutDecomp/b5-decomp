@@ -372,8 +372,6 @@ AptCXForm* AptRenderItem::GetColorMatrixWritable()
 }
 
 // ---- depth / clip depth ---------------------------------------------------
-int16_t AptRenderItem::GetDepth() const     { return mDepth; }
-int16_t AptRenderItem::GetClipDepth() const { return mClipDepth; }
 
 // ---- flags ----------------------------------------------------------------
 bool AptRenderItem::GetIsVisible() const { return (mFlags & 0x80000000u) != 0; }

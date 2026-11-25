@@ -52,7 +52,7 @@ namespace BrnWorld { namespace TriggerEntityModuleIO { class InRemoveTriggerEven
 // TYPE NAME is needed here (every accessor hands out a pointer); the request-builder bodies
 // live in BrnGameDataRequestQueue.h, which callers include for themselves. Forward-declaring
 // the template keeps this widely-included header off the GameData include chain.
-namespace BrnResource { namespace GameDataIO { template <s32 N> struct RequestInterface; } }
+namespace BrnResource { namespace GameDataIO { template <s32 N> class RequestInterface; } }
 
 // OutputBuffer::GetGameStateToNetworkInterface() (BrnPaybackManager grow) returns this by pointer
 // only; forward-declare its real home (BrnNetworkModuleGameStateIOInterfaces.h).

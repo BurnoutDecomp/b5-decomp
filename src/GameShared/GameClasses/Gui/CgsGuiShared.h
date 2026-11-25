@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Graphics/CgsCamera.h"
 
 // CgsGui::GuiAccessPointers is the module-owned state-access bundle. DecFIGS
@@ -60,9 +61,24 @@ namespace CgsGui
         void SetGDMReceiverQueue(GuiEventReceiverQueue* lpReceiverQueue);
 
         BrnFlapt::FileRef*      GetFlaptFile();
-        BrnFlapt::FlaptManager* GetFlaptManager();
-        BrnGui::GuiCache*       GetGuiCache();
-        BrnReplays::GuiModuleSerialiser* GetSerialiser();
+        BrnFlapt::FlaptManager* GetFlaptManager()
+        {
+            CGS_ASSERT_AT(mpFlaptManager != 0, "NULL != mpFlaptManager",
+                          "..\\..\\..\\GameShared\\GameClasses\\Gui/CgsGuiShared.h", 194);
+            return mpFlaptManager;
+        }
+        BrnGui::GuiCache* GetGuiCache()
+        {
+            CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache",
+                          "..\\..\\..\\GameShared\\GameClasses\\Gui/CgsGuiShared.h", 201);
+            return mpGuiCache;
+        }
+        BrnReplays::GuiModuleSerialiser* GetSerialiser()
+        {
+            CGS_ASSERT_AT(mpSerialiser != 0, "mpSerialiser",
+                          "..\\..\\..\\GameShared\\GameClasses\\Gui/CgsGuiShared.h", 216);
+            return mpSerialiser;
+        }
         BrnResource::GameDataIO::InputBuffer* GetGDMInput();
         GuiEventReceiverQueue*  GetGDMReceiverQueue();
     };

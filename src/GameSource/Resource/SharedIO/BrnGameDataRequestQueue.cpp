@@ -18,6 +18,6 @@ namespace BrnResource
 namespace GameDataIO
 {
     // Explicit instantiation of the <4096> request interface (this TU's instance).
-    template struct RequestInterface<4096>;
+    template class RequestInterface<4096>;
 }
 }

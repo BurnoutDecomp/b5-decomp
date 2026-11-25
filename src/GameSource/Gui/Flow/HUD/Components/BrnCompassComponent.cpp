@@ -312,8 +312,8 @@ namespace BrnGui
     {
         BrnFlapt::MovieClipRef lEastMovie;
         BrnFlapt::MovieClipRef lWestMovie;
-        lpMovieClipRef->FindChildMovieClip(&lEastMovie, "East_mc");
-        lpMovieClipRef->FindChildMovieClip(&lWestMovie, "West_mc");
+        lEastMovie = lpMovieClipRef->FindChildMovieClip("East_mc");
+        lWestMovie = lpMovieClipRef->FindChildMovieClip("West_mc");
 
         lEastMovie.GotoAndPlayLabel(KAPC_FRAMES_EAST[leLanguage]);
         lWestMovie.GotoAndPlayLabel(KAPC_FRAMES_WEST[leLanguage]);
@@ -494,13 +494,12 @@ namespace BrnGui
         mAptRef.mpMovieClipInst->ResetTimeline();
 
         BrnFlapt::MovieClipRef lCompassViewParent;
-        mAptRef.FindChildMovieClip(&lCompassViewParent, "CVParent_mc");
+        lCompassViewParent = mAptRef.FindChildMovieClip("CVParent_mc");
         CGS_ASSERT(lCompassViewParent.mpMovieClipInst != NULL, "mpMovieClipInst");   // BrnFlaptMovieClipRef.h:272
         lCompassViewParent.mpMovieClipInst->ResetTimeline();
 
-        BrnFlapt::MovieClipRef lTemp;
-        mCompassViewMovie = *lCompassViewParent.FindChildMovieClip(&lTemp, "CompassView_mc");
-        mDestMarkerMovie  = *lCompassViewParent.FindChildMovieClip(&lTemp, "DestMarker_mc");
+        mCompassViewMovie = lCompassViewParent.FindChildMovieClip("CompassView_mc");
+        mDestMarkerMovie  = lCompassViewParent.FindChildMovieClip("DestMarker_mc");
 
         BrnFlapt::MovieClipRef lCompassViewFrontLeft;
         BrnFlapt::MovieClipRef lCompassViewFrontCentre;
@@ -508,12 +507,12 @@ namespace BrnGui
         BrnFlapt::MovieClipRef lCompassViewBackLeft;
         BrnFlapt::MovieClipRef lCompassViewBackCentre;
         BrnFlapt::MovieClipRef lCompassViewBackRight;
-        mCompassViewMovie.FindChildMovieClip(&lCompassViewFrontLeft,   "LeftView_Front_mc");
-        mCompassViewMovie.FindChildMovieClip(&lCompassViewFrontCentre, "CentreView_Front_mc");
-        mCompassViewMovie.FindChildMovieClip(&lCompassViewFrontRight,  "RightView_Front_mc");
-        mCompassViewMovie.FindChildMovieClip(&lCompassViewBackLeft,    "LeftView_Back_mc");
-        mCompassViewMovie.FindChildMovieClip(&lCompassViewBackCentre,  "CentreView_Back_mc");
-        mCompassViewMovie.FindChildMovieClip(&lCompassViewBackRight,   "RightView_Back_mc");
+        lCompassViewFrontLeft = mCompassViewMovie.FindChildMovieClip(  "LeftView_Front_mc");
+        lCompassViewFrontCentre = mCompassViewMovie.FindChildMovieClip("CentreView_Front_mc");
+        lCompassViewFrontRight = mCompassViewMovie.FindChildMovieClip( "RightView_Front_mc");
+        lCompassViewBackLeft = mCompassViewMovie.FindChildMovieClip(   "LeftView_Back_mc");
+        lCompassViewBackCentre = mCompassViewMovie.FindChildMovieClip( "CentreView_Back_mc");
+        lCompassViewBackRight = mCompassViewMovie.FindChildMovieClip(  "RightView_Back_mc");
 
         mv2InitialViewPos       = mCompassViewMovie.GetPosition();
         mfSingleViewLength      = lCompassViewFrontRight.GetPosition().mV.x

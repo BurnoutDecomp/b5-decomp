@@ -59,5 +59,5 @@ struct AptDisplayListState
     // in its own TU) -- unlink pItem from the live list and queue it on the
     // delayed-release list (so a node removed mid-tick is released safely after the
     // walk). Declared so AptDisplayList::removeObject can call it by name.
-    AptCIH* AddToDelayReleaseList(AptCIH* pItem, bool bDelay);
+    void AddToDelayReleaseList(AptCIH* pItem, bool bDelay);
 };

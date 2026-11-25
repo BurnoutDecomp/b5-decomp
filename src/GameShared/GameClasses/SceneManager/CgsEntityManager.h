@@ -92,6 +92,14 @@ namespace CgsSceneManager
     public:
         void Construct(VolumeManager* lpVolumeManager);
 
+        // DecFIGS CgsEntityManager.cpp:70 and ARTIST 828D16D0/828D16E0
+        // both clear the same entity pool twice.
+        void Destruct()
+        {
+            mEntityPool.Destruct();
+            mEntityPool.Destruct();
+        }
+
         // @ 0x828C5FC8 -- clear both pools and both id->index tables.
         bool Prepare();
 

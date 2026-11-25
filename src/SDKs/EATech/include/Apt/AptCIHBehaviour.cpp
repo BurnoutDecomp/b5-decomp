@@ -1363,11 +1363,6 @@ void AptRunGeneralisedTextProcess(AptCIH* pRoot)
 #include "SDKs/EATech/include/Apt/AptCharacterAnimation.h"   // (cluster shim types)
 
 // ---- runtime callees / hook slots referenced by the deep cluster bodies ----------
-// AddToRemList (console AptAnimationTarget::AddToRemList @0x82AEE3F8; HOMED in
-// AptAnimationTarget.cpp): queue a node that is still externally referenced onto the
-// animation director's removal list.
-void AptAnimationTargetAddToRemList(AptAnimationTarget* pAnim, AptCIH* pItem);
-
 // PreDestroy hook: console dword_8324E8A0 is NOT a standalone global -- it is
 // gAptFuncs+0x88 == gAptFuncs.pfnOnUnload (base dword_8324E818; the neighbour
 // dword_8324E8A4 == pfnPointHitTest pins the alignment). The host installs
@@ -2158,7 +2153,7 @@ void AptCIH_PreDestroyHook(AptCIH* pCIH)
 // build + the host pfnAllocateString call + the SetZID/box-align/measure fold). The prior
 // no-op stub here is retired.
 
-AptCIH* AptDisplayListState::AddToDelayReleaseList(AptCIH* pItem, bool bDelay)
+void AptDisplayListState::AddToDelayReleaseList(AptCIH* pItem, bool bDelay)
 {
     // X360: (**pItem)(pItem) -- the value's vtable[0] == AddRef (the lifetime pin;
     // see the header note).
@@ -2168,11 +2163,10 @@ AptCIH* AptDisplayListState::AddToDelayReleaseList(AptCIH* pItem, bool bDelay)
     pItem->Remove(bDelay);
 
     // refcount > 1 (an outside reference survives) -> queue on the director's rem list.
-    if (pItem->getRefCount() > 1u && gpAptTarget != 0)
-        AptAnimationTargetAddToRemList(gpAptTarget->mpAnimationTarget, pItem);
+    if (pItem->getRefCount() > 1u)
+        gpAptTarget->GetAnimationTarget()->AddToRemList(pItem);
 
     pItem->Release();   // X360 vtable[1]
-    return pItem;
 }
 
 // ===========================================================================

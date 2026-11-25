@@ -1,4 +1,6 @@
 // Crash HUD lifecycle and offline presentation, recovered from ARTIST.
+#include "GameSource/Replays/BrnReplayGuiModuleStaticLayout.h"
+#include "GameSource/Replays/Serialisers/BrnReplayGuiModuleSerialiser.h"
 // Online mugshot and road-rule-shot dispatch remain un-reconstructed.
 #include "GameSource/Gui/Flow/HUD/States/BrnCrashedHudState.h"
 #include "GameShared/GameClasses/Containers/CgsHash.h"
@@ -124,22 +126,14 @@ void CrashedHudState::OnEnter()
     mbInImpactTime = false;
     mpCache = 0;
     CgsGui::GuiAccessPointers* lpAccess = mpStateInterface->GetAccessPointers();
-    CGS_ASSERT(lpAccess != 0, "mpAccessPointers != NULL");
     BrnFlapt::FlaptManager* lpFlapt = lpAccess->GetFlaptManager();
-    CGS_ASSERT(lpFlapt != 0, "NULL != mpFlaptManager");
-    BrnFlapt::FileRef lFile;
-    lpFlapt->GetFile(&lFile, 0);
+    BrnFlapt::FileRef lFile = lpFlapt->GetFile(BrnFlapt::E_FLAPTFILE_HUD);
     mpStateInterface->RegisterForEvents(maiEventToObserve, miNumEventsObserved);
-    // FLAG deferred: replay GuiModuleSerialiser::GetStaticLayout()->EndMessage();
-    // GuiAccessPointers does not yet carry the replay serialiser (shared HUD limitation).
-    BrnFlapt::MovieClipRef lRoot;
-    lFile.GetRootMovieClip(&lRoot);
-    lRoot.FindChildMovieClip(&mCrashHudAnimator, "CrashHUD_mc");
-    CGS_ASSERT(mCrashHudAnimator.IsValid(), "mpMovieClipInst");
-    mCrashHudAnimator.mpMovieClipInst->ResetTimeline();
+    mpStateInterface->GetAccessPointers()->GetSerialiser()->GetStaticLayout()->EndMessage();
+    mCrashHudAnimator = lFile.GetRootMovieClip().FindChildMovieClip("CrashHUD_mc");
+    mCrashHudAnimator.ResetTimeline();
     mHudMessageComponent.Construct("crashHudMessages_mc", mpStateInterface, 0);
-    GuiCache* lpCache = lpAccess->GetGuiCache();
-    CGS_ASSERT(lpCache != 0, "mpGuiCache");
+    GuiCache* lpCache = mpStateInterface->GetAccessPointers()->GetGuiCache();
     mHudMessageComponent.SetInGameMessagesQueue(lpCache->GetInGameMessagesQueue());
     mHudMessageComponent.Prepare("crashHudMessages_mc", lFile);
     mImpactTimePageChanger.Construct("ImpactOption_mc", mpStateInterface, 0);

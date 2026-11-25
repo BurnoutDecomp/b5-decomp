@@ -164,7 +164,7 @@ namespace BrnGui
             }
 
             BrnFlapt::MovieClipRef lChildClip;
-            lParentClip.FindChildMovieClip(&lChildClip, lpcChildName);
+            lChildClip = lParentClip.FindChildMovieClip(lpcChildName);
             maChildMovieClips[liCount] = lChildClip;
             ++liCount;
         }

@@ -1,4 +1,6 @@
 #include <float.h>
+#include "GameSource/Replays/BrnReplayGuiModuleStaticLayout.h"
+#include "GameSource/Replays/Serialisers/BrnReplayGuiModuleSerialiser.h"
 #include "GameSource/Gui/Flow/HUD/States/BrnFBurnMainHudState.h"
 
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // CgsGui::StateInterface
@@ -295,23 +297,14 @@ namespace BrnGui
         // The FLAPT persistent HUD file: access pointers -> FlaptManager -> file 0 ->
         // root movie clip -> the RaceMainHUD_mc child, shown + timeline-reset.
         CgsGui::GuiAccessPointers* lpAccessPointers = mpStateInterface->GetAccessPointers();
-        CGS_ASSERT(lpAccessPointers != 0, "mpAccessPointers != NULL");             // h:344
         BrnFlapt::FlaptManager* lpFlaptManager = lpAccessPointers->GetFlaptManager();
-        CGS_ASSERT(lpFlaptManager != 0, "NULL != mpFlaptManager");                 // CgsGuiShared.h:194
 
-        BrnFlapt::FileRef lFile;
-        lpFlaptManager->GetFile(&lFile, 0);
-        BrnFlapt::MovieClipRef lRootClip;
-        lFile.GetRootMovieClip(&lRootClip);
-        lRootClip.FindChildMovieClip(&mRaceMainHudClip, "RaceMainHUD_mc");
+        BrnFlapt::FileRef lFile = lpFlaptManager->GetFile(BrnFlapt::E_FLAPTFILE_HUD);
+        mRaceMainHudClip = lFile.GetRootMovieClip().FindChildMovieClip("RaceMainHUD_mc");
         mRaceMainHudClip.SetVisible(true);
-        CGS_ASSERT(mRaceMainHudClip.IsValid(), "mpMovieClipInst");                 // BrnFlaptMovieClipRef.h:272
-        mRaceMainHudClip.mpMovieClipInst->ResetTimeline();
+        mRaceMainHudClip.ResetTimeline();
 
-        // X360: GuiModuleSerialiser::GetStaticLayout(serialiser)->EndMessage() -- close
-        // any static-layout message left open by the previous state.
-        // FLAG deferred (Slice B): the BrnReplays::GuiModuleSerialiser recon does not
-        // yet surface GetStaticLayout/EndMessage; the layout stream is host-side inert.
+        mpStateInterface->GetAccessPointers()->GetSerialiser()->GetStaticLayout()->EndMessage();
 
         // ---- component construction against the FLAPT file ----------------------
         // [H3b] X360 OnEnter @0x8247B0E8: SatNavComponent::Construct(&this->+0x160,
@@ -346,9 +339,7 @@ namespace BrnGui
         // host where every pointer ahead of it in the cache has widened.
         {
             CgsGui::GuiAccessPointers* lpAccessPointers = mpStateInterface->GetAccessPointers();
-            CGS_ASSERT(lpAccessPointers != 0, "mpAccessPointers != NULL");
             GuiCache* lpGuiCache = static_cast<GuiCache*>(lpAccessPointers->GetGuiCache());
-            CGS_ASSERT(lpGuiCache != 0, "mpGuiCache");
             mInGameMessages.SetInGameMessagesQueue(lpGuiCache->GetInGameMessagesQueue());
         }
 
@@ -379,7 +370,7 @@ namespace BrnGui
 
         mFriendsList.Construct("friendList", mpStateInterface, 0);
         mFriendsList.Prepare("friendList", lFile);
-        mFriendsListChangeIcon.Construct("FriendListChange_mc", mpStateInterface, 0);
+        mFriendsListChangeIcon.FriendsListChangeIconComponent::Construct("FriendListChange_mc", mpStateInterface, 0);
         mFriendsListChangeIcon.Prepare("FriendListChange_mc", lFile);
 
         PostCommand16<94>(mpStateInterface, 0);

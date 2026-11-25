@@ -2,6 +2,7 @@
 #define CGS_UNICODE_H
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 
 namespace CgsUnicode
 {
@@ -18,10 +19,11 @@ namespace CgsUnicode
     class UnicodeBuffer
     {
     public:
+        void Construct();
         void Reset();
 
-        void Convert(s32 liInteger);                         // CgsUnicode.h:145 (X360 out-of-batch)
-        void Convert(f32 lfFloat);                           // CgsUnicode.h:149 (X360 out-of-batch)
+        void Convert(s32 liInteger);
+        void Convert(f32 lfFloat);
         void Convert(const CgsUtf8* lUtf8String);            // CgsUnicode.h:153  X360 0x82443380 (this batch)
         void Convert(const CgsUtf16* lUtf16String);          // CgsUnicode.h:157 (X360 out-of-batch)
         void Convert(bool lbBool);                           // CgsUnicode.h:161 (X360 out-of-batch)
@@ -30,10 +32,10 @@ namespace CgsUnicode
         // first member, offset 0; the Print<> formatters read the staged text through it).
         const CgsUtf8* GetBuffer() { return maBuffer; }
 
-        static void SetThousandsSeparator(const CgsUtf8* lUtf8ThousandsSeparator);  // :169
-        static void SetDecimalPointCharacter(const CgsUtf8* lUtf8DecimalPointChar); // :173
-        static void SetDecimalPlaces(u8 luDecimalPlaces);    // :177
-        static void SetMinimumDigits(u8 luMinimumDigits);    // :181
+        void SetThousandsSeparator(const CgsUtf8* lUtf8ThousandsSeparator);  // :169
+        void SetDecimalPointCharacter(const CgsUtf8* lUtf8DecimalPointChar); // :173
+        void SetDecimalPlaces(u8 luDecimalPlaces);    // :177
+        void SetMinimumDigits(u8 luMinimumDigits);    // :181
         static void SetTrueString(CgsUtf8* lUtf8TrueString); // :185
         static void SetFalseString(CgsUtf8* lUtf8FalseString);// :189
 
@@ -153,11 +155,9 @@ namespace CgsUnicode
     // 10^lu8DecimalPlaces and rendered through IntToString with NO minimum digits (so a
     // fraction shorter than the requested places prints unpadded -- the console's own
     // behaviour, reproduced). Asserts lu8DecimalPlaces < 10 (CgsUnicode.cpp:606) and the
-    // decimal character's UTF-8 lead byte (cpp:620). lu8MinimumDigits is accepted but the
-    // console body hands IntToString a literal 0 for both halves; kept in the signature
-    // because the call sites pass it.
-    CgsUtf8* FloatToString(CgsUtf8* lpUtf8TargetString, f32 lfValue, u8 lu8MinimumDigits,
-                           u8 lu8DecimalPlaces, const CgsUtf8* lpUtf8ThousandsSeparator,
+    // decimal character's UTF-8 lead byte (cpp:620).
+    CgsUtf8* FloatToString(CgsUtf8* lpUtf8TargetString, f32 lfValue, u8 lu8DecimalPlaces,
+                           const CgsUtf8* lpUtf8ThousandsSeparator,
                            const CgsUtf8* lpUtf8DecimalPointCharacter);
 
     CgsUtf8* IntToString(CgsUtf8* lpUtf8TargetString, s32 liValue, u8 lu8MinimumDigits,
@@ -172,6 +172,78 @@ namespace CgsUnicode
     // receives (target, source, size, args, count) -- note the X360 swaps source/target into
     // _Print's (target, source) slots. Bodies are out-of-line here; the two instantiations the
     // build uses are pinned by explicit instantiation in CgsUnicode.cpp.
+
+    inline void UnicodeBuffer::Reset()
+    {
+        maBuffer[0] = 0;
+    }
+
+    inline void UnicodeBuffer::Construct()
+    {
+        // ARTIST 0x82861A88 initializes the ten per-buffer format bytes.
+        maUtf8ThousandsSeparator[0] = 0;
+        maUtf8ThousandsSeparator[1] = 0;
+        maUtf8ThousandsSeparator[2] = 0;
+        maUtf8ThousandsSeparator[3] = 0;
+        maUtf8DecimalPointCharacter[0] = 0;
+        maUtf8DecimalPointCharacter[1] = 0;
+        maUtf8DecimalPointCharacter[2] = 0;
+        maUtf8DecimalPointCharacter[3] = 0;
+        muDecimalPlaces = 0;
+        muMinimumDigits = 0;
+        Reset();
+    }
+
+    inline void UnicodeBuffer::Convert(s32 liInteger)
+    {
+        IntToString(maBuffer, liInteger, muMinimumDigits, maUtf8ThousandsSeparator);
+    }
+
+    inline void UnicodeBuffer::Convert(f32 lfFloat)
+    {
+        FloatToString(maBuffer, lfFloat, muDecimalPlaces,
+                      maUtf8ThousandsSeparator, maUtf8DecimalPointCharacter);
+    }
+
+    #define CGS_ARTIST_UNICODE_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\fonts\\CgsUnicode.h"
+
+    // ARTIST tests both separator lengths with unsigned cmplwi before copying the UTF-8 value.
+    inline void UnicodeBuffer::SetThousandsSeparator(const CgsUtf8* lUtf8ThousandsSeparator)
+    {
+        CGS_ASSERT_AT(static_cast<u32>(StringLength(lUtf8ThousandsSeparator)) <= 1,
+                      "StringLength(lUtf8ThousandsSeparator) <= 1", CGS_ARTIST_UNICODE_FILE, 598);
+        Copy(maUtf8ThousandsSeparator, lUtf8ThousandsSeparator);
+    }
+
+    inline void UnicodeBuffer::SetDecimalPointCharacter(const CgsUtf8* lUtf8DecimalPointCharacter)
+    {
+        CGS_ASSERT_AT(static_cast<u32>(StringLength(lUtf8DecimalPointCharacter)) <= 1,
+                      "StringLength(lUtf8DecimalPointCharacter) <= 1", CGS_ARTIST_UNICODE_FILE, 617);
+        Copy(maUtf8DecimalPointCharacter, lUtf8DecimalPointCharacter);
+    }
+
+    #undef CGS_ARTIST_UNICODE_FILE
+
+    inline void UnicodeBuffer::SetDecimalPlaces(u8 luDecimalPlaces)
+    {
+        muDecimalPlaces = luDecimalPlaces > 9 ? 9 : luDecimalPlaces;
+    }
+
+    inline void UnicodeBuffer::SetMinimumDigits(u8 luMinimumDigits)
+    {
+        muMinimumDigits = luMinimumDigits > 9 ? 9 : luMinimumDigits;
+    }
+
+    template<typename T0>
+    CgsUtf8* Print(const CgsUtf8* lpUtf8SourceString,
+                   CgsUtf8* lpUtf8TargetString, s32 lnTargetStringSize, const T0& lrArg0)
+    {
+        UnicodeBuffer lBuffer;
+        lBuffer.Convert(lrArg0);
+        const CgsUtf8* lapArgs[1] = { lBuffer.GetBuffer() };
+        return _Print(lpUtf8TargetString, lpUtf8SourceString, lnTargetStringSize, lapArgs, 1);
+    }
+
     template< typename T0, typename T1 >
     CgsUtf8* Print(const CgsUtf8* lpUtf8SourceString,
                    CgsUtf8*       lpUtf8TargetString,

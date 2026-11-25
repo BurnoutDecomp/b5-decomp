@@ -175,6 +175,8 @@ struct AptAnimationTarget
     // call for it on the action queue. Returns the last enqueue/lookup result.
     AptValue* AddListenerToQueue(AptValue* pListener, int nEventMask, int nPacked);
 
+    void AddToRemList(AptCIH* pItem);   // ARTIST @0x82AEE418
+
     // ---- deferred-action queue thunks (each tail-jumps into mpActionQueue) ------
     // The four X360 one-liners at 0x82ADC608..0x82ADC620 load mpActionQueue (+0x0C)
     // and tail-call the matching AptActionQueueC enqueue method on it.

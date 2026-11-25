@@ -87,8 +87,8 @@ namespace CgsDev
                 Menu* menu = GetUI().GetMenuManager().FindMenu(item);
                 if (!menu) continue;
                 menu->GetPath(path, sizeof(path));
-                GetUI().SafeStringCat(path, "/", sizeof(path));
-                GetUI().SafeStringCat(path, item->GetFunction()->GetName(), sizeof(path));
+                DebugUI::SafeStringCat(path, "/", sizeof(path));
+                DebugUI::SafeStringCat(path, item->GetFunction()->GetName(), sizeof(path));
                 const char* compare = path[0] == '/' ? path + 1 : path;
                 if (_stricmp(compare, lpcPath) == 0)
                     return item->GetFunction();

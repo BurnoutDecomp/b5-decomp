@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string.h>
+
 #include "types.hpp"
 
 namespace CgsContainers
@@ -170,7 +172,7 @@ public:
 
     void Destruct()
     {
-        UnSetAll();
+        memset(maxBits, 0, sizeof(maxBits));
     }
 
     // ADDITIVE GROW (StreetData wave-C keystone; DWARF CgsBitArray.h:55 attests SetAll on the

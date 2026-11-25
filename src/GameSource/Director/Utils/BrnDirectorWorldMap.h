@@ -38,7 +38,7 @@ namespace BrnTraffic { struct Hull; }        // WalkLaneLeft takes a (const Hull
 namespace BrnTrigger { struct TriggerData; }
 namespace BrnAI      { struct AISectionsData; }
 // LoadDataStep's request-interface parameter (by pointer only).
-namespace BrnResource { namespace GameDataIO { template <s32 N> struct RequestInterface; } }
+namespace BrnResource { namespace GameDataIO { template <s32 N> class RequestInterface; } }
 
 namespace BrnDirector
 {

@@ -89,8 +89,8 @@ namespace CgsDev
                 return;
             }
             mpParent->GetPath(lpcBuffer, liBufferLen);
-            GetUI().SafeStringCat(lpcBuffer, "/", liBufferLen);
-            GetUI().SafeStringCat(lpcBuffer, macCaption, liBufferLen);
+            DebugUI::SafeStringCat(lpcBuffer, "/", liBufferLen);
+            DebugUI::SafeStringCat(lpcBuffer, macCaption, liBufferLen);
         }
 
         void Menu::RemoveMenuItem(MenuItem* lpMenuItem)

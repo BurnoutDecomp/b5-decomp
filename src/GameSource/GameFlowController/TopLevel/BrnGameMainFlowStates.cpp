@@ -171,7 +171,7 @@ void LoadingScriptedState::ResumeLoadingWorld()
 //         { DestroyIOBuffer (h:57 assert); return true; }
 //     LockForRead(effectsOut);
 //     gameDataIn->attribQueue.Append<2048,16>(effectsOut->GetVaultRequestInterface()->queue);
-//     gameDataIn->AppendRequestInterface<4096>(*effectsOut->GetResourceRequestInterface());
+//     gameDataIn->AppendRequestInterface<4096>(effectsOut->GetResourceRequestInterface());
 //     UnlockForRead(effectsOut);
 //     DestroyIOBuffer; return false;
 bool LoadingScriptedState::LoadEffectsModule(
@@ -206,7 +206,7 @@ bool LoadingScriptedState::LoadEffectsModule(
         lpGameDataInputBuffer->GetAttribSysRequestInterface()->mRequestQueue.Append(
             lpEffectsOutputRead->GetVaultRequestInterface()->mRequestQueue);
         lpGameDataInputBuffer->AppendRequestInterface<4096>(
-            *lpEffectsOutputRead->GetResourceRequestInterface());
+            lpEffectsOutputRead->GetResourceRequestInterface());
         lpEffectsOutput->UnlockForRead();
     }
 
@@ -249,7 +249,7 @@ bool LoadingScriptedState::LoadWorldModule(BrnResource::GameDataIO::InputBuffer*
         // The X360 reads through the CONST accessor (0x823B5780) under the read lock.
         const BrnWorldIO::UpdateOutputBuffer* lpWorldOutputRead = lpWorldOutput;
         lpGameDataInputBuffer->AppendRequestInterface<4096>(
-            *lpWorldOutputRead->GetResourceRequestResourceInterface());
+            lpWorldOutputRead->GetResourceRequestResourceInterface());
         // X360 (headless-IDA @0x823E72F0): also bulk-append the world output's AttribSys
         // vault request queue (<2048>) into the GameData input's attrib queue
         // (VariableEventQueue<32768,16>::Append<2048,16>) -- this is what carries the
@@ -340,7 +340,7 @@ bool LoadingScriptedState::LoadWorldCollision(BrnResource::GameDataIO::InputBuff
         // same pair LoadWorldModule uses.
         const BrnWorldIO::UpdateOutputBuffer* lpWorldOutputRead = lpWorldOutput;
         lpGameDataInputBuffer->AppendRequestInterface<4096>(
-            *lpWorldOutputRead->GetResourceRequestResourceInterface());
+            lpWorldOutputRead->GetResourceRequestResourceInterface());
         lpGameDataInputBuffer->GetAttribSysRequestInterface()->mRequestQueue.Append(
             lpWorldOutputRead->GetAttribSysVaultRequestInterface()->mRequestQueue);
         lpWorldOutput->UnlockForRead();
@@ -358,7 +358,7 @@ bool LoadingScriptedState::LoadWorldCollision(BrnResource::GameDataIO::InputBuff
 //         DestroyIOBuffer(out); return 1;
 //     }
 //     LockForRead(out);
-//     gameDataIn->AppendRequestInterface<3072>(*out->GetResourceRequestInterface());
+//     gameDataIn->AppendRequestInterface<3072>(out->GetResourceRequestInterface());
 //     UnlockForRead(out);
 //     DestroyIOBuffer(out); return 0;
 //
@@ -378,7 +378,7 @@ bool LoadingScriptedState::LoadGameState2(
     }
     lpGameStateOutput->LockForRead();
     const BrnGameState::GameStateModuleIO::OutputBuffer* const lpRead = lpGameStateOutput;
-    lpGameDataInput->AppendRequestInterface<3072>(*lpRead->GetResourceRequestInterface());
+    lpGameDataInput->AppendRequestInterface<3072>(lpRead->GetResourceRequestInterface());
     lpGameStateOutput->UnlockForRead();
     lpOutputStack->DestroyIOBuffer(&lpGameStateOutput);
     return false;
@@ -456,7 +456,7 @@ bool LoadingScriptedState::LoadDirectorModule(
             lpGameDataInputBuffer->GetAttribSysRequestInterface()->mRequestQueue.Append(
                 lpDirectorOutputRead->GetVaultRequestInterface()->mRequestQueue);
         }
-        lpGameDataInputBuffer->AppendRequestInterface<512>(*lpDirectorOutput->Get());
+        lpGameDataInputBuffer->AppendRequestInterface<512>(lpDirectorOutput->Get());
         lpDirectorOutput->UnlockForRead();
     }
 
@@ -805,7 +805,7 @@ bool LoadingScriptedState::LoadSoundModuleAgain(
         const BrnSound::Module::Io::RootOutputBuffer* const lpRead = lpSoundOutput;
         lpGameDataInput->GetAttribSysRequestInterface()->mRequestQueue.Append(
             lpRead->GetAttribSysRequestInterface()->mRequestQueue);
-        lpGameDataInput->AppendRequestInterface<4096>(*lpRead->GetResourceRequestInterface());
+        lpGameDataInput->AppendRequestInterface<4096>(lpRead->GetResourceRequestInterface());
         lpSoundOutput->UnlockForRead();
     }
     lpOutputStack->DestroyIOBuffer(&lpSoundOutput);
@@ -1482,7 +1482,7 @@ bool LoadingScriptedState::LoadNetworkModule(BrnResource::GameDataIO::InputBuffe
         lpNetworkOutputBuffer->LockForRead();
         {
             const BrnNetwork::BrnNetworkModuleIO::OutputBuffer* lpNetworkOutputRead = lpNetworkOutputBuffer;
-            lpGameDataInputBuffer->AppendRequestInterface<256>(*lpNetworkOutputRead->GetGameDataRequestInterface());
+            lpGameDataInputBuffer->AppendRequestInterface<256>(lpNetworkOutputRead->GetGameDataRequestInterface());
         }
         lpNetworkOutputBuffer->UnlockForRead();
     }

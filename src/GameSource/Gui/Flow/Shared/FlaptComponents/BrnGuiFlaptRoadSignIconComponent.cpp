@@ -125,7 +125,7 @@ namespace BrnGui
 
         mAptRef.mpMovieClipInst->ResetTimeline();
 
-        mAptRef.FindChildMovieClip(&mPostMovieClip, "SignPole");
+        mPostMovieClip = mAptRef.FindChildMovieClip("SignPole");
     }
 
     // @ 0x82427E58 -- play the road clip on lpcRoadName, show the post if present, and

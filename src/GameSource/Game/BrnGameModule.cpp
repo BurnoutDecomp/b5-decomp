@@ -216,8 +216,8 @@ namespace BrnGame
                 EA::Thread::ThreadParameters lParameters;
                 lParameters.mbSuspended = false;
                 lParameters.mnPriority = 0;
-                lParameters.mnProcessor = 2;
                 lParameters.mpName = "DispatchThread";
+                lParameters.mnProcessor = 2;
                 mErrorThread.Begin(reinterpret_cast<EA::Thread::RunnableFunction>(DiskErrorThreadProc),
                     reinterpret_cast<void*>(static_cast<uintptr_t>(luUserIndex)), &lParameters,
                     EA::Thread::Thread::GetGlobalRunnableFunctionUserWrapper());
@@ -2179,13 +2179,13 @@ namespace BrnGame
         BridgeWorldToResource(lpResourceInput, lpWorldRead);
         lpResourceInput->GetAttribSysRequestInterface()->mRequestQueue.Append(
             lpDirectorRead->GetVaultRequestInterface()->mRequestQueue);
-        lpResourceInput->AppendRequestInterface<512>(*lpDirectorRead->GetResourceRequestInterface());
-        lpResourceInput->AppendRequestInterface<3072>(*lpGameStateRead->GetResourceRequestInterface());
+        lpResourceInput->AppendRequestInterface<512>(lpDirectorRead->GetResourceRequestInterface());
+        lpResourceInput->AppendRequestInterface<3072>(lpGameStateRead->GetResourceRequestInterface());
         lpResourceInput->GetAttribSysRequestInterface()->mRequestQueue.Append(
             lpSoundRead->GetAttribSysRequestInterface()->mRequestQueue);
         lpResourceInput->GetRequestInterface()->mRequestQueue.Append(
             lpSoundRead->GetResourceRequestInterface()->mRequestQueue);
-        lpResourceInput->AppendRequestInterface<1024>(*lpReplayRead->GetGameDataRequestInterface());
+        lpResourceInput->AppendRequestInterface<1024>(lpReplayRead->GetGameDataRequestInterface());
         CgsModule::UnlockBuffersForIO(lpResourceInput, lpGameStateRead, lpWorldRead,
             lpDirectorRead, lpModelRead, lpSoundRead, lpGuiRead, lpReplayRead);
         CheckUpdateMemory(luAvailableMemory, 2281);
@@ -2534,7 +2534,7 @@ namespace BrnGame
                 }
                 lpGameStateOutput->LockForRead();
                 const BrnGameState::GameStateModuleIO::OutputBuffer* const lpRead = lpGameStateOutput;
-                lpResourceInput->AppendRequestInterface<3072>(*lpRead->GetResourceRequestInterface());
+                lpResourceInput->AppendRequestInterface<3072>(lpRead->GetResourceRequestInterface());
                 lpGameStateOutput->UnlockForRead();
                 mpUpdateOutputBufferStack->DestroyIOBuffer(&lpGameStateOutput);
             }
@@ -2602,7 +2602,6 @@ namespace BrnGame
         const BrnResource::GameDataIO::OutputBuffer* const lpResourceOutput = mpGameDataModuleOutputBuffer;
         lpResourceInput->LockForWrite();
         lpResourceOutput->LockForRead();
-        bool lbReleased = false;
         switch (meGameReleaseStage)
         {
         case E_GAMERELEASESTAGE_START:
@@ -2624,7 +2623,7 @@ namespace BrnGame
         case E_GAMERELEASESTAGE_WORLDMODULE:
             {
                 meGameReleaseStage = E_GAMERELEASESTAGE_WORLDMODULE;
-                BrnWorldIO::UpdateOutputBuffer* lpWorldOutput = 0;
+                BrnWorldIO::UpdateOutputBuffer* lpWorldOutput;
                 mpUpdateOutputBufferStack->CreateIOBuffer(&lpWorldOutput, "World");
                 if (!mWorldModule.Release(mpUpdateOutputBufferStack, lpWorldOutput))
                 {
@@ -2640,12 +2639,12 @@ namespace BrnGame
         case E_GAMERELEASESTAGE_GAMESTATEMODULE:
             {
                 meGameReleaseStage = E_GAMERELEASESTAGE_GAMESTATEMODULE;
-                BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput = 0;
+                BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput;
                 mpUpdateOutputBufferStack->CreateIOBuffer(&lpGameStateOutput, "GameState");
                 if (!mGameStateModule.Release(lpGameStateOutput))
                 {
                     const BrnGameState::GameStateModuleIO::OutputBuffer* const lpRead = lpGameStateOutput;
-                    lpResourceInput->AppendRequestInterface<3072>(*lpRead->GetResourceRequestInterface());
+                    lpResourceInput->AppendRequestInterface<3072>(lpRead->GetResourceRequestInterface());
                     mpUpdateOutputBufferStack->DestroyIOBuffer(&lpGameStateOutput);
                     break;
                 }
@@ -2657,8 +2656,9 @@ namespace BrnGame
         case E_GAMERELEASESTAGE_DONE:
             meGamePrepareStage = E_GAMEPREPARESTAGE_START;
             meGameReleaseStage = E_GAMERELEASESTAGE_DONE;
-            lbReleased = true;
-            break;
+            lpResourceInput->UnlockForWrite();
+            lpResourceOutput->UnlockForRead();
+            return true;
         default:
             CgsDev::Assert::BeginAssert();
             {
@@ -2672,7 +2672,7 @@ namespace BrnGame
         }
         lpResourceInput->UnlockForWrite();
         lpResourceOutput->UnlockForRead();
-        return lbReleased;
+        return false;
     }
 
     // @ BrnGameModule.cpp:1253 (X360 0x823A8BB0) - start-of-update-frame hook. The X360 body is
@@ -3269,27 +3269,27 @@ namespace BrnGame
     // timer is what freezes the world: every sim sub-step's timestep derives from it, and
     // ConstructUpdateSetFromFsm additionally raises update-set bit 0 off mbSimPaused.
     void BrnGameModule::CheckGameActions(
-        BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput)
+        const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput)
     {
         lpGameStateOutput->LockForRead();
         const BrnGameState::GameStateModuleIO::GameActionQueue* lpActionQueue =
-            static_cast<const BrnGameState::GameStateModuleIO::OutputBuffer*>(lpGameStateOutput)
-                ->GetGameActionQueue();
+            lpGameStateOutput->GetGameActionQueue();
 
-        const CgsModule::Event* lpEvent = 0;
-        s32 liSize = 0;
+        const CgsModule::Event* lpEvent;
+        s32 liSize;
         s32 liAction = lpActionQueue->GetFirstEvent(&lpEvent, &liSize);
         while (lpEvent != 0)
         {
-            if (liAction == 86)
+            switch (liAction)
             {
+            case 86:
                 mbSimPaused = true;
                 mSimTimer.SetRunning(false);
-            }
-            else if (liAction == 87)
-            {
+                break;
+            case 87:
                 mbSimPaused = false;
                 mSimTimer.SetRunning(true);
+                break;
             }
             const CgsModule::Event* lpCurrent = lpEvent;
             liAction = lpActionQueue->GetNextEvent(lpCurrent, &lpEvent, &liSize);

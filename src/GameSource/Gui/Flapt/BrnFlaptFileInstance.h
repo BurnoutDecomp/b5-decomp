@@ -48,7 +48,7 @@ namespace BrnFlapt
         // GetRootMovieClip @ 0x8246B360 : assert IsActive() and a live root clip,
         // then return a MovieClipRef {mpRootMovieClipInstance, 0} by value (written
         // into the caller-provided out buffer).
-        MovieClipRef* GetRootMovieClip(MovieClipRef* lpOutRef) const;
+        MovieClipRef GetRootMovieClip() const;
 
         // FindComponent @ 0x8246EBxx : look up a named timeline component by its
         // pre-hashed name and write a MovieClipRef onto it into lpOutRef. Declared

@@ -927,7 +927,8 @@ void PlayerManager::BroadcastEvent(EEvent leEvent, void* lpEventData)
 
 void PlayerManager::RegisterEventCallback(EventCallbackFunction lpfCallback, void* lpUserData)
 {
-    CGS_ASSERT(miNumEventCallbacks < KI_NUM_EVENT_CALLBACKS, "Too many callbacks registered");
+    CGS_ASSERT_AT(miNumEventCallbacks < KI_NUM_EVENT_CALLBACKS, "Too many callbacks registered",
+                  CGS_ARTIST_FILE, 1687 /* ARTIST 0x82873F74 */);
     maEventCallbacks[miNumEventCallbacks].mCallback  = lpfCallback;
     maEventCallbacks[miNumEventCallbacks].mpUserData = lpUserData;
     ++miNumEventCallbacks;

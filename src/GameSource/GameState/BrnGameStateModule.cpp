@@ -1122,11 +1122,7 @@ bool GameStateModule::Prepare2(GameStateModuleIO::OutputBuffer* lpOutputBuffer)
     {
         mePrepare2Stage = E_PREPARE2STAGE_PROGRESSION;
 
-        // X360 `BrnTrigger::TriggerData_::GetMemor(this + 43888)` -- the trigger RESOURCE MEMORY
-        // pointer, which is exactly what GetTriggerData() hands back. The manager stores it as an
-        // opaque back-pointer (its own member is typed void*), hence the const strip.
-        void* lpTriggerData =
-            const_cast<void*>(static_cast<const void*>(mTriggerQueryManager.GetTriggerData()));
+        const BrnTrigger::TriggerData* lpTriggerData = mTriggerQueryManager.GetTriggerData();
 
         // X360 r8 == `a1 + 181680` -- the embedded achievement manager, by address.
         if (!mProgressionManager.Prepare2(lpOutputBuffer,

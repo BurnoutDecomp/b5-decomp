@@ -911,46 +911,28 @@ namespace CgsLanguage
     void LanguageManager::FormatLargeDistanceString(char* lpcTarget, f32 lfValue,
                                                     s32 liTargetSize) const
     {
-        CGS_ASSERT(lpcTarget != 0, "lpTargetString != NULL");                          // cpp:2166
-        CGS_ASSERT(liTargetSize > 0, "lnTargetStringSize > 0");                        // cpp:2167
-        CGS_ASSERT(mpDistanceFormatLong != 0, "mpDistanceFormatLong");                 // cpp:2168
-        CGS_ASSERT(mpGeneralThousandsSeparator != 0, "mpGeneralThousandsSeparator");   // cpp:2169
-        CGS_ASSERT(mpGeneralDecimalSeparator != 0, "mpGeneralDecimalSeparator");       // cpp:2170
+        CGS_ASSERT_AT(lpcTarget != 0, "lpTargetString != NULL",
+                      CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2166);
+        CGS_ASSERT_AT(liTargetSize > 0, "lnTargetStringSize > 0",
+                      CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2167);
+        CGS_ASSERT_AT(mpDistanceFormatLong != 0, "mpDistanceFormatLong",
+                      CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2168);
+        CGS_ASSERT_AT(mpGeneralThousandsSeparator != 0, "mpGeneralThousandsSeparator",
+                      CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2169);
+        CGS_ASSERT_AT(mpGeneralDecimalSeparator != 0, "mpGeneralDecimalSeparator",
+                      CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2170);
 
-        const f32 lfScaledValue = mrLargeDistanceConversion * lfValue;
+        const f32 lfScaledDistance = mrLargeDistanceConversion * lfValue;
+        CgsUnicode::UnicodeBuffer lValue;
+        lValue.Construct();
+        lValue.SetThousandsSeparator(mpGeneralThousandsSeparator);
+        lValue.SetDecimalPointCharacter(mpGeneralDecimalSeparator);
+        lValue.SetDecimalPlaces(1);
+        lValue.Convert(lfScaledDistance);
 
-        CgsUnicode::CgsUtf8 lacValue[256];
-        CgsUnicode::CgsUtf8 lacThousandsSeparator[4];
-        CgsUnicode::CgsUtf8 lacDecimalPointCharacter[4];
-        lacValue[0] = 0;
-        for (s32 liByte = 0; liByte < 4; ++liByte)
-        {
-            lacThousandsSeparator[liByte]    = 0;
-            lacDecimalPointCharacter[liByte] = 0;
-        }
-
-        // UnicodeBuffer::SetThousandsSeparator, inlined (CgsUnicode.h:598).
-        CGS_ASSERT(CgsUnicode::StringLength(mpGeneralThousandsSeparator) <= 1,
-                   "StringLength(lUtf8ThousandsSeparator) <= 1");
-        CgsUnicode::Copy(lacThousandsSeparator, mpGeneralThousandsSeparator);
-
-        // UnicodeBuffer::SetDecimalPointCharacter, inlined (CgsUnicode.h:617).
-        CGS_ASSERT(CgsUnicode::StringLength(mpGeneralDecimalSeparator) <= 1,
-                   "StringLength(lUtf8DecimalPointCharacter) <= 1");
-        CgsUnicode::Copy(lacDecimalPointCharacter, mpGeneralDecimalSeparator);
-
-        CgsUnicode::FloatToString(lacValue, lfScaledValue, 0, 1,
-                                  lacThousandsSeparator, lacDecimalPointCharacter);
-
-        CgsUnicode::UnicodeBuffer lValueBuffer;
-        lValueBuffer.Convert(lacValue);
-
-        const CgsUnicode::CgsUtf8* lapUtf8Params[1];
-        lapUtf8Params[0] = lValueBuffer.GetBuffer();
-
-        CgsUnicode::_Print(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpcTarget),
-                           mpDistanceFormatLong,
-                           liTargetSize, lapUtf8Params, 1);
+        CgsUnicode::Print(mpDistanceFormatLong,
+                          reinterpret_cast<CgsUnicode::CgsUtf8*>(lpcTarget),
+                          liTargetSize, lValue.GetBuffer());
     }
 
     // ------------------------------------------------------------------------
@@ -1345,75 +1327,6 @@ namespace CgsLanguage
                            mpTimeFormatMinsSecsMidText, liTargetSize, lapUtf8Params, 2);
     }
 
-    // (FormatLargeDistanceString is no longer a trap-stub -- its faithful body is above
-    //  this block, landed with the H1 odometer wave.)
-    // ------------------------------------------------------------------------
-    // [pause-stats wave 2026-08-29] The distance leaves' SHARED BODY, de-inlined ONCE.
-    // The console emits four near-identical copies of it (FormatSmallDistanceString
-    // @0x82861988, FormatSmallDistanceStringLong @0x82861B88, FormatLargeDistanceString
-    // @0x82861D88 and FormatLargeDistanceStringLong @0x82861F88 -- 128/128/127/127
-    // instructions, differing only in the conversion factor, the format template and
-    // IntToString-vs-FloatToString). This is a de-optimisation of that duplication, not an
-    // invention: every step below is one of theirs, in their order, and each caller supplies
-    // exactly the operands its own asm loads.
-    //   * the two <=1-length tripwires are the inlined
-    //     UnicodeBuffer::SetThousandsSeparator / SetDecimalPointCharacter (CgsUnicode.h:598/617),
-    //     the same pair FormatIntegerString and FormatLargeDistanceString already carry;
-    //   * the LARGE leaves scale then FloatToString with ONE decimal place; the SMALL leaves
-    //     scale then `fctiwz`-TRUNCATE and IntToString with min digits 0;
-    //   * the REAL target size reaches _Print (no 1024 defect in this family).
-    // NOTE: FormatLargeDistanceString keeps its own inline copy above -- it landed with the H1
-    // odometer wave and is byte-checked against the asm there; it is left untouched on purpose.
-    // ------------------------------------------------------------------------
-    static void FormatDistanceIntoTemplate(char* lpcTarget, f32 lfMetres, s32 liTargetSize,
-                                           f32 lfConversion,
-                                           const CgsUnicode::CgsUtf8* lpUtf8Template,
-                                           const CgsUnicode::CgsUtf8* lpUtf8ThousandsSeparator,
-                                           const CgsUnicode::CgsUtf8* lpUtf8DecimalSeparator,
-                                           bool lbFractional)
-    {
-        const f32 lfScaledValue = lfConversion * lfMetres;
-
-        CgsUnicode::CgsUtf8 lacValue[256];
-        CgsUnicode::CgsUtf8 lacThousandsSeparator[4];
-        CgsUnicode::CgsUtf8 lacDecimalPointCharacter[4];
-        lacValue[0] = 0;
-        for (s32 liByte = 0; liByte < 4; ++liByte)
-        {
-            lacThousandsSeparator[liByte]    = 0;
-            lacDecimalPointCharacter[liByte] = 0;
-        }
-
-        CGS_ASSERT(CgsUnicode::StringLength(lpUtf8ThousandsSeparator) <= 1,
-                   "StringLength(lUtf8ThousandsSeparator) <= 1");        // CgsUnicode.h:598
-        CgsUnicode::Copy(lacThousandsSeparator, lpUtf8ThousandsSeparator);
-
-        CGS_ASSERT(CgsUnicode::StringLength(lpUtf8DecimalSeparator) <= 1,
-                   "StringLength(lUtf8DecimalPointCharacter) <= 1");     // CgsUnicode.h:617
-        CgsUnicode::Copy(lacDecimalPointCharacter, lpUtf8DecimalSeparator);
-
-        if (lbFractional)
-        {
-            CgsUnicode::FloatToString(lacValue, lfScaledValue, 0, 1,
-                                      lacThousandsSeparator, lacDecimalPointCharacter);
-        }
-        else
-        {
-            // `fctiwz` -- truncation, not rounding.
-            CgsUnicode::IntToString(lacValue, static_cast<s32>(lfScaledValue), 0,
-                                    lacThousandsSeparator);
-        }
-
-        CgsUnicode::UnicodeBuffer lValueBuffer;
-        lValueBuffer.Convert(lacValue);
-
-        const CgsUnicode::CgsUtf8* lapUtf8Params[1];
-        lapUtf8Params[0] = lValueBuffer.GetBuffer();
-
-        CgsUnicode::_Print(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpcTarget),
-                           lpUtf8Template, liTargetSize, lapUtf8Params, 1);
-    }
-
     f32  LanguageManager::GetDistanceDisplayScale() const                                 { __debugbreak(); return 1.0f; }   // FLAG trap-stub
 
     // ========================================================================================
@@ -1545,15 +1458,28 @@ namespace CgsLanguage
     void LanguageManager::FormatSmallDistanceString(char* lpcTarget, f32 lfMetres,
                                                     s32 liTargetSize) const
     {
-        CGS_ASSERT(lpcTarget != 0, "lpTargetString != NULL");                          // cpp:2087
-        CGS_ASSERT(liTargetSize > 0, "lnTargetStringSize > 0");                        // cpp:2088
-        CGS_ASSERT(mpDistanceFormatShort != 0, "mpDistanceFormatShort");               // cpp:2089
-        CGS_ASSERT(mpGeneralThousandsSeparator != 0, "mpGeneralThousandsSeparator");   // cpp:2090
-        CGS_ASSERT(mpGeneralDecimalSeparator != 0, "mpGeneralDecimalSeparator");       // cpp:2091
+        CGS_ASSERT_AT(lpcTarget != 0, "lpTargetString != NULL",
+                      CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2087);
+        CGS_ASSERT_AT(liTargetSize > 0, "lnTargetStringSize > 0",
+                      CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2088);
+        CGS_ASSERT_AT(mpDistanceFormatShort != 0, "mpDistanceFormatShort",
+                      CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2089);
+        CGS_ASSERT_AT(mpGeneralThousandsSeparator != 0, "mpGeneralThousandsSeparator",
+                      CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2090);
+        CGS_ASSERT_AT(mpGeneralDecimalSeparator != 0, "mpGeneralDecimalSeparator",
+                      CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2091);
 
-        FormatDistanceIntoTemplate(lpcTarget, lfMetres, liTargetSize,
-                                   mrSmallDistanceConversion, mpDistanceFormatShort,
-                                   mpGeneralThousandsSeparator, mpGeneralDecimalSeparator, false);
+        const s32 liDistance = static_cast<s32>(mrSmallDistanceConversion * lfMetres);
+        CgsUnicode::UnicodeBuffer lValue;
+        lValue.Construct();
+        lValue.SetThousandsSeparator(mpGeneralThousandsSeparator);
+        lValue.SetDecimalPointCharacter(mpGeneralDecimalSeparator);
+        lValue.SetDecimalPlaces(0);
+        lValue.Convert(liDistance);
+
+        CgsUnicode::Print(mpDistanceFormatShort,
+                          reinterpret_cast<CgsUnicode::CgsUtf8*>(lpcTarget),
+                          liTargetSize, lValue.GetBuffer());
     }
 
     // @ 0x82861B88 -- the SHORT-distance LONG-UNIT-NAME twin (format 18). FLAG: this is the ONE
@@ -1567,15 +1493,28 @@ namespace CgsLanguage
     void LanguageManager::FormatSmallDistanceStringLong(char* lpcTarget, f32 lfMetres,
                                                         s32 liTargetSize) const
     {
-        CGS_ASSERT(lpcTarget != 0, "lpTargetString != NULL");
-        CGS_ASSERT(liTargetSize > 0, "lnTargetStringSize > 0");
-        CGS_ASSERT(mpDistanceFormatShortL != 0, "mpDistanceFormatShortL");
-        CGS_ASSERT(mpGeneralThousandsSeparator != 0, "mpGeneralThousandsSeparator");
-        CGS_ASSERT(mpGeneralDecimalSeparator != 0, "mpGeneralDecimalSeparator");
+        CGS_ASSERT_AT(lpcTarget != 0, "lpTargetString != NULL",
+                      CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2127);
+        CGS_ASSERT_AT(liTargetSize > 0, "lnTargetStringSize > 0",
+                      CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2128);
+        CGS_ASSERT_AT(mpDistanceFormatShortL != 0, "mpDistanceFormatShortL",
+                      CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2129);
+        CGS_ASSERT_AT(mpGeneralThousandsSeparator != 0, "mpGeneralThousandsSeparator",
+                      CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2130);
+        CGS_ASSERT_AT(mpGeneralDecimalSeparator != 0, "mpGeneralDecimalSeparator",
+                      CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2131);
 
-        FormatDistanceIntoTemplate(lpcTarget, lfMetres, liTargetSize,
-                                   mrSmallDistanceConversion, mpDistanceFormatShortL,
-                                   mpGeneralThousandsSeparator, mpGeneralDecimalSeparator, false);
+        const s32 liDistance = static_cast<s32>(mrSmallDistanceConversion * lfMetres);
+        CgsUnicode::UnicodeBuffer lValue;
+        lValue.Construct();
+        lValue.SetThousandsSeparator(mpGeneralThousandsSeparator);
+        lValue.SetDecimalPlaces(0);
+        lValue.SetDecimalPointCharacter(mpGeneralDecimalSeparator);
+        lValue.Convert(liDistance);
+
+        CgsUnicode::Print(mpDistanceFormatShortL,
+                          reinterpret_cast<CgsUnicode::CgsUtf8*>(lpcTarget),
+                          liTargetSize, lValue.GetBuffer());
     }
 
     // @ 0x82861F88 (asserts cpp:2205..2209) -- the LARGE-distance LONG-UNIT-NAME twin
@@ -1585,15 +1524,28 @@ namespace CgsLanguage
     void LanguageManager::FormatLargeDistanceStringLong(char* lpcTarget, f32 lfMetres,
                                                         s32 liTargetSize) const
     {
-        CGS_ASSERT(lpcTarget != 0, "lpTargetString != NULL");                          // cpp:2205
-        CGS_ASSERT(liTargetSize > 0, "lnTargetStringSize > 0");                        // cpp:2206
-        CGS_ASSERT(mpDistanceFormatLongL != 0, "mpDistanceFormatLongL");               // cpp:2207
-        CGS_ASSERT(mpGeneralThousandsSeparator != 0, "mpGeneralThousandsSeparator");   // cpp:2208
-        CGS_ASSERT(mpGeneralDecimalSeparator != 0, "mpGeneralDecimalSeparator");       // cpp:2209
+        CGS_ASSERT_AT(lpcTarget != 0, "lpTargetString != NULL",
+                      CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2205);
+        CGS_ASSERT_AT(liTargetSize > 0, "lnTargetStringSize > 0",
+                      CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2206);
+        CGS_ASSERT_AT(mpDistanceFormatLongL != 0, "mpDistanceFormatLongL",
+                      CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2207);
+        CGS_ASSERT_AT(mpGeneralThousandsSeparator != 0, "mpGeneralThousandsSeparator",
+                      CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2208);
+        CGS_ASSERT_AT(mpGeneralDecimalSeparator != 0, "mpGeneralDecimalSeparator",
+                      CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2209);
 
-        FormatDistanceIntoTemplate(lpcTarget, lfMetres, liTargetSize,
-                                   mrLargeDistanceConversion, mpDistanceFormatLongL,
-                                   mpGeneralThousandsSeparator, mpGeneralDecimalSeparator, true);
+        const f32 lfScaledDistance = mrLargeDistanceConversion * lfMetres;
+        CgsUnicode::UnicodeBuffer lValue;
+        lValue.Construct();
+        lValue.SetThousandsSeparator(mpGeneralThousandsSeparator);
+        lValue.SetDecimalPointCharacter(mpGeneralDecimalSeparator);
+        lValue.SetDecimalPlaces(1);
+        lValue.Convert(lfScaledDistance);
+
+        CgsUnicode::Print(mpDistanceFormatLongL,
+                          reinterpret_cast<CgsUnicode::CgsUtf8*>(lpcTarget),
+                          liTargetSize, lValue.GetBuffer());
     }
 
     // @ 0x82862188 (asserts cpp:2244/2245) -- pick the unit by MAGNITUDE: if the value in LARGE

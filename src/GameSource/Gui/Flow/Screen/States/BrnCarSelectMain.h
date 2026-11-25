@@ -178,6 +178,10 @@ namespace BrnGui
         CarSetupInfo        mCurrentSetupInfo;   // +0x290
         CarSetupInfo        mDesiredSetupInfo;   // +0x2A0
         CgsID               miMostRecentDropInId; // +0x2B0
+        // DecFIGS BrnCarSelectMain.h and ARTIST pointers 0x82F26C8C/0x82F26C90.
+        static const char* mpacTitleTextFieldName;
+        static const char* mpacWaitingTextFieldName;
+
         TextField           mTitleText;          // +0x2B8
         ManufacturersIcon   mManufacturerLogo;   // +0x3E0 ("ManufacturerLogo_mc")
         HelpItem            mHelpItemContinue;    // +0x46C ("HelpItemContinue_mc")

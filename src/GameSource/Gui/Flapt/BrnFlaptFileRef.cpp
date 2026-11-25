@@ -1,3 +1,4 @@
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"
 
 #include "GameSource/Gui/Flapt/BrnFlaptFileInstance.h"   // BrnFlapt::FlaptFileInstance
@@ -45,11 +46,10 @@ MovieClipRef* FileRef::FindComponent(MovieClipRef* lpOutRef, const char* lpcName
 // ---- GetRootMovieClip @ 0x8246B410 ---------------------------------------
 // Assert the handle, then forward to FlaptFileInstance::GetRootMovieClip, which
 // writes the root timeline's MovieClipRef into lpOutRef and returns it.
-MovieClipRef* FileRef::GetRootMovieClip(MovieClipRef* lpOutRef) const
+MovieClipRef FileRef::GetRootMovieClip() const
 {
-    CGS_ASSERT(mpFileInstance != 0, "mpFileInst");
-
-    return static_cast<FlaptFileInstance*>(mpFileInstance)->GetRootMovieClip(lpOutRef);
+    CGS_ASSERT_AT(mpFileInstance != 0, "mpFileInst", "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptFileRef.cpp", 63);
+    return static_cast<FlaptFileInstance*>(mpFileInstance)->GetRootMovieClip();
 }
 
 }

@@ -29,6 +29,8 @@ namespace BrnWorld { namespace RaceCarEntityModuleIO { struct RCEntityActiveRace
 // Foreign types the additive DriveThruManager-facing accessors route by pointer (declare-only).
 // Tags match the committed homes (CarData/ProgressionData = struct, AchievementManagerBase = class)
 // to avoid a struct/class mismatch (C4099).
+namespace BrnTrigger { struct TriggerData; }
+
 namespace BrnProgression  { struct CarData; struct ProgressionData; }
 namespace BrnGameState    { class AchievementManagerBase; }
 // [stuntrace waveB / agent 10] the event-finish progression writer's two foreign types.
@@ -734,7 +736,7 @@ public:
     bool Prepare2(BrnGameState::GameStateModuleIO::OutputBuffer* lpOutput,
                   BrnGameState::ModeManager* lpModeManager,
                   CgsModule::EventReceiverQueue<3072, 16>* lpReceiverQueue,
-                  void* lpTriggerData, BrnGameState::AchievementManagerBase* lpAchievementManager);
+                  const BrnTrigger::TriggerData* lpTriggerData, BrnGameState::AchievementManagerBase* lpAchievementManager);
 
     // X360 0x82399ED0. The console's PROGRESSION.DAT loader -- the resumable five-stage machine
     // Prepare2 gates on. Returns true once the "ProgressionData" resource has been acquired and
@@ -1407,7 +1409,6 @@ private:
     // NOT A CONSOLE FUNCTION -- this file's name for the five trailing calls Prepare2 @0x8239DC98
     // makes at 0x8239DD94.., kept together in BrnProgressionManager_Lifecycle.cpp so Prepare2
     // itself keeps one line for them and this lane stays file-disjoint from the other four.
-    void RunPrepare2Tail();
 private:
     // ARTIST827DEA50/8237A5F8/82370008: native containment and scalar stores.
     // Declaration names and order corroborated by DecFIGS BrnProgressionManager.h:822..894.
@@ -1427,7 +1428,7 @@ private:
     AILoadStage meAILoadStage;                                    //208E0
     CgsResource::ResourcePtr<BrnProgression::ProgressionData> mpProgressionData; //208E4
     CgsResource::ResourcePtr<BrnAI::AISectionsData> mpAISectionData; //20904
-    void* mpTriggerData;                                          //20924
+    const BrnTrigger::TriggerData* mpTriggerData;                                          //20924
     s32 miLastUpdatedRival;                                       //20928
     s32 miLastReturnedRival;                                      //2092C
     BrnGameState::StreetManager* mpStreetManager;                 //20930

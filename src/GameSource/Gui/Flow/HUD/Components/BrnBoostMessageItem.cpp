@@ -106,8 +106,7 @@ void BoostMessageItem::Prepare(const char* lpacName, const BrnFlapt::FileRef& lr
     mMessageText = *AttachToTextFieldComponent(
         &lTextField, "BoostMessage_text", "MessageTextField", lpacName, lrFile);
 
-    BrnFlapt::MovieClipRef lBacking;
-    mBackingRef = *mAptRef.FindChildMovieClip(&lBacking, "backing_mc");
+    mBackingRef = mAptRef.FindChildMovieClip("backing_mc");
 }
 
 

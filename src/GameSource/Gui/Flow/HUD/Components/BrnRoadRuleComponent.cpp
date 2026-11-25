@@ -356,18 +356,18 @@ void RoadRuleComponent::Prepare(const char* lpacName, const BrnFlapt::FileRef& l
     mAptRef.SetFrameTriggerCallback(
         reinterpret_cast<void*>(&RoadRuleComponent::TransitionCompleteCallback), this);
 
-    mAptRef.FindChildMovieClip(&mRoadSignAnimationsMC, "animatedRoadSign_mc");
-    mAptRef.FindChildMovieClip(&mSubComponentPositionsMC, "rulesCpts");
+    mRoadSignAnimationsMC = mAptRef.FindChildMovieClip("animatedRoadSign_mc");
+    mSubComponentPositionsMC = mAptRef.FindChildMovieClip("rulesCpts");
 
     // The two positioning clips live under rulesCpts/upcoming{Left,Right}_mc.
     {
         BrnFlapt::MovieClipRef lUpcomingLeft;
-        mSubComponentPositionsMC.FindChildMovieClip(&lUpcomingLeft, "upcomingLeft_mc");
-        lUpcomingLeft.FindChildMovieClip(&mLeftSignAlignmentsMC, "leftPositions_mc");
+        lUpcomingLeft = mSubComponentPositionsMC.FindChildMovieClip("upcomingLeft_mc");
+        mLeftSignAlignmentsMC = lUpcomingLeft.FindChildMovieClip("leftPositions_mc");
 
         BrnFlapt::MovieClipRef lUpcomingRight;
-        mSubComponentPositionsMC.FindChildMovieClip(&lUpcomingRight, "upcomingRight_mc");
-        lUpcomingRight.FindChildMovieClip(&mRightSignAlignmentsMC, "rightPositions_mc");
+        lUpcomingRight = mSubComponentPositionsMC.FindChildMovieClip("upcomingRight_mc");
+        mRightSignAlignmentsMC = lUpcomingRight.FindChildMovieClip("rightPositions_mc");
     }
 
     char lacChildName[128];
@@ -402,8 +402,8 @@ void RoadRuleComponent::Prepare(const char* lpacName, const BrnFlapt::FileRef& l
     BRN_RR_CHILD("CurrentCrash_anim");  mCurrentCrashAnimator.Prepare(lacChildName, lrFile, 0);
     #undef BRN_RR_CHILD
 
-    mSubComponentPositionsMC.FindChildMovieClip(&mTargetTimeMC, "TimeTarget_mc");
-    mSubComponentPositionsMC.FindChildMovieClip(&mTargetCrashMC, "CrashTarget_mc");
+    mTargetTimeMC = mSubComponentPositionsMC.FindChildMovieClip("TimeTarget_mc");
+    mTargetCrashMC = mSubComponentPositionsMC.FindChildMovieClip("CrashTarget_mc");
     mTargetTimeMC.GotoAndPlayLabel("invisible");
     mTargetCrashMC.GotoAndPlayLabel("invisible");
 }

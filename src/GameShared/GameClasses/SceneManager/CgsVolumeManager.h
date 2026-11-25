@@ -98,11 +98,11 @@ namespace CgsSceneManager
         // ObjectPool<VolumeManagerVolume,5048,int>::Construct }.
         void Construct();
 
-        // h:87 / h:93 -- declaration-only. The console emits no out-of-line body, their
-        // DWARF twins are ObjectPool::Destruct (which this tree's ObjectPool does not
-        // declare), and nothing in the reconstructed tree calls either. Left undefined
-        // rather than invented.
-        void Destruct();
+        void Destruct()
+        {
+            mVolumeStore.Destruct();
+            mVolumePool.Destruct();
+        }
         bool Release();
 
         // h:90 @0x828CFD38 -- clear the store, the volume pool and the id->index table.

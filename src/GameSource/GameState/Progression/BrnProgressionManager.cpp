@@ -223,14 +223,13 @@ bool ProgressionManager::LoadProgressionData(BrnGameState::GameStateModuleIO::Ou
 //
 // ⭐ THE LOAD IS REAL NOW (2026-08-11): LoadProgressionData above is reconstructed, so this
 // function's `if (LoadProgressionData(...))` gate is the console's gate, not a pass-through.
-// ✅ [progression wave: lifecycle, 2026-09-06] The Prepare2 tail now dispatches all five original
-// calls, in order, through RunPrepare2Tail, including the recovered debug-component Construct and
-// Register. This function is the console's Prepare2 end to end.
+// ARTIST 0x8239DDA4..0x8239DDD4 initializes landmark and race data,
+// constructs and registers the debug component, then sets up roaming sections.
 // ------------------------------------------------------------------------------------
 bool ProgressionManager::Prepare2(BrnGameState::GameStateModuleIO::OutputBuffer* lpOutput,
                                   BrnGameState::ModeManager* lpModeManager,
                                   CgsModule::EventReceiverQueue<3072, 16>* lpReceiverQueue,
-                                  void* lpTriggerData,
+                                  const BrnTrigger::TriggerData* lpTriggerData,
                                   BrnGameState::AchievementManagerBase* lpAchievementManager)
 {
     CGS_ASSERT(lpOutput != 0, CGS_ASSERT_MESSAGE_AT("lpOutput", CGS_ARTIST_FILE, 249));            // X360 BrnProgressionManager.cpp:249
@@ -263,10 +262,11 @@ bool ProgressionManager::Prepare2(BrnGameState::GameStateModuleIO::OutputBuffer*
     CGS_ASSERT(lpAchievementManager != 0, CGS_ASSERT_MESSAGE_AT("lpAchievementManager", CGS_ARTIST_FILE, 265));
     mpAchievementManager = lpAchievementManager; // X360 +0x20938 (a6)
 
-    // The five trailing calls are dispatched by RunPrepare2Tail in the original order.
-    RunPrepare2Tail();
-
-
+    ComputeLandmarkAISectionIndices();
+    ProcessLoadedPresetRaces();
+    mDebugComponent.Construct(this, lpModeManager);
+    mDebugComponent.Register();
+    SetupRoamingSections();
     return true;
 }
 
@@ -726,11 +726,6 @@ BrnGameState::AchievementManagerBase* ProgressionManager::GetAchievementManager(
 // [!] The console does NOT null-test mpTriggerData before dereferencing it, and neither does this
 // body -- GameStateModule::Prepare2 installs it (BrnGameStateModule.cpp, the
 // mTriggerQueryManager.GetTriggerData() argument) on the same boot path that reaches every caller.
-// mpTriggerData is typed void* by the header (it is a Prepare2 back-pointer the manager treats as
-// opaque, and retyping it would ripple through Prepare2's signature and its call site in another
-// agent's file this round), so the cast to the real type is made here, in the only body that
-// dereferences it. Re-point the member's type when that signature is next touched.
-//
 // ✅ [progression wave: lifecycle, 2026-09-06] THE PRODUCER IS MOUNTED. The FLAG that stood here
 // said "THE PRODUCER IS NOT MOUNTED, SO THE TABLE IS EMPTY TODAY ... a one-function frontier, not
 // a research problem", and named exactly what was missing: a bound mpAISectionData and the
@@ -744,7 +739,7 @@ BrnGameState::AchievementManagerBase* ProgressionManager::GetAchievementManager(
 u16 ProgressionManager::FindLandmarkAISectionIndex(CgsID lLandmarkId) const
 {
     const BrnTrigger::TriggerData* lpTriggerData =
-        static_cast<const BrnTrigger::TriggerData*>(mpTriggerData);
+        mpTriggerData;
 
     // `lwz r9, 0x34(mpTriggerData)` -- the live landmark count is the trigger data's, and the
     // table is indexed in step with it.
@@ -3589,7 +3584,6 @@ namespace
     const char* const KPC_PRE_WORLD_MONITOR_NAME   = "Prog: Pre-World Up";
     const char* const KPC_POST_WORLD_MONITOR_NAME  = "Prog: Post-World Up";
     const f32         KF_PROGRESSION_CPU_BUDGET_MS = 1.0f;              // flt_82001C98
-    const s32         KI_PROGRESSION_PERFMON_PAGE  = 5;                 // `li r4, 5`
 
     // ---- the two zero-seeded float holds ----------------------------------------------------
     // IMAGE-CITED: 0x1CC0 reads 00 00 00 00 == 0.0f. Construct stfs's it into BOTH
@@ -3739,7 +3733,7 @@ void ProgressionManager::Construct(BrnGameState::CarSelectManager* lpCarSelectMa
     mpStuntManager     = lpStuntManager;          // +0x20944
 
     // First seed block (0x8237A70C..0x8237A748), before Profile::Construct.
-    maPresetRaces.Clear();                                // +0x1F780 (the Array's count word)
+    maPresetRaces.Construct();                                // +0x1F780 (the Array's count word)
     muNumPresetRaces        = 0;                          // +0x208D8
     mbUpdateRivalsRequested = false;                      // +0x20971 (DWARF mbUpdateRivals)
     mbReturnRivals          = false;                      // +0x20972
@@ -3766,13 +3760,12 @@ void ProgressionManager::Construct(BrnGameState::CarSelectManager* lpCarSelectMa
     miNumberOfNumberOfCompleteRoadRulesRuledByPlayer = 0;  // +0x20958
     mbHackEventNumberActive = false;                     // +0x2096E
     mi8HackEventRankNumber = 0;                          // +0x2096D
-    mQueueOfTrophyCarUnLocks.Clear();                     // +0x208C8 (`stwx 0`, the count word)
+    mQueueOfTrophyCarUnLocks.Construct();                     // +0x208C8 (`stwx 0`, the count word)
     mfTimeTillAllEventTypeCompleteHudMessage = KF_HUD_MESSAGE_HOLD_CLEARED;   // +0x2097C
     miMaxCarCount            = 0;                     // +0x2095C (DWARF miMaxCarCount -- see below)
     mbCheckAllWinTypesPending    = false;                 // +0x20975
-    mbHasJustRankedUp = false;                            // +0x20970
+    ClearRankUpCache();                                  // +0x20970 and +0x20960
     mbCheckAllWinTypesArmed      = false;                 // +0x20976
-    mNewlyUnlockedCarID = 0;                              // +0x20960
     mbNeedToShowAllRivalsBeatenMessage   = false;         // +0x20980
     mbShowShutDownAllIfNeeded            = false;         // +0x20981
     mfTimeTillShowAllRivalsBeatenMessage = KF_HUD_MESSAGE_HOLD_CLEARED;       // +0x20984
@@ -3782,11 +3775,11 @@ void ProgressionManager::Construct(BrnGameState::CarSelectManager* lpCarSelectMa
     // 0x8237A8C8 / 0x8237A8F4 -- the two CPU monitors, then the console's own >= 0 asserts.
     miPreWorldUpdate  = CgsDev::PerfMonCpu::AddMonitor(
         KPC_PRE_WORLD_MONITOR_NAME,
-        static_cast<CgsDev::PerfMonCpuPage>(KI_PROGRESSION_PERFMON_PAGE),
+        CgsDev::E_PMP_5,
         /*lbMinimum*/ false, KF_PROGRESSION_CPU_BUDGET_MS, /*lbLibPerfTagged*/ true);
     miPostWorldUpdate = CgsDev::PerfMonCpu::AddMonitor(
         KPC_POST_WORLD_MONITOR_NAME,
-        static_cast<CgsDev::PerfMonCpuPage>(KI_PROGRESSION_PERFMON_PAGE),
+        CgsDev::E_PMP_5,
         /*lbMinimum*/ false, KF_PROGRESSION_CPU_BUDGET_MS, /*lbLibPerfTagged*/ true);
 
     if (miPreWorldUpdate < 0)
@@ -4001,7 +3994,7 @@ void ProgressionManager::ComputeLandmarkAISectionIndices()
         lpAISectionsData->BuildAISectionPointMap(&lArena);
 
     const BrnTrigger::TriggerData* const lpTriggerData =
-        static_cast<const BrnTrigger::TriggerData*>(mpTriggerData);
+        mpTriggerData;
     const s32 liLandmarkCount = lpTriggerData->GetNumLandmarks();
 
     for (s32 liLandmarkIndex = 0; liLandmarkIndex < liLandmarkCount; ++liLandmarkIndex)
@@ -4039,7 +4032,7 @@ void ProgressionManager::HACK_SetupRaceWithLandMarks(Race* lpRace, const CgsID* 
                                                      u32 luCount) const
 {
     const BrnTrigger::TriggerData* const lpTriggerData =
-        static_cast<const BrnTrigger::TriggerData*>(mpTriggerData);
+        mpTriggerData;
 
     for (u32 luIndex = 0; luIndex < luCount; ++luIndex)
     {
@@ -4139,7 +4132,7 @@ void ProgressionManager::SetupRoamingSections()
         lpAISectionsData->BuildAISectionPointMap(&lArena);
 
     const BrnTrigger::TriggerData* const lpTriggerData =
-        static_cast<const BrnTrigger::TriggerData*>(mpTriggerData);
+        mpTriggerData;
 
     for (s32 liDistrict = 0; liDistrict < KI_DISTRICT_COUNT; ++liDistrict)
     {
@@ -4236,49 +4229,7 @@ bool ProgressionManager::LandmarkHasAvailableRaces(BrnGameState::LandmarkIndex l
     return false;
 }
 
-// --------------------------------------------------------------------------------------------
-// ProgressionManager::RunPrepare2Tail
-//
-// Prepare2's five trailing calls, factored here so BrnProgressionManager.cpp's Prepare2 keeps one
-// line for them and this lane stays file-disjoint. The console issues them in this order at
-// 0x8239DD94..:
-//     ComputeLandmarkAISectionIndices(this);
-//     ProcessLoadedPresetRaces(this);
-//     ProgressionDebugComponent::Construct(&mDebugComponent, this, lpModeManager);
-//     CgsDev::DebugComponent::Register(&mDebugComponent);
-//     SetupRoamingSections(this);
-// It is NOT a console function of its own -- it is this file's name for that sequence, which is
-// why it carries no address.
-//
-// ProgressionDebugComponent::Construct and DebugComponent::Register are recovered in the component source.
-// This tail preserves ARTIST's call order.
-// --------------------------------------------------------------------------------------------
-void ProgressionManager::RunPrepare2Tail()
-{
-    // [PC GUARD -- not console code, and it guards a PC failure mode, not a console one.]
-    // Three of the four legs below dereference mpAISectionData unconditionally, exactly as the
-    // console does, because on the console Prepare (stage 20) cannot reach Prepare2 without
-    // having bound it. On PC a GameData acquire ALWAYS replies -- if the resource is missing it
-    // replies with a NULL handle -- so a data or pool problem would turn "the AI sections did not
-    // load" into an access violation in the middle of the boot, on an exe shared with every other
-    // lane. The guard converts that into the one thing that is actually useful: a named line.
-    // It changes nothing on a healthy boot (the witness prints aiSections=1).
-    // DELETE-WHEN the AI-lanes acquire is proven non-null at the source.
-    if (!mpAISectionData.HasMemoryResource())
-    {
-        static bool sbSaidNoAISections = false;
-        return;
-    }
 
-    ComputeLandmarkAISectionIndices();
-    ProcessLoadedPresetRaces();
-
-    mDebugComponent.Construct(this, mpModeManager);
-    mDebugComponent.Register();
-
-    SetupRoamingSections();
-
-}
 
 }
 
@@ -6430,14 +6381,7 @@ void ProgressionManager::OnDriveThru(CgsID lId, BrnTrigger::GenericRegion::Type 
 
     if (mProfile.AreAllDriveThrusCompleted())
     {
-        // `lwzx r3, r28, 0x20938` -- the achievement manager, dereferenced with no null test
-        // by the console. Guarded here for the same reason every other consumer in this tree
-        // guards it: nothing in the mounted set calls Prepare2, so it reads NULL today.
-        BrnGameState::AchievementManagerBase* lpAchievementManager = GetAchievementManager();
-        if (lpAchievementManager != 0)
-        {
-            lpAchievementManager->OnFindAllDriveThrus();
-        }
+        GetAchievementManager()->OnFindAllDriveThrus();
     }
 
     if (lpQueue != 0)
@@ -6448,9 +6392,9 @@ void ProgressionManager::OnDriveThru(CgsID lId, BrnTrigger::GenericRegion::Type 
             SendGameCompletionResults(lpQueue);
         }
 
-        u8 lu8AutosaveIsForced = 0;
-        lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lu8AutosaveIsForced),
-                          BrnGameState::GameStateModuleIO::E_ACTION_REQUEST_AUTOSAVE, 1);
+        GsmIO::RequestAutoSaveAction lRequestAutoSave;
+        lRequestAutoSave.mbForceAutosave = false;
+        lpQueue->AddEvent(&lRequestAutoSave, GsmIO::E_ACTION_REQUEST_AUTOSAVE, sizeof(lRequestAutoSave));
     }
 
     // `stbx r10(1), r28, 0x20988` == manager+133512, unconditional on the not-yet-discovered

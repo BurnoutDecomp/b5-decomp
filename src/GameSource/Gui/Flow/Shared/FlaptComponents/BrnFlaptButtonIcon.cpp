@@ -132,7 +132,7 @@ namespace BrnGui
         mAptRef.GotoAndStopLabel("ps3");
 
         // Bind the "button" child glyph clip and park it on its hidden label.
-        mAptRef.FindChildMovieClip(&mAptButtonRef, "button");
+        mAptButtonRef = mAptRef.FindChildMovieClip("button");
         mAptButtonRef.GotoAndStopLabel("invisible");
     }
 }

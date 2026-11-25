@@ -1,3 +1,4 @@
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Gui/Flapt/BrnFlaptFileInstance.h"
 #define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptFileInstance.cpp"
 #include "GameSource/Gui/Flapt/BrnFlaptMovieClipInstance.h"   // BrnFlapt::MovieClipInstance (Update/Render forward targets)
@@ -131,22 +132,16 @@ void FlaptFileInstance::Render(FlaptRenderer* lpRenderer)
 }
 
 // ---- GetRootMovieClip @ 0x8246B360 ---------------------------------------
-MovieClipRef* FlaptFileInstance::GetRootMovieClip(MovieClipRef* lpOutRef) const
+MovieClipRef FlaptFileInstance::GetRootMovieClip() const
 {
-    CGS_ASSERT(mbIsActive, "IsActive()");
-    CGS_ASSERT(mpRootMovieClipInstance != 0, "mpRootMovieClipInstance");
-
-    // Inlined MovieClipRef construction: re-asserts the clip pointer is non-null
-    // ("lpMovieClipInst") and seeds the transform slot to 0 (a root clip has no
-    // Im2dTransform). The root instance is held opaquely here (void*); the Ref
-    // names it as a MovieClipInstance*, so bridge the pointer type.
-    void* lpMovieClipInst = mpRootMovieClipInstance;
-    CGS_ASSERT(lpMovieClipInst != 0, "lpMovieClipInst");
-
-    lpOutRef->mpMovieClipInst =
-        static_cast<BrnFlapt::MovieClipInstance*>(lpMovieClipInst);
-    lpOutRef->mpTransform = 0;
-    return lpOutRef;
+    CGS_ASSERT_AT(mbIsActive, "IsActive()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flapt\\BrnFlaptFileInstance.h", 135);
+    CGS_ASSERT_AT(mpRootMovieClipInstance != 0, "mpRootMovieClipInstance", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flapt\\BrnFlaptFileInstance.h", 136);
+    MovieClipInstance* lpMovieClipInst = static_cast<MovieClipInstance*>(mpRootMovieClipInstance);
+    CGS_ASSERT_AT(lpMovieClipInst != 0, "lpMovieClipInst", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flapt\\BrnFlaptMovieClipRef.h", 217);
+    MovieClipRef lClip;
+    lClip.mpMovieClipInst = lpMovieClipInst;
+    lClip.mpTransform = 0;
+    return lClip;
 }
 
 // ---- FindComponent @ 0x8246E958 -----------------------------------------

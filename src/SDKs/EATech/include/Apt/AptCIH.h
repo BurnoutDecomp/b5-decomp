@@ -95,7 +95,7 @@ struct AptCIH : public AptValueGC
 
     // ---- character instance / delegated visual reads ----------------------
     AptCharacterInst* GetCharacterInst() const { return mpCharacterInst; }  // @0x7DF174
-    int16_t GetDepth() const;   // @0x7EA024 (through the char inst's render item)
+    int32_t GetDepth() const { return mpCharacterInst->GetDepth(); }
 
     // ---- delegated mask / property reads (through the char inst) -----------
     AptNativeHash* GetNativeHash() const;   // @0x82AD5B28 (char inst's property hash)

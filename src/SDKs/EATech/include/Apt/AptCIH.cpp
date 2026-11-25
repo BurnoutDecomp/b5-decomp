@@ -219,9 +219,6 @@ void AptCIH::PreDestroy()
     AptCIH_PreDestroyHook(this);
 }
 
-// ---- delegated visual read ------------------------------------------------
-int16_t AptCIH::GetDepth() const { return mpCharacterInst->GetDepth(); }
-
 // ---- packed state / flags (ARTIST CIH+0x0C and +0x10) ----------------------
 uint32_t AptCIH::GetCIHState() const { return (mFlagsA >> 29) & 3u; }
 void AptCIH::SetCIHState(uint32_t eState)

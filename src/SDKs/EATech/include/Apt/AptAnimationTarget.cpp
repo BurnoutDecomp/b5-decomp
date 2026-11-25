@@ -373,10 +373,13 @@ bool AptAnimationTargetSet::remove(AptValue* pValue)
 //   * a full table (size >= the table element count) flushes via CleanRemList;
 //   * find the first FREE (null) slot within the current fill run (else append);
 //   * AddRef the node, mark it queued (InRemList), store it; appending bumps the fill.
-// (The console never reads its r3/pAnim arg -- CleanRemList is static.)
+// ARTIST 0x82AEE418 uses the director's shared removal list and static cleanup.
 // ---------------------------------------------------------------------------
-void AptAnimationTargetAddToRemList(AptAnimationTarget* /*pAnim (console r3, unread)*/,
-                                    AptCIH* pItem)
+// ARTIST records the in-removal-list flag at 0x82AEE42C.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+void AptAnimationTarget::AddToRemList(AptCIH* pItem)
 {
     if (pItem->GetInRemList())                        // ARTIST lwz 0xC(r30); extrwi 1,5
         return;                                       // already queued
@@ -399,6 +402,9 @@ void AptAnimationTargetAddToRemList(AptAnimationTarget* /*pAnim (console r3, unr
     if (liSlot == snDelayedReleaseListSize)
         ++snDelayedReleaseListSize;                   // appended past the fill run
 }
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // ---------------------------------------------------------------------------
 // GC / interpreter helpers the per-frame drains thread through -- every one is

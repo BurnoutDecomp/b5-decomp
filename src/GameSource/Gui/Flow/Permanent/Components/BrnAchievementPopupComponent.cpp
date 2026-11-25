@@ -93,7 +93,7 @@ namespace BrnGui
 
         // The two text fields live under the "AchievementsBox_mc" child clip.
         BrnFlapt::MovieClipRef lAchievementsBox;
-        mAptRef.FindChildMovieClip(&lAchievementsBox, "AchievementsBox_mc");
+        lAchievementsBox = mAptRef.FindChildMovieClip("AchievementsBox_mc");
 
         lAchievementsBox.FindChildTextField(&mAchievementAwardedRef, "AchievementAwarded_txt");
         lAchievementsBox.FindChildTextField(&mAchievementNameRef,    "AchievementName_txt");

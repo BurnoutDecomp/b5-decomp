@@ -119,8 +119,7 @@ void BaseOverlayState::Prepare()
     CgsGui::GuiAccessPointers* lpAccessPointers = mpStateInterface->GetAccessPointers();
     BrnFlapt::FlaptManager*    lpFlaptManager   = lpAccessPointers->GetFlaptManager();
 
-    BrnFlapt::FileRef lFile;
-    lpFlaptManager->GetFile(&lFile, 0);
+    BrnFlapt::FileRef lFile = lpFlaptManager->GetFile(BrnFlapt::E_FLAPTFILE_HUD);
 
     mOverlayComponent.Prepare(macOverlayComponentName, lFile, NULL);
 

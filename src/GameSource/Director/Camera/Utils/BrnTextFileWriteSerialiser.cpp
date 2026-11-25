@@ -35,16 +35,21 @@ void TextFileWriteSerialiser::Destruct()
 void TextFileWriteSerialiser::FormatName(char* lpcDest, const char* lpcSource)
 {
     const u32 luNumPrefixChars = 4u * muRecursionDepth;
-    const u32 luSourceLength   = static_cast<u32>(strlen(lpcSource));
+    const u32 luSourceLength = static_cast<u32>(strlen(lpcSource));
+    const char lcReplacement = '_';
 
     u32 luLoop = 0;
     for (; luLoop < luNumPrefixChars; ++luLoop)
-        lpcDest[luLoop] = '_';
+        lpcDest[luLoop] = lcReplacement;
 
-    for (; luLoop < luSourceLength + luNumPrefixChars; ++luLoop)
+    const u32 luFormattedLength = luSourceLength + luNumPrefixChars;
+    for (; luLoop < luFormattedLength; ++luLoop)
     {
         const char lcChar = lpcSource[luLoop - luNumPrefixChars];
-        lpcDest[luLoop] = (lcChar == ' ') ? '_' : lcChar;
+        if (lcChar == ' ')
+            lpcDest[luLoop] = lcReplacement;
+        else
+            lpcDest[luLoop] = lcChar;
     }
 
     lpcDest[luLoop] = '\0';

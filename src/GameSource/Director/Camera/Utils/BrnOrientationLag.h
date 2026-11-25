@@ -32,8 +32,19 @@ namespace Utils
             bool          mbUseSlerpSpring; // +0x14 (h:87)
 
             // X360 visitor: `void Serialise<S>(S&)` (camera-tunings TextFile{Read,Write}Serialiser).
-            // Per-instance body is a separate TU (BrnOrientationLagSerialise.cpp).
-            template<class TSerialiser> void Serialise(TSerialiser& lrSerialiser);
+            // ARTIST inlines the walk into the debug-menu wrapper at 0x822310B0.
+            template<class TSerialiser>
+            void Serialise(TSerialiser& lrSerialiser)
+            {
+                const u32 luVersion = 1u;
+                muVersion.muVersion = luVersion;
+                lrSerialiser.Serialise("Version Number (dont change)", muVersion);
+                if (muVersion.muVersion == luVersion)
+                {
+                    lrSerialiser.Serialise("Slerp spring", mfSlerpSpring);
+                    lrSerialiser.Serialise("Use slerp spring", mbUseSlerpSpring);
+                }
+            }
 
             // DWARF h:90 / cpp:28 -- body in BrnOrientationLag.cpp.
             void Construct();

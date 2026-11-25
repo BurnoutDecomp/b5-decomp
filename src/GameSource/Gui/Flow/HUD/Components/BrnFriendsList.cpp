@@ -1002,13 +1002,13 @@ void FriendsListComponent::Prepare(const char* lacName, const BrnFlapt::FileRef&
         maEntries[i].Prepare(name, lFile, lacName);
     }
     BrnFlapt::MovieClipRef clip;
-    mAptRef.FindChildMovieClip(&clip, "listTitle_mc");
+    clip = mAptRef.FindChildMovieClip("listTitle_mc");
     clip.FindChildTextField(&mListTitleTextfield, "listTitle_txt");
-    mAptRef.FindChildMovieClip(&mBranchRef, "branch_mc");
-    mAptRef.FindChildMovieClip(&clip, "upArrow_mc");
-    clip.FindChildMovieClip(&mUpArrowRef, "arrow");
-    mAptRef.FindChildMovieClip(&clip, "downArrow_mc");
-    clip.FindChildMovieClip(&mDownArrowRef, "arrow");
+    mBranchRef = mAptRef.FindChildMovieClip("branch_mc");
+    clip = mAptRef.FindChildMovieClip("upArrow_mc");
+    mUpArrowRef = clip.FindChildMovieClip("arrow");
+    clip = mAptRef.FindChildMovieClip("downArrow_mc");
+    mDownArrowRef = clip.FindChildMovieClip("arrow");
 }
 
 // ARTIST 0x8242B440.

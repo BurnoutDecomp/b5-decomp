@@ -2,7 +2,8 @@
 #define GAMESOURCE_DIRECTOR_CAMERA_UTILS_BRN_TEXT_FILE_READ_SERIALISER_H
 
 #include "types.hpp"
-#include "BrnCommonTypes.h"   // Vector3 (the vec3 leaf overload)
+#include "BrnCommonTypes.h"
+#include "GameSource/Director/Camera/Utils/CameraUtils.h"
 
 #include <cstdio>   // FILE / fscanf (the nested-block template reads its header line inline)
 
@@ -17,9 +18,8 @@
 //
 // Layout: one word, the wrapped FILE* (every reader loads it as `*this`).
 //
-// Bodies: Construct / Destruct / every leaf overload / the vec3 overload / the per-component
-// reader template are in BrnTextFileReadSerialiser.cpp; the nested-block template is inline
-// below (the console emits it per T).
+// The scalar readers and nested-block template are inline. BrnTextFileReadSerialiser.cpp
+// owns construction, destruction, and the vector readers.
 // ----------------------------------------------------------------------------
 
 namespace BrnDirector
@@ -43,13 +43,66 @@ public:
     // Close the file if it opened.
     void Destruct();
 
-    // ---- leaf readers: one "<label> : <value>\n" line each, read straight into the field ----
-    void Serialise(const char* lpcName, f32& lrValue);                    // "%s : %f\n"
-    void Serialise(const char* lpcName, u32& lrValue);                    // "%s : %d\n"
-    void Serialise(const char* lpcName, s32& lrValue);                    // "%s : %d\n"
-    void Serialise(const char* lpcName, bool& lrValue);                   // "%s : %d\n", stored as != 0
-    void Serialise(const char* lpcName, Utils::VersionNumber& lrValue);   // "%s : %d\n" into the tag
-    void Serialise(const char* lpcName, Utils::FOV& lrValue);             // "%s : %f\n" into the FOV
+    // ARTIST expands the scalar readers at their call sites. The
+    // label is consumed from the file rather than compared to the field name.
+    void Serialise(const char* /*lpcName*/, f32& lrValue)
+    {
+        if (mpFile != 0)
+        {
+            char lacBuffer[KI_CHARBUFFERLENGTH];
+            std::fscanf(mpFile, "%s : %f\n", lacBuffer, &lrValue);
+        }
+    }
+
+    void Serialise(const char* /*lpcName*/, u32& lrValue)
+    {
+        if (mpFile != 0)
+        {
+            char lacBuffer[KI_CHARBUFFERLENGTH];
+            std::fscanf(mpFile, "%s : %d\n", lacBuffer, &lrValue);
+        }
+    }
+
+    void Serialise(const char* /*lpcName*/, s32& lrValue)
+    {
+        if (mpFile != 0)
+        {
+            char lacBuffer[KI_CHARBUFFERLENGTH];
+            std::fscanf(mpFile, "%s : %d\n", lacBuffer, &lrValue);
+        }
+    }
+
+    // The flag is scanned as an int and stored as (value != 0). The console scans into an
+    // uninitialised stack word; it is seeded with the current flag here so a failed scan cannot
+    // store an indeterminate value.
+    void Serialise(const char* /*lpcName*/, bool& lrValue)
+    {
+        if (mpFile != 0)
+        {
+            char lacBuffer[KI_CHARBUFFERLENGTH];
+            s32  liValue = lrValue ? 1 : 0;
+            std::fscanf(mpFile, "%s : %d\n", lacBuffer, &liValue);
+            lrValue = (liValue != 0);
+        }
+    }
+
+    void Serialise(const char* /*lpcName*/, Utils::VersionNumber& lrValue)
+    {
+        if (mpFile != 0)
+        {
+            char lacBuffer[KI_CHARBUFFERLENGTH];
+            std::fscanf(mpFile, "%s : %d\n", lacBuffer, &lrValue.muVersion);
+        }
+    }
+
+    void Serialise(const char* /*lpcName*/, Utils::FOV& lrValue)
+    {
+        if (mpFile != 0)
+        {
+            char lacBuffer[KI_CHARBUFFERLENGTH];
+            std::fscanf(mpFile, "%s : %f\n", lacBuffer, &lrValue.mfFOV);
+        }
+    }
 
     // The vec3 leaf: builds "<name>: x" / ": y" / ": z" labels and hands each component to the
     // per-component reader below.

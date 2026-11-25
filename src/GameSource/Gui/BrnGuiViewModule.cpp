@@ -197,8 +197,7 @@ void ViewModule::ProcessIncomingLoadNotification(const CgsModule::Event* lpEvent
     CGS_ASSERT(mpGuiModule != 0, "mpGuiModule");
 
     // Fetch the registered file and (re)prepare the GuiModule's always-available components.
-    BrnFlapt::FileRef lFileRef;
-    mFlaptManager.GetFile(&lFileRef, KE_HUD_FLAPT_FILE);
+    BrnFlapt::FileRef lFileRef = mFlaptManager.GetFile(KE_HUD_FLAPT_FILE);
 
     GetAlwaysAvailableComponentsManager(mpGuiModule)->PrepareFlapt(lFileRef);
 }

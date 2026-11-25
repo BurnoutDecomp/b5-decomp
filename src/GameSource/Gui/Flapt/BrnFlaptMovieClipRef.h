@@ -2,6 +2,8 @@
 #define BRN_FLAPT_MOVIE_CLIP_REF_H
 
 #include "types.hpp"
+#include "GameSource/Gui/Flapt/BrnFlaptMovieClipInstance.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "BrnCommonTypes.h"   // Vector2, Vector4, VecFloat (the transform accessors take these by value)
 
 // ============================================================================
@@ -60,8 +62,12 @@ namespace BrnFlapt
         // FindChildMovieClip @ 0x8246C740 : hash lpcName, forward to the
         // instance, which writes the located child's MovieClipRef into lpOutRef
         // (sret modeled, per the module house style, as a written-into buffer).
-        MovieClipRef* FindChildMovieClip(MovieClipRef* lpOutRef,
-                                         const char* lpcName) const;
+        void ResetTimeline()
+        {
+            CGS_ASSERT_AT(mpMovieClipInst != 0, "mpMovieClipInst", "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptMovieClipRef.h", 272);
+            mpMovieClipInst->ResetTimeline();
+        }
+        MovieClipRef FindChildMovieClip(const char* lpcName) const;
 
         // FindChildMovieClipOnFrame @ 0x8246C8B0 : as above, restricted to the
         // children present on the instance's current frame.

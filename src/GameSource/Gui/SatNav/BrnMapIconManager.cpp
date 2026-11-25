@@ -614,8 +614,7 @@ MapIconManager::OwnerId MapIconManager::SetOwnerParameters(
                     CGS_ASSERT(lpFlaptManager != 0,
                                "NULL != mpFlaptManager");     // CgsGuiShared.h:194 (non-gating)
 
-                    BrnFlapt::FileRef lFile;
-                    lpFlaptManager->GetFile(&lFile, 0);
+                    BrnFlapt::FileRef lFile = lpFlaptManager->GetFile(BrnFlapt::E_FLAPTFILE_HUD);
                     lrComponent.Prepare(lacIconName, lFile);
                     lrComponent.mIcon.SetState(MapIconBrnBase::E_ICONSTATE_INVISIBLE);
                 }

@@ -90,7 +90,7 @@ namespace BrnGui
         // controlled clip.
         BrnFlapt::MovieClipRef lParent;
         mAptRef.GetParent(&lParent);
-        lParent.FindChildMovieClip(&mControlledMovieClip, lpControlledMovieClipName);
+        mControlledMovieClip = lParent.FindChildMovieClip(lpControlledMovieClipName);
 
         // Record the tween endpoints (X360: stvx128 of the four vector args).
         mv4StartColour = lv4StartColour;

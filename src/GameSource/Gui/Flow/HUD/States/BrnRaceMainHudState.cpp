@@ -1,4 +1,6 @@
 #include "GameSource/Gui/Flow/HUD/States/BrnRaceMainHudState.h"
+#include "GameSource/Replays/BrnReplayGuiModuleStaticLayout.h"
+#include "GameSource/Replays/Serialisers/BrnReplayGuiModuleSerialiser.h"
 #define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnRaceMainHudState.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                      // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsID.h"                          // CgsID / CgsIDCompress
@@ -488,18 +490,12 @@ namespace BrnGui
         mpCache         = 0;                                // stw r30, 0x140(r31)
 
         CgsGui::GuiAccessPointers* lpAccessPointers = mpStateInterface->GetAccessPointers();
-        CGS_ASSERT(lpAccessPointers != 0, "mpAccessPointers != NULL");   // CgsGuiStateInterface.h:344
         BrnFlapt::FlaptManager* lpFlaptManager = lpAccessPointers->GetFlaptManager();
-        CGS_ASSERT(lpFlaptManager != 0, "NULL != mpFlaptManager");       // CgsGuiShared.h:194
 
-        BrnFlapt::FileRef lFile;
-        lpFlaptManager->GetFile(&lFile, 0);
-        BrnFlapt::MovieClipRef lRootClip;
-        lFile.GetRootMovieClip(&lRootClip);
-        lRootClip.FindChildMovieClip(&mMainHUDMovieclip, "RaceMainHUD_mc");
+        BrnFlapt::FileRef lFile = lpFlaptManager->GetFile(BrnFlapt::E_FLAPTFILE_HUD);
+        mMainHUDMovieclip = lFile.GetRootMovieClip().FindChildMovieClip("RaceMainHUD_mc");
         mMainHUDMovieclip.SetVisible(true);
-        CGS_ASSERT(mMainHUDMovieclip.IsValid(), "mpMovieClipInst");      // BrnFlaptMovieClipRef.h:272
-        mMainHUDMovieclip.mpMovieClipInst->ResetTimeline();
+        mMainHUDMovieclip.ResetTimeline();
 
         // The reset run @0x8247901C..0x82479090: one `stb r30(=0)` per flag byte across
         // +0x150..+0x168 (exactly 25 -- see the header's FLAG), with mbHudVisible (+0x5F54)
@@ -508,10 +504,10 @@ namespace BrnGui
         // ascending order; every store writes 0 to a distinct byte with no intervening
         // read, so they are listed in offset order here.
         mbHudVisible                   = false;   // +0x5F54
-        mfEventCountdownTimer          = 0.0f;    // +0x1220
         mbSatNav                       = false;   // +0x150
         mbSatNavStatic                 = false;   // +0x151
         mbHudMessages                  = false;   // +0x152
+        mfEventCountdownTimer          = 0.0f;    // +0x1220
         mbBoostBar                     = false;   // +0x153
         mbBoostMessages                = false;   // +0x154
         mbPreRaceCountdown             = false;   // +0x155
@@ -519,9 +515,9 @@ namespace BrnGui
         mbEventInfo                    = false;   // +0x157
         mbDistrictMarker               = false;   // +0x158
         mbPlayerPositionTable          = false;   // +0x159
-        mbFriendsList                  = false;   // +0x15A
         mbAboveCarIcons                = false;   // +0x15B
         mbRoadRuleComponent            = false;   // +0x15C
+        mbFriendsList                  = false;   // +0x15A
         mbPreEventOverlay              = false;   // +0x15D
         mbMugShotComponent             = false;   // +0x15E
         mbPaybackComponent             = false;   // +0x15F
@@ -532,18 +528,12 @@ namespace BrnGui
         mbCompass                      = false;   // +0x164
         mbFreeburnChallengeButtonStart = false;   // +0x165
         mbFreeburnChallengeSelector    = false;   // +0x166
-        mbFreeburnChallengeTicker      = false;   // +0x167
         mbFreeburnChallengeOnComponent = false;   // +0x168
+        mbFreeburnChallengeTicker      = false;   // +0x167
 
         mpStateInterface->RegisterForEvents(maiEventToObserve, miNumEventsObserved);
 
-        // X360 @0x824790EC: GuiModuleSerialiser::GetStaticLayout(accessPointers+0x14)
-        // ->EndMessage() -- close any replay static-layout message the previous state left
-        // open. [FLAG deferred] the tree's CgsGui::GuiAccessPointers carries no serialiser
-        // member (it stops at mpGDMReceiverQueue), and BrnReplays::GuiModuleSerialiser has
-        // no shared header; the layout stream is host-side inert. Identical deferral to
-        // BrnFBurnMainHudState.cpp's OnEnter.
-        // DELETE-WHEN: GuiAccessPointers grows mpSerialiser + GetSerialiser().
+        mpStateInterface->GetAccessPointers()->GetSerialiser()->GetStaticLayout()->EndMessage();
 
         // ---- component construction, in X360 call order ------------------------------
         // EventInfoComponent::Construct @0x82421160 / ::Prepare @0x82412C00 -- the DERIVED
@@ -568,9 +558,7 @@ namespace BrnGui
             // X360 @0x824791A4..0x82479204: the asserting access chain, then the by-value
             // queue at cache+0x4080 handed to the component.
             CgsGui::GuiAccessPointers* lpQueueAccess = mpStateInterface->GetAccessPointers();
-            CGS_ASSERT(lpQueueAccess != 0, "mpAccessPointers != NULL");   // CgsGuiStateInterface.h:344
             GuiCache* lpQueueCache = lpQueueAccess->GetGuiCache();
-            CGS_ASSERT(lpQueueCache != 0, "mpGuiCache");                  // CgsGuiShared.h:201
             mHudMessageComponent.SetInGameMessagesQueue(lpQueueCache->GetInGameMessagesQueue());
         }
         mHudMessageComponent.Prepare(macHudMessagesName, lFile);
@@ -596,11 +584,15 @@ namespace BrnGui
         mPlayerPositionTable.Prepare(macPlayerPositionTableName, lFile);
 
         mFriendsList.Construct(macFriendListName, mpStateInterface, 0);
-        mFriendsListChangeIcon.Construct(macFriendsListChangeIconName, mpStateInterface, 0);
+        mFriendsListChangeIcon.FriendsListChangeIconComponent::Construct(macFriendsListChangeIconName, mpStateInterface, 0);
         mFriendsListChangeIcon.Prepare(macFriendsListChangeIconName, lFile);
         mFriendsList.Prepare(macFriendListName, lFile);
 
-        PostCommand16<94>(mpStateInterface, 0);
+        {
+            GuiEventFriendListShowing lFriendListShowingEvent;
+            lFriendListShowingEvent.mbNowShowing = false;
+            mpStateInterface->OutputGuiEvent(lFriendListShowingEvent);
+        }
 
         // The two "EventHud_Animator" halves. NOTE the divergence from the FBurn sibling,
         // which passes 0 as the flapt animator's debug name: RACE_MAIN passes the string to
@@ -626,7 +618,7 @@ namespace BrnGui
         // AttachToTextFieldComponent resolves "MugShot_mc"/"Gamertag_mc" -> "Gamertag_txt"
         // and its three words are copied back over them. ("Gamertag_txt" is a bare literal:
         // KAC_MUGSHOT_COMPONENT_GAMERTAG_NAME is the 12-byte "Gamertag_mc".)
-        mMugshotOpponentGamertag = BrnFlapt::TextFieldRef();
+        mMugshotOpponentGamertag.SetInvalid();
         {
             BrnFlapt::TextFieldRef lTextField;
             mMugshotOpponentGamertag = *AttachToTextFieldComponent(
@@ -646,7 +638,7 @@ namespace BrnGui
 
         mfBlackBarsCurrentValue = 0.0f;   // stfs f31(=0.0f), 0x6578(r31)
 
-        mRoadRuleShotComponent.Construct(KPC_ROAD_RULE_SHOT_COMPONENT_NAME, mpStateInterface, 0);
+        mRoadRuleShotComponent.RoadRuleShotComponent::Construct(KPC_ROAD_RULE_SHOT_COMPONENT_NAME, mpStateInterface, 0);
         mRoadRuleShotComponent.Prepare(KPC_ROAD_RULE_SHOT_COMPONENT_NAME, lFile);
 
         // Unconditional on the console: Construct, then the virtual Prepare (no parent).
@@ -664,10 +656,17 @@ namespace BrnGui
         mChallengeOnComponent.Prepare(KAC_CHALLENGE_ON_COMPONENT_NAME, lFile, 0);
 
         mbChallengeOnShowing = false;   // stb r30(=0), 0x7908(r31)
-        PostCommand16<580>(mpStateInterface, 0);
+        {
+            GuiEventFreeburnChallengeRequestEveryPlayerStatus lRequestCompletionStatus;
+            mpStateInterface->OutputGuiEvent(lRequestCompletionStatus);
+        }
 
         mbInRaceHud = true;             // stb 1, 0x144(r31)
-        PostCommand16<96>(mpStateInterface, 1);
+        {
+            GuiSetEasyDriveNotAllowedEvent lAllow;
+            lAllow.mbAllowed = true;
+            mpStateInterface->OutputGuiEvent(lAllow);
+        }
     }
 
     // =======================================================================

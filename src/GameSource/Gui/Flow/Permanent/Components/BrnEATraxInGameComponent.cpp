@@ -118,7 +118,7 @@ namespace BrnGui
 
         // The three text fields live under the "EATraxBox_mc" child clip.
         BrnFlapt::MovieClipRef lEATraxBox;
-        mAptRef.FindChildMovieClip(&lEATraxBox, KAC_EATRAX_BOX_NAME);
+        lEATraxBox = mAptRef.FindChildMovieClip(KAC_EATRAX_BOX_NAME);
 
         lEATraxBox.FindChildTextField(&mArtistNameRef, KAC_ARTIST_FIELD_NAME);
         mArtistNameRef.SetAutoSize(true);

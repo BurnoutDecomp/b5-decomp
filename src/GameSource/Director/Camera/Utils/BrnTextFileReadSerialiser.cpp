@@ -2,7 +2,7 @@
 // GameSource/Director/Camera/Utils/BrnTextFileReadSerialiser.cpp
 //
 // The out-of-line members of BrnDirector::Camera::TextFileReadSerialiser: Construct /
-// Destruct, the leaf readers, the vec3 reader and its per-component reader template.
+// Destruct, the vec3 reader and its per-component reader template.
 // ============================================================================
 
 #include "GameSource/Director/Camera/Utils/BrnTextFileReadSerialiser.h"
@@ -26,70 +26,6 @@ void TextFileReadSerialiser::Destruct()
 {
     if (mpFile != 0)
         std::fclose(mpFile);
-}
-
-// ----------------------------------------------------------------------------
-// The leaf readers. Each consumes one "<label> : <value>\n" line when the file is open; the
-// label token lands in a scratch buffer and is discarded. The scanned value goes straight
-// into the field, so a line that fails to parse leaves the field as it was.
-// ----------------------------------------------------------------------------
-void TextFileReadSerialiser::Serialise(const char* /*lpcName*/, f32& lrValue)
-{
-    if (mpFile != 0)
-    {
-        char lacBuffer[KI_CHARBUFFERLENGTH];
-        std::fscanf(mpFile, "%s : %f\n", lacBuffer, &lrValue);
-    }
-}
-
-void TextFileReadSerialiser::Serialise(const char* /*lpcName*/, u32& lrValue)
-{
-    if (mpFile != 0)
-    {
-        char lacBuffer[KI_CHARBUFFERLENGTH];
-        std::fscanf(mpFile, "%s : %d\n", lacBuffer, &lrValue);
-    }
-}
-
-void TextFileReadSerialiser::Serialise(const char* /*lpcName*/, s32& lrValue)
-{
-    if (mpFile != 0)
-    {
-        char lacBuffer[KI_CHARBUFFERLENGTH];
-        std::fscanf(mpFile, "%s : %d\n", lacBuffer, &lrValue);
-    }
-}
-
-// The flag is scanned as an int and stored as (value != 0). The console scans into an
-// uninitialised stack word; it is seeded with the current flag here so a failed scan cannot
-// store an indeterminate value.
-void TextFileReadSerialiser::Serialise(const char* /*lpcName*/, bool& lrValue)
-{
-    if (mpFile != 0)
-    {
-        char lacBuffer[KI_CHARBUFFERLENGTH];
-        s32  liValue = lrValue ? 1 : 0;
-        std::fscanf(mpFile, "%s : %d\n", lacBuffer, &liValue);
-        lrValue = (liValue != 0);
-    }
-}
-
-void TextFileReadSerialiser::Serialise(const char* /*lpcName*/, Utils::VersionNumber& lrValue)
-{
-    if (mpFile != 0)
-    {
-        char lacBuffer[KI_CHARBUFFERLENGTH];
-        std::fscanf(mpFile, "%s : %d\n", lacBuffer, &lrValue.muVersion);
-    }
-}
-
-void TextFileReadSerialiser::Serialise(const char* /*lpcName*/, Utils::FOV& lrValue)
-{
-    if (mpFile != 0)
-    {
-        char lacBuffer[KI_CHARBUFFERLENGTH];
-        std::fscanf(mpFile, "%s : %f\n", lacBuffer, &lrValue.mfFOV);
-    }
 }
 
 // ----------------------------------------------------------------------------

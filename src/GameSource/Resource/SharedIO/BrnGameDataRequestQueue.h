@@ -60,9 +60,11 @@ namespace GameDataIO
 
     // DWARF: BrnGameDataRequestQueue.h:136 (RequestInterface<512> shown; same shape for
     // every N). Holds exactly one RequestQueue<N> at offset 0.
+    // ARTIST AppendRequestInterface<3072> at 0x823EDF88 encodes the class key.
     template <s32 N>
-    struct RequestInterface
+    class RequestInterface
     {
+    public:
         RequestQueue<N> mRequestQueue;   // @0x00 (only member)
 
         // ---- ADDITIVE GROW 2026-08-12 (prop-BOOT wave, agent B8) -----------------------

@@ -268,8 +268,9 @@ namespace BrnNetwork
         {
         case E_PREPARESTAGE_START:
             mePrepareStage = E_PREPARESTAGE_START;
-            // The console also switches the shared network debug stream on here; that stream
-            // has no home in the tree.
+            // ARTIST 0x8259AD20-0x8259AD30 selects channel 1 on the shared network stream.
+            CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput.SetChannel(
+                static_cast<CgsDev::Log::LogChannelOutput::EUserChannel>(1));
             meLocalConsoleFrameRate = leLocalConsoleFrameRate;
             mServerInterface.SetMemoryBuffer(lpHeapMalloc);
             // fall through
@@ -299,7 +300,7 @@ namespace BrnNetwork
             }
             CGS_ASSERT(lReturnCode == CgsNetwork::E_MANAGER_STATUS_READY, CGS_ASSERT_MESSAGE_AT(
                 "lReturnCode == CgsNetwork::E_MANAGER_STATUS_READY",
-                __FILE__, 430 /* ARTIST 0x8259ADE8 */));
+                CGS_ARTIST_FILE, 430 /* ARTIST 0x8259ADE8 */));
 
             GetPlayerManager()->RegisterEventCallback(PlayerManagerEventCallback, this);
         }
@@ -467,7 +468,7 @@ namespace BrnNetwork
         default:
             CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
                 "unknown prepare stage",
-                __FILE__, 811 /* ARTIST 0x8259B318 */));
+                CGS_ARTIST_FILE, 811 /* ARTIST 0x8259B318 */));
             return false;
         }
     }
@@ -637,7 +638,7 @@ namespace BrnNetwork
         default:
             CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
                 "unknown release stage",
-                __FILE__, 1210 /* ARTIST 0x8258E230 */));
+                CGS_ARTIST_FILE, 1210 /* ARTIST 0x8258E230 */));
             return false;
         }
     }

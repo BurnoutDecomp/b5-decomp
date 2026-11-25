@@ -311,7 +311,7 @@ namespace CgsDev
             if (!lpcSplit)
             {
                 lpcPath[0] = '\0';
-                GetUI().SafeStringCopy(lpcMenuItem, lpcMenuItemPath, liSize);
+                DebugUI::SafeStringCopy(lpcMenuItem, lpcMenuItemPath, liSize);
                 return;
             }
 
@@ -319,7 +319,7 @@ namespace CgsDev
             const s32 liCopy = liPathLength < liSize - 1 ? liPathLength : liSize - 1;
             memcpy(lpcPath, lpcMenuItemPath, static_cast<size_t>(liCopy));
             lpcPath[liCopy] = '\0';
-            GetUI().SafeStringCopy(lpcMenuItem, lpcSplit + 1, liSize);
+            DebugUI::SafeStringCopy(lpcMenuItem, lpcSplit + 1, liSize);
         }
 
         Window* MenuManager::OpenWindowFromPath(const char* lpcPath)

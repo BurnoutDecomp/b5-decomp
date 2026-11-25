@@ -235,25 +235,23 @@ public:
         CGS_ASSERT_STREAM_AT(lsIndex < msCapacity, "Object not in pool\n",
             CGS_INDEXED_POOL_ARTIST_HEADER, 301);
 
-        IndexType       lsScanned = 0;
-        const IndexType lsNumFree = msNumFree;
-        if (lsNumFree > 0)
-        {
-            for (IndexType lsFree = 0; lsFree < lsNumFree; ++lsFree)
-            {
-                if (mpFreeIndices[lsFree] == lsIndex)
-                {
-                    break;
-                }
-                lsScanned = static_cast<IndexType>(lsFree + 1);
-            }
-        }
-        CGS_ASSERT_STREAM_AT(lsScanned == lsNumFree, "Object is already free\n",
+        CGS_ASSERT_STREAM_AT(!DebugIsIndexFree(lsIndex), "Object is already free\n",
             CGS_INDEXED_POOL_ARTIST_HEADER, 310);
 
         mpFreeIndices[msNumFree] = lsIndex;
         --msNumAllocated;
         ++msNumFree;
+    }
+
+    // DecFIGS CgsIndexedPool.h:374. Scan the live part of the free-index array.
+    __forceinline bool DebugIsIndexFree(IndexType lsIndex)
+    {
+        const IndexType lsNumFree = msNumFree;
+        IndexType lsFree = 0;
+        while (lsFree < msNumFree && mpFreeIndices[lsFree] != lsIndex)
+            ++lsFree;
+
+        return lsFree != lsNumFree;
     }
 
     // Push @ 0x828EB138 (CgsResource::ResourceModule::ProcessPendingFileSystemResponses, char-pool):

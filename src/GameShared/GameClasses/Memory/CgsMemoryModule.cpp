@@ -933,47 +933,46 @@ namespace CgsMemory
     // counts as available only when lbAllowFragmented). A used block resets the run, restarting it at the
     // following block. Returns true with the run's start/end (and the scan counters the caller carries on
     // with) once a long enough run is found.
-    bool MemoryModule::FindContiguousFreeBlocks(u16 lu16NumWanted, u32 luStartBlock, bool lbAllowFragmented,
+    bool MemoryModule::FindContiguousFreeBlocks(u32 luNumWanted, u32 luStartBlock, bool lbAllowFragmented,
                                                 u32* lpuOutRunStartIndex, u32* lpuOutRunStartBlock,
                                                 u32* lpuOutScanIndex, u32* lpuOutRunEndBlock)
     {
-        if (luStartBlock == MemoryBlock::KU_INVALID_BLOCK)
-            return false;
-
-        u32 luBlock        = luStartBlock;   // block currently examined
-        u32 luRunStartIndex = 0;             // scan index where the current run begins
-        u32 luRunStartBlock = luStartBlock;  // block index where the current run begins
-        u32 luContiguous    = 0;             // length of the current free run
-        u32 luScanIndex     = 0;             // total blocks scanned
-        do
+        u32 luBlock = luStartBlock;
+        u32 luRunStartIndex = 0;
+        u32 luRunStartBlock = luBlock;
+        u32 luScanIndex = 0;
+        u32 luContiguous = 0;
+        if (luBlock != MemoryBlock::KU_INVALID_BLOCK)
         {
-            const MemoryBlock& lrBlock = mpBlocks[luBlock];
-            const bool lbUsed = lrBlock.mxStatus.IsBitSet(1) ||
-                                (lrBlock.mxStatus.IsBitSet(2) && !lbAllowFragmented);
-            if (lbUsed)
+            const MemoryBlock* lpBlocks = mpBlocks;
+            do
             {
-                // run broken -- restart it at the next block
-                luBlock         = lrBlock.muNextBlock;
-                ++luScanIndex;
-                luContiguous    = 0;
-                luRunStartIndex = luScanIndex;
-                luRunStartBlock = luBlock;
-            }
-            else
-            {
-                if (++luContiguous == lu16NumWanted)
+                const MemoryBlock& lrBlock = lpBlocks[luBlock];
+                if (lrBlock.mxStatus.IsBitSet(1) ||
+                    (lrBlock.mxStatus.IsBitSet(2) && !lbAllowFragmented))
                 {
-                    *lpuOutRunStartIndex = luRunStartIndex;
-                    *lpuOutRunStartBlock = luRunStartBlock;
-                    *lpuOutScanIndex     = luScanIndex;
-                    *lpuOutRunEndBlock   = luBlock;
-                    return true;
+                    luBlock = lrBlock.muNextBlock;
+                    ++luScanIndex;
+                    luContiguous = 0;
+                    luRunStartIndex = luScanIndex;
+                    luRunStartBlock = luBlock;
                 }
-                luBlock = lrBlock.muNextBlock;
-                ++luScanIndex;
+                else
+                {
+                    if (++luContiguous == luNumWanted)
+                    {
+                        *lpuOutRunStartIndex = luRunStartIndex;
+                        *lpuOutRunStartBlock = luRunStartBlock;
+                        *lpuOutScanIndex = luScanIndex;
+                        *lpuOutRunEndBlock = luBlock;
+                        return true;
+                    }
+                    luBlock = lrBlock.muNextBlock;
+                    ++luScanIndex;
+                }
             }
-        } while (luBlock != MemoryBlock::KU_INVALID_BLOCK);
-
+            while (luBlock != MemoryBlock::KU_INVALID_BLOCK);
+        }
         return false;
     }
 
@@ -1041,6 +1040,8 @@ namespace CgsMemory
         switch (meReleaseStage)
         {
         case E_RELEASE_START:
+            meReleaseStage = E_RELEASE_START;
+            // fall through
         case E_RELEASE_MANAGER:
             meReleaseStage = E_RELEASE_MANAGER;
             if (!ModuleSingleBuffered::Release())
@@ -1051,7 +1052,15 @@ namespace CgsMemory
             meReleaseStage = E_RELEASE_DONE;
             return true;
         default:
-            CGS_ASSERT(false, "Invalid stage");
+            CgsDev::Assert::BeginAssert();
+            {
+                CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer,
+                                           CgsDev::Assert::giMessageBufferSize);
+                lMessage << "Invalid stage\n";
+            }
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 206));
+            CgsDev::Assert::EndAssert();
             return false;
         }
     }

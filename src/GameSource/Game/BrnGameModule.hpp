@@ -914,7 +914,7 @@ namespace BrnGame
         // simTimer.mbRunning); action 87 clears mbSimPaused and restarts it. The frozen
         // world IS the stopped sim timer: every sim timestep derives from it. Called by
         // DoUpdate_GameStatePreWorld after the game-state pre-world leg.
-        void CheckGameActions(BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput);
+        void CheckGameActions(const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput);
 
         // X360 0x823DEEB8 -- drain a GUI event queue (VariableEventQueue<18432,16>) and translate each
         // network-bound GUI event into the matching network IN-event, AddEvent'd into the network module's

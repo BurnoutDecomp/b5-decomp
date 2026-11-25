@@ -986,7 +986,7 @@ namespace CgsResource
                     lpPending->mpResponse));
 
             const s8 liIndex = mPendingFileResponses.GetObjectIndex(lpPending);
-            mPendingFileResponses.Push(liIndex);
+            mPendingFileResponses.PushIndex(liIndex);
         }
     }
 

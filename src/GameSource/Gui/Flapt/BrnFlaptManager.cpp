@@ -1,3 +1,4 @@
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Gui/View/CgsGuiViewModule.h"
 #include "GameSource/Gui/Flapt/BrnFlaptManager.h"
 #include "GameSource/Gui/BrnGuiPerfmons.h"
@@ -180,15 +181,15 @@ void FlaptManager::SetSoundTriggerHandler(
 }
 
 // ---- GetFile @ 0x82473078 ------------------------------------------------
-FileRef* FlaptManager::GetFile(FileRef* lpOutRef, u32 luFile)
+FileRef FlaptManager::GetFile(FlaptFiles leFile)
 {
-    FlaptFileInstance* lpFileInst = &maFlaptFileInstances[luFile];
-
-    CGS_ASSERT(lpFileInst->mbIsActive, "maFlaptFileInstances[leFile].IsActive()");
-    CGS_ASSERT(lpFileInst != 0, "lpFileInst");
-
-    lpOutRef->mpFileInstance = lpFileInst;
-    return lpOutRef;
+    FlaptFileInstance* lpFileInst = &maFlaptFileInstances[leFile];
+    CGS_ASSERT_AT(lpFileInst->mbIsActive, "maFlaptFileInstances[leFile].IsActive()",
+                  "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptManager.h", 185);
+    CGS_ASSERT_AT(lpFileInst != 0, "lpFileInst", "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptFileRef.h", 102);
+    FileRef lFile;
+    lFile.mpFileInstance = lpFileInst;
+    return lFile;
 }
 
 // ---- Update @ 0x82472120 -------------------------------------------------

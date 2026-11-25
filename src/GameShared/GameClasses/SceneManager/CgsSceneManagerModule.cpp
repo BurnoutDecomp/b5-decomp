@@ -363,6 +363,8 @@ void SceneManagerModule::Destruct()
     mOverlapCuller.Destruct();      // X360 (*(*[+0xDC9A0]+12))([+0xDC9A0])  vtable destruct slot
     mOverlapGenerator.Destruct();   // X360 (*(*[+0x290]+12))([+0x290])      vtable destruct slot
 
+    mVolumeManager.Destruct();
+    mEntityManager.Destruct();
     ModuleSingleBuffered::Destruct();
 }
 
@@ -2136,54 +2138,56 @@ void SceneManagerModule::UpdateCollisionBody(s32 liVolumeInstanceIndex,
                                              VolumeInstanceId lVolumeInstanceID,
                                              OverlapGenerationIO::InputBuffer* lpOverlapGenerationInput)
 {
-    CGS_ASSERT(lpOverlapGenerationInput != NULL, "lpOverlapGenerationInputBuffer != NULL");
+    CGS_ASSERT_AT(lpOverlapGenerationInput != NULL, "lpOverlapGenerationInputBuffer != NULL",
+                  KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 1225);
 
-    if (liVolumeInstanceIndex == KI_INVALID_VOLUME_INSTANCE_INDEX)
+    if (liVolumeInstanceIndex != KI_INVALID_VOLUME_INSTANCE_INDEX)
     {
-        CGS_ASSERT(false, "Volume instance not found");
-        return;
+        // DWARF CgsSceneManagerModule.cpp:1230 -- `const VolumeInstance * lpVolInst`.
+        const VolumeInstance* lpVolInst = mEntityManager.GetVolumeInstance(liVolumeInstanceIndex);
+
+        if (!lpVolInst->IsCollidable())
+        {
+            return;
+        }
+
+        // DWARF :1231 -- `const VolRef::Volume * lpVolume`.
+        const VolRef::Volume* lpVolume = mVolumeManager.GetRwVolume(lpVolInst->miVolumeIndex);
+
+        // DWARF :1229 -- `AABBox lAabb`. rw::collision::AABBox is only NAMED in this TU: its
+        // real home (vendor/renderware/collision/AABBox.hpp) pulls the SDK
+        // rw::math::vpu::Vector3 CLASS into a TU that already has the vendor 4-lane POD via
+        // BrnCommonTypes.h, and the two cannot coexist -- a PRE-EXISTING Vector3 fork reported
+        // by three earlier readers (CgsVolumeManager.cpp:54-77, CgsSceneSweeper_wQ5_01.cpp:26-53,
+        // PropManager_wQ4_03.cpp:289-301). OverlapGenerationIO::AABBoxRows is the byte image of
+        // AABBox already declared for exactly this purpose in the header this TU includes
+        // (two 16-byte corner rows, pinned by the mounted layout oracle
+        // PropManager_wQ4_03_embed_check.cpp), so no new local fork is minted here.
+        OverlapGenerationIO::AABBoxRows lAabb;
+
+        // The scene manager's opaque VolRef::Volume IS rw::collision::Volume (DecFIGS
+        // volume.h:39 typedefs exactly that); the cast is between two spellings of one type,
+        // not a layout reinterpretation. Same one-liner as CgsVolumeManager.cpp:218.
+        reinterpret_cast<const rw::collision::Volume*>(lpVolume)->GetBBox(
+            &lpVolInst->mWorldSpaceTransform,
+            1,
+            *reinterpret_cast<rw::collision::AABBox*>(&lAabb));
+
+        {
+            // DWARF opens an inner block at :1237 for `Vector3 lPadding` -- and the asm's
+            // second GetVolumeInstance call is inside it.
+            const Vector3 lPadding =
+                mEntityManager.GetVolumeInstance(liVolumeInstanceIndex)->mPadding;
+
+            lpOverlapGenerationInput->UpdateBody(static_cast<u32>(liVolumeInstanceIndex),
+                                                 reinterpret_cast<const rw::collision::AABBox*>(&lAabb),
+                                                 lPadding,
+                                                 lVolumeInstanceID);
+        }
     }
-
-    // DWARF CgsSceneManagerModule.cpp:1230 -- `const VolumeInstance * lpVolInst`.
-    const VolumeInstance* lpVolInst = mEntityManager.GetVolumeInstance(liVolumeInstanceIndex);
-
-    if (!lpVolInst->IsCollidable())
+    else
     {
-        return;
-    }
-
-    // DWARF :1231 -- `const VolRef::Volume * lpVolume`.
-    const VolRef::Volume* lpVolume = mVolumeManager.GetRwVolume(lpVolInst->miVolumeIndex);
-
-    // DWARF :1229 -- `AABBox lAabb`. rw::collision::AABBox is only NAMED in this TU: its
-    // real home (vendor/renderware/collision/AABBox.hpp) pulls the SDK
-    // rw::math::vpu::Vector3 CLASS into a TU that already has the vendor 4-lane POD via
-    // BrnCommonTypes.h, and the two cannot coexist -- a PRE-EXISTING Vector3 fork reported
-    // by three earlier readers (CgsVolumeManager.cpp:54-77, CgsSceneSweeper_wQ5_01.cpp:26-53,
-    // PropManager_wQ4_03.cpp:289-301). OverlapGenerationIO::AABBoxRows is the byte image of
-    // AABBox already declared for exactly this purpose in the header this TU includes
-    // (two 16-byte corner rows, pinned by the mounted layout oracle
-    // PropManager_wQ4_03_embed_check.cpp), so no new local fork is minted here.
-    OverlapGenerationIO::AABBoxRows lAabb;
-
-    // The scene manager's opaque VolRef::Volume IS rw::collision::Volume (DecFIGS
-    // volume.h:39 typedefs exactly that); the cast is between two spellings of one type,
-    // not a layout reinterpretation. Same one-liner as CgsVolumeManager.cpp:218.
-    reinterpret_cast<const rw::collision::Volume*>(lpVolume)->GetBBox(
-        &lpVolInst->mWorldSpaceTransform,
-        1,
-        *reinterpret_cast<rw::collision::AABBox*>(&lAabb));
-
-    {
-        // DWARF opens an inner block at :1237 for `Vector3 lPadding` -- and the asm's
-        // second GetVolumeInstance call is inside it.
-        const Vector3 lPadding =
-            mEntityManager.GetVolumeInstance(liVolumeInstanceIndex)->mPadding;
-
-        lpOverlapGenerationInput->UpdateBody(static_cast<u32>(liVolumeInstanceIndex),
-                                             reinterpret_cast<const rw::collision::AABBox*>(&lAabb),
-                                             lPadding,
-                                             lVolumeInstanceID);
+        CGS_ASSERT_AT(false, "Volume instance not found", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 1255);
     }
 }
 
@@ -2210,20 +2214,22 @@ void SceneManagerModule::UpdateCollisionBody(s32 liVolumeInstanceIndex,
 void SceneManagerModule::ProcessSetPaddingEvent(const SceneManagerIO::InEventSetPadding& lrEvent,
                                                 OverlapGenerationIO::InputBuffer* lpOverlapGenerationInput)
 {
-    CGS_ASSERT(lpOverlapGenerationInput != NULL, "lpOverlapGenerationInputBuffer != NULL");
+    CGS_ASSERT_AT(lpOverlapGenerationInput != NULL, "lpOverlapGenerationInputBuffer != NULL",
+                  KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 1115);
 
     const s32 liVolumeInstIndex =
         mEntityManager.GetVolumeInstanceIndexByID(lrEvent.mVolInstanceId);
 
-    if (liVolumeInstIndex == KI_INVALID_VOLUME_INSTANCE_INDEX)
+    if (liVolumeInstIndex != KI_INVALID_VOLUME_INSTANCE_INDEX)
     {
-        CGS_ASSERT(false, "Volume instance not found");
-        return;
+        mEntityManager.SetVolumePadding(liVolumeInstIndex, lrEvent.mPadding);
+
+        UpdateCollisionBody(liVolumeInstIndex, lrEvent.mVolInstanceId, lpOverlapGenerationInput);
     }
-
-    mEntityManager.SetVolumePadding(liVolumeInstIndex, lrEvent.mPadding);
-
-    UpdateCollisionBody(liVolumeInstIndex, lrEvent.mVolInstanceId, lpOverlapGenerationInput);
+    else
+    {
+        CGS_ASSERT_AT(false, "Volume instance not found", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 1129);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2254,20 +2260,22 @@ void SceneManagerModule::ProcessSetPaddingEvent(const SceneManagerIO::InEventSet
 void SceneManagerModule::ProcessForceNoPaddingEvent(const SceneManagerIO::InEventForceNoPadding& lrEvent,
                                                     OverlapGenerationIO::InputBuffer* lpOverlapGenerationInput)
 {
-    CGS_ASSERT(lpOverlapGenerationInput != NULL, "lpOverlapGenerationInputBuffer != NULL");
+    CGS_ASSERT_AT(lpOverlapGenerationInput != NULL, "lpOverlapGenerationInputBuffer != NULL",
+                  KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 1189);
 
     const s32 liVolumeInstIndex =
         mEntityManager.GetVolumeInstanceIndexByID(lrEvent.mVolInstanceId);
 
-    if (liVolumeInstIndex == KI_INVALID_VOLUME_INSTANCE_INDEX)
+    if (liVolumeInstIndex != KI_INVALID_VOLUME_INSTANCE_INDEX)
     {
-        CGS_ASSERT(false, "Volume instance not found");
-        return;
+        lpOverlapGenerationInput->ForceNoPadding(static_cast<u32>(liVolumeInstIndex));
+
+        UpdateCollisionBody(liVolumeInstIndex, lrEvent.mVolInstanceId, lpOverlapGenerationInput);
     }
-
-    lpOverlapGenerationInput->ForceNoPadding(static_cast<u32>(liVolumeInstIndex));
-
-    UpdateCollisionBody(liVolumeInstIndex, lrEvent.mVolInstanceId, lpOverlapGenerationInput);
+    else
+    {
+        CGS_ASSERT_AT(false, "Volume instance not found", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 1203);
+    }
 }
 
 // ---------------------------------------------------------------------------

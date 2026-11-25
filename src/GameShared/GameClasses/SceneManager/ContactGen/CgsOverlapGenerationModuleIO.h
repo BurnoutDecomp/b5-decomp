@@ -226,7 +226,12 @@ namespace OverlapGenerationIO
         void RemoveBody(u32 luIndex, VolumeInstanceId lVolumeInstanceID);       // :205
         void UpdateBody(u32 luIndex, const rw::collision::AABBox* lpAabb,
                         Vector3 lvPadding, VolumeInstanceId lVolumeInstanceID); // :212 @0x828BA430
-        void ForceNoPadding(u32 luVolInstIndex);                                // :216
+        void ForceNoPadding(u32 luVolInstIndex)
+        {
+            InForceNoPadding lEvent;
+            lEvent.muVolInstIndex = luVolInstIndex;
+            GetForceNoPaddingQueue()->AddEvent(lEvent);
+        }
 
         // ---- accessors -------------------------------------------------------------
         // Each asserts the matching IOBuffer lock; the X360 emits a separate out-of-line

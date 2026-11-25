@@ -27,7 +27,7 @@ namespace BrnFlapt
 
         // GetRootMovieClip @ 0x8246B410 : return a MovieClipRef onto the referenced
         // file instance's root timeline, by value into lpOutRef.
-        MovieClipRef* GetRootMovieClip(MovieClipRef* lpOutRef) const;
+        MovieClipRef GetRootMovieClip() const;
 
         // +0x00 : the referenced live FlaptFileInstance (raw pointer; modeled as
         // void* — GetFile only stores the element address, and FileRef's own

@@ -113,8 +113,9 @@ namespace CgsDev
             bool             IsVisible();
 
             void ShowErrorMessage(const char* lpcMessage);
-            void SafeStringCopy(char* lpcBuffer, const char* lpcSource, s32 liBufferLen);
-            void SafeStringCat(char* lpcBuffer, const char* lpcSource, s32 liBufferLen);
+            // ARTIST 0x82815FB8 and 0x82816018 receive the destination in r3.
+            static void SafeStringCopy(char* lpcBuffer, const char* lpcSource, s32 liBufferLen);
+            static void SafeStringCat(char* lpcBuffer, const char* lpcSource, s32 liBufferLen);
             void SetMetrics(const Metrics& lrMetrics);
             void SetPalette(const Palette& lrPalette);
 

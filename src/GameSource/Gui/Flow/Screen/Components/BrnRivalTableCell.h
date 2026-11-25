@@ -34,8 +34,8 @@ namespace BrnGui
     {
         // @0x82418E80 (this TU, DWARF cpp:48) -- both base Constructs (invalid id),
         // clear the rival binding, reset the selectable gates, mark empty.
-        void Construct(const char* lpacName, CgsGui::StateInterface* lpStateInterface,
-                       const char* lpacParentName);
+        virtual void Construct(const char* lpacName, CgsGui::StateInterface* lpStateInterface,
+                               const char* lpacParentName, u64 luAptId);
 
         // @0x82418F48 (this TU, DWARF cpp:78) -- consume the dirty flag and push the
         // rival-car / rivalry-state apt views.

@@ -157,7 +157,6 @@ namespace BrnGui
         RoadRuleComponent mRoadRuleComponent;      // +0xB10
 
         FriendsListComponent mFriendsList;         // +0x1040
-        bool mbFriendsListOffline;                 // +0x18D9 (mode == -1 mirror)
 
         FriendsListChangeIconComponent mFriendsListChangeIcon; // +0x5160
 

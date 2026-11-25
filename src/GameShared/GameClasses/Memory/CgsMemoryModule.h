@@ -118,7 +118,7 @@ namespace CgsMemory
                             u32* lpuOutFirstBlock, u32* lpuOutLastBlock);
         // Scan from luStartBlock for luNumWanted contiguous free blocks (frag-locked blocks count as free
         // when lbAllowFragmented). On success outputs the run's start index/block + scan index + end block.
-        bool FindContiguousFreeBlocks(u16 lu16NumWanted, u32 luStartBlock, bool lbAllowFragmented,
+        bool FindContiguousFreeBlocks(u32 luNumWanted, u32 luStartBlock, bool lbAllowFragmented,
                                       u32* lpuOutRunStartIndex, u32* lpuOutRunStartBlock,
                                       u32* lpuOutScanIndex, u32* lpuOutRunEndBlock);
         // Mark luCount blocks from luStartBlock as allocated by a child bank.

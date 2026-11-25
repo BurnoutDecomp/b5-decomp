@@ -8,25 +8,12 @@ namespace CgsGui
     // @ 0x8240E388 - assert the gui-cache pointer has been wired up (read at +0x10)
     // and return it. Path/line from the baked assert string
     // (GameShared/GameClasses/Gui/CgsGuiShared.h:201).
-    BrnGui::GuiCache* GuiAccessPointers::GetGuiCache()
-    {
-        CGS_ASSERT(mpGuiCache != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpGuiCache",
-                CGS_ARTIST_FILE, 201 /* ARTIST 0x8240E3B0 */));
-        return mpGuiCache;
-    }
 
     // GetFlaptManager -- DWARF home CgsGuiShared.h:194 (X360 header-inline; no
     // standalone body was emitted -- the assert+load pair is carried inlined at
     // e.g. BrnGui::InvisibleOverlayState::OnEnter @0x824B1568 and
     // BrnGui::BaseOverlayState::Prepare @0x824B1F80). Same shape as GetGuiCache
     // above: assert the pointer has been wired up, then return it.
-    BrnFlapt::FlaptManager* GuiAccessPointers::GetFlaptManager()
-    {
-        CGS_ASSERT(mpFlaptManager != 0, "NULL != mpFlaptManager");
-        return mpFlaptManager;
-    }
 
     // Header-inline access-pointer setters in the original build.  GuiModule::Construct
     // calls both before either the HUD or overlay flow can enter its first state.
@@ -62,16 +49,6 @@ namespace CgsGui
 
     // ARTIST82427AEC..B18: the original assertion is followed by the
     // load even if the assert handler continues. No readiness fallback.
-    BrnReplays::GuiModuleSerialiser* GuiAccessPointers::GetSerialiser()
-    {
-        if (mpSerialiser == 0)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("mpSerialiser", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 216));
-            CgsDev::Assert::EndAssert();
-        }
-        return mpSerialiser;
-    }
 
     // DecFIGS CgsGuiShared.h:102; ARTIST82527BC4 installs the actual
     // GameData input for the typed Update call. Its epilogue clears it.

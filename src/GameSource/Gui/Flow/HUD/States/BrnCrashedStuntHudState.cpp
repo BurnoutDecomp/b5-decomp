@@ -1,4 +1,6 @@
 #include "GameSource/Gui/Flow/HUD/States/BrnCrashedStuntHudState.h"
+#include "GameSource/Replays/BrnReplayGuiModuleStaticLayout.h"
+#include "GameSource/Replays/Serialisers/BrnReplayGuiModuleSerialiser.h"
 #include "GameShared/GameClasses/Containers/CgsHash.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"
@@ -62,21 +64,14 @@ void CrashedStuntHudState::OnEnter()
     meRunningState = E_CRASHRUNNINGSTATE_NONE;
     mpCache = 0;
     mpStateInterface->RegisterForEvents(maiEventToObserve, miNumEventsObserved);
-    // FLAG deferred: replay serialiser EndMessage, shared with the other HUD states.
+    mpStateInterface->GetAccessPointers()->GetSerialiser()->GetStaticLayout()->EndMessage();
     CgsGui::GuiAccessPointers* lpAccess = mpStateInterface->GetAccessPointers();
-    CGS_ASSERT(lpAccess != 0, "mpAccessPointers != NULL");
     BrnFlapt::FlaptManager* lpFlapt = lpAccess->GetFlaptManager();
-    CGS_ASSERT(lpFlapt != 0, "NULL != mpFlaptManager");
-    BrnFlapt::FileRef lFile;
-    lpFlapt->GetFile(&lFile, 0);
-    BrnFlapt::MovieClipRef lRoot;
-    lFile.GetRootMovieClip(&lRoot);
-    lRoot.FindChildMovieClip(&mCrashHudAnimator, "CrashHUD_mc");
-    CGS_ASSERT(mCrashHudAnimator.IsValid(), "mpMovieClipInst");
-    mCrashHudAnimator.mpMovieClipInst->ResetTimeline();
+    BrnFlapt::FileRef lFile = lpFlapt->GetFile(BrnFlapt::E_FLAPTFILE_HUD);
+    mCrashHudAnimator = lFile.GetRootMovieClip().FindChildMovieClip("CrashHUD_mc");
+    mCrashHudAnimator.ResetTimeline();
     mHudMessageComponent.Construct("crashHudMessages_mc", mpStateInterface, 0);
-    GuiCache* lpCache = lpAccess->GetGuiCache();
-    CGS_ASSERT(lpCache != 0, "mpGuiCache");
+    GuiCache* lpCache = mpStateInterface->GetAccessPointers()->GetGuiCache();
     mHudMessageComponent.SetInGameMessagesQueue(lpCache->GetInGameMessagesQueue());
     mHudMessageComponent.Prepare("crashHudMessages_mc", lFile);
     mStuntScoreAnimator.Construct("StuntScore_anim", mpStateInterface, 0);
@@ -87,7 +82,12 @@ void CrashedStuntHudState::OnEnter()
     mStuntRunMultiplierText.Construct("MultiplierScore_mc", mpStateInterface, 0);
     mbHudMessages = true;
     mbBoostBar = true;
-    miStartScore = miStartMultiplier = miFinishScore = miFinishMultiplier = miCurrentScore = miCurrentMultiplier = 0;
+    miStartScore = 0;
+    miStartMultiplier = 0;
+    miFinishScore = 0;
+    miFinishMultiplier = 0;
+    miCurrentScore = 0;
+    miCurrentMultiplier = 0;
 }
 
 // ARTIST 0x82481CF0.

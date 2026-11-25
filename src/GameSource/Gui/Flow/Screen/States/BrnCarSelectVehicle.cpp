@@ -33,6 +33,7 @@
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SPrintf
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"                      // CgsGui::GuiAccessPointers
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCommunicator.h"  // GuiEventAptTriggerPayload
+#include "GameSource/Gui/BrnGuiShared.h"
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache (+ GuiFlow)
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // BrnGui::GuiOverlayRequest (the ticker wire)
 #include "SharedClasses/DataLists/VehicleList.h"                          // BrnResource::VehicleList
@@ -83,15 +84,6 @@ namespace BrnGui
             }
         };
 
-        // The 304-byte overlay/ticker request OnEnter posts for the "DwnldTitleUp" title
-        // ticker: { 288, 184, 16, <pad>, the 288-byte request }, channel 40. Identical
-        // shape to BrnCarSelectMain_wG_02.cpp's GuiOverlayRequestWire.
-        struct GuiOverlayRequestWire
-        {
-            GuiOverlayRequest mRequest;   // the OutputGuiEvent payload
-            GuiOverlayRequestWire() {}
-        };
-
         // ---- in-queue payload views (the queue delivers the header-stripped payload) ----
 
         // Event 82 (online countdown time): one float at +0x00.
@@ -111,7 +103,7 @@ namespace BrnGui
     //    94 B5OnlineCarSelectComponents, 54 B5CarouselScrollBar, 55 B5ManufacturersIcon
     CgsGui::sResourceTuple       CarSelectVehicle::maResourcesToLoad[6] =
     {
-        { 149u, CgsGui::E_GUI_RESOURCETYPE_APT },
+        { E_GUI_RESOURCEID_APT_CARSELECT_MAIN, CgsGui::E_GUI_RESOURCETYPE_APT },
         {  52u, CgsGui::E_GUI_RESOURCETYPE_APT },
         {  70u, CgsGui::E_GUI_RESOURCETYPE_APT },
         {  94u, CgsGui::E_GUI_RESOURCETYPE_APT },
@@ -216,7 +208,7 @@ namespace BrnGui
 
         // off_82F26C8C -> "TitleText". The X360 dispatches through the component's vtable
         // slot 0, i.e. TextField::Construct(name, stateInterface, parentName).
-        mTitleText.Construct("TitleText", mpStateInterface, 0);
+        mTitleText.Construct(mpacTitleTextFieldName, mpStateInterface, 0);
 
         {
             GuiTickerFlagsWire409 lTickerOn;
@@ -226,7 +218,7 @@ namespace BrnGui
         mpStateInterface->RegisterForEvents(maiEventToObserve, miNumEventsObserved);
 
         mCarSelector.Construct(mpacCarSelectorName, mpStateInterface, 0,
-                               static_cast<u64>(-1));
+                               Selectable::K_INVALID_ID);
 
         // NOTE the console order: the three gauges, then CarsUnlocked, THEN CarType.
         mSpeedStatsBar.Construct(KAC_SPEED_STATS_BAR_NAME, mpStateInterface, 0);
@@ -237,7 +229,7 @@ namespace BrnGui
 
         // The pooled empty string @0x820046A7 -- the overview group has no apt clip of its own.
         mCarouselOverviewSelectableGroup.Construct("", mpStateInterface, 0,
-                                                   static_cast<u64>(-1));
+                                                   Selectable::K_INVALID_ID);
         mCarouselOverviewSelectableGroup.SetHighlightable(true);   // group vtable slot 1
 
         for (s32 liIcon = 0; liIcon < KI_NUMBER_VISIBLE_VEHICLE_ICONS; ++liIcon)
@@ -247,7 +239,9 @@ namespace BrnGui
             char lacName[32];
             CgsCore::SPrintf(lacName, 31, "Overview_%i_mc", liIcon + 1);
 
-            maCarouselOverviewSelectable[liIcon].Construct(lacName, mpStateInterface, 0);
+            lacName[31] = '\0';
+            maCarouselOverviewSelectable[liIcon].Construct(
+                lacName, mpStateInterface, 0, Selectable::K_INVALID_ID);
             maCarouselOverviewSelectable[liIcon].SetHighlightable(true);   // cell slot 1
             mCarouselOverviewSelectableGroup.Add(&maCarouselOverviewSelectable[liIcon]);  // group slot 7
         }
@@ -281,12 +275,9 @@ namespace BrnGui
 
         if (!mbTitleTickerPosted)
         {
-            GuiOverlayRequestWire lTitleTicker;
-            // The X360 zero-fills the 288-byte payload and writes only its leading id word.
-            std::memset(&lTitleTicker.mRequest, 0, sizeof(lTitleTicker.mRequest));
-            *reinterpret_cast<CgsID*>(&lTitleTicker.mRequest) = CgsIDCompress("DwnldTitleUp");
-
-            mpStateInterface->OutputGuiEvent(lTitleTicker.mRequest);
+            GuiOverlayRequest lTitleTicker;
+            lTitleTicker.Construct("DwnldTitleUp");
+            mpStateInterface->OutputGuiEvent(lTitleTicker);
             mbTitleTickerPosted = true;
         }
     }
@@ -378,28 +369,32 @@ namespace BrnGui
     {
         CarSelectMain::AppendAptComponents();
 
-        CGS_ASSERT(mpGuiCache != 0, "lpGuiCache");   // cpp:346
+        GuiCache* lpGuiCache = mpGuiCache;
+        CGS_ASSERT_AT(lpGuiCache != 0, "lpGuiCache", CGS_ARTIST_FILE, 346);
 
-        mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, "TitleText");
-        mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, "Waiting");
-        mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mpacCarSelectorName);
-        mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, KAC_BOOST_STATS_BAR_NAME);
-        mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, KAC_SPEED_STATS_BAR_NAME);
-        mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, KAC_STRENGTH_STATS_BAR_NAME);
-        mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, KAC_SLIDER_BAR_NAME);
-        mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, "HelpItemToggle_mc");
-        mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mTrackAnimTransitionComponent.GetName());
-        mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mMainAnimComponent.GetName());
+        lpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mpacTitleTextFieldName);
+        lpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mpacWaitingTextFieldName);
+        lpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mpacCarSelectorName);
+        lpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, KAC_BOOST_STATS_BAR_NAME);
+        lpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, KAC_SPEED_STATS_BAR_NAME);
+        lpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, KAC_STRENGTH_STATS_BAR_NAME);
+        lpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, KAC_SLIDER_BAR_NAME);
+        lpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, "HelpItemToggle_mc");
+        lpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mTrackAnimTransitionComponent.GetName());
+        lpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mMainAnimComponent.GetName());
     }
 
     // ---- PlayMovie @ 0x824C9DE8 ----------------------------------------------------
     // The inlined OutputGuiEvent<GuiEventPlayAptMovie> record { 8, 18, 12, <name>, 3 } on
     // channel 41 -- exactly what StateInterface::PlayAptMovie posts. The movie name comes
-    // from gGuiResourceIdentifier[149] through off_82F27B34, i.e. the same resource this
+    // from gGuiResourceIdentifier[E_GUI_RESOURCEID_APT_CARSELECT_MAIN] through off_82F27B34, i.e. the same resource this
     // state's maResourcesToLoad[0] loads.
     void CarSelectVehicle::PlayMovie()
     {
-        mpStateInterface->PlayAptMovie("BrnCarSelectMain", 3);
+        CgsGui::GuiEventPlayAptMovie lMovie;
+        lMovie.mpacMovieName = gGuiResourceIdentifier[E_GUI_RESOURCEID_APT_CARSELECT_MAIN];
+        lMovie.miLevelNum = 3;
+        mpStateInterface->OutputViewState(lMovie);
     }
 
     // ---- GetResourcesToLoad @ 0x824B5A08 / GetNumberResourcesToLoad @ 0x824B5A18 ----
@@ -422,9 +417,10 @@ namespace BrnGui
     // linear scan of the live carousel list. The compare is a full 64-bit `cmpld`.
     bool CarSelectVehicle::IsCarSelectable(CgsID lCarId) const
     {
+        const CgsID* lpaSelectedCars = maSelectedCars;
         for (s32 liCar = 0; liCar < gsiNumCarouselCars; ++liCar)
         {
-            if (maSelectedCars[liCar] == lCarId)
+            if (lpaSelectedCars[liCar] == lCarId)
                 return true;
         }
         return false;
@@ -498,27 +494,24 @@ namespace BrnGui
     // not an equality compare.
     void CarSelectVehicle::HandleAptTrigger(const CgsGui::GuiEventAptTriggerPayload* lpTrigger)
     {
-        const char* lpacName = lpTrigger->mpacComponentName;
+        switch (lpTrigger->meEventType)
+        {
+        case CgsGui::GuiEventAptTrigger::E_APT_EVENT_TRANSITION_COMPLETE:
+            if (std::strstr(lpTrigger->mpacComponentName, KAC_SPEED_STATS_BAR_NAME) != 0)
+                mSpeedStatsBar.HandleTransitionComplete(lpTrigger->mpacComponentName, lpTrigger->miUniqueId);
+            else if (std::strstr(lpTrigger->mpacComponentName, KAC_BOOST_STATS_BAR_NAME) != 0)
+                mBoostStatsBar.HandleTransitionComplete(lpTrigger->mpacComponentName, lpTrigger->miUniqueId);
+            else if (std::strstr(lpTrigger->mpacComponentName, KAC_STRENGTH_STATS_BAR_NAME) != 0)
+                mStrengthStatsBar.HandleTransitionComplete(lpTrigger->mpacComponentName, lpTrigger->miUniqueId);
+            break;
 
-        if (lpTrigger->meEventType == CgsGui::GuiEventAptTrigger::E_APT_EVENT_ONLOAD)
-        {
-            if (std::strstr(lpacName, mOnlinePlayerList.GetName()) != 0)
-                mOnlinePlayerList.HandleLoadNotification(lpacName);
-        }
-        else if (lpTrigger->meEventType == CgsGui::GuiEventAptTrigger::E_APT_EVENT_TRANSITION_COMPLETE)
-        {
-            if (std::strstr(lpacName, KAC_SPEED_STATS_BAR_NAME) != 0)
-            {
-                mSpeedStatsBar.HandleTransitionComplete(lpacName, lpTrigger->miUniqueId);
-            }
-            else if (std::strstr(lpacName, KAC_BOOST_STATS_BAR_NAME) != 0)
-            {
-                mBoostStatsBar.HandleTransitionComplete(lpacName, lpTrigger->miUniqueId);
-            }
-            else if (std::strstr(lpacName, KAC_STRENGTH_STATS_BAR_NAME) != 0)
-            {
-                mStrengthStatsBar.HandleTransitionComplete(lpacName, lpTrigger->miUniqueId);
-            }
+        case CgsGui::GuiEventAptTrigger::E_APT_EVENT_ONLOAD:
+            if (std::strstr(lpTrigger->mpacComponentName, mOnlinePlayerList.GetName()) != 0)
+                mOnlinePlayerList.HandleLoadNotification(lpTrigger->mpacComponentName);
+            break;
+
+        default:
+            break;
         }
     }
 }
@@ -949,10 +942,11 @@ namespace BrnGui
         // loop falls out with the index == the count (the X360 uses ONE register for both
         // the loop counter and the result).
         const s32 liNumCars = gsiNumCarouselCars;
+        const CgsID* lpaSelectedCars = maSelectedCars;
         s32 liHighlightedIndex = 0;
         while (liHighlightedIndex < liNumCars)
         {
-            if (maSelectedCars[liHighlightedIndex] == mCarSelector.GetHighlightedId())
+            if (lpaSelectedCars[liHighlightedIndex] == mCarSelector.GetHighlightedId())
                 break;
             ++liHighlightedIndex;
         }
@@ -979,9 +973,8 @@ namespace BrnGui
         // Slide the five icons by the live carousel scroll offset.
         for (s32 liIcon = 0; liIcon < KI_NUMBER_VISIBLE_VEHICLE_ICONS; ++liIcon)
         {
-            Vector2 lv2ScreenPosition;
-            lv2ScreenPosition.SetZero();
-            lv2ScreenPosition.mV.x = mfCarouselXOffset + mafCarouselOriginalXPos[liIcon];
+            const Vector2 lv2ScreenPosition(
+                mfCarouselXOffset + mafCarouselOriginalXPos[liIcon], 0.0f);
             maCarouselOverviewSelectable[liIcon].SetScreenPosition(lv2ScreenPosition);
         }
     }
@@ -999,28 +992,26 @@ namespace BrnGui
         if ((mfCarouselXOffsetDecay > 0.0f && mCarSelector.HighlightPrevious(true)) ||
             (mfCarouselXOffsetDecay < 0.0f && mCarSelector.HighlightNext(true)))
         {
-            mfCarouselXOffset = mfCarouselXOffsetDecay + mfCarouselXOffset;
+            mfCarouselXOffset += mfCarouselXOffsetDecay;
         }
 
         while (mfCarouselXOffset >= KC_CAROUSEL_X_ADVANCE)
         {
             lbStepped = true;
 
-            bool lbClappers;
             if (mfCarouselXOffsetDecay != 0.0f)
             {
                 // A decay was running: snap to the step and stop.
                 mfCarouselXOffset      = 0.0f;
                 mfCarouselXOffsetDecay = 0.0f;
-                lbClappers             = false;
+                TriggerSound(false);
             }
             else
             {
                 mfCarouselXOffset -= KC_CAROUSEL_X_ADVANCE;
-                lbClappers         = true;
+                TriggerSound(true);
             }
 
-            TriggerSound(lbClappers);
             mCarSelector.HighlightPrevious(false);
 
             const bool lbCarChanged = (mCurrentSetupInfo.mCarId != mCarSelector.GetHighlightedId());
@@ -1036,20 +1027,18 @@ namespace BrnGui
         {
             lbStepped = true;
 
-            bool lbClappers;
             if (mfCarouselXOffsetDecay != 0.0f)
             {
                 mfCarouselXOffsetDecay = 0.0f;
                 mfCarouselXOffset      = 0.0f;
-                lbClappers             = false;
+                TriggerSound(false);
             }
             else
             {
                 mfCarouselXOffset += KC_CAROUSEL_X_ADVANCE;
-                lbClappers         = true;
+                TriggerSound(true);
             }
 
-            TriggerSound(lbClappers);
             mCarSelector.HighlightNext(false);
 
             const bool lbCarChanged = (mCurrentSetupInfo.mCarId != mCarSelector.GetHighlightedId());
@@ -1571,13 +1560,10 @@ namespace BrnGui
     void CarSelectVehicle::TriggerSound(bool lbClappers)
     {
         GuiAudioTriggerEvent lAudio;
-        lAudio.Construct(KI_AUDIO_ACTION_CAROUSEL, "",
-                         lbClappers ? "CodeCarChoiceCarouselClappers" : "CodeCarChoiceCarousel",
-                         "");
-
-        // The X360 record is { 100, 457, 12, <the 100-byte audio record> }: same payload as
-        // the committed GuiAudioTriggerEvent, different queued id (see
-        // KU_AUDIO_TRIGGER_EVENT_ID_CAROUSEL above).
+        if (lbClappers)
+            lAudio.Construct(KI_AUDIO_ACTION_CAROUSEL, "", "CodeCarChoiceCarouselClappers", "");
+        else
+            lAudio.Construct(KI_AUDIO_ACTION_CAROUSEL, "", "CodeCarChoiceCarousel", "");
 
         mpStateInterface->OutputGuiEvent(lAudio);
     }

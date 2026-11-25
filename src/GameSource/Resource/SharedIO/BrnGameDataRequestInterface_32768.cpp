@@ -17,6 +17,6 @@ namespace BrnResource
 {
 namespace GameDataIO
 {
-    template struct RequestInterface<32768>;
+    template class RequestInterface<32768>;
 }
 }

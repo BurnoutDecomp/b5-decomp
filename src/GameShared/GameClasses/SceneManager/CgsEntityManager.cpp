@@ -184,15 +184,15 @@ const VolumeInstance* EntityManager::GetVolumeInstance(s32 liViIndex) const
 
 VolumeInstance* EntityManager::GetVolumeInstance(s32 liViIndex)
 {
-    CGS_ASSERT(liViIndex < KI_MAX_NUM_VOLUME_INSTANCES,
-               "liViIndex < KI_MAX_NUM_VOLUME_INSTANCES");
+    CGS_ASSERT_AT(liViIndex < KI_MAX_NUM_VOLUME_INSTANCES,
+                  "liViIndex < KI_MAX_NUM_VOLUME_INSTANCES", KAC_ENTITY_MANAGER_ARTIST_HEADER, 518);
 
     if (liViIndex == KI_INVALID_VOLUME_INSTANCE_INDEX)
     {
         return NULL;
     }
 
-    CGS_ASSERT(liViIndex >= 0, "liViIndex >= 0");
+    CGS_ASSERT_AT(liViIndex >= 0, "liViIndex >= 0", KAC_ENTITY_MANAGER_ARTIST_HEADER, 523);
 
     if (!mVolumeInstancePool.IsObjectAllocated(liViIndex))
     {
