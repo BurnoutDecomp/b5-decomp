@@ -147,8 +147,8 @@ namespace BrnDirector
     {
         const bool lbUseExternal = mbUseGameplayExternal && !mbLookbackOverride;
 
-        return lbUseExternal ? mGameplayExternal.GetProducedCamera()
-                             : mGameplayBumper.GetProducedCamera();
+        return lbUseExternal ? mGameplayExternal.GetCamera()
+                             : mGameplayBumper.GetCamera();
     }
 
     // ------------------------------------------------------------------------

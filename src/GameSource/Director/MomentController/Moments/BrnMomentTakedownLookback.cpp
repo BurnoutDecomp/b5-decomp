@@ -194,7 +194,7 @@ void MomentTakedownLookback::Update(f32 /*lfTimeStep*/, void* lrBehaviourControl
 
         if ((KF_ZERO > lfZDistanceToVictim) && (KF_MAX_DISTANCE_TO_VICTIM > lfDistanceToVictim))
         {
-            SetCamera(mRigCameraHandle.GetProducedCamera());
+            SetCamera(mRigCameraHandle.GetCamera());
         }
         else
         {

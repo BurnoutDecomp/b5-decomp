@@ -199,7 +199,7 @@ namespace BrnDirector
         case E_STATE_SELECTING_CAR:
         {
             // Drive the state camera from the ICE-anim reveal cam and fade the screen out (B&W).
-            lrCamera = mIceCam.GetProducedCamera();
+            lrCamera = mIceCam.GetCamera();
             Camera::EnsureEffectIsPlaying(lrCamera, lrEffects, KPC_HOOK_BLACK_OUT_BW, KF_FADE_BLEND);
 
             // In the INTRO event state with the game saying the car-select can start the intro,
@@ -245,7 +245,7 @@ namespace BrnDirector
         case E_STATE_SELECTING_LIVERY:
         {
             // Drive the state camera from the look-around-car cam and stop the current effect.
-            lrCamera = mLookAroundCarCam.GetProducedCamera();
+            lrCamera = mLookAroundCarCam.GetCamera();
             Camera::StopCurrentEffect(lrCamera, lrEffects);
 
             // Unless the car is showable, re-arm the quick black fade-in.
@@ -300,12 +300,12 @@ namespace BrnDirector
             // Drive the state camera from whichever cam is in force and fade the screen in.
             if (mbWasCarModScreen)
             {
-                lrCamera = mLookAroundCarCam.GetProducedCamera();
+                lrCamera = mLookAroundCarCam.GetCamera();
                 Camera::EnsureEffectIsPlaying(lrCamera, lrEffects, KPC_HOOK_BLACK_IN_NO_BW, KF_FADE_BLEND);
             }
             else
             {
-                lrCamera = mIceCam.GetProducedCamera();
+                lrCamera = mIceCam.GetCamera();
                 Camera::EnsureEffectIsPlaying(lrCamera, lrEffects, KPC_HOOK_BLACK_IN_BW, KF_FADE_BLEND);
             }
 
@@ -341,12 +341,12 @@ namespace BrnDirector
             // completes, then change to it.
             if (mbWasCarModScreen)
             {
-                lrCamera = mLookAroundCarCam.GetProducedCamera();
+                lrCamera = mLookAroundCarCam.GetCamera();
                 Camera::EnsureEffectIsPlaying(lrCamera, lrEffects, KPC_HOOK_BLACK_IN_NO_BW, KF_FADE_BLEND);
             }
             else
             {
-                lrCamera = mIceCam.GetProducedCamera();
+                lrCamera = mIceCam.GetCamera();
                 Camera::EnsureEffectIsPlaying(lrCamera, lrEffects, KPC_HOOK_BLACK_IN_BW, KF_FADE_BLEND);
             }
 
@@ -362,11 +362,11 @@ namespace BrnDirector
             // then change to roaming.
             if (mbWasCarModScreen)
             {
-                lrCamera = mLookAroundCarCam.GetProducedCamera();
+                lrCamera = mLookAroundCarCam.GetCamera();
             }
             else
             {
-                lrCamera = mIceCam.GetProducedCamera();
+                lrCamera = mIceCam.GetCamera();
             }
             Camera::StopCurrentEffect(lrCamera, lrEffects);
 

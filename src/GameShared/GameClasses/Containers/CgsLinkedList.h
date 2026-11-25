@@ -213,6 +213,11 @@ namespace CgsContainers
         // Cached live-element count (BaseLinkedList::CountElements @ 0x821F0E48 on the live list).
         s32 CountElements() const { return maLiveList.CountElements(); }
 
+        void RemoveHead()
+        {
+            maFreeList.InternalAddHead(maLiveList.InternalRemoveHead());
+        }
+
         // Recycle one live node back to the free list (the X360 live->free move:
         // InternalRemoveNode(live,n) ; InternalAddHead(free,n), e.g. UpdateQueued @0x82702108
         // promoting/recycling QueuedResource nodes). The node must currently be in the live list.

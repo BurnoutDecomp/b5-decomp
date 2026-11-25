@@ -381,12 +381,12 @@ void RoadRuleComponent::Prepare(const char* lpacName, const BrnFlapt::FileRef& l
     BRN_RR_CHILD("leftyAnim_mc");       mLeftRoadAnimator.Prepare(lacChildName, lrFile, 0);
     BRN_RR_CHILD("rightyAnim_mc");      mRightRoadAnimator.Prepare(lacChildName, lrFile, 0);
 
-    AttachToTextFieldComponent(&mBestCrashLabelTextField, "targetCrashText_txt", "targetCrashText_cpt", lpacName, lrFile);
-    AttachToTextFieldComponent(&mBestCrashNameTextField,  "CrashName_txt",       "CrashNameTxt_mc",     lpacName, lrFile);
-    AttachToTextFieldComponent(&mBestCrashValueTextField, "CrashValue_txt",      "CrashValueTxt_mc",    lpacName, lrFile);
-    AttachToTextFieldComponent(&mBestTimeLabelTextField,  "targetTimeText_txt",  "targetTimeText_cpt",  lpacName, lrFile);
-    AttachToTextFieldComponent(&mBestTimeNameTextField,   "TimeName_txt",        "TimeNameTxt_mc",      lpacName, lrFile);
-    AttachToTextFieldComponent(&mBestTimeValueTextField,  "TimeValue_txt",       "TimeValueTxt_mc",     lpacName, lrFile);
+    mBestCrashLabelTextField = AttachToTextFieldComponent("targetCrashText_txt", "targetCrashText_cpt", lpacName, lrFile);
+    mBestCrashNameTextField = AttachToTextFieldComponent( "CrashName_txt",       "CrashNameTxt_mc",     lpacName, lrFile);
+    mBestCrashValueTextField = AttachToTextFieldComponent("CrashValue_txt",      "CrashValueTxt_mc",    lpacName, lrFile);
+    mBestTimeLabelTextField = AttachToTextFieldComponent( "targetTimeText_txt",  "targetTimeText_cpt",  lpacName, lrFile);
+    mBestTimeNameTextField = AttachToTextFieldComponent(  "TimeName_txt",        "TimeNameTxt_mc",      lpacName, lrFile);
+    mBestTimeValueTextField = AttachToTextFieldComponent( "TimeValue_txt",       "TimeValueTxt_mc",     lpacName, lrFile);
 
     BRN_RR_CHILD("TimeTarget_anim");    mTimeAnimator.Prepare(lacChildName, lrFile, 0);
     mTimeAnimator.Run("invisible");
@@ -396,7 +396,7 @@ void RoadRuleComponent::Prepare(const char* lpacName, const BrnFlapt::FileRef& l
     BRN_RR_CHILD("crashIcon_mc");       mCrashLeaderIcon.Prepare(lacChildName, lrFile, 0);
     BRN_RR_CHILD("CurrentTime_mc");     mCurrentTimerField.Prepare("TimerText_txt", lacChildName, lrFile);
 
-    AttachToTextFieldComponent(&mCurrentCrashTextField, "CrashText_txt", "CrashText_mc", lpacName, lrFile);
+    mCurrentCrashTextField = AttachToTextFieldComponent("CrashText_txt", "CrashText_mc", lpacName, lrFile);
 
     BRN_RR_CHILD("CurrentTime_anim");   mCurrentTimeAnimator.Prepare(lacChildName, lrFile, 0);
     BRN_RR_CHILD("CurrentCrash_anim");  mCurrentCrashAnimator.Prepare(lacChildName, lrFile, 0);

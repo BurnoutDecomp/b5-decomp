@@ -532,7 +532,9 @@ namespace Deformation
                                    CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpScene,
                                    DetachedPartManager* lpPartMgr, DetachedWheelManager* lpWheelMgr)
     {
-        CGS_ASSERT(mbActive, "mbActive");
+        CGS_ASSERT_AT(mbActive, "mbActive",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/DeformationManager/DeformationPhysics/BrnDeformableObject.cpp",
+            809);
 
         // Drop physical parts/joints, then this car's detached wheels (0x8263A6F8..0x8263A708: r3
         // wheelMgr, r4 input, r5 scene, r6 = ld 0x6710 == mHandlingBodyID). Crash parity G20-D5,
@@ -541,19 +543,13 @@ namespace Deformation
         RemovePhysicalPartsAndJoints(lpInput, lpScene, lpPartMgr);
         lpWheelMgr->RemoveVehicleWheels(lpInput, lpScene, mHandlingBodyID);
 
-        // Invalidate the ids + drop the spec + clear active/index state (asm tail + DWARF SetInvalid).
-        // EntityId / RigidBodyId are plain { u32 muValue } handles on the frozen common-types header; the
-        // DWARF SetInvalid sets the handle to its 0xFFFFFFFF "invalid" sentinel (asm: qword_82F2A3A8).
-        // ⭐ 2026-08-11 (handle-widening wave): the member is the real 8-byte
-        // CgsPhysics::RigidBodyId now, so this is its own SetInvalid() -- which writes the full
-        // 64-bit K_INVALID_RIGID_BODY_ID. The old `.muValue = 0xFFFFFFFFu` on the 4-byte stand-in
-        // left the HIGH dword (the half every consumer reads) untouched, so a "released" model
-        // still answered with its old entity word.
-        mHandlingBodyID.SetInvalid();              // RigidBodyId::SetInvalid()
-        mGlobalEntityId.muValue   = 0xFFFFFFFFu;   // EntityId::SetInvalid()
-        mpDeformationSpec         = 0;
-        mu16DeformableObjectIndex = 0xFFFFu;   // asm: +26290 = -1 (the index sentinel)
-        mbActive                  = false;
+        mHandlingBodyID.SetInvalid();
+        mGlobalEntityId.muValue = 0xFFFFFFFFu;
+        mpDeformationSpec = 0;
+        mi16NumPhysicalParts = 0;
+        mi16NumHingedParts = 0;
+        mu16DeformableObjectIndex = 0xFFFFu;
+        mbActive = false;
     }
 
     // =================================================================================================
@@ -1212,8 +1208,10 @@ namespace Deformation
             const u8 lu8PoolSlot = mau8PhysicalBodyPartPoolIndex[li16Part];
             PhysicalBodyPart* lpPart = lpPartMgr->GetPartFromIndex(lu8PoolSlot);
 
-            const u32 luPartIndex =
-                static_cast<u32>(lpPart->GetContactVolumeInstanceId().muId >> 32) & 0x3FFu;
+            const CgsSceneManager::VolumeInstanceId lContactVolume = lpPart->GetContactVolumeInstanceId();
+            const CgsSceneManager::EntityId lEntityId(static_cast<u32>(
+                lContactVolume.muId >> CgsSceneManager::VolumeInstanceId::KU_ENTITY_ID_START_INDEX));
+            const u16 luPartIndex = lEntityId.GetPartIndex();
 
             // ":2594" tripwire -- the state must be HINGED or DETATCHED to be physical at all.
             CGS_ASSERT(maPartStates[luPartIndex] == static_cast<u8>(E_PART_STATE_HINGED) ||
@@ -1267,8 +1265,10 @@ namespace Deformation
 
             // The part's IK-part index out of the packed handle (entity word low 10 bits). Read
             // through the public packed-id accessor (the console `ld`s the same 8 bytes inline).
-            const u32 luPartIndex =
-                static_cast<u32>(lpPart->GetContactVolumeInstanceId().muId >> 32) & 0x3FFu;
+            const CgsSceneManager::VolumeInstanceId lContactVolume = lpPart->GetContactVolumeInstanceId();
+            const CgsSceneManager::EntityId lEntityId(static_cast<u32>(
+                lContactVolume.muId >> CgsSceneManager::VolumeInstanceId::KU_ENTITY_ID_START_INDEX));
+            const u16 luPartIndex = lEntityId.GetPartIndex();
 
             if (maPartStates[luPartIndex] == static_cast<u8>(E_PART_STATE_HINGED))
             {

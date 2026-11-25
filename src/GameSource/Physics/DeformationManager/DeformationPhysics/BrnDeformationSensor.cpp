@@ -61,6 +61,10 @@ namespace BrnPhysics
 {
 namespace Deformation
 {
+	CGS_STATIC_ASSERT((sizeof(DeformationSensor) == 0x1B0), "ARTIST deformation sensor stride");
+	CGS_STATIC_ASSERT((offsetof(DeformationSensor, mContactSpy) == 0x120), "ARTIST contact spy placement");
+	CGS_STATIC_ASSERT((offsetof(DeformationSensor, mVolInstId) == 0x190), "ARTIST sensor volume ID placement");
+
 	// ARTIST 0x8260A508..0x8260A930, called by UpdateOutputContactSpies.
 	// The stored spy uses physical body ids. Traffic's body index can differ from
 	// its scene index, so orientation uses the caller's global entity id for traffic.
@@ -68,18 +72,18 @@ namespace Deformation
 	                                       PhysicsModuleIO::PotentialContactInterface* lpContacts,
 	                                       EntityId lGlobalCarId)
 	{
-		const f32 lfNormalStressSq = maPostPhysicsVec1[0] * maPostPhysicsVec1[0]
-		                          + maPostPhysicsVec1[1] * maPostPhysicsVec1[1]
-		                          + maPostPhysicsVec1[2] * maPostPhysicsVec1[2];
+		const f32 lfNormalStressSq = mContactSpy.mNormalStress.mV.v[0] * mContactSpy.mNormalStress.mV.v[0]
+		                          + mContactSpy.mNormalStress.mV.v[1] * mContactSpy.mNormalStress.mV.v[1]
+		                          + mContactSpy.mNormalStress.mV.v[2] * mContactSpy.mNormalStress.mV.v[2];
 		if (!(lfNormalStressSq > 0.00001f))
 			return;
 
-		const u32 luEntityA = static_cast<u32>(mSpyVolumeInstanceIdA >> 32);
-		const u32 luEntityB = static_cast<u32>(mSpyVolumeInstanceIdB >> 32);
+		const u32 luEntityA = static_cast<u32>(mContactSpy.mIDA >> 32);
+		const u32 luEntityB = static_cast<u32>(mContactSpy.mIDB >> 32);
 		const u32 luOwnerA = luEntityA >> 24;
 		const u32 luOwnerB = luEntityB >> 24;
 		CGS_ASSERT(luOwnerA != 0, "Contact spy A must not be world");
-		const CgsSceneManager::SceneManagerIO::PotentialContact& lrContact = lpContacts->GetEvent(ContactId(mSpyContactId));
+		const CgsSceneManager::SceneManagerIO::PotentialContact& lrContact = lpContacts->GetEvent(ContactId(mContactSpy.muTag));
 		const u32 luContactA = static_cast<u32>(lrContact.muVolumeInstanceIdA.muId >> 32);
 		const u32 luContactB = static_cast<u32>(lrContact.muVolumeInstanceIdB.muId >> 32);
 		if (luOwnerA == 1 && (luOwnerB == 0 || luOwnerB == 1))
@@ -99,24 +103,24 @@ namespace Deformation
 		}
 
 		CgsPhysics::PhysicsSimulationIO::OutContactSpy lSpy;
-		lSpy.mFrictionStress.mV = __lvx(maPostPhysicsVec0, 0);
-		lSpy.mNormalStress.mV = __lvx(maPostPhysicsVec1, 0);
-		lSpy.mNormal = mSpyNormal;
-		lSpy.mPointOnA = mSpyPointOnA;
-		lSpy.mPointOnB = mSpyPointOnB;
-		lSpy.mIDA = mSpyVolumeInstanceIdA;
-		lSpy.mIDB = mSpyVolumeInstanceIdB;
-		lSpy.muTag = mSpyContactId;
+		lSpy.mFrictionStress.mV = mContactSpy.mFrictionStress.mV;
+		lSpy.mNormalStress.mV = mContactSpy.mNormalStress.mV;
+		lSpy.mNormal = mContactSpy.mNormal;
+		lSpy.mPointOnA = mContactSpy.mPointOnA;
+		lSpy.mPointOnB = mContactSpy.mPointOnB;
+		lSpy.mIDA = mContactSpy.mIDA;
+		lSpy.mIDB = mContactSpy.mIDB;
+		lSpy.muTag = mContactSpy.muTag;
 		const u32 luSceneEntityA = luOwnerA == 2 ? lGlobalCarId.muValue : luEntityA;
 		if (luSceneEntityA != luContactA)
 		{
 			CGS_ASSERT(luSceneEntityA == luContactB, "Spy entity must belong to the potential contact");
 			lSpy.SwapEntityOrder();
-			mSpyNormal = lSpy.mNormal;
-			mSpyPointOnA = lSpy.mPointOnA;
-			mSpyPointOnB = lSpy.mPointOnB;
-			mSpyVolumeInstanceIdA = lSpy.mIDA;
-			mSpyVolumeInstanceIdB = lSpy.mIDB;
+			mContactSpy.mNormal = lSpy.mNormal;
+			mContactSpy.mPointOnA = lSpy.mPointOnA;
+			mContactSpy.mPointOnB = lSpy.mPointOnB;
+			mContactSpy.mIDA = lSpy.mIDA;
+			mContactSpy.mIDB = lSpy.mIDB;
 		}
 		lpOutput->GetContactSpyQueue()->AddEvent(lSpy);
 	}
@@ -262,10 +266,10 @@ namespace Deformation
 		mImpulseContact.mfImpactTimeInFrame = 100.0f;   // PS3 ClearVariables @0x6B5F28: *(this+0x118) = 100.0 (disarm; walls leg 4 rename)
 		for ( s32 li = 0; li < 4; ++li )
 		{
-			maPostPhysicsVec0[li] = 0.0f;
-			maPostPhysicsVec1[li] = 0.0f;
+			mContactSpy.mFrictionStress.mV.v[li] = 0.0f;
+			mContactSpy.mNormalStress.mV.v[li] = 0.0f;
 		}
-		mSpyContactId = 0;   // spy reset (walls leg 4 rename)
+		mContactSpy.muTag = 0;   // spy reset (walls leg 4 rename)
 
 		mi32NumStoredContacts = 0;
 		mpLocalSpaceSphere = 0;
@@ -350,10 +354,10 @@ namespace Deformation
 
 		for ( s32 li = 0; li < 4; ++li )                 // stvx128 0 -> +288 / +304
 		{
-			maPostPhysicsVec0[li] = 0.0f;
-			maPostPhysicsVec1[li] = 0.0f;
+			mContactSpy.mFrictionStress.mV.v[li] = 0.0f;
+			mContactSpy.mNormalStress.mV.v[li] = 0.0f;
 		}
-		mSpyContactId = 0;                               // *(this+384) = 0 (spy reset; walls leg 4 rename)
+		mContactSpy.muTag = 0;                               // *(this+384) = 0 (spy reset; walls leg 4 rename)
 
 		mi32NumStoredContacts = 0;                       // *(this+408) = 0
 		mpSpec             = lpSpec;                      // *(this+4)   = lpSpec
@@ -1051,7 +1055,8 @@ namespace Deformation
 				{
 					// Swap-remove: pull the last live contact into this slot, drop the
 					// live count, and step back so the refilled slot is re-tested.
-					maStoredContacts[liIndex] = maStoredContacts[mi32NumStoredContacts - 1];
+					const StoredContact& lrLastContact = maStoredContacts[mi32NumStoredContacts - 1];
+					maStoredContacts[liIndex] = lrLastContact;
 					--liIndex;
 					--mi32NumStoredContacts;
 				}
@@ -1062,12 +1067,10 @@ namespace Deformation
 
 		// Post-physics scratch reset.
 		mImpulseContact.mfImpactTimeInFrame = 100.0f;   // disarm (walls leg 4 rename)
-		for ( int i = 0; i < 4; ++i )
-		{
-			maPostPhysicsVec0[i] = 0.0f;
-			maPostPhysicsVec1[i] = 0.0f;
-		}
-		mSpyContactId = 0;   // spy reset (walls leg 4 rename)
+		CgsPhysics::PhysicsSimulationIO::OutContactSpy& lrSpy = mContactSpy;
+		lrSpy.mFrictionStress.SetZero();
+		lrSpy.mNormalStress.SetZero();
+		lrSpy.muTag = 0;   // spy reset (walls leg 4 rename)
 	}
 
 	// =============================================================================================
@@ -1510,12 +1513,12 @@ namespace Deformation
 			mImpulseContact.mContactId          = lContactId;      // stw  this,0x11C
 
 			// The contact-spy record (sensor +0x140..+0x183):
-			mSpyNormal            = lNormal;                                    // stvx v30, this,0x140
-			mSpyPointOnA          = lPointOnA;                                  // stvx (potential+0),  this,0x150
-			mSpyPointOnB          = lPointOnB;                                  // stvx (potential+0x10),this,0x160
-			mSpyVolumeInstanceIdA = lrPotential.muVolumeInstanceIdA.muId & 0xFFFFFFFF00000000ull;           // std (idA word)<<32, this,0x170
-			mSpyVolumeInstanceIdB = lrPotential.muVolumeInstanceIdB.muId & 0xFFFFFFFF00000000ull;           // std (idB word)<<32, this,0x178
-			mSpyContactId         = static_cast<u32>(lContactId);               // stw r16, this,0x180 (operator u32)
+			mContactSpy.mNormal            = lNormal;                                    // stvx v30, this,0x140
+			mContactSpy.mPointOnA          = lPointOnA;                                  // stvx (potential+0),  this,0x150
+			mContactSpy.mPointOnB          = lPointOnB;                                  // stvx (potential+0x10),this,0x160
+			mContactSpy.mIDA = lrPotential.muVolumeInstanceIdA.muId & 0xFFFFFFFF00000000ull;           // std (idA word)<<32, this,0x170
+			mContactSpy.mIDB = lrPotential.muVolumeInstanceIdB.muId & 0xFFFFFFFF00000000ull;           // std (idB word)<<32, this,0x178
+			mContactSpy.muTag         = static_cast<u32>(lContactId);               // stw r16, this,0x180 (operator u32)
 		}
 
 		bool lbAccepted = false;

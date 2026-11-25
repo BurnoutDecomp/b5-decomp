@@ -502,10 +502,10 @@ namespace BrnDirector
             // Pick whichever gyro cam is currently "behaviour driven" (its produced camera's
             // dirty-flags word has KI_CAMERA_DIRTY_BEHAVIOUR_DRIVEN set); default to the right
             // seat when neither/the left one isn't.
-            const Camera::Camera& lrLeftProduced = mGyroCamDriveByL.GetProducedCamera();
+            const Camera::Camera& lrLeftProduced = mGyroCamDriveByL.GetCamera();
             const bool lbLeftIsDriving = (lrLeftProduced.mState_uFlags & KI_CAMERA_DIRTY_BEHAVIOUR_DRIVEN) != 0;
 
-            lOutCamera = lbLeftIsDriving ? lrLeftProduced : mGyroCamDriveByR.GetProducedCamera();
+            lOutCamera = lbLeftIsDriving ? lrLeftProduced : mGyroCamDriveByR.GetCamera();
 
             if (mfActiveTime == 0.0f)
             {
@@ -523,9 +523,9 @@ namespace BrnDirector
 
         case E_STATE_FINISHED:
         {
-            const Camera::Camera& lrLeftProduced = mGyroCamDriveByL.GetProducedCamera();
+            const Camera::Camera& lrLeftProduced = mGyroCamDriveByL.GetCamera();
             const bool lbLeftIsDriving = (lrLeftProduced.mState_uFlags & KI_CAMERA_DIRTY_BEHAVIOUR_DRIVEN) != 0;
-            lOutCamera = lbLeftIsDriving ? lrLeftProduced : mGyroCamDriveByR.GetProducedCamera();
+            lOutCamera = lbLeftIsDriving ? lrLeftProduced : mGyroCamDriveByR.GetCamera();
             break;
         }
 
@@ -610,7 +610,7 @@ namespace BrnDirector
             }
             // FALLTHROUGH
         case E_STATE_ACTIVE:
-            lOutCamera = mIceCam.GetProducedCamera();
+            lOutCamera = mIceCam.GetCamera();
             if (mIceCam.GetBehaviour()->HasFinishedOrFailed())
             {
                 meState = E_STATE_FINISHED;
@@ -618,7 +618,7 @@ namespace BrnDirector
             break;
 
         case E_STATE_FINISHED:
-            lOutCamera = mIceCam.GetProducedCamera();
+            lOutCamera = mIceCam.GetCamera();
             break;
 
         default:
@@ -748,7 +748,7 @@ namespace BrnDirector
             // FALLTHROUGH
         case E_STATE_FLYBACK:
         {
-            lOutCamera = mInterpolaterA.GetProducedCamera();
+            lOutCamera = mInterpolaterA.GetCamera();
 
             if (mfActiveTime == 0.0f)
             {
@@ -786,7 +786,7 @@ namespace BrnDirector
 
         case E_STATE_INTERPOLATING_TO_GAMEPLAY:
         {
-            lOutCamera = mInterpolaterB.GetProducedCamera();
+            lOutCamera = mInterpolaterB.GetCamera();
 
             // The hold value the eased term immediately overwrites; the console stores it first
             // all the same, so it is kept.
@@ -809,7 +809,7 @@ namespace BrnDirector
         }
 
         case E_STATE_FINISHED:
-            lOutCamera = mInterpolaterB.GetProducedCamera();
+            lOutCamera = mInterpolaterB.GetCamera();
             break;
 
         default:
@@ -955,7 +955,7 @@ namespace BrnDirector
             // FALLTHROUGH
         case E_STATE_FLYBACK1:
         {
-            lOutCamera = mInterpolaterA.GetProducedCamera();
+            lOutCamera = mInterpolaterA.GetCamera();
 
             if (mfActiveTime == 0.0f)
             {
@@ -989,7 +989,7 @@ namespace BrnDirector
         }
 
         case E_STATE_FLYBACK2:
-            lOutCamera = mInterpolaterB.GetProducedCamera();
+            lOutCamera = mInterpolaterB.GetCamera();
             lOutCamera.mEffects.mfSimTimeScale = KF_TAKEDOWN_SIM_TIME_SCALE;
             lOutCamera.mDepthOfField.SetBlurriness(
                 sinf(mInterpolaterB.GetBehaviour()->GetParametricTime() * KF_PI));
@@ -1002,7 +1002,7 @@ namespace BrnDirector
             break;
 
         case E_STATE_FINISHED:
-            lOutCamera = mInterpolaterB.GetProducedCamera();
+            lOutCamera = mInterpolaterB.GetCamera();
             break;
 
         default:
@@ -1207,7 +1207,7 @@ namespace BrnDirector
             }
 
             // The frame's camera is the LOOKBACK blend's, whichever of the two arms above ran.
-            lOutCamera = mInterpolaterA.GetProducedCamera();
+            lOutCamera = mInterpolaterA.GetCamera();
             lOutCamera.RequestMotionBlur(0.0f, KF_UNIT);
             lOutCamera.mEffects.mfSimTimeScale =
                 (mfActiveTime < KF_SHUTDOWN_GYRO_TIME) ? KF_TAKEDOWN_SIM_TIME_SCALE : KF_UNIT;
@@ -1215,7 +1215,7 @@ namespace BrnDirector
         }
 
         case E_STATE_FLYBACK:
-            lOutCamera = mInterpolaterB.GetProducedCamera();
+            lOutCamera = mInterpolaterB.GetCamera();
             lOutCamera.RequestMotionBlur(KF_UNIT, KF_UNIT);
 
             if (mfActiveTime > KF_SHUTDOWN_FLYBACK_TIME)
@@ -1248,7 +1248,7 @@ namespace BrnDirector
             break;
 
         case E_STATE_ZOOM1:
-            lOutCamera = mZoom1.GetProducedCamera();
+            lOutCamera = mZoom1.GetCamera();
             lOutCamera.mEffects.mfSimTimeScale = KF_ZOOM_SIM_TIME_SCALE;
             lOutCamera.RequestMotionBlur(0.0f, KF_UNIT);
 
@@ -1280,7 +1280,7 @@ namespace BrnDirector
             break;
 
         case E_STATE_ZOOM2:
-            lOutCamera = mZoom2.GetProducedCamera();
+            lOutCamera = mZoom2.GetCamera();
             lOutCamera.mEffects.mfSimTimeScale = KF_ZOOM_SIM_TIME_SCALE;
             lOutCamera.RequestMotionBlur(0.0f, KF_UNIT);
 
@@ -1312,7 +1312,7 @@ namespace BrnDirector
             break;
 
         case E_STATE_ZOOM3:
-            lOutCamera = mZoom3.GetProducedCamera();
+            lOutCamera = mZoom3.GetCamera();
             lOutCamera.mEffects.mfSimTimeScale = KF_ZOOM_SIM_TIME_SCALE;
             lOutCamera.RequestMotionBlur(0.0f, KF_UNIT);
 
@@ -1328,7 +1328,7 @@ namespace BrnDirector
             break;
 
         case E_STATE_FINISHED:
-            lOutCamera = mZoom3.GetProducedCamera();
+            lOutCamera = mZoom3.GetCamera();
             lOutCamera.mEffects.mfSimTimeScale = KF_UNIT;
             lOutCamera.RequestMotionBlur(0.0f, KF_UNIT);
             break;
@@ -1552,7 +1552,7 @@ namespace BrnDirector
         case E_STATE_ROAD_RAGE_TAKEDOWN_PLAYING:
             if (mInterpolator.IsAllocated() && mfActiveTime < KF_TRANSITION_TIME)
             {
-                GetNonConstCamera() = mInterpolator.GetProducedCamera();
+                GetNonConstCamera() = mInterpolator.GetCamera();
 
                 const f32 lfBlurAmount =
                     ClampUnit(sinf(mInterpolator.GetBehaviour()->GetParametricTime() * KF_PI));
@@ -1603,7 +1603,7 @@ namespace BrnDirector
 
                     mfFailsafeTimer = lrSharedInfo.mfTimestep + mfFailsafeTimer;
 
-                    GetNonConstCamera() = mInterpolator.GetProducedCamera();
+                    GetNonConstCamera() = mInterpolator.GetCamera();
                     GetNonConstCamera().RequestMotionBlur(0.0f, KF_UNIT);
                     GetNonConstCamera().mState_uFlags |= KI_CAMERA_DIRTY_BEHAVIOUR_DRIVEN;
                 }
@@ -1677,7 +1677,7 @@ namespace BrnDirector
             if (lrSharedInfo.mpAllVehicleData->GetUsedRaceCarsBitArray().IsBitSet(
                     static_cast<u32>(liVictimRaceCarIndex)))
             {
-                GetNonConstCamera() = mTakedownDebugCam.GetProducedCamera();
+                GetNonConstCamera() = mTakedownDebugCam.GetCamera();
 
                 const rw::math::vpu::Matrix44Affine& lrPlayerTransform =
                     *lrSharedInfo.mpPlayerCarTransform;

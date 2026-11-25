@@ -75,12 +75,12 @@ namespace BrnDirector
             meState = E_STATE_ACTIVE;
             // fall through
         case E_STATE_ACTIVE:
-            GetNonConstCamera() = mCam.GetProducedCamera();
+            GetNonConstCamera() = mCam.GetCamera();
             break;
 
         case E_STATE_CHANGING_TO_ROAMING:
         {
-            GetNonConstCamera() = mCam.GetProducedCamera();
+            GetNonConstCamera() = mCam.GetCamera();
 
             ArbitratorState* lpRoamingState =
                 lrSharedInfo.mpStateContainer->GetState(ArbitratorStateContainer::E_STATE_ROAMING);

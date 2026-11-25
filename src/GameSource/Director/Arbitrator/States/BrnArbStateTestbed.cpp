@@ -113,7 +113,7 @@ namespace BrnDirector
                 mIceCam.GetBehaviour()->SetParameters(mpShotRef);
                 mIceCam.GetBehaviour()->SetTakeLooping(mbLoopIceMovies);
                 mIceCam.GetBehaviour()->SetUseCollisionPolicy(true);
-                mpCamera = &mIceCam.GetProducedCamera();
+                mpCamera = &mIceCam.GetCamera();
             }
             else if (mpParameters != 0)
             {
@@ -129,7 +129,7 @@ namespace BrnDirector
                     const Attrib::Gen::aftertouchcam lAftertouchCam(
                         lrSharedInfo.mpDirectorResourceManager->GetAfterTouchCam(), 0);
                     mAftertouch.GetBehaviour()->SetSourceShot(lAftertouchCam);
-                    mpCamera = &mAftertouch.GetProducedCamera();
+                    mpCamera = &mAftertouch.GetCamera();
                     break;
                 }
 
@@ -137,14 +137,14 @@ namespace BrnDirector
                     lpBehaviourManager->NewBehaviour<Camera::BehaviourAftertouchCrash>(mAftertouchCrash, this, 0, 1);
                     mAftertouchCrash.GetBehaviour()->SetParameters(
                         static_cast<const Camera::BehaviourAftertouchCrash::Parameters*>(mpParameters));
-                    mpCamera = &mAftertouchCrash.GetProducedCamera();
+                    mpCamera = &mAftertouchCrash.GetCamera();
                     break;
 
                 case Camera::eBehaviourRig:
                     lpBehaviourManager->NewBehaviour<Camera::BehaviourRig>(mRigCam, this, 0, 1);
                     mRigCam.GetBehaviour()->SetParameters(
                         static_cast<const Camera::BehaviourRig::Parameters*>(mpParameters));
-                    mpCamera = &mRigCam.GetProducedCamera();
+                    mpCamera = &mRigCam.GetCamera();
                     mRigCam.AttachTweaker();
                     break;
 
@@ -152,7 +152,7 @@ namespace BrnDirector
                     lpBehaviourManager->NewBehaviour<Camera::BehaviourHeliCam>(mHeliCam, this, 0, 1);
                     mHeliCam.GetBehaviour()->SetParameters(
                         static_cast<const Camera::BehaviourHeliCam::Parameters*>(mpParameters));
-                    mpCamera = &mHeliCam.GetProducedCamera();
+                    mpCamera = &mHeliCam.GetCamera();
                     break;
 
                 case Camera::eBehaviourBystanderCam:
@@ -161,35 +161,35 @@ namespace BrnDirector
                         static_cast<const Camera::BehaviourBystanderCam::Parameters*>(mpParameters));
                     mBystander.GetBehaviour()->SetTarget(
                         static_cast<EActiveRaceCarIndex>(lrSharedInfo.mePlayerActiveRaceCarIndex));
-                    mpCamera = &mBystander.GetProducedCamera();
+                    mpCamera = &mBystander.GetCamera();
                     break;
 
                 case Camera::eBehaviourGyroCam:
                     lpBehaviourManager->NewBehaviour<Camera::BehaviourGyroCam>(mGyroCam, this, 0, 1);
                     mGyroCam.GetBehaviour()->SetParameters(
                         static_cast<const Camera::BehaviourGyroCam::Parameters*>(mpParameters));
-                    mpCamera = &mGyroCam.GetProducedCamera();
+                    mpCamera = &mGyroCam.GetCamera();
                     break;
 
                 case Camera::eBehaviourGameplayExternal:
                     lpBehaviourManager->NewBehaviour<Camera::BehaviourGameplayExternal>(mGameplayExternal, this, 0, 1);
                     mGameplayExternal.GetBehaviour()->SetParameters(mpParameters);
                     mGameplayExternal.SetUpdatesDuringPause(true);
-                    mpCamera = &mGameplayExternal.GetProducedCamera();
+                    mpCamera = &mGameplayExternal.GetCamera();
                     break;
 
                 case Camera::eBehaviourFailsafe:
                     lpBehaviourManager->NewBehaviour<Camera::BehaviourFailsafe>(mFailsafe, this, 0, 1);
                     mFailsafe.GetBehaviour()->SetParameters(
                         static_cast<const Camera::BehaviourFailsafe::Parameters*>(mpParameters));
-                    mpCamera = &mFailsafe.GetProducedCamera();
+                    mpCamera = &mFailsafe.GetCamera();
                     break;
 
                 case Camera::eBehaviourPassengerCam:
                     lpBehaviourManager->NewBehaviour<Camera::BehaviourPassengerCam>(mPassenger, this, 0, 1);
                     mPassenger.GetBehaviour()->SetParameters(
                         static_cast<const Camera::BehaviourPassengerCam::Parameters*>(mpParameters));
-                    mpCamera = &mPassenger.GetProducedCamera();
+                    mpCamera = &mPassenger.GetCamera();
                     break;
 
                 case Camera::eBehaviourLooseAttachment:
@@ -198,14 +198,14 @@ namespace BrnDirector
                         static_cast<const Camera::BehaviourLooseAttachment::Parameters*>(mpParameters));
                     mLooseAttachment.GetBehaviour()->AttachTo(lrSharedInfo.mePlayerActiveRaceCarIndex);
                     mLooseAttachment.GetBehaviour()->GetImpactEffect().RegisterImpact(1.0f);
-                    mpCamera = &mLooseAttachment.GetProducedCamera();
+                    mpCamera = &mLooseAttachment.GetCamera();
                     break;
 
                 case Camera::eBehaviourFixedCam:
                     lpBehaviourManager->NewBehaviour<Camera::BehaviourFixedCam>(mFixedCam, this, 0, 1);
                     mFixedCam.GetBehaviour()->SetParameters(
                         static_cast<const Camera::BehaviourFixedCam::Parameters*>(mpParameters));
-                    mpCamera = &mFixedCam.GetProducedCamera();
+                    mpCamera = &mFixedCam.GetCamera();
                     mFixedCam.AttachTweaker();
                     break;
 
@@ -213,7 +213,7 @@ namespace BrnDirector
                     lpBehaviourManager->NewBehaviour<Camera::BehaviourRotateAboutVehicle>(mRotateAboutVehicleCam, this, 0, 1);
                     mRotateAboutVehicleCam.GetBehaviour()->SetParameters(
                         static_cast<const Camera::BehaviourRotateAboutVehicle::Parameters*>(mpParameters));
-                    mpCamera = &mRotateAboutVehicleCam.GetProducedCamera();
+                    mpCamera = &mRotateAboutVehicleCam.GetCamera();
                     break;
 
                 case Camera::BehaviourSpirallingDeathcam::eBehaviourSpirallingDeathcam:
@@ -221,14 +221,14 @@ namespace BrnDirector
                     mSpirallingDeathCam.GetBehaviour()->SetParameters(
                         static_cast<const Camera::BehaviourSpirallingDeathcam::Parameters*>(mpParameters));
                     mSpirallingDeathCam.GetBehaviour()->Start();
-                    mpCamera = &mSpirallingDeathCam.GetProducedCamera();
+                    mpCamera = &mSpirallingDeathCam.GetCamera();
                     break;
 
                 case KU_BEHAVIOUR_TYPE_ROAD_RUNNER:
                     lpBehaviourManager->NewBehaviour<Camera::BehaviourRoadRunner>(mRoadRunner, this, 0, 1);
                     mRoadRunner.GetBehaviour()->SetParameters(
                         static_cast<const Camera::BehaviourRoadRunner::Parameters*>(mpParameters));
-                    mpCamera = &mRoadRunner.GetProducedCamera();
+                    mpCamera = &mRoadRunner.GetCamera();
                     break;
 
                 default:

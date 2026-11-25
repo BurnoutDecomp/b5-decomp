@@ -265,7 +265,7 @@ namespace BrnDirector
         case E_STATE_CHANGING_TO_ROAMING:
         {
             // Copy the produced camera, then hand the frame to the roaming state.
-            GetNonConstCamera() = mAftertouch.GetProducedCamera();
+            GetNonConstCamera() = mAftertouch.GetCamera();
             ArbitratorStateContainer& lrContainer = *lrSharedInfo.mpStateContainer;
             if (lrContainer.GetState(ArbitratorStateContainer::E_STATE_ROAMING)->Prepare(lrSharedInfo))
             {
@@ -295,7 +295,7 @@ namespace BrnDirector
             Camera::BehaviourAftertouchCrash& lrBehaviour = *mAftertouch.GetBehaviour();
 
             // Copy the aftertouch behaviour's produced camera into ours, then mark dirty.
-            lrCamera = mAftertouch.GetProducedCamera();
+            lrCamera = mAftertouch.GetCamera();
             lrCamera.mState_uFlags |= KU_CAMERA_DIRTY_TRANSFORM;
 
             // ---- camera roll/tilt oscillation -------------------------------------------

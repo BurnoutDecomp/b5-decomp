@@ -42,6 +42,33 @@ namespace BrnDirector
 {
 namespace Camera
 {
+    // DecFIGS BrnPlayerInfo.h:54. One signed word identifying a slot in the
+    // BehaviourManager helper pool. ARTIST leaves the default index unset.
+    class BehaviourHelperIndex
+    {
+    public:
+        BehaviourHelperIndex() {}
+        BehaviourHelperIndex(s32 liIndex) : miIndex(liIndex) {}
+
+        const BehaviourHelperIndex& operator=(const BehaviourHelperIndex& lrOther)
+        {
+            miIndex = lrOther.miIndex;
+            return *this;
+        }
+
+        const BehaviourHelperIndex& operator=(s32 liIndex)
+        {
+            miIndex = liIndex;
+            return *this;
+        }
+
+        operator s32() const { return miIndex; }
+        bool operator==(const BehaviourHelperIndex& lrOther) const { return miIndex == lrOther.miIndex; }
+
+    private:
+        s32 miIndex;
+    };
+
     // RETIRED (2026-07-29): this header used to carry its own byte-identical copy of the
     // BrnDirector::Camera::AABBox storage stand-in, whose own comment already noted the
     // duplicate in Camera/Utils/CameraUtils.h. Keeping both meant any TU that reached this

@@ -140,11 +140,13 @@ namespace CgsLanguage
     const u8* LanguageManager::FindStringByHash(unsigned int luHash) const
     {
         const CgsUnicode::CgsUtf8* const* lppString = mStrings.Get(luHash);
-        if (!lppString)
-            return 0;
-
-        CGS_ASSERT(CgsUnicode::IsValidUtf8String(*lppString), "CgsUnicode::IsValidUtf8String( *luccp )");
-        return *lppString;
+        if (lppString != 0)
+        {
+            CGS_ASSERT_AT(CgsUnicode::IsValidUtf8String(*lppString), "CgsUnicode::IsValidUtf8String( *luccp )",
+                          CGS_ARTIST_LANGUAGE_MANAGER_FILE, 282);
+            return *lppString;
+        }
+        return 0;
     }
 
     // X360 0x828647F8 CgsLanguage::LanguageManager::AddString.
@@ -250,53 +252,34 @@ namespace CgsLanguage
         return true;
     }
 
-    // X360 0x828664B8 CgsLanguage::LanguageManager::LoadStringTable.
-    //
-    // Faithful decompile: assert the language id ("Language ID <id> is invalid" for ids >= 24;
-    // streamed on the console -- the StrStream text collapses to the plain string per project
-    // convention), unload any prior table, CAlloc the bulk static element block (one hash
-    // element per entry, mpStringElements), then insert every {hash, string} pair into
-    // mStrings, UTF-8-validating each string. Records the resource (mpResource), re-derives
-    // the formatting strings, picks the language's default font ("dfheic" only for language
-    // 16, the wide-glyph locale), and stamps meLanguage last (the X360 store order).
-    void LanguageManager::LoadStringTable(CgsResource::LanguageResource* lpResource)
+    void LanguageManager::LoadStringTable(const CgsResource::LanguageResource& resource)
     {
-        CGS_ASSERT(lpResource->meLanguageID < 0x18u, "Language ID is invalid");
-
+        CGS_ASSERT_STREAM_AT(resource.meLanguageID < E_LANGUAGE_TOTAL,
+                             "Language ID " << resource.meLanguageID << " is invalid",
+                             CGS_ARTIST_LANGUAGE_MANAGER_FILE, 547);
         UnloadStringTable();
-
-        // The X360 ctor leaves mStrings' bins at the uninitialised sentinel; the table must be
-        // live before the inserts (UnloadStringTable only re-Inits when a table was loaded).
-        if (mpResource == 0 && mpStringElements == 0)
-            mStrings.Init();
-
         mpStringElements = static_cast<HashIDStringArray::Element*>(
-            mpLanguageAllocator->CAlloc(lpResource->muSize,
-                                        static_cast<s32>(sizeof(HashIDStringArray::Element))));
-        if (lpResource->muSize)
-        {
-            const CgsResource::LanguageResourceHashEntry* lpEntries = lpResource->GetEntries();
-            for (u32 li = 0; li < lpResource->muSize; ++li)
-            {
-                const u8* lpcString = reinterpret_cast<const u8*>(
-                    static_cast<uintptr_t>(lpEntries[li].mpString));
-                CGS_ASSERT(CgsUnicode::IsValidUtf8String(lpcString),
-                           "CgsUnicode::IsValidUtf8String( resource.mpEntries[luIndex].GetString() )");
+            mpLanguageAllocator->CAlloc(resource.muSize, sizeof(HashIDStringArray::Element)));
 
-                HashIDStringArray::Element* lpElement = &mpStringElements[li];
-                lpElement->Set(static_cast<u32>(lpEntries[li].muHash), lpcString);
-                mStrings.Insert(lpElement);
-            }
+        for (u32 luIndex = 0; luIndex < resource.muSize; ++luIndex)
+        {
+            HashIDStringArray::Element* lpElement = &mpStringElements[luIndex];
+            CGS_ASSERT_AT(CgsUnicode::IsValidUtf8String(resource.mpEntries[luIndex].GetString()),
+                          "CgsUnicode::IsValidUtf8String( resource.mpEntries[luIndex].GetString() )",
+                          CGS_ARTIST_LANGUAGE_MANAGER_FILE, 559);
+            lpElement->Set(resource.mpEntries[luIndex].GetHash(), resource.mpEntries[luIndex].GetString());
+            mStrings.Insert(lpElement);
         }
 
-        mpResource = lpResource;
-        const u32 luLanguageId = lpResource->meLanguageID;
-        // The PER-LOCALE formatting strings, read out of the table just installed
-        // (`bl PrepareFormattingStrings` between the mpResource store and the font pick). See the
-        // function's banner: the English tables are NOT the defaults (currency ',', imperial units).
+        // DecFIGS gives the const input and mutable stored resource pointer.
+        mpResource = const_cast<CgsResource::LanguageResource*>(&resource);
+        const ELanguage leLanguage = static_cast<ELanguage>(resource.meLanguageID);
         PrepareFormattingStrings();
-        mpcDefaultFontName = (luLanguageId == 16u) ? "dfheic" : "NODEFAULTFONTSPECIFIED";
-        meLanguage = static_cast<CgsLanguage::ELanguage>(luLanguageId);
+        if (leLanguage != E_LANGUAGE_JAPANESE)
+            mpcDefaultFontName = "NODEFAULTFONTSPECIFIED";
+        else
+            mpcDefaultFontName = "dfheic";
+        meLanguage = static_cast<ELanguage>(resource.meLanguageID);
     }
 
     // X360 0x82862540 CgsLanguage::LanguageManager::UnloadStringTable.
@@ -314,20 +297,22 @@ namespace CgsLanguage
         mStrings.Init();
         mpResource = 0;
 
-        while (DynamicHashElementsList::Node* lpNode = mDynamicStringElements.GetHead())
+        DynamicHashElementsList::Node* lpNode = mDynamicStringElements.GetHead();
+        while (lpNode != 0)
         {
             HashIDStringArray::Element* lpElement = lpNode->mData;
-            mDynamicStringElements.RecycleNode(lpNode);
-            // The owned list heap-copied its string (AddString): free the copy, then the element.
+            mDynamicStringElements.RemoveHead();
+            lpNode = mDynamicStringElements.GetHead();
             mpLanguageAllocator->Free(const_cast<CgsUnicode::CgsUtf8*>(lpElement->GetValue()));
             mpLanguageAllocator->Free(lpElement);
         }
 
-        while (DynamicHashElementsList::Node* lpNode = mDynamicStringPointerElements.GetHead())
+        lpNode = mDynamicStringPointerElements.GetHead();
+        while (lpNode != 0)
         {
             HashIDStringArray::Element* lpElement = lpNode->mData;
-            mDynamicStringPointerElements.RecycleNode(lpNode);
-            // The pointer list stores the caller's string (caller-owned): free the element only.
+            mDynamicStringPointerElements.RemoveHead();
+            lpNode = mDynamicStringPointerElements.GetHead();
             mpLanguageAllocator->Free(lpElement);
         }
 
@@ -365,23 +350,22 @@ namespace CgsLanguage
     {
         mStrings.Remove(luHash);
 
+        bool lbRemoved = false;
         DynamicHashElementsList::Node* lpNode = mDynamicStringElements.GetHead();
-        while (lpNode)
+        while (lpNode != 0)
         {
             HashIDStringArray::Element* lpElement = lpNode->mData;
-            if (lpElement && lpElement->GetKey() == luHash)
+            if (lpElement != 0 && lpElement->GetKey() == luHash)
+            {
+                mDynamicStringElements.RecycleNode(lpNode);
+                mpLanguageAllocator->Free(const_cast<CgsUnicode::CgsUtf8*>(lpElement->GetValue()));
+                mpLanguageAllocator->Free(lpElement);
+                lbRemoved = true;
                 break;
+            }
             lpNode = static_cast<DynamicHashElementsList::Node*>(lpNode->GetNextNode());
         }
-
-        if (!lpNode)
-            return false;
-
-        HashIDStringArray::Element* lpElement = lpNode->mData;
-        mDynamicStringElements.RecycleNode(lpNode);
-        mpLanguageAllocator->Free(const_cast<CgsUnicode::CgsUtf8*>(lpElement->GetValue()));
-        mpLanguageAllocator->Free(lpElement);
-        return true;
+        return lbRemoved;
     }
 
     // X360 0x82864B30 CgsLanguage::LanguageManager::RemoveStringPointer.
@@ -409,22 +393,21 @@ namespace CgsLanguage
     {
         mStrings.Remove(luHash);
 
+        bool lbRemoved = false;
         DynamicHashElementsList::Node* lpNode = mDynamicStringPointerElements.GetHead();
-        while (lpNode)
+        while (lpNode != 0)
         {
             HashIDStringArray::Element* lpElement = lpNode->mData;
-            if (lpElement && lpElement->GetKey() == luHash)
+            if (lpElement != 0 && lpElement->GetKey() == luHash)
+            {
+                mDynamicStringPointerElements.RecycleNode(lpNode);
+                mpLanguageAllocator->Free(lpElement);
+                lbRemoved = true;
                 break;
+            }
             lpNode = static_cast<DynamicHashElementsList::Node*>(lpNode->GetNextNode());
         }
-
-        if (!lpNode)
-            return false;
-
-        HashIDStringArray::Element* lpElement = lpNode->mData;
-        mDynamicStringPointerElements.RecycleNode(lpNode);
-        mpLanguageAllocator->Free(lpElement);
-        return true;
+        return lbRemoved;
     }
 
     // X360 0x824434C0 CgsLanguage::LanguageManager::GetDefaultFont.
@@ -479,37 +462,32 @@ namespace CgsLanguage
     // English-default literal (used before a locale's string table has loaded its own
     // PrepareFormattingStrings values, and restored by UnloadStringTable), and set the metric
     // flag to true (the X360 build's fallback default).
-    bool LanguageManager::PrepareDefaultFormattingStrings()
+    void LanguageManager::PrepareDefaultFormattingStrings()
     {
         mrLargeDistanceConversion = 0.001f;
-        mrSmallDistanceConversion = 1.0f;
-
-        mpGeneralDecimalSeparator   = reinterpret_cast<const CgsUnicode::CgsUtf8*>(".");
+        mpGeneralDecimalSeparator = reinterpret_cast<const CgsUnicode::CgsUtf8*>(".");
+        mpGeneralCurrencySeparator = reinterpret_cast<const CgsUnicode::CgsUtf8*>(".");
         mpGeneralThousandsSeparator = reinterpret_cast<const CgsUnicode::CgsUtf8*>(",");
-        mpGeneralPercentage         = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1%");
-        mpGeneralXOverY             = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1/%2");
-        mpGeneralCurrencySeparator  = reinterpret_cast<const CgsUnicode::CgsUtf8*>(".");
-        mpGeneralCurrency           = reinterpret_cast<const CgsUnicode::CgsUtf8*>("$%1");
-
-        mpTimeFormatDate            = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1/%2/%3");
-        mpTimeFormatAll             = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1:%2:%3");
-        mpTimeFormatHrsMinsSecs     = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1:%2:%3");
-        mpTimeFormatMinsSecsHnds    = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1:%2.%3");
-        mpTimeFormatMinsSecs        = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1:%2");
-        mpTimeFormatSecsHnds        = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1.%2");
-        mpTimeFormatSecs            = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1s");
-        mpTimeFormatSecsLong        = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1 Seconds");
-        mpTimeFormatMinSecsMidText  = reinterpret_cast<const CgsUnicode::CgsUtf8*>("1 Min %1 Secs");
+        mrSmallDistanceConversion = 1.0f;
+        mpGeneralPercentage = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1%");
+        mpGeneralXOverY = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1/%2");
+        mpGeneralCurrency = reinterpret_cast<const CgsUnicode::CgsUtf8*>("$%1");
+        mpTimeFormatDate = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1/%2/%3");
+        mpTimeFormatAll = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1:%2:%3");
+        mpTimeFormatHrsMinsSecs = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1:%2:%3");
+        mpTimeFormatMinsSecsHnds = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1:%2.%3");
+        mpTimeFormatMinsSecs = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1:%2");
+        mpTimeFormatSecsHnds = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1.%2");
+        mpTimeFormatSecs = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1s");
+        mpTimeFormatSecsLong = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1 Seconds");
         mpTimeFormatMinsSecsMidText = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1 Mins %2 Secs");
-
-        mpDistanceFormatShort       = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1m");
-        mpDistanceFormatShortL      = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1 Meters");
-        mpDistanceFormatLong        = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1km");
-        mpDistanceFormatLongL       = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1 Kilometres");
-        mpDistanceFormatIsMetric    = reinterpret_cast<const CgsUnicode::CgsUtf8*>("1");
-
+        mpTimeFormatMinSecsMidText = reinterpret_cast<const CgsUnicode::CgsUtf8*>("1 Min %1 Secs");
+        mpDistanceFormatIsMetric = reinterpret_cast<const CgsUnicode::CgsUtf8*>("1");
+        mpDistanceFormatShort = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1m");
+        mpDistanceFormatShortL = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1 Meters");
+        mpDistanceFormatLong = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1km");
+        mpDistanceFormatLongL = reinterpret_cast<const CgsUnicode::CgsUtf8*>("%1 Kilometres");
         mbIsUsingMetricUnits = true;
-        return true;
     }
 
     namespace

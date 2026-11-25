@@ -215,7 +215,7 @@ void MomentStationaryCrash::Update(f32 /*lfTimeStep*/, void* lrBehaviourControll
         // fall through -- the console build runs the VALID body the same frame
 
     case E_STATE_VALID:
-        SetCamera(mIceCameraHandle.GetProducedCamera());
+        SetCamera(mIceCameraHandle.GetCamera());
         SetCanSwitchFromMeNow(false);
         GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_VALID);
 

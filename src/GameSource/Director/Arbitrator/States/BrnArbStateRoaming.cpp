@@ -367,7 +367,7 @@ namespace BrnDirector
                 // ProcessInputQueue case 146, E_ACTION_SHOWTIME_INTRO_START). When set the external
                 // chase cam is FORCED (the selection predicate is bypassed entirely -- 0x822645C8
                 // goes straight to container +0x04).
-                GetNonConstCamera() = lrContainer.mGameplayExternal.GetProducedCamera();
+                GetNonConstCamera() = lrContainer.mGameplayExternal.GetCamera();
             }
             else
             {
@@ -404,7 +404,7 @@ namespace BrnDirector
         // They cannot be written here yet because:
         //   * this header carries its OWN private nested BehaviourHandle<T> (a 5-field POD with
         //     no methods) rather than Camera::BehaviourHandle<T> -- the type the manager's
-        //     NewBehaviour<T> takes and the only one with GetProducedCamera/GetBehaviour/
+        //     NewBehaviour<T> takes and the only one with GetCamera/GetBehaviour/
         //     IsWaitingToPrepare/Release. De-forking that is its own job;
         //   * BehaviourInterpolate::Setup(f32, BehaviourHelperIndex, BehaviourHelperIndex,
         //     BehaviourManager*) and SharedCameraContainer::GetGameplayCameraHelperIndex have

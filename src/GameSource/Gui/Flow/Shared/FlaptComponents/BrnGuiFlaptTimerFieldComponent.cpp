@@ -110,7 +110,7 @@ namespace BrnGui
         mAptRef.mpMovieClipInst->ResetTimeline();
 
         // Dig the "TimerText_mc" sub-component's named text field out of the file.
-        AttachToTextFieldComponent(&mTimerTextField, lpcTextFieldName,
+        mTimerTextField = AttachToTextFieldComponent(lpcTextFieldName,
                                    "TimerText_mc", lacName, lFlaptFile);
 
         // Push the current band colour + formatted time to the field.

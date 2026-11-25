@@ -108,7 +108,7 @@ void RoadRuleShotComponent::SetupComponent(EPlayerState lePlayerState,
     mpcComponentState = KAPC_COMPONENT_STATE_FRAME_NAMES[meComponentState];
     SetState(mpcComponentState);   // the live vtable dispatch (slot 3)
 
-    mAptRef.FindChildMovieClipOnFrame(&mAnimationMovieClip, "anim_mc");
+    mAnimationMovieClip = mAptRef.FindChildMovieClipOnFrame("anim_mc");
 
     // ---- the gamertag well ----
     BrnFlapt::MovieClipRef lTextFieldComponent;
@@ -117,24 +117,24 @@ void RoadRuleShotComponent::SetupComponent(EPlayerState lePlayerState,
                    KAC_GAMERTAG_TEXTFIELD_MOVIECLIP_NAME, &lTextFieldComponent),
                "mAnimationMovieClip.TryFindChildComponentRecursively( KAC_GAMERTAG_TEXTFIELD_MOVIECLIP_NAME, &lTextFieldComponent )");   // :197 (non-gating)
     lTextFieldComponent.SetVisible(false);
-    lTextFieldComponent.GetParent(&lParent);
-    lParent.FindChildTextField(&mGamertagTextfield, KAC_GAMERTAG_TEXTFIELD_NAME);
+    lParent = lTextFieldComponent.GetParent();
+    mGamertagTextfield = lParent.FindChildTextField(KAC_GAMERTAG_TEXTFIELD_NAME);
 
     // ---- the road-name well ----
     CGS_ASSERT(mAnimationMovieClip.TryFindChildComponentRecursively(
                    KAC_ROAD_NAME_TEXTFIELD_MOVIECLIP_NAME, &lTextFieldComponent),
                "mAnimationMovieClip.TryFindChildComponentRecursively( KAC_ROAD_NAME_TEXTFIELD_MOVIECLIP_NAME, &lTextFieldComponent )");   // :202 (non-gating)
     lTextFieldComponent.SetVisible(false);
-    lTextFieldComponent.GetParent(&lParent);
-    lParent.FindChildTextField(&mRoadNameTextfield, KAC_ROAD_NAME_TEXTFIELD_NAME);
+    lParent = lTextFieldComponent.GetParent();
+    mRoadNameTextfield = lParent.FindChildTextField(KAC_ROAD_NAME_TEXTFIELD_NAME);
 
     // ---- the rule-state well ----
     CGS_ASSERT(mAnimationMovieClip.TryFindChildComponentRecursively(
                    KAC_RULE_STATE_TEXTFIELD_MOVIECLIP_NAME, &lTextFieldComponent),
                "mAnimationMovieClip.TryFindChildComponentRecursively( KAC_RULE_STATE_TEXTFIELD_MOVIECLIP_NAME, &lTextFieldComponent )");   // :207 (non-gating)
     lTextFieldComponent.SetVisible(false);
-    lTextFieldComponent.GetParent(&lParent);
-    lParent.FindChildTextField(&mRuleStateTextfield, KAC_RULE_STATE_TEXTFIELD_NAME);
+    lParent = lTextFieldComponent.GetParent();
+    mRuleStateTextfield = lParent.FindChildTextField(KAC_RULE_STATE_TEXTFIELD_NAME);
 
     // ---- the three lines (the varargs SetLocalisedText, one (value, format)
     // pair each; the rule-state line is the plain id form) ----

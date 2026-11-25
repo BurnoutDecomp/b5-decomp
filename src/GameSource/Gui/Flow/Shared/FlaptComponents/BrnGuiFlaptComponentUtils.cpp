@@ -10,10 +10,7 @@
 // component and dig the named text field out of its parent clip.
 //
 // CALLING CONVENTION (from the X360 asm):
-//  - AttachToTextFieldComponent returns a TextFieldRef by value; the sret slot is
-//    modeled, per this module's house style, as an explicit lpOutRef first parameter
-//    that is written and returned. The remaining params follow the DecFIGS order
-//    (lpcTextFieldName, lpcComponentName, lpcParentName, lFile).
+//  - AttachToTextFieldComponent returns a TextFieldRef by value using the Xbox ABI.
 //  - TryFindTextFieldFromMovieClip takes the search-root MovieClipRef BY VALUE (8
 //    bytes, one 64-bit GPR on the X360), then the recursive component name, the text
 //    field name, and the out TextFieldRef*; it returns bool.
@@ -42,8 +39,7 @@ namespace BrnGui
     // Resolve the apt movie component keyed "<lpcParentName>_<lpcComponentName>"
     // out of lFile, hide it, walk up to its parent clip, and return the parent's
     // child text field named lpcTextFieldName (by value into lpOutRef).
-    TextFieldRef* AttachToTextFieldComponent(TextFieldRef* lpOutRef,
-                                             const char* lpcTextFieldName,
+    TextFieldRef AttachToTextFieldComponent(const char* lpcTextFieldName,
                                              const char* lpcComponentName,
                                              const char* lpcParentName,
                                              const FileRef& lFile)
@@ -53,15 +49,13 @@ namespace BrnGui
                           "%s_%s", lpcParentName, lpcComponentName);
         lacComponentPath[KI_COMPONENT_PATH_LENGTH - 1] = '\0';
 
-        MovieClipRef lComponentClip;
-        lComponentClip = lFile.FindComponent(lacComponentPath);
+        MovieClipRef lComponentClip = lFile.FindComponent(lacComponentPath);
         lComponentClip.SetVisible(false);
 
-        MovieClipRef lParentClip;
-        lComponentClip.GetParent(&lParentClip);
+        MovieClipRef lParentClip = lComponentClip.GetParent();
 
-        lParentClip.FindChildTextField(lpOutRef, lpcTextFieldName);
-        return lpOutRef;
+        TextFieldRef lTextField = lParentClip.FindChildTextField(lpcTextFieldName);
+        return lTextField;
     }
 
     // @ 0x8241CEF8 ---------------------------------------------------------------
@@ -73,20 +67,13 @@ namespace BrnGui
                                        const char* lpcTextFieldName,
                                        TextFieldRef* lpOutTextFieldRef)
     {
-        CGS_ASSERT(lpOutTextFieldRef != 0, "lpOutTextFieldRef");
+        CGS_ASSERT_AT(lpOutTextFieldRef != 0, "lpOutTextFieldRef", "..\\..\\..\\GameSource\\Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptComponentUtils.cpp", 111);
 
         MovieClipRef lFoundClip;
         if (lMovieClip.TryFindChildComponentRecursively(lpcComponentName, &lFoundClip))
         {
-            MovieClipRef lParentClip;
-            lFoundClip.GetParent(&lParentClip);
-
-            TextFieldRef lTextField;
-            lParentClip.FindChildTextField(&lTextField, lpcTextFieldName);
-
-            lpOutTextFieldRef->mpTextFieldInstance = lTextField.mpTextFieldInstance;
-            lpOutTextFieldRef->mpParentMovie       = lTextField.mpParentMovie;
-            lpOutTextFieldRef->mpTransform         = lTextField.mpTransform;
+            MovieClipRef lParentClip = lFoundClip.GetParent();
+            *lpOutTextFieldRef = lParentClip.FindChildTextField(lpcTextFieldName);
             return true;
         }
 

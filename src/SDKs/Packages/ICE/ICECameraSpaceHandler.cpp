@@ -1,7 +1,7 @@
 #include "SDKs/Packages/ICE/ICECameraSpaceHandler.hpp"
 #include "rw/math/vpu/types.h"   // rw::math::vpu::Matrix44Affine / Vector3
 #include "GameSource/Director/Camera/Utils/CameraUtils.h"   // Utils::CreateLookAt (the two takedown spaces)
-#include "GameSource/Director/Camera/BrnBehaviourManager.h" // BehaviourHandle<>::GetProducedCamera (gameplay space)
+#include "GameSource/Director/Camera/BrnBehaviourManager.h" // BehaviourHandle<>::GetCamera (gameplay space)
 #include "GameSource/Director/Camera/Camera.h"              // Camera::GetTransform
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
 
@@ -186,7 +186,7 @@ const Matrix44Affine CameraSpaceHandler::GetTransformToWorld(eICESpace leSpace) 
         // on the returned pointer is Camera::GetTransform's own member offset, i.e. the
         // console spells this as two chained accessors, not one raw address.
         CGS_ASSERT(mpGamePlayCam != 0, "mpGamePlayCam != NULL");
-        lMatrix = mpGamePlayCam->GetProducedCamera().GetTransform();
+        lMatrix = mpGamePlayCam->GetCamera().GetTransform();
         break;
 
     case eICE_HEADING_SPACE:

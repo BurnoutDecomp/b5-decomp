@@ -102,9 +102,8 @@ void BoostMessageItem::Prepare(const char* lpacName, const BrnFlapt::FileRef& lr
 {
     BrnFlaptComponent::Prepare(lpacName, lrFile, 0);   // inlined on the X360
 
-    BrnFlapt::TextFieldRef lTextField;
-    mMessageText = *AttachToTextFieldComponent(
-        &lTextField, "BoostMessage_text", "MessageTextField", lpacName, lrFile);
+    mMessageText = AttachToTextFieldComponent(
+        "BoostMessage_text", "MessageTextField", lpacName, lrFile);
 
     mBackingRef = mAptRef.FindChildMovieClip("backing_mc");
 }

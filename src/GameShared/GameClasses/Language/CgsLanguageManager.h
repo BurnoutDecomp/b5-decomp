@@ -161,7 +161,7 @@ namespace CgsLanguage
         // ("dfheic" for language 16, the wide-glyph locale, else "NODEFAULTFONTSPECIFIED"),
         // and stamp meLanguage. ViewModule::ProcessIncomingLoadNotification (the
         // localised-text load notification) is its only X360 caller. Body in this TU.
-        void LoadStringTable(CgsResource::LanguageResource* lpResource);
+        void LoadStringTable(const CgsResource::LanguageResource& resource);
 
         // X360 0x82862540. Tear the loaded table down (only when one is loaded): re-Init the
         // mStrings bins, null mpResource, drain both dynamic-string lists back to their free
@@ -376,7 +376,7 @@ namespace CgsLanguage
 
         // X360 0x82860940. Stamps every per-locale format separator/template member with its
         // English-default literal and sets the metric flag to true. Body links from this TU.
-        bool PrepareDefaultFormattingStrings();
+        void PrepareDefaultFormattingStrings();
 
         // X360 0x82865B70 (DWARF CgsLanguageManager.h `void PrepareFormattingStrings()`). Reads the
         // per-locale separators, templates and the DISTANCE_FORMAT_ISMETRIC switch out of the LOADED

@@ -121,7 +121,7 @@ namespace detail
     // this class's handles are ALREADY the canonical Camera::BehaviourHandle<Camera::Behaviour>,
     // so the accessors were reachable by name the whole time. Read against that precedent, the
     // live-behaviour resolver is BehaviourHandle::GetBehaviour() and the produced-camera resolver
-    // is BehaviourHandle::GetProducedCamera(); the mounted sibling states (ArbStateDriveThru /
+    // is BehaviourHandle::GetCamera(); the mounted sibling states (ArbStateDriveThru /
     // ArbStateCrashing / ArbStateTakedown) already call both by name. Every call site below now
     // does the same, which cost the link nothing and closed two unresolved externals.
 
@@ -378,14 +378,14 @@ void MomentHardStop::Update(f32 lfTimeStep, void* lrBehaviourController,
             Camera::Behaviour* lpBehaviourA = mRigCameraHandleA.GetBehaviour();
             lpDebugLog->Append("Hardstop: Camera A failed", KU_LOG_COLOUR_RED);
             lpDebugLog->Append(lpBehaviourA->GetDebugParametersName(), 0xFFFFFFFFu);
-            mRigCameraHandleA.GetProducedCamera().GetValidityAccount().Print(*lpDebugLog);
+            mRigCameraHandleA.GetCamera().GetValidityAccount().Print(*lpDebugLog);
         }
         if (mRigCameraHandleB.GetBehaviour()->HasFailed())
         {
             Camera::Behaviour* lpBehaviourB = mRigCameraHandleB.GetBehaviour();
             lpDebugLog->Append("Hardstop: Camera B failed", KU_LOG_COLOUR_RED);
             lpDebugLog->Append(lpBehaviourB->GetDebugParametersName(), 0xFFFFFFFFu);
-            mRigCameraHandleB.GetProducedCamera().GetValidityAccount().Print(*lpDebugLog);
+            mRigCameraHandleB.GetCamera().GetValidityAccount().Print(*lpDebugLog);
         }
 
         if (mRigCameraHandleA.GetBehaviour()->HasFailed()
@@ -440,12 +440,12 @@ void MomentHardStop::Update(f32 lfTimeStep, void* lrBehaviourController,
         // force the ultra-slo-mo sim-time scale.
         if (mbUsingA)
         {
-            SetCamera(mRigCameraHandleA.GetProducedCamera());
+            SetCamera(mRigCameraHandleA.GetCamera());
             GetNonConstCamera().mShotSelectionInfo = mShotASelectionInfo;
         }
         else
         {
-            SetCamera(mRigCameraHandleB.GetProducedCamera());
+            SetCamera(mRigCameraHandleB.GetCamera());
             GetNonConstCamera().mShotSelectionInfo = mShotBSelectionInfo;
         }
         GetNonConstCamera().mState.SetFlag(Camera::CameraState::E_FLAG_HARD_STOP_CAMERA, true);

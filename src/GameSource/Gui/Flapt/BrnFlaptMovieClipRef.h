@@ -71,13 +71,10 @@ namespace BrnFlapt
 
         // FindChildMovieClipOnFrame @ 0x8246C8B0 : as above, restricted to the
         // children present on the instance's current frame.
-        MovieClipRef* FindChildMovieClipOnFrame(MovieClipRef* lpOutRef,
-                                                const char* lpcName) const;
+        MovieClipRef FindChildMovieClipOnFrame(const char* lpcName) const;
 
-        // FindChildTextField @ 0x8246C7F8 : hash lpcName, return a TextFieldRef
-        // onto the named child text field (by value into lpOutRef).
-        TextFieldRef* FindChildTextField(TextFieldRef* lpOutRef,
-                                         const char* lpcName) const;
+        // FindChildTextField @ 0x8246C7F8 returns the named child text-field handle.
+        TextFieldRef FindChildTextField(const char* lpcName) const;
 
         // TryFindChildComponentRecursively @ 0x8246C968 : depth-first search for
         // a named component; on a hit writes lpOutMovieClipRef and returns true.
@@ -86,7 +83,7 @@ namespace BrnFlapt
 
         // GetParent @ 0x8246CA40 : return a MovieClipRef onto the parent clip
         // (by value into lpOutRef).
-        MovieClipRef* GetParent(MovieClipRef* lpOutRef) const;
+        MovieClipRef GetParent() const;
 
         // ---- visibility ----------------------------------------------------
         // SetVisible @ 0x8246CA80 : set/clear the referenced clip instance's

@@ -10,10 +10,12 @@
 #include "BrnProfile.h"
 #include "GameSource/Gui/SaveLoad/BrnGuiSaveLoadProfileDLC1.h"   // BrnGuiSaveLoad::ProfileDLC1::IsDLCCarId (SplitArray DLC test)
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "GameShared/GameClasses/System/Timer/PS3/CgsDateAndTimePS3.h"
 #include "GameShared/GameClasses/Network/Texture/CgsNetworkTexture.h"
 #include "GameShared/GameClasses/Network/Utilities/CgsNetworkImageConverter.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint ([profile] selftest witness)
+#define CGS_ARTIST_FILE_CGSBITARRAY "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsBitArray.h"
 #define CGS_ARTIST_FILE_BRNPROFILE "..\\..\\..\\GameSource\\GameState/Progression/BrnProfile.h"
 #include <string.h>   // memset / memcpy
 #include <stdlib.h>   // getenv (the [profile] selftest gate)
@@ -580,9 +582,11 @@ bool Profile::HasPlayerSeenTrainingType(ETrainingType leTrainingType) const
 {
     CGS_ASSERT(leTrainingType >= 0 && leTrainingType < E_TRAINING_TYPE_COUNT,
                CGS_ASSERT_MESSAGE_AT("leTrainingType >= 0 && leTrainingType < E_TRAINING_TYPE_COUNT", CGS_ARTIST_FILE_BRNPROFILE, 2769));  // :2769
-    CGS_ASSERT(static_cast<u32>(leTrainingType) < 256u, "invalid index : ");      // CgsBitArray.h:203
+    const u32 luIndex = static_cast<u32>(leTrainingType);
+    CGS_ASSERT_STREAM_AT(luIndex < 256u, "invalid index : " << luIndex << " < " << 256u,
+                         CGS_ARTIST_FILE_CGSBITARRAY, 203);
 
-    return maHasPlayerSeenTraining.IsBitSet(static_cast<u32>(leTrainingType));
+    return maHasPlayerSeenTraining.IsBitSet(luIndex);
 }
 
 // ====================================================================================
@@ -870,13 +874,12 @@ s32 Profile::DeleteMugshot(BrnGameState::GameStateModuleIO::EImageGalleryType le
             liFileID = static_cast<s32>(lrInfo.mu16FileID);        // X360 `lhz 0x30` (zero-extended)
             lrGallery.Erase(static_cast<u32>(liImageIndex));
 
-            // X360 `mulli r11, r30, 0x3E8 ; subf r29, r11, r27` then the inlined
-            // BitArray<20>::SetBit. The bounds assert (CgsBitArray.h:222, whose streamed message
-            // is "Index: <n>, Number of bits: 20") is NOT a guard on the console -- the store is
-            // issued either way -- so it is kept as an assert, not an early-out.
-            const s32 liNewlyAvailableID = liFileID - 1000 * leMugshotType;
-            CGS_ASSERT(static_cast<u32>(liNewlyAvailableID) < 20u, "luIndex < NUMBITS");
-            maAvailableMugshotFileIDs[leMugshotType].SetBit(static_cast<u32>(liNewlyAvailableID));
+            const u32 luNewlyAvailableID = static_cast<u32>(liFileID - 1000 * leMugshotType);
+            CgsContainers::BitArray<20>& lrAvailableIDs = maAvailableMugshotFileIDs[leMugshotType];
+            CGS_ASSERT_STREAM_AT(luNewlyAvailableID < 20u,
+                                 "Index: " << luNewlyAvailableID << ", Number of bits: " << 20u,
+                                 CGS_ARTIST_FILE_CGSBITARRAY, 222);
+            lrAvailableIDs.SetBit(luNewlyAvailableID);
         }
     }
 
@@ -886,50 +889,48 @@ s32 Profile::DeleteMugshot(BrnGameState::GameStateModuleIO::EImageGalleryType le
 // ====================================================================================
 // Profile::AddDriveThru  @ 0x82374DB8
 // Record a discovered drive-thru of the given category. When the category's set reaches
-// its capacity (every drive-thru of that kind found) the matching trophy-unlock id is
-// returned; otherwise 0 (E_UNLOCKTYPE_NONE). The X360 switch covers the five drive-thru
-// GenericRegion types (0..4); anything else fires the streamed assert. The literal
-// unlock ids 17..20 are TrophyUnlockData::UnlockType values (enumerator names
-// unrecovered; only NONE=0/COUNT=35 are committed).
+// its capacity, return the corresponding trophy type. Car parks record discovery
+// without awarding a trophy.
 // ====================================================================================
-s32 Profile::AddDriveThru(CgsID lId, BrnTrigger::GenericRegion::Type leType)
+TrophyUnlockData::UnlockType Profile::AddDriveThru(CgsID lId, BrnTrigger::GenericRegion::Type leType)
 {
     switch (leType)
     {
     case BrnTrigger::GenericRegion::E_TYPE_JUNK_YARD:
         mJunkYardsDriveThruSet.Insert(lId);
         if (mJunkYardsDriveThruSet.GetLength() == 5)
-            return 18;   // all junk yards found
-        break;
-
-    case BrnTrigger::GenericRegion::E_TYPE_GAS_STATION:
-        mGasStationsDriveThruSet.Insert(lId);
-        if (mGasStationsDriveThruSet.GetLength() == 14)
-            return 17;   // all gas stations found
+            return TrophyUnlockData::E_UNLOCKTYPE_FIND_ALL_JUNKYARDS;
         break;
 
     case BrnTrigger::GenericRegion::E_TYPE_BODY_SHOP:
         mBodyShopsDriveThruSet.Insert(lId);
         if (mBodyShopsDriveThruSet.GetLength() == 11)
-            return 20;   // all body shops found
+            return TrophyUnlockData::E_UNLOCKTYPE_FIND_ALL_BODYSHOPS;
         break;
 
     case BrnTrigger::GenericRegion::E_TYPE_PAINT_SHOP:
         mPaintShopsDriveThruSet.Insert(lId);
         if (mPaintShopsDriveThruSet.GetLength() == 5)
-            return 19;   // all paint shops found
+            return TrophyUnlockData::E_UNLOCKTYPE_FIND_ALL_PAINTSHOPS;
+        break;
+
+    case BrnTrigger::GenericRegion::E_TYPE_GAS_STATION:
+        mGasStationsDriveThruSet.Insert(lId);
+        if (mGasStationsDriveThruSet.GetLength() == 14)
+            return TrophyUnlockData::E_UNLOCKTYPE_FIND_ALL_GASSTATIONS;
         break;
 
     case BrnTrigger::GenericRegion::E_TYPE_CAR_PARK:
         mCarParksDriveThruSet.Insert(lId);
-        return 0;
+        return TrophyUnlockData::E_UNLOCKTYPE_NONE;
 
     default:
-        CGS_ASSERT(false, "We must know what type of drive through this is! Right now we don't\n");
+        CGS_ASSERT_STREAM_AT(false, "We must know what type of drive through this is! Right now we don't\n",
+                             CGS_ARTIST_FILE_BRNPROFILE, 2436);
         break;
     }
 
-    return 0;
+    return TrophyUnlockData::E_UNLOCKTYPE_NONE;
 }
 
 // ====================================================================================
@@ -954,20 +955,21 @@ bool Profile::IsDriveThruDiscoverd(CgsID lId, BrnTrigger::GenericRegion::Type le
     case BrnTrigger::GenericRegion::E_TYPE_JUNK_YARD:
         return mJunkYardsDriveThruSet.Contains(lId);
 
-    case BrnTrigger::GenericRegion::E_TYPE_GAS_STATION:
-        return mGasStationsDriveThruSet.Contains(lId);
-
     case BrnTrigger::GenericRegion::E_TYPE_BODY_SHOP:
         return mBodyShopsDriveThruSet.Contains(lId);
 
     case BrnTrigger::GenericRegion::E_TYPE_PAINT_SHOP:
         return mPaintShopsDriveThruSet.Contains(lId);
 
+    case BrnTrigger::GenericRegion::E_TYPE_GAS_STATION:
+        return mGasStationsDriveThruSet.Contains(lId);
+
     case BrnTrigger::GenericRegion::E_TYPE_CAR_PARK:
         return mCarParksDriveThruSet.Contains(lId);
 
     default:
-        CGS_ASSERT(false, "We must know what type of drive through this is! Right now we don't\n");
+        CGS_ASSERT_STREAM_AT(false, "We must know what type of drive through this is! Right now we don't\n",
+                             CGS_ARTIST_FILE_BRNPROFILE, 2587);
         break;
     }
 
@@ -990,20 +992,21 @@ s32 Profile::GetNumDriveThrusDiscovered(BrnTrigger::GenericRegion::Type leType) 
     case BrnTrigger::GenericRegion::E_TYPE_JUNK_YARD:
         return static_cast<s32>(mJunkYardsDriveThruSet.GetLength());
 
-    case BrnTrigger::GenericRegion::E_TYPE_GAS_STATION:
-        return static_cast<s32>(mGasStationsDriveThruSet.GetLength());
-
     case BrnTrigger::GenericRegion::E_TYPE_BODY_SHOP:
         return static_cast<s32>(mBodyShopsDriveThruSet.GetLength());
 
     case BrnTrigger::GenericRegion::E_TYPE_PAINT_SHOP:
         return static_cast<s32>(mPaintShopsDriveThruSet.GetLength());
 
+    case BrnTrigger::GenericRegion::E_TYPE_GAS_STATION:
+        return static_cast<s32>(mGasStationsDriveThruSet.GetLength());
+
     case BrnTrigger::GenericRegion::E_TYPE_CAR_PARK:
         return static_cast<s32>(mCarParksDriveThruSet.GetLength());
 
     default:
-        CGS_ASSERT(false, "We must know what type of drive through this is! Right now we don't\n");
+        CGS_ASSERT_STREAM_AT(false, "We must know what type of drive through this is! Right now we don't\n",
+                             CGS_ARTIST_FILE_BRNPROFILE, 2538);
         break;
     }
 
@@ -1471,70 +1474,80 @@ void Profile::RepairUnlockedVehicle(CgsID lCarId)
 // ====================================================================================
 // Profile::RecordPropHit  @ 0x82361C48
 // Set the hit bit for one prop (bit index = 600 * zone + prop) in the 300000-bit prop
-// bit array. The two range asserts stream "Zone Index: <z> Prop index: <p>\n" on the
-// X360 (collapsed to the leading rodata fragment per project convention); the third is
-// the BitArray SetBit guard (CgsBitArray.h:222).
+// bit array. ARTIST checks both coordinates, then the computed BitArray index.
 // ====================================================================================
 void Profile::RecordPropHit(s32 liZoneIndex, s32 liPropIndex)
 {
-    CGS_ASSERT(liZoneIndex < 500, "Zone Index: ");   // BrnProfile.h:3137
-    CGS_ASSERT(liPropIndex < 600, "Zone Index: ");   // BrnProfile.h:3138
+    CGS_ASSERT_STREAM_AT(liZoneIndex < 500, "Zone Index: " << liZoneIndex << " Prop index: " << liPropIndex << "\n",
+                         CGS_ARTIST_FILE_BRNPROFILE, 3137);
+    CGS_ASSERT_STREAM_AT(liPropIndex < 600, "Zone Index: " << liZoneIndex << " Prop index: " << liPropIndex << "\n",
+                         CGS_ARTIST_FILE_BRNPROFILE, 3138);
 
     const u32 luBitIndex = static_cast<u32>(600 * liZoneIndex + liPropIndex);
-    CGS_ASSERT(luBitIndex < 300000u, "Index: ");     // CgsBitArray.h:222 SetBit guard
-    mabHitPropBitArray.SetBit(luBitIndex);
+    HitPropsBitArray& lrHitProps = mabHitPropBitArray;
+    CGS_ASSERT_STREAM_AT(luBitIndex < 300000u, "Index: " << luBitIndex << ", Number of bits: " << 300000u,
+                         CGS_ARTIST_FILE_CGSBITARRAY, 222);
+    lrHitProps.SetBit(luBitIndex);
 }
 
 // ====================================================================================
 // Profile::GetSeenAllEventTypeWonMessage  @ 0x82361F58
-// leModeType is BrnProgression::RaceEventData::EModeType (not yet homed; the X360
-// compares against E_MODE_COUNT == 6).
+// Reads the persisted completion-message flag for an authored race-event mode.
 // ====================================================================================
-bool Profile::GetSeenAllEventTypeWonMessage(s32 leModeType) const
+bool Profile::GetSeenAllEventTypeWonMessage(RaceEventData::EModeType leModeType) const
 {
-    CGS_ASSERT(leModeType > -1, CGS_ASSERT_MESSAGE_AT("leModeType > RaceEventData::E_MODE_INVALID", CGS_ARTIST_FILE_BRNPROFILE, 3320));   // :3320
-    CGS_ASSERT(leModeType < 6,  CGS_ASSERT_MESSAGE_AT("leModeType < RaceEventData::E_MODE_COUNT", CGS_ARTIST_FILE_BRNPROFILE, 3321));     // :3321
-    CGS_ASSERT(static_cast<u32>(leModeType) < 6u, "invalid index : < 6");        // CgsBitArray.h:203 Get guard
+    CGS_ASSERT(leModeType > RaceEventData::E_MODE_INVALID, CGS_ASSERT_MESSAGE_AT("leModeType > RaceEventData::E_MODE_INVALID", CGS_ARTIST_FILE_BRNPROFILE, 3320));   // :3320
+    CGS_ASSERT(leModeType < RaceEventData::E_MODE_COUNT, CGS_ASSERT_MESSAGE_AT("leModeType < RaceEventData::E_MODE_COUNT", CGS_ARTIST_FILE_BRNPROFILE, 3321));     // :3321
+    const u32 luIndex = static_cast<u32>(leModeType);
+    CGS_ASSERT_STREAM_AT(luIndex < 6u, "invalid index : " << luIndex << " < " << 6u,
+                         CGS_ARTIST_FILE_CGSBITARRAY, 203);
 
-    return mSeenCompleteAllEventTypeArray.IsBitSet(static_cast<u32>(leModeType));
+    return mSeenCompleteAllEventTypeArray.IsBitSet(luIndex);
 }
 
 // ====================================================================================
 // Profile::SetSeenAllEventTypeWonMessage  @ 0x823620A8
 // ====================================================================================
-void Profile::SetSeenAllEventTypeWonMessage(s32 leModeType)
+void Profile::SetSeenAllEventTypeWonMessage(RaceEventData::EModeType leModeType)
 {
-    CGS_ASSERT(leModeType > -1, CGS_ASSERT_MESSAGE_AT("leModeType > RaceEventData::E_MODE_INVALID", CGS_ARTIST_FILE_BRNPROFILE, 3336));   // :3336
-    CGS_ASSERT(leModeType < 6,  CGS_ASSERT_MESSAGE_AT("leModeType < RaceEventData::E_MODE_COUNT", CGS_ARTIST_FILE_BRNPROFILE, 3337));     // :3337
-    CGS_ASSERT(static_cast<u32>(leModeType) < 6u, "Index: ");                    // CgsBitArray.h:222 SetBit guard
+    CGS_ASSERT(leModeType > RaceEventData::E_MODE_INVALID, CGS_ASSERT_MESSAGE_AT("leModeType > RaceEventData::E_MODE_INVALID", CGS_ARTIST_FILE_BRNPROFILE, 3336));   // :3336
+    CGS_ASSERT(leModeType < RaceEventData::E_MODE_COUNT, CGS_ASSERT_MESSAGE_AT("leModeType < RaceEventData::E_MODE_COUNT", CGS_ARTIST_FILE_BRNPROFILE, 3337));     // :3337
+    CgsContainers::BitArray<6u>& lrFlags = mSeenCompleteAllEventTypeArray;
+    const u32 luIndex = static_cast<u32>(leModeType);
+    CGS_ASSERT_STREAM_AT(luIndex < 6u, "Index: " << luIndex << ", Number of bits: " << 6u,
+                         CGS_ARTIST_FILE_CGSBITARRAY, 222);
 
-    mSeenCompleteAllEventTypeArray.SetBit(static_cast<u32>(leModeType));
+    lrFlags.SetBit(luIndex);
 }
 
 // ====================================================================================
 // Profile::GetSeenTrophyUnlockSequence  @ 0x82475A30
-// leUnlockType is BrnProgression::TrophyUnlockData::UnlockType (DWARF); only NONE=0 /
-// COUNT=35 are committed, so the s32 underlying value is taken.
+// Reads the persisted unlock-sequence flag for the supplied trophy.
 // ====================================================================================
-bool Profile::GetSeenTrophyUnlockSequence(s32 leUnlockType) const
+bool Profile::GetSeenTrophyUnlockSequence(TrophyUnlockData::UnlockType leUnlockType) const
 {
-    CGS_ASSERT(leUnlockType > 0,  CGS_ASSERT_MESSAGE_AT("leUnlockType > BrnProgression::TrophyUnlockData::E_UNLOCKTYPE_NONE", CGS_ARTIST_FILE_BRNPROFILE, 3287));  // :3287
-    CGS_ASSERT(leUnlockType < 35, CGS_ASSERT_MESSAGE_AT("leUnlockType < BrnProgression::TrophyUnlockData::E_UNLOCKTYPE_COUNT", CGS_ARTIST_FILE_BRNPROFILE, 3288)); // :3288
-    CGS_ASSERT(static_cast<u32>(leUnlockType) < 35u, "invalid index : < 35");    // CgsBitArray.h:203 Get guard
+    CGS_ASSERT(leUnlockType > TrophyUnlockData::E_UNLOCKTYPE_NONE, CGS_ASSERT_MESSAGE_AT("leUnlockType > BrnProgression::TrophyUnlockData::E_UNLOCKTYPE_NONE", CGS_ARTIST_FILE_BRNPROFILE, 3287));  // :3287
+    CGS_ASSERT(leUnlockType < TrophyUnlockData::E_UNLOCKTYPE_COUNT, CGS_ASSERT_MESSAGE_AT("leUnlockType < BrnProgression::TrophyUnlockData::E_UNLOCKTYPE_COUNT", CGS_ARTIST_FILE_BRNPROFILE, 3288)); // :3288
+    const u32 luIndex = static_cast<u32>(leUnlockType);
+    CGS_ASSERT_STREAM_AT(luIndex < 35u, "invalid index : " << luIndex << " < " << 35u,
+                         CGS_ARTIST_FILE_CGSBITARRAY, 203);
 
-    return mSeenTrophyAwardBitArray.IsBitSet(static_cast<u32>(leUnlockType));
+    return mSeenTrophyAwardBitArray.IsBitSet(luIndex);
 }
 
 // ====================================================================================
 // Profile::SetSeenTrophyUnlockSequence  @ 0x824BAA30
 // ====================================================================================
-void Profile::SetSeenTrophyUnlockSequence(s32 leUnlockType)
+void Profile::SetSeenTrophyUnlockSequence(TrophyUnlockData::UnlockType leUnlockType)
 {
-    CGS_ASSERT(leUnlockType > 0,  CGS_ASSERT_MESSAGE_AT("leUnlockType > BrnProgression::TrophyUnlockData::E_UNLOCKTYPE_NONE", CGS_ARTIST_FILE_BRNPROFILE, 3303));  // :3303
-    CGS_ASSERT(leUnlockType < 35, CGS_ASSERT_MESSAGE_AT("leUnlockType < BrnProgression::TrophyUnlockData::E_UNLOCKTYPE_COUNT", CGS_ARTIST_FILE_BRNPROFILE, 3304)); // :3304
-    CGS_ASSERT(static_cast<u32>(leUnlockType) < 35u, "Index: ");                 // CgsBitArray.h:222 SetBit guard
+    CGS_ASSERT(leUnlockType > TrophyUnlockData::E_UNLOCKTYPE_NONE, CGS_ASSERT_MESSAGE_AT("leUnlockType > BrnProgression::TrophyUnlockData::E_UNLOCKTYPE_NONE", CGS_ARTIST_FILE_BRNPROFILE, 3303));  // :3303
+    CGS_ASSERT(leUnlockType < TrophyUnlockData::E_UNLOCKTYPE_COUNT, CGS_ASSERT_MESSAGE_AT("leUnlockType < BrnProgression::TrophyUnlockData::E_UNLOCKTYPE_COUNT", CGS_ARTIST_FILE_BRNPROFILE, 3304)); // :3304
+    CgsContainers::BitArray<35u>& lrFlags = mSeenTrophyAwardBitArray;
+    const u32 luIndex = static_cast<u32>(leUnlockType);
+    CGS_ASSERT_STREAM_AT(luIndex < 35u, "Index: " << luIndex << ", Number of bits: " << 35u,
+                         CGS_ARTIST_FILE_CGSBITARRAY, 222);
 
-    mSeenTrophyAwardBitArray.SetBit(static_cast<u32>(leUnlockType));
+    lrFlags.SetBit(luIndex);
 }
 
 // ====================================================================================
@@ -1545,9 +1558,12 @@ void Profile::SetTrainingAlreadySeen(ETrainingType leTrainingType)
 {
     CGS_ASSERT(leTrainingType >= 0 && leTrainingType < E_TRAINING_TYPE_COUNT,
                CGS_ASSERT_MESSAGE_AT("leTrainingType >= 0 && leTrainingType < E_TRAINING_TYPE_COUNT", CGS_ARTIST_FILE_BRNPROFILE, 2761));  // :2761
-    CGS_ASSERT(static_cast<u32>(leTrainingType) < 256u, "Index: ");               // CgsBitArray.h:222 SetBit guard
+    CgsContainers::BitArray<256u>& lrFlags = maHasPlayerSeenTraining;
+    const u32 luIndex = static_cast<u32>(leTrainingType);
+    CGS_ASSERT_STREAM_AT(luIndex < 256u, "Index: " << luIndex << ", Number of bits: " << 256u,
+                         CGS_ARTIST_FILE_CGSBITARRAY, 222);
 
-    maHasPlayerSeenTraining.SetBit(static_cast<u32>(leTrainingType));
+    lrFlags.SetBit(luIndex);
 }
 
 // ====================================================================================
@@ -1660,7 +1676,7 @@ void Profile::RemoveTargetEventScore(CgsID lEventId)
 {
     u32 luIndex = 0;
     while (luIndex < maTargetEventScores.GetLength() &&
-           maTargetEventScores[luIndex].mEventId != lEventId)
+           lEventId != maTargetEventScores[luIndex].mEventId)
     {
         ++luIndex;
     }
@@ -1671,7 +1687,7 @@ void Profile::RemoveTargetEventScore(CgsID lEventId)
     }
     else
     {
-        CGS_ASSERT(false, "Tried to remove an event target that doesn't exist\n");   // BrnProfile.cpp:1641
+        CGS_ASSERT_STREAM_AT(false, "Tried to remove an event target that doesn't exist\n", CGS_ARTIST_FILE, 1641);
     }
 }
 
@@ -1686,33 +1702,35 @@ void Profile::SetEventScoreToUpload(CgsID lEventId, s32 liScore, GsmIO::EGameMod
 {
     BrnNetwork::LocalEventScoreUploadData* lpEventScoreToUpload = 0;
 
-    u32 luIndex = 0;
-    while (luIndex < maEventScoresToUpload.GetLength())
+    for (u32 luIndex = 0; luIndex < maEventScoresToUpload.GetLength(); ++luIndex)
     {
-        if (maEventScoresToUpload[luIndex].mu64EventID == lEventId)
+        if (lEventId == maEventScoresToUpload[luIndex].mu64EventID)
         {
             lpEventScoreToUpload = &maEventScoresToUpload[luIndex];
-            break;
-        }
-        ++luIndex;
-    }
+            switch (leGameMode)
+            {
+            default:
+                CGS_ASSERT_STREAM_AT(false,
+                    "Trying to set score to upload for event without leaderboard: "
+                        << static_cast<s32>(leGameMode) << "\n",
+                    CGS_ARTIST_FILE, 1698);
+                break;
 
-    if (lpEventScoreToUpload)
-    {
-        if (leGameMode == GsmIO::E_MODE_BURNING_ROUTE)
-        {
-            if (liScore >= static_cast<s32>(lpEventScoreToUpload->muScore))
-                return;   // times: only a LOWER score replaces the pending upload
-        }
-        else if (leGameMode == GsmIO::E_MODE_STUNT_ATTACK)
-        {
-            if (liScore <= static_cast<s32>(lpEventScoreToUpload->muScore))
-                return;   // points: only a HIGHER score replaces the pending upload
-        }
-        else
-        {
-            // X360 streams "Trying to set score to upload for event without leaderboard: <mode>\n".
-            CGS_ASSERT(false, "Trying to set score to upload for event without leaderboard: ");   // BrnProfile.cpp:1698
+            case GsmIO::E_MODE_STUNT_ATTACK:
+                if (liScore <= static_cast<s32>(lpEventScoreToUpload->muScore))
+                {
+                    return;
+                }
+                break;
+
+            case GsmIO::E_MODE_BURNING_ROUTE:
+                if (liScore >= static_cast<s32>(lpEventScoreToUpload->muScore))
+                {
+                    return;
+                }
+                break;
+            }
+            break;
         }
     }
 
@@ -1736,7 +1754,7 @@ void Profile::RemoveEventScoreToUpload(CgsID lEventId)
 {
     u32 luIndex = 0;
     while (luIndex < maEventScoresToUpload.GetLength() &&
-           maEventScoresToUpload[luIndex].mu64EventID != lEventId)
+           lEventId != maEventScoresToUpload[luIndex].mu64EventID)
     {
         ++luIndex;
     }
@@ -1747,7 +1765,7 @@ void Profile::RemoveEventScoreToUpload(CgsID lEventId)
     }
     else
     {
-        CGS_ASSERT(false, "Tried to remove an upload event score that doesn't exist\n");   // BrnProfile.cpp:1751
+        CGS_ASSERT_STREAM_AT(false, "Tried to remove an upload event score that doesn't exist\n", CGS_ARTIST_FILE, 1751);
     }
 }
 

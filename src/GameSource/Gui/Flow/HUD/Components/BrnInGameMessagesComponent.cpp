@@ -679,7 +679,7 @@ namespace
 
         mAptRef.GotoAndPlayLabel(lpMessage->macMessageStyle);
 
-        mAptRef.FindChildMovieClipOnFrame(&mAnimationRef, "SpecificMessage_mc");
+        mAnimationRef = mAptRef.FindChildMovieClipOnFrame("SpecificMessage_mc");
         mAnimationRef.GotoAndPlayLabel(lpcAnimName);
         mIconRef = mAnimationRef.FindChildMovieClip("Icon_mc");
 
@@ -692,8 +692,8 @@ namespace
             lFound.SetVisible(false);
 
             BrnFlapt::MovieClipRef lParent;
-            lFound.GetParent(&lParent);
-            lParent.FindChildTextField(&maTextFields[liIter], KAPC_STRING_FIELD_NAMES[liIter]);
+            lParent = lFound.GetParent();
+            maTextFields[liIter] = lParent.FindChildTextField(KAPC_STRING_FIELD_NAMES[liIter]);
 
             if (liIter == 0)
                 maTextFields[0].SetAutoSize(true);

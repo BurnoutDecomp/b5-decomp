@@ -189,7 +189,7 @@ namespace CgsContainers
             while (lpHead)
             {
                 Node* lpNode = static_cast<Node*>(lpHead);
-                if (lpNode->mData.mKey == lKey)
+                if (lKey == lpNode->mData.mKey)
                     return lpNode;
                 lpHead = lpHead->GetNextNode();
             }
@@ -201,4 +201,15 @@ namespace CgsContainers
         // :202 - set true by Init().
         bool mbInitialised;
     };
+
+    // The localization table's sorted Insert and native Get and Remove
+    // have out-of-line providers in CgsHashTableUtf8Ptr13.cpp.
+    template<>
+    void HashTable<u32, const u8*, 13>::Insert(HashTable<u32, const u8*, 13>::Element* lpElement);
+
+    template<>
+    const u8* const* HashTable<u32, const u8*, 13>::Get(u32 luKey) const;
+
+    template<>
+    void HashTable<u32, const u8*, 13>::Remove(u32 luKey);
 }

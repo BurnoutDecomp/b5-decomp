@@ -404,7 +404,7 @@ namespace BrnDirector
             // Drive the camera from the player "show" produced camera. When the show time has
             // elapsed, set up the rival movie + interpolate to it (MOVING_TO_RIVAL); otherwise
             // keep the camera behaviour-driven.
-            lrCamera = mPlayerBehaviourHandle.GetProducedCamera();
+            lrCamera = mPlayerBehaviourHandle.GetCamera();
 
             if (mfTimeInState < mfTimeToSpendLookingAtPlayer)
             {
@@ -420,8 +420,8 @@ namespace BrnDirector
                 // the rival + player handles and latches Setup over them; expressed
                 // here through the BehaviourInterpolate named-setup API.)
                 SetupInterpolator(lrSharedInfo,
-                    maRivalBehaviourHandle[muRivalMovieOffset - 1].GetProducedCamera(),
-                    mPlayerBehaviourHandle.GetProducedCamera());
+                    maRivalBehaviourHandle[muRivalMovieOffset - 1].GetCamera(),
+                    mPlayerBehaviourHandle.GetCamera());
 
                 mfTimeInState = 0.0f;   // +0x214 = 0
                 meState       = E_STATE_MOVING_TO_RIVAL;   // +0x220 = 5
@@ -441,13 +441,13 @@ namespace BrnDirector
 
             if (lbInterpolatorActive)
             {
-                lrCamera = mInterpolator.GetProducedCamera();
+                lrCamera = mInterpolator.GetCamera();
                 mfTimeInState = 0.0f;   // +0x214 = 0
                 meState = E_STATE_MOVING_TO_RIVAL;   // re-enter the move (+0x220 = 5)
             }
             else
             {
-                lrCamera = maRivalBehaviourHandle[muRivalMovieOffset - 1].GetProducedCamera();
+                lrCamera = maRivalBehaviourHandle[muRivalMovieOffset - 1].GetCamera();
             }
 
             if (lbInterpolatorActive || mfTimeInState < mfTimeToSpendLookingAtRival)
@@ -481,8 +481,8 @@ namespace BrnDirector
 
                 // Blend from the player "show" back over the last rival "show".
                 SetupInterpolator(lrSharedInfo,
-                    mPlayerBehaviourHandle.GetProducedCamera(),
-                    maRivalBehaviourHandle[muRivalMovieOffset - 1].GetProducedCamera());
+                    mPlayerBehaviourHandle.GetCamera(),
+                    maRivalBehaviourHandle[muRivalMovieOffset - 1].GetCamera());
 
                 // Release the rival behaviour.
                 maRivalBehaviourHandle[muRivalMovieOffset - 1].Release();
@@ -497,8 +497,8 @@ namespace BrnDirector
 
                 // Blend from the newly-set-up rival "show" over the previous one.
                 SetupInterpolator(lrSharedInfo,
-                    maRivalBehaviourHandle[muRivalMovieOffset - 1].GetProducedCamera(),
-                    maRivalBehaviourHandle[muRivalMovieOffset - 2].GetProducedCamera());
+                    maRivalBehaviourHandle[muRivalMovieOffset - 1].GetCamera(),
+                    maRivalBehaviourHandle[muRivalMovieOffset - 2].GetCamera());
 
                 // Release the previous rival behaviour.
                 maRivalBehaviourHandle[muRivalMovieOffset - 2].Release();
@@ -513,7 +513,7 @@ namespace BrnDirector
             // Drive the camera from the interpolator. When the interpolator finishes, latch the
             // rival being shown + its show time on the shared info, release the interpolator and
             // advance to SHOWING_RIVAL.
-            lrCamera = mInterpolator.GetProducedCamera();
+            lrCamera = mInterpolator.GetCamera();
 
             if (mInterpolator.GetBehaviour()->HasFinished())
             {
@@ -543,7 +543,7 @@ namespace BrnDirector
         {
             // Drive the camera from the interpolator. When it finishes, advance to
             // SHOWING_PLAYER_AGAIN.
-            lrCamera = mInterpolator.GetProducedCamera();
+            lrCamera = mInterpolator.GetCamera();
 
             if (mInterpolator.GetBehaviour()->HasFinished())
             {
@@ -561,7 +561,7 @@ namespace BrnDirector
             // Drive the camera from the player "show" produced camera. Once the event reaches the
             // countdown, allocate + configure the start-lights behaviour and advance to
             // SHOWING_LIGHTS.
-            lrCamera = mPlayerBehaviourHandle.GetProducedCamera();
+            lrCamera = mPlayerBehaviourHandle.GetCamera();
 
             if (lrGameState.mEventState.GetCurrent() == GameState::E_EVENT_STATE_COUNTDOWN)
             {
@@ -624,7 +624,7 @@ namespace BrnDirector
         {
             // Drive the camera from the start-lights produced camera. Once the event leaves the
             // countdown, hand control back to the roaming state.
-            lrCamera = mLightsBehaviourHandle.GetProducedCamera();
+            lrCamera = mLightsBehaviourHandle.GetCamera();
 
             if (lrGameState.mEventState.GetCurrent() != GameState::E_EVENT_STATE_COUNTDOWN)
             {

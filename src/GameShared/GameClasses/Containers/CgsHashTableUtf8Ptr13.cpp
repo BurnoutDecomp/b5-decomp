@@ -1,39 +1,38 @@
-// Explicit-instantiation gate TU for the localisation string map:
-//   CgsContainers::HashTable<u32, const CgsUnicode::CgsUtf8*, 13>
-// driven by CgsLanguage::LanguageManager (FindStringByHash/Construct/UnloadStringTable/
-// AddString/RemoveStringByHash). The IDA-truncated ledger key "*,13>" is this 13-bucket,
-// pointer-valued table.
-//
-// HashTable<K,V,N> is header-only (CgsHashTable.h); this TU pins the exact instantiation so the
-// Get/Init/Insert/Remove bodies are compiled and gated. The X360 attests, all under the
-// truncated symbol "*,13>":
-//   Get    @ 0x82863EE8  (FindStringByHash; GetInternal then read value @ node+12 -> key u32 @ +8,
-//                         value ptr @ +12, confirming Key=u32 / Value=pointer)
-//   Init   @ 0x828623B8  (Construct/UnloadStringTable; 13x BaseLinkedList::InternalInit, then set
-//                         the +156 init flag -> 13 bins * 12B = 156, confirming N=13)
-//   Insert @ 0x82863DD0  (AddString/AddStringPointer/LoadStringTable; bin = key%13, SORTED chain --
-//                         specialized below; the primary-template Insert is a plain append)
-//   Remove @ 0x82863F68  (RemoveStringByHash/RemoveStringPointerByHash; GetInternal then unlink)
-//
-// Key=u32 (the hashed string id, `key % 0xD`), Value=const CgsUnicode::CgsUtf8* (the interned
-// UTF-8 string pointer; CgsUtf8 == u8). N=13. Value referenced only as a pointer here.
 #include "GameShared/GameClasses/Containers/CgsHashTable.h"
-#include "GameShared/GameClasses/Fonts/CgsUnicode.h"   // CgsUnicode::CgsUtf8 (== u8)
+#include "GameShared/GameClasses/Fonts/CgsUnicode.h"
+
+#define CGS_ARTIST_HASH_TABLE_FILE "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsHashTable.h"
 
 namespace CgsContainers
 {
-    // Explicit member specialization of Insert for the localisation table: the X360
-    // HashTable<u32,Utf8*,13>::Insert @ 0x82863DD0 keeps each bin SORTED ascending by key (so the
-    // FindStringByHash walk can stop early), unlike the primary template's plain InternalAddTail
-    // append (the form the AptRenderHandler/TextureState25 rasteriser path force-instantiates).
-    // Specialized HERE -- not grown into the shared generic -- so every append instantiation stays
-    // byte-identical. Declared before the explicit class instantiation so `template class` does not
-    // implicitly instantiate the generic append Insert for this type.
-    template<>
-    void HashTable<u32, const CgsUnicode::CgsUtf8*, 13>::Insert(
-        HashTable<u32, const CgsUnicode::CgsUtf8*, 13>::Element* lpElement);
-
     template class HashTable<u32, const CgsUnicode::CgsUtf8*, 13>;
+
+    template<>
+    const CgsUnicode::CgsUtf8* const*
+    HashTable<u32, const CgsUnicode::CgsUtf8*, 13>::Get(u32 luKey) const
+    {
+        CGS_ASSERT_AT(mbInitialised, "HashTable accessed when uninitialised",
+                      CGS_ARTIST_HASH_TABLE_FILE, 271);
+        Node* lpNode = const_cast<HashTable*>(this)->GetInternal(luKey, 0);
+        if (lpNode == 0)
+            return 0;
+        return &lpNode->mData.mValue;
+    }
+
+    template<>
+    void HashTable<u32, const CgsUnicode::CgsUtf8*, 13>::Remove(u32 luKey)
+    {
+        CGS_ASSERT_AT(mbInitialised, "HashTable accessed when uninitialised",
+                      CGS_ARTIST_HASH_TABLE_FILE, 334);
+        Bin* lpBin;
+        Node* lpNode = GetInternal(luKey, &lpBin);
+        if (lpNode == 0)
+        {
+            CGS_ASSERT_AT(false, "Node not found", CGS_ARTIST_HASH_TABLE_FILE, 340);
+            return;
+        }
+        lpBin->InternalRemoveNode(lpNode);
+    }
 
     // X360 0x82863DD0, sorted-ascending-by-key bin insert:
     //   assert mbInitialised (+0x9C, :229 "HashTable accessed when uninitialised");
@@ -50,7 +49,8 @@ namespace CgsContainers
     void HashTable<u32, const CgsUnicode::CgsUtf8*, 13>::Insert(
         HashTable<u32, const CgsUnicode::CgsUtf8*, 13>::Element* lpElement)
     {
-        CGS_ASSERT(mbInitialised, "HashTable accessed when uninitialised");
+        CGS_ASSERT_AT(mbInitialised, "HashTable accessed when uninitialised",
+                      CGS_ARTIST_HASH_TABLE_FILE, 229);
 
         const u32 luKey = lpElement->GetKey();
         Bin& lrBin = maBins[luKey % 13];
@@ -76,7 +76,8 @@ namespace CgsContainers
             {
                 break;
             }
-            CGS_ASSERT(luNodeKey != luKey, "2 elements with the same key inserted");
+            CGS_ASSERT_AT(luNodeKey != luKey, "2 elements with the same key inserted",
+                          CGS_ARTIST_HASH_TABLE_FILE, 258);
             lpHead = static_cast<Node*>(lpHead->GetNextNode());
         }
         if (lpHead)
@@ -85,3 +86,5 @@ namespace CgsContainers
         }
     }
 }
+
+#undef CGS_ARTIST_HASH_TABLE_FILE

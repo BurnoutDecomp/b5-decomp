@@ -189,7 +189,8 @@ void OfflineTrophyCarUnlock::OnLeave()
 {
     if (mpGuiCache != 0 && mpProfile != 0)
     {
-        mpProfile->SetSeenTrophyUnlockSequence(mpGuiCache->GetTrophyCarUnlockType());
+        mpProfile->SetSeenTrophyUnlockSequence(
+            static_cast<BrnProgression::TrophyUnlockData::UnlockType>(mpGuiCache->GetTrophyCarUnlockType()));
     }
 
     mpStateInterface->PlayAptMovie("", KI_MOVIE_LEVEL);

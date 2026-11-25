@@ -11,8 +11,7 @@
 //
 // Free-function helpers shared by the BrnGui flapt components (declaration home for
 // BrnGuiFlaptComponentUtils.cpp). Reconstructed from BURNOUT_X360_ARTIST.XEX; the
-// sret returns are modelled, per the module house style, as an explicit lpOut first
-// parameter that is written and returned. See the .cpp for the bodies/addresses.
+// AttachToTextFieldComponent returns the resolved text-field handle by value.
 // ============================================================================
 
 namespace BrnGui
@@ -20,8 +19,7 @@ namespace BrnGui
     // AttachToTextFieldComponent @ 0x8241CE78 -- resolve the apt component keyed
     // "<lpcParentName>_<lpcComponentName>" out of lFile, hide it, walk to its parent
     // clip, and return that parent's child text field named lpcTextFieldName.
-    BrnFlapt::TextFieldRef* AttachToTextFieldComponent(BrnFlapt::TextFieldRef* lpOutRef,
-                                                       const char* lpcTextFieldName,
+    BrnFlapt::TextFieldRef AttachToTextFieldComponent(const char* lpcTextFieldName,
                                                        const char* lpcComponentName,
                                                        const char* lpcParentName,
                                                        const BrnFlapt::FileRef& lFile);

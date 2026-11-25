@@ -149,8 +149,7 @@ namespace BrnGui
         const BrnFlapt::TriggerParameters* lpTriggerParameters =
             mAptRef.GetTriggerParameters();
 
-        BrnFlapt::MovieClipRef lParentClip;
-        mAptRef.GetParent(&lParentClip);
+        BrnFlapt::MovieClipRef lParentClip = mAptRef.GetParent();
 
         CGS_ASSERT(lpTriggerParameters != 0, CGS_ASSERT_MESSAGE_AT("NULL != lpTriggerParameters", CGS_ARTIST_FILE, 180 /* ARTIST 0x8241C604 */));
 
@@ -181,10 +180,9 @@ namespace BrnGui
         const BrnFlapt::TriggerParameters* lpTriggerParameters =
             mAptRef.GetTriggerParameters();
 
-        BrnFlapt::MovieClipRef lParentClip;
-        mAptRef.GetParent(&lParentClip);
+        BrnFlapt::MovieClipRef lParentClip = mAptRef.GetParent();
 
-        CGS_ASSERT(lpTriggerParameters != 0, "NULL != lpTriggerParameters");
+        CGS_ASSERT_AT(lpTriggerParameters != 0, "NULL != lpTriggerParameters", CGS_ARTIST_FILE, 218);
 
         int liCount = 0;
         do
@@ -196,7 +194,7 @@ namespace BrnGui
             }
 
             BrnFlapt::MovieClipRef lChildClip;
-            lParentClip.FindChildMovieClipOnFrame(&lChildClip, lpcChildName);
+            lChildClip = lParentClip.FindChildMovieClipOnFrame(lpcChildName);
             maChildMovieClips[liCount] = lChildClip;
             ++liCount;
         }

@@ -288,7 +288,7 @@ namespace BrnDirector
         case E_STATE_ACTIVE:
         {
             // Drive the state camera from the behaviour and mark it behaviour-driven.
-            lrCamera = mPostEventCam.GetProducedCamera();
+            lrCamera = mPostEventCam.GetCamera();
             lrCamera.mState_uFlags |= KI_CAMERA_DIRTY_BEHAVIOUR_DRIVEN;
 
             // Rank-up reveal: when a rank-up message was received this frame and the new rank
@@ -346,7 +346,7 @@ namespace BrnDirector
         case E_STATE_CHANGING_TO_ROAMING:
             // Drive the state camera from the behaviour one last frame, then hand control back
             // to roaming.
-            lrCamera = mPostEventCam.GetProducedCamera();
+            lrCamera = mPostEventCam.GetCamera();
             lrCamera.mState_uFlags |= KI_CAMERA_DIRTY_BEHAVIOUR_DRIVEN;
             ArbUtils::ChangeToState<EState>(
                 this, lrSharedInfo, ArbitratorStateContainer::E_STATE_ROAMING,

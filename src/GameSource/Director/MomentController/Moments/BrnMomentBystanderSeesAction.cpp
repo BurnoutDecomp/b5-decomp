@@ -186,7 +186,7 @@ void MomentBystanderSeesAction::Update(f32 /*lfTimeStep*/, void* lrBehaviourCont
 
     // ---- the shared VALID tail (runs the frame the behaviour becomes switchable
     // and every valid frame after) ----
-    SetCamera(mBystander.GetProducedCamera());
+    SetCamera(mBystander.GetCamera());
     {
         Camera::MotionBlurData& lrBlur =
             GetNonConstCamera().GetEffects().mMotionBlurData;
@@ -204,7 +204,7 @@ void MomentBystanderSeesAction::Update(f32 /*lfTimeStep*/, void* lrBehaviourCont
     if ((!MomentSharedInfo_IsPlayerCrashing(lSharedInfo)
          && !MomentSharedInfo_WasTakedown(lSharedInfo))
         || MomentSharedInfo_IsCrashReplayDisabled(lSharedInfo)
-        || !mBystander.GetProducedCamera().mState.IsFlagSet(Camera::CameraState::E_FLAG_VALID))
+        || !mBystander.GetCamera().mState.IsFlagSet(Camera::CameraState::E_FLAG_VALID))
     {
         Release();   // the live-vtable call (slot 4)
     }

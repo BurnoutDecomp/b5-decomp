@@ -118,8 +118,6 @@ namespace Deformation
     void DeformationDebugComponent_Construct(DeformationDebugComponent* lpComponent,
                                              DeformationManager* lpManager);   // X360: DeformationDebugComponent::Construct(&static, this)
     void DeformationDebugComponent_Register(DeformationDebugComponent* lpComponent);  // X360: DebugComponent::Register(&static)
-    void DeformationDebugComponent_Destruct(DeformationDebugComponent* lpComponent);  // X360: clear mpDeformationManager + BaseCollisionGenerator::Destruct(&static)
-    bool DeformationDebugComponent_HasManager(const DeformationDebugComponent* lpComponent); // X360: the (mpDeformationManager != NULL) assert read
 
     // ⭐ BOTH BODIED 2026-08-14 (walls wave) -- they were declare-only "cross-TU surface" and no TU
     // anywhere defined them (trial-link-measured). Their mechanisms are now byte-attested:
@@ -177,15 +175,8 @@ namespace Deformation
     // -----------------------------------------------------------------------------------
     void DeformationManager::Destruct()
     {
-        // The X360 asserts the static debug component still references a manager
-        // ("mpDeformationManager != NULL", baked BrnDeformationDebugComponent.cpp:227), then
-        // clears that back-pointer and destructs the base collision generator the static derives
-        // from. Both reach the file-scope-static debug component; modelled by name through it.
-        CGS_ASSERT(DeformationDebugComponent_HasManager(&mDebugComponent), "mpDeformationManager != NULL");
-        DeformationDebugComponent_Destruct(&mDebugComponent);
-
-        // No models live after teardown.
-        mModelsAdded.UnSetAll();
+        mDebugComponent.Destruct();
+        mModelsAdded.Destruct();
     }
 
     // -----------------------------------------------------------------------------------

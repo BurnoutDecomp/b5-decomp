@@ -809,7 +809,7 @@ namespace CgsGui
                     lpNotification->mResourceHandle.mpResourceMemory);
             CGS_ASSERT(lpResource != 0 && lpResource->muSize != 0,
                        "Language Resource pointer is null in ViewModule::ProcessIncomingLoadNotification");
-            mLanguageManager.LoadStringTable(lpResource);
+            mLanguageManager.LoadStringTable(*lpResource);
             break;
         }
 

@@ -169,11 +169,10 @@ namespace BrnGui
         mStartHintButton2.Prepare("StartPromptRight_cpt", lFile, "JunctionInfo_mc");
         mStartHintButton2.Setup();
 
-        BrnFlapt::TextFieldRef lTextField;
-        mEventNameTextfield = *AttachToTextFieldComponent(
-            &lTextField, "EventName_txt", "EventNameText_cpt", lacName, lFile);
-        mEventNameTextfield2Line = *AttachToTextFieldComponent(
-            &lTextField, "EventName2Line_txt", "EventNameText2Line_cpt", lacName, lFile);
+        mEventNameTextfield = AttachToTextFieldComponent(
+            "EventName_txt", "EventNameText_cpt", lacName, lFile);
+        mEventNameTextfield2Line = AttachToTextFieldComponent(
+            "EventName2Line_txt", "EventNameText2Line_cpt", lacName, lFile);
 
         mAptRef.GotoAndStopLabel("invisible");
     }

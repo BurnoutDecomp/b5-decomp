@@ -620,9 +620,8 @@ namespace BrnGui
         // KAC_MUGSHOT_COMPONENT_GAMERTAG_NAME is the 12-byte "Gamertag_mc".)
         mMugshotOpponentGamertag.SetInvalid();
         {
-            BrnFlapt::TextFieldRef lTextField;
-            mMugshotOpponentGamertag = *AttachToTextFieldComponent(
-                &lTextField, "Gamertag_txt", KAC_MUGSHOT_COMPONENT_GAMERTAG_NAME,
+            mMugshotOpponentGamertag = AttachToTextFieldComponent(
+                "Gamertag_txt", KAC_MUGSHOT_COMPONENT_GAMERTAG_NAME,
                 macMugShotComponentName, lFile);
         }
 

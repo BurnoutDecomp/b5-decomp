@@ -10,21 +10,22 @@ namespace CgsResource
     // array slot at +8 and each string slot at +4, with an 8-byte stride.
     struct LanguageResourceHashEntry
     {
+        u32 GetHash() const { return muHash; }
+        const u8* GetString() const { return mpString; }
+        u32 GetSize() const;
+        void FixDown(const rw::Resource& lrResource);
+        void FixUp(const rw::Resource& lrResource);
+
+    private:
         u32 muHash;
-        u32 mpString;
+        u8* mpString;
     };
 
     struct LanguageResource
     {
         u32 meLanguageID;
         u32 muSize;
-        u32 mpEntries;
-
-        const LanguageResourceHashEntry* GetEntries() const
-        {
-            return reinterpret_cast<const LanguageResourceHashEntry*>(
-                static_cast<uintptr_t>(mpEntries));
-        }
+        LanguageResourceHashEntry* mpEntries;
     };
 
     typedef char LanguageResourceEntrySizeCheck[sizeof(LanguageResourceHashEntry) == 8 ? 1 : -1];

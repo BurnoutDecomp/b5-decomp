@@ -455,20 +455,19 @@ namespace Deformation
     // =============================================================================================
     void DeformableObject::ClearStoredContacts()
     {
-        CGS_ASSERT(mpDeformationSpec != 0, "mpDeformationSpec");   // line 4336 (non-gating)
+        CGS_ASSERT_AT(mpDeformationSpec != 0, "mpDeformationSpec",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/DeformationManager/DeformationPhysics/BrnDeformableObject.cpp",
+            4336);
 
-        const s32 liNumSensors = GetNumSensors() - 4;   // *(mpDeformationSpec + 1618)
-        for ( s32 li = 0; li < liNumSensors; ++li )
+        const u8 lu8NumSensors = static_cast<u8>(GetNumSensors() - 4);
+        if (lu8NumSensors != 0)
         {
-            DeformationSensor& lrSensor = maDeformationSensors[li];
-            lrSensor.mImpulseContact.mfImpactTimeInFrame = 100.0f;   // sensor +280 -- DISARM the impulse record (walls leg 4: the old overlay name mfMaxPointDisplacement was this field misnamed)
-            for ( s32 lj = 0; lj < 4; ++lj )
+            u8 lu8Sensor = 0;
+            do
             {
-                lrSensor.maPostPhysicsVec0[lj] = 0.0f;  // sensor +288 (stvx128 0)
-                lrSensor.maPostPhysicsVec1[lj] = 0.0f;  // sensor +304 (stvx128 0, r10+16)
-            }
-            lrSensor.mSpyContactId = 0;                 // sensor +384 -- spy reset (was mu32PostPhysicsReset)
-            lrSensor.mi32NumStoredContacts = 0;         // sensor +408
+                maDeformationSensors[lu8Sensor].ClearStoredContacts();
+                ++lu8Sensor;
+            } while (lu8Sensor < lu8NumSensors);
         }
     }
 
@@ -1111,10 +1110,10 @@ namespace Deformation
         }
         if (lbAddToSpy)
         {
-            const __vector4 vOld0 = __lvx(lpSensor->maPostPhysicsVec0, 0);
-            const __vector4 vOld1 = __lvx(lpSensor->maPostPhysicsVec1, 0);
-            __stvx(__vaddfp(vOld0, __vaddfp(vLocalForce, vBankLocal)), lpSensor->maPostPhysicsVec0, 0);
-            __stvx(__vmaddfp(lImpulseDir.mV, vMagnitude, vOld1), lpSensor->maPostPhysicsVec1, 0);
+            const __vector4 vOld0 = lpSensor->mContactSpy.mFrictionStress.mV;
+            const __vector4 vOld1 = lpSensor->mContactSpy.mNormalStress.mV;
+            lpSensor->mContactSpy.mFrictionStress.mV = __vaddfp(vOld0, __vaddfp(vLocalForce, vBankLocal));
+            lpSensor->mContactSpy.mNormalStress.mV = __vmaddfp(lImpulseDir.mV, vMagnitude, vOld1);
         }
 
         (void)lbUseNormalScaledFriction;

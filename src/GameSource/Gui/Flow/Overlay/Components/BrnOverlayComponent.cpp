@@ -103,9 +103,8 @@ void OverlayComponent::RunOverlay(const char* lpcOverlayFlashId, const char* lpc
 
     // The frame the label landed on carries the popup's single-overlay child; adopt it
     // as the transition clip and run the phase label on it.
-    BrnFlapt::MovieClipRef lSingleOverlayClip;
     mTransitionMovieClipRef =
-        *mAptRef.FindChildMovieClipOnFrame(&lSingleOverlayClip, "singleOverlay_mc");
+        mAptRef.FindChildMovieClipOnFrame("singleOverlay_mc");
     mTransitionMovieClipRef.GotoAndPlayLabel(lpcFrameLabel);
 }
 

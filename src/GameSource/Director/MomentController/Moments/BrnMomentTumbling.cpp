@@ -361,7 +361,7 @@ void MomentTumbling::Update(f32 lfTimeStep, void* lrBehaviourController,
 
     // ---- the VALID body (runs the frame the rig becomes switchable and every
     // valid frame after) ----
-    SetCamera(mGyroCam.GetProducedCamera());
+    SetCamera(mGyroCam.GetCamera());
     if (!mbLookingAtTakedown)
         GetNonConstCamera().mState.SetFlag(Camera::CameraState::E_FLAG_TUMBLING_PLAYER_FOCUSED, true);
 

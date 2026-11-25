@@ -145,7 +145,7 @@ void CrashedHudState::OnEnter()
     mMugShotComponent.Construct("CrashMugShot_mc", mpStateInterface, 0);
     mMugShotComponent.Prepare("CrashMugShot_mc", lFile, 0);
     mMugshotOpponentGamertag = BrnFlapt::TextFieldRef();
-    AttachToTextFieldComponent(&mMugshotOpponentGamertag, "Gamertag_txt", "Gamertag_mc", "CrashMugShot_mc", lFile);
+    mMugshotOpponentGamertag = AttachToTextFieldComponent("Gamertag_txt", "Gamertag_mc", "CrashMugShot_mc", lFile);
     // FLAG deferred: online RoadRuleShotComponent name/data and mugshot event handlers.
     mSkipPromptAnimator.Construct("skipAnim_cpt", mpStateInterface, 0);
     mSkipPromptButton.Construct("skipButton", mpStateInterface, 0);

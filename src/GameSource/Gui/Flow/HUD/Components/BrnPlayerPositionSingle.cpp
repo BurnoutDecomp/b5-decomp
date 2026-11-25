@@ -131,15 +131,13 @@ void PlayerPositionSingleComponent::Prepare(const char* lacName, const BrnFlapt:
     mPlayerTextColourAnimator.Prepare(lacChildName, lFile, NULL);
 
     // The two icons on the row's current frame.
-    BrnFlapt::MovieClipRef lFound;
-    mRevenge = *mAptRef.FindChildMovieClipOnFrame(&lFound, "RevengeIcon_mc");
-    mAudio   = *mAptRef.FindChildMovieClipOnFrame(&lFound, "AudioIcon_mc");
+    mRevenge = mAptRef.FindChildMovieClipOnFrame("RevengeIcon_mc");
+    mAudio   = mAptRef.FindChildMovieClipOnFrame("AudioIcon_mc");
 
     // The two text fields (each resolved through its "_mc" wrapper).
-    BrnFlapt::TextFieldRef lTextField;
-    mName  = *AttachToTextFieldComponent(&lTextField, "PlayerText_txt", "PlayerText_mc",
+    mName  = AttachToTextFieldComponent("PlayerText_txt", "PlayerText_mc",
                                          lacName, lFile);
-    mValue = *AttachToTextFieldComponent(&lTextField, "DistanceText_txt", "DistanceText_mc",
+    mValue = AttachToTextFieldComponent("DistanceText_txt", "DistanceText_mc",
                                          lacName, lFile);
 }
 

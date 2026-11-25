@@ -188,11 +188,11 @@ namespace BrnGui
         if (mAptRef.mpMovieClipInst != 0)
         {
             BrnFlapt::MovieClipRef lBackgroundClip;
-            mAptRef.FindChildMovieClipOnFrame(&lBackgroundClip, "bg");
+            lBackgroundClip = mAptRef.FindChildMovieClipOnFrame("bg");
             lBackgroundClip.GotoAndPlayLabel(KAPC_SIGN_COLOURS[meSignColour]);
 
             BrnFlapt::MovieClipRef lRoadTextClip;
-            mAptRef.FindChildMovieClipOnFrame(&lRoadTextClip, "RoadText");
+            lRoadTextClip = mAptRef.FindChildMovieClipOnFrame("RoadText");
             const Vector4 lv4TextColour(KAF_SIGN_TEXT_COLOURS[meSignColour]);
             lRoadTextClip.SetColour(lv4TextColour);
         }

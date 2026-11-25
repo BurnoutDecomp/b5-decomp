@@ -508,7 +508,7 @@ namespace BrnDirector
             // takes the EXTERNAL (chase) handle's produced camera directly here, not the
             // flag-selected one (`addi r3, container, 4` with no lookback test).
             GetNonConstCamera() =
-                lrSharedInfo.mpSharedCameraContainer->mGameplayExternal.GetProducedCamera();
+                lrSharedInfo.mpSharedCameraContainer->mGameplayExternal.GetCamera();
             ReportCrashCamera(0, mMomentSelector.GetNumValidMoments(), GetCamera());   // [diag]
 
             if (mMomentSelector.GetNumValidMoments() != 0 &&
@@ -546,9 +546,9 @@ namespace BrnDirector
         if (!lrSharedInfo.mpGameState->mbImpactTimeActive &&
             mTakenDownCam.IsAllocated() &&
             !mTakenDownCam.IsWaitingToPrepare() &&
-            (mTakenDownCam.GetProducedCamera().mState_uFlags & KI_CAMERA_STATE_FOLLOW) != 0)
+            (mTakenDownCam.GetCamera().mState_uFlags & KI_CAMERA_STATE_FOLLOW) != 0)
         {
-            GetNonConstCamera() = mTakenDownCam.GetProducedCamera();
+            GetNonConstCamera() = mTakenDownCam.GetCamera();
         }
     }
 
@@ -755,7 +755,7 @@ namespace BrnDirector
         case E_STATE_AFTERCRASH:
             // Hold the chase camera for kfAfterCrashTime, then start interpolating home.
             GetNonConstCamera() =
-                lrSharedInfo.mpSharedCameraContainer->mGameplayExternal.GetProducedCamera();
+                lrSharedInfo.mpSharedCameraContainer->mGameplayExternal.GetCamera();
 
             if (mfTimeActive > KF_AFTERCRASH_TIME)
             {
@@ -789,7 +789,7 @@ namespace BrnDirector
 
         case E_STATE_INTERPOLATING_TO_ROAMING:
             GetNonConstCamera() =
-                lrSharedInfo.mpSharedCameraContainer->mGameplayExternal.GetProducedCamera();
+                lrSharedInfo.mpSharedCameraContainer->mGameplayExternal.GetCamera();
 
             if (!ChangeToRoaming(lrSharedInfo, lrContainer))
             {
@@ -918,7 +918,7 @@ namespace BrnDirector
         // A totalled player gets the spiralling deathcam over everything else.
         if (mbShouldUseDeathcam)     // +0x3BE
         {
-            GetNonConstCamera() = mDeathcam.GetProducedCamera();
+            GetNonConstCamera() = mDeathcam.GetCamera();
 
             if (!mDeathcam.GetBehaviour()->HasStarted())    // behaviour +0x2F4
             {

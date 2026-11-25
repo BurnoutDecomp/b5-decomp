@@ -5,6 +5,8 @@
 #include "types.hpp"
 #include <cfloat>
 #include "BrnCommonTypes.h"                               // CgsID, Vector3 (rw::math::vpu::Vector3)
+#include "SharedClasses/Progression/BrnRaceEventData.h"    // RaceEventData::EModeType
+#include "SharedClasses/Progression/BrnTrophyUnlockData.h" // TrophyUnlockData::UnlockType
 #include "SharedClasses/Progression/BrnTrainingTypes.h"  // BrnProgression::ETrainingType (Profile training-flag accessors)
 #include "SharedClasses/Trigger/BrnGenericRegion.h"      // BrnTrigger::GenericRegion::Type (drive-thru discovery accessors)
 #include "GameShared/GameClasses/Containers/CgsSet.h"     // Set<CgsID,N> (stunt-element + drive-thru sets, embedded by value)
@@ -504,7 +506,7 @@ public:
     // a category completes (0 == E_UNLOCKTYPE_NONE); the DWARF return type is
     // BrnProgression::TrophyUnlockData::UnlockType, whose full enum home is not yet
     // reconstructed (only NONE=0/COUNT=35 are committed), so the s32 underlying value is used.
-    s32  AddDriveThru(CgsID lId, BrnTrigger::GenericRegion::Type leType);           // 0x82374DB8
+    TrophyUnlockData::UnlockType AddDriveThru(CgsID lId, BrnTrigger::GenericRegion::Type leType);           // 0x82374DB8
     bool AreAllDriveThrusCompleted();                                               // 0x82361870 (DWARF: non-const)
     s32  GetDriveThrusFound() const;                                                // 0x82361778 (car parks excluded!)
 
@@ -650,13 +652,13 @@ public:
 
     // "Seen all events of a mode won" HUD-message bits (leModeType is the not-yet-homed
     // BrnProgression::RaceEventData::EModeType; taken as the s32 the X360 compares against 6).
-    bool GetSeenAllEventTypeWonMessage(s32 leModeType) const;                       // 0x82361F58
-    void SetSeenAllEventTypeWonMessage(s32 leModeType);                             // 0x823620A8
+    bool GetSeenAllEventTypeWonMessage(RaceEventData::EModeType leModeType) const;                       // 0x82361F58
+    void SetSeenAllEventTypeWonMessage(RaceEventData::EModeType leModeType);                             // 0x823620A8
 
     // Trophy-unlock-sequence-seen bits (leUnlockType is BrnProgression::TrophyUnlockData::
     // UnlockType per the DWARF; taken as the s32 the X360 compares against 35).
-    bool GetSeenTrophyUnlockSequence(s32 leUnlockType) const;                       // 0x82475A30
-    void SetSeenTrophyUnlockSequence(s32 leUnlockType);                             // 0x824BAA30
+    bool GetSeenTrophyUnlockSequence(TrophyUnlockData::UnlockType leUnlockType) const;                       // 0x82475A30
+    void SetSeenTrophyUnlockSequence(TrophyUnlockData::UnlockType leUnlockType);                             // 0x824BAA30
 
     // Target-event-score records (Burning Route / Stunt Attack targets; X360 DLC-era tail).
     const BrnGameState::GameStateModuleIO::TargetEventScore* GetTargetEvent(CgsID lEventId) const;

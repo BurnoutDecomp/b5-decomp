@@ -535,7 +535,7 @@ void ICEMoviePlayer::Update(Camera::BehaviourManager& lrBehaviourManager)
         // The blend's produced camera lives on the pool HELPER the handle names, not on the
         // behaviour -- the console reads it through the handle here (and the behaviour only
         // for the finished flag on the next line).
-        mCamera = mOutInterpolator.GetProducedCamera();
+        mCamera = mOutInterpolator.GetCamera();
         Camera::BehaviourInterpolate* lpOut = mOutInterpolator.GetBehaviour();
         if (lpOut->HasFinished())
         {
@@ -544,7 +544,7 @@ void ICEMoviePlayer::Update(Camera::BehaviourManager& lrBehaviourManager)
     }
     else if (mInInterpolator.IsAllocated())
     {
-        mCamera = mInInterpolator.GetProducedCamera();
+        mCamera = mInInterpolator.GetCamera();
         Camera::BehaviourInterpolate* lpIn = mInInterpolator.GetBehaviour();
         if (lpIn->HasFinished())
         {

@@ -254,12 +254,10 @@ namespace BrnGui
     // byte is 7, the same value every GuiAudioTriggerEvent::Construct site uses.
     void PlayerPositionTableComponent::SetTitleText(const char* lpcText)
     {
-        BrnFlapt::MovieClipRef lTitleTextClipRef;
         const BrnFlapt::MovieClipRef lTitleTextClip =
-            *mTitleBarMCR.FindChildMovieClipOnFrame(&lTitleTextClipRef, "TitleText");
+            mTitleBarMCR.FindChildMovieClipOnFrame("TitleText");
 
-        BrnFlapt::TextFieldRef lTitleTextFieldRef;
-        mTitleText = *lTitleTextClip.FindChildTextField(&lTitleTextFieldRef, "titleText_txt");
+        mTitleText = lTitleTextClip.FindChildTextField("titleText_txt");
 
         GuiAudioTriggerEvent lAudio;
         lAudio.Construct(7, "", "CodeTodaysBestFlips", "");
@@ -273,12 +271,10 @@ namespace BrnGui
     // inside it) into mSkillzText, then set the text. No audio trigger on this one.
     void PlayerPositionTableComponent::SetSkillsText(const char* lpcText)
     {
-        BrnFlapt::MovieClipRef lSkillsTextClipRef;
         const BrnFlapt::MovieClipRef lSkillsTextClip =
-            *mTitleBarMCR.FindChildMovieClipOnFrame(&lSkillsTextClipRef, "SkillzText");
+            mTitleBarMCR.FindChildMovieClipOnFrame("SkillzText");
 
-        BrnFlapt::TextFieldRef lSkillsTextFieldRef;
-        mSkillzText = *lSkillsTextClip.FindChildTextField(&lSkillsTextFieldRef, "skillz_txt");
+        mSkillzText = lSkillsTextClip.FindChildTextField("skillz_txt");
 
         mSkillzText.SetText(lpcText, false);
     }

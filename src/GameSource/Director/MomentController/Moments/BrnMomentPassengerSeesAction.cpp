@@ -181,7 +181,7 @@ void MomentPassengerSeesAction::Update(f32 lfTimeStep, void* lrBehaviourControll
     }
 
     // ---- the VALID body ----
-    SetCamera(mPassengerCam.GetProducedCamera());
+    SetCamera(mPassengerCam.GetCamera());
     if (mfTimeCrashing > KF_PASSENGER_CRASH_WINDOW)
     {
         SetCanSwitchToMeNow(false);

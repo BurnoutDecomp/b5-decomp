@@ -92,7 +92,7 @@ namespace BrnDirector
     {
         CGS_ASSERT(mbAllocatedShots, CGS_ASSERT_MESSAGE_AT("mbAllocatedShots", CGS_ARTIST_JUMPING_HEADER, 97));
         CGS_ASSERT(mbHasCurrentCamera, CGS_ASSERT_MESSAGE_AT("mbHasCurrentCamera", CGS_ARTIST_JUMPING_HEADER, 98));
-        return maShots[static_cast<u32>(miCurrentCamera)].mHandle.GetProducedCamera();
+        return maShots[static_cast<u32>(miCurrentCamera)].mHandle.GetCamera();
     }
 
 #undef CGS_ARTIST_JUMPING_HEADER

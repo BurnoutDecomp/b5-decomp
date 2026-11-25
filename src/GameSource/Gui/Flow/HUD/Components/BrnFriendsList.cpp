@@ -992,8 +992,8 @@ void FriendsListComponent::Prepare(const char* lacName, const BrnFlapt::FileRef&
         BrnFlapt::MovieClipRef clip, parent;
         clip = lFile.FindComponent(name);
         clip.SetVisible(false);
-        clip.GetParent(&parent);
-        parent.FindChildTextField(&mBranchTextfields[i], KAPC_BRANCH_TEXT_FIELDS[i]);
+        parent = clip.GetParent();
+        mBranchTextfields[i] = parent.FindChildTextField(KAPC_BRANCH_TEXT_FIELDS[i]);
     }
     for (s32 i = 0; i < KI_VISIBLE_ROWS; ++i)
     {
@@ -1003,7 +1003,7 @@ void FriendsListComponent::Prepare(const char* lacName, const BrnFlapt::FileRef&
     }
     BrnFlapt::MovieClipRef clip;
     clip = mAptRef.FindChildMovieClip("listTitle_mc");
-    clip.FindChildTextField(&mListTitleTextfield, "listTitle_txt");
+    mListTitleTextfield = clip.FindChildTextField("listTitle_txt");
     mBranchRef = mAptRef.FindChildMovieClip("branch_mc");
     clip = mAptRef.FindChildMovieClip("upArrow_mc");
     mUpArrowRef = clip.FindChildMovieClip("arrow");

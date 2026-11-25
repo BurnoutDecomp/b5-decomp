@@ -120,11 +120,11 @@ namespace BrnGui
         BrnFlapt::MovieClipRef lEATraxBox;
         lEATraxBox = mAptRef.FindChildMovieClip(KAC_EATRAX_BOX_NAME);
 
-        lEATraxBox.FindChildTextField(&mArtistNameRef, KAC_ARTIST_FIELD_NAME);
+        mArtistNameRef = lEATraxBox.FindChildTextField(KAC_ARTIST_FIELD_NAME);
         mArtistNameRef.SetAutoSize(true);
 
-        lEATraxBox.FindChildTextField(&mSongNameRef,  KAC_SONG_FIELD_NAME);
-        lEATraxBox.FindChildTextField(&mAlbumNameRef, KAC_ALBUM_FIELD_NAME);
+        mSongNameRef = lEATraxBox.FindChildTextField(KAC_SONG_FIELD_NAME);
+        mAlbumNameRef = lEATraxBox.FindChildTextField(KAC_ALBUM_FIELD_NAME);
     }
 
     // @ 0x82415C00 -- reset the runtime state to idle.

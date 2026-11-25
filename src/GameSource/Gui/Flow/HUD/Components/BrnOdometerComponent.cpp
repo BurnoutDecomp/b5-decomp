@@ -100,13 +100,12 @@ namespace BrnGui
         mEventsFoundAnimator.Prepare("EventsFoundAnim_cpt", lFile, lacName);
         mDriveThrusFoundAnimator.Prepare("DriveThrusAnim_cpt", lFile, lacName);
 
-        BrnFlapt::TextFieldRef lTextField;
-        mMileageTextField = *AttachToTextFieldComponent(
-            &lTextField, "MileageText_Txt", "MileageText_cpt", lacName, lFile);
-        mEventsFoundTextField = *AttachToTextFieldComponent(
-            &lTextField, "EventsFoundText_Txt", "EventsFoundText_cpt", lacName, lFile);
-        mDriveThrusFoundTextField = *AttachToTextFieldComponent(
-            &lTextField, "DriveThrusFoundText_Txt", "DriveThrusFoundText_cpt", lacName, lFile);
+        mMileageTextField = AttachToTextFieldComponent(
+            "MileageText_Txt", "MileageText_cpt", lacName, lFile);
+        mEventsFoundTextField = AttachToTextFieldComponent(
+            "EventsFoundText_Txt", "EventsFoundText_cpt", lacName, lFile);
+        mDriveThrusFoundTextField = AttachToTextFieldComponent(
+            "DriveThrusFoundText_Txt", "DriveThrusFoundText_cpt", lacName, lFile);
 
         meOdometerState    = E_ODOMETERSTATE_NONE;
         mfEnteredStateTime = 0.0f;
@@ -121,11 +120,11 @@ namespace BrnGui
     // EVENTSFOUND state. Only fires for a newly-discovered event.
     void OdometerComponent::HandleJunctionChange(const GuiEventJunctionInfo* lpEvent)
     {
-        CGS_ASSERT(lpEvent != 0, "lpEvent");
+        CGS_ASSERT_AT(lpEvent != 0, "lpEvent", CGS_ARTIST_FILE, 124);
 
         if (lpEvent->mbIsNewlyDiscovered)
         {
-            CGS_ASSERT(mpProfile != 0, "mpProfile");
+            CGS_ASSERT_AT(mpProfile != 0, "mpProfile", CGS_ARTIST_FILE, 128);
 
             const s32 liNumDiscovered = mpProfile->GetGameModeTypeDiscovered(lpEvent->meGameModeType);
             const s32 liNumTotal      = mpProfile->GetGameModeTypeAmount(lpEvent->meGameModeType);

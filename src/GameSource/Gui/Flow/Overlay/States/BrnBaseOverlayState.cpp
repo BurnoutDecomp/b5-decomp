@@ -397,10 +397,10 @@ void BaseOverlayState::SetupOverlayComponents(const char* lpcTransition)
     {
         lTextMovieClip.SetVisible(false);
         BrnFlapt::MovieClipRef lParentMovieClip;
-        lTextMovieClip.GetParent(&lParentMovieClip);
+        lParentMovieClip = lTextMovieClip.GetParent();
 
         BrnFlapt::TextFieldRef lTextField;
-        mTitleTextField = *lParentMovieClip.FindChildTextField(&lTextField, "Title_txt");
+        mTitleTextField = lParentMovieClip.FindChildTextField("Title_txt");
     }
     else
     {
@@ -411,10 +411,10 @@ void BaseOverlayState::SetupOverlayComponents(const char* lpcTransition)
     {
         lTextMovieClip.SetVisible(false);
         BrnFlapt::MovieClipRef lParentMovieClip;
-        lTextMovieClip.GetParent(&lParentMovieClip);
+        lParentMovieClip = lTextMovieClip.GetParent();
 
         BrnFlapt::TextFieldRef lTextField;
-        mMessageTextField = *lParentMovieClip.FindChildTextField(&lTextField, "Main_txt");
+        mMessageTextField = lParentMovieClip.FindChildTextField("Main_txt");
     }
     else
     {

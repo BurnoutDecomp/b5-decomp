@@ -1,3 +1,4 @@
+#include <cstring>
 #include "GameSource/Gui/Flapt/BrnFlaptMovieClipRef.h"
 
 #include "GameSource/Gui/Flapt/BrnFlaptMovieClipInstance.h"  // BrnFlapt::MovieClipInstance
@@ -44,32 +45,18 @@
 
 // Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptMovieClipRef.cpp".
 
+#define CGS_ARTIST_FLAPT_REF_FILE "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptMovieClipRef.cpp"
+
 namespace BrnFlapt
 {
 
-// Inline strlen the X360 folds into each lookup: count up to (not including) the
-// NUL terminator, which is the byte count CgsHash::CalculateHash expects.
-static int FlaptNameLength(const char* lpcName)
-{
-    int liLength = 0;
-    while (lpcName[liLength] != '\0')
-    {
-        ++liLength;
-    }
-    return liLength;
-}
-
 // ---- FindChildMovieClip @ 0x8246C740 -------------------------------------
-// Assert the handle and the name, hash the name, then forward to the instance,
-// which writes the matched child's MovieClipRef into lpOutRef and (via this Ref)
-// returns it.
+// Hash the name and ask the clip instance for the named child.
 MovieClipRef MovieClipRef::FindChildMovieClip(const char* lpcName) const
 {
     CGS_ASSERT_AT(mpMovieClipInst != 0, "mpMovieClipInst", "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptMovieClipRef.cpp", 44);
     CGS_ASSERT_AT(lpcName != 0, "lpcName", "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptMovieClipRef.cpp", 45);
-    const char* lpEnd = lpcName;
-    while (*lpEnd++) {}
-    const u32 luHash = CgsContainers::CgsHash::CalculateHash(const_cast<char*>(lpcName), lpEnd - lpcName - 1);
+    const u32 luHash = CgsContainers::CgsHash::CalculateHash(const_cast<char*>(lpcName), std::strlen(lpcName));
     MovieClipRef lClip;
     mpMovieClipInst->FindChildMovieClip(luHash, &lClip, lpcName);
     return lClip;
@@ -78,33 +65,32 @@ MovieClipRef MovieClipRef::FindChildMovieClip(const char* lpcName) const
 // ---- FindChildMovieClipOnFrame @ 0x8246C8B0 ------------------------------
 // As FindChildMovieClip, but the instance restricts the search to the children
 // placed on its current frame.
-MovieClipRef* MovieClipRef::FindChildMovieClipOnFrame(MovieClipRef* lpOutRef,
-                                                      const char* lpcName) const
+MovieClipRef MovieClipRef::FindChildMovieClipOnFrame(const char* lpcName) const
 {
-    CGS_ASSERT(mpMovieClipInst != 0, "mpMovieClipInst");
-    CGS_ASSERT(lpcName != 0, "lpcName");
+    CGS_ASSERT_AT(mpMovieClipInst != 0, "mpMovieClipInst", CGS_ARTIST_FLAPT_REF_FILE, 94);
+    CGS_ASSERT_AT(lpcName != 0, "lpcName", CGS_ARTIST_FLAPT_REF_FILE, 95);
 
     u32 luHash = CgsContainers::CgsHash::CalculateHash(const_cast<char*>(lpcName),
-                                                       FlaptNameLength(lpcName));
+                                                       std::strlen(lpcName));
 
-    mpMovieClipInst->FindChildMovieClipOnFrame(luHash, lpOutRef, lpcName);
-    return lpOutRef;
+    MovieClipRef lResult;
+    mpMovieClipInst->FindChildMovieClipOnFrame(luHash, &lResult, lpcName);
+    return lResult;
 }
 
 // ---- FindChildTextField @ 0x8246C7F8 -------------------------------------
-// Assert the handle and the name, hash the name, then forward to the instance,
-// which writes the named child text field's TextFieldRef into lpOutRef.
-TextFieldRef* MovieClipRef::FindChildTextField(TextFieldRef* lpOutRef,
-                                               const char* lpcName) const
+// Hash the name and resolve the child text-field handle through the clip instance.
+TextFieldRef MovieClipRef::FindChildTextField(const char* lpcName) const
 {
-    CGS_ASSERT(mpMovieClipInst != 0, "mpMovieClipInst");
-    CGS_ASSERT(lpcName != 0, "lpcName");
+    CGS_ASSERT_AT(mpMovieClipInst != 0, "mpMovieClipInst", CGS_ARTIST_FLAPT_REF_FILE, 74);
+    CGS_ASSERT_AT(lpcName != 0, "lpcName", CGS_ARTIST_FLAPT_REF_FILE, 75);
 
     u32 luHash = CgsContainers::CgsHash::CalculateHash(const_cast<char*>(lpcName),
-                                                       FlaptNameLength(lpcName));
+                                                       std::strlen(lpcName));
 
-    mpMovieClipInst->FindChildTextField(luHash, lpOutRef, lpcName);
-    return lpOutRef;
+    TextFieldRef lResult;
+    mpMovieClipInst->FindChildTextField(luHash, &lResult, lpcName);
+    return lResult;
 }
 
 // ---- TryFindChildComponentRecursively @ 0x8246C968 -----------------------
@@ -114,12 +100,12 @@ TextFieldRef* MovieClipRef::FindChildTextField(TextFieldRef* lpOutRef,
 bool MovieClipRef::TryFindChildComponentRecursively(const char* lpcName,
                                                     MovieClipRef* lpOutMovieClipRef) const
 {
-    CGS_ASSERT(mpMovieClipInst != 0, CGS_ASSERT_MESSAGE_AT("mpMovieClipInst", __FILE__, 115 /* ARTIST 0x8246C9A8 */));
-    CGS_ASSERT(lpOutMovieClipRef != 0, CGS_ASSERT_MESSAGE_AT("lpOutMovieClipRef", __FILE__, 116 /* ARTIST 0x8246C9CC */));
-    CGS_ASSERT(lpcName != 0, CGS_ASSERT_MESSAGE_AT("lpcName", __FILE__, 117 /* ARTIST 0x8246C9F0 */));
+    CGS_ASSERT(mpMovieClipInst != 0, CGS_ASSERT_MESSAGE_AT("mpMovieClipInst", CGS_ARTIST_FLAPT_REF_FILE, 115 /* ARTIST 0x8246C9A8 */));
+    CGS_ASSERT(lpOutMovieClipRef != 0, CGS_ASSERT_MESSAGE_AT("lpOutMovieClipRef", CGS_ARTIST_FLAPT_REF_FILE, 116 /* ARTIST 0x8246C9CC */));
+    CGS_ASSERT(lpcName != 0, CGS_ASSERT_MESSAGE_AT("lpcName", CGS_ARTIST_FLAPT_REF_FILE, 117 /* ARTIST 0x8246C9F0 */));
 
     u32 luHash = CgsContainers::CgsHash::CalculateHash(const_cast<char*>(lpcName),
-                                                       FlaptNameLength(lpcName));
+                                                       std::strlen(lpcName));
 
     return mpMovieClipInst->TryFindChildComponentRecursively(luHash,
                                                              lpOutMovieClipRef,
@@ -127,12 +113,12 @@ bool MovieClipRef::TryFindChildComponentRecursively(const char* lpcName,
 }
 
 // ---- GetParent @ 0x8246CA40 ----------------------------------------------
-// Forward to the instance, which writes the parent clip's MovieClipRef into
-// lpOutRef and (via this Ref) returns it. The X360 omits the handle assert here.
-MovieClipRef* MovieClipRef::GetParent(MovieClipRef* lpOutRef) const
+// Resolve the parent clip through the instance.
+MovieClipRef MovieClipRef::GetParent() const
 {
-    mpMovieClipInst->GetParent(lpOutRef);
-    return lpOutRef;
+    MovieClipRef lResult;
+    mpMovieClipInst->GetParent(&lResult);
+    return lResult;
 }
 
 // ---- GotoAndPlayLabel @ 0x8246F388 ---------------------------------------
@@ -152,11 +138,11 @@ void MovieClipRef::GotoAndPlayLabel(u32 luLabelHash, const char* lpcDEBUGName) c
 // string as the debug name).
 void MovieClipRef::GotoAndPlayLabel(const char* lpcLabel) const
 {
-    CGS_ASSERT(mpMovieClipInst != 0, "mpMovieClipInst");
-    CGS_ASSERT(lpcLabel != 0, "lpcLabel");
+    CGS_ASSERT_AT(mpMovieClipInst != 0, "mpMovieClipInst", CGS_ARTIST_FLAPT_REF_FILE, 165);
+    CGS_ASSERT_AT(lpcLabel != 0, "lpcLabel", CGS_ARTIST_FLAPT_REF_FILE, 166);
 
     u32 luHash = CgsContainers::CgsHash::CalculateHash(const_cast<char*>(lpcLabel),
-                                                       FlaptNameLength(lpcLabel));
+                                                       std::strlen(lpcLabel));
 
     mpMovieClipInst->GotoAndPlayLabel(luHash, lpcLabel);
 }
@@ -166,11 +152,11 @@ void MovieClipRef::GotoAndPlayLabel(const char* lpcLabel) const
 // (which receives both the hash and the original string).
 void MovieClipRef::GotoAndStopLabel(const char* lpcLabel) const
 {
-    CGS_ASSERT(mpMovieClipInst != 0, CGS_ASSERT_MESSAGE_AT("mpMovieClipInst", __FILE__, 182 /* ARTIST 0x8246F4D4 */));
-    CGS_ASSERT(lpcLabel != 0, CGS_ASSERT_MESSAGE_AT("lpcLabel", __FILE__, 183 /* ARTIST 0x8246F4F8 */));
+    CGS_ASSERT(mpMovieClipInst != 0, CGS_ASSERT_MESSAGE_AT("mpMovieClipInst", CGS_ARTIST_FLAPT_REF_FILE, 182 /* ARTIST 0x8246F4D4 */));
+    CGS_ASSERT(lpcLabel != 0, CGS_ASSERT_MESSAGE_AT("lpcLabel", CGS_ARTIST_FLAPT_REF_FILE, 183 /* ARTIST 0x8246F4F8 */));
 
     u32 luHash = CgsContainers::CgsHash::CalculateHash(const_cast<char*>(lpcLabel),
-                                                       FlaptNameLength(lpcLabel));
+                                                       std::strlen(lpcLabel));
 
     mpMovieClipInst->GotoAndStopLabel(luHash, lpcLabel);
 }

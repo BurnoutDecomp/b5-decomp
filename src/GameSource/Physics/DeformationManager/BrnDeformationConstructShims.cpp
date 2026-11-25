@@ -97,15 +97,7 @@ namespace Deformation
         lpComponent->Register();
     }
 
-    bool DeformationDebugComponent_HasManager(const DeformationDebugComponent* lpComponent)
-    {
-        return lpComponent->HasManager();
-    }
 
-    void DeformationDebugComponent_Destruct(DeformationDebugComponent* lpComponent)
-    {
-        lpComponent->DetachManager();
-    }
 
     // ==============================================================================================
     // (3) ConstructUpdatePerformanceMonitors @ 0x825B99A0  (87 instructions)

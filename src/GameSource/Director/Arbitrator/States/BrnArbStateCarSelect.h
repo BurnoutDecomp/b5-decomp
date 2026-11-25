@@ -124,12 +124,12 @@ namespace BrnDirector
         // @0x82219998 -- h:68 tripwire (the X360 CALLS IsReady out-of-line, so
         // its own tripwires fire too), then a BY-VALUE copy of the camera the
         // owned behaviour produced (the X360 copy-constructs from the manager
-        // pool slot's +0x10 camera -- the handle's GetProducedCamera surface,
+        // pool slot's +0x10 camera -- the handle's GetCamera surface,
         // which carries the :610 handle tripwire).
         Camera::Camera GetCamera() const
         {
             CGS_ASSERT(IsReady(), CGS_ASSERT_MESSAGE_AT("IsReady()", CGS_ARTIST_BRNARBSTATECARSELECT_FILE, 68));   // :68 (non-gating)
-            return mInterpolater.GetProducedCamera();
+            return mInterpolater.GetCamera();
         }
 
         // @0x822346E0 -- exactly the handle's Release body (drop the manager-side

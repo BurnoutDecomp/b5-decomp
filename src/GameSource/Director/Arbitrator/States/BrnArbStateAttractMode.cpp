@@ -5,7 +5,7 @@
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/Arbitrator/BrnDirectorArbitratorStateContainer.h" // ArbitratorStateContainer::GetState/SetCurrentState
 #include "GameSource/Director/Camera/BrnBehaviourManager.h"                 // Camera::BehaviourManager (complete)
-#include "GameSource/Director/Camera/Behaviours/BrnBehaviourRoadRunner.h"   // Camera::BehaviourRoadRunner (slice; GetProducedCamera)
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourRoadRunner.h"   // Camera::BehaviourRoadRunner (slice; GetCamera)
 #include "GameSource/Director/Camera/Camera.h"                              // Camera::Camera (operator= / Construct)
 
 // ============================================================================
@@ -19,7 +19,7 @@
 // behaviour, copies the camera it produces each frame into the state's own camera, and -- once
 // the roaming state accepts a Prepare -- switches the arbitrator's current state to roaming and
 // releases itself. All member access is BY NAME; the camera copy goes through the road-runner
-// handle's named GetProducedCamera() accessor (mirrors ArbStateRoaming / ArbStateCrashNav), and
+// handle's named GetCamera() accessor (mirrors ArbStateRoaming / ArbStateCrashNav), and
 // the roaming hand-off goes through the state container's named GetState()/SetCurrentState().
 // ----------------------------------------------------------------------------
 
@@ -27,7 +27,7 @@ namespace BrnDirector
 {
     // (The two out-of-line BehaviourHandle<> template bodies this file used to carry -- for
     // this state's own nested handle copy -- are gone: the state now uses the SHARED
-    // Camera::BehaviourHandle<>, whose GetProducedCamera / IsWaitingToPrepare are bodied in
+    // Camera::BehaviourHandle<>, whose GetCamera / IsWaitingToPrepare are bodied in
     // BrnBehaviourManager.h against the manager's real helper pool.)
 
     // ------------------------------------------------------------------------
@@ -132,12 +132,12 @@ namespace BrnDirector
 
         case E_STATE_ACTIVE:
         active_body:
-            GetNonConstCamera() = mRoadRunnerCam.GetProducedCamera();
+            GetNonConstCamera() = mRoadRunnerCam.GetCamera();
             break;
 
         case E_STATE_CHANGING_TO_ROAMING:
         {
-            GetNonConstCamera() = mRoadRunnerCam.GetProducedCamera();
+            GetNonConstCamera() = mRoadRunnerCam.GetCamera();
 
             // X360: mpStateContainer + 0x1890 -> the embedded roaming state sub-object; virtual
             // call at vtable slot +4 (Prepare).

@@ -265,7 +265,7 @@ void MomentPlayerStunt::Update(f32 /*lfTimeStep*/, void* lrBehaviourController,
     }
 
     // ---- the VALID body ----
-    SetCamera(mIceCam.GetProducedCamera());
+    SetCamera(mIceCam.GetCamera());
     // ARTIST @0x82272834: moment+0x120 == camera+0x110 == effects+0xA8.
     GetNonConstCamera().GetEffects().mfBlackBarAmount = KF_STUNT_RACE_END_EFFECT;
 

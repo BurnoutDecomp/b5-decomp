@@ -64,7 +64,7 @@ namespace BrnGui
         mIconRight.Setup();
 
         // Bind the help item's "TextField" child text field.
-        mAptRef.FindChildTextField(&mTextField, "TextField");
+        mTextField = mAptRef.FindChildTextField("TextField");
     }
 
     // The child button-icon component names (the @0x82428188 assert text names the
@@ -99,7 +99,7 @@ namespace BrnGui
         mIconRight.BrnFlaptComponent::Prepare(&lRightButtonMovieClipRef);
         mIconRight.Setup();
 
-        mAptRef.FindChildTextField(&mTextField, "TextField");
+        mTextField = mAptRef.FindChildTextField("TextField");
     }
 
     // @ 0x8241D338 -- set the help text and both flanking button glyphs.

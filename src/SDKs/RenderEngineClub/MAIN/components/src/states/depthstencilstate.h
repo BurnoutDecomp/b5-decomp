@@ -37,13 +37,30 @@ public:
     {
         // ARTIST82B643F4..4450; natural padding4A..4B is untouched.
         Parameters()
-            : muFunction(3), muState4(7), muState8(7), muState9(0), muState10(0),
-              muStencilReadMask(0xFFFFFFFFu), muStencilWriteMask(0xFFFFFFFFu),
-              muState13(0), muState14(0xFFFFFFFFu), muState15(0xFFFFFFFFu), muState16(0),
-              mbDepthTestEnable(1), mbDepthWriteEnable(1), mu8Flag2(0), mu8Flag3(0),
-              mu8Flag4(0), mu8Flag5(0)
         {
-            for (u32 i = 0; i != 3; ++i) maState1[i] = maState5[i] = 0;
+            mbDepthTestEnable = 1;
+            mbDepthWriteEnable = 1;
+            mu8Flag2 = 0;
+            muFunction = 3;
+            muState4 = E_FUNCTION_ALWAYS;
+            muStencilReadMask = 0xFFFFFFFFu;
+            muStencilWriteMask = 0xFFFFFFFFu;
+            maState1[0] = 0;
+            maState1[1] = 0;
+            maState1[2] = 0;
+            muState10 = 0;
+            mu8Flag3 = 0;
+            muState8 = E_FUNCTION_ALWAYS;
+            maState5[0] = 0;
+            maState5[1] = 0;
+            maState5[2] = 0;
+            muState14 = 0xFFFFFFFFu;
+            muState15 = 0xFFFFFFFFu;
+            muState13 = 0;
+            muState9 = 0;
+            muState16 = 0;
+            mu8Flag4 = 0;
+            mu8Flag5 = 0;
         }
 
         u32 muFunction;        // +0x00 -> muZFunc                 (the Function arg)

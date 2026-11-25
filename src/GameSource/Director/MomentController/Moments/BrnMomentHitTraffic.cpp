@@ -96,7 +96,7 @@ void MomentHitTraffic::Update(f32 lfTimeStep, void* lrBehaviourController,
         break;
 
     case E_STATE_VALID:
-        SetCamera(mHeliCamHandle.GetProducedCamera());
+        SetCamera(mHeliCamHandle.GetCamera());
         if (!MomentSharedInfo_IsHitTrafficConditionActive(lSharedInfo))
             mfRunningTime += lfTimeStep;
         if (mfRunningTime > KF_HIT_TRAFFIC_MAX_RUNNING_TIME

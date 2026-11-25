@@ -175,11 +175,10 @@ void FriendsListEntry::Prepare(const char* lpacName, const BrnFlapt::FileRef& lr
     lArrowClip = lEntryClip.FindChildMovieClip("branch_arrow_mc");
     mBarArrowRef = lArrowClip;
 
-    BrnFlapt::TextFieldRef lTextField;
-    mPlayerNameTextField = *AttachToTextFieldComponent(
-        &lTextField, macPlayerNameTextFieldName, "playerName_cpt", lacComposite, lrFile);
-    mIndexTextField = *AttachToTextFieldComponent(
-        &lTextField, KAC_INDEX_TEXT_FIELD_NAME, "index_mc", lacComposite, lrFile);
+    mPlayerNameTextField = AttachToTextFieldComponent(
+        macPlayerNameTextFieldName, "playerName_cpt", lacComposite, lrFile);
+    mIndexTextField = AttachToTextFieldComponent(
+        KAC_INDEX_TEXT_FIELD_NAME, "index_mc", lacComposite, lrFile);
 }
 
 // @ 0x82423B58 -- consume the dirty flag; re-derive the bar state through the

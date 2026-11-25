@@ -525,7 +525,7 @@ namespace BrnDirector
             return true;
         }
 
-        GetNonConstCamera() = mTransitionCam.GetProducedCamera();
+        GetNonConstCamera() = mTransitionCam.GetCamera();
         return true;
     }
 
@@ -631,12 +631,12 @@ namespace BrnDirector
 
         if (mbHasCarsToUnlock)
         {
-            GetNonConstCamera() = mIntroNewCars.GetProducedCamera();
+            GetNonConstCamera() = mIntroNewCars.GetCamera();
             GetNonConstCamera().mState_uFlags |= KI_CAMERA_STATE_JUNKYARD_NEW_CARS;
         }
         else
         {
-            GetNonConstCamera() = mIntroNoNewCars.GetProducedCamera();
+            GetNonConstCamera() = mIntroNoNewCars.GetCamera();
             GetNonConstCamera().mState_uFlags |= KI_CAMERA_STATE_JUNKYARD;
         }
         mLookAroundCarCam.GetBehaviour()->BecomeSimilarTo(GetNonConstCamera(),
@@ -854,7 +854,7 @@ namespace BrnDirector
         // Shot 0 is playing. Force the junkyard time of day; when the GUI raises the fly-by
         // flag (BrnGui::Intro's START_FLYBY -> command 477), change to shot 1.
         case E_STATE_GAME_INTRO_PART_ONE:
-            GetNonConstCamera() = mGameIntro.GetProducedCamera();
+            GetNonConstCamera() = mGameIntro.GetCamera();
             GetNonConstCamera().GetEffects().mbSetTimeOfDay = true;
             GetNonConstCamera().GetEffects().mfTimeOfDay    = KF_JUNKYARD_TIME_OF_DAY;
 
@@ -874,7 +874,7 @@ namespace BrnDirector
         // ---- 3: GAME_INTRO_PART_TWO  ⭐ ------------------------------------------------
         // Shot 1 is playing; when it finishes, change to shot 2.
         case E_STATE_GAME_INTRO_PART_TWO:
-            GetNonConstCamera() = mGameIntro.GetProducedCamera();
+            GetNonConstCamera() = mGameIntro.GetCamera();
 
             if (mGameIntro.GetBehaviour()->HasFinishedOrFailed())
             {
@@ -894,7 +894,7 @@ namespace BrnDirector
         // CLEARS the fly-by flag (command 478), interpolate off the movie onto the player's
         // car and hand over to ROTATE_ABOUT_CAR.
         case E_STATE_GAME_INTRO_PART_THREE:
-            GetNonConstCamera() = mGameIntro.GetProducedCamera();
+            GetNonConstCamera() = mGameIntro.GetCamera();
             GetNonConstCamera().mState_uFlags |= KI_CAMERA_STATE_JUNKYARD;
             mLookAroundCarCam.GetBehaviour()->BecomeSimilarTo(GetNonConstCamera(),
                                                              *lrSharedInfo.mpAllVehicleData);
@@ -938,7 +938,7 @@ namespace BrnDirector
             }
             lrSharedInfo.mpSharedCameraContainer->ForcePrimaryGameplayBehaviourToFinish();
 
-            GetNonConstCamera() = mIntroNewCars.GetProducedCamera();
+            GetNonConstCamera() = mIntroNewCars.GetCamera();
             if (mIntroNewCars.GetBehaviour()->HasFinishedOrFailed())
             {
                 mIntroNewCars.Release();
@@ -949,7 +949,7 @@ namespace BrnDirector
 
         // ---- 7: CAR_UNLOCK ------------------------------------------------------------
         case E_STATE_CAR_UNLOCK:
-            GetNonConstCamera() = mCarUnlockCam.GetProducedCamera();
+            GetNonConstCamera() = mCarUnlockCam.GetCamera();
             GetNonConstCamera().mState_uFlags |= KI_CAMERA_STATE_JUNKYARD;
 
             if (lrGameState.mbJunkyardCarUnlockTickedClosedThisFrame)
@@ -988,7 +988,7 @@ namespace BrnDirector
 
         // ---- 8: ACTIVE (the browse camera) --------------------------------------------
         case E_STATE_ACTIVE:
-            GetNonConstCamera() = mTransitionCam.GetProducedCamera();
+            GetNonConstCamera() = mTransitionCam.GetCamera();
             GetNonConstCamera().mState_uFlags |= KI_CAMERA_STATE_JUNKYARD;
 
             if (lrGameState.mbJunkyardPosJustChanged)
@@ -1049,7 +1049,7 @@ namespace BrnDirector
                                                     KI_INTERPOLATION_METHOD,
                                                     KI_INTERPOLATION_MAPPING);
                     mLookAroundCarCam.GetBehaviour()->BecomeSimilarTo(
-                        mTransitionCam.GetProducedCamera(), *lrSharedInfo.mpAllVehicleData);
+                        mTransitionCam.GetCamera(), *lrSharedInfo.mpAllVehicleData);
                     mfTimeInState = 0.0f;
                     meState       = E_STATE_ROTATE_ABOUT_CAR;
                 }
@@ -1129,7 +1129,7 @@ namespace BrnDirector
 
         // ---- 10: WAIT_FOR_CAR_DROP ----------------------------------------------------
         case E_STATE_WAIT_FOR_CAR_DROP:
-            GetNonConstCamera() = mTransitionCam.GetProducedCamera();
+            GetNonConstCamera() = mTransitionCam.GetCamera();
             GetNonConstCamera().mState_uFlags |= KI_CAMERA_STATE_JUNKYARD;
 
             if (lrGameState.meJunkyardState == GameState::E_JY_INACTIVE)
@@ -1193,7 +1193,7 @@ namespace BrnDirector
 
         // ---- 11: IDLE -----------------------------------------------------------------
         case E_STATE_IDLE:
-            GetNonConstCamera() = mIdleCam.GetProducedCamera();
+            GetNonConstCamera() = mIdleCam.GetCamera();
             GetNonConstCamera().mState_uFlags |= KI_CAMERA_STATE_JUNKYARD;
 
             if (lrGameState.meJunkyardState == GameState::E_JY_INACTIVE)
@@ -1259,7 +1259,7 @@ namespace BrnDirector
                                                     KI_INTERPOLATION_METHOD,
                                                     KI_INTERPOLATION_MAPPING);
                     mLookAroundCarCam.GetBehaviour()->BecomeSimilarTo(
-                        mTransitionCam.GetProducedCamera(), *lrSharedInfo.mpAllVehicleData);
+                        mTransitionCam.GetCamera(), *lrSharedInfo.mpAllVehicleData);
                     mIdleCam.Release();
                     mfTimeInState = 0.0f;
                     meState       = E_STATE_ROTATE_ABOUT_CAR;
@@ -1276,7 +1276,7 @@ namespace BrnDirector
 
         // ---- 12: WAIT_FOR_AUDIO -------------------------------------------------------
         case E_STATE_WAIT_FOR_AUDIO:
-            GetNonConstCamera() = mIntroNewCars.GetProducedCamera();
+            GetNonConstCamera() = mIntroNewCars.GetCamera();
             GetNonConstCamera().mState_uFlags |= KI_CAMERA_STATE_JUNKYARD;
 
             if (lrGameState.meJunkyardState == GameState::E_JY_INACTIVE)

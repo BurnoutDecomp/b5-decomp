@@ -281,7 +281,7 @@ void MomentNewCarJoined::Update(f32 /*lfTimeStep -- dead arg, see the banner*/,
     {
         // The return blend has taken over: publish its camera, and let go of the
         // moment as soon as it will also switch away.
-        SetCamera(mInterpolaterB.GetProducedCamera());
+        SetCamera(mInterpolaterB.GetCamera());
         if (mInterpolaterB.GetBehaviour()->CanSwitchFromMeNow())
         {
             Release();   // the live-vtable call
@@ -322,7 +322,7 @@ void MomentNewCarJoined::Update(f32 /*lfTimeStep -- dead arg, see the banner*/,
             mInterpolaterB.GetBehaviour()->Setup();
         }
         // Hold interpolater A's output until B takes over.
-        SetCamera(mInterpolaterA.GetProducedCamera());
+        SetCamera(mInterpolaterA.GetCamera());
     }
 
     // the common tail (runs on the release frame too -- the console build falls through) ----

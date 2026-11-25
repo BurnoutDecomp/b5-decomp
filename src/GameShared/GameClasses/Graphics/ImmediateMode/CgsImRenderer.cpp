@@ -173,29 +173,12 @@ const DepthStencilState* ImRendererBase::ConstructDepthStencilState(
 {
     renderengine::DepthStencilState::Parameters lParameters;
 
-    lParameters.muFunction = static_cast<u32>(leFunction);  // v7[0] = a4
-    std::memset(lParameters.maState1, 0, sizeof(lParameters.maState1));  // v7[1..3]
-    lParameters.muState4  = renderengine::DepthStencilState::E_FUNCTION_ALWAYS;  // v7[4] = 7
-    std::memset(lParameters.maState5, 0, sizeof(lParameters.maState5));  // v7[5..7]
-    lParameters.muState8  = renderengine::DepthStencilState::E_FUNCTION_ALWAYS;  // v7[8] = 7
-    lParameters.muState9  = 0;             // v7[9]
-    lParameters.muState10 = 0;             // v7[10]
-    lParameters.muStencilReadMask  = 0xFFFFFFFFu;  // v7[11] = -1
-    lParameters.muStencilWriteMask = 0xFFFFFFFFu;  // v7[12] = -1
-    lParameters.muState13 = 0;             // v7[13]
-    lParameters.muState14 = 0xFFFFFFFFu;   // v7[14] = -1
-    lParameters.muState15 = 0xFFFFFFFFu;   // v7[15] = -1
-    lParameters.muState16 = 0;             // v7[16]
-    lParameters.mbDepthTestEnable  = static_cast<u8>(lbDepthTestEnable);   // v8 = a2
-    lParameters.mbDepthWriteEnable = static_cast<u8>(lbDepthWriteEnable);  // v9 = a3
-    lParameters.mu8Flag2 = 0;              // v10
-    lParameters.mu8Flag3 = 0;              // v11
-    lParameters.mu8Flag4 = 0;              // v12
-    lParameters.mu8Flag5 = 0;              // v13
+    lParameters.mbDepthTestEnable = lbDepthTestEnable;
+    lParameters.mbDepthWriteEnable = lbDepthWriteEnable;
+    lParameters.muFunction = leFunction;
 
-    const rw::ResourceDescriptor descriptor =
-        renderengine::DepthStencilState::GetResourceDescriptor(lParameters);
-    const rw::Resource resource = lpAllocator->DoAllocate(descriptor, 0);
+    const rw::Resource resource = lpAllocator->Allocate(
+        renderengine::DepthStencilState::GetResourceDescriptor(lParameters), NULL);
     return renderengine::DepthStencilState::Initialize(resource, lParameters);
 }
 
@@ -281,12 +264,17 @@ const SamplerState* ImRendererBase::ConstructSamplerState(
 renderengine::Texture* ImRendererBase::ConstructWhiteTexture(rw::IResourceAllocator* lpAllocator)
 {
     renderengine::Texture::Parameters lParameters;
-    lParameters.meType = renderengine::Texture::TYPE_2D;
+    const u32 luWidth = 4;
+    const u32 luHeight = 4;
     lParameters.muFlags = 0;
-    lParameters.muWidth = 4; lParameters.muHeight = 4; lParameters.muDepth = 1;
-    lParameters.muNumLevels = 1; lParameters.meFormat = static_cast<renderengine::PixelFormat>(0x18280086);
+    lParameters.muWidth = luWidth;
+    lParameters.muHeight = luHeight;
+    lParameters.meType = renderengine::Texture::TYPE_2D;
+    lParameters.muDepth = 1;
+    lParameters.muNumLevels = 1;
+    lParameters.meFormat = renderengine::PIXELFORMAT_A8R8G8B8;
     const rw::ResourceDescriptor lDescriptor = renderengine::Texture::GetResourceDescriptor(lParameters);
-    const rw::Resource lTextureResource = lpAllocator->DoAllocate(lDescriptor, 0);
+    const rw::Resource lTextureResource = lpAllocator->Allocate(lDescriptor, NULL);
     renderengine::Texture* lpWhiteTexture = renderengine::Texture::Initialize(lTextureResource, lParameters);
     renderengine::Texture::Locked lLocked;
     const char* const lpcFile = "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\ImmediateMode/CgsImRenderer.cpp";
@@ -303,16 +291,15 @@ renderengine::Texture* ImRendererBase::ConstructWhiteTexture(rw::IResourceAlloca
         CgsDev::Assert::EndAssert();
     }
 
-    u8* lpPixelRow = static_cast<u8*>(lLocked.mpPixelData);
-    const u32 luStrideBytes = lLocked.muStride & 0xFFFFFFFCu;
-    for (u32 luRow = 0; luRow < 4; ++luRow)
+    u32* lpuPixels = static_cast<u32*>(lLocked.mpPixelData);
+    const u32 luStrideInPixels = lLocked.muStride / sizeof(*lpuPixels);
+    for (u32 luRow = 0; luRow < luHeight; ++luRow)
     {
-        u32* lpPixels = reinterpret_cast<u32*>(lpPixelRow);
-        lpPixels[0] = 0xFFFFFFFFu;
-        lpPixels[1] = 0xFFFFFFFFu;
-        lpPixels[2] = 0xFFFFFFFFu;
-        lpPixels[3] = 0xFFFFFFFFu;
-        lpPixelRow += luStrideBytes;
+        for (u32 luCol = 0; luCol < luWidth; ++luCol)
+        {
+            lpuPixels[luCol] = 0xFFFFFFFFu;
+        }
+        lpuPixels += luStrideInPixels;
     }
 
     lpWhiteTexture->Unlock(lLocked);

@@ -92,7 +92,7 @@ void MomentStaticCamImpact::Update(f32 lfTimeStep, void* lrBehaviourController,
         }
         else
         {
-            SetCamera(mFixedCam.GetProducedCamera());
+            SetCamera(mFixedCam.GetCamera());
         }
         break;
 

@@ -139,12 +139,11 @@ void OnlineInviteMessageComponent::Prepare(
     mAptRef.SetFrameTriggerCallback(
         reinterpret_cast<void*>(&TransitionCompleteCallback), this);
 
-    BrnFlapt::TextFieldRef lTextField;
-    maTextFields[0] = *AttachToTextFieldComponent(
-        &lTextField, KAC_NOTIFY_TYPE_TEXTFIELD_NAME,
+    maTextFields[0] = AttachToTextFieldComponent(
+        KAC_NOTIFY_TYPE_TEXTFIELD_NAME,
         KAC_NOTIFY_TYPE_COMPONENT_NAME, lpcMovieClipName, lFile);
-    maTextFields[1] = *AttachToTextFieldComponent(
-        &lTextField, KAC_PLAYER_NAME_TEXTFIELD_NAME,
+    maTextFields[1] = AttachToTextFieldComponent(
+        KAC_PLAYER_NAME_TEXTFIELD_NAME,
         KAC_PLAYER_NAME_COMPONENT_NAME, lpcMovieClipName, lFile);
 }
 

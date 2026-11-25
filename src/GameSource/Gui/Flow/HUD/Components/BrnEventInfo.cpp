@@ -522,8 +522,7 @@ void EventInfoComponent::MoveAnimation(const char* lpcAnimation)
 
     // The X360 hands FindChildMovieClipOnFrame a stack MovieClipRef and then copies
     // BOTH words of the returned ref into mEventMovieClip (+0x0C/+0x10). Preserved.
-    BrnFlapt::MovieClipRef lEventMovieClip;
-    mEventMovieClip = *mAptRef.FindChildMovieClipOnFrame(&lEventMovieClip, KAC_EVENT_MOVIECLIP_NAME);
+    mEventMovieClip = mAptRef.FindChildMovieClipOnFrame(KAC_EVENT_MOVIECLIP_NAME);
 
     CGS_ASSERT(mEventMovieClip.mpMovieClipInst != 0, "mpMovieClipInst");   // BrnFlaptMovieClipRef.h:272 (non-gating)
 

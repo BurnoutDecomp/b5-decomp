@@ -95,8 +95,8 @@ namespace BrnGui
         BrnFlapt::MovieClipRef lAchievementsBox;
         lAchievementsBox = mAptRef.FindChildMovieClip("AchievementsBox_mc");
 
-        lAchievementsBox.FindChildTextField(&mAchievementAwardedRef, "AchievementAwarded_txt");
-        lAchievementsBox.FindChildTextField(&mAchievementNameRef,    "AchievementName_txt");
+        mAchievementAwardedRef = lAchievementsBox.FindChildTextField("AchievementAwarded_txt");
+        mAchievementNameRef = lAchievementsBox.FindChildTextField("AchievementName_txt");
     }
 
     // @ 0x8242C310 -- reset the runtime state to its idle defaults.

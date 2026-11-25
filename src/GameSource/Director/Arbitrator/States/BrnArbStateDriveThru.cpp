@@ -40,7 +40,7 @@
 //
 // The three breaks that were in the way, and what each turned out to be:
 //   (1) the two `sub_821FCxxx` callees banner-justified as "owning TU not yet identified"
-//       were BehaviourHandle::GetBehaviour / GetProducedCamera all along, hidden by this
+//       were BehaviourHandle::GetBehaviour / GetCamera all along, hidden by this
 //       class's own private BehaviourHandle fork. Fork retired.
 //   (2) BehaviourManager::NewBehaviour @0x82267418 -- the ATTRIBUTE-driven factory, distinct
 //       from the NewBehaviour<TBehaviour> family -- had no body anywhere. Landed in
@@ -109,7 +109,7 @@ namespace BrnDirector
     //                 == the live Camera::Behaviour*      == BehaviourHandle::GetBehaviour()
     //   sub_821FCE10: same assert (BrnBehaviourManager.h:610), same pool resolve, then
     //                 `addi r3, r3, 0x10`  == BehaviourHelper::mCamera
-    //                                      == BehaviourHandle::GetProducedCamera()
+    //                                      == BehaviourHandle::GetCamera()
     // Both are byte-identical to the sub_821FCD40/@0x821FCEE0/@0x821FD450/@0x821FD780 family
     // BrnBehaviourManager.h already documents as those two members, and to the ones the mounted
     // sibling states (BrnArbStateCrashing / BrnArbStateTakedown) call by name.
@@ -300,7 +300,7 @@ namespace BrnDirector
             // `mState_uFlags |= 2` on the copied camera, citing "X360 mCamera.mState_uFlags |= 2";
             // Update @0x82235DB0 contains no such store -- the body goes straight from
             // Camera::operator= to `bl sub_821FCDA8`. Removed: it was invented behaviour.
-            lrCamera = mDriveThruBehaviourHandle.GetProducedCamera();
+            lrCamera = mDriveThruBehaviourHandle.GetCamera();
 
             Camera::Behaviour* lpBehaviour = mDriveThruBehaviourHandle.GetBehaviour();
 

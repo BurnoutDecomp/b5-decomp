@@ -3092,7 +3092,7 @@ namespace BrnDirector
             {
                 mCameraInterpolationController.Update(
                     lCamera,
-                    mArbitrator.GetSharedCameras().mGameplayExternal.GetProducedCamera(),
+                    mArbitrator.GetSharedCameras().mGameplayExternal.GetCamera(),
                     lpIO->mpInputBuffer->GetRaceCarInfo()[liPlayerCarIndex].mRaceCarState.mTransform);
             }
             else

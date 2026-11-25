@@ -222,7 +222,7 @@ namespace BrnDirector
         case E_STATE_ACTIVE_PRE_COUNTDOWN:
         {
             // Drive the state camera from the behaviour and mark it behaviour-driven.
-            lrCamera = mRaceIntroBehaviourHandle.GetProducedCamera();
+            lrCamera = mRaceIntroBehaviourHandle.GetCamera();
             lrCamera.mState_uFlags |= KI_CAMERA_DIRTY_BEHAVIOUR_DRIVEN;
 
             // Once the event reaches the countdown, either resume the single-shot take and
@@ -260,7 +260,7 @@ namespace BrnDirector
 
         case E_STATE_ACTIVE_COUNTDOWN:
         {
-            lrCamera = mRaceIntroBehaviourHandle.GetProducedCamera();
+            lrCamera = mRaceIntroBehaviourHandle.GetCamera();
             lrCamera.mState_uFlags |= KI_CAMERA_DIRTY_BEHAVIOUR_DRIVEN;
 
             if (lrGameState.meEventType == KI_EVENT_TYPE_CAR_RESET)

@@ -388,7 +388,7 @@ namespace BrnDirector
             {
                 // Drive the state camera from the road-runner behaviour and request the crash-nav
                 // depth-of-field blurriness (DOF blurriness lane + border post-FX cleared).
-                lrCamera = mRoadRunnerCam.GetProducedCamera();
+                lrCamera = mRoadRunnerCam.GetCamera();
                 lrCamera.GetDepthOfField().SetBlurriness(SF_CRASHNAV_BLURRINESS);  // camera +0x134
                 lrCamera.SetRequestedBorderPostFX(KF_ZERO);                        // camera +0x110
             }
@@ -454,7 +454,7 @@ namespace BrnDirector
 
             // While turning about, the road-runner fly-by always drives the camera (with the
             // crash-nav blurriness).
-            lrCamera = mRoadRunnerCam.GetProducedCamera();
+            lrCamera = mRoadRunnerCam.GetCamera();
             lrCamera.GetDepthOfField().SetBlurriness(SF_CRASHNAV_BLURRINESS);  // camera +0x134
             lrCamera.SetRequestedBorderPostFX(KF_ZERO);                        // camera +0x110
 
@@ -518,7 +518,7 @@ namespace BrnDirector
 
             if (lbDriveFlyByCamera)
             {
-                lrCamera = mRoadRunnerCam.GetProducedCamera();
+                lrCamera = mRoadRunnerCam.GetCamera();
                 lrCamera.GetDepthOfField().SetBlurriness(SF_CRASHNAV_BLURRINESS);  // camera +0x134
                 lrCamera.SetRequestedBorderPostFX(KF_ZERO);                        // camera +0x110
             }

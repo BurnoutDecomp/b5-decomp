@@ -89,7 +89,7 @@ namespace BrnGui
         // Locate the named child under the base clip's parent and adopt it as the
         // controlled clip.
         BrnFlapt::MovieClipRef lParent;
-        mAptRef.GetParent(&lParent);
+        lParent = mAptRef.GetParent();
         mControlledMovieClip = lParent.FindChildMovieClip(lpControlledMovieClipName);
 
         // Record the tween endpoints (X360: stvx128 of the four vector args).

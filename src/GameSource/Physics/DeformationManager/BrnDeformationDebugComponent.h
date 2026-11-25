@@ -1,5 +1,6 @@
 #pragma once
 
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "types.hpp"
 #include "BrnCommonTypes.h"   // Vector3, Vector4, Matrix44Affine, VecFloat
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"   // CgsDev::DebugComponent (base)
@@ -74,15 +75,15 @@ namespace Deformation
         const char* GetName() const  { return "Deformation"; }
         const char* GetPath() const  { return "Physics"; }
 
-        // ⭐ ADDITIVE named views (2026-08-14, walls wave), for DeformationManager::Destruct
-        // @0x82603F78's two direct pokes on the file-scope static component:
-        //   * the "mpDeformationManager != NULL" assert READ  -> HasManager()
-        //   * the back-pointer CLEAR before the base destruct -> DetachManager()
-        // Same shape as DeformableObject's *Debug wrappers -- a named member access, no friendship,
-        // no raw offset. Reached via the DeformationDebugComponent_* stand-ins in
-        // BrnDeformationConstructShims.cpp.
-        bool HasManager() const { return mpDeformationManager != 0; }
-        void DetachManager()    { mpDeformationManager = 0; }
+        // ARTIST inlines this teardown in DeformationManager::Destruct.
+        void Destruct()
+        {
+            CGS_ASSERT_AT(mpDeformationManager != 0, "mpDeformationManager != NULL",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/DeformationManager/BrnDeformationDebugComponent.cpp",
+                227);
+            mpDeformationManager = 0;
+            CgsDev::DebugComponent::Destruct();
+        }
 
     private:
         // ---- selected-rig / sensor / point sliders + the compression solver ----------------------
