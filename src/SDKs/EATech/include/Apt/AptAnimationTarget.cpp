@@ -353,23 +353,32 @@ void AptAnimationTargetSet::add(AptValue* pValue)
 // linear-scan the slots (bound = capacity) for pValue; on a hit decrement the count,
 // Release the slot's value and null the slot. True iff one was removed.
 // ---------------------------------------------------------------------------
-bool AptAnimationTargetSet::remove(AptValue* pValue)
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
+int AptAnimationTargetSet::remove(AptValue* pValue)
 {
     if (mnCount == 0)
-        return false;
+        return 0;
 
-    const u32 luCap = mnCapacity;
-    u32 luIndex = 0;
-    while (luIndex < luCap && mppSlots[luIndex] != pValue)
-        ++luIndex;
-    if (luIndex >= luCap)
-        return false;                                      // not found
-
-    mnCount = static_cast<u16>(mnCount - 1);
-    mppSlots[luIndex]->Release();                          // vtbl[1]
-    mppSlots[luIndex] = 0;
-    return true;
+    int i;
+    for (i = 0; i < mnCapacity && mppSlots[i] != pValue; ++i)
+    {
+    }
+    if (i < mnCapacity)
+    {
+        --mnCount;
+        mppSlots[i]->Release();
+        mppSlots[i] = 0;
+        return 1;
+    }
+    return 0;
 }
+
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // ---------------------------------------------------------------------------
 // AptAnimationTarget::AddToRemList -- queue a

@@ -36,10 +36,8 @@
 // vtable object-type index = AptVFT_Key (16), confirmed by the ctor's
 // `li r4, 0x10` argument to the AptValueWithHash base.
 //
-// removeListener / getAscii: their disassembly was NOT part of this TU's dossier
-// (only their symbol addresses, referenced by objectMemberLookup). They are
-// declared so the lookup can wire the cached AptNativeFunction; their bodies are
-// their own follow-on leaves and are NOT fabricated here.
+// The native callback registration identifies removeListener at 0x82ADC7C0
+// and getAscii at 0x82AECEF8.
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
@@ -90,18 +88,16 @@ public:
     //   addListener   @0x82ADC6E0 -- register a Key listener object.
     //   getAnalogStickInfo    @0x82AF55F0 -- pad analog-stick snapshot Object.
     //   getAnalogTriggerInfo  @0x82AF5748 -- pad analog-trigger snapshot Object.
-    static AptValue* sMethod_isDown();
+    static AptValue* sMethod_isDown(AptValue* pThis, int nArgCount);
     static AptValue* sMethod_isToggled();
     static AptValue* sMethod_getCode();
     static AptValue* sMethod_getController();
-    static AptValue* sMethod_addListener(AptKey* pThis, int nArgCount);
+    static AptValue* sMethod_addListener(AptValue* pThis, int nArgCount);
     static AptValue* sMethod_getAnalogStickInfo();
     static AptValue* sMethod_getAnalogTriggerInfo();
 
-    // removeListener / getAscii: bodies HOMED in AptKey.cpp (decompiled from the
-    // PS3 DecFIGS EXTERNAL twins @0xF303D8 / @0xF3E078 -- see the .cpp headers).
-    static AptValue* sMethod_removeListener(AptKey* pThis, int nArgCount);
-    static AptValue* sMethod_getAscii();
+    static AptValue* sMethod_removeListener(AptValue* pThis, int nArgCount);
+    static AptValue* sMethod_getAscii(AptValue* pThis, int nArgCount);
 
 private:
     // Reserve room for this many native members in the base property hash. The

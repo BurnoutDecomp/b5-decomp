@@ -105,10 +105,10 @@ SpliceManager::SpliceManager( const CgsSound::Playback::Environment& arEnvironme
         rw::audio::core::PlugInRegistry* lpRegistry =
             rw::audio::core::System::GetPlugInRegistry( lpSystem );
 
-        sndplayerHandle = rw::audio::core::PlugInRegistry::GetPlugInHandle( lpRegistry, 0x536E5031 ); // 'SnP1' +0x6B4
-        resampleHandle  = rw::audio::core::PlugInRegistry::GetPlugInHandle( lpRegistry, 0x52737030 ); // 'Rsp0' +0x6B8
-        sendHandle      = rw::audio::core::PlugInRegistry::GetPlugInHandle( lpRegistry, 0x53656E30 ); // 'Sen0' +0x6C0
-        pannerHandle    = rw::audio::core::PlugInRegistry::GetPlugInHandle( lpRegistry, 0x506E3231 ); // 'Pn21' +0x6BC
+        sndplayerHandle = lpRegistry->GetPlugInHandle( 0x536E5031 ); // 'SnP1' +0x6B4
+        resampleHandle  = lpRegistry->GetPlugInHandle( 0x52737030 ); // 'Rsp0' +0x6B8
+        sendHandle      = lpRegistry->GetPlugInHandle( 0x53656E30 ); // 'Sen0' +0x6C0
+        pannerHandle    = lpRegistry->GetPlugInHandle( 0x506E3231 ); // 'Pn21' +0x6BC
 
         for ( u32 luVoice = 0; luVoice < auMonoVoiceCount; ++luVoice )
             CreateMonoVoice( &mMonoVoicePool.maVoicePluginPairs[luVoice] );

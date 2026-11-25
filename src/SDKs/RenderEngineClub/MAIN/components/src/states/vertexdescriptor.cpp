@@ -12,8 +12,22 @@ namespace renderengine
 // position/texture indices differ; the bytes here are the actual X360 table.
 const u8 gauVertexFormatDefaults[16 * 2] =
 {
-    0xFF, 0, 0, 0, 0, 0, 3, 0, 10, 0, 10, 1, 5, 0, 5, 1,
-    5, 2, 5, 3, 5, 4, 5, 5, 5, 6, 5, 7, 2, 0, 1, 0
+    0xFF, 0,
+    D3DDECLUSAGE_POSITION, 0,
+    D3DDECLUSAGE_POSITION, 0,
+    D3DDECLUSAGE_NORMAL, 0,
+    D3DDECLUSAGE_COLOR, 0,
+    D3DDECLUSAGE_COLOR, 1,
+    D3DDECLUSAGE_TEXCOORD, 0,
+    D3DDECLUSAGE_TEXCOORD, 1,
+    D3DDECLUSAGE_TEXCOORD, 2,
+    D3DDECLUSAGE_TEXCOORD, 3,
+    D3DDECLUSAGE_TEXCOORD, 4,
+    D3DDECLUSAGE_TEXCOORD, 5,
+    D3DDECLUSAGE_TEXCOORD, 6,
+    D3DDECLUSAGE_TEXCOORD, 7,
+    D3DDECLUSAGE_BLENDINDICES, 0,
+    D3DDECLUSAGE_BLENDWEIGHT, 0
 };
 
 // ARTIST82B611A0. The SDK declaration record is exactly twelve bytes; its
@@ -40,9 +54,9 @@ D3DVertexDeclaration* VertexDescriptor::CreateD3DObject(VertexDescriptorData* lp
     D3DVERTEXELEMENT9& lrEnd = laElements[luIndex];
     lrEnd.Stream = 0xFF;
     lrEnd.Offset = 0;
-    lrEnd.Type = 0xFFFFFFFFu;
-    lrEnd.Method = 0;
-    lrEnd.Usage = 0;
+    lrEnd.Type = D3DDECLTYPE_UNUSED;
+    lrEnd.Method = D3DDECLMETHOD_DEFAULT;
+    lrEnd.Usage = D3DDECLUSAGE_POSITION;
     lrEnd.UsageIndex = 0;
     lpData->mpDeclaration = D3DDevice_CreateVertexDeclaration(laElements);
     return lpData->mpDeclaration;
@@ -57,51 +71,69 @@ VertexDescriptorData* VertexDescriptor::Initialize(rw::Resource* lpResource,
         static_cast<VertexDescriptorData*>(lpResource->m_baseResources[0]);
     memset(lpData, 0, 0x20);
     lpData->muType2Mask = 0;
-    u32 lauStreamStrides[16] = { 0 };
+    u32 lauStreamStrides[16];
+    for (u32 luStream = 0; luStream < 16; ++luStream)
+        lauStreamStrides[luStream] = 0;
     u32 luCount = 0;
-    for (u32 luIndex = 0; luIndex != 16; ++luIndex)
+    const Parameters::Element* lpSource = lpParameters->maElements;
+    VertexElement* lpDest = lpData->maElements;
+    u32 luRemaining = sizeof(lpParameters->maElements) / sizeof(*lpSource);
+    do
     {
-        const Parameters::Element& lrSource = lpParameters->maElements[luIndex];
-        if (lrSource.miOffset == -1)
-            continue;
-        VertexElement& lrElement = lpData->maElements[luCount];
-        lrElement.muStream = lrSource.mu16Stream;
-        lrElement.muOffset = lrSource.mu16Pad0;
-        lrElement.muType = static_cast<u32>(lrSource.miOffset);
-        lrElement.mauTail[0] = lrSource.mu8Type;
-        lrElement.mauTail[1] = lrSource.mu8Pad1;
-        lrElement.mauTail[2] = lrSource.mu8Usage;
-        lrElement.mauTail[3] = lrSource.mu8UsageIndex;
-        lrElement.muReserved0C = lrSource.muElementClass;
-        lpData->muStreamMask |= 1u << lrSource.mu8UsageIndex;
-        const u32 luSize = VertexFormatGetStride(static_cast<VertexFormat>(lrSource.miOffset));
-        if (lrElement.muOffset >= 0x100)
+        if (lpSource->miOffset != VERTEXFORMAT_NA)
         {
-            lrElement.muOffset = static_cast<u8>(lauStreamStrides[lrSource.mu16Stream]);
-            lauStreamStrides[lrSource.mu16Stream] += luSize;
-        }
-        else
-        {
-            const u32 luEnd = lrElement.muOffset + luSize;
-            if (lauStreamStrides[lrSource.mu16Stream] < luEnd)
-                lauStreamStrides[lrSource.mu16Stream] = luEnd;
-        }
-        if (lrSource.mu8Pad1 == 0xFF)
-            lrElement.mauTail[1] = gauVertexFormatDefaults[lrSource.mu8UsageIndex * 2];
-        if (lrSource.mu8Usage == 0xFF)
-            lrElement.mauTail[2] = gauVertexFormatDefaults[lrSource.mu8UsageIndex * 2 + 1];
-        if (lrSource.muElementClass == 2)
-            lpData->muType2Mask = static_cast<u16>(lpData->muType2Mask | (1u << lrSource.mu16Stream));
-        ++luCount;
-    }
+            // ARTIST 82B630CC–82B630EC transfers the whole compact element.
+            CGS_STATIC_ASSERT((sizeof(VertexElement) == sizeof(Parameters::Element)), "ARTIST vertex element width");
+            std::memcpy(lpDest, lpSource, sizeof(*lpDest));
+            lpData->muStreamMask |= 1u << lpSource->mu8UsageIndex;
 
-    lpData->muElementCount = static_cast<u8>(luCount);
-    u8* const lpElementStrides = lpData->GetElementStrides();
-    for (u32 luIndex = 0; luIndex != luCount; ++luIndex)
+            const u32 luSize = VertexFormatGetStride(static_cast<VertexFormat>(lpSource->miOffset));
+            if (lpDest->muOffset < 0x100)
+            {
+                const u32 luEnd = lpDest->muOffset + luSize;
+                if (lauStreamStrides[lpSource->mu16Stream] < luEnd)
+                    lauStreamStrides[lpSource->mu16Stream] = luEnd;
+            }
+            else
+            {
+                // ARTIST 82B63130 writes an unsigned halfword, including offsets past 0xFF.
+                lpDest->muOffset = static_cast<u16>(lauStreamStrides[lpSource->mu16Stream]);
+                lauStreamStrides[lpSource->mu16Stream] += luSize;
+            }
+
+            u8 luUsage = lpSource->mu8Pad1;
+            if (luUsage == 0xFF)
+                luUsage = gauVertexFormatDefaults[lpSource->mu8UsageIndex * 2];
+            lpDest->mauTail[1] = luUsage;
+
+            u8 luUsageIndex = lpSource->mu8Usage;
+            if (luUsageIndex == 0xFF)
+                luUsageIndex = gauVertexFormatDefaults[lpSource->mu8UsageIndex * 2 + 1];
+            lpDest->mauTail[2] = luUsageIndex;
+
+            if (lpSource->muElementClass == 2)
+                lpData->muType2Mask = static_cast<u16>(lpData->muType2Mask | (1u << lpSource->mu16Stream));
+            ++luCount;
+            ++lpDest;
+        }
+        ++lpSource;
+    }
+    while (--luRemaining != 0);
+
+    lpData->muElementCount = static_cast<u16>(luCount);
+    u8* lpElementStrides = lpData->GetElementStrides();
+    if (luCount != 0)
     {
-        const u8 luOverride = lpParameters->maElementFlags[luIndex];
-        lpElementStrides[luIndex] = luOverride ? luOverride :
-            static_cast<u8>(lauStreamStrides[lpData->maElements[luIndex].muStream]);
+        const u8* lpOverriddenStrides = lpParameters->maElementFlags;
+        const VertexElement* lpElement = lpData->maElements;
+        do
+        {
+            const u8 luOverride = *lpOverriddenStrides++;
+            *lpElementStrides++ = luOverride ? luOverride :
+                static_cast<u8>(lauStreamStrides[lpElement->muStream]);
+            ++lpElement;
+        }
+        while (--luCount != 0);
     }
     lpData->muInitialised = 1;
     CreateD3DObject(lpData);
@@ -171,4 +203,38 @@ rw::BaseResourceDescriptors<5> VertexDescriptor::GetResourceDescriptor(const Par
     lDescriptor.m_baseResourceDescriptors[0] = rw::BaseResourceDescriptor(luSize, 4);
     return lDescriptor;
 }
+
+// ARTIST 82B61310 includes a four-byte declaration using the SDK RGBA swizzle.
+// Keep the stride decoder visible to the descriptor builder, whose native call
+// at 82B63108 preserves live volatile registers across this specific callee.
+static const DWORD KU_VERTEX_RGBA =
+    MAKED3DDECLTYPE(GPUVERTEXFORMAT_8_8_8_8, GPUENDIAN_8IN32, GPUVERTEXSIGN_UNSIGNED,
+                   GPUNUMFORMAT_FRACTION, GPUSWIZZLE_RGBA);
+
+// Only the declaration words selected by ARTIST have a native stride here.
+u32 VertexFormatGetStride(VertexFormat format)
+{
+    switch (static_cast<D3DDECLTYPE>(format))
+    {
+    case KU_VERTEX_RGBA: case D3DDECLTYPE_D3DCOLOR:
+    case D3DDECLTYPE_UBYTE4N: case D3DDECLTYPE_UDEC4N: case D3DDECLTYPE_BYTE4N: case D3DDECLTYPE_DEC4N:
+    case D3DDECLTYPE_UBYTE4: case D3DDECLTYPE_UDEC4: case D3DDECLTYPE_BYTE4: case D3DDECLTYPE_DEC4:
+    case D3DDECLTYPE_UDEC3N: case D3DDECLTYPE_UHEND3N: case D3DDECLTYPE_UDHEN3N: case D3DDECLTYPE_DEC3N:
+    case D3DDECLTYPE_HEND3N: case D3DDECLTYPE_DHEN3N: case D3DDECLTYPE_UDEC3: case D3DDECLTYPE_UHEND3:
+    case D3DDECLTYPE_UDHEN3: case D3DDECLTYPE_DEC3: case D3DDECLTYPE_HEND3: case D3DDECLTYPE_DHEN3:
+    case D3DDECLTYPE_USHORT2N: case D3DDECLTYPE_SHORT2N: case D3DDECLTYPE_USHORT2: case D3DDECLTYPE_SHORT2: case D3DDECLTYPE_FLOAT16_2:
+    case D3DDECLTYPE_UINT1N: case D3DDECLTYPE_INT1N: case D3DDECLTYPE_UINT1: case D3DDECLTYPE_INT1: case D3DDECLTYPE_FLOAT1:
+        return 4;
+    case D3DDECLTYPE_USHORT4N: case D3DDECLTYPE_SHORT4N: case D3DDECLTYPE_USHORT4: case D3DDECLTYPE_SHORT4: case D3DDECLTYPE_FLOAT16_4:
+    case D3DDECLTYPE_UINT2N: case D3DDECLTYPE_INT2N: case D3DDECLTYPE_UINT2: case D3DDECLTYPE_INT2: case D3DDECLTYPE_FLOAT2:
+        return 8;
+    case D3DDECLTYPE_FLOAT3:
+        return 12;
+    case D3DDECLTYPE_UINT4N: case D3DDECLTYPE_INT4N: case D3DDECLTYPE_UINT4: case D3DDECLTYPE_INT4: case D3DDECLTYPE_FLOAT4:
+        return 16;
+    default:
+        return 0;
+    }
+}
+
 }

@@ -11,7 +11,7 @@
 #include "SDKs/EA/GameTalk/GameTalk.h"                              // EA::GameTalk::GameTalkMessage accessors
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/attriblivelink.h" // Attrib::DecodeLiveLinkMessage
 
-// Asserts pass __FILE__; ARTIST's reads "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\attribsys\\CgsAttribSysModule.cpp".
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\attribsys\\CgsAttribSysModule.cpp"
 
 namespace CgsAttribSys
 {
@@ -144,19 +144,19 @@ bool AttribSysModule::Prepare(CgsMemory::LinearMalloc* lpLinearAlloc,
 
             CGS_ASSERT(lpLinearAlloc   != 0,
                 CGS_ASSERT_MESSAGE_AT(
-                    "lpLinearAlloc != NULL", __FILE__, 133 /* ARTIST 0x828076C8 */));
+                    "lpLinearAlloc != NULL", CGS_ARTIST_FILE, 133 /* ARTIST 0x828076C8 */));
             CGS_ASSERT(lpAttribSysHeap != 0,
                 CGS_ASSERT_MESSAGE_AT(
-                    "lpAttribSysHeap != NULL", __FILE__, 134 /* ARTIST 0x828076EC */));
+                    "lpAttribSysHeap != NULL", CGS_ARTIST_FILE, 134 /* ARTIST 0x828076EC */));
             CGS_ASSERT(lpGameTalkHeap  != 0,
                 CGS_ASSERT_MESSAGE_AT(
-                    "lpGameTalkHeap != NULL", __FILE__, 135 /* ARTIST 0x82807710 */));
+                    "lpGameTalkHeap != NULL", CGS_ARTIST_FILE, 135 /* ARTIST 0x82807710 */));
             CGS_ASSERT(lpEastlHeap     != 0,
                 CGS_ASSERT_MESSAGE_AT(
-                    "lpEastlHeap != NULL", __FILE__, 136 /* ARTIST 0x82807734 */));
+                    "lpEastlHeap != NULL", CGS_ARTIST_FILE, 136 /* ARTIST 0x82807734 */));
             CGS_ASSERT(liMaxNumVaults > 0,
                 CGS_ASSERT_MESSAGE_AT(
-                    "liMaxNumVaults > 0", __FILE__, 137 /* ARTIST 0x82807758 */));
+                    "liMaxNumVaults > 0", CGS_ARTIST_FILE, 137 /* ARTIST 0x82807758 */));
 
             mMemoryManager.Prepare(lpLinearAlloc, lpAttribSysHeap,
                                             lpGameTalkHeap, lpEastlHeap);
@@ -166,7 +166,7 @@ bool AttribSysModule::Prepare(CgsMemory::LinearMalloc* lpLinearAlloc,
                 lpLinearAlloc->Malloc(KI_SCHEMA_VAULT_BYTES));
             CGS_ASSERT(mpSchemaVault != 0,
                 CGS_ASSERT_MESSAGE_AT(
-                    "mpSchemaVault != NULL", __FILE__, 152 /* ARTIST 0x828077B4 */));
+                    "mpSchemaVault != NULL", CGS_ARTIST_FILE, 152 /* ARTIST 0x828077B4 */));
 
             mePrepareStage++;
             // fall through
@@ -177,7 +177,7 @@ bool AttribSysModule::Prepare(CgsMemory::LinearMalloc* lpLinearAlloc,
         default:
             CGS_ASSERT(false,
                 CGS_ASSERT_MESSAGE_AT(
-                    "Invalid prepare state.\n", __FILE__, 169 /* ARTIST 0x828077F4 */));
+                    "Invalid prepare state.\n", CGS_ARTIST_FILE, 169 /* ARTIST 0x828077F4 */));
             return false;
     }
 }
@@ -205,7 +205,7 @@ bool AttribSysModule::Release()
         default:
             CGS_ASSERT(false,
                 CGS_ASSERT_MESSAGE_AT(
-                    "Invalid release state.\n", __FILE__, 226 /* ARTIST 0x828025B4 */));
+                    "Invalid release state.\n", CGS_ARTIST_FILE, 226 /* ARTIST 0x828025B4 */));
             return false;
     }
 }
@@ -296,7 +296,7 @@ void AttribSysModule::Update(const AttribSysIO::InputBuffer* lpInputBuffer)
 // the event type id (0 RegisterVault, 1 RegisterSchema, 2 UnregisterVault).
 void AttribSysModule::ProcessInputs(const AttribSysIO::InputBuffer* lpInputBuffer)
 {
-    CGS_ASSERT(lpInputBuffer != 0, "lpInputBuffer != NULL");
+    CGS_ASSERT_AT(lpInputBuffer != 0, "lpInputBuffer != NULL", CGS_ARTIST_FILE, 299);
 
     lpInputBuffer->LockForRead();
 
@@ -331,7 +331,7 @@ void AttribSysModule::ProcessInputs(const AttribSysIO::InputBuffer* lpInputBuffe
 
 
 
-                CGS_ASSERT(false, "Unrecognised AttribSys event type\n");
+                CGS_ASSERT_AT(false, "Unrecognised AttribSys event type\n", CGS_ARTIST_FILE, 334);
                 break;
         }
 
@@ -359,7 +359,7 @@ void AttribSysModule::ProcessInputs(const AttribSysIO::InputBuffer* lpInputBuffe
 // it; the world passes 1 and only tests queue length).
 void AttribSysModule::RegisterVault(AttribSysIO::RegisterVaultRequest* lpRegisterVaultRequest)
 {
-    CGS_ASSERT(IsSchemaLoaded(), "IsSchemaLoaded()");
+    CGS_ASSERT_AT(IsSchemaLoaded(), "IsSchemaLoaded()", CGS_ARTIST_FILE, 362);
     mVaultArray.RegisterVault(lpRegisterVaultRequest);
 
     const s32 liEventId = lpRegisterVaultRequest->miEventId;
@@ -394,7 +394,7 @@ void AttribSysModule::RegisterVault(AttribSysIO::RegisterVaultRequest* lpRegiste
 // vlt size, bin size, vlt data, bin data); the placement new's null test is the compiler's.
 void AttribSysModule::RegisterSchema(AttribSysIO::RegisterSchemaRequest* lpRegisterSchemaRequest)
 {
-    CGS_ASSERT(!IsSchemaLoaded(), "!IsSchemaLoaded()");
+    CGS_ASSERT_AT(!IsSchemaLoaded(), "!IsSchemaLoaded()", CGS_ARTIST_FILE, 397);
 
 
     int32_t liVltSize = lpRegisterSchemaRequest->miSchemaVltDataSize;
@@ -414,7 +414,7 @@ void AttribSysModule::RegisterSchema(AttribSysIO::RegisterSchemaRequest* lpRegis
 
 
 
-    CGS_ASSERT(lpNewVault == mpSchemaVault, "lpNewVault == mpSchemaVault");
+    CGS_ASSERT_AT(lpNewVault == mpSchemaVault, "lpNewVault == mpSchemaVault", CGS_ARTIST_FILE, 417);
 
     if (lpNewVault->HasUnresolvedDependency())
     {
@@ -425,7 +425,7 @@ void AttribSysModule::RegisterSchema(AttribSysIO::RegisterSchemaRequest* lpRegis
 
 
 
-    CGS_ASSERT(!lpNewVault->HasUnresolvedDependency(), "!lpNewVault->HasUnresolvedDependency()");
+    CGS_ASSERT_AT(!lpNewVault->HasUnresolvedDependency(), "!lpNewVault->HasUnresolvedDependency()", CGS_ARTIST_FILE, 428);
 
     lpNewVault->Initialize();
 
@@ -459,8 +459,8 @@ void AttribSysModule::RegisterSchema(AttribSysIO::RegisterSchemaRequest* lpRegis
 // @0x8266EAA0 uses it as the GameData event-slot index).
 void AttribSysModule::UnregisterVault(AttribSysIO::UnregisterVaultRequest* lpUnregisterVaultRequest)
 {
-    CGS_ASSERT(IsSchemaLoaded(), "IsSchemaLoaded()");
-    CGS_ASSERT(lpUnregisterVaultRequest != 0, "lpUnregisterVaultRequest != NULL");
+    CGS_ASSERT_AT(IsSchemaLoaded(), "IsSchemaLoaded()", CGS_ARTIST_FILE, 462);
+    CGS_ASSERT_AT(lpUnregisterVaultRequest != 0, "lpUnregisterVaultRequest != NULL", CGS_ARTIST_FILE, 463);
     mVaultArray.UnregisterVault(lpUnregisterVaultRequest);
 
     const s32 liEventId = lpUnregisterVaultRequest->miEventId;
@@ -469,3 +469,5 @@ void AttribSysModule::UnregisterVault(AttribSysIO::UnregisterVaultRequest* lpUnr
         5, static_cast<s32>(sizeof(liEventId)));
 }
 }
+
+#undef CGS_ARTIST_FILE

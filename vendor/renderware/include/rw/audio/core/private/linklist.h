@@ -101,6 +101,15 @@ struct ListQueue
         return phead;
     }
 
+    void Push(ListNode *node)
+    {
+        node->pnext = phead;
+        if (!ptail)
+            ptail = node;
+        phead = node;
+        ++entries;
+    }
+
     void PushTail(ListNode *node)
     {
         node->pnext = 0;

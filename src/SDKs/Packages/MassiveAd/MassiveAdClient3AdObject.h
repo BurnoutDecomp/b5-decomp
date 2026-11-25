@@ -72,17 +72,14 @@ public:
     virtual int GetBestImpression(CMassiveListNode* pSubscriberNode, MAD_Impression* pBest);
 
     int BaseFindPreSubscribers(CMassiveAdObject* pAdObject);
-    int AssetIDRemove(int nAssetID);
-    int AssetIDAdd(int nAssetID);
+    // ARTIST 0x82BD5B9C/0x82BD5BE0 and 0x82BD5C74 compare the delivered U32 IDs as unsigned.
+    int AssetIDRemove(unsigned int uAssetID);
+    int AssetIDAdd(unsigned int uAssetID);
     int SubscriberRemove(XMassiveAdClientSubscriber* pSubscriber);
     XMassiveAdClientSubscriber* SubscriberFind(XMassiveAdClientSubscriber* pSubscriber);
     int GetCrexID();
     int ChangeViewState(int nViewState);
     float GetScreenRatio(unsigned short nScreenWidth, unsigned short nScreenHeight);
-
-    char* mpcAdObjectName;      // +0x14 (read by the zone manager's name lookup)
-    CMassiveAdObject* mpMaster; // +0x34 spawning composite of a slave, or 0
-    int mnInvElementID;         // +0x48 inventory-element id
 
 protected:
     int StateInit();
@@ -98,17 +95,32 @@ protected:
     int SaveImpressionRecord(MAD_Impression* pImpression);
     int UpdateImpressions(int bOutOfView);
 
+public:
+    // ARTIST constructor 0x82BD58F8 pins the offsets in this block.
+    char* mpcAdObjectName;      // +0x14 (read by the zone manager's name lookup)
+
+protected:
     CMassiveZoneManager* mpZone;            // +0x18
     CMassiveList         mSubscriberList;   // +0x1C
     CMassiveAsset*       mpCurrentAsset;    // +0x2C asset being reported on
     CMassiveAsset*       mpDownloadAsset;   // +0x30 asset whose media is downloading
+public:
+    CMassiveAdObject* mpMaster; // +0x34 spawning composite of a slave, or 0
+
+protected:
     int                  mnRotationType;    // +0x38 1 fixed, 16 dynamic composite
     int                  mnViewState;       // +0x3C 1 impression, 2 view, 3 none
     CMassiveRecord*      mpCurrentRecord;   // +0x40
     unsigned char        mbSuspended;       // +0x44
     unsigned char        mbMediaDownloaded; // +0x45
+public:
+    int mnInvElementID;        // +0x48 inventory-element id
+
+protected:
     unsigned short       muAssetIDCount;    // +0x4C primary match list size (rotation bound)
-    CMassiveList         mAssetIDList;      // +0x50 delivered asset ids (MassiveMalloc'd ints)
+    CMassiveList         mAssetIDList;      // +0x50 delivered unsigned 32-bit asset ids
 };
+
+CGS_STATIC_ASSERT((sizeof(CMassiveAdObject) == 0x60), "ARTIST placement base size");
 
 } // namespace MassiveAdClient3

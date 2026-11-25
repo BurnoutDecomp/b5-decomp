@@ -84,7 +84,7 @@ int CMassiveAdObjectAudioDynamic::GetNextAssetID()
             if (luStep++ >= muAssetIDCount)
                 break;
 
-            if (*static_cast<int*>(mAssetIDList.GetCurrData()) == mnCurrentAssetID)
+            if (*static_cast<unsigned int*>(mAssetIDList.GetCurrData()) == mnCurrentAssetID)
             {
                 mAssetIDList.GoToNext();
                 ++muActiveAssetCount;
@@ -101,7 +101,7 @@ int CMassiveAdObjectAudioDynamic::GetNextAssetID()
         }
     }
 
-    mnCurrentAssetID = *static_cast<int*>(mAssetIDList.GetCurrData());
+    mnCurrentAssetID = *static_cast<unsigned int*>(mAssetIDList.GetCurrData());
     return mnCurrentAssetID;
 }
 

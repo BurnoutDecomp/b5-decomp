@@ -206,7 +206,7 @@ namespace CgsSceneManager
         // sub_828AE988 word for word). The generic's second argument is an unread placeholder: the capacity is the
         // group count Construct computes at run time (the static tree's groups + KU_LOOSE_OCTREE_ADAPTIVE_NODEARRAY_
         // POOL_SIZE spares), held in the pool's own capacity field.
-        typedef CgsContainers::IndexedPool<LooseOctreeNodeAllocation, 0, u16> NodeGroupPool;
+        typedef CgsContainers::IndexedPool<LooseOctreeNodeAllocation, u16> NodeGroupPool;
 
         // @ 0x828BADD8 -- placement-new: carve a LooseOctree out of the scene resource
         // allocator (a 16-byte-aligned main-memory block).

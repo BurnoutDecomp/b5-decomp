@@ -7,52 +7,13 @@
 
 #define CGS_INDEXED_POOL_ARTIST_HEADER "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsIndexedPool.h"
 
-// ============================================================================
-// GameShared/GameClasses/Containers/CgsIndexedPool.h
-//
-// CgsContainers::IndexedPool<T, N> -- a fixed-capacity object pool that hands out
-// stable integer handles. Live objects live in maElements[]; the free slots are
-// tracked by a list of free indices (mpFreeIndices[0 .. muNumFree)). operator[]
-// resolves a handle back to its element, asserting (non-fatally) that the handle is
-// in range AND that the slot is currently allocated (not on the free list).
-//
-// SLICE -- operator[] (the indexed accessor) plus Clear / GetObjectIndex / PushIndex,
-// all reconstructed from the X360 out-of-line instantiation
-//   CgsContainers::IndexedPool<BrnResource::GameDataEventSlot, short>::*
-//     operator[](s16)      @ 0x82663010  (asserts CgsIndexedPool.h:241 / :250)
-//     Clear()              @ 0x826638D0
-//     GetObjectIndex(T*)   @ 0x82662F50  (assert CgsIndexedPool.h:222 "Object not in pool")
-//     PushIndex(s16)       @ 0x82663180  (asserts :301 "Object not in pool", :310 "Object is already free")
-// (IDA-truncated symbol "BrnResource::GameDataEventSlot,short>"). The element base /
-// free-list / count fields are modeled at the exact byte offsets the asm reads. The
-// pool's construction, Allocate/Free proper, iteration and the rest of the class are
-// DEFERRED to their own reconstruction pass -- GROW this header additively when they
-// land; do NOT fork the pool elsewhere.
-//
-// FLAG (additive correction, X360-authoritative): the prior commit modeled +0x08 as an
-// honest unnamed `muPad08` because operator[] never touches it. Clear @0x826638D0 and
-// PushIndex @0x82663180 now PROVE +0x08 is a real s16 live/allocated count -- Clear sets
-// it to 0, PushIndex decrements it when an index is returned to the free list. It is
-// renamed msNumAllocated here. No prior TU referenced muPad08 by name (it was padding),
-// so the rename is safe; the byte offset (+0x08) and the size (s16) are unchanged.
-//
-// FLAG: this is a layout-faithful model of the generic, not the full IndexedPool surface.
-// The byte layout (+0 element base, +4 free-index array, +0x08 num-allocated, +0x0A
-// num-free, +0x0C capacity) is proven by the X360 asm of these four methods; the +0x06
-// short is not touched by any reconstructed method and stays honest unnamed padding.
-// ============================================================================
-
+// DecFIGS CgsIndexedPool.h:33-81. The runtime pool stores object and free-index
+// pointers followed by the used, free and capacity counts. The index type sets
+// the count widths. FixedIndexedPool owns the compile-time backing extents.
 namespace CgsContainers
 {
 
-// IndexType is the free-list / count field type spelled by the demangler's second template
-// tail (the "<...,short>" / "<...,char>" the IDA symbols show). It controls BOTH the width of
-// the free-index list entries AND the width of the three live/free/capacity count fields, which
-// is why the byte-indexed pools (IndexType=s8) pack their counts at +0x08/+0x09/+0x0A while the
-// short-indexed pools (IndexType=s16) land them at +0x08/+0x0A/+0x0C. Defaulted to s16 so the
-// pre-existing <T,N> instantiations keep their recovered layout unchanged. N stays the runtime
-// capacity placeholder (msCapacity is the live field; N is not read by any reconstructed method).
-template <typename T, s32 N, typename IndexType = s16>
+template <typename T, typename IndexType>
 class IndexedPool
 {
 public:
@@ -96,11 +57,11 @@ public:
     // (a1+439328) at +0, the free-index array (a1+443936) at +4, then Clear() -- so the
     // construction step is modeled as this named member on the generic. (The X360 also zeroes
     // two neighbouring module fields in the same run; those belong to the module, not the pool.)
-    void Construct(T* lpElements, IndexType* lpFreeIndices, IndexType lsCapacity)
+    void Construct(T* lpElements, IndexType* lpFreeIndices, s32 liCapacity)
     {
         maElements     = lpElements;
         mpFreeIndices  = lpFreeIndices;
-        msCapacity     = lsCapacity;
+        msCapacity     = static_cast<IndexType>(liCapacity);
         Clear();
     }
 
@@ -132,7 +93,7 @@ public:
     IndexType GetNumFree()  { return msNumFree; }
     IndexType GetNumUsed()  { return msNumAllocated; }
 
-    // Get @ 0x828DFD38 (CgsResource::ResourceModule::ProcessPendingFileSystemResponses, char-pool):
+    // GetUsedList @ 0x828DFD38 (CgsResource::ResourceModule::ProcessPendingFileSystemResponses, char-pool):
     // gather pointers to every CURRENTLY-ALLOCATED element into the caller's buffer and return how
     // many were written. X360: assert the supplied buffer holds at least msCapacity entries
     // ("You must supply a buffer to contain a minimum of all the objects in the pool", :400 -- the
@@ -141,31 +102,23 @@ public:
     // (lppOutBuffer[mpFreeIndices[f]] = 0 for f in [0, msNumFree)); (3) compact the surviving
     // non-null pointers to the front, counting them. Returns the live count. Additive: the original
     // header did not model Get; recovered from the char-pool asm of this instantiation.
-    s32 Get(T** lppOutBuffer, s32 liBufferCapacity) const
+    s32 GetUsedList(T** lppOutBuffer, s32 liBufferCapacity)
     {
-        CGS_ASSERT(liBufferCapacity >= msCapacity,
-                   "You must supply a buffer to contain a minimum of all the objects in the pool\n");
+        CGS_ASSERT_STREAM_AT(liBufferCapacity >= msCapacity,
+            "You must supply a buffer to contain a minimum of all the objects in the pool\n",
+            CGS_INDEXED_POOL_ARTIST_HEADER, 400);
 
-        const s32 liCapacity = static_cast<s32>(msCapacity);
-        for (s32 li = 0; li < liCapacity; ++li)
-        {
-            lppOutBuffer[li] = const_cast<T*>(&maElements[li]);
-        }
+        for (s32 li = 0; li < msCapacity; ++li)
+            lppOutBuffer[li] = &maElements[li];
 
-        const s32 liNumFree = static_cast<s32>(msNumFree);
-        for (s32 lf = 0; lf < liNumFree; ++lf)
-        {
-            lppOutBuffer[static_cast<s32>(mpFreeIndices[lf])] = 0;
-        }
+        for (s32 liFree = 0; liFree < msNumFree; ++liFree)
+            lppOutBuffer[mpFreeIndices[liFree]] = 0;
 
         s32 liLive = 0;
-        for (s32 li = 0; li < liCapacity; ++li)
+        for (s32 li = 0; li < msCapacity; ++li)
         {
             if (lppOutBuffer[li])
-            {
-                lppOutBuffer[liLive] = lppOutBuffer[li];
-                ++liLive;
-            }
+                lppOutBuffer[liLive++] = lppOutBuffer[li];
         }
         return liLive;
     }
@@ -194,7 +147,7 @@ public:
     // AddOpen/CloseReadStreamRequest): claim a free slot and return the OBJECT pointer rather
     // than the handle. X360: index = PopIndex(); when the pool is full (index == -1) return 0,
     // else return &maElements[index] (the asm's `12*index + maElements` for the 12-byte
-    // ResourcePoolRecord instantiation -- the stride is sizeof(T)). DWARF CgsIndexedPool.h:330.
+    // PendingFileResponse instantiation -- the stride is sizeof(T)). DWARF CgsIndexedPool.h:330.
     T* Pop()
     {
         const IndexType lsIndex = PopIndex();
@@ -211,7 +164,7 @@ public:
     // return the index. Pointer subtraction already scales by sizeof(T) (== the 48-byte
     // stride the asm divides by), so this is byte-faithful. The returned index is the
     // sign-extended 16-bit difference (X360 `extsh`).
-    IndexType GetObjectIndex(const T* lpObject) const
+    IndexType GetObjectIndex(const T* lpObject)
     {
         const IndexType lsIndex = static_cast<IndexType>(lpObject - maElements);
 
@@ -253,19 +206,16 @@ public:
         return lsFree != lsNumFree;
     }
 
-    // Push @ 0x828EB138 (CgsResource::ResourceModule::ProcessPendingFileSystemResponses, char-pool):
-    // the X360 emitted a Push(IndexType) symbol with a body BYTE-IDENTICAL to PushIndex (same
-    // range-guard :301, same "Object is already free" free-list scan :310, same append +
-    // --msNumAllocated / ++msNumFree). It is the public free-an-index entry point that PushIndex
-    // backs; modeled as a thin forward so the two attested symbols share one body.
-    void Push(IndexType lsIndex)
+    // DecFIGS CgsIndexedPool.h:357. The resource response consumer
+    // releases the typed record through its signed pool index.
+    void Push(T* lpObject)
     {
-        PushIndex(lsIndex);
+        PushIndex(GetObjectIndex(lpObject));
     }
 
 private:
     // ---- layout (X360 byte offsets; widths follow IndexType) ----
-    // IndexType=s16 (default): mpFreeIndices@+4, counts @ +0x08/+0x0A/+0x0C (the short-pool
+    // IndexType=s16: mpFreeIndices@+4, counts @ +0x08/+0x0A/+0x0C (the short-pool
     //   layout the committed <GameDataEventSlot,N> instantiation recovered: `lhz/sth` halfwords).
     // IndexType=s8: counts pack at +0x08/+0x09/+0x0A and the free list is a byte array (the
     //   char-pool layout the CgsResource/CgsFileSystem instantiations recover: `lbz/stb` bytes,
@@ -279,11 +229,11 @@ private:
 
 // ARTIST 0x829056FC binds the embedded records at +0x0C and the free list at +0xCC.
 template<typename T, s32 N, typename IndexType>
-struct FixedIndexedPool : public IndexedPool<T, N, IndexType>
+struct FixedIndexedPool : public IndexedPool<T, IndexType>
 {
     void Construct()
     {
-        IndexedPool<T, N, IndexType>::Construct(maObjects, maiFreeIndices, static_cast<IndexType>(N));
+        IndexedPool<T, IndexType>::Construct(maObjects, maiFreeIndices, N);
     }
 
 private:

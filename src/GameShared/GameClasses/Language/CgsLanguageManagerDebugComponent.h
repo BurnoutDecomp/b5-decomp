@@ -25,8 +25,8 @@
 //   mrDistance                        +0x5C
 //
 // The X360 ledger attests Construct / DrawText / GetName / RenderHUD for this TU; the DWARF's
-// Destruct / GetPath / OnActivate / GetStarString are not in the X360 set for this slice and are
-// left out (the base GetPath default applies). ShowKeysOnly / ShowLocalisedTextAsStars have no X360
+// OnActivate and the GetPath override are attested by the ARTIST vtable at 820CE2C0.
+// ShowKeysOnly / ShowLocalisedTextAsStars have no X360
 // symbol because they are INLINED: LanguageManager::PrepareFormattingStrings @0x82866028 / @0x82866034
 // reads them as `lbz 0x6165(this)` / `lbz 0x6166(this)` (this component sits at LanguageManager+0x6154,
 // so +0x11 / +0x12 -- mbShowKeys / mbShowLocalisedTextAsStars).
@@ -52,6 +52,7 @@ namespace CgsLanguage
         const char* GetName() const ;   // @ 0x82860A58 -> "LanguageManager"
         // ARTIST vtable 0x820CE2C0, slot +0x10: original menu hierarchy.
         const char* GetPath() const  { return "Gui"; }
+        virtual void OnActivate();
 
     private:
         // Draw a "<label><value>" pair at (lfX, lrY) - label, then value just past the label's width -

@@ -144,27 +144,27 @@ namespace Playback
             // returns that existing node -- which is exactly the handle this
             // member is supposed to hold.
             mGainHandle = reinterpret_cast<uintptr_t>(
-                rw::audio::core::PlugInRegistry::RegisterPlugInRunTime(mpPlugInRegistry,
+                mpPlugInRegistry->RegisterPlugInRunTime(
                     reinterpret_cast<rw::audio::core::PlugInDescRunTime*>(
                         rw::audio::core::Gain::GetPlugInDescRunTime())));       // @0x82B97350 -> +0x3C
             mPan2DHandle = reinterpret_cast<uintptr_t>(
-                rw::audio::core::PlugInRegistry::RegisterPlugInRunTime(mpPlugInRegistry,
+                mpPlugInRegistry->RegisterPlugInRunTime(
                     reinterpret_cast<rw::audio::core::PlugInDescRunTime*>(
                         rw::audio::core::Pan2D::GetPlugInDescRunTime())));      // @0x82B984E8 -> +0x40
             mRouteHandle = reinterpret_cast<uintptr_t>(
-                rw::audio::core::PlugInRegistry::RegisterPlugInRunTime(mpPlugInRegistry,
+                mpPlugInRegistry->RegisterPlugInRunTime(
                     reinterpret_cast<rw::audio::core::PlugInDescRunTime*>(
                         rw::audio::core::Route::GetPlugInDescRunTime())));     // @0x82B9B258 -> +0x44
             mSndPlayer1Handle = reinterpret_cast<uintptr_t>(
-                rw::audio::core::PlugInRegistry::RegisterPlugInRunTime(mpPlugInRegistry,
+                mpPlugInRegistry->RegisterPlugInRunTime(
                     reinterpret_cast<rw::audio::core::PlugInDescRunTime*>(
                         rw::audio::core::SndPlayer1::GetPlugInDescRunTime()))); // @0x82B9BE60 -> +0x4C
             mRechannelHandle = reinterpret_cast<uintptr_t>(
-                rw::audio::core::PlugInRegistry::RegisterPlugInRunTime(mpPlugInRegistry,
+                mpPlugInRegistry->RegisterPlugInRunTime(
                     reinterpret_cast<rw::audio::core::PlugInDescRunTime*>(
                         rw::audio::core::Rechannel::GetPlugInDescRunTime())));  // @0x82B9A718 -> +0x50
             mResampleHandle = reinterpret_cast<uintptr_t>(
-                rw::audio::core::PlugInRegistry::RegisterPlugInRunTime(mpPlugInRegistry,
+                mpPlugInRegistry->RegisterPlugInRunTime(
                     reinterpret_cast<rw::audio::core::PlugInDescRunTime*>(
                         rw::audio::core::Resample::GetPlugInDescRunTime())));   // @0x82B9A850 -> +0x54
 
@@ -172,18 +172,16 @@ namespace Playback
             // 'Sub0' 0x53756230 -> +0x58). Read-only walks; null on the
             // still-empty registry.
             mSendHandle = reinterpret_cast<uintptr_t>(
-                rw::audio::core::PlugInRegistry::GetPlugInHandle(mpPlugInRegistry, 0x53656E30));
+                mpPlugInRegistry->GetPlugInHandle(0x53656E30));
             mSubMixHandle = reinterpret_cast<uintptr_t>(
-                rw::audio::core::PlugInRegistry::GetPlugInHandle(mpPlugInRegistry, 0x53756230));
+                mpPlugInRegistry->GetPlugInHandle(0x53756230));
 
             // The decoder registrations (real typed records): XasDec @0x82B91E80
             // then Xas1Dec @0x82B91E90 through RegisterDecoder @0x82B67CB0.
             rw::audio::core::DecoderRegistry* lpDecoderRegistry =
                 rw::audio::core::System::GetDecoderRegistry(lpSystem);
-            rw::audio::core::DecoderRegistry::RegisterDecoder(
-                lpDecoderRegistry, rw::audio::core::XasDec::GetDecoderDesc());
-            rw::audio::core::DecoderRegistry::RegisterDecoder(
-                lpDecoderRegistry, rw::audio::core::Xas1Dec::GetDecoderDesc());
+            lpDecoderRegistry->RegisterDecoder(rw::audio::core::XasDec::GetDecoderDesc());
+            lpDecoderRegistry->RegisterDecoder(rw::audio::core::Xas1Dec::GetDecoderDesc());
         }
         rw::audio::core::System::Unlock(lpSystem);
 

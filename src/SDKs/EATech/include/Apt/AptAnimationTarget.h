@@ -69,7 +69,16 @@ struct AptAnimationTargetSet
     // at capacity) and AddRef it; the count is advanced first.
     void add(AptValue* pValue);
     // remove -- find pValue, drop the count, Release it and null its slot. True iff found.
-    bool remove(AptValue* pValue);
+    int remove(AptValue* pValue);
+    bool has(AptValue* pValue) const
+    {
+        for (int i = 0; i < mnCapacity; ++i)
+        {
+            if (mppSlots[i] == pValue)
+                return true;
+        }
+        return false;
+    }
 };
 
 // ---------------------------------------------------------------------------
@@ -138,7 +147,7 @@ struct AptAnimationTarget
 
     // ---- instance accessors (X360 ARTIST one-liners; offsets above) ------------
     AptDisplayList* GetDisplayList()              { return &mDisplayList; }            // @0x82AD5F18
-    void*           GetListenerSet()              { return &mListenerSet; }            // @0x82AD5F08
+    AptAnimationTargetSet* GetListenerSet()              { return &mListenerSet; }            // @0x82AD5F08
     void*           GetInputSet()                 { return &mInputSet; }               // @0x82AD5F10
     void*           GetDragPos()                  { return &mConstrain[0]; }           // @0x82AD5F38 (the +0x40 slot)
     void*           GetDragMC()                   { return mpDragMC; }                 // @0x82AD5F30

@@ -1133,11 +1133,10 @@ u8 SndPlayer1::StartRequest(SndPlayer1 *self, u32 index)
 
     DecoderRegistry *registry =
         System::GetDecoderRegistry(self->mpSystemUseGetSystemAccessor);
-    DecoderDesc *descriptor = DecoderRegistry::GetDecoderHandle(
-        registry, static_cast<int>(kDecoderLookupWords[external.codec]));
+    DecoderRegistry::DecoderHandle descriptor = registry->GetDecoderHandle(kDecoderLookupWords[external.codec]);
 
-    request->pDecoder = DecoderRegistry::DecoderFactory(
-        registry, descriptor, request->numChannels, KU_MAX_DECODERFEEDS,
+    request->pDecoder = registry->DecoderFactory(
+        descriptor, request->numChannels, KU_MAX_DECODERFEEDS,
         self->mpSystemUseGetSystemAccessor);
     if (request->pDecoder == 0)
     {

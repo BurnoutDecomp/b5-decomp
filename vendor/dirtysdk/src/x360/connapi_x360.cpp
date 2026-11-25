@@ -178,7 +178,7 @@ void DefaultCallback(ConnApiRefT*, ConnApiCbInfoT* info, void*)
 }
 
 // ARTIST 0x82B16148.
-void ConnApiIdle(void* data, u32)
+void _ConnApiIdle(void* data, u32)
 {
     ConnApiRefT* ref = static_cast<ConnApiRefT*>(data);
     if (ref->bAutoUpdate == 1) ConnApiUpdate(ref);
@@ -221,7 +221,7 @@ extern "C" ConnApiRefT* ConnApiCreate(s32 gamePort, s32 maxClients,
     ref->uGameServFallback = 0;
     ref->bVoipEnabled = 1;
     ref->bAutoUpdate = 1;
-    NetConnIdleAdd(ConnApiIdle, ref);
+    NetConnIdleAdd(_ConnApiIdle, ref);
     return ref;
 }
 
@@ -229,7 +229,7 @@ extern "C" ConnApiRefT* ConnApiCreate(s32 gamePort, s32 maxClients,
 extern "C" void ConnApiDestroy(ConnApiRefT* ref)
 {
     if (ref->eState && ref->eState != 5) ConnApiDisconnect(ref);
-    NetConnIdleDel(ConnApiIdle, ref);
+    NetConnIdleDel(_ConnApiIdle, ref);
     if (ref->pProtoMangle)
     {
         ProtoMangleDestroy(ref->pProtoMangle);
@@ -248,10 +248,13 @@ extern "C" void NetGameLinkDestroy(NetGameLinkRefT*);
 extern "C" void NetGameUtilDestroy(NetGameUtilRefT*);
 
 namespace {
+void _ConnApiUpdateCallback(ConnApiRefT* ref, s32 clientIndex, s32 type, s32 oldStatus, s32 newStatus);
+
 // ARTIST 0x82B14210.
-void DisconnectGame(ConnApiRefT* ref, ConnApiClientT* client, s32 index, const char* reason)
+void _ConnApiDestroyGameConnection(ConnApiRefT* ref, ConnApiClientT* client, s32 index, const char* reason)
 {
-    bool hadConnection = client->uReservedA8 != 0 || client->pGameLinkRef != 0;
+    // The connection teardown tracks this as u32 (DecFIGS connapi.c:987).
+    const u32 bRefsDestroyed = client->uReservedA8 != 0 || client->pGameLinkRef != 0;
     NetPrintfCode("connapi: destroying game connection to user %s: %s\n", client->UserInfo.strName, reason);
     if (client->pGameLinkRef)
     {
@@ -264,25 +267,17 @@ void DisconnectGame(ConnApiRefT* ref, ConnApiClientT* client, s32 index, const c
         client->pGameUtilRef = 0;
     }
     client->GameInfo.eStatus = 5;
-    if (hadConnection)
-    {
-        ConnApiCbInfoT info;
-        info.iClientIndex = index;
-        info.eType = 0;
-        info.eOldStatus = 5;
-        info.eNewStatus = 6;
-        ref->bInCallback = 1;
-        ref->pCallback(ref, &info, ref->pUserData);
-        ref->bInCallback = 0;
-    }
+    if (bRefsDestroyed)
+        _ConnApiUpdateCallback(ref, index, CgsNetwork::DirtySock::CONNAPI_CBTYPE_GAMEEVENT,
+                      CgsNetwork::DirtySock::CONNAPI_STATUS_DISC, CgsNetwork::DirtySock::CONNAPI_STATUS_DEST);
 }
 
 // ARTIST 0x82B142B8.
-void DisconnectClient(ConnApiRefT* ref, ConnApiClientT* client, s32 index, const char* reason)
+void _ConnApiDisconnectClient(ConnApiRefT* ref, ConnApiClientT* client, s32 index, const char* reason)
 {
-    DisconnectGame(ref, client, index, reason);
-    u32 tick = NetTick();
-    NetPrintfCode("connapi: destroying voip connection to user %s: %s at %d\n", client->UserInfo.strName, reason, tick);
+    _ConnApiDestroyGameConnection(ref, client, index, reason);
+    NetPrintfCode("connapi: destroying voip connection to user %s: %s at %d\n",
+                  client->UserInfo.strName, reason, NetTick());
     if (client->iVoipConnId >= 0)
     {
         VoipDisconnect(ref->pVoipRef, client->iVoipConnId);
@@ -305,10 +300,10 @@ extern "C" s32 ConnApiDisconnect(ConnApiRefT* ref)
     if (ref->eState == 5) return NetPrintfCode("connapi: can't disconnect when already disconnecting\n");
     NetPrintfCode("connapi: disconnecting\n");
     for (s32 i = 0; i < ref->ClientList.iNumClients; ++i)
-        if (i != ref->iSelf) DisconnectClient(ref, &ref->ClientList.Clients[i], i, "disconnect");
+        if (i != ref->iSelf) _ConnApiDisconnectClient(ref, &ref->ClientList.Clients[i], i, "disconnect");
     if (ref->uGameServAddr && ref->eGameServMode == 1)
     {
-        DisconnectClient(ref, &ref->GameServer, 0, "disconnect");
+        _ConnApiDisconnectClient(ref, &ref->GameServer, 0, "disconnect");
         std::memset(&ref->GameServer, 0, sizeof(ref->GameServer));
     }
     ref->ClientList.iNumClients = 0;
@@ -338,7 +333,7 @@ extern "C" s32 ConnApiControl(ConnApiRefT* ref, s32 control, s32 value,
         break;
     case 0x67647363: // gdsc
         if (value < ref->ClientList.iNumClients)
-            DisconnectGame(ref, &ref->ClientList.Clients[value], value, "user disconnect");
+            _ConnApiDestroyGameConnection(ref, &ref->ClientList.Clients[value], value, "user disconnect");
         return 0;
     case 0x67707274: // gprt
         NetPrintfCode("connapi: using game port %d\n", value);
@@ -566,7 +561,7 @@ s32 ConnApiUpdateSessionParams(ConnApiRefT* ref, s32 isHost)
                               sessionFlags, 0, 0);
 }
 
-void ConnApiNotify(ConnApiRefT* ref, s32 clientIndex, s32 type,
+void _ConnApiUpdateCallback(ConnApiRefT* ref, s32 clientIndex, s32 type,
                    s32 oldStatus, s32 newStatus)
 {
     if (oldStatus != newStatus)
@@ -690,7 +685,7 @@ bool ConnApiUpdateGameClient(ConnApiRefT* ref, ConnApiClientT* client,
     {
         if (client->GameInfo.eStatus == 0 || client->GameInfo.eStatus == 5)
             return false;
-        DisconnectGame(ref, client, clientIndex, "connection closed (voiponly)");
+        _ConnApiDestroyGameConnection(ref, client, clientIndex, "connection closed (voiponly)");
     }
 
     if (!client->GameInfo.eStatus)
@@ -792,7 +787,7 @@ bool ConnApiUpdateGameClient(ConnApiRefT* ref, ConnApiClientT* client,
         }
         if (static_cast<s32>(NetTick() - client->uReservedAC) > 10000)
         {
-            DisconnectGame(ref, client, clientIndex, "connection timeout");
+            _ConnApiDestroyGameConnection(ref, client, clientIndex, "connection timeout");
             client->GameInfo.eStatus = ConnApiCheckGameServerFallback(
                 ref, client, 1);
         }
@@ -805,15 +800,15 @@ bool ConnApiUpdateGameClient(ConnApiRefT* ref, ConnApiClientT* client,
         {
             const s32 elapsed = static_cast<s32>(stats->tick - stats->rcvdlast);
             if (elapsed > ref->iTimeout)
-                DisconnectGame(ref, client, clientIndex, "connection timed out");
+                _ConnApiDestroyGameConnection(ref, client, clientIndex, "connection timed out");
         }
         else
         {
-            DisconnectGame(ref, client, clientIndex, "connection closed");
+            _ConnApiDestroyGameConnection(ref, client, clientIndex, "connection closed");
         }
     }
 
-    ConnApiNotify(ref, clientIndex, 0, oldStatus, client->GameInfo.eStatus);
+    _ConnApiUpdateCallback(ref, clientIndex, 0, oldStatus, client->GameInfo.eStatus);
     return client->GameInfo.eStatus != 5;
 }
 
@@ -892,7 +887,7 @@ bool ConnApiUpdateVoipClient(ConnApiRefT* ref, ConnApiClientT* client,
             client->iVoipConnId = -1;
     }
 
-    ConnApiNotify(ref, clientIndex, 1, oldStatus, client->VoipInfo.eStatus);
+    _ConnApiUpdateCallback(ref, clientIndex, 1, oldStatus, client->VoipInfo.eStatus);
     return client->VoipInfo.eStatus != 5;
 }
 
@@ -903,14 +898,14 @@ void ConnApiRemoveClientEntry(ConnApiRefT* ref, ConnApiClientT* client,
     const s32 oldVoipStatus = client->VoipInfo.eStatus;
     ProtoMangleControl(ref->pProtoMangle, 0x72656d76, 0, 0,
                        &client->UserInfo.DirtyAddr);
-    DisconnectClient(ref, client, clientIndex, "removal");
+    _ConnApiDisconnectClient(ref, client, clientIndex, "removal");
     if (ref->bRemoveCallback == 1)
     {
         if (ref->uConnFlags & 1)
-            ConnApiNotify(ref, clientIndex, 0, oldGameStatus,
+            _ConnApiUpdateCallback(ref, clientIndex, 0, oldGameStatus,
                           client->GameInfo.eStatus);
         if (ref->uConnFlags & 2)
-            ConnApiNotify(ref, clientIndex, 1, oldVoipStatus,
+            _ConnApiUpdateCallback(ref, clientIndex, 1, oldVoipStatus,
                           client->VoipInfo.eStatus);
     }
 
@@ -963,7 +958,7 @@ s32 ConnApiUpdateSessionCreate(ConnApiRefT* ref)
     {
         NetPrintfCode("connapi: session creation successful\n");
         if (ref->bHost == 1)
-            ConnApiNotify(ref, 0, 2, 0, 3);
+            _ConnApiUpdateCallback(ref, 0, 2, 0, 3);
         ref->eState = (ref->ClientList.iNumClients > 1) ? 2 : 3;
     }
     else if (status < 0)
@@ -1051,9 +1046,9 @@ s32 ConnApiUpdateSessionConnect(ConnApiRefT* ref)
     for (s32 clientIndex = 0; clientIndex < numClients; ++clientIndex)
     {
         ConnApiClientT* client = &ref->ClientList.Clients[clientIndex];
-        ConnApiNotify(ref, clientIndex, 0, oldGameStatus[clientIndex],
+        _ConnApiUpdateCallback(ref, clientIndex, 0, oldGameStatus[clientIndex],
                       client->GameInfo.eStatus);
-        ConnApiNotify(ref, clientIndex, 1, oldVoipStatus[clientIndex],
+        _ConnApiUpdateCallback(ref, clientIndex, 1, oldVoipStatus[clientIndex],
                       client->VoipInfo.eStatus);
     }
     return 1;
@@ -1235,7 +1230,7 @@ extern "C" void ConnApiUpdate(ConnApiRefT* ref)
         (ProtoMangleStatus(ref->pProtoMangle, 0x69646c65, 0, 0) == 1 ||
          ProtoMangleStatus(ref->pProtoMangle, 0x6661696c, 0, 0) == 1))
     {
-        ConnApiNotify(ref, 0, 2, 3, 5);
+        _ConnApiUpdateCallback(ref, 0, 2, 3, 5);
         ref->eState = 0;
     }
     ConnApiUpdateRemoval(ref);

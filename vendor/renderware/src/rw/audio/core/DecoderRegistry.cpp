@@ -29,11 +29,10 @@ namespace audio
 namespace core
 {
 
-// A link slot points at DecoderDesc::mpNext (+0x10); recover the owning record.
-static DecoderDesc *InfoFromLink(void *link)
+DecoderDesc *DecoderRegistry::GetDecoderDescFromNode(ListNode *node)
 {
     return reinterpret_cast<DecoderDesc *>(
-        reinterpret_cast<char *>(link) - offsetof(DecoderDesc, mpNext));
+        reinterpret_cast<char *>(node) - offsetof(DecoderDesc, listNode));
 }
 
 static u32 AlignUpDecoderFactory(u32 value, u32 alignment)
@@ -58,8 +57,9 @@ extern "C" System *off_83271928;
 // -------------------------------------------------------------------------------------
 DecoderRegistry *DecoderRegistry::CreateInstance(System *system)
 {
-    DecoderRegistry *self = 0;
-    System::New2<DecoderRegistry>(system, &self, 0, 0, 16, 0);
+    DecoderRegistry *instance;
+    system->New2<DecoderRegistry>(&instance, 0, 0, 16, 0);
+    DecoderRegistry *const self = instance;
     if (self)
         self->mpSystem = system; // stw r31 -> 0xC
     return self;
@@ -67,87 +67,56 @@ DecoderRegistry *DecoderRegistry::CreateInstance(System *system)
 
 // -------------------------------------------------------------------------------------
 // DecoderRegistry::GetDecoderHandle @0x82B67C80
-// Walk the link list looking for the record whose GUID matches `id`; return the owning
-// DecoderDesc (as the opaque handle) or null.
-// -------------------------------------------------------------------------------------
-DecoderDesc *DecoderRegistry::GetDecoderHandle(DecoderRegistry *self, int id)
+#if defined(_XBOX) && defined(_MSC_VER)
+// Use the size form emitted by the original Xbox 360 rwAudio common object.
+#pragma optimize("s", on)
+#endif
+DecoderRegistry::DecoderHandle DecoderRegistry::GetDecoderHandle(u32 guid)
 {
-    void *link = self->mpHead;
-    if (!link)
-        return 0;
-    for (;;)
+    ListNode *node = mDecoderDescList.GetHead();
+    while (node)
     {
-        DecoderDescLink *node = static_cast<DecoderDescLink *>(link);
-        DecoderDesc *owner = InfoFromLink(link); // result = link - 0x10
-        u32 nodeId = node->muId;                 // v4 = v2[1]
-        link = node->mpNext;                     // v2 = *v2
-        if (nodeId == static_cast<u32>(id))
-            return owner;
-        if (!link)
-            return 0;
+        DecoderDesc *info = GetDecoderDescFromNode(node);
+        node = node->GetNext();
+        if (info->muId == guid)
+            return info;
     }
+    return 0;
 }
 
-// -------------------------------------------------------------------------------------
 // DecoderRegistry::RegisterDecoder @0x82B67CB0
-// Register `info` if its GUID is not already present: link it at the head, set the tail on
-// the first insert, and bump the count. Returns the existing record on a duplicate GUID,
-// else the newly-registered `info`. (Unlike PlugInRegistry there is no sequence byte.)
-// -------------------------------------------------------------------------------------
-DecoderDesc *DecoderRegistry::RegisterDecoder(DecoderRegistry *self, DecoderDesc *info)
+DecoderRegistry::DecoderHandle DecoderRegistry::RegisterDecoder(DecoderDesc *info)
 {
-    void *head = self->mpHead;
-    void *link = self->mpHead;
-    if (link)
+    ListNode *node = mDecoderDescList.GetHead();
+    while (node)
     {
-        for (;;)
-        {
-            DecoderDescLink *node = static_cast<DecoderDescLink *>(link);
-            DecoderDesc *owner = InfoFromLink(link);
-            u32 existingId = node->muId; // v6 = v4[1]
-            link = node->mpNext;         // v4 = *v4
-            if (existingId == info->muId) // v6 == *(a2+20)
-                return owner;             // duplicate -> existing record
-            if (!link)
-                break;                    // not found -> insert
-        }
+        DecoderDesc *existing = GetDecoderDescFromNode(node);
+        node = node->GetNext();
+        if (existing->muId == info->muId)
+            return existing;
     }
 
-    // Insert at the head. The node handle is &info->mpNext (DecoderDesc +0x10).
-    void **newLink = &info->mpNext;   // r10 = a2 + 0x10
-    info->mpNext = head;              // *(a2+16) = old head link
-
-    if (!self->mppTail)               // if (!a1[1])
-        self->mppTail = newLink;      //   a1[1] = newLink
-
-    u32 count = self->muCount;        // v8 = a1[2]
-    self->mpHead = newLink;           // *a1 = newLink
-    self->muCount = count + 1;        // a1[2] = v8 + 1
+    mDecoderDescList.Push(reinterpret_cast<ListNode *>(&info->listNode));
     return info;
 }
 
-// -------------------------------------------------------------------------------------
-// DecoderRegistry::RegisterStandardRunTimeDecoders @0x82B6B538
-// Register the three run-time (software) decoders in order: XAS1, XAS0, then XMA. Each
-// codec's GetDecoderDesc hands back its static descriptor (the pseudocode's
-// `XasDec::GetDecoderDesc(v3)` etc. are Hex-Rays artifacts -- the accessors take no args;
-// r3 merely still holds the prior RegisterDecoder return). Returns the last RegisterDecoder
-// result (the XMA descriptor), matching r3 at return.
-// -------------------------------------------------------------------------------------
-DecoderDesc *DecoderRegistry::RegisterStandardRunTimeDecoders(DecoderRegistry *self)
+void DecoderRegistry::RegisterStandardRunTimeDecoders()
 {
-    RegisterDecoder(self, Xas1Dec::GetDecoderDesc());
-    RegisterDecoder(self, XasDec::GetDecoderDesc());
-    return RegisterDecoder(self, EaXmaDec::GetDecoderDesc());
+    RegisterDecoder(Xas1Dec::GetDecoderDesc());
+    RegisterDecoder(XasDec::GetDecoderDesc());
+    RegisterDecoder(EaXmaDec::GetDecoderDesc());
 }
 
-// -------------------------------------------------------------------------------------
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", off)
+#endif
+
 // DecoderFactory @0x82B6C778 -- allocate one codec instance, its inline request ring,
 // and (for block codecs) its inline buffer descriptor plus separate sample storage.
 // Console record sizes are replaced only where pointer widening requires host sizeof;
 // alignment, truncation, callback order and initialization order follow the X360 body.
 // -------------------------------------------------------------------------------------
-Decoder *DecoderRegistry::DecoderFactory(DecoderRegistry * /*self*/, void *decoderHandle,
+Decoder *DecoderRegistry::DecoderFactory(DecoderHandle decoderHandle,
                                          u32 numChannels, u32 maxSlots, System *system)
 {
     DecoderDesc *desc = static_cast<DecoderDesc *>(decoderHandle);
@@ -168,7 +137,7 @@ Decoder *DecoderRegistry::DecoderFactory(DecoderRegistry * /*self*/, void *decod
     }
 
     Decoder *decoder = 0;
-    System::New2<Decoder>(off_83271928, &decoder, 0, instanceBytes, alignment, 0);
+    off_83271928->New2<Decoder>(&decoder, 0, instanceBytes, alignment, 0);
     if (!decoder)
         return 0;
 

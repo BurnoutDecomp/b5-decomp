@@ -232,12 +232,11 @@ namespace shadow
             return false;
         }
 
-        void* lpShader = 0;
-        if (lpPixelProgram != 0)
-        {
-            lpShader = const_cast<u8*>(reinterpret_cast<const u8*>(lpPixelProgram)) + 0x14;
-        }
-        D3DDevice_SetPixelShader(gpD3DDevice, static_cast<D3DPixelShader*>(lpShader));
+        D3DDevice* const lpDevice = gpD3DDevice;
+        D3DPixelShader* const lpShader = lpPixelProgram
+            ? reinterpret_cast<D3DPixelShader*>(const_cast<renderengine::ProgramBufferData*>(lpPixelProgram) + 1)
+            : 0;
+        D3DDevice_SetPixelShader(lpDevice, lpShader);
         m_Shadow.m_pPixelProgramBuffer = lpPixelProgram;
         return true;
     }
@@ -258,7 +257,8 @@ namespace shadow
     // @0x822769E0: bind a sampler-state object through the shadow.
     void Device::SetState(const renderengine::SamplerState* lpState, u32 luSamplerId)
     {
-        CGS_ASSERT(luSamplerId < KU_MAX_TEXTURE_STATES, "luSamplerId < MaxTextureStates");
+        CGS_ASSERT_AT(luSamplerId < KU_MAX_TEXTURE_STATES, "luSamplerId < MaxTextureStates",
+                      KAC_ARTIST_SHADOW_HEADER, 889);
 
         const renderengine::SamplerState* const lpPrevious = m_Shadow.m_apSamplerStates[luSamplerId];
         if (lpPrevious != lpState)
@@ -271,23 +271,17 @@ namespace shadow
     }
 
     // @0x82276C70: bind a texture (resource) through the shadow.
-    void* Device::SetResource(void* lpTexture, u32 luSamplerId)
+    void Device::SetResource(renderengine::Texture* lpTexture, u32 luSamplerId)
     {
-        CGS_ASSERT(luSamplerId < KU_MAX_TEXTURE_STATES, "luSamplerId < MaxTextureStates");
+        CGS_ASSERT_AT(luSamplerId < KU_MAX_TEXTURE_STATES, "luSamplerId < MaxTextureStates",
+                      KAC_ARTIST_SHADOW_HEADER, 1093);
 
-        void* lpResult = lpTexture;
         if (m_Shadow.m_apTextures[luSamplerId] != lpTexture)
         {
-            // The bind flag is (1<<63) >> (luSamplerId + 32), taken as its low 32 bits: for sampler
-            // 0 this is 0x80000000 (the Xenon "set sampler N" mask).
-            const u32 luFlags =
-                static_cast<u32>((1ull << 63) >> (luSamplerId + 32));
-            D3DDevice_SetTexture(gpD3DDevice, luSamplerId, static_cast<D3DBaseTexture*>(lpTexture), luFlags);
-            m_Shadow.m_apTextures[luSamplerId] = static_cast<const renderengine::Texture*>(lpTexture);
-            m_Shadow.m_apTextureStates[luSamplerId] = 0;   // a bare-texture bind invalidates the whole-unit key
-            lpResult = lpTexture;
+            D3DDevice_SetTexture_Inline(gpD3DDevice, luSamplerId, lpTexture);
+            m_Shadow.m_apTextures[luSamplerId] = lpTexture;
+            m_Shadow.m_apTextureStates[luSamplerId] = 0;
         }
-        return lpResult;
     }
 
     // @0x8227D158: bind a whole TextureState (its 32-byte sampler block + the raster it samples)

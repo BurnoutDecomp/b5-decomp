@@ -19,6 +19,7 @@
 // (project layout policy — DWARF member order + natural PC widths, not exact X360 byte offsets).
 
 #include "types.hpp"
+#include "GameShared/GameClasses/System/FileSystem/CgsFileSystem.h"
 #include "GameShared/GameClasses/System/FileSystem/CgsFile.h"  // FileState vocabulary
 
 namespace CgsFileSystem
@@ -47,7 +48,7 @@ namespace CgsFileSystem
         // releases the lock, returns its result.
         bool Write(const void* lpInputBuffer, u64 luFilePosition, u64 lnSizeToWrite);
 
-        FileState GetStatus() const;
+        FileState GetStatus() const { return mpFileSystem->GetStatus(muFileId); }
         u32 GetFileId() const { return muFileId; }
         u64 GetLastOperationSize();
 

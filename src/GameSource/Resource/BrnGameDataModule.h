@@ -510,7 +510,7 @@ namespace BrnResource
         s32 miNumPoolsCreated;                          // +0x6B404
         s32 miNumAllocatorCreationRequests;             // +0x6B408
         s32 miNumAllocatorsCreated;                     // +0x6B40C
-        CgsContainers::IndexedPool<GameDataEventSlot, KI_NUM_GAMEDATA_EVENT_SLOTS> mGameDataEventSlotPool; // +0x6B410
+        CgsContainers::IndexedPool<GameDataEventSlot, s16> mGameDataEventSlotPool; // +0x6B410
         GameDataEventSlot maGameDataEventSlots[KI_NUM_GAMEDATA_EVENT_SLOTS]; // +0x6B420
         s16 masGameDataEventSlotFreeIndices[KI_NUM_GAMEDATA_EVENT_SLOTS]; // +0x6C620
         BrnResource::DebugComponent mDebugComponent;    // +0x6C6E0

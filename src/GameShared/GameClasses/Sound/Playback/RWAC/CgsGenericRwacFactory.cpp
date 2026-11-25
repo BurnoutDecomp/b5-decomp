@@ -130,8 +130,7 @@ void GenericRwacFeatureImplementation::ResolvePluginInfoHandle(
     u32 au32Index, rw::audio::core::PlugInRegistry* apRegistry) const
 {
     PluginInfo* lpInfo = GetPluginInfoAddress(au32Index);
-    lpInfo->mHandle = rw::audio::core::PlugInRegistry::GetPlugInHandle(
-        apRegistry, static_cast<int>(lpInfo->mGuid));
+    lpInfo->mHandle = apRegistry->GetPlugInHandle(lpInfo->mGuid);
 }
     // The process-wide default RWAC System accessor (bodied phase B5): the console
     // inlines the off_83271928 read + the "mpSystem" assert (CgsGenericRwacFactory.h:59)
@@ -289,7 +288,7 @@ GenericRwacFactory::GenericRwacFactory(Environment& arEnvironment,
         // The 25 RegisterPlugInRunTime calls in exact console order. Every descriptor
         // and every callback it publishes is now live on the host.
         #define CGS_RWAC_REGISTER(GETTER) \
-            PlugInRegistry::RegisterPlugInRunTime(lpPlugInRegistry, \
+            lpPlugInRegistry->RegisterPlugInRunTime( \
                 reinterpret_cast<PlugInDescRunTime*>(GETTER))
         CGS_RWAC_REGISTER(rw::audio::core::AiffWriter::GetPlugInDescRunTime());          // 1  @0x82B968B0
         CGS_RWAC_REGISTER(rw::audio::core::BandPassIir2::GetPlugInDescRunTime());        // 2  @0x82B96A40
@@ -324,9 +323,8 @@ GenericRwacFactory::GenericRwacFactory(Environment& arEnvironment,
         // (@0x82B6DD78).
         DecoderRegistry* lpDecoderRegistry =
             rw::audio::core::System::GetDecoderRegistry(mpSystem);
-        DecoderRegistry::RegisterStandardRunTimeDecoders(lpDecoderRegistry);
-        DecoderRegistry::RegisterDecoder(lpDecoderRegistry,
-                                         rw::audio::core::Pcm16BigDec::GetDecoderDesc());
+        lpDecoderRegistry->RegisterStandardRunTimeDecoders();
+        lpDecoderRegistry->RegisterDecoder(rw::audio::core::Pcm16BigDec::GetDecoderDesc());
     }   // ~RwacLock == System::Unlock (the console tail)
 }
 

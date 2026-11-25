@@ -268,7 +268,7 @@ int CMassiveAdObjectModelDynamic::GetNextAssetID()
                 break;
             }
 
-            if (*static_cast<int*>(mAssetIDList.GetCurrData()) == mnCurrentAssetID)
+            if (*static_cast<unsigned int*>(mAssetIDList.GetCurrData()) == mnCurrentAssetID)
             {
                 mAssetIDList.GoToNext();  // step past the current id
                 ++muActiveAssetCount;     // lhz/addi 1/sth +0x68 (unconditional)
@@ -288,7 +288,7 @@ int CMassiveAdObjectModelDynamic::GetNextAssetID()
         return 0;  // no current asset (or a single one) and an empty list
     }
 
-    int nAssetId = *static_cast<int*>(mAssetIDList.GetCurrData());
+    int nAssetId = *static_cast<unsigned int*>(mAssetIDList.GetCurrData());
     mnCurrentAssetID = nAssetId;  // stw r3, 0x64(r31)
     return nAssetId;
 }

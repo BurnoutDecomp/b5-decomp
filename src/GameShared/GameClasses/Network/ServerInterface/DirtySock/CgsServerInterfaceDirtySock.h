@@ -1,6 +1,7 @@
 #ifndef CGS_SERVER_INTERFACE_DIRTY_SOCK_H
 #define CGS_SERVER_INTERFACE_DIRTY_SOCK_H
 #define CGS_ARTIST_CGSSERVERINTERFACEDIRTYSOCK_FILE "..\\..\\..\\GameShared\\GameClasses\\Network/ServerInterface\\""DirtySock\\CgsServerInterfaceDirtySock.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLogChannelOutput.h"   // CgsDev::Log::LogChannelOutput
@@ -401,6 +402,17 @@ namespace CgsNetwork
                                                    int liCount) const;
 
     private:
+        friend class ServerInterfaceServerInfo;
+
+        // The client-config query expands the same checked accessor as its standalone callers.
+        char* GetCheckedMessageBuffer() const
+        {
+            CGS_ASSERT_AT(mpacMessageBuffer != 0, "mpacMessageBuffer",
+                          "..\\..\\..\\GameShared\\GameClasses\\Network/ServerInterface\\DirtySock\\CgsServerInterfaceDirtySock.h",
+                          719);
+            return mpacMessageBuffer;
+        }
+
         void AllocateDirtySock();
         void FreeDirtySock();
         void CreateLobbyApi();

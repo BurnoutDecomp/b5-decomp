@@ -907,10 +907,9 @@ bool SndPlayer1_CgsStreamMod::StartRequest(u32 auIndex)
     RequestExternal& external = mpRequestExternal[auIndex];
     System::Lock(system);
     DecoderRegistry* registry = System::GetDecoderRegistry(system);
-    DecoderDesc* handle =
-        DecoderRegistry::GetDecoderHandle(registry, codecGuids[external.codec]);
-    request.pDecoder = DecoderRegistry::DecoderFactory(
-        registry, handle, request.numChannels, KU_MAX_DECODERFEEDS, system);
+    DecoderRegistry::DecoderHandle handle = registry->GetDecoderHandle(codecGuids[external.codec]);
+    request.pDecoder = registry->DecoderFactory(
+        handle, request.numChannels, KU_MAX_DECODERFEEDS, system);
     if (!request.pDecoder)
     {
         System::Unlock(system);

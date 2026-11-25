@@ -21,6 +21,7 @@
 #include "rw/audio/core/Voice.h"        // Voice / VoiceListLink / VoiceActiveNode
 #include "rw/audio/core/TimerManager.h" // rw::audio::core::TimerManager
 #include "rw/audio/core/Profiler.h"     // rw::audio::core::Profiler / KPF_ProfilerVTable
+#include "rw/audio/core/Decoder.h"
 #include "rw/audio/core/DecoderRegistry.h" // DecoderRegistry (Release frees it via its +0x0C back-pointer)
 #include "rw/audio/core/EaXmaDec.h"        // EaXmaDec::DeallocateResources (nullary; the XMA contexts)
 // (2026-08-25, faithful-audio-engine phase A: the SDKs/EATech X360-aligned
@@ -726,6 +727,52 @@ System *System::VectorToCsisMutex(System *self)
     }
     return self;
 }
+
+#if defined(_XBOX) && defined(_MSC_VER)
+// Use the size form emitted by the original Xbox 360 rwAudio common object.
+#pragma optimize("s", on)
+#endif
+
+// New2<T> -- the templated allocate-and-default-construct helper. Reconstructed as ONE
+// uniform template body from its three exported X360 instantiations, which differ ONLY
+// by the inlined default constructor and the default size:
+//   New2<Decoder>         @0x82B6C2D0: default size 52 (X360 sizeof), ctor = vtable install
+//   New2<PlugInRegistry>  @0x82B6C350: default size 24 (X360 sizeof), ctor = zero the
+//                                       ListQueue words (see PlugInRegistry())
+//   New2<Voice>           @0x82B6E140: default size 80 (X360 sizeof), ctor = zero mUnk0C
+// Uniform behaviour (identical in all three): size 0 -> sizeof(T); allocator null -> the
+// System's own mpAllocator (@+0x14); allocate via ICoreAllocator::Alloc(size, name,
+// /*flags*/1, align, /*alignOffset*/0) (vtable slot +4); store the result through
+// `outResult` both before and after construction, constructing only when non-null.
+// (An earlier recon pass stubbed this as `allocator ? Alloc(...) : 0` with no name/flags,
+// no default size and no construction -- every call site passes allocator=0, so that stub
+// made ALL the CreateInstance paths return null. Fixed wave E.)
+template <class T>
+void System::New2(T **outResult, const char *name,
+                         unsigned size, unsigned align,
+                         EA::Allocator::ICoreAllocator *allocator)
+{
+    if (!size)
+        size = sizeof(T);
+    if (!allocator)
+        allocator = mpAllocator;
+    T *result = static_cast<T *>(allocator->Alloc(size, name, 1, align, 0));
+    *outResult = result;
+    if (result)
+    {
+        new (result) T;
+        *outResult = result;
+    }
+}
+
+template void System::New2<DecoderRegistry>(DecoderRegistry **, const char *,
+    unsigned, unsigned, EA::Allocator::ICoreAllocator *);
+template void System::New2<Decoder>(Decoder **, const char *,
+    unsigned, unsigned, EA::Allocator::ICoreAllocator *);
+template void System::New2<PlugInRegistry>(PlugInRegistry **, const char *,
+    unsigned, unsigned, EA::Allocator::ICoreAllocator *);
+template void System::New2<Voice>(Voice **, const char *,
+    unsigned, unsigned, EA::Allocator::ICoreAllocator *);
 
 } // namespace core
 } // namespace audio

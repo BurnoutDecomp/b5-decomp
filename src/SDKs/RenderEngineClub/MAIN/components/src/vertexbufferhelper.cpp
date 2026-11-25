@@ -12,15 +12,6 @@ u32 VertexBufferHelper::CalculateStride(const VertexFormat* formats, u32 count)
     return stride;
 }
 
-// ARTIST 823F8BF0. The native array is terminated by VERTEXFORMAT_NA.
-void VertexBufferHelper::Parameters::CalculateBufferSize()
-{
-    numElements = 0;
-    while (elementFormats[numElements] != VERTEXFORMAT_NA) ++numElements;
-    stride = VertexBufferHelper::CalculateStride(elementFormats, numElements);
-    bufferSize = numVertices * stride;
-}
-
 // Native PfxHelper constructor82408348 recalculates before each operation.
 rw::ResourceDescriptor VertexBufferHelper::GetResourceDescriptor(Parameters& parameters)
 {

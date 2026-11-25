@@ -525,7 +525,7 @@ void ImRendererBase::SetTexture(renderengine::Texture* lpTexture)
 
     // Sampler 0 -- `li r4, 0` @0x82276F54. SetResource re-derives the same 0x80000000 bind mask and
     // caches into the same two slots.
-    shadow::Device::SetResource(static_cast<void*>(lpTexture), 0);
+    shadow::Device::SetResource(lpTexture, 0);
 }
 
 // ARTIST 8240625C..82406298 inlines the stage-zero TextureState overload.

@@ -206,7 +206,7 @@ namespace Native
 
             renderengine::Texture* const lpTexture =
                 BrnSimpleParticleArray::GetTexture(static_cast<ENativeParticleType>(lrBatch.meParticleType));
-            shadow::Device::SetResource(static_cast<void*>(lpTexture), 0);
+            shadow::Device::SetResource(lpTexture, 0);
 
 
 

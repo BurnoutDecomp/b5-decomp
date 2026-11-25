@@ -45,8 +45,8 @@ typedef s32  (*DecoderDecodeEventFn)(Decoder *apDecoder, DecoderBuffer *apBuffer
 // intrusive singly-linked list by their +0x10 link. Layout grounded in
 // DecoderRegistry::GetDecoderHandle @0x82B67C80 and RegisterDecoder @0x82B67CB0:
 //   ...                                  (object header / name / factory callbacks)
-//   +0x10  mpNext   (the link field; the registry stores &mpNext as its node handle,
-//                    and the owning record is node = &mpNext - 0x10)
+//   +0x10  listNode   (the link field; the registry stores &listNode as its node handle,
+//                    and the owning record is node = &listNode - 0x10)
 //   +0x14  muId     (the registration GUID, compared in GetDecoderHandle/RegisterDecoder)
 //
 // The registry only ever touches +0x10 / +0x14, so the +0x00..+0x0F prefix (the codec's
@@ -60,50 +60,31 @@ struct DecoderDesc
     DecoderCreateInstanceEventFn pCreateInstanceEvent; // +0x04
     DecoderReleaseEventFn        pReleaseEvent;        // +0x08 (nullable)
     DecoderDecodeEventFn         pDecodeEvent;         // +0x0C
-    void                        *mpNext;                // +0x10 -- intrusive next link
+    void                        *listNode;                // +0x10 -- intrusive next link
     u32                          muId;                  // +0x14 -- registration GUID
     u16                          muMaxBlockSize;        // +0x18 -- zero for direct decoders
 };
 
-// The intrusive list threads DecoderDesc records by their +0x10 link. The registry's node
-// handle is the address of a link slot; the owning DecoderDesc is (link - 0x10). A small
-// "link view" keeps the walk member-by-name: a link slot is {mpNext, muId} laid over
-// DecoderDesc at +0x10 (next) / +0x14 (id).
-struct DecoderDescLink
-{
-    void *mpNext; // +0x00 == DecoderDesc +0x10
-    u32 muId;     // +0x04 == DecoderDesc +0x14
-};
-
-// -------------------------------------------------------------------------------------
-// DecoderRegistry -- owns the linked list of DecoderDesc records. Layout grounded in
-// CreateInstance @0x82B6C728, GetDecoderHandle @0x82B67C80, RegisterDecoder @0x82B67CB0:
-//   +0x00  mpHead   (head node's +0x10 link, i.e. node->mpNext slot; null when empty)
-//   +0x04  mppTail  (tail link slot; set on the first registration)
-//   +0x08  muCount  (number of registered decoders)
-//   +0x0C  mpSystem (back-pointer to the owning System, set in CreateInstance)
-// Allocated 16-aligned via System::New2<DecoderRegistry> (see CreateInstance).
-// -------------------------------------------------------------------------------------
+// The decoder registry keeps its original ListQueue and opaque public handle.
 class DecoderRegistry
 {
 public:
-    // Default ctor = zero the ListQueue state, mirroring the (ICF-shared) inlined
-    // construction in System::New2 -- see New2<PlugInRegistry> @0x82B6C350; the
-    // DecoderRegistry instantiation has no separate X360 body. CreateInstance writes
-    // mpSystem afterwards.
-    DecoderRegistry() : mpHead(0), mppTail(0), muCount(0) {}
+    typedef void *DecoderHandle;
 
     static DecoderRegistry *CreateInstance(System *system);
-    static DecoderDesc *GetDecoderHandle(DecoderRegistry *self, int id);
-    static DecoderDesc *RegisterDecoder(DecoderRegistry *self, DecoderDesc *info);
-    static DecoderDesc *RegisterStandardRunTimeDecoders(DecoderRegistry *self);
-    static Decoder *DecoderFactory(DecoderRegistry *self, void *decoderHandle,
-                                   u32 numChannels, u32 maxSlots, System *system);
+    DecoderHandle GetDecoderHandle(u32 guid);
+    DecoderHandle RegisterDecoder(DecoderDesc *info);
+    void RegisterStandardRunTimeDecoders();
+    Decoder *DecoderFactory(DecoderHandle decoderHandle,
+                            u32 numChannels, u32 maxSlots, System *system);
 
-    void *mpHead;       // +0x00
-    void **mppTail;     // +0x04
-    u32 muCount;        // +0x08
-    System *mpSystem;   // +0x0C
+private:
+    friend class System;
+
+    DecoderDesc *GetDecoderDescFromNode(ListNode *node);
+
+    ListQueue mDecoderDescList;
+    System *mpSystem;
 };
 
 } // namespace core

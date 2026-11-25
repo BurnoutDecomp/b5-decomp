@@ -44,11 +44,4 @@ namespace CgsFileSystem
 // module's file wait needs, beside their home CgsFileHandle.cpp.
 namespace CgsFileSystem
 {
-    // Header-inline on the console (ReplayModule::WaitForOpenReplayFiles inlines it as a direct
-    // FileSystem::GetStatus(mpFileSystem, muFileId) call): the file-system slot state.
-    FileState FileHandle::GetStatus() const
-    {
-        return mpFileSystem->GetStatus(muFileId);
-    }
-
 }

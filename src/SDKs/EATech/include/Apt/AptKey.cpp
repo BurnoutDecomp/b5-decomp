@@ -55,16 +55,6 @@
 extern AptValue* gpUndefinedValue;   // off_8324D814
 
 // ---------------------------------------------------------------------------
-// The native ActionScript method argument stack. isDown / addListener read their
-// single argument off the top of this stack (X360 globals dword_8324E760 =
-// count, off_8324E768 = array). Defined in AptGlobals.cpp; the interpreter's
-// native-call dispatch (AptActionInterpreterInterpHelpers.cpp) publishes the
-// operand stack through them around each native call.
-// ---------------------------------------------------------------------------
-extern AptValue** gppAptNativeArgStack;   // off_8324E768
-extern int        gnAptNativeArgCount;    // dword_8324E760
-
-// ---------------------------------------------------------------------------
 // The packed most-recent input event the `Key` methods report on: X360
 // dword_8324E7A8 IS the interpreter member gAptActionInterpreter.mnInput
 // (interpreter base dword_8324E760 + 0x48), stamped per queued slot by the
@@ -85,13 +75,7 @@ extern AptActionInterpreter gAptActionInterpreter;   // dword_8324E760 (AptGloba
 // low pad/extended scancodes [0..19] to their Windows virtual-key codes; -1 means
 // "no mapping". Used by getCode / isDown to translate a raw low code (< 0x14) that
 // is not an ASCII-range printable.
-// PROVENANCE: the asm loads dword_82143400 (getCode @0x82AECED0, isDown
-// @0x82ADC690) but the current dossier does not dump the .rdata bytes. The values
-// below are the canonical Scaleform/Flash `Key` scancode->VK mapping (LEFT/RIGHT/
-// HOME/END/INS/DEL/BACKSPACE/ENTER/UP/DOWN/PGUP/PGDN/TAB/ESC), which AptKey (an
-// EATech Scaleform-GFx workalike) uses; every non-sentinel entry is the exact VK
-// code for that slot and the -1s sit where Flash has no mapping. TODO: confirm the
-// 20 words byte-for-byte against the raw X360 .rdata when a dump is available.
+// ARTIST stores the same twenty signed words at 0x82143400.
 // ---------------------------------------------------------------------------
 static const int32_t kAptKeyCodeTranslate[20] =
 {
@@ -212,17 +196,15 @@ void AptKey::CleanNativeFunctions()
 // allocate an AptNativeFunction wrapping pFn, GC-root it, then AddRef it (the
 // X360's `(**slot)(slot)` == AptValue::AddRef, vtbl[0]). Returns the slot.
 // ---------------------------------------------------------------------------
-static AptValue* GetOrBuildKeyMethod(AptNativeFunction*& rpSlot, AptExtFunctionPtr pFn)
-{
-    if (rpSlot == 0)
-    {
-        void* pMem = AptNativeFunction::operator new(sizeof(AptNativeFunction));
-        rpSlot = pMem ? ::new (pMem) AptNativeFunction(pFn) : 0;
-        rpSlot->setGCRoot(1);
-        rpSlot->AddRef();
-    }
-    return rpSlot;
-}
+// Equivalent to the SDK's NATIVE_MEMBER_FUNCTION_DISPATCH in _AptInternalDefines.h.
+#define APT_DISPATCH_KEY_METHOD(name) \
+    if (!spMethod_##name) \
+    { \
+        spMethod_##name = new AptNativeFunction(reinterpret_cast<AptExtFunctionPtr>(&AptKey::sMethod_##name)); \
+        spMethod_##name->setGCRoot(1); \
+        spMethod_##name->AddRef(); \
+    } \
+    return spMethod_##name;
 
 // ---------------------------------------------------------------------------
 // objectMemberLookup @ 0x82AF8780
@@ -245,15 +227,8 @@ static AptValue* GetOrBuildKeyMethod(AptNativeFunction*& rpSlot, AptExtFunctionP
 AptValue* AptKey::objectMemberLookup(AptValue* const pThis,
                                      const AptNativeString* const pName) const
 {
-    const KeyMembersIndex::Entry* pEntry = 0;
-
-    // Only a defined Key value resolves named members.
-    if (pThis != 0
-        && pThis->getVtblIndex() == AptVFT_Key
-        && pThis->getIsDefined())
-    {
-        pEntry = KeyMembersIndex::in_word_set(pName->GetBuffer(), pName->GetLength());
-    }
+    const KeyMembersIndex::Entry* pEntry = pThis && pThis->isKey()
+        ? KeyMembersIndex::in_word_set(pName->GetBuffer(), pName->GetLength()) : 0;
 
     if (pEntry == 0)
         return 0;
@@ -280,32 +255,22 @@ AptValue* AptKey::objectMemberLookup(AptValue* const pThis,
     case 17: return AptInteger::Create(0x09);   // TAB
     case 18: return AptInteger::Create(0x26);   // UP
 
-    // ---- native methods (lazily built + GC-rooted singletons) -----------
-    case 100: return GetOrBuildKeyMethod(spMethod_isDown,
-                  reinterpret_cast<AptExtFunctionPtr>(&AptKey::sMethod_isDown));
-    case 101: return GetOrBuildKeyMethod(spMethod_isToggled,
-                  reinterpret_cast<AptExtFunctionPtr>(&AptKey::sMethod_isToggled));
-    case 102: return GetOrBuildKeyMethod(spMethod_getCode,
-                  reinterpret_cast<AptExtFunctionPtr>(&AptKey::sMethod_getCode));
-    case 103: return GetOrBuildKeyMethod(spMethod_getController,
-                  reinterpret_cast<AptExtFunctionPtr>(&AptKey::sMethod_getController));
-    case 104: return GetOrBuildKeyMethod(spMethod_addListener,
-                  reinterpret_cast<AptExtFunctionPtr>(&AptKey::sMethod_addListener));
-    case 105: return GetOrBuildKeyMethod(spMethod_removeListener,
-                  reinterpret_cast<AptExtFunctionPtr>(&AptKey::sMethod_removeListener));
-    case 106: return GetOrBuildKeyMethod(spMethod_getAnalogStickInfo,
-                  reinterpret_cast<AptExtFunctionPtr>(&AptKey::sMethod_getAnalogStickInfo));
-    // X360 jump-table (byte_82145308 rodata): miData 107 -> getAscii (off_8324E3A0),
-    // 108 -> getAnalogTriggerInfo (off_8324E3B4).
-    case 107: return GetOrBuildKeyMethod(spMethod_getAscii,
-                  reinterpret_cast<AptExtFunctionPtr>(&AptKey::sMethod_getAscii));
-    case 108: return GetOrBuildKeyMethod(spMethod_getAnalogTriggerInfo,
-                  reinterpret_cast<AptExtFunctionPtr>(&AptKey::sMethod_getAnalogTriggerInfo));
+    case 100: APT_DISPATCH_KEY_METHOD(isDown)
+    case 101: APT_DISPATCH_KEY_METHOD(isToggled)
+    case 102: APT_DISPATCH_KEY_METHOD(getCode)
+    case 103: APT_DISPATCH_KEY_METHOD(getController)
+    case 104: APT_DISPATCH_KEY_METHOD(addListener)
+    case 105: APT_DISPATCH_KEY_METHOD(removeListener)
+    case 106: APT_DISPATCH_KEY_METHOD(getAnalogStickInfo)
+    case 108: APT_DISPATCH_KEY_METHOD(getAnalogTriggerInfo)
+    case 107: APT_DISPATCH_KEY_METHOD(getAscii)
 
     default:
         return 0;
     }
 }
+
+#undef APT_DISPATCH_KEY_METHOD
 
 // ---------------------------------------------------------------------------
 // Translate the last event's raw virtual key code to its reported code (shared
@@ -331,16 +296,21 @@ static int AptKeyTranslateCode(int nCode)
 // to the queried value's integer; equal -> the true singleton, else the false
 // singleton. (A non-key event returns false immediately.)
 // ---------------------------------------------------------------------------
-AptValue* AptKey::sMethod_isDown()
+AptValue* AptKey::sMethod_isDown(AptValue*, int)
 {
-    AptValue* pQueried = gppAptNativeArgStack[gnAptNativeArgCount - 1];
-
-    if ((gAptActionInterpreter.mnInput & 3) != 1)
-        return AptBoolean::Create(false);
-
-    int nCode = AptKeyTranslateCode((int)(gAptActionInterpreter.mnInput >> 17));
-
-    return AptBoolean::Create(nCode == pQueried->toInteger());
+    int nCode = 0;
+    AptValue* pQueried = gAptActionInterpreter.stackAt(0);
+    if ((gAptActionInterpreter.mnInput & 3) == 1)
+    {
+        nCode = gAptActionInterpreter.mnInput >> 17;
+        if ((unsigned int)(nCode - 0x20) <= 0x5E)
+            nCode = toupper(nCode);
+        else if (nCode < 0x14)
+            nCode = kAptKeyCodeTranslate[nCode];
+        const int nLookingFor = pQueried->toInteger();
+        return AptBoolean::Create(nCode == nLookingFor);
+    }
+    return AptBoolean::Create(false);
 }
 
 // ---------------------------------------------------------------------------
@@ -374,58 +344,27 @@ AptValue* AptKey::sMethod_getController()
 }
 
 // ---------------------------------------------------------------------------
-// sMethod_addListener @ 0x82ADC6E0 -- register a Key listener.
-//
-// Reads the listener value off the top of the native arg stack (only when called
-// with exactly one argument). It is registered only when it is a defined value of
-// a CIH-like type (the X360 tests `mbIsDefined` and value-type 12 (CIH) or 37
-// (CIHNone), and rejects a CIH whose flags carry the 0x60000000 marker). It is
-// then added to the current target's director listener set unless that set
-// already holds it.
-// Always returns the AS undefined value.
-// ---------------------------------------------------------------------------
-AptValue* AptKey::sMethod_addListener(AptKey* /*pThis*/, int nArgCount)
+// ARTIST 0x82ADC6E0. Register a defined listener if it is absent from the set.
+// A CIH listener must also be in its normal state.
+AptValue* AptKey::sMethod_addListener(AptValue*, int nArgCount)
 {
-    if (nArgCount == 1)
+    if (nArgCount != 1)
+        return gpUndefinedValue;
+
+    AptValue* pListener = gAptActionInterpreter.stackAt(0);
+    if (pListener->getIsDefined())
     {
-        AptValue* pListener = gppAptNativeArgStack[gnAptNativeArgCount - 1];
-
-        // The X360 reads the value word: bit 4-from-MSB is mbIsDefined; the low 7
-        // bits are meValueType (sign-extended in the asm). A non-defined value is
-        // rejected outright.
-        if (pListener->getIsDefined())
+        const AptVirtualFunctionTable_Indices eType = pListener->getVtblIndex();
+        const bool bIsCIH = eType == AptVFT_CharacterInstHandle || eType == AptVFT_CIHNone;
+        if (bIsCIH)
         {
-            const AptVirtualFunctionTable_Indices eType = pListener->getVtblIndex();
-            const bool bIsCIH = (eType == AptVFT_CharacterInstHandle)   // 12
-                             || (eType == AptVFT_CIHNone);              // 37
-
-            // A CIH-like listener (type 12 or 37) that carries the CIHState marker in
-            // mFlagsA is rejected (the X360 `lwz r11, 0xC(r4); rlwinm. 0,1,2` reads
-            // the CIHState pair and bails; x64 position bits 1-2, mask 0x6). A non-CIH
-            // value skips the marker test entirely (the X360 flag is 0) and proceeds to
-            // the membership scan / add. So: add unless it is a marked CIH.
-            const bool bRejected =
-                bIsCIH && (static_cast<AptCIH*>(pListener)->mFlagsA & 0x60000000u) != 0;
-
-            if (!bRejected)
-            {
-                AptAnimationTargetSet* const pSet =
-                    &gpAptTarget->GetAnimationTarget()->mListenerSet;
-                bool bPresent = false;
-                for (u32 lu = 0; lu < pSet->mnCapacity; ++lu)
-                {
-                    if (pSet->mppSlots[lu] == pListener)
-                    {
-                        bPresent = true;
-                        break;
-                    }
-                }
-                if (!bPresent)
-                    pSet->add(pListener);
-            }
+            if (static_cast<AptCIH*>(pListener)->mFlagsA & 0x60000000u)
+                return gpUndefinedValue;
         }
+        AptAnimationTargetSet* pSet = gpAptTarget->GetAnimationTarget()->GetListenerSet();
+        if (!pSet->has(pListener))
+            pSet->add(pListener);
     }
-
     return gpUndefinedValue;
 }
 
@@ -503,62 +442,35 @@ AptValue* AptKey::sMethod_getAnalogTriggerInfo()
 }
 
 // ---------------------------------------------------------------------------
-// sMethod_removeListener @ 0x82ADC??? (PS3 EXTERNAL DecFIGS 0xF303D8) -- unregister
-// a Key listener. DECOMPILED from the PS3 body, cross-checked vs the X360 listener-
-// vector `remove` helper (ARTIST 0x82ADBC28).
-//
-// Mirrors addListener: only a single-argument call acts. The listener value is the
-// top of the native arg stack; it is removed only when it carries the listener
-// marker bit (PS3 `*(value+4) & 0x8000000` -- the same packed value-flag word the
-// add path tests, here AptValue::mnValueData bit 27). The actual {count, array}
-// scan-find-Release-null-and-decrement is the shared set remove
-// (AptAnimationTargetSet::remove) over the director's listener set.
-// Returns the AS true/false singleton (true iff a listener was removed; every early
-// bail returns false).
-// ---------------------------------------------------------------------------
-AptValue* AptKey::sMethod_removeListener(AptKey* /*pThis*/, int nArgCount)
+// ARTIST 0x82ADC7C0. Unregister a defined listener if it is present.
+AptValue* AptKey::sMethod_removeListener(AptValue*, int nArgCount)
 {
     if (nArgCount != 1)
-        return AptBoolean::Create(false);                 // PS3: a2 != 1
-
-    AptValue* pListener = gppAptNativeArgStack[gnAptNativeArgCount - 1];   // PS3: top of the interp value stack
-
-    // PS3: (*(value + 4) & 0x8000000) == 0 -> not a registered listener value.
-    // Bit 27 of the packed value word (mnValueData). Only a value carrying the
-    // listener marker is eligible; otherwise nothing to remove.
-    if ((pListener->mnValueData & 0x8000000u) == 0)
         return AptBoolean::Create(false);
 
-    // The find-Release-null-decrement walk over the director's listener set; a miss
-    // returns false.
-    const bool bRemoved =
-        gpAptTarget->GetAnimationTarget()->mListenerSet.remove(pListener);
-    return AptBoolean::Create(bRemoved);
+    AptValue* pListener = gAptActionInterpreter.stackAt(0);
+    if (pListener->getIsDefined())
+    {
+        AptAnimationTargetSet* pSet = gpAptTarget->GetAnimationTarget()->GetListenerSet();
+        if (pSet->has(pListener))
+        {
+            pSet->remove(pListener);
+            return AptBoolean::Create(true);
+        }
+    }
+    return AptBoolean::Create(false);
 }
 
 // ---------------------------------------------------------------------------
-// sMethod_getAscii @ 0x82?????? (PS3 EXTERNAL DecFIGS 0xF3E078) -- box the last
-// key event's ASCII/virtual key code as an AptInteger.
-//
-// DECOMPILED from the PS3 body: take the last event's raw key code (event >> 17);
-// only when the event actually carries a controller field (event >> 2 != 0) is the
-// low code (<= 0x13) folded through the pad->keycode translate table -- a raw code
-// with no controller (a pure ASCII event) is reported verbatim. (PS3:
-//   v2 = dword_1071B118 >> 17;
-//   if ( dword_1071B118 >> 2 ) { if ( v2 <= 0x13 ) v2 = BUTTONACTIONCODE_TO_KEYCODE[v2]; }
-//   return AptInteger::Create(v2); )
-// BUTTONACTIONCODE_TO_KEYCODE is the same 20-entry low-code translate table the
-// X360 getCode/isDown use (kAptKeyCodeTranslate). The header (and the X360 method
-// slot) take no arguments; the PS3 a2 is the AptInteger::Create allocation arg the
-// caller threads, reproduced by the Create call here.
-// ---------------------------------------------------------------------------
-AptValue* AptKey::sMethod_getAscii()
+// ARTIST 0x82AECEF8. Keyboard events keep their raw code. Other controllers
+// use the button-action code table for entries within its range.
+AptValue* AptKey::sMethod_getAscii(AptValue*, int)
 {
-    int nCode = (int)(gAptActionInterpreter.mnInput >> 17);
-    if ((gAptActionInterpreter.mnInput >> 2) != 0)
-    {
-        if ((unsigned int)nCode <= 0x13u)
-            nCode = kAptKeyCodeTranslate[nCode];
-    }
+    int nCode = gAptActionInterpreter.mnInput >> 17;
+    const int nController = (gAptActionInterpreter.mnInput >> 2) & 0xFF;
+    if (nController == 0)
+        return AptInteger::Create(nCode);
+    if (nCode < 0x14)
+        nCode = kAptKeyCodeTranslate[nCode];
     return AptInteger::Create(nCode);
 }

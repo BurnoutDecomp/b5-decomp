@@ -18,30 +18,10 @@ namespace audio
 namespace core
 {
 
-// The intrusive list threads PlugInDescRunTime records by their +0x24 link. The registry's
-// node handle is the address of a link slot; the owning PlugInDescRunTime is (link - 0x24).
-// A small "link view" keeps the walk member-by-name: a link slot is {next, id}
-// laid over PlugInDescRunTime at +0x24 (next) / +0x28 (id).
-struct PlugInDescRunTimeLink
+PlugInDescRunTime *PlugInRegistry::GetPlugInDescRunTimeFromNode(ListNode *node) const
 {
-    void *mpNext; // +0x00 == PlugInDescRunTime +0x24
-    u32 muId;     // +0x04 == PlugInDescRunTime +0x28
-};
-
-static PlugInDescRunTime *InfoFromLink(void *link)
-{
-    // link points at PlugInDescRunTime::mpNext; recover the owning record.
-    //
-    // X360-LITERAL TRAP: the asm subtracts the console immediate 0x24
-    // (addi r3,r11,-0x24 @0x82B6A914 in GetPlugInHandle and addi r3,r10,-0x24
-    // @0x82B6A94C in RegisterPlugInRunTime), which is the CONSOLE
-    // offsetof(PlugInDescRunTime, mpNext). It does NOT survive the host layout:
-    // mHeader[0x24] is 36 bytes and mpNext is a pointer, so MSVC x64 pads the
-    // member to offset 40 (0x28). Subtracting the console 0x24 from a link slot
-    // at base+40 yields base+4 -- every field access through the result was off
-    // by four bytes. Use the host offsetof so the two stay in step.
     return reinterpret_cast<PlugInDescRunTime *>(
-        reinterpret_cast<char *>(link) - offsetof(PlugInDescRunTime, mpNext));
+        reinterpret_cast<char *>(node) - offsetof(PlugInDescRunTime, listNode));
 }
 
 // -------------------------------------------------------------------------------------
@@ -59,11 +39,16 @@ static PlugInDescRunTime *InfoFromLink(void *link)
 // non-zero console 24 must be replaced by the host expression rather than by 0 -- that
 // also preserves the asm's explicit-size call shape.
 // -------------------------------------------------------------------------------------
+#if defined(_XBOX) && defined(_MSC_VER)
+// Use the size form emitted by the original Xbox 360 rwAudio common object.
+#pragma optimize("s", on)
+#endif
 PlugInRegistry *PlugInRegistry::CreateInstance(System *system)
 {
-    PlugInRegistry *self = 0;
+    PlugInRegistry *instance;
     // X360: li r6,0x18 -- console sizeof(PlugInRegistry) == 24; host sizeof == 40.
-    System::New2<PlugInRegistry>(system, &self, 0, static_cast<unsigned>(sizeof(PlugInRegistry)), 16, 0);
+    system->New2<PlugInRegistry>(&instance, 0, static_cast<unsigned>(sizeof(PlugInRegistry)), 16, 0);
+    PlugInRegistry *const self = instance;
     if (self)
     {
         self->mpSystem = system; // stw r31 -> 0x10
@@ -75,66 +60,39 @@ PlugInRegistry *PlugInRegistry::CreateInstance(System *system)
 
 // -------------------------------------------------------------------------------------
 // PlugInRegistry::GetPlugInHandle @0x82B6A908
-// Walks the link list looking for the record whose id matches; returns the owning
-// PlugInDescRunTime (as the opaque handle) or null.
-// -------------------------------------------------------------------------------------
-void *PlugInRegistry::GetPlugInHandle(PlugInRegistry *self, int id)
+PlugInRegistry::PlugInHandle PlugInRegistry::GetPlugInHandle(u32 guid) const
 {
-    void *link = self->mpHead;
-    if (!link)
-        return 0;
-    for (;;)
+    ListNode *node = mPlugInDescRunTimeList.GetHead();
+    while (node)
     {
-        PlugInDescRunTimeLink *node = static_cast<PlugInDescRunTimeLink *>(link);
-        PlugInDescRunTime *owner = InfoFromLink(link); // result = v2 - 9 (words) = link - 0x24
-        u32 nodeId = node->muId;                // v4[1]
-        link = node->mpNext;                    // v2 = *v2
-        if (nodeId == static_cast<u32>(id))
-            return owner;
-        if (!link)
-            return 0;
+        PlugInDescRunTime *info = GetPlugInDescRunTimeFromNode(node);
+        node = node->GetNext();
+        if (info->muId == guid)
+            return info;
     }
+    return 0;
 }
 
-// -------------------------------------------------------------------------------------
 // PlugInRegistry::RegisterPlugInRunTime @0x82B6A938
-// Registers `info` if its id is not already present: links it at the head, sets the
-// tail on first insert, bumps the count, and snapshots the running sequence byte into
-// the record. Returns the existing record on a duplicate id, else the new record.
-// -------------------------------------------------------------------------------------
-void *PlugInRegistry::RegisterPlugInRunTime(PlugInRegistry *self, PlugInDescRunTime *info)
+PlugInRegistry::PlugInHandle PlugInRegistry::RegisterPlugInRunTime(PlugInDescRunTime *info)
 {
-    void *head = self->mpHead;
-    void *link = self->mpHead;
-    if (link)
+    ListNode *node = mPlugInDescRunTimeList.GetHead();
+    while (node)
     {
-        for (;;)
-        {
-            PlugInDescRunTimeLink *node = static_cast<PlugInDescRunTimeLink *>(link);
-            PlugInDescRunTime *owner = InfoFromLink(link);
-            u32 existingId = node->muId;       // v4[1]
-            link = node->mpNext;               // v4 = *v4
-            if (existingId == info->muId)      // *(a2+40) == info->muId
-                return owner;                  // duplicate -> existing record
-            if (!link)
-                break;                         // not found -> insert
-        }
+        PlugInDescRunTime *existing = GetPlugInDescRunTimeFromNode(node);
+        node = node->GetNext();
+        if (existing->muId == info->muId)
+            return existing;
     }
 
-    // Insert at the head. The node handle is &info->mpNext (PlugInDescRunTime +0x24).
-    void **newLink = &info->mpNext;            // r10 = a2 + 0x24
-    info->mpNext = head;                       // *(a2+36) = old head link
-
-    if (!self->mppTail)                        // if (!*(a1+4))
-        self->mppTail = newLink;               //   *(a1+4) = newLink
-
-    char seq = self->mCurrentRegistryIndex;                // lbz 0x14
-    self->muCount = self->muCount + 1;         // *(a1+8) += 1
-    self->mpHead = newLink;                    // *a1 = newLink
-    info->mbSeq = seq;                         // *(a2+0x32) = seq
-    ++self->mCurrentRegistryIndex;                         // ++*(a1+0x14)
+    mPlugInDescRunTimeList.Push(reinterpret_cast<ListNode *>(&info->listNode));
+    info->mbSeq = mCurrentRegistryIndex++;
     return info;
 }
+
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", off)
+#endif
 
 } // namespace core
 } // namespace audio

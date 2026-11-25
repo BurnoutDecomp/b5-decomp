@@ -90,7 +90,7 @@ namespace shadow
         static void SetState(const renderengine::SamplerState* lpState, u32 luSamplerId);
 
         // Bind a texture (resource) through the shadow cache (X360 0x82276C70).
-        static void* SetResource(void* lpTexture, u32 luSamplerId);
+        static void SetResource(renderengine::Texture* lpTexture, u32 luSamplerId);
 
         // Bind a WHOLE TextureState (sampler block + its raster) at one unit through the shadow
         // cache (X360 0x8227D158; the DecFIGS DWARF names it SetState(const TextureState*, u32),

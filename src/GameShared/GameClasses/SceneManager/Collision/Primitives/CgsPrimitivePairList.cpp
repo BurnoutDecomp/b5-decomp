@@ -1,6 +1,9 @@
 #include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsPrimitivePairList.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
+#define CGS_ARTIST_PAIR_LIST_CPP "..\\..\\..\\GameShared\\GameClasses\\SceneManager/Collision/Primitives/CgsPrimitivePairList.cpp"
+#define CGS_ARTIST_PAIR_LIST_H "..\\..\\..\\GameShared\\GameClasses\\SceneManager/Collision/Primitives/CgsPrimitivePairList.h"
+
 // Reconstructed from BURNOUT_X360_ARTIST.XEX.
 // CgsSceneManager::CgsCollision::PrimitivePairList::Itterator — a forward cursor over the
 // packed primitive-pair records in a PrimitivePairList blob:
@@ -29,9 +32,10 @@ namespace CgsCollision
     // -------------------------------------------------------------------------
     void PrimitivePairList::CollisionHeader::CheckCheckSum() const
     {
-        CGS_ASSERT(
-            mu8DataPaddingAndCheckSum == (mu8PrimTypeA + mu8PrimTypeB + mu8HeaderType),
-            "mu8DataPaddingAndCheckSum == mu8PrimTypeA + mu8PrimTypeB + mu8HeaderType");
+        CGS_ASSERT_AT(
+            mu8DataPaddingAndCheckSum == (mu8PrimTypeB + mu8HeaderType + mu8PrimTypeA),
+            "mu8DataPaddingAndCheckSum == mu8PrimTypeA + mu8PrimTypeB + mu8HeaderType",
+            CGS_ARTIST_PAIR_LIST_H, 85);
     }
 
     // -------------------------------------------------------------------------
@@ -48,13 +52,11 @@ namespace CgsCollision
     // -------------------------------------------------------------------------
     void PrimitivePairList::Itterator::Prepare(const PrimitivePairList* lpPairList)
     {
-        mpau8CurrentStreamPosition = lpPairList->mpaDataStream;
-        mu16CurrentTest            = 0;
-        mu16CurrentDataPosition    = 0;
-        // Round the in-use byte count up to a multiple of 16 (the asm's
-        // `(size + 0xF) & 0xFFF0`); the result stays a u16.
-        mu16DataSize  = static_cast<u16>((lpPairList->mu16UsedData + 15u) & 0xFFF0u);
-        mu16NumHeaders = lpPairList->mu16NumTests;
+        mpau8CurrentStreamPosition = lpPairList->GetDataStream();
+        mu16CurrentTest = 0;
+        mu16DataSize = static_cast<u16>((lpPairList->GetDataSize() + 15u) & 0xFFF0u);
+        mu16CurrentDataPosition = 0;
+        mu16NumHeaders = lpPairList->GetNumTests();
 
         // Cache the first record's header (the asm copies the 16-byte header dword by
         // dword from the stream base) and validate its checksum.
@@ -120,33 +122,31 @@ namespace CgsCollision
     // -------------------------------------------------------------------------
     bool PrimitivePairList::Itterator::MoveToNextHeader()
     {
-        if (mu16CurrentTest + 1 >= mu16NumHeaders)
+        if (mu16CurrentTest + 1 < mu16NumHeaders)
         {
-            return false;
+            CGS_ASSERT_AT(mpau8CurrentStreamPosition != NULL, "mpau8CurrentStreamPosition != NULL",
+                          CGS_ARTIST_PAIR_LIST_CPP, 128);
+
+            // DecFIGS CgsPrimitivePairList.cpp:126, ARTIST 82812264–828122EC.
+            const u32 luDataSize = mCurrentHeader.mu16PrimADataSize +
+                                   mCurrentHeader.mu16PrimBDataSize + sizeof(CollisionHeader);
+
+            mu16CurrentTest         = static_cast<u16>(mu16CurrentTest + 1);
+            mu16CurrentDataPosition = static_cast<u16>(mu16CurrentDataPosition + luDataSize);
+
+            CGS_ASSERT_AT(mu16CurrentTest < mu16NumHeaders, "mu16CurrentTest < mu16NumHeaders",
+                          CGS_ARTIST_PAIR_LIST_CPP, 135);
+            CGS_ASSERT_AT(mu16CurrentDataPosition < mu16DataSize, "mu16CurrentDataPosition < mu16DataSize",
+                          CGS_ARTIST_PAIR_LIST_CPP, 136);
+
+            mpau8CurrentStreamPosition += luDataSize;
+            mCurrentHeader =
+                *reinterpret_cast<const CollisionHeader*>(mpau8CurrentStreamPosition);
+            mCurrentHeader.CheckCheckSum();
+
+            return true;
         }
-
-        CGS_ASSERT(mpau8CurrentStreamPosition != NULL,
-                   "mpau8CurrentStreamPosition != NULL");
-
-        const u16 lu16Stride = static_cast<u16>(
-            mCurrentHeader.mu16PrimADataSize +
-            mCurrentHeader.mu16PrimBDataSize +
-            sizeof(CollisionHeader));
-
-        mu16CurrentTest         = static_cast<u16>(mu16CurrentTest + 1);
-        mu16CurrentDataPosition = static_cast<u16>(mu16CurrentDataPosition + lu16Stride);
-
-        CGS_ASSERT(mu16CurrentTest < mu16NumHeaders,
-                   "mu16CurrentTest < mu16NumHeaders");
-        CGS_ASSERT(mu16CurrentDataPosition < mu16DataSize,
-                   "mu16CurrentDataPosition < mu16DataSize");
-
-        mpau8CurrentStreamPosition += lu16Stride;
-        mCurrentHeader =
-            *reinterpret_cast<const CollisionHeader*>(mpau8CurrentStreamPosition);
-        mCurrentHeader.CheckCheckSum();
-
-        return true;
+        return false;
     }
 
     // -------------------------------------------------------------------------
@@ -172,3 +172,6 @@ namespace CgsCollision
     };
 }
 }
+
+#undef CGS_ARTIST_PAIR_LIST_H
+#undef CGS_ARTIST_PAIR_LIST_CPP

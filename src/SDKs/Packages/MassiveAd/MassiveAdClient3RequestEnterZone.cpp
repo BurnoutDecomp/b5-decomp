@@ -340,7 +340,7 @@ CMassiveAdObject* CRequestEnterZone::ReadIEBlock()
     if (lpAdObject)
     {
         for (unsigned short i = 0; i < luAssetCount; ++i)
-            lpAdObject->AssetIDAdd(static_cast<int>(lpAssetIDs[i]));
+            lpAdObject->AssetIDAdd(lpAssetIDs[i]);
         lpAdObject->muAssetIDCount = lbPrimaryMatchListSize;
         lpAdObject->Initialize();
     }

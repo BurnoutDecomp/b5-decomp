@@ -137,12 +137,9 @@ inline VecFloat::VecFloat(VectorIntrinsicInParam v, int index)
 
 inline VecFloat::VecFloat(VecFloatRefIndex v)
 {
-    // vspltw(v.mV, v.mIndex): broadcast the referenced lane to all four lanes.
-    const float lfValue = v.mV.v[v.mIndex];
-    mV.v[0] = lfValue;
-    mV.v[1] = lfValue;
-    mV.v[2] = lfValue;
-    mV.v[3] = lfValue;
+    // DecFIGS vec_float_type_inline.h:131. Broadcast the indexed word.
+    const VectorIntrinsic permConstant = __vspltw(__lvsl(0, sizeof(float) * v.mIndex), 0);
+    mV = __vperm(v.mV, v.mV, permConstant);
 }
 
 template<VectorAxis INDEX>

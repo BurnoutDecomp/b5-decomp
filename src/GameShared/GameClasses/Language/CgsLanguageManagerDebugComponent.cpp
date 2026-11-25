@@ -72,6 +72,48 @@ namespace CgsLanguage
         return "LanguageManager";
     }
 
+    // DecFIGS cpp:149 and ARTIST vtable 820CE2C0, slot +0x18.
+    void LanguageManagerDebugComponent::OnActivate()
+    {
+        RegisterVariable( &mbShowLocalisedTextAsStars, "Show Localised Text as Stars" );
+        RegisterVariable( &mbShowKeys, "Show Keys" );
+        RegisterVariable( &mbShowDebugComponent, "Display Language Debug" );
+
+        RegisterVariable( &mrPosX, "X Position" );
+        RegisterVariable( &mrPosY, "Y Position" );
+        RegisterVariable( &mrTextSpacing, "Spacing" );
+        RegisterVariable( &mrTextSize, "Text Size" );
+        SetStep( &mrPosX, 5.0f );
+        SetStep( &mrPosY, 5.0f );
+        SetStep( &mrTextSpacing, 0.1f );
+
+        RegisterVariable( &mnNumber1, "Number 1" );
+        RegisterVariable( &mnNumber2, "Number 2" );
+        SetStep( &mnNumber1, 50 );
+        SetStep( &mnNumber2, 50 );
+        RegisterVariable( &mnCurrency, "Currency Amount" );
+        SetStep( &mnCurrency, 50 );
+        SetStep( &mnCurrency, 50 ); // ARTIST calls the setter again at 82860D04.
+
+        RegisterVariable( &mnDays, "Days" );
+        RegisterVariable( &mnMonths, "Months" );
+        RegisterVariable( &mnYears, "Years" );
+        RegisterVariable( &mnHours, "Hours" );
+        RegisterVariable( &mnMinutes, "Minutes" );
+        RegisterVariable( &mrSeconds, "Seconds" );
+        SetStep( &mnDays, 1 );
+        SetStep( &mnMonths, 1 );
+        SetStep( &mnYears, 25 );
+        SetStep( &mnHours, 1 );
+        SetStep( &mnMinutes, 1 );
+        SetStep( &mrSeconds, 0.01f );
+        SetRange( &mrSeconds, 0.0f, 1000000.0f );
+
+        RegisterVariable( &mrDistance, "Distance (m)" );
+        SetStep( &mrDistance, 150.0f );
+        SetRange( &mrDistance, 0.0f, 1000000.0f );
+    }
+
     void LanguageManagerDebugComponent::DrawText( CgsDev::Debug2DImmediateRender* lpRender,
                                                   const char* lpcLabel, const char* lpcValue,
                                                   f32 lfX, f32& lrY ) const

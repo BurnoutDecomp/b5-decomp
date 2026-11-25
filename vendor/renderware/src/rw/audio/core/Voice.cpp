@@ -166,7 +166,7 @@ Voice *Voice::CreateInstance(u8 priority, int numStages, PlugInConfig *configs,
     }
 
     Voice *voice = 0;
-    System::New2<Voice>(system, &voice, 0, blockSize, 16, 0);
+    system->New2<Voice>(&voice, 0, blockSize, 16, 0);
     if (!voice)
         return 0;
 

@@ -52,16 +52,16 @@ CMassiveAdObject::CMassiveAdObject(const char* pcName, int nInvElementID, int nR
                                    CMassiveZoneManager* pZone)
     : CMassiveBaseObject("CMassiveAdObject")
     , mpcAdObjectName(0)
-    , mpMaster(0)
-    , mnInvElementID(nInvElementID)
     , mpZone(pZone)
     , mpCurrentAsset(0)
     , mpDownloadAsset(0)
+    , mpMaster(0)
     , mnRotationType(nRotationType)
     , mnViewState(0)
     , mpCurrentRecord(0)
     , mbSuspended(0)
     , mbMediaDownloaded(0)
+    , mnInvElementID(nInvElementID)
     , muAssetIDCount(0)
 {
     if (!IsValidString(pcName))
@@ -125,9 +125,9 @@ int CMassiveAdObject::Initialize()
 }
 
 // Drops a delivered asset id and releases this placement's hold on the asset's media.
-int CMassiveAdObject::AssetIDRemove(int nAssetID)
+int CMassiveAdObject::AssetIDRemove(unsigned int uAssetID)
 {
-    if (!nAssetID)
+    if (!uAssetID)
     {
         SetLastError(-600, "");
         return 0;
@@ -136,12 +136,12 @@ int CMassiveAdObject::AssetIDRemove(int nAssetID)
     mAssetIDList.GoToStart();
     while (mAssetIDList.GetCurrent())
     {
-        if (*static_cast<int*>(mAssetIDList.GetCurrData()) == nAssetID)
+        if (*static_cast<unsigned int*>(mAssetIDList.GetCurrData()) == uAssetID)
         {
             MassiveFree(mAssetIDList.GetCurrData());
             mAssetIDList.Remove(mAssetIDList.GetCurrent(), 1);
 
-            CMassiveAsset* lpAsset = mpZone->AssetFind(nAssetID);
+            CMassiveAsset* lpAsset = mpZone->AssetFind(uAssetID);
             if (lpAsset)
                 lpAsset->mnRefCount = lpAsset->mnRefCount ? lpAsset->mnRefCount - 1 : 0;
             return 1;
@@ -151,21 +151,21 @@ int CMassiveAdObject::AssetIDRemove(int nAssetID)
     return 0;
 }
 
-int CMassiveAdObject::AssetIDAdd(int nAssetID)
+int CMassiveAdObject::AssetIDAdd(unsigned int uAssetID)
 {
-    if (!nAssetID)
+    if (!uAssetID)
     {
         SetLastError(-600, "");
         return 0;
     }
 
-    int* lpAssetID = static_cast<int*>(MassiveMalloc(sizeof(int)));
+    unsigned int* lpAssetID = static_cast<unsigned int*>(MassiveMalloc(sizeof(unsigned int)));
     if (!lpAssetID)
     {
         MassiveLog(2, GetName(), "ALLOCATION Failed in AssetIDAdd");
         return 0;
     }
-    *lpAssetID = nAssetID;
+    *lpAssetID = uAssetID;
 
     void* lpNodeMemory = CMassiveListNode::operator new(sizeof(CMassiveListNode));
     CMassiveListNode* lpNode = lpNodeMemory ? ::new (lpNodeMemory) CMassiveListNode(lpAssetID) : 0;
@@ -203,13 +203,13 @@ int CMassiveAdObject::GetNextAssetID()
             if (luStep++ >= muAssetIDCount)
                 break;
 
-            if (*static_cast<int*>(mAssetIDList.GetCurrData()) == lnCurrentID)
+            if (*static_cast<unsigned int*>(mAssetIDList.GetCurrData()) == lnCurrentID)
             {
                 if (mAssetIDList.GetCurrent()->GetNext())
                     mAssetIDList.GoToNext();
                 else
                     mAssetIDList.GoToStart();
-                lnNextID = *static_cast<int*>(mAssetIDList.GetCurrData());
+                lnNextID = *static_cast<unsigned int*>(mAssetIDList.GetCurrData());
                 lbFound = lnNextID != 0;
                 break;
             }
@@ -224,7 +224,7 @@ int CMassiveAdObject::GetNextAssetID()
     }
 
     if (lbTakeCursor)
-        lnNextID = *static_cast<int*>(mAssetIDList.GetCurrData());
+        lnNextID = *static_cast<unsigned int*>(mAssetIDList.GetCurrData());
 
     MassiveLog(5, GetName(), "MAO: %s -> Next AssetID: %d", mpcAdObjectName, lnNextID);
     return lnNextID;
@@ -316,7 +316,7 @@ int CMassiveAdObject::StateRotate()
     {
         mAssetIDList.GoToStart();
         lbRotate = mAssetIDList.GetCurrent() && mpCurrentAsset &&
-                   *static_cast<int*>(mAssetIDList.GetCurrData()) != mpCurrentAsset->mnAssetId;
+                   *static_cast<unsigned int*>(mAssetIDList.GetCurrData()) != mpCurrentAsset->mnAssetId;
     }
 
     if (lbRotate)
@@ -400,7 +400,7 @@ int CMassiveAdObject::SetAssetExpired(int nAssetID)
             break;
         }
 
-        if (*static_cast<int*>(mAssetIDList.GetCurrData()) == nAssetID)
+        if (*static_cast<unsigned int*>(mAssetIDList.GetCurrData()) == nAssetID)
         {
             AssetIDRemove(nAssetID);
             MassiveLog(6, GetName(), "%s - Asset Expired: %d Inv ID: %d", mpcAdObjectName, nAssetID,
@@ -572,7 +572,7 @@ int CMassiveAdObject::Resume()
         mAssetIDList.GoToStart();
         while (mAssetIDList.GetCurrent())
         {
-            CMassiveAsset* lpAsset = mpZone->AssetFind(*static_cast<int*>(mAssetIDList.GetCurrData()));
+            CMassiveAsset* lpAsset = mpZone->AssetFind(*static_cast<unsigned int*>(mAssetIDList.GetCurrData()));
             if (lpAsset)
             {
                 lpAsset->mRecordList.GoToStart();
@@ -626,17 +626,19 @@ int CMassiveAdObject::StateRequestMedia()
         return SetLastError(-397, "No Assets with ID: %d for Mao: %s", lnAssetID, mpcAdObjectName);
     }
 
-    if (MediaDownload(mpDownloadAsset->mnAssetId))
-    {
-        mpDownloadAsset->RequestDownloadBinary();
-        SetValid(E_STATE_DOWNLOADING);
-    }
-    else
+    E_State leNextState;
+    if (!MediaDownload(mpDownloadAsset->mnAssetId))
     {
         MassiveLog(5, GetName(), "Asset will not download media %s, subscriber handling: %s", mpDownloadAsset->mpcUrl,
                    mpcAdObjectName);
-        SetValid(E_STATE_DOWNLOAD_COMPLETE);
+        leNextState = E_STATE_DOWNLOAD_COMPLETE;
     }
+    else
+    {
+        mpDownloadAsset->RequestDownloadBinary();
+        leNextState = E_STATE_DOWNLOADING;
+    }
+    SetValid(leNextState);
     return 0;
 }
 

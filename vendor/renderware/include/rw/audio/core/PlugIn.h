@@ -210,8 +210,8 @@ struct ParameterDescRunTime
 // intrusive singly-linked list inside the registry. Layout grounded in
 // PlugInRegistry::GetPlugInHandle @0x82B6A908 and RegisterPlugInRunTime @0x82B6A938:
 //   ...                                  (object header / v-tables / construct hooks)
-//   +0x24  mpNext   (the link field; the registry stores &mpNext as its node handle,
-//                    and the public "handle" is node = &mpNext - 0x24)
+//   +0x24  listNode   (the link field; the registry stores &listNode as its node handle,
+//                    and the public "handle" is node = &listNode - 0x24)
 //   +0x28  muId     (the registration id, compared in GetPlugInHandle)
 //   +0x32  mbSeq    (byte; the registry's running id counter snapshotted here)
 //
@@ -240,7 +240,7 @@ public:
     ParameterDescRunTime *pParameterDescRunTime; // +0x18
     void *pEventDescRunTime;         // +0x1C runtime event metadata
     void *pPlugInDescToolSide;       // +0x20 (zero in all 25 console records)
-    void *mpNext;                    // +0x24 -- intrusive next link (PDB listNode)
+    void *listNode;                    // +0x24 -- intrusive next link (PDB listNode)
     u32 muId;                        // +0x28 -- registration id fourcc (PDB guid)
     u8 mu8PlugInType;                // +0x2C -- stage classification (<=3 marks the source stage, @0x82B6EDD0)
     u8 mu8NumConstructorParameters;  // +0x2D (PDB name; unproven-consumer)
@@ -252,40 +252,26 @@ public:
 };
 
 // -------------------------------------------------------------------------------------
-// PlugInRegistry -- owns the linked list of PlugInDescRunTime records. Layout grounded in
-// CreateInstance @0x82B6DBC0, GetPlugInHandle @0x82B6A908, RegisterPlugInRunTime
-// @0x82B6A938:
-// FLAG (rwaudio PDB reconcile -- rw::audio::core::PlugInRegistry [sizeof=24], offsets
-// MATCH): PDB models +0x00..+0x08 as a ListQueue mPlugInDescRunTimeList{phead,ptail,
-// entries}; +0x0C mpEnumerator; +0x10 mpSystem; +0x14 mCurrentRegistryIndex. Kept the flat
-// head/tail/count shape (ARTIST asm models it flat) and applied PDB names to the two
-// previously-guessed members.
-//   +0x00  mpHead    (ListQueue.phead -- head node's +0x24 link, i.e. node->mpNext slot)
-//   +0x04  mppTail   (ListQueue.ptail -- tail link slot; set on first registration)
-//   +0x08  muCount   (ListQueue.entries -- number of registered plug-ins)
-//   +0x0C  mpEnumerator (PDB; was mField0C; int/ListNode*, init 0)
-//   +0x10  mpSystem  (back-pointer to the owning System, set in CreateInstance)
-//   +0x14  mCurrentRegistryIndex (PDB; was mbNextSeq; running index, post-inc per register)
-// Allocated 24 bytes (0x18), 16-aligned, via System::New2<PlugInRegistry>.
-// -------------------------------------------------------------------------------------
+// PlugInRegistry owns the runtime descriptor list and its registration order.
+// The Xbox 360 audio PDB gives the five members of this 24-byte registry.
 class PlugInRegistry
 {
 public:
-    // Default ctor = zero the ListQueue state. Grounded in System::New2<PlugInRegistry>
-    // @0x82B6C350, whose inlined construction zeroes exactly these three words (the
-    // remaining members are written by CreateInstance afterwards).
-    PlugInRegistry() : mpHead(0), mppTail(0), muCount(0) {}
+    typedef PlugInDescRunTime *PlugInHandle;
 
     static PlugInRegistry *CreateInstance(System *system);
-    static void *GetPlugInHandle(PlugInRegistry *self, int id);
-    static void *RegisterPlugInRunTime(PlugInRegistry *self, PlugInDescRunTime *info);
+    PlugInHandle GetPlugInHandle(u32 guid) const;
+    PlugInHandle RegisterPlugInRunTime(PlugInDescRunTime *info);
 
-    void *mpHead;                 // +0x00  ListQueue.phead
-    void **mppTail;               // +0x04  ListQueue.ptail
-    u32 muCount;                  // +0x08  ListQueue.entries
-    int mpEnumerator;             // +0x0C  (was mField0C)
-    System *mpSystem;             // +0x10
-    char mCurrentRegistryIndex;   // +0x14  (was mbNextSeq)
+private:
+    friend class System;
+
+    PlugInDescRunTime *GetPlugInDescRunTimeFromNode(ListNode *node) const;
+
+    ListQueue mPlugInDescRunTimeList;
+    ListNode *mpEnumerator;
+    System *mpSystem;
+    u8 mCurrentRegistryIndex;
 };
 
 // -------------------------------------------------------------------------------------
@@ -304,13 +290,13 @@ public:
 //
 // New2<T> is the templated allocate-and-default-construct helper (mangled
 //   ??$New2@VPlugInRegistry@...@System@... ); its three X360 instantiations belong to
-// this TU and are reconstructed as the single uniform inline template below.
+// the native SDK common object and share one template in System.cpp.
 // -------------------------------------------------------------------------------------
 class System
 {
 public:
     template <class T>
-    static void New2(System *self, T **outResult, const char *name, unsigned size,
+    void New2(T **outResult, const char *name, unsigned size,
                      unsigned align, EA::Allocator::ICoreAllocator *allocator);
 
     // Placement-construct the System's leaf fields: clear the expelled-voice list head and
@@ -537,38 +523,6 @@ public:
     u8 maucDebugFeatures[6];                      // +0x10FB..0x1100 (PDB: mDebugFeatures[6]; CreateInstance
                                                   //   memsets all six to 1)
 };
-
-// New2<T> -- the templated allocate-and-default-construct helper. Reconstructed as ONE
-// uniform template body from its three exported X360 instantiations, which differ ONLY
-// by the inlined default constructor and the default size:
-//   New2<Decoder>         @0x82B6C2D0: default size 52 (X360 sizeof), ctor = vtable install
-//   New2<PlugInRegistry>  @0x82B6C350: default size 24 (X360 sizeof), ctor = zero the
-//                                       ListQueue words (see PlugInRegistry())
-//   New2<Voice>           @0x82B6E140: default size 80 (X360 sizeof), ctor = zero mUnk0C
-// Uniform behaviour (identical in all three): size 0 -> sizeof(T); allocator null -> the
-// System's own mpAllocator (@+0x14); allocate via ICoreAllocator::Alloc(size, name,
-// /*flags*/1, align, /*alignOffset*/0) (vtable slot +4); store the result through
-// `outResult` both before and after construction, constructing only when non-null.
-// (An earlier recon pass stubbed this as `allocator ? Alloc(...) : 0` with no name/flags,
-// no default size and no construction -- every call site passes allocator=0, so that stub
-// made ALL the CreateInstance paths return null. Fixed wave E.)
-template <class T>
-inline void System::New2(System *self, T **outResult, const char *name,
-                         unsigned size, unsigned align,
-                         EA::Allocator::ICoreAllocator *allocator)
-{
-    if (!size)
-        size = sizeof(T);
-    if (!allocator)
-        allocator = self->mpAllocator;
-    T *result = static_cast<T *>(allocator->Alloc(size, name, 1, align, 0));
-    *outResult = result;
-    if (result)
-    {
-        new (result) T;
-        *outResult = result;
-    }
-}
 
 } // namespace core
 } // namespace audio

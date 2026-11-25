@@ -12,7 +12,7 @@
 //   OpenDirectory  @ 0x828F9E40   ReadDirectory  @ 0x828DEC30   CloseDirectory @ 0x828FA8B0
 //
 // Unlike the PC sibling (which maps an int handle onto a Win32 HANDLE through a flat table), the
-// X360 device owns an embedded IndexedPool<FileHandleRecord,N,s8> at this+16 that hands out
+// X360 device owns an embedded IndexedPool<FileHandleRecord,s8> at this+16 that hands out
 // stable byte handles; each live element IS a FileHandleRecord (the open Win32 HANDLE + the seek
 // cursor + the resolved path). Open claims a pool slot and stores the record there; Close returns
 // the slot. The op methods therefore receive a FileHandleRecord* (the resolved pool element),
@@ -92,7 +92,7 @@ namespace CgsFileSystem
         // Embedded handle pool (this+16; byte-indexed, element stride 0x110). The opaque handle
         // is a live FileHandleRecord*; Close/CloseDirectory recover its index when returning it.
         s32 miDriveIndex; // ARTIST82903510/58: DVD0, HDD1.
-        CgsContainers::IndexedPool<FileHandleRecord, KI_MAX_OPEN_FILES, s8> mHandlePool;  // X360 this+0x10
+        CgsContainers::IndexedPool<FileHandleRecord, s8> mHandlePool;  // X360 this+0x10
         FileHandleRecord maHandles[KI_MAX_OPEN_FILES];
         s8 maiFreeIndices[KI_MAX_OPEN_FILES];
     };

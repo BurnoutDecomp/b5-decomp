@@ -171,10 +171,10 @@ inline Vector3::Vector3(VecFloatRefIndex::InParam x,
                         VecFloatRefIndex::InParam y,
                         VecFloatRefIndex::InParam z)
 {
-    // broadcast each referenced lane then assemble lane0/1/2.
-    mV.v[0] = x.mV.v[x.mIndex];
-    mV.v[1] = y.mV.v[y.mIndex];
-    mV.v[2] = z.mV.v[z.mIndex];
+    const VecFloat xValue(x);
+    const VecFloat yValue(y);
+    const VecFloat zValue(z);
+    mV = _asmCreateVectorAxis<VectorAxisX, VectorAxisY, VectorAxisZ>(xValue.mV, yValue.mV, zValue.mV);
 }
 
 template<VectorAxis XSRC_INDEX, VectorAxis YSRC_INDEX, VectorAxis ZSRC_INDEX>

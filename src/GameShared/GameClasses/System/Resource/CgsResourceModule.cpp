@@ -637,9 +637,7 @@ namespace CgsResource
     }
     template<class Response> void ResourceModule::FileSystemFree(Response* lpResponse)
     {
-        rw::Resource lResource;
-        lResource.m_baseResources[0] = lpResponse;
-        mpFileSystemAllocator->DoFree(lResource);
+        mpFileSystemAllocator->FreeMemoryResource(lpResponse);
     }
 
     // ARTIST828EC6B0 owns no pending-response drain.
@@ -928,80 +926,83 @@ namespace CgsResource
     // can safely return its index to the pool during the walk.
     void ResourceModule::ProcessPendingFileSystemResponses()
     {
-        PendingFileResponse*
-            lapPending[KI_MAX_PENDING_FILE_SYSTEM_RESPONSES] = {};
-        const s32 liCount = mPendingFileResponses.Get(
+        // The receiver copies the opaque event bytes using the concrete payload size.
+        PendingFileResponse* lapPending[KI_MAX_PENDING_FILE_SYSTEM_RESPONSES];
+        const s32 liCount = mPendingFileResponses.GetUsedList(
             lapPending, KI_MAX_PENDING_FILE_SYSTEM_RESPONSES);
-
-        for (s32 li = 0; li < liCount; ++li)
+        for (s32 liPending = 0; liPending < liCount; ++liPending)
         {
-            PendingFileResponse* lpPending = lapPending[li];
-            bool lbComplete = false;
-            CgsModule::BaseEventReceiverQueue* lpUser = 0;
-            s32 liResponseSize = 0;
-
-            if (lpPending->meEvent == ResourceIO::EVENT_OPENREADSTREAM)
+            PendingFileResponse* lpPending = lapPending[liPending];
+            switch (lpPending->meEvent)
             {
-                Events::OpenReadStreamResponse* lpResponse =
-                    static_cast<Events::OpenReadStreamResponse*>(
-                        lpPending->mpResponse);
-                lbComplete = mFileSystem.IsReadStreamOpen(lpResponse->GetStream());
-                lpUser = lpResponse->GetUser();
-                liResponseSize = sizeof(*lpResponse);
-            }
-            else if (lpPending->meEvent == ResourceIO::EVENT_CLOSEREADSTREAM)
-            {
-                Events::CloseReadStreamResponse* lpResponse =
-                    static_cast<Events::CloseReadStreamResponse*>(
-                        lpPending->mpResponse);
-                lbComplete = mFileSystem.IsReadStreamClosed(
-                    static_cast<s32>(lpPending->muFileId));
-                lpUser = lpResponse->GetUser();
-                liResponseSize = sizeof(*lpResponse);
-            }
-            else if (lpPending->meEvent == ResourceIO::EVENT_OPENFILE)
-            {
-                Events::OpenFileResponse* lpResponse = static_cast<Events::OpenFileResponse*>(lpPending->mpResponse);
-                lbComplete = lpResponse->GetFileHandle().GetStatus() == CgsFileSystem::E_FILESTATE_OPEN;
-                lpUser = lpResponse->GetUser();
-                liResponseSize = sizeof(*lpResponse);
-            }
-            else if (lpPending->meEvent == ResourceIO::EVENT_CLOSEFILE)
-            {
-                Events::CloseFileResponse* lpResponse = static_cast<Events::CloseFileResponse*>(lpPending->mpResponse);
-                lbComplete = mFileSystem.GetStatus(lpPending->muFileId) == CgsFileSystem::E_FILESTATE_CLOSED;
-                lpUser = lpResponse->GetUser();
-                liResponseSize = sizeof(*lpResponse);
-            }
-            else if (lpPending->meEvent == ResourceIO::EVENT_OPENWRITESTREAM || lpPending->meEvent == ResourceIO::EVENT_CLOSEWRITESTREAM)
-                continue;
-            else
-            {
-                CGS_ASSERT(false, "Unexpected pending file response\n");
-            }
+            case ResourceIO::EVENT_OPENREADSTREAM:
+                {
+                    Events::OpenReadStreamResponse* lpResponse =
+                        static_cast<Events::OpenReadStreamResponse*>(lpPending->mpResponse);
+                    if (mFileSystem.IsReadStreamOpen(lpResponse->GetStream()))
+                    {
+                        if (lpResponse->GetUser())
+                            lpResponse->GetUser()->AddEvent(
+                                reinterpret_cast<const CgsModule::Event*>(lpResponse),
+                                lpPending->meEvent, sizeof(*lpResponse));
+                        FileSystemFree(lpResponse);
+                        mPendingFileResponses.Push(lpPending);
+                    }
+                }
+                break;
+            case ResourceIO::EVENT_CLOSEREADSTREAM:
+                {
+                    Events::CloseReadStreamResponse* lpResponse =
+                        static_cast<Events::CloseReadStreamResponse*>(lpPending->mpResponse);
+                    if (mFileSystem.IsReadStreamClosed(lpPending->muFileId))
+                    {
+                        if (lpResponse->GetUser())
+                            lpResponse->GetUser()->AddEvent(
+                                reinterpret_cast<const CgsModule::Event*>(lpResponse),
+                                lpPending->meEvent, sizeof(*lpResponse));
+                        FileSystemFree(lpResponse);
+                        mPendingFileResponses.Push(lpPending);
+                    }
+                }
+                break;
+            case ResourceIO::EVENT_OPENFILE:
+                {
+                    Events::OpenFileResponse* lpResponse =
+                        static_cast<Events::OpenFileResponse*>(lpPending->mpResponse);
+                    if (lpResponse->GetFileHandle().GetStatus() == CgsFileSystem::E_FILESTATE_OPEN)
+                    {
+                        if (lpResponse->GetUser())
+                            lpResponse->GetUser()->AddEvent(
+                                reinterpret_cast<const CgsModule::Event*>(lpResponse),
+                                lpPending->meEvent, sizeof(*lpResponse));
+                        FileSystemFree(lpResponse);
+                        mPendingFileResponses.Push(lpPending);
+                    }
+                }
+                break;
+            case ResourceIO::EVENT_CLOSEFILE:
+                {
+                    Events::CloseFileResponse* lpResponse =
+                        static_cast<Events::CloseFileResponse*>(lpPending->mpResponse);
+                    if (mFileSystem.GetStatus(lpPending->muFileId) == CgsFileSystem::E_FILESTATE_CLOSED)
+                    {
+                        if (lpResponse->GetUser())
+                            lpResponse->GetUser()->AddEvent(
+                                reinterpret_cast<const CgsModule::Event*>(lpResponse),
+                                lpPending->meEvent, sizeof(*lpResponse));
+                        FileSystemFree(lpResponse);
+                        mPendingFileResponses.Push(lpPending);
+                    }
+                }
+                break;
+            case ResourceIO::EVENT_OPENWRITESTREAM:
+            case ResourceIO::EVENT_CLOSEWRITESTREAM:
+                break;
 
-            if (!lbComplete)
-                continue;
-
-            if (lpUser)
-                lpUser->AddEvent(
-                    static_cast<const CgsModule::Event*>(
-                        lpPending->mpResponse),
-                    lpPending->meEvent, liResponseSize);
-
-            if (lpPending->meEvent == ResourceIO::EVENT_OPENREADSTREAM)
-                FileSystemFree(static_cast<Events::OpenReadStreamResponse*>(
-                    lpPending->mpResponse));
-            else if (lpPending->meEvent == ResourceIO::EVENT_OPENFILE)
-                FileSystemFree(static_cast<Events::OpenFileResponse*>(lpPending->mpResponse));
-            else if (lpPending->meEvent == ResourceIO::EVENT_CLOSEFILE)
-                FileSystemFree(static_cast<Events::CloseFileResponse*>(lpPending->mpResponse));
-            else
-                FileSystemFree(static_cast<Events::CloseReadStreamResponse*>(
-                    lpPending->mpResponse));
-
-            const s8 liIndex = mPendingFileResponses.GetObjectIndex(lpPending);
-            mPendingFileResponses.PushIndex(liIndex);
+            default:
+                CGS_ASSERT_STREAM_AT(false, "Unexpected pending file response\n", CGS_ARTIST_FILE, 1160);
+                break;
+            }
         }
     }
 

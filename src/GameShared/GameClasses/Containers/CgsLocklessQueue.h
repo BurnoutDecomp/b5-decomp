@@ -95,8 +95,7 @@ bool LocklessQueue<T>::Lock(bool lbWait)
             {
                 return false;
             }
-            const u32 luSleepMilliseconds = 0;
-            EA::Thread::ThreadSleep(&luSleepMilliseconds);
+            EA::Thread::ThreadSleep(&EA::Thread::kTimeoutImmediate);
             continue;
         }
 
@@ -131,6 +130,7 @@ template <typename T>
 bool LocklessQueue<T>::Post(const T* lpItem, bool lbWaitIfFull, s32 liSleepTime)
 {
     Lock(true);
+    bool lbSucceeded;
     for (;;)
     {
         u16 lu16ReadIndex, lu16WriteIndex, lu16NumItems, lu16Lock;
@@ -140,8 +140,8 @@ bool LocklessQueue<T>::Post(const T* lpItem, bool lbWaitIfFull, s32 liSleepTime)
         {
             if (!lbWaitIfFull)
             {
-                Unlock();
-                return false;
+                lbSucceeded = false;
+                break;
             }
             Unlock();
             const u32 luSleepMilliseconds = static_cast<u32>(liSleepTime);
@@ -157,19 +157,21 @@ bool LocklessQueue<T>::Post(const T* lpItem, bool lbWaitIfFull, s32 liSleepTime)
         if (SetStatusConditional(lu16ReadIndex, lu16NewWriteIndex, static_cast<u16>(lu16NumItems + 1), lu16Lock,
                                  lu16ReadIndex, lu16WriteIndex, lu16NumItems, lu16Lock))
         {
+            lbSucceeded = true;
             break;
         }
         CGS_ASSERT_AT(false, "Another thread changed the status while locked by this thread\n",
                       CGS_ARTIST_LOCKLESS_QUEUE_FILE, 349);
     }
     Unlock();
-    return true;
+    return lbSucceeded;
 }
 
 template <typename T>
 bool LocklessQueue<T>::Pop(T* lpItem, bool lbWaitIfEmpty, s32 liSleepTime)
 {
     Lock(true);
+    bool lbSucceeded;
     for (;;)
     {
         u16 lu16ReadIndex, lu16WriteIndex, lu16NumItems, lu16Lock;
@@ -179,8 +181,8 @@ bool LocklessQueue<T>::Pop(T* lpItem, bool lbWaitIfEmpty, s32 liSleepTime)
         {
             if (!lbWaitIfEmpty)
             {
-                Unlock();
-                return false;
+                lbSucceeded = false;
+                break;
             }
             Unlock();
             const u32 luSleepMilliseconds = static_cast<u32>(liSleepTime);
@@ -196,13 +198,14 @@ bool LocklessQueue<T>::Pop(T* lpItem, bool lbWaitIfEmpty, s32 liSleepTime)
         if (SetStatusConditional(lu16NewReadIndex, lu16WriteIndex, static_cast<u16>(lu16NumItems - 1), lu16Lock,
                                  lu16ReadIndex, lu16WriteIndex, lu16NumItems, lu16Lock))
         {
+            lbSucceeded = true;
             break;
         }
         CGS_ASSERT_AT(false, "Another thread changed the status while locked by this thread\n",
                       CGS_ARTIST_LOCKLESS_QUEUE_FILE, 421);
     }
     Unlock();
-    return true;
+    return lbSucceeded;
 }
 }
 

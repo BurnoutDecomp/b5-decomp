@@ -66,11 +66,7 @@ namespace CgsNetwork
 
     char* ServerInterfaceDirtySock::GetMessageBuffer() const
     {
-        CGS_ASSERT(mpacMessageBuffer != 0,
-            CGS_ASSERT_MESSAGE_AT(
-                "mpacMessageBuffer",
-                "..\\..\\..\\GameShared\\GameClasses\\Network/ServerInterface\\DirtySock\\CgsServerInterfaceDirtySock.h", 719 /* ARTIST 0x82580B70 */));
-        return mpacMessageBuffer;
+        return GetCheckedMessageBuffer();
     }
 }
 

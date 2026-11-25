@@ -5,7 +5,7 @@
 //   Read           @ 0x828DE9F0   Seek           @ 0x828DEB98
 //   OpenDirectory  @ 0x828F9E40   ReadDirectory  @ 0x828DEC30   CloseDirectory @ 0x828FA8B0
 //
-// The device owns an embedded byte-indexed IndexedPool<FileHandleRecord,N,s8> (mHandlePool, this
+// The device owns an embedded byte-indexed IndexedPool<FileHandleRecord,s8> (mHandlePool, this
 // +0x10): Open claims a slot and stores the open HANDLE + seek cursor + resolved path there;
 // Close returns the slot. The op methods receive the opaque FileHandleRecord pointer the asm
 // passes directly. The failure path on every op runs the device's

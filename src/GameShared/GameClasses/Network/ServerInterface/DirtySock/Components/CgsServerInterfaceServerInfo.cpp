@@ -9,6 +9,8 @@
 
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceEvents.h"
 
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceServerInfo.cpp"
+
 #include <string.h>   // _strnicmp
 
 // Case-insensitive bounded compare (console strnicmp -> MSVC _strnicmp).
@@ -39,8 +41,6 @@ namespace CgsNetwork
         const s32 KI_SELECT_CONF = 0x636F6E66;   // 'conf'
         const s32 KI_SELECT_PRED = 0x70657264;   // 'perd'
 
-        // FindUrl's status buffer / record sizes.
-        const s32 KI_STATUS_BUFFER_SIZE = 564;
     }
 }
 
@@ -106,15 +106,14 @@ void ServerInterfaceServerInfo::Resume()
 
 void ServerInterfaceServerInfo::FindUrl(const char* lpcUrlKey, char* lpcOut, s32 liOutLen)
 {
-    CGS_ASSERT(mpServerInterface->GetLobbyAPIRef() != 0, CGS_ASSERT_MESSAGE_AT(
-        "NULL != mpServerInterface->GetLobbyAPIRef()",
-        "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceServerInfo.cpp", 363 /* ARTIST 0x8287A5EC */));
+    CGS_ASSERT_AT(mpServerInterface->GetLobbyAPIRef() != 0,
+                  "NULL != mpServerInterface->GetLobbyAPIRef()", CGS_ARTIST_FILE, 363);
 
     // Pull the 'self' status record and the 'conf' info record, then read the named
     // URL template out of the config record (defaulting to the empty error string).
-    char lacSelf[KI_STATUS_BUFFER_SIZE];
+    LobbyApiUserT lPlayerInfo;
     LobbyApiStatus(mpServerInterface->GetLobbyAPIRef(), KI_SELECT_SELF,
-                   lacSelf, KI_STATUS_BUFFER_SIZE);
+                   &lPlayerInfo, sizeof(lPlayerInfo));
 
     const char* lpcConf = static_cast<const char*>(
         LobbyApiInfo(mpServerInterface->GetLobbyAPIRef(), KI_SELECT_CONF));
@@ -129,15 +128,14 @@ void ServerInterfaceServerInfo::FindUrl(const char* lpcUrlKey, char* lpcOut, s32
     const s32 liLanguage = CgsSystem::HardwareSku::FindLanguage();
     const u32 luLangCode = KAU_LANGUAGE_STRINGS[liLanguage];
 
-    char lacLangCode[3];
+    char lacLangCode[8];
     lacLangCode[0] = static_cast<char>(luLangCode >> 8);
     lacLangCode[1] = static_cast<char>(luLangCode);
     lacLangCode[2] = 0;
 
-    // The X360 also packs a second 2-char code out of the status buffer tail (offset
-    // 0x214) -- the region territory code -- and passes it as the second substitution.
-    const u32 luRegionWord = *reinterpret_cast<const u32*>(lacSelf + 0x214);
-    char lacRegionCode[3];
+    // The lobby user's locality supplies the second two-character substitution.
+    const u32 luRegionWord = lPlayerInfo.uLocality;
+    char lacRegionCode[8];
     lacRegionCode[0] = static_cast<char>(luRegionWord >> 8);
     lacRegionCode[1] = static_cast<char>(luRegionWord);
     lacRegionCode[2] = 0;
@@ -158,29 +156,23 @@ void ServerInterfaceServerInfo::GetNewsUrl(char* lpcOut, s32 liOutLen)
 
 void ServerInterfaceServerInfo::GetTelemetryAuthString(char* lpcOut, s32 liOutLen)
 {
-    CGS_ASSERT(mpServerInterface->GetLobbyAPIRef() != 0, CGS_ASSERT_MESSAGE_AT(
-        "NULL != mpServerInterface->GetLobbyAPIRef()",
-        __FILE__, 524 /* ARTIST 0x8287A710 */));
+    CGS_ASSERT_AT(mpServerInterface->GetLobbyAPIRef() != 0,
+                  "NULL != mpServerInterface->GetLobbyAPIRef()", CGS_ARTIST_FILE, 524);
 
     const char* lpcPred = static_cast<const char*>(
         LobbyApiInfo(mpServerInterface->GetLobbyAPIRef(), KI_SELECT_PRED));
-    const char* lpcField = TagFieldFind(lpcPred, "EX-Telemetry");
-    TagFieldGetString(lpcField, lpcOut, liOutLen,
-                      "");
+    TagFieldGetString(TagFieldFind(lpcPred, "EX-Telemetry"), lpcOut, liOutLen, "");
 }
 
 void ServerInterfaceServerInfo::GetStringFromClientConfig(const char* lpcKey,
                                                           char* lpcOut, s32 liOutLen)
 {
-    CGS_ASSERT(mpServerInterface->GetLobbyAPIRef() != 0, CGS_ASSERT_MESSAGE_AT(
-        "NULL != mpServerInterface->GetLobbyAPIRef()",
-        __FILE__, 572 /* ARTIST 0x8287A83C */));
+    CGS_ASSERT_AT(mpServerInterface->GetLobbyAPIRef() != 0,
+                  "NULL != mpServerInterface->GetLobbyAPIRef()", CGS_ARTIST_FILE, 572);
 
     const char* lpcConf = static_cast<const char*>(
         LobbyApiInfo(mpServerInterface->GetLobbyAPIRef(), KI_SELECT_CONF));
-    const char* lpcField = TagFieldFind(lpcConf, lpcKey);
-    TagFieldGetString(lpcField, lpcOut, liOutLen,
-                      "");
+    TagFieldGetString(TagFieldFind(lpcConf, lpcKey), lpcOut, liOutLen, "");
 }
 
 bool ServerInterfaceServerInfo::IsNewsUpdated() const
@@ -197,17 +189,17 @@ bool ServerInterfaceServerInfo::IsNewsUpdated() const
 
 u32 ServerInterfaceServerInfo::GetTimeStampFromClientConfig(const char* lpcKey)
 {
-    CGS_ASSERT(mpServerInterface->GetMessageBuffer() != 0, "mpServerInterface->GetMessageBuffer()");
+    CGS_ASSERT_AT(mpServerInterface->GetCheckedMessageBuffer() != 0,
+                  "mpServerInterface->GetMessageBuffer()", CGS_ARTIST_FILE, 594);
 
-    mpServerInterface->GetMessageBuffer()[0] = 0;
-    GetStringFromClientConfig(lpcKey, mpServerInterface->GetMessageBuffer(), KI_MESSAGE_BUFFER_SIZE);
-
-    // A "0" record means no timestamp is configured.
-    if (strnicmp(mpServerInterface->GetMessageBuffer(), "0", KI_MESSAGE_BUFFER_SIZE) == 0)
+    mpServerInterface->GetCheckedMessageBuffer()[0] = 0;
+    GetStringFromClientConfig(lpcKey, mpServerInterface->GetCheckedMessageBuffer(), KI_MESSAGE_BUFFER_SIZE);
+    u32 luTimestamp = 0;
+    if (strnicmp(mpServerInterface->GetCheckedMessageBuffer(), "0", KI_MESSAGE_BUFFER_SIZE) != 0)
     {
-        return 0;
+        luTimestamp = TagFieldGetEpoch(mpServerInterface->GetCheckedMessageBuffer(), 0);
     }
-    return TagFieldGetEpoch(mpServerInterface->GetMessageBuffer(), 0);
+    return luTimestamp;
 }
 
 }
