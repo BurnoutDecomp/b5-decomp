@@ -3,6 +3,9 @@
 #include "rw/math/vpu/vector3_operation.h"               // rw::math::vpu::IsValid(Vector3)
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
 
+#include "GameSource/World/BrnEntityTypes.h"
+#include "GameShared/GameClasses/SceneManager/CgsEntityId.h"
+
 #include <cstddef>                                       // offsetof (layout gate)
 
 // BrnPhysics::Vehicle::ArticulatedJoint::Set -- reconstructed store-for-store from
@@ -24,6 +27,8 @@ namespace BrnPhysics
 {
 namespace Vehicle
 {
+    static const char KAC_ARTIST_JOINT_FILE[] = "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\vehiclemanager\\vehiclephysics\\BrnArticulatedJoint.h";
+
     // ---------------------------------------------------------------------------------------
     // _AssertLayout -- never called; the gate that keeps this class on its console seats.
     //
@@ -159,8 +164,10 @@ namespace Vehicle
         EntityId lCabEntityId;
         lCabEntityId.muValue = static_cast<u32>(mu64RawId >> 32);
 
-        CGS_ASSERT((lCabEntityId.muValue >> 24) == KU_ENTITYTYPE_TRAFFIC_VEHICLE,
-                   "lCabEntityId.GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE");
+        const CgsSceneManager::EntityId lSceneCabEntityId(lCabEntityId.muValue);
+        CGS_ASSERT_AT(lSceneCabEntityId.GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE,
+                      "lCabEntityId.GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE",
+                      KAC_ARTIST_JOINT_FILE, 183);
         return lCabEntityId;
     }
 }

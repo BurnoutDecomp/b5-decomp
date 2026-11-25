@@ -31,6 +31,7 @@
 #include "SDKs/EATech/include/Apt/AptCharacterInst.h"     // mpRenderItem / GetRenderItemWritable
 #include "SDKs/EATech/include/Apt/AptRenderItem.h"        // mpColorMatrix / GetColorMatrixWritable / gIdentityCXForm
 #include "SDKs/EATech/include/Apt/AptStd/AptCXForm.h"     // AptColorHelper channels
+#include "SDKs/EATech/include/Apt/AptRenderingContext.h"  // gAptNullCXForm
 #include "SDKs/EATech/include/Apt/AptNativeFunction.h"    // the cached native methods
 #include "SDKs/EATech/include/Apt/AptNativeHash.h"        // Lookup / Set on the built Object
 #include "SDKs/EATech/include/Apt/AptValue/AptInteger.h"  // AptInteger::Create
@@ -116,7 +117,7 @@ void AptScriptColour::DestroyGCPointers()
         mpTarget->Release();
     mpTarget = 0;
 
-    AptObject::DestroyGCPointers();   // == mHash.DestroyGCPointers() (X360: a1+8)
+    mHash.DestroyGCPointers();   // ARTIST 0x82AF1014 passes the hash at +8.
 }
 
 // ---------------------------------------------------------------------------
@@ -273,33 +274,35 @@ AptValue* AptScriptColour::sMethod_setRGB(AptScriptColour* pThis, int /*nArgCoun
 // ---------------------------------------------------------------------------
 AptValue* AptScriptColour::sMethod_getRGB(AptScriptColour* pThis)
 {
-    if (!pThis->mpTarget)
-        return gpUndefinedValue;
+    if (pThis->mpTarget)
+    {
+        // mpTarget -> char inst -> render item -> colour matrix (null -> identity).
+        AptCharacterInst* pCharInst   = static_cast<AptCIH*>(pThis->mpTarget)->mpCharacterInst;
+        AptRenderItem*    pRenderItem = pCharInst->mpRenderItem;
+        const AptCXForm*  pColorMatrix = pRenderItem->mpColorMatrix;
+        if (!pColorMatrix)
+            pColorMatrix = &gAptNullCXForm;
 
-    // mpTarget -> char inst -> render item -> colour matrix (null -> identity).
-    AptCharacterInst* pCharInst   = static_cast<AptCIH*>(pThis->mpTarget)->mpCharacterInst;
-    AptRenderItem*    pRenderItem = pCharInst->mpRenderItem;
-    const AptCXForm*  pColorMatrix = pRenderItem->mpColorMatrix;
-    if (!pColorMatrix)
-        pColorMatrix = &gIdentityCXForm;
+        // The additive (translate) ARGB run; getRGB takes the R/G/B offsets.
+        f32 fRed   = pColorMatrix->translate.GetValuef(AptColorHelper::Red);
+        f32 fGreen = pColorMatrix->translate.GetValuef(AptColorHelper::Green);
+        f32 fBlue  = pColorMatrix->translate.GetValuef(AptColorHelper::Blue);
 
-    // The additive (translate) ARGB run; getRGB takes the R/G/B offsets.
-    f32 fRed   = pColorMatrix->translate.GetValuef(AptColorHelper::Red);
-    f32 fGreen = pColorMatrix->translate.GetValuef(AptColorHelper::Green);
-    f32 fBlue  = pColorMatrix->translate.GetValuef(AptColorHelper::Blue);
+        if (fRed   < 0.0f)   fRed   = 0.0f;
+        if (fGreen < 0.0f)   fGreen = 0.0f;
+        if (fBlue  < 0.0f)   fBlue  = 0.0f;
+        if (fRed   > 255.0f) fRed   = 255.0f;
+        if (fGreen > 255.0f) fGreen = 255.0f;
+        if (fBlue  > 255.0f) fBlue  = 255.0f;
 
-    if (fRed   < 0.0f)   fRed   = 0.0f;
-    if (fGreen < 0.0f)   fGreen = 0.0f;
-    if (fBlue  < 0.0f)   fBlue  = 0.0f;
-    if (fRed   > 255.0f) fRed   = 255.0f;
-    if (fGreen > 255.0f) fGreen = 255.0f;
-    if (fBlue  > 255.0f) fBlue  = 255.0f;
+        // ARTIST 0x82AECFE4 converts the clamped channels as unsigned.
+        const unsigned int nRed   = static_cast<unsigned int>(fRed);
+        const unsigned int nGreen = static_cast<unsigned int>(fGreen);
+        const unsigned int nBlue  = static_cast<unsigned int>(fBlue);
 
-    const int nRed   = static_cast<int>(fRed);
-    const int nGreen = static_cast<int>(fGreen);
-    const int nBlue  = static_cast<int>(fBlue);
-
-    return AptInteger::Create((nRed << 16) | (nGreen << 8) | nBlue);
+        return AptInteger::Create((nRed << 16) | (nGreen << 8) | nBlue);
+    }
+    return gpUndefinedValue;
 }
 
 // ---------------------------------------------------------------------------

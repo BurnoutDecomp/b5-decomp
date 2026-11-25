@@ -69,6 +69,17 @@ namespace vpu
         Matrix44(const Matrix44& lrMatrix)
             : xAxis(lrMatrix.xAxis), yAxis(lrMatrix.yAxis),
               zAxis(lrMatrix.zAxis), wAxis(lrMatrix.wAxis) {}
+        // DecFIGS matrix44.h:61 and matrix44_type_inline.h:22 declare the
+        // original assignment. ARTIST 0x827B0060 copies all four SIMD rows.
+        Matrix44& operator=(const Matrix44& lrMatrix)
+        {
+            xAxis.mV = lrMatrix.xAxis.mV;
+            yAxis.mV = lrMatrix.yAxis.mV;
+            zAxis.mV = lrMatrix.zAxis.mV;
+            wAxis.mV = lrMatrix.wAxis.mV;
+            return *this;
+        }
+
         Matrix44(Vector4::InParam x, Vector4::InParam y, Vector4::InParam z, Vector4::InParam w)
             : xAxis(x), yAxis(y), zAxis(z), wAxis(w) {}
         Matrix44(VectorIntrinsicInParam x, VectorIntrinsicInParam y, VectorIntrinsicInParam z, VectorIntrinsicInParam w)

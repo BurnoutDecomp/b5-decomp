@@ -122,11 +122,11 @@ void TextFormat::copyTextFormatObj(const TextFormat* pSource)
         mnColor = pSource->mnColor;
     // Font: copy when the source font is non-empty (X360 byte-compares the source
     // buffer against the "" constant @unk_82143A57 before EAStringC::operator=).
-    if (pSource->mFontName.GetBuffer()[0] != '\0')
+    if (strcmp(pSource->mFontName.GetBuffer(), "") != 0)
         mFontName = pSource->mFontName;
     if (pSource->mfSize != -1.0f)                    // lfs 4(r31); fcmpu flt_820037C8
         mfSize = pSource->mfSize;
-    if (pSource->mnStyleFlags != 2)                  // lwz 0x10(r31); cmplwi 2
+    if (pSource->mnStyleFlags != 2u)                  // lwz 0x10(r31); cmplwi 2
         mnStyleFlags = pSource->mnStyleFlags;
     if (pSource->mnIndent != -1)                     // lwz 0x14(r31)
         mnIndent = pSource->mnIndent;

@@ -57,7 +57,8 @@ void BrnShaderConstantsFrame::Construct()
 // X360 0x827B0018: write the per-frame view-projection matrix. 64-byte store @this+0x00.
 void BrnShaderConstantsFrame::SetViewProjectionMatrix(Matrix44 lMatrix)
 {
-    CGS_ASSERT(true == mbLockedForWriting, "true == mbLockedForWriting");
+    CGS_ASSERT(true == mbLockedForWriting,
+        CGS_ASSERT_MESSAGE_AT("true == mbLockedForWriting", KAC_ARTIST_ASSERT_FILE, 231));
     mViewProjection = lMatrix;
 }
 
@@ -65,8 +66,10 @@ void BrnShaderConstantsFrame::SetViewProjectionMatrix(Matrix44 lMatrix)
 // store @this+0x90+face*64.
 void BrnShaderConstantsFrame::SetEnvMapViewProjectionMatrix(BrnGraphics::EEnvironmentMapFace leFace, Matrix44 lMatrix)
 {
-    CGS_ASSERT(true == mbLockedForWriting, "true == mbLockedForWriting");
-    CGS_ASSERT(leFace < BrnGraphics::E_FACE_NUM, "leEnvMapFace < BrnGraphics::E_FACE_NUM");
+    CGS_ASSERT(true == mbLockedForWriting,
+        CGS_ASSERT_MESSAGE_AT("true == mbLockedForWriting", KAC_ARTIST_ASSERT_FILE, 247));
+    CGS_ASSERT(leFace < BrnGraphics::E_FACE_NUM,
+        CGS_ASSERT_MESSAGE_AT("leEnvMapFace < BrnGraphics::E_FACE_NUM", KAC_ARTIST_ASSERT_FILE, 248));
     maEnvMapViewProjectionMatrices[leFace] = lMatrix;
 }
 

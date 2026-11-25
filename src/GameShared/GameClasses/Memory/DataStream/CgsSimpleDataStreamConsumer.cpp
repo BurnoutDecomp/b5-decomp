@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Memory/DataStream/CgsSimpleDataStreamConsumer.h"
 
-#include <cstring>   // std::memcpy (the XMemCpy tail-calls)
+#include <xtl.h>
 
 namespace CgsMemory
 {
@@ -11,17 +11,12 @@ namespace CgsMemory
     //   0x8286852C  lwz r4,  0x18(this)    <- mShared.mpPoster, read back from the copy
     //   0x82868538  bl  DataStreamCommandReader::Construct(this + 0x80, r4)
     //
-    // ⚠️ The 0x20-byte XMemCpy is a CONSOLE SIZE LITERAL over a runtime-carved
-    // struct whose two pointers widen on x64. Reproduced as the struct assignment
-    // it is, not as a byte count (standing rule: "a count is not a size";
-    // "carved at runtime => widen 4->8"). The console then re-loads mpPoster out
-    // of the freshly written copy; that ordering is kept because it is what makes
-    // the reader bind to the producer's poster rather than to a caller argument.
     void SimpleDataStreamConsumer::Construct(SimpleDataStreamProducer* lpProducer,
                                              void*                     lpvResultDestination,
                                              s32                       liResultDestinationSize)
     {
-        mShared = lpProducer->mShared;
+        CGS_STATIC_ASSERT(sizeof(mShared) == 0x20, "ARTIST SharedData copy");
+        XMemCpy(&mShared, &lpProducer->mShared, sizeof(mShared));
 
         mpvResultDestination   = lpvResultDestination;
         miResultDestinationSize = liResultDestinationSize;
@@ -57,6 +52,6 @@ namespace CgsMemory
 
         u8* lpDestination = static_cast<u8*>(mShared.mpResultBuffer) + (liStride * liResultIndex);
 
-        std::memcpy(lpDestination, lpvResult, static_cast<size_t>(liStride));
+        XMemCpy(lpDestination, lpvResult, static_cast<size_t>(liStride));
     }
 }

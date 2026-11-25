@@ -375,11 +375,10 @@ namespace
             Deformation::DeformationManager* lpDeformationManager,
             f32 lfTimeStep)
     {
-        CGS_ASSERT(mpContactGenerator != 0, "mpContactGenerator != NULL");          // :2346
-
-        // 0x82629CFC/0x82629D14: the counter is zeroed BEFORE the assert's fall-through, then the
-        // three Add* returns are accumulated into it.
+        // ARTIST 0x82629D1C resets the counter before the contact-generator check.
         miNumSPUTractionLineTests = 0;
+        CGS_ASSERT_AT(mpContactGenerator != 0, "mpContactGenerator != NULL",
+                      KAC_ARTIST_ASSERT_FILE, 2346);
 
         const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* const lpCacheInterface =
             lpInputInterface->GetTriangleCacheInterface();

@@ -215,7 +215,7 @@ bool TextField::SetLocalisedText(const char* lpacText,
 // @ 0x824E7DD0 -- cpp:386/:387. The ONE-FLOAT-PARAMETER variant (ledger-unnamed
 // sub_824E7DD0): the exact sibling of the integer form above, differing in one call --
 // LanguageManager::FormatTextFromFloat instead of FormatTextFromInt. Same two asserts
-// (streamed, folded), same 1024-capped scratch, same SetDatabaseText + OutputAptData
+// (streamed), same 1024-capped scratch, same SetDatabaseText + OutputAptData
 // tail, same constant 1 return.
 // ⚠️ The value rides in f1 and therefore eats the r6 GPR slot; leValueFormat is the r7
 // argument. See the header note -- this is asm-pinned at the UpdateScoreTotalling call
@@ -260,13 +260,12 @@ bool TextField::SetLocalisedText(const char* lpacText,
     CGS_ASSERT_STREAM_AT(liNumParams < KI_MAX_PARAMS && liNumParams > 0,
                          "Wrong number of Parameters int SetLocalisedText", CGS_ARTIST_FILE, 266);
 
-    CgsLanguage::LanguageManager* lpLanguageManager =
-        mpStateInterface->GetAccessPointers()->mpLanguageManager;
-
-    char lacFormatted[KI_MAX_STRING_LENGTH];
-
     va_list lArguments;
     va_start(lArguments, liNumParams);
+
+    CgsLanguage::LanguageManager* lpLanguageManager =
+        mpStateInterface->GetAccessPointers()->mpLanguageManager;
+    char lacFormatted[KI_MAX_STRING_LENGTH];
     lpLanguageManager->FormatTextV(lacFormatted, KI_MAX_STRING_LENGTH, lpacText, leFormat, liNumParams, lArguments);
     va_end(lArguments);
 

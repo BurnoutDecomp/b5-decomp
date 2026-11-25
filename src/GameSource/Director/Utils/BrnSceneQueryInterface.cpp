@@ -45,8 +45,8 @@ namespace BrnDirector
     void SceneQueryInterface::LineTestFine(LineTestFinePostBox&                             lrPostBox,
                                            u32                                              lx32EntityTypeFlags,
                                            u8                                               lxVolumeTypeFlags,
-                                           const Vector3&                                   lLineStart,
-                                           const Vector3&                                   lLineEnd,
+                                           Vector3                                           lLineStart,
+                                           Vector3                                           lLineEnd,
                                            CgsSceneManager::EntityId                        lExcludeEntityId,
                                            CgsSceneManager::SceneManagerIO::EExclusionMode leExclusionMode) const
     {
@@ -56,8 +56,8 @@ namespace BrnDirector
         CgsSceneManager::SceneQueryId lQueryId;
         lQueryId.Set(KU_DIRECTOR_QUERY_OWNER, mpLineTestFinePostOffice->AddPostBox(lrPostBox));
 
-        mpSceneQueryInterface->LineTestFine(lLineStart, lLineEnd, lQueryId, lx32EntityTypeFlags,
-                                            lxVolumeTypeFlags, lExcludeEntityId, leExclusionMode);
+        mpSceneQueryInterface->LineTestFine(lQueryId, lx32EntityTypeFlags, lxVolumeTypeFlags,
+                                            lLineStart, lLineEnd, lExcludeEntityId, leExclusionMode);
     }
 
     // -------------------------------------------------------------------------

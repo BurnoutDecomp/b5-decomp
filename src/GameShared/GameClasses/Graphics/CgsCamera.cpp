@@ -6,6 +6,7 @@
 
 #include "GameShared/GameClasses/Graphics/CgsCamera.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (GetViewProjectionMatrixModified devs)
+#include "SDKs/EATech/include/rw/math/vpu/vec_float_operation.h"
 #include "rw/math/vpu/matrix44_operation.h"            // native affine view-projection multiply
 
 #include <cmath>    // tanf/atanf (SetFovHorizontal -- the XMVectorTan/ATan lowering), sqrt (LookAt / frustum normalizes)
@@ -345,7 +346,7 @@ namespace CgsGraphics
     // ------------------------------------------------------------------------
     void Camera::GetFrustum(CameraRwFrustum& lrOut) const
     {
-        if (static_cast<f32>(mProjection.wAxis.GetW()) == 1.0f)
+        if (mProjection.wAxis.GetComponent(rw::math::vpu::VectorAxisW) == 1.0f)
         {
             GetFrustumParallel(lrOut);
         }

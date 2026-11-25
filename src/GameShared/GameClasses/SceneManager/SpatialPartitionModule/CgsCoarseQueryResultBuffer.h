@@ -200,20 +200,18 @@ namespace CgsSceneManager
     bool CoarseQueryResultBuffer<KU_MaxResults>::PushResults(const u16* lpResults, u32 luNumResults)
     {
         CGS_ASSERT(mbInABatch,
-                   "PushResults called outside of a BeginResultsBatch/EndResultsBatch pair");
+                   CGS_ASSERT_MESSAGE_AT("PushResults called outside of a BeginResultsBatch/EndResultsBatch pair",
+                                         CGS_ARTIST_CGSCOARSEQUERYRESULTBUFFER_FILE, 300));
 
-        const s32 liStart = miTotalBufferSize;
         miNumResultsAttemptedThisBatch += luNumResults;
-
-        if (static_cast<u32>(liStart + luNumResults) > KU_MaxResults)
+        if (miTotalBufferSize + luNumResults <= KU_MaxResults)
         {
-            return false;
+            memcpy(&mau16Buffer[miTotalBufferSize], lpResults, sizeof(u16) * luNumResults);
+            miTotalBufferSize += luNumResults;
+            miTotalNumResults += luNumResults;
+            return true;
         }
-
-        memcpy(&mau16Buffer[liStart], lpResults, 2 * luNumResults);
-        miTotalBufferSize += luNumResults;
-        miTotalNumResults += luNumResults;
-        return true;
+        return false;
     }
 
     // X360 0x828ADC60. miTotalBufferSize - miCurrentResultsStartPosition (const).

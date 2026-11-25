@@ -108,7 +108,7 @@ void AptFrameStack::DestroyGCPointers()
 {
     if (mpEnclosingScope != 0)
         mpEnclosingScope->Release();
-    AptValueWithHash::DestroyGCPointers();   // mHash.DestroyGCPointers()
+    mHash.DestroyGCPointers();   // ARTIST passes the hash subobject at +8.
 }
 
 // ---------------------------------------------------------------------------

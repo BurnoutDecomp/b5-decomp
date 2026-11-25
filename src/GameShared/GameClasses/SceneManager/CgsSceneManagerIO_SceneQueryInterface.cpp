@@ -16,47 +16,35 @@
 // -----------------------------------------------------------------------------
 // CgsSceneManager::SceneManagerIO::SceneQueryInterface::LineTestFine  @ 0x82216EF0
 //
-// Packs the caller's line-test arguments into a stack-local InEventLineTestFine record and
-// appends it to this->mpFineLineTestQueue (member +0x00). The line start/end Vector3 lanes
-// arrive in the two leading vector-register args (v1/v2); the GPR args carry the scalar fields.
-//
-// X360 ARG -> store mapping (authoritative; register order == declared param order):
-//   r3 = this
-//   r4 -> stw +0x20  mQueryId             (a2)
-//   r5 -> stw +0x24  mx32EntityTypeFlags  (a3)
-//   r6 -> stb +0x30  mxVolumeTypeFlags    (a4, byte)
-//   r7 -> stw +0x28  mExcludeEntityId     (a5)
-//   r8 -> stw +0x2C  meExclusionMode      (a6) -- the value the exclusion-mode assert gates on
-//   v1 -> stvx128 +0x00  mLineStart
-//   v2 -> stvx128 +0x10  mLineEnd
-//
-// The leExclusionMode assert fires when a6 is neither E_EXCLUDE_ENTITY_ONLY nor
-// E_EXCLUDE_ALL_CHILD_PARTS; the mpFineLineTestQueue assert fires when this+0x00 == 0. Both are
-// non-gating tripwires (CGS_ASSERT collapses Begin/Fire/EndAssert); the AddEvent always runs.
-// -----------------------------------------------------------------------------
-bool CgsSceneManager::SceneManagerIO::SceneQueryInterface::LineTestFine(
-    const Vector3&  lLineStart,
-    const Vector3&  lLineEnd,
-    SceneQueryId    lQueryId,
-    u32             lx32EntityTypeFlags,
-    u8              lxVolumeTypeFlags,
-    EntityId        lExcludeEntityId,
-    EExclusionMode  leExclusionMode)
+// DecFIGS CgsSceneManagerModuleIO.h:346. ARTIST takes the two endpoints in v1/v2.
+void CgsSceneManager::SceneManagerIO::SceneQueryInterface::LineTestFine(
+    SceneQueryId lQueryId,
+    u32 lx32EntityTypeFlags,
+    u8 lxVolumeTypeFlags,
+    Vector3 lLineStart,
+    Vector3 lLineEnd,
+    EntityId lExcludeEntityId,
+    EExclusionMode leExclusionMode)
 {
+    static const char KAC_ARTIST_FILE[] =
+        "..\\..\\..\\GameShared\\GameClasses\\SceneManager/CgsSceneManagerModuleIO.h";
+
     CGS_ASSERT(leExclusionMode == E_EXCLUDE_ALL_CHILD_PARTS || leExclusionMode == E_EXCLUDE_ENTITY_ONLY,
-               "leExclusionMode == E_EXCLUDE_ALL_CHILD_PARTS || leExclusionMode == E_EXCLUDE_ENTITY_ONLY");
-    CGS_ASSERT(mpFineLineTestQueue, "mpFineLineTestQueue");
+               CGS_ASSERT_MESSAGE_AT("leExclusionMode == E_EXCLUDE_ALL_CHILD_PARTS || leExclusionMode == E_EXCLUDE_ENTITY_ONLY",
+                                     KAC_ARTIST_FILE, 995));
+    CGS_ASSERT(mpFineLineTestQueue,
+               CGS_ASSERT_MESSAGE_AT("mpFineLineTestQueue",
+                                     KAC_ARTIST_FILE, 996));
 
     InEventLineTestFine lEvent;
-    lEvent.mLineStart          = lLineStart;
-    lEvent.mLineEnd            = lLineEnd;
-    lEvent.mQueryId            = lQueryId;
+    lEvent.mQueryId = lQueryId;
     lEvent.mx32EntityTypeFlags = lx32EntityTypeFlags;
-    lEvent.mExcludeEntityId    = lExcludeEntityId;
-    lEvent.meExclusionMode     = leExclusionMode;
-    lEvent.mxVolumeTypeFlags   = lxVolumeTypeFlags;
-
-    return mpFineLineTestQueue->AddEvent(lEvent);
+    lEvent.mLineStart = lLineStart;
+    lEvent.mLineEnd = lLineEnd;
+    lEvent.mxVolumeTypeFlags = lxVolumeTypeFlags;
+    lEvent.mExcludeEntityId = lExcludeEntityId;
+    lEvent.meExclusionMode = leExclusionMode;
+    mpFineLineTestQueue->AddEvent(lEvent);
 }
 
 // -----------------------------------------------------------------------------

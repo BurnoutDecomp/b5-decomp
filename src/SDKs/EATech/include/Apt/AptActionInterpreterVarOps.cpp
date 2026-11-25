@@ -69,6 +69,11 @@ const EAStringC* AptValue::Get_ToString(AptValue* pValue, EAStringC* pScratch)
 // and replace it with the result. An undefined name is a no-op (it stays on the
 // stack as the result), matching the console's early return.
 // ---------------------------------------------------------------------------
+// ARTIST uses the record-form Boolean test at 0x82B038D4.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 void AptActionInterpreter::_FunctionAptActionGetVariable(AptActionInterpreter* pInterp,
                                                          LocalContextT* pContext)
 {
@@ -87,6 +92,10 @@ void AptActionInterpreter::_FunctionAptActionGetVariable(AptActionInterpreter* p
 }
 
 // ---------------------------------------------------------------------------
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
+
 // _FunctionAptActionSetVariable @0x82B03970 -- opcode 0x1D, AS `name = value`.
 // The stack holds [name, value] (value on top); coerce the name and store the
 // value through setVariable, then pop both. When the pop empties the operand

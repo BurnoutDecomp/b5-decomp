@@ -2,6 +2,7 @@
 #define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\DataStream/CgsDataStreamCommandPoster.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"  // CGS_ASSERT
 
+#include <xtl.h>
 #include <cstring>  // std::memcpy (models the Xbox XMemCpy block-copy intrinsic)
 #include "types.hpp"  // uintptr_t (Construct's two 128-byte buffer-alignment tripwires)
 #include <ppcintrinsics.h> // native __lwsync
@@ -109,12 +110,10 @@ namespace CgsMemory
     s32 DataStreamCommandPoster::AddCommand(void* lpCommand)
     {
         // Two X360 assert tripwires (fire-on-failure), in store order.
-        CGS_ASSERT(!mbStreaming,
-                   "Streaming has already begun so can't syncronously add commands\n");
-        CGS_ASSERT(miNumCommands < miMaxCommands,
-                   "No space for more commands\n");
+        CGS_ASSERT_STREAM_AT(!mbStreaming, "Streaming has already begun so can't syncronously add commands\n", CGS_ARTIST_FILE, 199);
+        CGS_ASSERT_STREAM_AT(miNumCommands < miMaxCommands, "No space for more commands\n", CGS_ARTIST_FILE, 200);
 
-        std::memcpy(mpcCommandBuffer + miNumCommands * miCommandSize,
+        XMemCpy(mpcCommandBuffer + miNumCommands * miCommandSize,
                     lpCommand,
                     static_cast<size_t>(miCommandSize));
 

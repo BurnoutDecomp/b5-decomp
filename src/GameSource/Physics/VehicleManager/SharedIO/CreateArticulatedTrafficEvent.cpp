@@ -6,6 +6,8 @@ namespace BrnPhysics
 {
 namespace Vehicle
 {
+    static const char KAC_ARTIST_EVENT_FILE[] = "..\\..\\..\\GameSource\\Physics/VehicleManager/SharedIO/BrnVehicleEvents.h";
+
     CreateArticulatedTrafficEvent&
     CreateArticulatedTrafficEvent::operator=(const CreateArticulatedTrafficEvent& lrOther)
     {
@@ -35,7 +37,7 @@ namespace Vehicle
     // the cab CgsID. mCrasherID (out+0x8) is deliberately NOT written -- left as the caller supplied it.
     void CreateArticulatedTrafficEvent::GetCreateCabEvent( CreatePhysicalTrafficEvent* lpCreateCabEvent ) const
     {
-        CGS_ASSERT( lpCreateCabEvent != 0, "lpCreateCabEvent != NULL" );
+        CGS_ASSERT_AT( lpCreateCabEvent != 0, "lpCreateCabEvent != NULL", KAC_ARTIST_EVENT_FILE, 477 );
 
         lpCreateCabEvent->mVolumeInstanceID  = mVolumeInstanceID_Cab;
         lpCreateCabEvent->mInitialTransform  = mInitialTransform_Cab;
@@ -44,8 +46,8 @@ namespace Vehicle
         lpCreateCabEvent->mCarAssetAttribKey = mAssetAttribKey_Cab;
         lpCreateCabEvent->mModelHandle       = mModelHandle_Cab;
         lpCreateCabEvent->meTrafficType      = meTrafficType;
-        lpCreateCabEvent->mbIsCab            = true;
         lpCreateCabEvent->mCgsID             = mCgsId_Cab;
+        lpCreateCabEvent->mbIsCab            = true;
     }
 
     // BrnPhysics::Vehicle::CreateArticulatedTrafficEvent::GetCreateTrailerEvent  @ 0x825B3108
@@ -54,7 +56,7 @@ namespace Vehicle
     // mCrasherID (out+0x8) is again left unwritten.
     void CreateArticulatedTrafficEvent::GetCreateTrailerEvent( CreatePhysicalTrafficEvent* lpCreateTrailerEvent ) const
     {
-        CGS_ASSERT( lpCreateTrailerEvent != 0, "lpCreateTrailerEvent != NULL" );
+        CGS_ASSERT_AT( lpCreateTrailerEvent != 0, "lpCreateTrailerEvent != NULL", KAC_ARTIST_EVENT_FILE, 496 );
 
         lpCreateTrailerEvent->mVolumeInstanceID  = mVolumeInstanceID_Trailer;
         lpCreateTrailerEvent->mInitialTransform  = mInitialTransform_Trailer;
@@ -63,8 +65,8 @@ namespace Vehicle
         lpCreateTrailerEvent->mCarAssetAttribKey = mAssetAttribKey_Trailer;
         lpCreateTrailerEvent->mModelHandle       = mModelHandle_Trailer;
         lpCreateTrailerEvent->meTrafficType      = meTrafficType;
-        lpCreateTrailerEvent->mbIsCab            = false;
         lpCreateTrailerEvent->mCgsID             = mCgsId_Trailer;
+        lpCreateTrailerEvent->mbIsCab            = false;
     }
 }
 }

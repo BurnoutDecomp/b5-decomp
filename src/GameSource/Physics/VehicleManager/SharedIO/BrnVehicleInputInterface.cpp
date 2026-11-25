@@ -2,11 +2,8 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "rw/math/vpu/vector3_operation.h"          // rw::math::vpu::IsValid(Vector3)
 #include "rw/math/vpu/matrix44affine_operation.h"   // rw::math::vpu::IsValid(Matrix44Affine)
-// this TU's own `static const u32 KU_ENTITYTYPE_TRAFFIC_VEHICLE = 2;`
-// was the THIRD copy of that constant at BrnPhysics::Vehicle namespace scope (the others were
-// BrnPhysicalTrafficManager.h:272 and BrnArticulatedJoint.h:42). It is owned by
-// BrnVehicleConstants.h now; see the note there.
-#include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"  // KU_ENTITYTYPE_TRAFFIC_VEHICLE
+#include "GameSource/World/BrnEntityTypes.h"
+#include "GameShared/GameClasses/SceneManager/CgsEntityId.h"
 
 // BrnPhysics::Vehicle::VehicleInputInterface -- the bodied ledger functions homed by this group.
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. Each enqueue builds its event inline in declaration
@@ -16,6 +13,8 @@ namespace BrnPhysics
 {
 namespace Vehicle
 {
+    static const char KAC_ARTIST_INPUT_FILE[] = "..\\..\\..\\GameSource\\Physics/VehicleManager/SharedIO/BrnVehicleInputInterface.h";
+
     // ========================================================================
     // @0x822E66A0  VehicleInputInterface::Construct
     //   Point every embedded EventQueue's mpEvents at its own inline storage and clear the
@@ -272,8 +271,10 @@ namespace Vehicle
     //   (owner byte == 2), then appends a SetTrafficCrashingEvent with mbCrashing = true.
     void VehicleInputInterface::SetTrafficCrashing(EntityId lEntityId)
     {
-        CGS_ASSERT((lEntityId.muValue >> 24) == KU_ENTITYTYPE_TRAFFIC_VEHICLE,
-                   "lEntityId.GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE");
+        const CgsSceneManager::EntityId lSceneEntityId(lEntityId.muValue);
+        CGS_ASSERT_AT(lSceneEntityId.GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE,
+                      "lEntityId.GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE",
+                      KAC_ARTIST_INPUT_FILE, 565);
 
         SetTrafficCrashingEvent lEvent;
         lEvent.mEntityId  = lEntityId;
@@ -285,8 +286,10 @@ namespace Vehicle
     //   As SetTrafficCrashing but with mbCrashing = false, routed through the SAME queue.
     void VehicleInputInterface::SetTrafficNotCrashing(EntityId lEntityId)
     {
-        CGS_ASSERT((lEntityId.muValue >> 24) == KU_ENTITYTYPE_TRAFFIC_VEHICLE,
-                   "lEntityId.GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE");
+        const CgsSceneManager::EntityId lSceneEntityId(lEntityId.muValue);
+        CGS_ASSERT_AT(lSceneEntityId.GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE,
+                      "lEntityId.GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE",
+                      KAC_ARTIST_INPUT_FILE, 579);
 
         SetTrafficCrashingEvent lEvent;
         lEvent.mEntityId  = lEntityId;

@@ -72,13 +72,13 @@ namespace SceneManagerIO
 
         // ---- producer methods (bodies in their own TUs) ----
         // @ 0x82216EF0 -- stages an InEventLineTestFine and pushes it onto mpFineLineTestQueue.
-        bool LineTestFine(const Vector3&  lLineStart,
-                          const Vector3&  lLineEnd,
-                          SceneQueryId    lQueryId,
-                          u32             lx32EntityTypeFlags,
-                          u8              lxVolumeTypeFlags,
-                          EntityId        lExcludeEntityId,
-                          EExclusionMode  leExclusionMode);
+        void LineTestFine(SceneQueryId lQueryId,
+                          u32 lx32EntityTypeFlags,
+                          u8 lxVolumeTypeFlags,
+                          Vector3 lLineStart,
+                          Vector3 lLineEnd,
+                          EntityId lExcludeEntityId,
+                          EExclusionMode leExclusionMode);
 
         // @ 0x82216FD0 -- stages an InEventLineTestNearest and pushes it onto mpFineLineTestNearestQueue.
         void LineTestNearest(SceneQueryId    lQueryId,

@@ -81,23 +81,18 @@ namespace CgsMemory
     // count, else E_READ_SUCCESS (advancing the cursor).
     DataStreamResultReader::EReadResultStatus DataStreamResultReader::ReadResult(void* lpBuffer)
     {
-        CGS_ASSERT(!mbStreaming, "Can't read while streaming\n");
+        CGS_ASSERT_STREAM_AT(!mbStreaming, "Can't read while streaming\n", CGS_ARTIST_FILE, 166);
 
-        const s32 liCursor = miNextResult;          // *(this+36)
-        if (liCursor >= miNumResultsAtEnd)          // *(this+40)
+        const s32 liCursor = miNextResult;
+        if (liCursor < miNumResultsAtEnd)
         {
-            return E_READ_FINISHED;                 // result = 2
+            const s32 liResultSize = miResultSize;
+            if (liResultSize > 0)
+                XMemCpy(lpBuffer, mpcResultBuffer + liResultSize * liCursor, liResultSize);
+            ++miNextResult;
+            return E_READ_SUCCESS;
         }
-
-        const s32 liResultSize = miResultSize;      // *(this+16)
-        if (liResultSize > 0)
-        {
-            ::XMemCpy(lpBuffer,
-                        mpcResultBuffer + (liResultSize * liCursor),
-                        static_cast<usize>(liResultSize));
-        }
-        ++miNextResult;                             // ++*(this+36)
-        return E_READ_SUCCESS;                      // result = 0
+        return E_READ_FINISHED;
     }
 
     // Closes the read pass: must be streaming, and every producer user must have
