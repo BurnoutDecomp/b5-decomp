@@ -411,16 +411,16 @@ namespace
     // pad on that axis) and push the children the interval reaches -- the one on the far side
     // of the line's direction first, so the near one is popped next.
     void ProcessBranchNode(rw::collision::KdTreeLineQuery& lrQuery,
-                           const rw::collision::KdTreeLineQuery::NodeStackEntry& lrEntry)
+                           const rw::collision::KdTreeLineQuery::StackElement& lrEntry)
     {
         const rw::collision::KdTree::BranchNode* lpaBranchNodes =
-            lrQuery.mpKdTree->mpBranchNodes;
-        const rw::collision::KdTree::BranchNode& lrNode = lpaBranchNodes[lrEntry.muNode1];
+            lrQuery.m_kdtree->mpBranchNodes;
+        const rw::collision::KdTree::BranchNode& lrNode = lpaBranchNodes[lrEntry.m_nodeRef.muIndex];
 
         const u32 luAxis    = lrNode.muAxis;
-        const f32 lfPad     = (&lrQuery.mClipper.m_padding.mV.x)[luAxis];
-        const f32 lfClipMin = (&lrQuery.mClipper.m_origin.mV.x)[luAxis];
-        const f32 lfRecip   = (&lrQuery.mClipper.m_recip.mV.x)[luAxis];
+        const f32 lfPad     = (&lrQuery.m_lineClipper.m_padding.mV.x)[luAxis];
+        const f32 lfClipMin = (&lrQuery.m_lineClipper.m_origin.mV.x)[luAxis];
+        const f32 lfRecip   = (&lrQuery.m_lineClipper.m_recip.mV.x)[luAxis];
 
         f32 lafSplit[2];
         lafSplit[0] = ((lrNode.mafExtents[0] + lfPad) - lfClipMin) * lfRecip;
@@ -429,49 +429,49 @@ namespace
         const u32 luFarChild  = (lfRecip > 0.0f) ? 1u : 0u;   // `fcmpu ; bgt`
         const u32 luNearChild = 1u - luFarChild;
 
-        if (lrEntry.mfFar > lafSplit[luFarChild])
+        if (lrEntry.m_pb > lafSplit[luFarChild])
         {
-            rw::collision::KdTreeLineQuery::NodeStackEntry& lrPush = lrQuery.maNodeStack[lrQuery.muStackCount];
-            lrPush.muNode0 = lrNode.maChildRefs[luFarChild].muContent;
-            lrPush.muNode1 = lrNode.maChildRefs[luFarChild].muIndex;
+            rw::collision::KdTreeLineQuery::StackElement& lrPush = lrQuery.m_stack[lrQuery.m_top];
+            lrPush.m_nodeRef.muContent = lrNode.maChildRefs[luFarChild].muContent;
+            lrPush.m_nodeRef.muIndex = lrNode.maChildRefs[luFarChild].muIndex;
             const f32 lfSplit = lafSplit[luFarChild];
-            lrPush.mfKey = (lrEntry.mfKey - lfSplit >= 0.0f) ? lrEntry.mfKey : lfSplit;   // fsel: max(key, split)
-            lrPush.mfFar = lrEntry.mfFar;
-            ++lrQuery.muStackCount;
+            lrPush.m_pa = (lrEntry.m_pa - lfSplit >= 0.0f) ? lrEntry.m_pa : lfSplit;   // fsel: max(key, split)
+            lrPush.m_pb = lrEntry.m_pb;
+            ++lrQuery.m_top;
         }
 
-        if (lrEntry.mfKey < lafSplit[luNearChild])
+        if (lrEntry.m_pa < lafSplit[luNearChild])
         {
-            rw::collision::KdTreeLineQuery::NodeStackEntry& lrPush = lrQuery.maNodeStack[lrQuery.muStackCount];
-            lrPush.muNode0 = lrNode.maChildRefs[luNearChild].muContent;
-            lrPush.muNode1 = lrNode.maChildRefs[luNearChild].muIndex;
+            rw::collision::KdTreeLineQuery::StackElement& lrPush = lrQuery.m_stack[lrQuery.m_top];
+            lrPush.m_nodeRef.muContent = lrNode.maChildRefs[luNearChild].muContent;
+            lrPush.m_nodeRef.muIndex = lrNode.maChildRefs[luNearChild].muIndex;
             const f32 lfSplit = lafSplit[luNearChild];
-            lrPush.mfKey = lrEntry.mfKey;
-            lrPush.mfFar = (lrEntry.mfFar - lfSplit >= 0.0f) ? lfSplit : lrEntry.mfFar;   // fsel: min(far, split)
-            ++lrQuery.muStackCount;
+            lrPush.m_pa = lrEntry.m_pa;
+            lrPush.m_pb = (lrEntry.m_pb - lfSplit >= 0.0f) ? lfSplit : lrEntry.m_pb;   // fsel: min(far, split)
+            ++lrQuery.m_top;
         }
     }
 
     // Pop stack entries until a non-empty leaf is latched in muTopNode (its entry count) and
-    // muTopNodeHi (its first entry). False once the stack runs dry.
+    // m_nextEntry (its first entry). False once the stack runs dry.
     bool LatchNextLeaf(rw::collision::KdTreeLineQuery& lrQuery)
     {
-        while (lrQuery.muTopNode == 0)
+        while (lrQuery.m_leafCount == 0)
         {
-            if (lrQuery.muStackCount == 0)
+            if (lrQuery.m_top == 0)
             {
                 return false;
             }
-            --lrQuery.muStackCount;
-            const rw::collision::KdTreeLineQuery::NodeStackEntry lEntry = lrQuery.maNodeStack[lrQuery.muStackCount];
-            if (lEntry.muNode0 == KU_KDTREE_BRANCH_CONTENT)
+            --lrQuery.m_top;
+            const rw::collision::KdTreeLineQuery::StackElement lEntry = lrQuery.m_stack[lrQuery.m_top];
+            if (lEntry.m_nodeRef.muContent == KU_KDTREE_BRANCH_CONTENT)
             {
                 ProcessBranchNode(lrQuery, lEntry);
             }
             else
             {
-                lrQuery.muTopNode   = lEntry.muNode0;
-                lrQuery.muTopNodeHi = lEntry.muNode1;
+                lrQuery.m_leafCount   = lEntry.m_nodeRef.muContent;
+                lrQuery.m_nextEntry = lEntry.m_nodeRef.muIndex;
             }
         }
         return true;
@@ -537,10 +537,10 @@ namespace
 
         while (LatchNextLeaf(lLineQuery))
         {
-            const u32 luNumUnits = lLineQuery.muTopNode;
-            const u32 luEntry    = lLineQuery.muTopNodeHi;
-            lLineQuery.muTopNodeHi = luEntry + 1u;
-            lLineQuery.muTopNode   = 0;
+            const u32 luNumUnits = lLineQuery.m_leafCount;
+            const u32 luEntry    = lLineQuery.m_nextEntry;
+            lLineQuery.m_nextEntry = luEntry + 1u;
+            lLineQuery.m_leafCount   = 0;
 
             u32 luClusterIndex = luEntry >> luOffsetBits;
             u32 luUnitOffset   = luEntry & luOffsetMask;

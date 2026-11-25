@@ -40,9 +40,9 @@ struct PlayerPositionTableComponent; // friend below (reads mePageState inline)
 
 // Freeburn-challenge GUI event payloads (pointer-only parameters of the handlers
 // reconstructed below). Full layouts in GameSource/Gui/Events/BrnGuiChallengeEvents.h.
-struct GuiChallengeStartEvent;
-struct GuiChallengeTriggerResponse;
-struct GuiChallengeUpdateEvent;
+class GuiChallengeStartEvent;
+class GuiChallengeTriggerResponse;
+class GuiChallengeUpdateEvent;
 struct GuiChallengeNotActiveStartEvent;          // GUI 583 (BrnGuiDemangledEventTypes.h)
 struct GuiEventFburnChallengeEveryPlayerStatus;  // GUI 581 (BrnGuiDemangledEventTypes.h)
 

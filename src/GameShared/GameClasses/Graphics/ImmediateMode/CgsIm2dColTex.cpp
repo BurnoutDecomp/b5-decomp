@@ -3,7 +3,7 @@
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasic2dColouredTexturedVertex.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"
 #include "rw/rwcore_structs.h"
@@ -635,9 +635,9 @@ template <typename V>
 bool ImRenderer<V>::SetProgram(s8 li8Program)
 {
     CGS_ASSERT(mapVertexProgramBuffer[li8Program] != 0,
-               "mapVertexProgramBuffer[ li8Program ] != NULL");
+        CGS_ASSERT_MESSAGE_AT("mapVertexProgramBuffer[ li8Program ] != NULL", kRendererFile, 526));
     CGS_ASSERT(mapPixelProgramBuffer[li8Program] != 0,
-               "mapPixelProgramBuffer[ li8Program ] != NULL");
+        CGS_ASSERT_MESSAGE_AT("mapPixelProgramBuffer[ li8Program ] != NULL", kRendererFile, 527));
     if (shadow::Device::SetVertexProgram(
         reinterpret_cast<const renderengine::ProgramBufferData*>(mapVertexProgramBuffer[li8Program])))
     {
@@ -654,9 +654,12 @@ template bool ImRenderer<Basic2dColouredTexturedVertex>::SetProgram(s8);
 template <typename V>
 void ImRenderer<V>::BeginRendering()
 {
-    CGS_ASSERT(mapVertexProgramBuffer[0] != 0, "mapVertexProgramBuffer[ 0 ] != NULL");
-    CGS_ASSERT(mapPixelProgramBuffer[0] != 0, "mapPixelProgramBuffer[ 0 ] != NULL");
-    CGS_ASSERT(mgpActiveRenderer == 0, "mgpActiveRenderer == NULL");
+    CGS_ASSERT(mapVertexProgramBuffer[0] != 0,
+        CGS_ASSERT_MESSAGE_AT("mapVertexProgramBuffer[ 0 ] != NULL", kRendererFile, 588));
+    CGS_ASSERT(mapPixelProgramBuffer[0] != 0,
+        CGS_ASSERT_MESSAGE_AT("mapPixelProgramBuffer[ 0 ] != NULL", kRendererFile, 589));
+    CGS_ASSERT(mgpActiveRenderer == 0,
+        CGS_ASSERT_MESSAGE_AT("mgpActiveRenderer == NULL", kRendererFile, 590));
     mgpActiveRenderer = this;
     shadow::Device::ResetShadowing();
     const renderengine::ProgramBufferData* const lpVertex =
@@ -673,7 +676,8 @@ void ImRenderer<V>::BeginRendering()
 template <typename V>
 void ImRenderer<V>::EndRendering()
 {
-    CGS_ASSERT(mgpActiveRenderer == static_cast<ImRendererBase*>(this), "mgpActiveRenderer == this");
+    CGS_ASSERT(mgpActiveRenderer == static_cast<ImRendererBase*>(this),
+        CGS_ASSERT_MESSAGE_AT("mgpActiveRenderer == this", kRendererFile, 645));
     mgpActiveRenderer = 0;
 }
 

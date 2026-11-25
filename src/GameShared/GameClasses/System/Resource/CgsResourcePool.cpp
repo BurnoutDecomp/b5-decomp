@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePool.h"
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"   // overhead / per-pool allocators (InitPool)
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"           // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint (the null-type boot gate)
@@ -143,15 +144,15 @@ namespace CgsResource
     // entry; == false requires refcount > 0.
     s32 Pool::FindResourceIndex(ID lID, bool lbCheckRefCount, u16 luStatusMask)
     {
-        CGS_ASSERT(mbIsValid, "Pool is not valid\n");   // CgsResourcePool.cpp:805
-        s32 liIndex = mHashTable.FindEntry(lID);
-        if (liIndex < 0
-            || (!lbCheckRefCount && mpiResourceRefCounts[liIndex] <= 0)
-            || (mpx8ResourceStatuses[liIndex] & luStatusMask) == 0)
+        CGS_ASSERT(mbIsValid, CGS_ASSERT_STREAM_MESSAGE_AT("Pool is not valid\n", CGS_ARTIST_POOL_FILE, 805));
+        const s32 liIndex = mHashTable.FindEntry(lID);
+        if (liIndex >= 0
+            && (lbCheckRefCount || mpiResourceRefCounts[liIndex] > 0)
+            && (mpx8ResourceStatuses[liIndex] & luStatusMask) != 0)
         {
-            return -1;
+            return liIndex;
         }
-        return liIndex;
+        return -1;
     }
 
     // 0x828F5D58 - FindResourceIndex, then return the Entry* (and the index via lpiOutIndex).
@@ -228,8 +229,8 @@ namespace CgsResource
     // 0x828D8A18 - Entry* by index (bounds-checked), gated on refcount + status as above.
     Entry* Pool::GetResource(s32 liIndex, bool lbCheckRefCount, u16 luStatusMask)
     {
-        CGS_ASSERT(mbIsValid, "Pool is not valid\n");                          // :737
-        CGS_ASSERT(liIndex >= 0 && liIndex < muMaxResources, "Invalid id\n");  // :738
+        CGS_ASSERT(mbIsValid, CGS_ASSERT_STREAM_MESSAGE_AT("Pool is not valid\n", CGS_ARTIST_POOL_FILE, 737));
+        CGS_ASSERT(liIndex >= 0 && liIndex < muMaxResources, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid id\n", CGS_ARTIST_POOL_FILE, 738));
         if ((lbCheckRefCount || mpiResourceRefCounts[liIndex] > 0)
             && (mpx8ResourceStatuses[liIndex] & luStatusMask) != 0)
         {
@@ -473,60 +474,61 @@ namespace CgsResource
     // pool is full; otherwise decrements the free count and hands back the entry + index.
     bool Pool::AllocateResourceEntry(Entry** lppOutEntry, s32* lpiOutIndex)
     {
-        CGS_ASSERT(mbIsValid, "Pool is not valid\n");   // :522
-
+        CGS_ASSERT(mbIsValid, CGS_ASSERT_STREAM_MESSAGE_AT("Pool is not valid\n", CGS_ARTIST_POOL_FILE, 522));
         if (muNumFreeResources == 0)
             return false;
 
+        const u16 luMaxResources = muMaxResources;
         u16 luSlot = 0;
-        for (u16 luIndex = 0; luIndex < muMaxResources; ++luIndex)
+        for (; luSlot < muMaxResources; ++luSlot)
         {
-            if (mpx8ResourceStatuses[luIndex] == 0)
-            {
-                luSlot = luIndex;
+            if (mpx8ResourceStatuses[luSlot] == 0)
                 break;
-            }
-            luSlot = static_cast<u16>(luIndex + 1);   // if none free, ends == muMaxResources
         }
-        CGS_ASSERT(luSlot != muMaxResources, "No room for more resources\n");   // :538
+        CGS_ASSERT(luSlot != luMaxResources, CGS_ASSERT_STREAM_MESSAGE_AT("No room for more resources\n", CGS_ARTIST_POOL_FILE, 538));
 
         --muNumFreeResources;
-        *lppOutEntry  = &mpResourceEntries[luSlot];
-        *lpiOutIndex  = luSlot;
+        *lppOutEntry = &mpResourceEntries[luSlot];
+        *lpiOutIndex = luSlot;
         return true;
     }
 
-    // 0x828D8938 - release an entry slot (mark free, bump the free count). The X360 also
-    // brackets this in a perf-mon scope (debug instrumentation; omitted).
+    // 0x828D8938 - release an entry slot (mark free, bump the free count).
+    // The original resource deletion monitor measures clearing the slot status.
     void Pool::FreeResourceEntry(s16 liIndex)
     {
-        CGS_ASSERT(mbIsValid, "Pool is not valid\n");   // :662
+        CGS_ASSERT(mbIsValid, CGS_ASSERT_STREAM_MESSAGE_AT("Pool is not valid\n", CGS_ARTIST_POOL_FILE, 662));
+        if (_miPoolDeleteResourcePerfMon > -1)
+            CgsDev::PerfMonCpu::StartMonitor(_miPoolDeleteResourcePerfMon);
         mpx8ResourceStatuses[liIndex] = 0;
+        if (_miPoolDeleteResourcePerfMon > -1)
+            CgsDev::PerfMonCpu::StopMonitor(_miPoolDeleteResourcePerfMon);
+
         ++muNumFreeResources;
     }
 
     // 0x828F5C08 - free the resource's per-memory-type heap allocations (Heap::Free each) and clear its
-    // memory state. The X360 loops the 3 in-memory pools, Heap::Free'ing any allocated one then zeroing
-    // the resource pointer + heap node index.
+    // memory state. The three heap lanes release the allocated nodes and publish empty memory
+    // through the existing resource pointer and its aliases.
     void Pool::FreeMemoryForResource(Entry* lpEntry)
     {
-        CGS_ASSERT(mbIsValid, "Pool is not valid\n");   // :687
-        for (s32 lt = 0; lt < E_MEMTYPE_NUMTYPES; ++lt)
+        CGS_ASSERT(mbIsValid, CGS_ASSERT_STREAM_MESSAGE_AT("Pool is not valid\n", CGS_ARTIST_POOL_FILE, 687));
+        SmallResource lResource = lpEntry->mPtr.mResourceMemory;
+        for (s32 liMemType = 0; liMemType < E_MEMTYPE_NUMTYPES; ++liMemType)
         {
-            if (lpEntry->mPtr.mResourceMemory.m_baseResources[lt] != 0)
+            if (lResource.m_baseResources[liMemType])
             {
-
-                maHeaps[lt].Free(lpEntry->mauHeapIndices[lt]);
-                lpEntry->mPtr.mResourceMemory.m_baseResources[lt] = 0;
-                lpEntry->mauHeapIndices[lt]            = 0;
+                if (_miPoolDeleteMemoryPerfMon > -1)
+                    CgsDev::PerfMonCpu::StartMonitor(_miPoolDeleteMemoryPerfMon);
+                maHeaps[liMemType].Free(lpEntry->mauHeapIndices[liMemType]);
+                if (_miPoolDeleteMemoryPerfMon > -1)
+                    CgsDev::PerfMonCpu::StopMonitor(_miPoolDeleteMemoryPerfMon);
             }
+            lResource.m_baseResources[liMemType] = 0;
         }
-        // ARTIST 828F5D38-4C clears all three owner words, then publishes the
-        // empty resource to its alias ring twice. Cached aliases must not keep
-        // pointers to the heap bytes (or native raster) just retired above.
-        BaseResourcePtr* lpOwner = &lpEntry->mPtr;
-        lpOwner->Propogate();
-        lpOwner->Propogate();
+        lpEntry->mPtr.mResourceMemory = lResource;
+        lpEntry->mPtr.Propogate();
+        lpEntry->mPtr.Propogate();
     }
 
     // Ref-counted acquire: bump the entry's ref count and return it. (The X360 AddReference/RemoveReference
@@ -577,13 +579,7 @@ namespace CgsResource
     // mark every entry free and reset its ResourcePtr owner ring.
     void Pool::InitManagementData()
     {
-        u64 luHashLength = static_cast<u64>(muMaxResources) * 3 - 1;
-        luHashLength |= luHashLength >> 1;
-        luHashLength |= luHashLength >> 2;
-        luHashLength |= luHashLength >> 4;
-        luHashLength |= luHashLength >> 8;
-        const s32 liNumHashEntries = static_cast<s32>(
-            (static_cast<u32>(luHashLength) | static_cast<u32>(luHashLength >> 16)) + 1);
+        const s32 liNumHashEntries = mHashTable.CalculateRequiredSize(muMaxResources);
         mHashTable.Initialize(mpHashEntries, liNumHashEntries);
 
         for (u32 luIndex = 0; luIndex < muNumFreeResources; ++luIndex)

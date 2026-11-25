@@ -176,13 +176,13 @@ void Send::DisconnectImmediate()
         }
 
         ReChannelGainWrite(destination, source, 1.0f, channels, mBase.mbFlag20, 1);
-        SubMixConnector::Disconnect(&mSubMixConnector, foldback);
+        mSubMixConnector.Disconnect(foldback);
         for (unsigned channel = 0; channel < 6; ++channel)
             mDeClickValue[channel] = 0.0f;
     }
     else
     {
-        SubMixConnector::Disconnect(&mSubMixConnector, 0);
+        mSubMixConnector.Disconnect();
     }
 }
 
@@ -300,16 +300,7 @@ int Send::ConnectByPointerHandler(Command * cmd)
     if (lpSubMix)
     {
         SubMixConnector* lpConn = &lpSend->mSubMixConnector; // conn = send+0x30
-        lpConn->mpSubMix = lpSubMix;                                     // stw 0xC(conn)
-        lpConn->mpSubMixBuffer = lpSubMix->mpSubMixBuffer;               // lwz 0x24 -> stw 8
-        lpConn->mNumSubMixChannels = lpSubMix->mOutputChannels;              // lbz 0x21 -> stb 0x10
-
-        SubMixConnector* lpHead = lpSubMix->GetSendListHead();          // lwz 0x28(subMix)
-        lpConn->mppPrev = 0;                                            // stw 0, 4(conn)
-        lpConn->mpNext = lpHead;                                        // stw head, 0(conn)
-        if (lpHead)
-            lpHead->mppPrev = reinterpret_cast<SubMixConnector**>(lpConn); // stw conn, 4(head)
-        lpSubMix->SetSendListHead(lpConn);                             // stw conn, 0x28(subMix)
+        lpConn->Connect(lpSend->mBase.mpVoice, lpSubMix);
     }
     return static_cast<int>(sizeof(SendConnectByPointerCommand)); // X360: li r3, 0xC @0x82B9FF64
 }
@@ -674,16 +665,7 @@ int Send::ConnectByNameHandler(Command * cmd)
         if (std::strcmp(lpCmd->maName, lpSubMix->mName) == 0)
         {
             SubMixConnector* lpConn = &lpSend->mSubMixConnector; // r11 = r30 + 0x30
-            lpConn->mpSubMix = lpSubMix;                                     // stw 0xC(conn)
-            lpConn->mpSubMixBuffer = lpSubMix->mpSubMixBuffer;               // lwz 0x24 -> stw 8
-            lpConn->mNumSubMixChannels = lpSubMix->mOutputChannels;              // lbz 0x21 -> stb 0x10
-
-            SubMixConnector* lpHead = lpSubMix->GetSendListHead(); // lwz 0x28(subMix)
-            lpConn->mppPrev = 0;                                 // stw r9(=0), 4(conn)
-            lpConn->mpNext = lpHead;                             // stw r8, 0(conn)
-            if (lpHead)
-                lpHead->mppPrev = reinterpret_cast<SubMixConnector**>(lpConn); // stw r11, 4(r9)
-            lpSubMix->SetSendListHead(lpConn);                   // stw r11, 0x28(subMix)
+            lpConn->Connect(lpSend->mBase.mpVoice, lpSubMix);
             break; // the asm falls straight through to the epilogue: FIRST match only
         }
     }

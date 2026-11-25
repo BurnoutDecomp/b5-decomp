@@ -321,16 +321,6 @@ VecFloat FindBestSeparatingDirectionBoxBox(Vector3& arBestSepDir,
     return VecFloat(result);
 }
 
-// ARTIST 0x82BAA1A0
-VecFloat FindBestSeparatingDirectionBoxTri(Vector3& arBestSepDir,
-                                      const GPInstance& arGP1, const GPInstance& arGP2)
-{
-    const VecFloat separation = FindBestSeparatingDirectionTriBox(arBestSepDir, arGP2, arGP1);
-    const __vector4 all = __vspltisw(-1);
-    arBestSepDir.mV = __vxor(arBestSepDir.mV, __vslw(all, all));
-    return separation;
-}
-
 // ARTIST 0x82BAA1F0
 VecFloat FindBestSeparatingDirectionSphSph(Vector3& arBestSepDir,
                                       const GPInstance& arGP1, const GPInstance& arGP2)
@@ -369,29 +359,6 @@ VecFloat FindBestSepDirWithCylinder(Vector3& arBestSepDir,
 
     return FindBestSepDirWithCylinder_Evaluate(arBestSepDir, laCandidates,
                                                liCandidateResult, arGPCylinder, arGPOther);
-}
-
-// ARTIST 0x82BAA250
-VecFloat FindBestSeparatingDirCylVol(Vector3& arBestSepDir,
-                                const GPInstance& arGPCylinder, const GPInstance& arGPOther)
-{
-    return FindBestSepDirWithCylinder(arBestSepDir,
-                                      static_cast<const GPCylinder&>(arGPCylinder),
-                                      arGPOther);
-}
-
-// ARTIST 0x82BAA258
-VecFloat FindBestSeparatingDirVolCyl(Vector3& arBestSepDir,
-                                const GPInstance& arGPOther, const GPInstance& arGPCylinder)
-{
-    const VecFloat lfSeparation =
-        FindBestSepDirWithCylinder(arBestSepDir,
-                                   static_cast<const GPCylinder&>(arGPCylinder),
-                                   arGPOther);
-
-    arBestSepDir = SepNegate(arBestSepDir);
-
-    return lfSeparation;
 }
 
 static const f32 KF_RIM_FLT_MIN = 1.1754944e-38f;

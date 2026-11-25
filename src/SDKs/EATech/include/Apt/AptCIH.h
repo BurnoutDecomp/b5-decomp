@@ -46,7 +46,23 @@ static const unsigned int KU_AptEmbeddedMovieOff = 0x10u;
 struct AptCIH : public AptValueGC
 {
     EAStringC         mInstanceName;          // +0x08
-    uint32_t          mFlagsA;                // +0x0C
+    union
+    {
+        uint32_t mFlagsA;                     // +0x0C
+        struct
+        {
+            uint32_t mbASChanged : 1;
+            uint32_t mbCIHState : 2;
+            uint32_t mbHasClass : 1;
+            uint32_t mbInCtor : 1;
+            uint32_t mbInRemList : 1;
+            uint32_t mbDirty : 1;
+            uint32_t mbSelfDirty : 1;
+            uint32_t mbSubtreeDirty : 1;
+            int32_t mnZombieCount : 16;
+            uint32_t mnRemainingFlags : 7;
+        } mInstanceFlags;
+    };
     uint32_t          mFlagsB;                // +0x10
     AptCIH*           mpDisplayListPrevious;  // +0x14
     AptCIH*           mpDisplayListNext;      // +0x18
@@ -87,10 +103,8 @@ struct AptCIH : public AptValueGC
     const EAStringC& GetInstanceName() const { return mInstanceName; }   // @0x7DF0A8
     void SetInstanceName(const EAStringC& strName) { mInstanceName = strName; }  // @0x7F56B4
 
-    // GetRootAnimation @PS3 0x820F3C -- the nearest enclosing ANIMATION node: the
-    // empty CIHNone placeholder resolves to the level-0 root (AptGetAnimationAtLevel(0));
-    // otherwise walk mpDisplayListParent until the node's character-inst type tag is
-    // 9 (animation) or 15. Body in AptCIH.cpp.
+    // CIHNone resolves to level zero. Other handles follow their display-list
+    // parents to the nearest animation or level instance.
     AptCIH* GetRootAnimation();
 
     // ---- character instance / delegated visual reads ----------------------
@@ -236,7 +250,9 @@ struct AptCIH : public AptValueGC
 
     // ---- packed state / flags (mFlagsA bit-fields) -----------------------
     uint32_t GetCIHState() const;       void SetCIHState(uint32_t eState);    // @0x7DF12C/0x7DF110
-    int16_t  GetZombieCount() const;    void IncZombieCount();  void DecZombieCount();  // @0x7DF160/0x7DF138/0x7FB648
+    int16_t GetZombieCount() const;
+    void IncZombieCount() { ++mInstanceFlags.mnZombieCount; }
+    void DecZombieCount();
     bool     IsInCtor() const;          void SetInCtor(uint32_t b);           // @0x7DF0E8/0x7DF0F4
     int      GetCreatedOnFrame() const; void SetCreatedOnFrame(int nFrame);   // @0x7DF1D4/0x7DF1E4
 
@@ -408,3 +424,28 @@ CGS_STATIC_ASSERT(sizeof(AptCIHProcessCallback) == 4, "ARTIST CIH callback word"
 extern AptCIHProcessCallback AptCIH_sCIHProcessCb;
 extern AptCIHProcessCallback AptCIH_sCIHProcessCb1;
 extern AptCIHProcessCallback AptCIH_sCIHProcessCb2;
+
+AptCIH* AptGetAnimationAtLevel(int nLevel);
+void* AptUpdateZombieVector(char bClear);
+
+inline void AptCIH::DecZombieCount()
+{
+    --mInstanceFlags.mnZombieCount;
+    if (mInstanceFlags.mnZombieCount == 0)
+        AptUpdateZombieVector(0);
+}
+
+inline AptCIH* AptCIH::GetRootAnimation()
+{
+    if (getVtblIndex() == AptVFT_CIHNone)
+        return AptGetAnimationAtLevel(0);
+
+    AptCIH* pNode = this;
+    int uTag = pNode->mpCharacterInst->GetTypeTag();
+    while (uTag != 9u && uTag != 15u)
+    {
+        pNode = pNode->mpDisplayListParent;
+        uTag  = pNode->mpCharacterInst->GetTypeTag();
+    }
+    return pNode;
+}

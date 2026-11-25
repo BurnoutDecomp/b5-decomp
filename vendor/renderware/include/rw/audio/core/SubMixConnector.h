@@ -1,37 +1,10 @@
 #pragma once
 
-// =====================================================================================
-// rw::audio::core::SubMixConnector -- one node in a SubMix's intrusive list of inbound
-// connections (a Send/Route attaching into a SubMix).
-//
-// EARenderWare "rwaudio". Reconstructed from BURNOUT_X360_ARTIST.XEX; the PowerPC asm of
-// SubMixConnector::Disconnect @0x82B9C3C0 is authoritative. There is NO matching TU in
-// the reference dump and no DecFIGS DWARF for `SubMixConnector` itself, so every offset
-// of that class is grounded directly in the disassembly of the bodied member function.
-// (DWARF *does* cover neighbouring rwaudiocore vocabulary and is used where it applies:
-// `private/linklist.h` for ListDNode/ListDStack and `plugins/submix.h` for SubMix's two
-// private statics -- see the SubMix declaration below.)
-//
-// Disconnect unlinks this connector from its SubMix's doubly-linked connector list
-// (head pointer lives in the SubMix at +0x28, link via mpNext / mppPrev), then -- when
-// asked to fold-back -- accumulates this connection's per-channel gains into the SubMix's
-// channel gain array before clearing the back-pointer/cursor fields.
-//
-// SubMixConnector layout (grounded in Disconnect's stores/loads; the member names below
-// are the ones the class actually declares -- see its PDB-reconcile FLAG):
-//   +0x00  mpNext            (next connector in the SubMix list; *result)
-//   +0x04  mppPrev           (address of the previous node's mpNext slot; *(result+4))
-//   +0x08  mpSubMixBuffer    (f32*; cleared to 0 on disconnect; stw r7,8(r3))
-//   +0x0C  mpSubMix          (SubMix*; the owning SubMix; *(result+12))
-//   +0x10  mNumSubMixChannels (u8; cleared to 0 on disconnect; stb r7,0x10(r3))
-//
-// Lowercase rw::audio:: namespaces match the third-party middleware API (per
-// CXX_NAMING_CONVENTIONS: lowercase namespaces are acceptable for matching a
-// third-party/legacy API).
-// =====================================================================================
+// A Send or Route owns a connector. SubMix keeps the connector's intrusive node
+// in its inbound list. LegacySrc submix.h and the Xbox 360 audio PDB agree on
+// the member order used by ARTIST Disconnect at 0x82B9C3C0.
 
 #include "types.hpp"             // f32
-#include "rw/audio/core/ITask.h"
 #include "rw/audio/core/private/linklist.h"
 
 #include <cstddef> // offsetof -- the relative layout pins below
@@ -43,21 +16,8 @@ namespace audio
 namespace core
 {
 
-// -------------------------------------------------------------------------------------
-// SubMix -- MOVED (phase E 2026-08-28). The partial, opaque-base SubMix that used to be
-// declared here was evidence scaffolding for the era when the class had no home: it
-// modelled only the fields the bodied rwaudiocore functions walk, kept the PlugIn base as
-// an opaque `char mHeader00[0x21]`, and carried reconstruction aliases (mbNumChannels,
-// mpConnectorHead, mafChannelGain, mbDirty) in place of the vendor's names.
-//
-// The REAL class now lives in rw/audio/core/SubMix.h: a true `SubMix : public PlugIn`
-// with the vendor submix.h member names and a full set of bodies. Including that header
-// from here would be circular (it needs ListDStack/SubMixConnector from this one), so a
-// forward declaration is all this header keeps -- SubMixConnector only ever stores a
-// SubMix*, which needs no complete type.
-// -------------------------------------------------------------------------------------
 class SubMix;          // fwd -- the real declaration is in rw/audio/core/SubMix.h
-class SubMixConnector; // fwd
+class Voice;
 
 class SubMixConnector
 {
@@ -67,18 +27,21 @@ public:
     // are added into the SubMix's channel gains (marking the SubMix dirty) before the
     // connector's owning-SubMix / cursor / flag fields are cleared.
     //
-    // (IDA renders this as `int(int result, int a2)`; r3 = this, r4 = foldBackGains.)
-    static SubMixConnector *Disconnect(SubMixConnector *self, const f32 *foldBackGains);
+    void Connect(Voice *voice, SubMix *submix);
+    void Disconnect(f32 *foldBackGains = 0);
 
-    // FLAG (rwaudio PDB reconcile -- rw::audio::core::SubMixConnector [sizeof=20], offsets
-    // MATCH ARTIST): +0x00 is a ListDNode (pnext/pprev), +0x08 is float* mpSubMixBuffer (was
-    // an opaque int), +0x10 is mNumSubMixChannels (was mbField10). x64 widths.
-    SubMixConnector *mpNext;   // +0x00  ListDNode.pnext
-    SubMixConnector **mppPrev; // +0x04  ListDNode.pprev
+    static SubMixConnector *GetConnectorFromNode(void *node)
+    {
+        return reinterpret_cast<SubMixConnector *>(node);
+    }
+
+    ListDNode mListNode;        // +0x00
     f32 *mpSubMixBuffer;       // +0x08  (was mField08/int) -- the owning SubMix's buffer
     SubMix *mpSubMix;          // +0x0C
     u8 mNumSubMixChannels;     // +0x10  (was mbField10)
 };
+
+CGS_STATIC_ASSERT(offsetof(SubMixConnector, mListNode) == 0, "connector starts at its list node");
 
 } // namespace core
 } // namespace audio

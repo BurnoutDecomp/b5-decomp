@@ -84,44 +84,62 @@ static void PingFreeRequest(ProtoPingRefT* ref, ProtoPingRequestT* item)
 // ARTIST82B383C0: session-id lookup first, then peer QoS query.
 static void PingStartPeer(ProtoPingRefT* ref, ProtoPingRequestT* item)
 {
-    DWORD bytes = 0;
-    if (!item->state)
+    if (item->state == 0)
     {
-        DWORD result = XSessionSearchByID(item->session.sessionID, ref->userIndex, &bytes, 0, 0);
-        if (result != ERROR_INSUFFICIENT_BUFFER)
+        DWORD bytes = 0;
+        if (XSessionSearchByID(item->session.sessionID, ref->userIndex, &bytes, 0, 0) == ERROR_INSUFFICIENT_BUFFER)
         {
-            NetPrintfCode("protopingxenon: error identifying session\n"); item->state = 4; return;
+            item->search = static_cast<XSESSION_SEARCHRESULT_HEADER*>(DirtyMemAlloc(bytes, PING_MEM_ID, ref->memGroup));
+            if (!item->search)
+            {
+                NetPrintfCode("protopingxenon: error allocating session result buffer\n");
+                return;
+            }
+            if (XSessionSearchByID(item->session.sessionID, ref->userIndex, &bytes, item->search,
+                                   &item->overlapped) == ERROR_IO_PENDING)
+                item->state = 1;
+            else
+            {
+                NetPrintfCode("protopingxenon: error identifying session\n");
+                item->state = 4;
+                return;
+            }
         }
-        item->search = static_cast<XSESSION_SEARCHRESULT_HEADER*>(DirtyMemAlloc(bytes, PING_MEM_ID, ref->memGroup));
-        if (!item->search) { NetPrintfCode("protopingxenon: error allocating session result buffer\n"); return; }
-        result = XSessionSearchByID(item->session.sessionID, ref->userIndex, &bytes, item->search, &item->overlapped);
-        if (result != ERROR_IO_PENDING)
-        {
-            NetPrintfCode("protopingxenon: error identifying session\n"); item->state = 4; return;
-        }
-        item->state = 1;
-    }
-    if (item->state != 1) return;
-    DWORD result = XGetOverlappedResult(&item->overlapped, 0, FALSE);
-    if (!result)
-    {
-        if (item->search->dwSearchResults != 1) item->state = 4;
         else
         {
-            memcpy(&item->session, &item->search->pResults->info, sizeof(item->session));
-            const XNADDR* addresses[] = { &item->session.hostAddress };
-            const XNKID* ids[] = { &item->session.sessionID };
-            const XNKEY* keys[] = { &item->session.keyExchangeKey };
-            result = XNetQosLookup(1, addresses, ids, keys, 0, 0, 0, ref->probes, 0, 0, 0, &item->qos);
-            item->state = result ? 4 : 2;
+            NetPrintfCode("protopingxenon: error identifying session\n");
+            item->state = 4;
+            return;
         }
     }
-    else if (result != ERROR_IO_INCOMPLETE)
+
+    if (item->state == 1)
     {
-        NetPrintfCode("protopingxenon: error %d getting user session, aborting\n", result);
-        item->ping = 0; item->state = 4;
+        const DWORD result = XGetOverlappedResult(&item->overlapped, 0, FALSE);
+        if (result == ERROR_SUCCESS)
+        {
+            if (item->search->dwSearchResults == 1)
+            {
+                // ARTIST 82B384A0 through 82B384AC stages pointers to the request's
+                // session members before copying the XDK session result into it.
+                const XNADDR* pAddress = &item->session.hostAddress;
+                const XNKID* pId = &item->session.sessionID;
+                const XNKEY* pKey = &item->session.keyExchangeKey;
+                memcpy(&item->session, &item->search->pResults->info, sizeof(item->session));
+                item->state = XNetQosLookup(1, &pAddress, &pId, &pKey, 0, 0, 0, ref->probes, 0, 0, 0, &item->qos) ? 4 : 2;
+            }
+            else
+                item->state = 4;
+        }
+        else if (result != ERROR_IO_INCOMPLETE)
+        {
+            NetPrintfCode("protopingxenon: error %d getting user session, aborting\n", result);
+            item->ping = 0;
+            item->state = 4;
+        }
+        if (item->state != 1)
+            DirtyMemFree(item->search, PING_MEM_ID, ref->memGroup);
     }
-    if (item->state != 1) DirtyMemFree(item->search, PING_MEM_ID, ref->memGroup);
 }
 
 // ARTIST82B38578: resolve local, service-id, or mapped server address.

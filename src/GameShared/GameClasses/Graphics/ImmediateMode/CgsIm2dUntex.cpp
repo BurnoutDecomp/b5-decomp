@@ -4,11 +4,14 @@
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasic2dColouredVertex.h"
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasicColouredTexturedVertex.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"
 #include "rw/rwcore_structs.h"
 #include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"
+
+static const char KAC_IM_RENDERER_ASSERT_FILE[] =
+    "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/CgsImRenderer.h";
 
 namespace CgsGraphics
 {
@@ -206,7 +209,7 @@ void Im2dUntex::Construct(rw::IResourceAllocator* allocator)
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("mapVertexProgramBuffer[ li8Program ] != NULL",
-                CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/CgsImRenderer.h", 570));
+                CGS_ASSERT_LOCATION(KAC_IM_RENDERER_ASSERT_FILE, 570));
             CgsDev::Assert::EndAssert();
         }
         renderengine::ProgramBuffer::GetVariableHandleByName(
@@ -218,9 +221,12 @@ void Im2dUntex::Construct(rw::IResourceAllocator* allocator)
 template <typename V>
 void ImRenderer<V>::BeginRendering()
 {
-    CGS_ASSERT(mapVertexProgramBuffer[0] != 0, "mapVertexProgramBuffer[ 0 ] != NULL");
-    CGS_ASSERT(mapPixelProgramBuffer[0] != 0, "mapPixelProgramBuffer[ 0 ] != NULL");
-    CGS_ASSERT(mgpActiveRenderer == 0, "mgpActiveRenderer == NULL");
+    CGS_ASSERT(mapVertexProgramBuffer[0] != 0,
+        CGS_ASSERT_MESSAGE_AT("mapVertexProgramBuffer[ 0 ] != NULL", KAC_IM_RENDERER_ASSERT_FILE, 588));
+    CGS_ASSERT(mapPixelProgramBuffer[0] != 0,
+        CGS_ASSERT_MESSAGE_AT("mapPixelProgramBuffer[ 0 ] != NULL", KAC_IM_RENDERER_ASSERT_FILE, 589));
+    CGS_ASSERT(mgpActiveRenderer == 0,
+        CGS_ASSERT_MESSAGE_AT("mgpActiveRenderer == NULL", KAC_IM_RENDERER_ASSERT_FILE, 590));
     mgpActiveRenderer = this;
     shadow::Device::ResetShadowing();
     const renderengine::ProgramBufferData* const lpVertex =
@@ -238,9 +244,9 @@ template <typename V>
 bool ImRenderer<V>::SetProgram(s8 li8Program)
 {
     CGS_ASSERT(mapVertexProgramBuffer[li8Program] != 0,
-               "mapVertexProgramBuffer[ li8Program ] != NULL");
+        CGS_ASSERT_MESSAGE_AT("mapVertexProgramBuffer[ li8Program ] != NULL", KAC_IM_RENDERER_ASSERT_FILE, 526));
     CGS_ASSERT(mapPixelProgramBuffer[li8Program] != 0,
-               "mapPixelProgramBuffer[ li8Program ] != NULL");
+        CGS_ASSERT_MESSAGE_AT("mapPixelProgramBuffer[ li8Program ] != NULL", KAC_IM_RENDERER_ASSERT_FILE, 527));
     if (shadow::Device::SetVertexProgram(
         reinterpret_cast<const renderengine::ProgramBufferData*>(mapVertexProgramBuffer[li8Program])))
     {

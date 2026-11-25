@@ -1,7 +1,9 @@
 #pragma once
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
+
+#define CGS_ARTIST_LINEAR_HASH_TABLE_FILE "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsLinearHashTable.h"
 
 // CgsContainers::LinearHashTable<Key, Value> - an open-addressing hash table with linear
 // probing over a caller-supplied entry array. The slot for a key is key % miLength
@@ -19,8 +21,8 @@
 //   RemoveEntryInternal  @ 0x828EAC10   (no-empty-slot :357 / not-empty-slot :358 asserts)
 // Layout + method shapes are pinned by the DecFIGS DWARF for LinearHashTable<u64,s32>:
 // miLength (u64 @+0), mpEntries (Entry* @+8), miInvalidKey (u64 @+16); Entry is
-// {miKey u64 @+0, mValue s32 @+8} with a 16-byte stride (asm slwi ,4). CalculateRequiredSize
-// / VerifyHashTable / FindEntryPosition remain declared-only (not yet brought up).
+// {miKey u64 @+0, mValue s32 @+8} with a 16-byte stride (asm slwi ,4).
+// VerifyHashTable and FindEntryPosition remain declared-only.
 
 namespace CgsContainers
 {
@@ -38,14 +40,24 @@ namespace CgsContainers
         typedef LinearHashEntry<Key, Value> Entry;
 
         // :156
-        Key CalculateRequiredSize(Key luLength);
+        Key CalculateRequiredSize(Key luLength)
+        {
+            Key luSpread = luLength - 1;
+            luSpread |= luSpread >> 1;
+            luSpread |= luSpread >> 2;
+            luSpread |= luSpread >> 4;
+            luSpread |= luSpread >> 8;
+            luSpread |= luSpread >> 16;
+            return luSpread + 1;
+        }
 
         // :180 - bind to the entry array (luLength must be a non-zero power of two), set
         // the invalid-key sentinel to all-ones, and clear every slot.
         void Initialize(Entry* lpEntries, Key luLength)
         {
-            CGS_ASSERT(luLength != 0 && ((luLength - 1) & luLength) == 0,
-                       "Length of hash table must be more than 0 and a power of 2\n");   // :182
+            CGS_ASSERT(luLength > 0 && ((luLength - 1) & luLength) == 0,
+                CGS_ASSERT_STREAM_MESSAGE_AT("Length of hash table must be more than 0 and a power of 2\n",
+                    CGS_ARTIST_LINEAR_HASH_TABLE_FILE, 182));
             miLength     = luLength;
             mpEntries    = lpEntries;
             miInvalidKey = static_cast<Key>(-1);
@@ -63,7 +75,9 @@ namespace CgsContainers
         // optionally store *lpValue. Returns &slot.mValue, or null if the table is full.
         Value* AddEntry(Key luKey, const Value* lpValue)
         {
-            CGS_ASSERT(luKey != miInvalidKey, "Can not add entry with invalid key value to table\n");   // :256
+            CGS_ASSERT(luKey != miInvalidKey,
+                CGS_ASSERT_STREAM_MESSAGE_AT("Can not add entry with invalid key value to table\n",
+                    CGS_ARTIST_LINEAR_HASH_TABLE_FILE, 256));
             Key luStart = luKey % miLength;
             Key luPos   = luStart;
             if (luStart < miLength)
@@ -75,7 +89,7 @@ namespace CgsContainers
                 } while (++luPos < miLength);
             }
             luPos = 0;
-            if (luStart != 0)
+            if (luStart > 0)
             {
                 do
                 {
@@ -93,7 +107,9 @@ namespace CgsContainers
         // two-loop [start,miLength) then [0,start) probe, bl RemoveEntryInternal on match.)
         bool RemoveEntry(Key luKey)
         {
-            CGS_ASSERT(luKey != miInvalidKey, "Can not remove entry with invalid key value to table\n");   // :305
+            CGS_ASSERT(luKey != miInvalidKey,
+                CGS_ASSERT_STREAM_MESSAGE_AT("Can not remove entry with invalid key value to table\n",
+                    CGS_ARTIST_LINEAR_HASH_TABLE_FILE, 305));
             Key luStart = luKey % miLength;
             Key luPos   = luStart;
             if (luStart < miLength)
@@ -106,7 +122,7 @@ namespace CgsContainers
                 } while (++luPos < miLength);
             }
             luPos = 0;
-            if (luStart != 0)
+            if (luStart > 0)
             {
                 do
                 {
@@ -134,7 +150,7 @@ namespace CgsContainers
                 } while (++luPos < miLength);
             }
             luPos = 0;
-            if (luStart != 0)
+            if (luStart > 0)
             {
                 do
                 {
@@ -162,7 +178,7 @@ namespace CgsContainers
                 } while (++luPos < miLength);
             }
             luPos = 0;
-            if (luStart != 0)
+            if (luStart > 0)
             {
                 do
                 {
@@ -180,8 +196,11 @@ namespace CgsContainers
         {
             Key luFirstEmpty = FindFirstEmptyIndex(luIndex);
             CGS_ASSERT(luFirstEmpty != miInvalidKey,
-                       "There is no empty slot in the hash table - this should NEVER happen\n");   // :357
-            CGS_ASSERT(luFirstEmpty != luIndex, "Can not remove an empty slot!\n");                 // :358
+                CGS_ASSERT_STREAM_MESSAGE_AT("There is no empty slot in the hash table - this should NEVER happen\n",
+                    CGS_ARTIST_LINEAR_HASH_TABLE_FILE, 357));
+            CGS_ASSERT(luFirstEmpty != luIndex,
+                CGS_ASSERT_STREAM_MESSAGE_AT("Can not remove an empty slot!\n",
+                    CGS_ARTIST_LINEAR_HASH_TABLE_FILE, 358));
 
             mpEntries[luIndex].miKey = miInvalidKey;
             Key luPos = luIndex + 1;
@@ -229,3 +248,5 @@ namespace CgsContainers
         Key    miInvalidKey;   // +16 empty-slot sentinel (all-ones)
     };
 }
+
+#undef CGS_ARTIST_LINEAR_HASH_TABLE_FILE

@@ -30,7 +30,7 @@
 #include <cstring>   // memcpy -- the staged shader-constant copies (console lvx128/stvx128)
 #include <cstdio>    // [diag] snprintf (the eight-handle resolve line in Construct)
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [diag] CgsDev::Log::WriteToLog
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"
@@ -43,6 +43,9 @@
 // template bodies never take sizeof(V) (the vertex descriptor is built from the asm immediates and the
 // program uploads are byte-based), so an incomplete type suffices for the explicit instantiation.
 namespace BrnGraphics { struct LionBlendVertex; }
+
+static const char KAC_IM_RENDERER_ASSERT_FILE[] =
+    "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/CgsImRenderer.h";
 
 namespace CgsGraphics
 {
@@ -219,12 +222,13 @@ template <typename V>
 void ImRenderer<V>::BeginRendering(s8 li8Program)
 {
     CGS_ASSERT((li8Program >= 0) && (li8Program < KI8_MAX_PROGRAMS),
-               "( li8Program >= 0 ) && ( li8Program < KI8_MAX_PROGRAMS )");
+        CGS_ASSERT_MESSAGE_AT("( li8Program >= 0 ) && ( li8Program < KI8_MAX_PROGRAMS )", KAC_IM_RENDERER_ASSERT_FILE, 617));
     CGS_ASSERT(mapVertexProgramBuffer[li8Program] != 0,
-               "mapVertexProgramBuffer[ li8Program ] != NULL");
+        CGS_ASSERT_MESSAGE_AT("mapVertexProgramBuffer[ li8Program ] != NULL", KAC_IM_RENDERER_ASSERT_FILE, 618));
     CGS_ASSERT(mapPixelProgramBuffer[li8Program] != 0,
-               "mapPixelProgramBuffer[ li8Program ] != NULL");
-    CGS_ASSERT(mgpActiveRenderer == 0, "mgpActiveRenderer == NULL");
+        CGS_ASSERT_MESSAGE_AT("mapPixelProgramBuffer[ li8Program ] != NULL", KAC_IM_RENDERER_ASSERT_FILE, 619));
+    CGS_ASSERT(mgpActiveRenderer == 0,
+        CGS_ASSERT_MESSAGE_AT("mgpActiveRenderer == NULL", KAC_IM_RENDERER_ASSERT_FILE, 620));
 
     // X360 stores `this + 4` (the ImRendererBase subobject past this renderer's vptr) == `this`, or 0
     // when `this` is null.
@@ -241,6 +245,9 @@ void ImRenderer<V>::BeginRendering(s8 li8Program)
     // The shadow device performs the identical compare-and-dirty on its own field.
     shadow::Device::SetVertexProgram(
         reinterpret_cast<const renderengine::ProgramBufferData*>(lpVertexProgram));
+
+    shadow::Device::SetPixelProgram(
+        reinterpret_cast<const renderengine::ProgramBufferData*>(lpPixelProgram));
 
     // Shadow this renderer's vertex descriptor (X360 reads this+0x10 = mpVertexDescriptor); mark the
     // vertex-program state dirty when it changed.
@@ -363,9 +370,9 @@ template <typename V>
 bool ImRenderer<V>::SetProgram(s8 li8Program)
 {
     CGS_ASSERT(mapVertexProgramBuffer[li8Program] != 0,
-               "mapVertexProgramBuffer[ li8Program ] != NULL");
+        CGS_ASSERT_MESSAGE_AT("mapVertexProgramBuffer[ li8Program ] != NULL", KAC_IM_RENDERER_ASSERT_FILE, 526));
     CGS_ASSERT(mapPixelProgramBuffer[li8Program] != 0,
-               "mapPixelProgramBuffer[ li8Program ] != NULL");
+        CGS_ASSERT_MESSAGE_AT("mapPixelProgramBuffer[ li8Program ] != NULL", KAC_IM_RENDERER_ASSERT_FILE, 527));
 
     renderengine::ProgramBuffer* lpVertexProgram = mapVertexProgramBuffer[li8Program];
     // Device::SetVertexProgram IS the console's compare-and-bind (it returns false when the shadow
@@ -377,6 +384,8 @@ bool ImRenderer<V>::SetProgram(s8 li8Program)
     if (lbChanged)
     {
         mi8CurrentProgram = li8Program;
+        shadow::Device::SetPixelProgram(
+            reinterpret_cast<const renderengine::ProgramBufferData*>(mapPixelProgramBuffer[li8Program]));
         return true;
     }
     return false;

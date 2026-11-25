@@ -28,6 +28,7 @@
 // =====================================================================================
 
 #include "rw/audio/core/MixKernels.h"
+#include "rw/audio/core/Mixer.h"
 
 #include <xtl.h>
 #include <vectorintrinsics.h>
@@ -266,29 +267,33 @@ void ScaleSamples(f32 *pData, f32 scale, s32 numSamples)
 // output samples with linearly decaying coefficients (16-j)/17, then clear it.
 //
 // Float literals are the X360 rodata values verbatim (flt_8214B190..flt_8214B1C8, with
-// 9/17 sourced from flt_820581AC -- same value, shared rodata slot). The asm reloads
+// 10/17 sourced from flt_820581AC -- same value, shared rodata slot). The asm reloads
 // pDeClickValue[ch] before every fmadds (alias-exact); re-reading the array element
 // per tap preserves that.
 // -------------------------------------------------------------------------------------
-void DeClick(void *pSampleBuffer, f32 *pDeClickValue, u32 numChannels)
+void DeClick(SampleBuffer *pSampleBuffer, f32 *pDeClickValue, u32 numChannels, u32)
 {
-    // (16-j)/17 for j = 0..15.
-    static const f32 KAF_DECLICK[16] = {
-        0.94117647f, 0.88235295f, 0.82352942f, 0.7647059f,
-        0.70588237f, 0.64705884f, 0.58823532f, 0.52941179f,
-        0.47058824f, 0.41176471f, 0.35294119f, 0.29411766f,
-        0.23529412f, 0.17647059f, 0.11764706f, 0.05882353f,
-    };
-
-    ChannelNode *node = static_cast<ChannelNode *>(pSampleBuffer);
-
     for (u32 ch = 0; ch < numChannels; ++ch)
     {
         // lhz 0xE(r3) * ch, scaled to floats; lwz 4(r3) base.
-        f32 *pOut = node->mpBase + static_cast<u32>(node->muStride16) * ch;
+        f32 *pOut = pSampleBuffer->LockChannel(ch);
 
-        for (int j = 0; j < 16; ++j)
-            pOut[j] = pDeClickValue[ch] * KAF_DECLICK[j] + pOut[j]; // fmadds
+        pOut[0] += pDeClickValue[ch] * 0.94117647f;
+        pOut[1] += pDeClickValue[ch] * 0.88235295f;
+        pOut[2] += pDeClickValue[ch] * 0.82352942f;
+        pOut[3] += pDeClickValue[ch] * 0.7647059f;
+        pOut[4] += pDeClickValue[ch] * 0.70588237f;
+        pOut[5] += pDeClickValue[ch] * 0.64705884f;
+        pOut[6] += pDeClickValue[ch] * 0.58823532f;
+        pOut[7] += pDeClickValue[ch] * 0.52941179f;
+        pOut[8] += pDeClickValue[ch] * 0.47058824f;
+        pOut[9] += pDeClickValue[ch] * 0.41176471f;
+        pOut[10] += pDeClickValue[ch] * 0.35294119f;
+        pOut[11] += pDeClickValue[ch] * 0.29411766f;
+        pOut[12] += pDeClickValue[ch] * 0.23529412f;
+        pOut[13] += pDeClickValue[ch] * 0.17647059f;
+        pOut[14] += pDeClickValue[ch] * 0.11764706f;
+        pOut[15] += pDeClickValue[ch] * 0.05882353f;
 
         pDeClickValue[ch] = 0.0f; // stfs flt_82001CC0(0.0)
     }

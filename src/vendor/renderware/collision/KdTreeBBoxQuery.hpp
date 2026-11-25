@@ -3,56 +3,12 @@
 #include "types.hpp"
 #include "vendor/renderware/collision/AABBox.hpp"
 
-// ===========================================================================
-// rw::collision::KdTreeBBoxQuery -- a stateful "find all KD-tree leaves that
-// overlap a bounding box" query object. Constructed against a KD-tree plus a
-// caller-supplied query box, it caches the box and seeds the traversal cursor;
-// the per-step Next/GetNext machinery (not in this TU) walks the tree from
-// there. Created by rw::collision::TriangleKDTreeProcedural::BBoxOverlapQueryThis
-// and rw::collision::ClusteredMesh::BBoxOverlapQueryThis.
-//
-// OWNING HOME for the single function the X360 binary defines here:
-//     rw::collision::KdTreeBBoxQuery::KdTreeBBoxQuery (ctor) @ 0x828A9C08
-//
-// No DWARF hints exist for this TU, so the LAYOUT below is reconstructed from
-// the store widths/offsets in the X360 ctor asm. The ctor touches only:
-//     +0x00          word          stw a2          (the KD-tree pointer)
-//     +0x10..+0x2F   8 words        copy from a3    (the query box, 8 dwords)
-//     +0x30          word          stw 0            (only on the seeded branch)
-//     +0xB0          word          stw 0|1          (traversal-active flag)
-//     +0xB4          word          stw 0 then node  (top-of-stack node index)
-//     +0xB8          word          stw 0            (traversal stack depth)
-// Everything in between is the traversal scratch/stack the ctor leaves
-// uninitialised; it is declared as honest opaque blocks sized only to land the
-// asm-attested fields at their observed offsets. Members are accessed by name.
-//
-// The ctor reads two fields off the KD-tree (a2): *(a2+0x04) (the branch-node
-// count -- nonzero means the tree has interior nodes to descend) and *(a2+0x08)
-// (the single leaf's node index, used to seed the cursor for a leaf-only tree).
-// ===========================================================================
-
 namespace rw
 {
 namespace collision
 {
 
-// Minimal view of the KD-tree the query descends. Only the two header words the
-// BBoxQuery ctor reads are named; the remainder of the KD-tree layout is not
-// recovered by this TU. (FLAG: KdTree layout opaque beyond the named fields.)
-//
-// ADDITIVE GROW (rw-physics-collision group): the KdTreeLineQuery ctor
-// @0x828AEE80 also reads this tree's overall AABB. It passes (a2+0x10) to
-// AALineClipper::Init as the clip box, and its slab-clip loads the box-min row
-// from (a2+0x10) and the box-max row from (a2+0x20). Those two 16-byte rows are
-// added here at the asm-attested offsets; the three header words above are
-// unchanged (same offsets/widths) so existing BBoxQuery code is unaffected.
-//
-// The node records (kdtree.h) and the branch-node array word are named for
-// the clustered-mesh line walk FineIntersectionTestModule::ComputeLineTestFine inlines: a
-// child reference is {m_content, m_index} -- m_content 0xFFFFFFFF marks a BRANCH child whose
-// m_index is a branch-node index, anything else is a LEAF child holding m_content entries from
-// entry m_index on -- and a branch node splits its axis at m_extents[0] (the low child's upper
-// bound) / m_extents[1] (the high child's lower bound).
+// DecFIGS kdtree.h:174-177. ARTIST reads the two counts and the in-place bounds.
 struct KdTree
 {
     struct NodeRef
@@ -81,26 +37,30 @@ CGS_STATIC_ASSERT((offsetof(KdTree,muNumEntries)==0x08), "KDTree entries");
 CGS_STATIC_ASSERT((offsetof(KdTree,mBBox)==0x10), "KDTree box");
 CGS_STATIC_ASSERT((sizeof(KdTree)==0x30), "KDTree size");
 
-class KdTreeBBoxQuery
+// DecFIGS kdtreebboxquerybase.h:29-44 and kdtreebboxquery.h:47-55.
+struct KdTreeBBoxQueryBase
 {
-public:
-    // @ 0x828A9C08 -- cache the KD-tree and query box, then seed the traversal
-    // cursor. If the tree has branch nodes (lpKdTree->muNumBranchNodes != 0) the
-    // descent starts at the root: clears the entry-stack slot at +0x30 and marks
-    // the traversal active. Otherwise (a leaf-only tree) it seeds the cursor with
-    // the single leaf node (muLeafNodeIndex) and leaves the traversal inactive.
-    KdTreeBBoxQuery(KdTree* lpKdTree, const u32* lpQueryBox);
+    KdTreeBBoxQueryBase(const KdTree* lpKdTree, const AABBox& lrBox);
 
-    // --- members (reconstructed from the ctor store offsets) ----------------
-    KdTree* mpKdTree;            // +0x00  the tree being queried
-    u32     muPad04[3];          // +0x04..+0x0F  unwritten (alignment to +0x10)
-    u32     maQueryBox[8];       // +0x10..+0x2F  cached query box (8 words from a3)
-    u32     muPad30[1];          // +0x30         root-descent slot (cleared when active)
-    u32     muPad34[31];         // +0x34..+0xAF  traversal scratch/stack (opaque)
-    u32     muTraversalActive;   // +0xB0         1 when descending from the root
-    u32     muTopNode;           // +0xB4         current/top-of-stack node index
-    u32     muStackDepth;        // +0xB8         traversal stack depth
+    const KdTree* m_kdtree;
+    AABBox m_bbox;
+    u32 m_stack[32];
+    u32 m_top;
+    u32 m_resultCount;
+    u32 m_nextEntry;
 };
+
+struct KdTreeBBoxQuery : public KdTreeBBoxQueryBase
+{
+    KdTreeBBoxQuery(const KdTree* lpKdTree, const AABBox& lrBox);
+};
+
+CGS_STATIC_ASSERT((sizeof(KdTreeBBoxQuery) == 0xC0), "KDTree box query size");
+CGS_STATIC_ASSERT((offsetof(KdTreeBBoxQueryBase, m_bbox) == 0x10), "KDTree query box");
+CGS_STATIC_ASSERT((offsetof(KdTreeBBoxQueryBase, m_stack) == 0x30), "KDTree box query stack");
+CGS_STATIC_ASSERT((offsetof(KdTreeBBoxQueryBase, m_top) == 0xB0), "KDTree box query top");
+CGS_STATIC_ASSERT((offsetof(KdTreeBBoxQueryBase, m_resultCount) == 0xB4), "KDTree box query result count");
+CGS_STATIC_ASSERT((offsetof(KdTreeBBoxQueryBase, m_nextEntry) == 0xB8), "KDTree box query next entry");
 
 } // namespace collision
 } // namespace rw

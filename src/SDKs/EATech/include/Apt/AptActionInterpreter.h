@@ -357,16 +357,6 @@ public:
     // pair (or null when there is no pair). Used by loadVariables.
     const char* urlDecode(const char* pStream, EAStringC* pOutKey, EAStringC* pOutValue);
 
-    // unEscape @0x82AEE110 -- URL-decode a string in place ('+' -> space, '%HH' hex
-    // pair -> byte, else copy). The value-layer escape codec urlDecode consumes.
-    // Static: operates purely on the passed EAStringC.
-    static void unEscape(EAStringC* pStr);
-
-    // escape @0x82AEE008 -- URL percent-ENCODE a string in place (every
-    // non-alphanumeric byte becomes "%XX"; alphanumerics copy). The inverse codec
-    // of unEscape; the AS escape() builtin consumes it.
-    static void escape(EAStringC* pStr);
-
     // ---- AS global builtins (cbCallMethod_*) that this TU owns ------------
     // cbCallMethod_ASSetPropFlags @0x82AD8448 -- ASSetPropFlags() stub (returns
     // `undefined`; the AS member-visibility flags are a no-op in this build).

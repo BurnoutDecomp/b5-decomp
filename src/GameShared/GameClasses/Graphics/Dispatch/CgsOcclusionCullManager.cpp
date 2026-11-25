@@ -227,8 +227,8 @@ namespace CgsGraphics
     void OcclusionCullManager::BeginQueries()
     {
         CGS_ASSERT(meOcclusionMode == OCCLUSIONMODE_NONE,
-                   "meOcclusionMode == OCCLUSIONMODE_NONE");
-        CGS_ASSERT(mbOcclusionEnabled, "mbOcclusionEnabled");
+                   CGS_ASSERT_MESSAGE_AT("meOcclusionMode == OCCLUSIONMODE_NONE", KAC_ARTIST_ASSERT_SOURCE, 282));
+        CGS_ASSERT(mbOcclusionEnabled, CGS_ASSERT_MESSAGE_AT("mbOcclusionEnabled", KAC_ARTIST_ASSERT_SOURCE, 283));
 
         miNextQueryIndex = 0;
         miOccludeeIndex = 0;
@@ -247,7 +247,7 @@ namespace CgsGraphics
         shadow::Device::SetVertexDescriptor(
             reinterpret_cast<const renderengine::VertexDescriptorData*>(mpVertexDescriptor));
         shadow::Device::FlushVertexProgramState();
-        D3DDevice_SetStreamSource(gpD3DDevice, 0u, mpVertexBuffer, 0u, 0u, 1u);
+        gpD3DDevice->SetStreamSource(0u, mpVertexBuffer, 0u, 0u);
         D3DDevice_SetIndices(gpD3DDevice, mpIndexBuffer);
     }
 

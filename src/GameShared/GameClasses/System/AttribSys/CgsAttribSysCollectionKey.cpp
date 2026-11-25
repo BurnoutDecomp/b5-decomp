@@ -5,13 +5,15 @@
 #include "rw/core/stdc/stdc.h"   // rw::core::stdc::ConvertI64ToA
 
 // CgsAttribSys::AttribSysCollectionKey -- reconstructed from BURNOUT_X360_ARTIST.XEX.
-//
-// Bodied here (1 ledger function, DWARF primary file
-// GameShared/GameClasses/System/AttribSys/CgsAttribSysCollectionKey.cpp):
-//   AttribSysCollectionKey::GetHashKey @0x82805C20
 
 namespace CgsAttribSys
 {
+
+// VehicleListResourceType::FixUp passes the five embedded keys to the
+// same folded Destruct leaf at 0x8284CB38. That leaf only returns.
+void AttribSysCollectionKey::Destruct()
+{
+}
 
 // @ 0x82805C20 -- print the 64-bit asset GUID as decimal text, then hash the text
 // with the attribsys string hash (the standard 0xABCDEF00_11223344 seed the X360

@@ -383,28 +383,13 @@ RwBool FindEdgeEdgePrism(rwc_FeatureIntersectionPrism& arRes, rw::math::vpu::Vec
 // The 6th (sepDir) argument is forwarded by the dispatcher but never read.
 // ===========================================================================
 RwBool FindEdgePointPrism(rwc_FeatureIntersectionPrism& arRes, rw::math::vpu::Vector3* lapPtsOn1, rw::math::vpu::Vector3* lapPtsOn2,
-                          Feature& arEdgeFeature, Feature& arPointFeature, const rw::math::vpu::Vector3& arSepDir)
+                          Feature& arEdgeFeature, Feature& arPointFeature, const rw::math::vpu::Vector3&)
 {
-    (void)arSepDir;
-
-    // stw r9, 0x210(r10) with r9 = 1: this case always emits one point.
     arRes.m_numpts = 1;
-
-    // lvx128 v0, r0, r11 (r11 = pf + 0x220) / stvx128 to r4 and again to r5:
-    // the point feature's position row goes to BOTH out rows.
-    lapPtsOn1[0] = arPointFeature.pt;
-    lapPtsOn2[0] = arPointFeature.pt;
-
-    // bl FeatureEdge::constrain_point (this = ef+0x10, point = r4): constrain
-    // the copy in ptsOn1[0] onto the edge, in place, and get the region code
-    // (1 = before base, 2 = on segment, 3 = past the length).
-    const u32 luRegion = arEdgeFeature.edges[0].constrain_point(lapPtsOn1[0]);
-
-    // lwz r11,0(r31) / subf / addi 2 / stw: refine the edge feature's region
-    // word by the region code (region 2 leaves it unchanged).
-    arEdgeFeature.region = arEdgeFeature.region - luRegion + 2;
-
-    // li r3, 1: return the number of contact points emitted.
+    *lapPtsOn1 = arPointFeature.pt;
+    *lapPtsOn2 = arPointFeature.pt;
+    arEdgeFeature.region -= arEdgeFeature.edges[0].constrain_point(*lapPtsOn1);
+    arEdgeFeature.region += 2;
     return 1;
 }
 

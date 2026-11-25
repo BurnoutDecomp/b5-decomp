@@ -87,19 +87,16 @@ AptScriptFunctionBase::AptScriptFunctionBase(AptVirtualFunctionTable_Indices eTy
     {
         // ARTIST dispatches CreatingNestedFunction at virtual slot +0x60.
         static_cast<AptScriptFunctionBase*>(pCallContext)->CreatingNestedFunction();
-        mpCreatorScope = spFrameStack;
-        if (spFrameStack)
-            spFrameStack->AddRef();
+        AptFrameStack* pCreatorScope = spFrameStack;
+        mpCreatorScope = pCreatorScope;
+        if (pCreatorScope)
+            pCreatorScope->AddRef();
     }
 
-    // The timeline animation this function is defined on: walk from the CIH, else the
-    // level-0 root.
-    const AptVirtualFunctionTable_Indices eCIH = pCIH->getVtblIndex();
-    if ((eCIH == AptVFT_CharacterInstHandle && pCIH->getIsDefined())
-        || eCIH == static_cast<AptVirtualFunctionTable_Indices>(37))
-        mpParentAnim = static_cast<AptValue*>(reinterpret_cast<AptCIH*>(pCIH)->GetRootAnimation());   // CIH-chain walk (-> AptGetAnimationAtLevel)
+    if (pCIH->isCIH())
+        mpParentAnim = static_cast<AptCIH*>(pCIH)->GetRootAnimation();
     else
-        mpParentAnim = reinterpret_cast<AptValue*>(AptGetAnimationAtLevel(0));
+        mpParentAnim = AptGetAnimationAtLevel(0);
 
     mpCIH->AddRef();
     mpParentAnim->AddRef();
@@ -110,7 +107,7 @@ AptScriptFunctionBase::AptScriptFunctionBase(AptVirtualFunctionTable_Indices eTy
     if (bMakePrototype)
     {
         AptPrototype* pProto = new AptPrototype();
-        GetNativeHashVirtual()->SetPrototype(pProto);
+        mHash.SetPrototype(pProto);
         pProto->GetNativeHashVirtual()->Set__Proto__(gpAptFunctionPrototypeRoot);   // dword_8324E4EC -- the builtin prototype root, seeded by AptValueInitialize (AptInit.cpp)
     }
 }
@@ -129,17 +126,13 @@ AptScriptFunctionBase::AptScriptFunctionBase(AptVirtualFunctionTable_Indices eTy
     : AptObject(eType, 8)   // -> AptValueWithHash(eType, 8); clears the class-flags word
     , mpCIH(pCIH)
     , mpParentAnim(0)
-    , mpCreatorScope(rOther.mpCreatorScope)   // a3[10]: inherit the enclosing frame verbatim
     , mnFrameStackReserve(0)
 {
-    // Derive the owning timeline animation from the (re-bound) CIH -- identical walk to
-    // the primary ctor (the X360 starts from a4 == pCIH, which is what we store at +0x20).
-    const AptVirtualFunctionTable_Indices eCIH = pCIH->getVtblIndex();
-    if ((eCIH == AptVFT_CharacterInstHandle && pCIH->getIsDefined())
-        || eCIH == static_cast<AptVirtualFunctionTable_Indices>(37))
-        mpParentAnim = static_cast<AptValue*>(reinterpret_cast<AptCIH*>(pCIH)->GetRootAnimation());   // CIH-chain walk (-> AptGetAnimationAtLevel)
+    mpCreatorScope = rOther.mpCreatorScope;
+    if (pCIH->isCIH())
+        mpParentAnim = static_cast<AptCIH*>(pCIH)->GetRootAnimation();
     else
-        mpParentAnim = reinterpret_cast<AptValue*>(AptGetAnimationAtLevel(0));
+        mpParentAnim = AptGetAnimationAtLevel(0);
 
     // AddRef the inherited scope (when present) + the CIH + the owning animation, then
     // bump the animation's zombie-count field (the same IncZombieCount the primary
@@ -152,13 +145,8 @@ AptScriptFunctionBase::AptScriptFunctionBase(AptVirtualFunctionTable_Indices eTy
     // (bits 7-22, step 0x80 -- the ctor asm's extlwi/addi 0x80/rlwimi on anim+0xC).
     static_cast<AptCIH*>(mpParentAnim)->IncZombieCount();
 
-    // Copy the prototype + __proto__ links from the original (a3[5] / a3[4]).
-    // GetNativeHashVirtual is non-const (the SDK accessor is not const-qualified), so
-    // read rOther's hash through a const_cast -- the read is non-mutating in practice.
-    AptNativeHash* pOtherHash =
-        const_cast<AptScriptFunctionBase&>(rOther).GetNativeHashVirtual();
-    GetNativeHashVirtual()->SetPrototype(pOtherHash->GetPrototype());
-    GetNativeHashVirtual()->Set__Proto__(pOtherHash->Get__Proto__());
+    mHash.SetPrototype(rOther.mHash.mpPrototype);
+    mHash.Set__Proto__(rOther.mHash.mp__Proto__);
 }
 
 // ~AptScriptFunctionBase is header-inline (empty; the GC pointers are released by
@@ -374,5 +362,5 @@ void AptScriptFunctionBase::DestroyGCPointers()
     mpParentAnim->Release();
     mpParentAnim = 0;
 
-    GetNativeHashVirtual()->DestroyGCPointers();
+    mHash.DestroyGCPointers();
 }

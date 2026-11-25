@@ -23,6 +23,7 @@
 #include "rw/audio/core/MixKernels.h" // DeClick
 
 #include <cstddef> // offsetof (the node-to-owner conversion)
+#include <xtl.h>
 #include <cstring> // std::memcpy / std::memset (the X360 XMemCpy / XMemSet)
 
 namespace rw
@@ -226,36 +227,33 @@ SubMix *SubMix::EnumerateSubMix()
 // published source, and the copy then writes into it. This is an assignment, not an
 // accumulation -- the accumulation already happened upstream.
 // -------------------------------------------------------------------------------------
-int SubMix::Process(SubMix *self, AudioProcessContext *ctx, bool /*discontinuity*/)
+#if defined(_XBOX) && defined(_MSC_VER)
+// ARTIST and the original Xbox 360 plug-in object use the scalar size form here.
+#pragma optimize("s", on)
+#endif
+BufferStatus SubMix::Process(PlugIn *plugIn, Mixer *mixer, bool)
 {
-    SampleBuffer *lpOutput = ctx->mpDstBuffer;      // lwz ctx+0x30010
-    SampleBuffer *lpOldSource = ctx->mpSrcBuffer;   // lwz ctx+0x3000C
-    ctx->mpSrcBuffer = lpOutput;                    // the ping-pong, done up front
-    ctx->mpDstBuffer = lpOldSource;
+    SubMix *self = static_cast<SubMix *>(plugIn);
+    SampleBuffer *output = mixer->mpDstBuffer;
+    mixer->SwapBuffers();
 
-    for (u32 luChannel = 0; luChannel < self->mOutputChannels; ++luChannel)
-    {
-        std::memcpy(lpOutput->mpSamples + lpOutput->muStride * luChannel,
-                    self->mpSubMixBuffer + KI_FRAME_SAMPLES * luChannel,
-                    KI_FRAME_SAMPLES * sizeof(f32));           // XMemCpy, 0x400 bytes
-    }
+    for (u32 channel = 0; channel < self->mOutputChannels; ++channel)
+        XMemCpy(output->LockChannel(channel), self->mpSubMixBuffer + KI_FRAME_SAMPLES * channel,
+                KI_FRAME_SAMPLES * sizeof(f32));
 
-    // A disconnect since the last frame folded its gain back into this bus, which would
-    // otherwise step the output; ramp it out over the head of the frame.
     if (self->mDeClickRequired)
     {
-        // The console also passes 256 in r6; the committed DeClick kernel consumes three
-        // arguments and hard-codes its ramp length, so the frame size is not forwarded.
-        DeClick(lpOutput, self->mDeClickValueTotal, self->mOutputChannels);
+        DeClick(output, self->mDeClickValueTotal, self->mOutputChannels, KI_FRAME_SAMPLES);
         self->mDeClickRequired = 0;
     }
 
-    // Clear the accumulation buffer for the next frame's contributors.
-    std::memset(self->mpSubMixBuffer, 0,
-                static_cast<size_t>(self->mOutputChannels)
-                    * KI_FRAME_SAMPLES * sizeof(f32));
-    return 1;   // BUFFERSTATUS_AVAILABLE
+    XMemSet(self->mpSubMixBuffer, 0, self->mOutputChannels * KI_FRAME_SAMPLES * sizeof(f32));
+    return BUFFERSTATUS_AVAILABLE;
 }
+
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", off)
+#endif
 
 // -------------------------------------------------------------------------------------
 // ReleaseEvent @0x82BA0C18 -- vt[0], modelled here as the destructor (the Dac precedent).
@@ -266,10 +264,10 @@ int SubMix::Process(SubMix *self, AudioProcessContext *ctx, bool /*discontinuity
 // -------------------------------------------------------------------------------------
 SubMix::~SubMix()
 {
-    // Drain the inbound connector list. Disconnect(conn, 0) means "no fold-back": the bus
+    // Drain the inbound connector list without fold-back. The bus
     // is going away, so there is nothing to fold the gains into.
     while (SubMixConnector *lpConnector = GetSendListHead())
-        SubMixConnector::Disconnect(lpConnector, 0);
+        lpConnector->Disconnect();
 
     if (mSubMixAdded)
     {

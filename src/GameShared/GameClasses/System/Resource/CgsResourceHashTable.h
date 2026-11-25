@@ -19,7 +19,11 @@ namespace CgsResource
         typedef CgsContainers::LinearHashTable<u64, s32> InternalHashTable;   // :37
         typedef CgsContainers::LinearHashEntry<u64, s32> HashEntry;           // :36
 
-        s32  CalculateRequiredSize(s32 liLength);                              // :52
+        s32 CalculateRequiredSize(s32 liLength)                              // :52
+        {
+            const u64 luSlots = static_cast<u64>(3 * static_cast<s64>(liLength));
+            return static_cast<s32>(mHashTable.CalculateRequiredSize(luSlots));
+        }
 
         void Initialize(HashEntry* lpEntries, s32 liLength)                    // :55
         {

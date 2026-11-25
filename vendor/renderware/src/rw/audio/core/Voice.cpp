@@ -70,7 +70,7 @@ static bool ReleaseComposedStage(PlugIn *apStage, const PlugInDescRunTime *apDes
         AiffWriter::ScalarDeletingDestructor(reinterpret_cast<AiffWriter*>(apStage), 0);
         return true;
     case 0x526F7530u: // 'Rou0' Route
-        Route::ReleaseEvent(reinterpret_cast<Route*>(apStage));
+        reinterpret_cast<Route*>(apStage)->ReleaseEvent();
         Route::ScalarDeletingDestructor(apStage, 0);
         return true;
     case 0x53656E30u: // 'Sen0' Send

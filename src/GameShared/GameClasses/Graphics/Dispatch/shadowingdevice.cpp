@@ -241,19 +241,6 @@ namespace shadow
         return true;
     }
 
-    // Bind the active vertex descriptor through the shadow (X360 off_83010958 +
-    // byte_83010A34, written inline by the immediate-mode renderers).
-    bool Device::SetVertexDescriptor(const renderengine::VertexDescriptorData* lpVertexDescriptor)
-    {
-        if (m_Shadow.m_pVertexDescriptor == lpVertexDescriptor)
-        {
-            return false;
-        }
-        m_Shadow.m_pVertexDescriptor = lpVertexDescriptor;
-        m_Shadow.mbVertexProgramStateDirty = true;
-        return true;
-    }
-
     // @0x822769E0: bind a sampler-state object through the shadow.
     void Device::SetState(const renderengine::SamplerState* lpState, u32 luSamplerId)
     {

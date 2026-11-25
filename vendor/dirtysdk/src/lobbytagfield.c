@@ -24,13 +24,10 @@
 #include <string.h>
 #include <time.h>
 
-// The four byte-translation tables follow their original contiguous layout.
-// Two getters index hex_decode with a sign-extended character, so a byte >= 0x80
-// reads the 128 bytes that precede the table (the tail of char_encode and
-// hex_encode); keeping the block contiguous reproduces those reads byte for byte.
-static const unsigned char _TagField_aTables[0x310] =
+// DecFIGS lobbytagfield.c:51 through :100 identifies the four translation tables.
+// ARTIST preserves their order at 82146148 through 82146457.
+static const unsigned char char_encode[256] =
 {
-    // char_encode[256] (+0x000): bit 0 = escape in a string, bit 1 = escape in a
     // token, bit 2 = escape in a structure string, bit 3 = forces quoting.
     0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07,
     0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07,
@@ -48,9 +45,15 @@ static const unsigned char _TagField_aTables[0x310] =
     0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02,
     0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02,
     0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02,
-    // hex_encode[16] (+0x100)
+};
+
+static const unsigned char hex_encode[16] =
+{
     0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66,
-    // hex_decode[256] (+0x110): digit value, 0x80 for a non-hex character.
+};
+
+static const unsigned char hex_decode[256] =
+{
     0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80,
     0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80,
     0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80,
@@ -67,7 +70,10 @@ static const unsigned char _TagField_aTables[0x310] =
     0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80,
     0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80,
     0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80,
-    // to_upper[256] (+0x210)
+};
+
+static const unsigned char to_upper[256] =
+{
     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
     0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F,
     0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2A, 0x2B, 0x2C, 0x2D, 0x2E, 0x2F,
@@ -86,10 +92,17 @@ static const unsigned char _TagField_aTables[0x310] =
     0xF0, 0xF1, 0xF2, 0xF3, 0xF4, 0xF5, 0xF6, 0xF7, 0xF8, 0xF9, 0xFA, 0xFB, 0xFC, 0xFD, 0xFE, 0xFF,
 };
 
-static const unsigned char* const char_encode = _TagField_aTables + 0x000;
-static const unsigned char* const hex_encode  = _TagField_aTables + 0x100;
-static const unsigned char* const hex_decode  = _TagField_aTables + 0x110;
-static const unsigned char* const to_upper    = _TagField_aTables + 0x210;
+// Select from the same translation tables when the original lookup is signed.
+static unsigned char _TagFieldDecodeSigned(unsigned char uChar)
+{
+    const s32 iChar = (signed char)uChar;
+    const s32 iHexCount = (s32)sizeof(hex_encode);
+    if (iChar >= 0)
+        return hex_decode[iChar];
+    if (iChar >= -iHexCount)
+        return hex_encode[iChar + iHexCount];
+    return char_encode[iChar + iHexCount + (s32)sizeof(char_encode)];
+}
 static const char flag_encode[33] = "@ABCDEFGHIJKLMNOPQRSTUVWXYZ0123-";
 
 // Field divider, and whether a setter also writes it after its value (TagFieldDivider,
@@ -687,7 +700,7 @@ s32 TagFieldGetNumber(const char* pData, s32 iDefval)
     }
 
     // the digit lookup uses the signed character value (see the table block)
-    for (uValue = 0; (uDigit = hex_decode[(signed char)*pData]) < uBase; ++pData)
+    for (uValue = 0; (uDigit = _TagFieldDecodeSigned((unsigned char)*pData)) < uBase; ++pData)
     {
         uValue = (uValue * uBase) + uDigit;
     }
@@ -1128,8 +1141,8 @@ s32 TagFieldSetStructure(char* pRecord, s32 iReclen, const char* pName, const vo
     unsigned char* pMarker;
     unsigned char* pAppend;
     const unsigned char* pStruct = (const unsigned char*)(pStruct_);
-    const unsigned char* pLength = (unsigned char*)(pRecord) + iReclen - 2;
     const unsigned char* pLimit = (iLength < 0) ? pStruct + 0x10000 : pStruct + iLength;
+    const unsigned char* pLength = (unsigned char*)(pRecord) + iReclen - 2;
 
     if ((pAppend = _TagFieldSetupAppend((unsigned char*)(pRecord), iReclen, pName, 0)) == NULL)
     {
@@ -1142,13 +1155,12 @@ s32 TagFieldSetStructure(char* pRecord, s32 iReclen, const char* pName, const vo
         if (*pPattern == '#')
         {
             ++pPattern;
-            while (*pPattern != 0)
+            do
             {
-                if (*pPattern++ == '=')
-                {
+                if (*pPattern == 0)
                     break;
-                }
             }
+            while (*pPattern++ != '=');
         }
 
         // optional decimal count
@@ -1440,7 +1452,7 @@ u32 TagFieldGetEpoch(const char* pData, u32 uDefval)
         {
             // hex epoch (the digit lookup uses the signed character value)
             u32 uHex;
-            for (pParse = pData + 1; (uHex = hex_decode[(signed char)*pParse]) < 16; ++pParse)
+            for (pParse = pData + 1; (uHex = _TagFieldDecodeSigned((unsigned char)*pParse)) < 16; ++pParse)
             {
                 uEpoch = (uEpoch << 4) | uHex;
             }

@@ -78,7 +78,8 @@ void ScaleSamples(f32 *pData, f32 scale, s32 numSamples);
 // Fir64::Filter / RawPuller2 read); typed void* per the committed Fir64::Filter idiom.
 // (r3 buffer node, r4 click values, r5 channel count.)
 // -------------------------------------------------------------------------------------
-void DeClick(void *pSampleBuffer, f32 *pDeClickValue, u32 numChannels);
+struct SampleBuffer;
+void DeClick(SampleBuffer *pSampleBuffer, f32 *pDeClickValue, u32 numChannels, u32 numSamples);
 
 // -------------------------------------------------------------------------------------
 // ReOrderRwAudioCoreToWave @0x82B6B590 -- interleave the planar rwaudio channel buffer

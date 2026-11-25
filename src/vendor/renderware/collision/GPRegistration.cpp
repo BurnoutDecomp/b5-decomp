@@ -13,9 +13,8 @@
 //
 // This is the TU that GPInstance.hpp, CapsuleVolume.cpp and TriangleVolume*.cpp
 // have been calling "the un-recovered GP registration TU" (canonical
-// FixupSepDirMethods, rwccore.h:2955). It carries DATA only -- no reconstructed
-// data table; the independently declared GetBBox members are folded by the
-// retail linker to the same empty function.
+// FixupSepDirMethods, rwccore.h:2955). The table's dispatch adapters live here.
+// The independently declared GetBBox members fold to the same empty function.
 //
 // ARTIST records contain the native member entry points. The single-
 // inheritance member pointers below preserve the observed four-word records.
@@ -33,6 +32,41 @@ namespace rw
 {
 namespace collision
 {
+
+using math::vpu::VecFloat;
+using math::vpu::Vector3;
+
+// ARTIST 0x82BAA1A0
+VecFloat FindBestSeparatingDirectionBoxTri(Vector3& arBestSepDir,
+                                      const GPInstance& arGP1, const GPInstance& arGP2)
+{
+    const VecFloat separation = FindBestSeparatingDirectionTriBox(arBestSepDir, arGP2, arGP1);
+    arBestSepDir = math::vpu::Negate(arBestSepDir);
+    return separation;
+}
+
+// ARTIST 0x82BAA250
+VecFloat FindBestSeparatingDirCylVol(Vector3& arBestSepDir,
+                                const GPInstance& arGPCylinder, const GPInstance& arGPOther)
+{
+    return FindBestSepDirWithCylinder(arBestSepDir,
+                                      static_cast<const GPCylinder&>(arGPCylinder),
+                                      arGPOther);
+}
+
+// ARTIST 0x82BAA258
+VecFloat FindBestSeparatingDirVolCyl(Vector3& arBestSepDir,
+                                const GPInstance& arGPOther, const GPInstance& arGPCylinder)
+{
+    const VecFloat lfSeparation =
+        FindBestSepDirWithCylinder(arBestSepDir,
+                                   static_cast<const GPCylinder&>(arGPCylinder),
+                                   arGPOther);
+
+    arBestSepDir = math::vpu::Negate(arBestSepDir);
+
+    return lfSeparation;
+}
 
 // ---------------------------------------------------------------------------
 // rw::collision::gapFindBestSeparatingDirection -- X360 off_82F91800
@@ -58,12 +92,8 @@ namespace collision
 // 5 CYLINDER); row/column 0 is never indexed by a live GPInstance but is
 // present in the image and reproduced.
 //
-// [3][4] WAS the one slot whose target had no body in the tree. CLOSED
-// 2026-08-18 (waveQ5 rwc3): FindBestSeparatingDirectionTriBox @ 0x82BB4CA8
-// (272 insns) is bodied at the END of SeparatingDirection.cpp, under the
-// "wave Q5 rwc3" banner, so this slot and the BoxTri thunk at
-// SeparatingDirection.cpp:538 both resolve now. (Comment-only correction; the
-// slot expression itself was already correct.)
+// The TriBox implementation at 0x82BB4CA8 is in SeparatingDirection.cpp.
+// This table also uses its operand-reversing BoxTri adapter above.
 // ---------------------------------------------------------------------------
 const FindBestSeparatingDirectionFn
 gapFindBestSeparatingDirection[GPInstance::NUMINTERNALTYPES][GPInstance::NUMINTERNALTYPES] =

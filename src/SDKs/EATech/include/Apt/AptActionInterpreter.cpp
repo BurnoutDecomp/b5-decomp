@@ -335,7 +335,7 @@ bool AptActionInterpreter::isObjectOfType(AptValue* pObject, AptValue* pClass)
 // position past the consumed pair (skipping a trailing '&'), or null when the pair
 // has no '=' / pStream is empty. EAStringC::Append's byte-range form and the
 // un-escape pass are reused via the EAStringC API; unEscape @0x82AEE110 is homed
-// below as the AptActionInterpreter::unEscape static member.
+// below as the native _unEscape codec.
 // ---------------------------------------------------------------------------
 // The un-escape codec -- HOMED 2026-07-02 (retiring the {} stub). The X360
 // _unEscape @0x82AEE110 + _escape2Char @0x82AD90D8: '+' decodes to a space;
@@ -356,10 +356,10 @@ namespace
     }
 }
 
-void AptActionInterpreter::unEscape(EAStringC* pStr)
+void _unEscape(AptNativeString& rString)
 {
     EAStringC lDecoded("");
-    const char* p = pStr->GetBuffer();
+    const char* p = rString.GetBuffer();
     while (*p != 0)
     {
         const char c = *p++;
@@ -380,7 +380,7 @@ void AptActionInterpreter::unEscape(EAStringC* pStr)
         const char aOne[2] = { cOut, 0 };
         lDecoded += aOne;
     }
-    *pStr = lDecoded;
+    rString = lDecoded;
 }
 
 // ---------------------------------------------------------------------------
@@ -388,10 +388,10 @@ void AptActionInterpreter::unEscape(EAStringC* pStr)
 // byte that is not an ASCII alphanumeric is emitted as "%XX" (uppercase hex);
 // alphanumerics copy through.
 // ---------------------------------------------------------------------------
-void AptActionInterpreter::escape(EAStringC* pStr)
+void _escape(AptNativeString& rString)
 {
     EAStringC lEncoded("");
-    const char* p = pStr->GetBuffer();
+    const char* p = rString.GetBuffer();
     while (*p != 0)
     {
         const unsigned char c = static_cast<unsigned char>(*p++);
@@ -407,7 +407,7 @@ void AptActionInterpreter::escape(EAStringC* pStr)
             lEncoded += aHex;
         }
     }
-    *pStr = lEncoded;
+    rString = lEncoded;
 }
 
 const char* AptActionInterpreter::urlDecode(const char* pStream, EAStringC* pOutKey, EAStringC* pOutValue)
@@ -429,9 +429,9 @@ const char* AptActionInterpreter::urlDecode(const char* pStream, EAStringC* pOut
         return 0;   // no '=' -> no pair
 
     pOutKey->Append(pStream, static_cast<uint32_t>(pEq - pStream));
-    unEscape(pOutKey);                                                        // the un-escape codec
+    _unEscape(*pOutKey);
     pOutValue->Append(pEq + 1, static_cast<uint32_t>(p - (pEq + 1)));
-    unEscape(pOutValue);                                                      // the un-escape codec
+    _unEscape(*pOutValue);
     if (*p == '&')
         ++p;
     return p;

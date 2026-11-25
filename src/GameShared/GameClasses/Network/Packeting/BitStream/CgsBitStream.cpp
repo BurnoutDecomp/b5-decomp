@@ -2,8 +2,6 @@
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
-#include "types.hpp"   // uintptr_t
-
 #define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\BitStream\\CgsBitStream.cpp"
 
 namespace CgsNetwork
@@ -11,25 +9,8 @@ namespace CgsNetwork
     bool BitStream::Prepare(u8* lpu8Buffer, s32 liBufferReadOffsetInBits,
                             s32 liBufferWriteOffsetInBits, s32 liBufferLengthInBits)
     {
-        const u32 luExcessBytes = static_cast<u32>(reinterpret_cast<uintptr_t>(lpu8Buffer) & 7);
-        const u32 luExcessBits = luExcessBytes * 8;
-        mpuBuffer = reinterpret_cast<u64*>(lpu8Buffer - luExcessBytes);
-        miBitWritePosition = liBufferWriteOffsetInBits + luExcessBits;
-        miBitReadPosition = liBufferReadOffsetInBits + luExcessBits;
-        miBufferSizeInBits = liBufferLengthInBits + luExcessBits;
-        return true;
-    }
-
-    // Detach the stream from its buffer. The shipping build has no standalone copy: it is
-    // inlined into Message::Pack / Message::UnPack as four zero stores over the whole
-    // stream (+0x0 write position, +0x4 read position, +0x8 buffer, +0xC size). The
-    // out-of-line build of the same source returns true.
-    bool BitStream::Release()
-    {
-        miBufferSizeInBits = 0;
-        miBitWritePosition = 0;
-        miBitReadPosition  = 0;
-        mpuBuffer          = 0;
+        PrepareCursors(lpu8Buffer, liBufferReadOffsetInBits,
+                       liBufferWriteOffsetInBits, liBufferLengthInBits);
         return true;
     }
 

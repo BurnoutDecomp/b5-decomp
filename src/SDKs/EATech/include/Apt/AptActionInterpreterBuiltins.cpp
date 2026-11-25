@@ -25,21 +25,14 @@
 
 #include "types.hpp"   // uintptr_t
 
-// The global native-method arg stack (X360 off_8324E768 = gAptActionInterpreter.
-// mOperandStack.mppItems, dword_8324E760 = its mOperandStack.mnTop). Storage is defined in AptGlobals.cpp;
-// the native-call dispatch (AptActionInterpreterInterpHelpers.cpp) publishes the
-// operand-stack window into the pair around each callback. The i-th AS argument
-// (i=0 = last pushed) is gppAptNativeArgStack[gnAptNativeArgCount - 1 - i].
-extern AptValue** gppAptNativeArgStack;   // off_8324E768
-extern int        gnAptNativeArgCount;    // dword_8324E760
+extern AptActionInterpreter gAptActionInterpreter;
 
 // The shared "undefined" value (off_8324D814) -- defined in AptGlobals.cpp, built
 // at AptInit.
 extern AptValue* gpUndefinedValue;
 
-// The escape/unescape codecs are the homed members AptActionInterpreter::escape
-// @0x82AEE008 / ::unEscape @0x82AEE110 (percent-encode / decode an EAStringC in
-// place; AptActionInterpreter.cpp).
+void _escape(AptNativeString& rString);
+void _unEscape(AptNativeString& rString);
 
 // The running .swf version (only v7 makes a non-empty string coerce to boolean
 // true) -- homed in AptLinker.cpp (the dword_8324E530 SWF-version cache parsed from
@@ -145,16 +138,20 @@ bool _isNaN(AptValue* pValue)
 // cbCallMethod_isNaN @0x82AF99E8 -- AS _isNaN(x): true with no argument, or when the
 // single argument is Not-a-Number. Returns the shared true/false singleton.
 // ---------------------------------------------------------------------------
+// ARTIST combines both Boolean singleton returns into the size-oriented epilogue.
+#pragma optimize("s", on)
 AptValue* AptActionInterpreter::cbCallMethod_isNaN(AptValue* /*pThis*/, int nArgCount)
 {
     if (nArgCount == 0)
         return AptBoolean::Create(true);
 
-    AptValue* pArg = gppAptNativeArgStack[gnAptNativeArgCount - 1];
+    AptValue* pArg = gAptActionInterpreter.stackAt(0);
     return AptBoolean::Create(_isNaN(pArg));
 }
 
 // ---------------------------------------------------------------------------
+#pragma optimize("", on)
+
 // cbCallMethod_boolean @0x82AF9BD8 -- AS Boolean(x): coerce the single argument to a
 // boolean (returns the shared true/false singleton). No argument -> undefined.
 // ---------------------------------------------------------------------------
@@ -163,7 +160,7 @@ AptValue* AptActionInterpreter::cbCallMethod_boolean(AptValue* /*pThis*/, int nA
     if (nArgCount == 0)
         return gpUndefinedValue;
 
-    AptValue* pArg = gppAptNativeArgStack[gnAptNativeArgCount - 1];
+    AptValue* pArg = gAptActionInterpreter.stackAt(0);
     const AptVirtualFunctionTable_Indices eType = pArg->getVtblIndex();
 
     // A defined movie-clip handle (or a CIHNone), or a defined Object, is always true.
@@ -198,6 +195,9 @@ AptValue* AptActionInterpreter::cbCallMethod_boolean(AptValue* /*pThis*/, int nA
     return AptBoolean::Create(!bEmpty);
 }
 
+// ARTIST uses the size-oriented condition-register form in both string callbacks.
+#pragma optimize("s", on)
+
 // ---------------------------------------------------------------------------
 // cbCallMethod_escape @0x82AF9B08 -- AS escape(s): URL percent-encode the single
 // string argument into a fresh AptString (no/non-string argument -> empty string).
@@ -207,15 +207,12 @@ AptValue* AptActionInterpreter::cbCallMethod_escape(AptValue* /*pThis*/, int nAr
     AptString* pResult = AptString::Create("");
     if (nArgCount != 0)
     {
-        AptValue* pArg = gppAptNativeArgStack[gnAptNativeArgCount - 1];
-        const AptVirtualFunctionTable_Indices eType = pArg->getVtblIndex();
-        const bool bString = (eType == AptVFT_StringValue || eType == AptVFT_StringObject)
-                          && pArg->getIsDefined();
-        if (bString)
+        AptValue* pArg = gAptActionInterpreter.stackAt(0);
+        if (pArg->isString())
         {
             EAStringC strArg;
             pArg->toString(&strArg);   // render the argument to text
-            AptActionInterpreter::escape(&strArg);   // percent-encode in place (@0x82AEE008)
+            _escape(strArg);
             *pResult->GetInternalString() += strArg;
         }
     }
@@ -231,19 +228,18 @@ AptValue* AptActionInterpreter::cbCallMethod_unescape(AptValue* /*pThis*/, int /
 {
     AptString* pResult = AptString::Create("");
 
-    AptValue* pArg = gppAptNativeArgStack[gnAptNativeArgCount - 1];
-    const AptVirtualFunctionTable_Indices eType = pArg->getVtblIndex();
-    const bool bString = (eType == AptVFT_StringValue || eType == AptVFT_StringObject)
-                      && pArg->getIsDefined();
-    if (bString)
+    AptValue* pArg = gAptActionInterpreter.stackAt(0);
+    if (pArg->isString())
     {
         EAStringC strArg;
         pArg->toString(&strArg);   // render the argument to text
-        AptActionInterpreter::unEscape(&strArg);   // percent-decode in place (@0x82AEE110)
+        _unEscape(strArg);
         *pResult->GetInternalString() = strArg;
     }
     return pResult;
 }
+
+#pragma optimize("", on)
 
 // ---------------------------------------------------------------------------
 // _FunctionAptActionAsciiToChar @0x82AF3C18 -- AS chr(code): replace the top operand

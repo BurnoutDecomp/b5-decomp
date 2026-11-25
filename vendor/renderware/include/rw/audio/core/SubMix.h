@@ -1,5 +1,7 @@
 #pragma once
 
+#include "rw/audio/core/Mixer.h"
+
 // =====================================================================================
 // rw::audio::core::SubMix -- the "SubMix" plug-in: a named mix bus that other voices
 // Send/Route into by name, and which then publishes the accumulated result as its own
@@ -88,8 +90,7 @@ public:
     static int    CreateInstance(SubMix *self,
                                  const ConstructorParams *params); // @0x82BA4680
     static int    CreateInstanceHandler(Command *apCommand);       // @0x82B9C380
-    static int    Process(SubMix *self, AudioProcessContext *ctx,
-                          bool discontinuity);                  // @0x82B9C480
+    static BufferStatus Process(PlugIn *plugIn, Mixer *mixer, bool discontinuity);                  // @0x82B9C480
 
     // The by-name registry walk. Both were INLINED into Send::ConnectByNameHandler by the
     // X360 build, so there is no standalone ARTIST address for either -- their bodies are
@@ -106,13 +107,8 @@ public:
     // vendor's own SubMixConnector::GetConnectorFromNode expresses.
     SubMixConnector *GetSendListHead() const
     {
-        return reinterpret_cast<SubMixConnector *>(mSendList.phead);
+        return SubMixConnector::GetConnectorFromNode(mSendList.GetHead());
     }
-    void SetSendListHead(SubMixConnector *apConnector)
-    {
-        mSendList.phead = reinterpret_cast<ListDNode *>(apConnector);
-    }
-
     f32       *mpSubMixBuffer;                    // +0x24
     ListDStack mSendList;                         // +0x28
     ListDNode  mSubMixListNode;                   // +0x2C
@@ -129,6 +125,14 @@ public:
     static ListDStack sSubMixList;      // off_8327EE68 -- registry head
     static ListDNode *spSubMixNextNode; // dword_8327EE00 -- safe-iteration cursor
 };
+
+inline void SubMixConnector::Connect(Voice *, SubMix *submix)
+{
+    mpSubMix = submix;
+    mpSubMixBuffer = submix->GetBuffer();
+    mNumSubMixChannels = submix->mOutputChannels;
+    submix->mSendList.Push(&mListNode);
+}
 
 } // namespace core
 } // namespace audio

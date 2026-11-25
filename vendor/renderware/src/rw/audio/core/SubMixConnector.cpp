@@ -1,41 +1,8 @@
-// =====================================================================================
-// rw::audio::core::SubMixConnector::Disconnect -- unlink an inbound connector from its
-// SubMix and (optionally) fold its per-channel gains back into the SubMix.
-//
-// EARenderWare "rwaudio". Reconstructed from BURNOUT_X360_ARTIST.XEX @0x82B9C3C0; the
-// PowerPC asm is authoritative. No LegacySrc reference source and no DecFIGS DWARF exist.
-//
-// Store-for-store from the asm (r3 = this, r4 = foldBackGains):
-//   lwz r11,0xC(r3)            v2 = mpSubMix
-//   cmplwi r11,0 / beqlr       if (!v2) return            // nothing to do
-//   lwz  r10,0x28(r11)         v3 = v2->mpConnectorHead
-//   cmplw r3,r10 / bne ...     if (this == head)
-//   lwz  r10,0(r10)            head = this->mpNext
-//   stw  r10,0x28(r11)
-//   lwz  r11,4(r3)             v4 = mppPrev
-//   cmpwi/ beq                 if (v4)
-//   lwz  r10,0(r3)              *v4 = mpNext
-//   stw  r10,0(r11)
-//   lwz  r11,0(r3)             if (mpNext)
-//   cmpwi/beq
-//   lwz  r10,4(r3)              mpNext->mppPrev = this->mppPrev
-//   stw  r10,4(r11)
-//   li   r7,0                  (the zero used for the trailing clears)
-//   cmplwi r4,0 / beq          if (foldBackGains)
-//     stb 1,0x8D(mpSubMix)      mpSubMix->mbDirty = 1
-//     lbz 0x21(mpSubMix)        n = mpSubMix->mbNumChannels
-//     loop i in [0,n):          mpSubMix->mafChannelGain[i] += foldBackGains[i]
-//   stw r7,0xC(r3)             mpSubMix  = 0
-//   stw r7,8(r3)              mField08 = 0
-//   stb r7,0x10(r3)            mbField10 = 0   (single byte)
-//   return this
-//
-// NOTE: the asm re-reads mpSubMix (lwz 0xC) each loop iteration and re-reads
-// mbNumChannels (lbz 0x21) at the loop bottom; the rolling form below preserves that
-// the count is re-evaluated against the (unchanged) SubMix each pass.
-// =====================================================================================
+// SubMixConnector links a Send or Route into a SubMix. LegacySrc submix.h
+// and the Xbox 360 audio PDB give the node and connector declarations.
 
 #include "rw/audio/core/SubMixConnector.h"
+#include "rw/audio/core/Route.h"
 #include "rw/audio/core/SubMix.h" // SubMix (the real class; moved out of SubMixConnector.h)
 
 namespace rw
@@ -45,39 +12,59 @@ namespace audio
 namespace core
 {
 
-SubMixConnector *SubMixConnector::Disconnect(SubMixConnector *self, const f32 *foldBackGains)
+#if defined(_XBOX) && defined(_MSC_VER)
+// ARTIST and the original Xbox 360 plug-in object use the scalar size form here.
+#pragma optimize("s", on)
+#endif
+// ARTIST 0x82B9C3C0
+void SubMixConnector::Disconnect(f32 *foldBackGains)
 {
-    SubMix *submix = self->mpSubMix; // v2 = *(this+0xC)
+    if (!mpSubMix)
+        return;
+
+    mpSubMix->mSendList.Remove(&mListNode);
+    if (foldBackGains)
+    {
+        mpSubMix->mDeClickRequired = 1;
+        for (int channel = 0; channel < mpSubMix->mOutputChannels; ++channel)
+            mpSubMix->mDeClickValueTotal[channel] += foldBackGains[channel];
+    }
+    mpSubMix = 0;
+    mpSubMixBuffer = 0;
+    mNumSubMixChannels = 0;
+}
+
+// The original Xbox 360 rwAudio plug-in object owns these Route callers and
+// Disconnect. Keeping them together lets XDK track the callee's register use.
+void Route::ReleaseEvent()
+{
+    mSubMixConnector.Disconnect(mDeClickValue);
+    for (unsigned channel = 0; channel < 6; ++channel)
+        mDeClickValue[channel] = 0.0f;
+}
+
+int Route::ConnectByPointerHandler(Command *command)
+{
+    RouteConnectCommand *params = static_cast<RouteConnectCommand *>(command);
+    Route *route = static_cast<Route *>(params->pObject);
+    route->mSubMixConnector.Disconnect(route->mDeClickValue);
+    for (unsigned channel = 0; channel < 6; ++channel)
+        route->mDeClickValue[channel] = 0.0f;
+
+    SubMix *submix = params->mpSubMix;
     if (submix)
     {
-        // ---- unlink from the SubMix's doubly-linked connector list ----
-        SubMixConnector *head = submix->GetSendListHead(); // v3 = *(v2+0x28)
-        if (self == head)
-            submix->SetSendListHead(self->mpNext);       // head = this->mpNext
-
-        SubMixConnector **prev = self->mppPrev;          // v4 = *(this+4)
-        if (prev)
-            *prev = self->mpNext;                        // *mppPrev = mpNext
-
-        if (self->mpNext)                                // if (*this)
-            self->mpNext->mppPrev = self->mppPrev;       // mpNext->mppPrev = this->mppPrev
-
-        // ---- optional gain fold-back ----
-        if (foldBackGains)
-        {
-            self->mpSubMix->mDeClickRequired = 1;        // *(v2+0x8D) = 1
-            for (int i = 0; i < self->mpSubMix->mOutputChannels; ++i)
-                self->mpSubMix->mDeClickValueTotal[i] =
-                    foldBackGains[i] + self->mpSubMix->mDeClickValueTotal[i];
-        }
-
-        // ---- clear the owning-SubMix / cursor / flag fields ----
-        self->mpSubMix = 0;           // +0x0C
-        self->mpSubMixBuffer = 0;     // +0x08
-        self->mNumSubMixChannels = 0; // +0x10 (stb)
+        route->mSubMixConnector.Connect(route->mBase.mpVoice, submix);
+        route->mSourceStartChannel = static_cast<u8>(params->mfGain0);
+        route->mTargetStartChannel = static_cast<u8>(params->mfGain1);
+        route->mNumChannels = static_cast<u8>(params->mfGain2);
     }
-    return self;
+    return sizeof(RouteConnectCommand);
 }
+
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", off)
+#endif
 
 } // namespace core
 } // namespace audio

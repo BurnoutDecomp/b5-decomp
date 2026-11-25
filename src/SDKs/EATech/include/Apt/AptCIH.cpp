@@ -80,10 +80,6 @@ static AptMovie* AptGetClipMovie(const AptCharacterSpriteInstBase* pInst)
 // AptAux::ConstructApt -> CgsGui::AptCallbackFile::OnUnload).
 void AptCIH_PreDestroyHook(AptCIH* pCIH);
 
-// The zombie-vector reap (XB1 sub_140830A40; X360 name AptUpdateZombieVector) --
-// HOMED in AptGC.cpp (the real gpAptZombieVector reap; AptInit builds the vector).
-extern void* AptUpdateZombieVector(char bClear);
-
 // ctor @0x824C7C
 AptCIH::AptCIH(AptCharacter* pCharacter, AptCIH* pParent)
     : AptValueGC(AptVFT_CharacterInstHandle, CO_CIH)
@@ -227,19 +223,7 @@ void AptCIH::SetCIHState(uint32_t eState)
 }
 
 // ARTIST 0x82AD5138: signed 16-bit field at bits 7..22.
-int16_t AptCIH::GetZombieCount() const { return static_cast<int16_t>(static_cast<uint16_t>(mFlagsA >> 7)); }
-void AptCIH::IncZombieCount()
-{
-    const uint16_t n = static_cast<uint16_t>(GetZombieCount() + 1);
-    mFlagsA = (mFlagsA & ~0x007FFF80u) | (static_cast<uint32_t>(n) << 7);
-}
-void AptCIH::DecZombieCount()
-{
-    const uint16_t n = static_cast<uint16_t>(GetZombieCount() - 1);
-    mFlagsA = (mFlagsA & ~0x007FFF80u) | (static_cast<uint32_t>(n) << 7);
-    if ((mFlagsA & 0x007FFF80u) == 0u)
-        AptUpdateZombieVector(0);
-}
+int16_t AptCIH::GetZombieCount() const { return static_cast<int16_t>(mInstanceFlags.mnZombieCount); }
 
 // ARTIST IsInCtor @0x82AD50F8 / SetInCtor @0x82AD5108.
 bool AptCIH::IsInCtor() const { return (mFlagsA & 0x08000000u) != 0; }
@@ -294,27 +278,6 @@ AptNativeHash* AptCIH::GetNativeHash() const   // @0x82AD5B28
 // member recognizers -- are homed in AptCIHMembers.cpp.)
 bool AptCIH::IsMask() const  { return mpCharacterInst->GetRenderItem()->GetIsMask(); }   // @0x82AD5BA0
 bool AptCIH::HasMask() const { return mpCharacterInst->GetRenderItem()->GetHasMask(); }  // @0x82AD5BB8
-
-// ---------------------------------------------------------------------------
-// GetRootAnimation @PS3 0x820F3C -- the nearest enclosing ANIMATION node. The empty
-// CIHNone placeholder (tag 0x25) resolves to the lazily-created level-0 root; any
-// other node walks its display-list parent chain ([7] mpDisplayListParent) until the
-// character-inst type tag (x64: mTypeFlags & 0x3F) is 9 (animation) or 15.
-// ---------------------------------------------------------------------------
-AptCIH* AptCIH::GetRootAnimation()
-{
-    if (getVtblIndex() == AptVFT_CIHNone)          // (this[1] & 0x7F) == 0x25
-        return AptGetAnimationAtLevel(0);
-
-    AptCIH* pNode = this;
-    int uTag = pNode->mpCharacterInst->GetTypeTag();   // *(this[8]+8) >> 26
-    while (uTag != 9u && uTag != 15u)
-    {
-        pNode = pNode->mpDisplayListParent;                 // this[7]
-        uTag  = pNode->mpCharacterInst->GetTypeTag();
-    }
-    return pNode;
-}
 
 // ---------------------------------------------------------------------------
 // SetDirtyState @0x82AD76B8 -- set/clear ARTIST mFlagsA dirty bit 0x02000000. Clearing, or a non-renderable character type (shape 1 /

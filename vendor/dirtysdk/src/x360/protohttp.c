@@ -242,22 +242,36 @@ static s32 _ProtoHttpParseHeader(ProtoHttpRefT* pState)
 
 static void _ProtoHttpRedirect(ProtoHttpRefT* pState)
 {
-    char* p = pState->pLocation;
-    s32 iLength, i;
-    char* pUrl;
-    if (!p) { NetPrintfCode("protohttp: no location included in redirect header\n"); pState->eState = ST_FAIL; return; }
+    const char* pStr = pState->pLocation;
+    const char* pUrl;
+    s32 iUrl;
+
+    if (!pStr)
+    {
+        NetPrintfCode("protohttp: no location included in redirect header\n");
+        pState->eState = ST_FAIL;
+        return;
+    }
     if (++pState->iNumRedirect > pState->iMaxRedirect)
-    { NetPrintfCode("protohttp: maximum number of redirections (%d) exceeded\n", pState->iMaxRedirect); pState->eState = ST_FAIL; return; }
-    while (*p && *p != ' ') ++p;
-    while (*p && *p <= ' ') ++p;
-    iLength = 0;
-    while (p[iLength] > ' ') ++iLength;
-    ++iLength;
-    pUrl = pState->pInpBuf + pState->iInpMax - iLength;
-    for (i = 0; i < iLength; ++i) pUrl[i] = p[i];
+    {
+        NetPrintfCode("protohttp: maximum number of redirections (%d) exceeded\n", pState->iMaxRedirect);
+        pState->eState = ST_FAIL;
+        return;
+    }
+    while (*pStr && *pStr != ' ') ++pStr;
+    while (*pStr && *pStr <= ' ') ++pStr;
+    for (iUrl = 0; pStr[iUrl] > ' '; ++iUrl)
+        ;
+    ++iUrl;
+    pUrl = &pState->pInpBuf[pState->iInpMax - iUrl];
+    while (iUrl > 0)
+    {
+        pState->pInpBuf[pState->iInpMax - iUrl] = *pStr++;
+        --iUrl;
+    }
     pState->pInpBuf[pState->iInpMax - 1] = 0;
     pState->iKeepAlive = 0;
-    _ProtoHttpRequest(pState, pUrl, 0, 0, pState->bHeadOnly ? PROTOHTTP_REQUESTTYPE_HEAD : PROTOHTTP_REQUESTTYPE_GET);
+    ProtoHttpGet(pState, pUrl, pState->bHeadOnly);
 }
 
 static s32 _ProtoHttpChunkProcess(ProtoHttpRefT* pState, s32 iBufMax)
@@ -413,6 +427,52 @@ void ProtoHttpAbort(ProtoHttpRefT* pState)
     _ProtoHttpReset(pState);
 }
 
+// DirtySDK 5.5.3 protohttp.c:1314. ARTIST retains these diagnostics at
+// 0x82F7F20C..0x82F7F2A7; there is no linked entry for the control dispatch.
+static s32 ProtoHttpControl(ProtoHttpRefT* pState, s32 iSelect, s32 iValue, s32 iValue2, void* pValue)
+{
+    if (iSelect == 'apnd')
+    {
+        ds_strnzcpy(pState->strAppendHdr, (const char*)pValue, sizeof(pState->strAppendHdr));
+        return 0;
+    }
+    if (iSelect == 'disc')
+    {
+        _ProtoHttpClose(pState, "user request");
+        return 0;
+    }
+    if (iSelect == 'hver')
+    {
+        const char* pVerify = iValue ? "enabled" : "disabled";
+        NetPrintfCode("protohttp: header type verification %s\n", pVerify);
+        pState->bVerifyHdr = (u8)iValue;
+    }
+    if (iSelect == 'keep')
+    {
+        NetPrintfCode("protohttp: setting keep-alive to %d\n", iValue);
+        pState->iKeepAliveDflt = iValue;
+        pState->iKeepAlive = iValue;
+        return 0;
+    }
+    if (iSelect == 'rmax')
+    {
+        pState->iMaxRedirect = iValue;
+        return 0;
+    }
+    if (iSelect == 'spam')
+    {
+        pState->iVerbose = (u8)iValue;
+        return 0;
+    }
+    if (iSelect == 'time')
+    {
+        NetPrintfCode("protohttp: setting timeout to %d ms\n", iValue);
+        pState->uTimeout = iValue;
+        return 0;
+    }
+    return -1;
+}
+
 s32 ProtoHttpStatus(ProtoHttpRefT* pState, s32 iSelect, void* pBuffer, s32 iBufSize)
 {
     if (iSelect == 0x73717565) return pState->pSsl ? ProtoSSLStat(pState->pSsl, iSelect, 0, 0) : -1;
@@ -483,8 +543,15 @@ void ProtoHttpUpdate(ProtoHttpRefT* pState)
         if (_ProtoHttpParseHeader(pState) >= 0)
         {
             if (pState->bHttp1_0 == 1 && !pState->iBodySize && pState->iInpCnt > 0) pState->iBodySize = -1;
-            if (pState->bHeadOnly != 1 && (pState->iBodySize < 0 || pState->iInpCnt < pState->iBodySize)) pState->eState = ST_BODY;
-            else pState->eState = ST_DONE;
+            if (pState->bHeadOnly == 1)
+                goto bodyComplete;
+            if (pState->iBodySize < 0 || pState->iInpCnt < pState->iBodySize)
+                pState->eState = ST_BODY;
+            else
+            {
+            bodyComplete:
+                pState->eState = ST_DONE;
+            }
             if (100 * (pState->iHdrCode / 100) == 300) _ProtoHttpRedirect(pState);
         }
         else return;

@@ -6,6 +6,7 @@
 #include "GameShared/GameClasses/Core/CgsID.h"                          // CgsIDConvertToString
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"
 #include "GameShared/GameClasses/System/Timer/PS3/CgsDateAndTimePS3.h"
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"             // gpDebugPrint
 #include "GameShared/GameClasses/Development/CgsStrStream.h"          // CgsDev::StrStream (streamed assert)
 #include "rw/math/vpu/vector3_operation.h"                              // Min / Max / Magnitude
@@ -45,6 +46,8 @@ namespace CgsNetwork
     {
         const char KAC_ARTIST_FILE[] =
             "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\Messages\\CgsMessage.cpp";
+        const char KAC_ARTIST_HEADER[] =
+            "..\\..\\..\\GameShared\\GameClasses\\Network/Packeting/Messages/CgsMessage.h";
 
         const f32 KF_ANGLE_PI      = 3.14159274f;
         const f32 KF_ANGLE_HALF_PI = 1.57079637f;
@@ -663,28 +666,26 @@ namespace CgsNetwork
     }
 
     // ---- GetGameID @ 0x8286F3E8 ------------------------------------------------
-    // The X360 build, when the game-id is still invalid, streams a diagnostic line
-    // ("We have received a message with GameID -1 ...") into an ostream-like sink
-    // (off_82F335C8) and then asserts mu8GameID != KU8_INVALID_GAME_ID. The sink is
-    // an un-homed global stream object that this TU cannot model by name, so the
-    // logging side-channel is reduced to the assert it guards (the assert is the
-    // observable contract). FLAGGED: the off_82F335C8 stream-logging side effect is
-    // dropped (un-homed data-global), the assert is preserved.
     u8 Message::GetGameID() const
     {
-        CGS_ASSERT(mu8GameID != KU8_INVALID_GAME_ID,
-                   "mu8GameID != KU8_INVALID_GAME_ID");
+        if (mu8GameID == KU8_INVALID_GAME_ID)
+        {
+            const u8 lu8Type = static_cast<u8>(mi8Type);
+            ServerInterfaceDirtySock::mNetStreamLogChannelOutput
+                << "We have received a message with GameID -1, the message is of type ";
+            ServerInterfaceDirtySock::mNetStreamLogChannelOutput << static_cast<s32>(lu8Type) << "\n";
+        }
+        CGS_ASSERT_AT(mu8GameID != KU8_INVALID_GAME_ID, "mu8GameID != KU8_INVALID_GAME_ID",
+                      KAC_ARTIST_HEADER, 772);
         return mu8GameID;
     }
 
     // ---- SetType @ 0x82579C30 --------------------------------------------------
     void Message::SetType(::EMessageType leType)
     {
-        static const char KAC_ARTIST_FILE[] =
-            "..\\..\\..\\GameShared\\GameClasses\\Network/Packeting/Messages/CgsMessage.h";
-        CGS_ASSERT_AT(leType >= 0, "leType >= 0", KAC_ARTIST_FILE, 633);
-        CGS_ASSERT_AT(leType < E_MESSAGE_TYPE_COUNT, "leType < E_MESSAGE_TYPE_COUNT", KAC_ARTIST_FILE, 634);
-        CGS_ASSERT_AT(leType < 255, "leType < 255", KAC_ARTIST_FILE, 635);
+        CGS_ASSERT_AT(leType >= 0, "leType >= 0", KAC_ARTIST_HEADER, 633);
+        CGS_ASSERT_AT(leType < E_MESSAGE_TYPE_COUNT, "leType < E_MESSAGE_TYPE_COUNT", KAC_ARTIST_HEADER, 634);
+        CGS_ASSERT_AT(leType < 255, "leType < 255", KAC_ARTIST_HEADER, 635);
         mi8Type = static_cast<s8>(leType);
     }
 
@@ -759,8 +760,8 @@ namespace CgsNetwork
                        s32* lpiBitsWritten)
     {
         mePackOrUnpack = E_PACK_INTO_BITSTREAM;
-        mBitstream.Prepare(lpu8Buffer, liBufferOffsetInBits, liBufferOffsetInBits,
-                           liBufferLengthInBits);
+        mBitstream.PrepareCursors(lpu8Buffer, liBufferOffsetInBits, liBufferOffsetInBits,
+                                 liBufferLengthInBits);
 
         const s32 liStartWritePosition = mBitstream.miBitWritePosition;
 
@@ -786,14 +787,14 @@ namespace CgsNetwork
                          s32* lpiBitsRead)
     {
         mePackOrUnpack = E_UNPACK_FROM_BITSTREAM;
-        mBitstream.Prepare(lpu8Buffer, liBufferReadOffsetInBits, liBufferLengthInBits,
-                           liBufferLengthInBits);
+        mBitstream.PrepareCursors(lpu8Buffer, liBufferReadOffsetInBits, liBufferLengthInBits,
+                                 liBufferLengthInBits);
 
         const s32 liStartUnread = mBitstream.miBitWritePosition - mBitstream.miBitReadPosition;
 
         mx8Flags = 0;
 
-        const PackOrUnpackResult lxResult = PackOrUnpack();
+        const PackOrUnpackResult lxPackOrUnpackResult = PackOrUnpack();
 
         mx8Flags |= KX8_FLAGS_VALID;
         if (IsReliable())
@@ -806,28 +807,26 @@ namespace CgsNetwork
         mBitstream.Release();
         mePackOrUnpack = E_PACK_OR_UNPACK_COUNT;
 
-        CGS_ASSERT(lxResult == KX_PACK_OR_UNPACK_SUCCESS,
-                   "lxPackOrUnpackResult == KX_PACK_OR_UNPACK_SUCCESS");
+        CGS_ASSERT_AT(lxPackOrUnpackResult == KX_PACK_OR_UNPACK_SUCCESS,
+                      "lxPackOrUnpackResult == KX_PACK_OR_UNPACK_SUCCESS",
+                      KAC_ARTIST_HEADER, 1031);
     }
 
     // ---- GetPackedMessageSize ------------------------------------------------------
-    // Pack the message into a stack scratch buffer of KI_MAX_PACKED_MESSAGE_SIZE bytes
-    // (asserting the pack succeeded) and return the packed length rounded up to whole
-    // bytes. The console also streams "CgsNetwork::Message::GetPackedMessageSize
-    // returning <n>" into the global debug-print stream; that stream has no home in
-    // the tree, so the log line is dropped (same precedent as GetGameID).
     s32 Message::GetPackedMessageSize()
     {
-        u8  lacTmpBuffer[KI_MAX_PACKED_MESSAGE_SIZE];
-        s32 liMessageSizeInBits = 0;
-
+        u8 lacTmpBuffer[KI_MAX_PACKED_MESSAGE_SIZE];
+        s32 liMessageSizeInBits;
         const bool lbPacked = Pack(lacTmpBuffer, 0, KI_MAX_PACKED_MESSAGE_SIZE * 8,
                                    &liMessageSizeInBits);
-        CGS_ASSERT(lbPacked, CGS_ASSERT_MESSAGE_AT(
-            "Pack(lacTmpBuffer, 0, KI_MAX_PACKED_MESSAGE_SIZE*8, &liMessageSizeInBits)",
-            __FILE__, 416 /* ARTIST 0x82880EB4 */));
+        CGS_ASSERT_AT(lbPacked,
+                      "Pack(lacTmpBuffer, 0, KI_MAX_PACKED_MESSAGE_SIZE*8, &liMessageSizeInBits)",
+                      KAC_ARTIST_FILE, 416);
 
-        return (liMessageSizeInBits + 7) / 8;
+        const s32 liMessageSizeInBytes = (liMessageSizeInBits + 7) / 8;
+        ServerInterfaceDirtySock::mNetStreamLogChannelOutput
+            << __FUNCTION__ << " returning " << liMessageSizeInBytes << "\n";
+        return liMessageSizeInBytes;
     }
 
     // ---- GetEulerAnglesFromMatrix ---------------------------------------------------

@@ -104,7 +104,7 @@ public:
 
     // Release: disconnect the embedded connector (folding its gains back into the
     // SubMix) and clear the foldback gain array. X360 @0x82BA3D88.
-    static SubMixConnector *ReleaseEvent(Route *self);
+    void ReleaseEvent();
 
     // Deferred connect handler replayed off the ring (the consumer calls it through
     // int (*)(void *) with the record's own address): disconnect the embedded connector,
