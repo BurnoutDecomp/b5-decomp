@@ -42,8 +42,9 @@ namespace SceneManagerIO
 
     // EventQueue<InEventRemoveForCollision, N> element. 8-byte aligned, sizeof 8
     // (a single 64-bit collision/volume id stored as one std).
-    struct CGS_ALIGN(8) InEventRemoveForCollision : public EventBaseRemoveForCollision
+    class CGS_ALIGN(8) InEventRemoveForCollision : public EventBaseRemoveForCollision
     {
+    public:
         u64 muCollisionId; // +0x00 -- the 64-bit id removed from the collision set
     };
 }

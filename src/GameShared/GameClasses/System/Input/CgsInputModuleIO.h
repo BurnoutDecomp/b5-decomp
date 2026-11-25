@@ -20,8 +20,9 @@ namespace InputIO
 {
     struct Event {};   // empty base of the input event hierarchy
 
-    struct BaseInputEvent : public Event
+    class BaseInputEvent : public Event
     {
+    public:
         s32 miPlayer;
         s32 miPort;
     };
@@ -47,36 +48,42 @@ namespace InputIO
         JoltEnvelope mHighFreqJoltData;
     };
 
-    struct BindResult : public BaseInputEvent
+    class BindResult : public BaseInputEvent
     {
+    public:
         CgsInput::EBindResult meResultCode;
     };
 
-    struct UnBindResult : public BaseInputEvent
+    class UnBindResult : public BaseInputEvent
     {
+    public:
         CgsInput::EUnbindResult meResultCode;
     };
 
-    struct ChangeVolumeRumbleEffectEvent : public BaseInputEvent
+    class ChangeVolumeRumbleEffectEvent : public BaseInputEvent
     {
+    public:
         JoltEffect mJoltEffect;
         s32        miRumbleId;
         f32        mfRumbleVolume;
     };
 
-    struct PlayJoltEffectEvent : public BaseRumbleEvent
+    class PlayJoltEffectEvent : public BaseRumbleEvent
     {
+    public:
         JoltEffect mJoltEffect;
     };
 
-    struct PlayRumbleEffectEvent : public PlayJoltEffectEvent
+    class PlayRumbleEffectEvent : public PlayJoltEffectEvent
     {
+    public:
         s32 miRumbleId;
         f32 mfRumbleVolume;
     };
 
-    struct StopRumbleEffectEvent : public BaseInputEvent
+    class StopRumbleEffectEvent : public BaseInputEvent
     {
+    public:
         s32 miRumbleId;
     };
 

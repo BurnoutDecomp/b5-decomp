@@ -43,8 +43,9 @@ namespace TriggerEntityModuleIO
     // BrnTriggerEntityModuleInputInterface.h:92 (DecFIGS DWARF). Element record of the module's
     // "remove trigger" input queue. Derives from the empty CgsModule::Event base (EBO -> sizeof ==
     // 4, matching the X360 4-byte element stride). Owning queue capacity == 256.
-    struct InRemoveTriggerEvent : public CgsModule::Event
+    class InRemoveTriggerEvent : public CgsModule::Event
     {
+    public:
         TriggerId mTriggerID;   // BrnTriggerEntityModuleInputInterface.h:94
     };
 

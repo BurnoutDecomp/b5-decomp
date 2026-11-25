@@ -24,8 +24,9 @@ namespace CrashIO
     // Traffic-input event: a traffic vehicle has started crashing. 16 bytes
     // (VolumeInstanceId 8 + EntityId 4 + eCrashTrafficType 4); the X360 AddEvent copies the
     // element as two 8-byte stores at a 16-byte stride (@0x8271A2E8).
-    struct AddCrashingTrafficEvent
+    class AddCrashingTrafficEvent
     {
+    public:
         CgsSceneManager::VolumeInstanceId mVolumeInstanceId;
         EntityId                          mCrasherEntityId;
         BrnPhysics::Vehicle::eCrashTrafficType meCrashTrafficType;
@@ -34,16 +35,18 @@ namespace CrashIO
     // Traffic-output event: a crashed traffic volume to clean up. A single 8-byte
     // VolumeInstanceId; the queue base subobject pads to 16 (8-byte element alignment),
     // giving the maEvents offset 0x10 the EventQueue<...,160>::Construct attests (@0x82760910).
-    struct CleanupTrafficEvent
+    class CleanupTrafficEvent
     {
+    public:
         CgsSceneManager::VolumeInstanceId mVolumeInstanceId;
     };
 
     // Traffic-output event: a network-replicated traffic vehicle to start crashing. A single
     // u16 vehicle id; the queue base subobject stays 12 bytes (4-byte element alignment),
     // giving the maEvents offset 0xC the EventQueue<...,160>::Construct attests (@0x82760980).
-    struct NetworkTrafficCrashingEvent
+    class NetworkTrafficCrashingEvent
     {
+    public:
         u16 muVehicleId;
     };
 
@@ -54,8 +57,9 @@ namespace CrashIO
     // 2-byte element at a 2-byte stride. The queue base subobject stays 12 bytes (4-byte element
     // alignment), giving the maEvents offset 0xC the EventQueue<...,160>::Construct attests
     // (@0x827608A0).
-    struct RemoveCrashedTrafficEvent
+    class RemoveCrashedTrafficEvent
     {
+    public:
         u16 muVehicleId;
     };
 
@@ -65,8 +69,9 @@ namespace CrashIO
     // the X360 AddEvent (@0x8271A430) writes one 2-byte element at a 2-byte stride. The queue
     // base subobject stays 12 bytes (4-byte element alignment), giving the maEvents offset 0xC
     // the EventQueue<...,160>::Construct attests (@0x82760830).
-    struct RemoveSlammedTrafficEvent
+    class RemoveSlammedTrafficEvent
     {
+    public:
         u16 muVehicleId;
     };
 

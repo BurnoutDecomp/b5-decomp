@@ -41,31 +41,35 @@ enum EFinishType : s32
 namespace BrnGameState
 {
 // DWARF BrnGameStateToGuiEvents.h:96 -- sizeof 8.
-struct GameStateToGuiOvertakeEvent
+class GameStateToGuiOvertakeEvent
 {
+public:
     u8                  mu8NewPosition;        // 0x00
     EActiveRaceCarIndex meActiveRaceCarIndex;  // 0x04
 };
 
 // DWARF BrnGameStateToGuiEvents.h:41 -- the "new dirty trick" notification (3 enum fields).
-struct GameStateToGuiNewDirtyTrick
+class GameStateToGuiNewDirtyTrick
 {
+public:
     EActiveRaceCarIndex      meAggressorActiveRaceCarIndex;
     EActiveRaceCarIndex      meVictimActiveRaceCarIndex;
     BrnNetwork::EPaybackType meTrickType;
 };
 
 // DWARF BrnGameStateToGuiEvents.h:59 -- "dirty trick triggered".
-struct GameStateToGuiTriggeredDirtyTrick
+class GameStateToGuiTriggeredDirtyTrick
 {
+public:
     EActiveRaceCarIndex      meAggressorActiveRaceCarIndex;
     EActiveRaceCarIndex      meVictimActiveRaceCarIndex;
     BrnNetwork::EPaybackType meTrickType;
 };
 
 // DWARF BrnGameStateToGuiEvents.h (dirty-trick ending) -- adds the survived flag.
-struct GameStateToGuiEndingDirtyTrick
+class GameStateToGuiEndingDirtyTrick
 {
+public:
     EActiveRaceCarIndex      meAggressorActiveRaceCarIndex;
     EActiveRaceCarIndex      meVictimActiveRaceCarIndex;
     BrnNetwork::EPaybackType meTrickType;
@@ -73,15 +77,17 @@ struct GameStateToGuiEndingDirtyTrick
 };
 
 // DWARF BrnGameStateToGuiEvents.h -- race-finished notification. sizeof 8.
-struct GameStateToGuiFinishedRaceEvent
+class GameStateToGuiFinishedRaceEvent
 {
+public:
     BrnGui::EFinishType meFinishType;
     EActiveRaceCarIndex meActiveRaceCarIndex;
 };
 
 // DWARF BrnGameStateToGuiEvents.h:157 -- "on tail of rival". CgsID (u64) -> sizeof 16.
-struct GameStateToGuiOnTailEvent
+class GameStateToGuiOnTailEvent
 {
+public:
     CgsID               mOfflineRivalCarID;
     EActiveRaceCarIndex meOnTailActiveRaceCarIndex;
 };

@@ -143,8 +143,9 @@ namespace OverlapGenerationIO
     //   stw r7 -> +0x20; stw r5 -> +0x24; stw r8 -> +0x28; std r9 -> +0x30.
     //   X360 consumer reads:  r5 = the event pointer (== &mAabb); lwz 0x24 -> muIndex;
     //   lwz 0x28 -> meBodyState; ld 0x30 -> mVolumeInstanceID.
-    struct CGS_ALIGN(16) InAddBody : public CgsModule::Event
+    class CGS_ALIGN(16) InAddBody : public CgsModule::Event
     {
+    public:
         // The culling-group tag: the same u32 typedef the add-for-collision event carries
         // (DWARF names the member's type `InEventAddForCollision::CullingGroup`).
         typedef SceneManagerIO::InEventAddForCollision::CullingGroup CullingGroup;
@@ -161,8 +162,9 @@ namespace OverlapGenerationIO
     // stacks a single word and appends it), consumed by
     // OverlapGenerationModule::ProcessForceNoPaddingQueue @0x828B56D8.
     // NOTE this is a one-word STRUCT, not a bare u32: the DWARF names the field.
-    struct InForceNoPadding : public CgsModule::Event
+    class InForceNoPadding : public CgsModule::Event
     {
+    public:
         u32 muVolInstIndex;  // :113 +0x00 (the volume-instance index, == sweeper object index)
     };
 
@@ -171,8 +173,9 @@ namespace OverlapGenerationIO
     // OverlapGenerationModule::ProcessUpdateBodyQueue @0x828C1DE8.
     //   X360 producer stores: 4x ld/std off the caller's box -> +0x00..+0x1F;
     //   stvx128 v1 -> +0x20; stw r4 -> +0x30; std r6 -> +0x38.
-    struct CGS_ALIGN(16) InUpdateBody : public CgsModule::Event
+    class CGS_ALIGN(16) InUpdateBody : public CgsModule::Event
     {
+    public:
         AABBoxRows            mAabb;              // :146 +0x00 (DWARF type: AABBox; see AABBoxRows)
         Vector3               mPadding;           // :147 +0x20 (the sweeper's padding lane)
         u32                   muIndex;            // :148 +0x30 sweeper object index
@@ -183,8 +186,9 @@ namespace OverlapGenerationIO
     // into SceneManagerModule::ProcessRemoveForCollisionEvent @0x828CF828: `v10 = *a2`
     // (the 8-byte id) then `v11 = index`), consumed by
     // OverlapGenerationModule::ProcessRemoveBodyQueue @0x828C1E90.
-    struct InRemoveBody : public CgsModule::Event
+    class InRemoveBody : public CgsModule::Event
     {
+    public:
         VolumeInstanceId mVolumeInstanceID;  // :165 +0x00
         u32              muIndex;            // :166 +0x08 sweeper object index
     };

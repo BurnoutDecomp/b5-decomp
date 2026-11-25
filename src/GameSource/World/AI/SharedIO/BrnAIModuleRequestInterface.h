@@ -33,8 +33,9 @@ namespace BrnAI
         //   meResetType @+0xC  (X360 ResetOnTrackRequest::Construct @0x822A0438 stores
         //   the index, two f32 speeds and the reset-type word at those displacements;
         //   the index is asserted 0 <= index < E_GLOBAL_RACE_CAR_INDEX_COUNT). sizeof == 16.
-        struct ResetOnTrackRequest
+        class ResetOnTrackRequest
         {
+        public:
             // X360 @0x822A0438: stw idx@+0, stfs speed@+4, stfs dist@+8, stw type@+0xC.
             void Construct(EGlobalRaceCarIndex leGlobalRaceCarIndex,
                            f32 lfResetSpeed,

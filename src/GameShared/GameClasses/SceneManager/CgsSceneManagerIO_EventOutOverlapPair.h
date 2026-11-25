@@ -75,8 +75,9 @@ namespace SceneManagerIO
     // this file is not cluster F1's grant; see scratchpad/waveQ5/f1.owner.md.
     //
     // BaseEventQueue<OutOverlapPair> element. 8-byte aligned, X360-attested stride 24 (0x18).
-    struct OutOverlapPair : public EventBaseOutOverlapPair
+    class OutOverlapPair : public EventBaseOutOverlapPair
     {
+    public:
         VolumeInstanceId muVolumeInstanceIdA;  // +0x00  packed id of overlap volume A (DWARF :295 mVolInstA)
         VolumeInstanceId muVolumeInstanceIdB;  // +0x08  packed id of overlap volume B (DWARF :296 mVolInstB)
         f32              mfPadding;            // +0x10  DWARF :297 (X360 `stfs f0` @0x828BA848)

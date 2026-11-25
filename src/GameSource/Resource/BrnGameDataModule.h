@@ -29,7 +29,7 @@ namespace CgsMemory { struct MemoryMap; }
 namespace CgsGraphics { struct Im2dRenderBuffer; }
 namespace rw { struct LinearResourceAllocator; namespace core { struct GeneralResourceAllocator; } }
 namespace CgsResource { namespace ResourceIO { struct InputBuffer; } }       // handler param (by pointer)
-namespace CgsResource { namespace Events { struct LoadBundleResponse; struct UnloadBundleResponse;
+namespace CgsResource { namespace Events { class LoadBundleResponse; class UnloadBundleResponse;
                                            struct AcquireResourceResponse; } } // response params (by pointer)
 namespace CgsModule { struct Event; struct IOBufferStack; }                                        // pump param (by pointer)
 

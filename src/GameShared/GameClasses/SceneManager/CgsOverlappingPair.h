@@ -85,8 +85,9 @@
 
 namespace CgsSceneManager
 {
-    struct OverlappingPair
+    class OverlappingPair
     {
+    public:
         // The two EntityManager volume-instance POOL indices (not VolumeInstanceIds,
         // and not VolumeManager volume indices -- that third index space is
         // VolumeInstance::miVolumeIndex, which ProcessOverlap looks up separately).

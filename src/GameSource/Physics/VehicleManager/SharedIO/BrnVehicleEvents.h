@@ -201,8 +201,9 @@ namespace Vehicle
     };
 
     // A vehicle-vs-vehicle impact (aggressor/victim, severity, recovery).
-    struct CGS_ALIGN(16) ImpactEvent
+    class CGS_ALIGN(16) ImpactEvent
     {
+    public:
         Vector3            mDirection;
         EImpactType        meImpactType;
         EActiveRaceCarIndex meAggressorActiveRaceCarIndex;
@@ -288,8 +289,9 @@ namespace Vehicle
         CreateRaceCarEvent& operator=(const CreateRaceCarEvent&);
     };
 
-    struct RemoveRaceCarEvent
+    class RemoveRaceCarEvent
     {
+    public:
         VolumeInstanceId mVolumeInstanceID;
     };
 
@@ -312,21 +314,24 @@ namespace Vehicle
         BrnPhysics::Deformation::DeformationResetType meDeformationResetType;
     };
 
-    struct SetRaceCarCollisionEvent
+    class SetRaceCarCollisionEvent
     {
+    public:
         EntityId mBodyId;
         bool     mbCollide;
     };
 
-    struct SetRaceCarCullingGroupEvent
+    class SetRaceCarCullingGroupEvent
     {
+    public:
         EntityId      mBodyId;
         typedef u32   CullingGroup;   // CgsSceneManagerTypes.h
         CullingGroup  mCullingGroup;
     };
 
-    struct SetTrafficCrashingEvent
+    class SetTrafficCrashingEvent
     {
+    public:
         EntityId mEntityId;
         bool     mbCrashing;
     };
@@ -337,8 +342,9 @@ namespace Vehicle
     // AddEvent's 5-_DWORD element copy and Append's 20*count XMemCpy.
     // ADDITIVE GROW (flagged by Vehicle-events group): new event struct, no change to
     // existing types.
-    struct TrafficSlammedEvent
+    class TrafficSlammedEvent
     {
+    public:
         EntityId          mTrafficId;
         EntityId          mEntityThatSlammedIt;
         eCrashTrafficType meCrashTrafficType;
@@ -346,8 +352,9 @@ namespace Vehicle
         f32               mfDriveDirection;
     };
 
-    struct TrafficRemovedEvent
+    class TrafficRemovedEvent
     {
+    public:
         EntityId     mRemovedVehicleEntityId;
         ETrafficType meTrafficType;
     };
@@ -359,8 +366,9 @@ namespace Vehicle
     // (16-byte) element copy and Append's 16*count XMemCpy.
     // ADDITIVE GROW (flagged by Vehicle-events group): new event struct, no change to
     // existing types.
-    struct TrafficCrashedEvent
+    class TrafficCrashedEvent
     {
+    public:
         VolumeInstanceId mTrafficVolumeInstanceID;
         EntityId         mCrasherEntityID;
     };
@@ -371,8 +379,9 @@ namespace Vehicle
         Matrix44Affine   mTransform;
     };
 
-    struct ValidateRaceCarEvent
+    class ValidateRaceCarEvent
     {
+    public:
         bool             mbValidate;
         VolumeInstanceId mVolumeInstanceID;
         ResourceHandle   mModelHandle;
@@ -380,8 +389,9 @@ namespace Vehicle
     };
 
     // A race car crashed (takedown/contact info).
-    struct CGS_ALIGN(16) RaceCarCrashEvent
+    class CGS_ALIGN(16) RaceCarCrashEvent
     {
+    public:
         VolumeInstanceId            mRaceCarVolumeInstanceID;
         EntityId                    mCrasherEntityID;
         Vector3                     mCollisionNormal;
@@ -394,8 +404,9 @@ namespace Vehicle
         bool                        mbCarIsNetwork;
     };
 
-    struct VehicleAddedForCollisionEvent
+    class VehicleAddedForCollisionEvent
     {
+    public:
         VolumeInstanceId mRaceCarVolumeInstanceId;
         bool             mbAdded;
     };
@@ -470,8 +481,9 @@ namespace Vehicle
     // BrnVehicleEvents.h:542. VolumeInstanceId is 8-byte aligned so the trailing bool pads out to
     // sizeof==16, matching the X360 EventQueue<...,8> / AddEvent / Append 16-byte element copy.
     // Element of the VehicleManagerOutputInterface mCreateVehicleResultQueue.
-    struct CreateVehicleResult
+    class CreateVehicleResult
     {
+    public:
         VolumeInstanceId mVolumeInstanceID;  // @0
         bool             mbSuccess;          // @8
     };
@@ -490,8 +502,9 @@ namespace Vehicle
     // sizeof==32, matching the X360 EventQueue<...,8> / AddEvent / Append 32-byte element stride
     // (the RaceCarResetEvent queue spanning +0x5B0..+0x6C0 in VehicleManagerOutputInterface).
     // Element of the VehicleManagerOutputInterface mRaceCarResetEventQueue.
-    struct CGS_ALIGN(16) RaceCarResetEvent
+    class CGS_ALIGN(16) RaceCarResetEvent
     {
+    public:
         EActiveRaceCarIndex meActiveRaceCarIndex;   // @0
         bool                mbResettingAfterWreck;  // @4
         Vector3             mResetPosition;         // @16 (padded from 5; Vector3 is alignas(16))

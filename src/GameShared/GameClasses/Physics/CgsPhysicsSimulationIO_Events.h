@@ -299,8 +299,9 @@ namespace PhysicsSimulationIO
     // == 32, the attested stride, nothing invented.
     // ⚠️ mID stays u64, not CgsPhysics::RigidBodyId -- the same documented ~30-TU cost
     // decision as every sibling event.
-    struct CGS_ALIGN(16) InApplyForce : public Event
+    class CGS_ALIGN(16) InApplyForce : public Event
     {
+    public:
         u64                    mID;     // @+0x00  DWARF :102 (a CgsPhysics::RigidBodyId handle)
         rw::math::vpu::Vector3 mForce;  // @+0x10  DWARF :103 -- the drain's `lvx128 v0,r30,0x10`
     };
@@ -491,8 +492,9 @@ namespace PhysicsSimulationIO
     // 5*16 + 8 + 8 + 4 == 100 -> alignas(16) == the attested 112; pointer-free, host == console.
     // The DWARF's SwingType-style helper methods (SwapEntityOrder :379 / Clear :382) have no
     // X360 body or caller in the image and are not declared (the standing gating rule).
-    struct CGS_ALIGN(16) OutContactSpy : public Event
+    class CGS_ALIGN(16) OutContactSpy : public Event
     {
+    public:
         rw::math::vpu::Vector3 mFrictionStress;  // @+0x00  DWARF :384 -- tangential impulse / ts
         rw::math::vpu::Vector3 mNormalStress;    // @+0x10  DWARF :385 -- normal impulse / ts
         rw::math::vpu::Vector3 mNormal;          // @+0x20  DWARF :386 -- the drain event's mNormal
@@ -539,8 +541,9 @@ namespace PhysicsSimulationIO
     // @0x828A5D10 stores `std id` @+0x00, `stvx` spy mForce @+0x10, `stvx` spy mTorque @+0x20,
     // `stfs` spy mSeparation @+0x30, `stfs` spy mAngSeparation @+0x34 (frame slots var_A0/-90/-80/
     // -70/-6C). 16 + 16 + 16 + 4 + 4 -> alignas(16) == the attested 64; pointer-free.
-    struct CGS_ALIGN(16) OutDriveSpy : public Event
+    class CGS_ALIGN(16) OutDriveSpy : public Event
     {
+    public:
         u64                    mID;                    // @+0x00  DWARF :423 (a CgsPhysics::DriveId handle)
         u64                    mIDPad;                 // @+0x08  pad to the payload's 16-byte slot
         rw::math::vpu::Vector3 mLinearStress;          // @+0x10  DWARF :424 -- the spy record's mForce row
@@ -561,8 +564,9 @@ namespace PhysicsSimulationIO
     // @0x828A58E0 stores `std id` @+0x00 (var_E0), `stvx` spy mForce * (ts*59.999996f) @+0x10
     // (var_D0), `stvx` spy mTorque * (ts*59.999996f) @+0x20 (var_C0).
     // 16 + 16 + 16 == the attested 48; pointer-free, host == console.
-    struct CGS_ALIGN(16) OutJointSpy : public Event
+    class CGS_ALIGN(16) OutJointSpy : public Event
     {
+    public:
         u64                    mID;             // @+0x00  DWARF :406 (a CgsPhysics::JointId handle)
         u64                    mIDPad;          // @+0x08  pad to the payload's 16-byte slot
         rw::math::vpu::Vector3 mLinearStress;   // @+0x10  DWARF :407 -- spy mForce  * (ts * 59.999996f)

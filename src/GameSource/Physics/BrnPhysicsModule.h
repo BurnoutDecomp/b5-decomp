@@ -118,7 +118,7 @@
 #include "GameShared/GameClasses/Physics/CgsPhysicsSimulationModuleIO.h" // CgsPhysics::PhysicsSimulationIO::{InputBuffer,OutputBuffer} nested queue typedefs + OutContactSpy (the bridge-slice method signatures; ADDITIVE 2026-08-06)
 
 namespace CgsModule { struct IOBufferStack; }
-namespace CgsSceneManager { namespace SceneManagerIO { struct InputBuffer_Update; struct PotentialContact; } }
+namespace CgsSceneManager { namespace SceneManagerIO { struct InputBuffer_Update; class PotentialContact; } }
 namespace BrnResource { namespace GameDataIO { struct AllocatorList; } }
 namespace BrnWorld { class WorldModule; enum EEntityTypeID ; }   // fixed-underlying-type opaque decl (home BrnEntityTypes.h)
 

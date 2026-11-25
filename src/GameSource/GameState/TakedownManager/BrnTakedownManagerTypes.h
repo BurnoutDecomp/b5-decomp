@@ -18,8 +18,9 @@ namespace BrnGameState
     // headers included after this one.
     typedef ::EActiveRaceCarIndex EActiveRaceCarIndex;
 
-    struct TakedownEvent
+    class TakedownEvent
     {
+    public:
         EActiveRaceCarIndex meAggressorIndex;
         EActiveRaceCarIndex meVictimIndex;
         CgsID               mAggressorCarID;

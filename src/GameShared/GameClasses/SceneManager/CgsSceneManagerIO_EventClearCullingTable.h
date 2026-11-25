@@ -29,8 +29,9 @@ namespace SceneManagerIO
     struct EventBaseClearCullingTable {};
 
     // mClearCullingTableQueue element. 1-byte aligned (single bool flag).
-    struct InEventClearCullingTable : public EventBaseClearCullingTable
+    class InEventClearCullingTable : public EventBaseClearCullingTable
     {
+    public:
         bool mbCullAll; // +0x00 (:236)
     };
 }

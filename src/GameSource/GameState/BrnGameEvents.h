@@ -433,8 +433,9 @@ struct RequestCarUnlockEvent : public GameEvent<E_EVENT_REQUEST_CAR_UNLOCK_EVENT
 };
 
 // X360 element of EventQueue<HitOverheadSignEvent,100> (DWARF BrnGameEvents.h:429). Single byte.
-struct HitOverheadSignEvent : public GameEvent<E_EVENT_OVERHEAD_SIGN_HIT>
+class HitOverheadSignEvent : public GameEvent<E_EVENT_OVERHEAD_SIGN_HIT>
 {
+public:
     u8 muRaceCarId;   // 0x00
 };
 

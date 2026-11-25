@@ -60,8 +60,9 @@ namespace SceneManagerIO
     };
 
     // EventQueue<InEventLineTestFine, N> element. 16-byte aligned (carries two Vector3 lanes).
-    struct CGS_ALIGN(16) InEventLineTestFine : public EventBaseLineTest
+    class CGS_ALIGN(16) InEventLineTestFine : public EventBaseLineTest
     {
+    public:
         Vector3        mLineStart;          // +0x00
         Vector3        mLineEnd;            // +0x10
         SceneQueryId   mQueryId;            // +0x20

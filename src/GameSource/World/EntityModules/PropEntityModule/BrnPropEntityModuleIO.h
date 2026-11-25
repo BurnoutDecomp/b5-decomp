@@ -167,8 +167,9 @@ namespace PropEntityIO
     // the class banner above). Rename to muCarIndex once a reader is recovered.
     //
     // This is the only field and the type is exactly one byte wide as the asm attests.
-    struct BrokenPropEvent
+    class BrokenPropEvent
     {
+    public:
         u8 muPropIndex;   // +0x00  single-byte payload; MEASURED as (u8)car.GetEntityIndex()
     };
 

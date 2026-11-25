@@ -37,8 +37,9 @@ namespace SceneManagerIO
 
     // EventQueue<InEventTriangleCollisionLineTestNearest, 256> element. 16-byte aligned (two
     // Vector3 lanes), sizeof 0x30 (48). DWARF CgsSceneManagerIO_FineQuery.h:133.
-    struct CGS_ALIGN(16) InEventTriangleCollisionLineTestNearest : public EventBaseTriangleCollisionLineTestNearest
+    class CGS_ALIGN(16) InEventTriangleCollisionLineTestNearest : public EventBaseTriangleCollisionLineTestNearest
     {
+    public:
         Vector3      mLineStart; // +0x00 (16B SIMD lane)   DWARF :135
         Vector3      mLineEnd;   // +0x10 (16B SIMD lane)   DWARF :136
         SceneQueryId mQueryId;   // +0x20                    DWARF :137

@@ -35,7 +35,7 @@ namespace BrnAI
 {
     struct AICar;                 // pointer-only (opaque, sizeof == 0x1560 == 5472)
     struct ResetOnTrackManager;   // pointer-only collaborator
-    namespace AIModuleIO { struct ResetOnTrackRequest; }
+    namespace AIModuleIO { class ResetOnTrackRequest; }
 
     // --- BrnAIBuzzBy.cpp file-scope tuning constants (DWARF names; runtime-initialised in the
     //     X360 data/rodata segment, grounded by the asm uses). Defined in the .cpp. ----------

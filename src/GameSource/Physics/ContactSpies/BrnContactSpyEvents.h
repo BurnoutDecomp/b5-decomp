@@ -6,7 +6,7 @@
 // (its canonical home is GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h).
 // Forward-declared here so the header does not pull in the SceneManager IO tree; the
 // factory .cpp includes the full definition.
-namespace CgsSceneManager { namespace SceneManagerIO { struct PotentialContact; } }
+namespace CgsSceneManager { namespace SceneManagerIO { class PotentialContact; } }
 
 namespace BrnPhysics
 {
@@ -59,8 +59,9 @@ namespace BrnPhysics
         public:
         };
 
-        struct CGS_ALIGN(16) HingedPartContact : public BaseContact
+        class CGS_ALIGN(16) HingedPartContact : public BaseContact
         {
+        public:
             EBodyParts meType;
         };
 

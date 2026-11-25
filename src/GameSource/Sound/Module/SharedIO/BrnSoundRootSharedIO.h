@@ -31,8 +31,9 @@ namespace Io
     // BrnSoundRootSharedIO.h:45 -- published when the sound module is told the
     // world's pass-by audio map has finished loading / is about to unload, tagged
     // with the world zone the map belongs to.
-    struct SoundWorldLoadEvent
+    class SoundWorldLoadEvent
     {
+    public:
         // BrnSoundRootSharedIO.h:53
         enum eLoadEvent
         {

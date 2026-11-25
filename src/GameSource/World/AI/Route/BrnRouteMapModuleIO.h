@@ -193,8 +193,9 @@ namespace BrnAI
         // ARTIST ProcessRaceRoute/ProcessExtrapolatedRoute attest the id stores
         // at 0x140C/0x140E and the EventQueue copy stride of 5136.
         // =====================================================================
-        struct RouteResponse : public CgsModule::Event
+        class RouteResponse : public CgsModule::Event
         {
+        public:
             Route mRoute;
             u16 muOwnerId;
             u16 muEventId;

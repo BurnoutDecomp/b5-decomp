@@ -20,7 +20,7 @@ namespace BrnWorld
 namespace CrashIO
 {
     // Forward-declared here so the interface below can name its queue; defined right after.
-    struct RaceCarCrashCompleteEvent;
+    class RaceCarCrashCompleteEvent;
 
     // RaceCar-output event: a race-car crash has finished resolving. 16 bytes. The producer
     // (CrashModule::ResetRaceCarFromCrashIndex @0x827C6C40) copies the crashed car's
@@ -29,8 +29,9 @@ namespace CrashIO
     // AddEvent (@0x827C2AC8) copies the element as two 8-byte stores at a 16-byte stride. The
     // queue base subobject pads 12->16 (8-byte element alignment), giving the maEvents offset
     // 0x10 the EventQueue<...,10>::Construct attests (@0x822E3600).
-    struct RaceCarCrashCompleteEvent
+    class RaceCarCrashCompleteEvent
     {
+    public:
         CgsSceneManager::VolumeInstanceId mRaceCarVolumeInstanceId;   // +0x00 (the RaceCarCrash item)
         bool                              mbRemoveRaceCar;            // +0x08 (the `char a4` flag)
     };

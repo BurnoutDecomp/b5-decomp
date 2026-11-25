@@ -68,16 +68,18 @@ namespace BrnPhysics
 
         // Input event: stop simulating a deformable model. The X360 places the
         // owning queue's inline buffer 16-byte aligned.
-        struct CGS_ALIGN(16) DeactivateDeformationModelEvent
+        class CGS_ALIGN(16) DeactivateDeformationModelEvent
         {
+        public:
             RigidBodyId          mHandlingBodyID;
             f32                  mfInitialDamageAmount;
             DeformationResetType meDeformationResetType;
         };
 
         // Input event: remove a deformation model from simulation.
-        struct RemoveDeformationModelEvent
+        class RemoveDeformationModelEvent
         {
+        public:
             RigidBodyId mHandlingBodyID;
         };
         // ARTIST 825A95F8..9604: the twenty-entry remove queue spans
@@ -86,8 +88,9 @@ namespace BrnPhysics
         CGS_STATIC_ASSERT((__alignof(RemoveDeformationModelEvent) == 8), "ARTIST remove deformation event alignment");
 
         // Input event: toggle a deformation model's collision.
-        struct CGS_ALIGN(16) SetModelCollisionEvent
+        class CGS_ALIGN(16) SetModelCollisionEvent
         {
+        public:
             RigidBodyId mHandlingBodyID;
             bool        mbCollide;
         };
@@ -128,8 +131,9 @@ namespace BrnPhysics
         };
 
         // Input event: set a deformation model's scene culling group.
-        struct CGS_ALIGN(16) SetModelCullingGroupEvent
+        class CGS_ALIGN(16) SetModelCullingGroupEvent
         {
+        public:
             RigidBodyId  mHandlingBodyID;
             typedef u32  CullingGroup;   // InEventAddForCollision::CullingGroup (CgsSceneManagerTypes.h)
             CullingGroup mCullGroup;

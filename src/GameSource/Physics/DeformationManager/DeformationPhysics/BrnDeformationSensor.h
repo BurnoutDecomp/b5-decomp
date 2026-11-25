@@ -40,7 +40,7 @@
 // load-bearing (console 432 == 0x1B0; the host figure is larger and is nobody's constant). GROW the
 // reconstructed scratch overlay into the real DWARF members as further sensor TUs land -- do not fork.
 
-namespace CgsSceneManager { namespace SceneManagerIO { struct PotentialContact; } }
+namespace CgsSceneManager { namespace SceneManagerIO { class PotentialContact; } }
 
 // Collision sphere; its leading 16 bytes are centre.xyz + radius.w. Its canonical home is
 // CgsGeometric (GameShared/GameClasses/Geometric/Primitives/CgsSphere.h); referenced only by

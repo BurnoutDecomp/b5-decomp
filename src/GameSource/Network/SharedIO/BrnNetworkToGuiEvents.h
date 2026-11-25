@@ -19,8 +19,9 @@ namespace BrnNetwork
     // DWARF BrnNetworkToGuiEvents.h:41 -- NetworkToGuiLiveRevengeUpdate. Derives from the
     // empty BrnNetwork::Event spine (no data members on the base). Four int32 members ==
     // 16 bytes, which matches the inline EventQueue<...,4> stride (buffer base at this+0xC).
-    struct NetworkToGuiLiveRevengeUpdate : public Event
+    class NetworkToGuiLiveRevengeUpdate : public Event
     {
+    public:
         // DWARF BrnNetworkToGuiEvents.h:45
         enum LiveRevengeStatus
         {

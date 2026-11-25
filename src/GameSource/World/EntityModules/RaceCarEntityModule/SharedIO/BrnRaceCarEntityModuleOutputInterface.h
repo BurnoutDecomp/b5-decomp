@@ -44,8 +44,9 @@ namespace RaceCarEntityModuleIO
     // Output event: a race car's audio data has finished (un)loading, or a (un)load
     // has been requested. The owning queue is 16-capacity; the event carries no SIMD
     // members so it takes its natural 8-byte alignment (CgsID is 64-bit).
-    struct AudioCarDataLoadedEvent : public CgsModule::Event
+    class AudioCarDataLoadedEvent : public CgsModule::Event
     {
+    public:
         enum EMessageType : s32
         {
             E_NONE                = 0,

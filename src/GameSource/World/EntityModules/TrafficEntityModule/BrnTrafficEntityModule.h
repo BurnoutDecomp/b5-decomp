@@ -86,7 +86,7 @@ namespace BrnPhysics { namespace Vehicle { struct BrnTrafficDriverControls;
 // pointer to the un-instantiated template is enough for the declaration, and the .cpp that
 // defines the body includes BrnVehicleOutputInterface.h for the real thing.
 namespace CgsModule { template <typename T, s32 N> class EventQueue; }
-namespace BrnPhysics { namespace Vehicle { struct TrafficRemovedEvent; } }
+namespace BrnPhysics { namespace Vehicle { class TrafficRemovedEvent; } }
 // HandleContactPoints / ProcessContactPoint / DEBUG_RenderContactPoint take the contact spy's
 // traffic record by pointer only (forward-declaration exception (b)); its home is
 // GameSource/Physics/ContactSpies/BrnContactSpyEvents.h (`struct TrafficContact : BaseContact`),
@@ -152,7 +152,7 @@ namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene
 // ProcessTrafficTypeRequests' response element, by pointer only (forward-declaration
 // exception (b)): the real definition is SharedIO/BrnTrafficTypeInterface.h, which
 // BrnTrafficEntityModuleIO.h already includes, and BrnWorldModule.h includes THIS header.
-namespace BrnTrafficIO { struct TrafficTypeResponse; }
+namespace BrnTrafficIO { class TrafficTypeResponse; }
 
     // The module's small record types. The DWARF homes every one of them in this header;
     // the `:NNN` on each is its source line there.

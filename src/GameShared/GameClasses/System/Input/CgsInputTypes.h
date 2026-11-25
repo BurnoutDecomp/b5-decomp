@@ -40,8 +40,9 @@ namespace CgsInput
         // PostWorldInputBuffer::PostMappingRequest builds it as the target port word followed
         // by a 0x70-byte copy of the caller's mapping table, so this build carries 28
         // ActionMappings (the original header's [34] is the other platform's table).
-        struct PadMapping
+        class PadMapping
         {
+        public:
             static const s32 KI_NUM_ACTION_MAPPINGS = 28;
 
             s32           miPortId;                            // +0x00 (-1 == every pad)

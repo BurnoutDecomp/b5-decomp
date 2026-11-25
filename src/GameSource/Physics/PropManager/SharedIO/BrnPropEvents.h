@@ -67,8 +67,9 @@ namespace BrnPhysics
         // single 4-byte packed word (BrnPropEntityID.h). DO NOT add alignas(16) here: the slwi,3
         // stride would desync if sizeof padded to 16. Member name miPhysicalIndex is DWARF
         // source-line attested (BrnPropEvents.h:107).
-        struct RemovePhysicalPropEvent
+        class RemovePhysicalPropEvent
         {
+        public:
             BrnWorld::PropEntityID mEntityId;        // BrnPropEvents.h:106  @+0x0 (stw word0)
             s32                    miPhysicalIndex;  // BrnPropEvents.h:107  @+0x4 (stw word1)
         };
@@ -82,8 +83,9 @@ namespace BrnPhysics
         // (stride 8) + two word stores; Append (@0x827A8110) XMemCpys at stride 8; and
         // EventQueue<...,100>::Construct (@0x822E3830) reserves maEvents at base+0xC. Member name
         // miPhysicalIndex is DWARF source-line attested (BrnPropEvents.h:122).
-        struct RemovePhysicalPartEvent
+        class RemovePhysicalPartEvent
         {
+        public:
             BrnWorld::PropEntityID mEntityId;        // BrnPropEvents.h:121  @+0x0 (stw word0)
             s32                    miPhysicalIndex;  // BrnPropEvents.h:122  @+0x4 (stw word1)
         };

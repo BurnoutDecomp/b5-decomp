@@ -46,7 +46,7 @@
 // ============================================================================
 
 namespace BrnProgression { class ProgressionManager; }
-namespace BrnPhysics { namespace Vehicle { struct RaceCarState; struct RaceCarCrashEvent; struct CrashingRaceCarInterface; } }
+namespace BrnPhysics { namespace Vehicle { struct RaceCarState; class RaceCarCrashEvent; struct CrashingRaceCarInterface; } }
 namespace BrnWorld { namespace RaceCarEntityModuleIO { class RCEntityActiveRaceCarOutputInterface; } }
 
 namespace BrnGameState

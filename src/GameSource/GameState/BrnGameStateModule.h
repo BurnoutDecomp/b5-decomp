@@ -72,12 +72,12 @@ namespace CgsModule      { struct IOBufferStack; }
 namespace CgsSystem      { struct TimerRequests; }
 namespace BrnResource    { namespace GameDataIO { class AllocatorList; } }
 
-namespace BrnGameState   { struct TakedownEvent; struct TakedownManager; struct TakedownPostWorldCache; }
+namespace BrnGameState   { class TakedownEvent; struct TakedownManager; struct TakedownPostWorldCache; }
 
 namespace BrnGameState   { struct MugshotManager; struct PaybackManager; }
 
 namespace BrnGameState   { struct GameStateInviteManager; struct GameStateImageManagerBase; class OnlineFlybyManager; class RichPresenceManagerX360; }
-namespace BrnTraffic     { namespace BrnTrafficIO { struct TrafficTypeResponse; } }
+namespace BrnTraffic     { namespace BrnTrafficIO { class TrafficTypeResponse; } }
 
 namespace BrnPhysics     { namespace Vehicle { struct VehicleOutputInterface; } }
 

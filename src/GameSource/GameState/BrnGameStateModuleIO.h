@@ -46,7 +46,7 @@
 // GetTriggerManagementInputInterface(); the grown interface methods below take these by
 // incomplete pointer/reference, so forward declarations suffice.
 namespace BrnTrigger { struct TriggerRegion; }
-namespace BrnWorld { namespace TriggerEntityModuleIO { struct InRemoveTriggerEvent; } }
+namespace BrnWorld { namespace TriggerEntityModuleIO { class InRemoveTriggerEvent; } }
 
 // The OutputBuffer's +0x3414 member is the GameData resource-request interface. Only the
 // TYPE NAME is needed here (every accessor hands out a pointer); the request-builder bodies

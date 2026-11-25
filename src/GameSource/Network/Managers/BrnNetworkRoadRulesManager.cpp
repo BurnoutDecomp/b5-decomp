@@ -628,6 +628,7 @@ namespace BrnNetwork
 
 #include "GameSource/Network/Managers/BrnNetworkRoadRulesManager.h"
 
+#include <xtl.h>
 #include <cstring>                                                                  // memset / memcpy
 
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                                  // CGS_ASSERT
@@ -1673,7 +1674,7 @@ namespace BrnNetwork
         lPlayerName.Construct( lpPlayerMenuData->macName );
 
         RoadRulesRecvData lRoadRulesRecvData;
-        memcpy( lRoadRulesRecvData.maRoadRulesData, laRoadRulesMessageData,
+        XMemCpy( lRoadRulesRecvData.maRoadRulesData, laRoadRulesMessageData,
                 sizeof( RoadRulesMessageData ) * liNumRoadRulesScoresRecv );
         lRoadRulesRecvData.miNumRoadRulesScoresRecv = liNumRoadRulesScoresRecv;
         lRoadRulesRecvData.mPlayerName              = lPlayerName;

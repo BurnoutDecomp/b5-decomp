@@ -36,8 +36,9 @@ namespace SceneManagerIO
     struct EventBaseRemoveVolume {};
 
     // EventQueue<InEventRemoveVolume, N> element. 8-byte aligned (carries the u64 VolumeId).
-    struct InEventRemoveVolume : public EventBaseRemoveVolume
+    class InEventRemoveVolume : public EventBaseRemoveVolume
     {
+    public:
         VolumeId mVolumeId;   // +0x00
     };
 }

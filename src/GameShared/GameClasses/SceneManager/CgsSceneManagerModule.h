@@ -69,14 +69,14 @@ namespace CgsSceneManager
         struct InEventLineTest;
         struct InEventFrustumTest;
         struct InEventVolumeTest;
-        struct InEventLineTestFine;
-        struct InEventLineTestNearest;
+        class InEventLineTestFine;
+        class InEventLineTestNearest;
         struct InEventLineTestFastDoubleSided;
         struct InEventSphereTestFast;
         struct InEventVolumeTestDeepest;
         struct InEventVolumeTestFine;
-        struct InEventTriangleCollisionLineTest;
-        struct InEventTriangleCollisionLineTestNearest;
+        class InEventTriangleCollisionLineTest;
+        class InEventTriangleCollisionLineTestNearest;
         struct InEventTriangleCollisionSphereTest;
     }
 
@@ -113,15 +113,15 @@ namespace CgsSceneManager
         struct InputBuffer_Query;
         // The volume-collision scene events the wave-Q5 round-3 drain legs consume (their
         // full homes are the CgsSceneManagerIO_Event*.h headers; reference parameters only).
-        struct InEventAddForCollision;
-        struct InEventRemoveForCollision;
+        class InEventAddForCollision;
+        class InEventRemoveForCollision;
         struct InEventSetPadding;
-        struct InEventClearEntityPadding;
+        class InEventClearEntityPadding;
         struct InEventForceNoPadding;
         // ADDED 2026-08-19 (wave Q5 / E1a): the culling-group leg's own element type. Its
         // home is CgsSceneManagerIO_SceneUpdate.h; a reference parameter needs only this.
-        struct InEventSetVolumeInstanceCullingGroup;
-        struct InEventAddVolumeInstanceForCaching;
+        class InEventSetVolumeInstanceCullingGroup;
+        class InEventAddVolumeInstanceForCaching;
     }
     struct VolumeInstanceId;   // CgsVolumeInstanceId.h (by-value parameter of UpdateCollisionBody -- see note there)
 

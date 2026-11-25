@@ -88,8 +88,9 @@ namespace SceneManagerIO
     // mSetVolumeInstanceCullingGroupQueue element (producer @0x822B1A98: `std r4` id @+0x00,
     // `stw r5` culling-group id @+0x08). 8-byte aligned, sizeof 0x10 (16). Capacity 1280.
     struct EventBaseSetVolumeInstanceCullingGroup {};
-    struct InEventSetVolumeInstanceCullingGroup : public EventBaseSetVolumeInstanceCullingGroup
+    class InEventSetVolumeInstanceCullingGroup : public EventBaseSetVolumeInstanceCullingGroup
     {
+    public:
         VolumeInstanceId mVolumeInstanceId; // +0x00 (std r4, 8B)
         s32              miCullingGroupId;  // +0x08 (stw r5, 4B)
     };
@@ -97,8 +98,9 @@ namespace SceneManagerIO
     // mAddVolumeInstanceForCachingQueue element (producer @0x8270DA10: `std r30` id @+0x00,
     // `stw r31` cache-options enum word @+0x08). 8-byte aligned, sizeof 0x10 (16). Capacity 64.
     struct EventBaseAddVolumeInstanceForCaching {};
-    struct InEventAddVolumeInstanceForCaching : public EventBaseAddVolumeInstanceForCaching
+    class InEventAddVolumeInstanceForCaching : public EventBaseAddVolumeInstanceForCaching
     {
+    public:
         VolumeInstanceId mVolumeInstanceId; // +0x00 (std r30, 8B)
         s32              meCacheOptions;     // +0x08 (stw r31, 4B; E_*_CACHE_OPTIONS enum word)
     };

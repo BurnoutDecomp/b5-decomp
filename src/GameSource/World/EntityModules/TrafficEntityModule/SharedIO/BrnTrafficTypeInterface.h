@@ -31,8 +31,9 @@ namespace BrnTrafficIO
     // `*(v12 + 3)` -- i.e. +2 and +6, the padding and the middle of the class word. Transcribing
     // that would hand the scorer a garbage VehicleClass (which indexes maiNumCarsCrashed[4]) and
     // a truncated type id. The asm above is unambiguous; the pseudocode is not.
-    struct TrafficTypeResponse
+    class TrafficTypeResponse
     {
+    public:
         u16          muVehicleIndex;   // +0   (lhz)
         VehicleClass meType;           // +4   (lwz)  -- 2 bytes of padding precede it
         CgsID        mTypeId;          // +8   (ld)

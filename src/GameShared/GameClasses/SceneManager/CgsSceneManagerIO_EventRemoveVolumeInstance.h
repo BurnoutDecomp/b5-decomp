@@ -37,8 +37,9 @@ namespace SceneManagerIO
 
     // mRemoveVolumeInstanceQueue element. 8-byte aligned; a single 64-bit
     // volume-instance handle (the AddEvent body copies it as one `ld`/`stdx`).
-    struct InEventRemoveVolumeInstance : public EventBaseRemoveVolumeInstance
+    class InEventRemoveVolumeInstance : public EventBaseRemoveVolumeInstance
     {
+    public:
         VolumeInstanceId mVolumeInstanceId; // +0x00 (the removed volume-instance handle)
     };
 }

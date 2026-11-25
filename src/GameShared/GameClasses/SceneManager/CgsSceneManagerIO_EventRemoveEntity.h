@@ -40,8 +40,9 @@ namespace SceneManagerIO
     struct EventBaseRemoveEntity {};
 
     // EventQueue<InEventRemoveEntity, N> element. 4-byte aligned, sizeof 8 (two u32 words).
-    struct InEventRemoveEntity : public EventBaseRemoveEntity
+    class InEventRemoveEntity : public EventBaseRemoveEntity
     {
+    public:
         EntityId mEntityId; // +0x00 -- the scene-entity handle to remove
         u32      muOptions;  // +0x04 -- per-request option word (copied verbatim by AddEvent)
     };

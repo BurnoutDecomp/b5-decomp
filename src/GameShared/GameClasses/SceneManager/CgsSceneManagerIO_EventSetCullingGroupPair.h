@@ -38,8 +38,9 @@ namespace SceneManagerIO
 
     // mSetCullingGroupPairQueue element. 4-byte aligned; three 32-bit words
     // (group A, group B, enabled) -- the AddEvent body copies them as three `stw`.
-    struct InEventSetCullingGroupPair : public EventBaseSetCullingGroupPair
+    class InEventSetCullingGroupPair : public EventBaseSetCullingGroupPair
     {
+    public:
         u32 muGroupA;   // +0x00  first culling group id
         u32 muGroupB;   // +0x04  second culling group id
         u32 muEnabled;  // +0x08  adjacency-bit enable flag (stored as a 32-bit word)

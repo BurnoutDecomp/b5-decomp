@@ -50,16 +50,18 @@ namespace TriangleCollisionManagerIO
     struct Event {};
 
     // Add-poly-soup-list queue element. X360 sizeof == 16 (stride 0x10, slwi ...,4).
-    struct InEventAddPolySoupList : public Event
+    class InEventAddPolySoupList : public Event
     {
+    public:
         CgsResource::ResourceHandle mPolySoupListHandle;          // +0x00 (:54)  8B on X360
         s32                         miZoneNumber;                 // +0x08 (:55)
         bool                        mbRebuildSpacialPartitioning; // +0x0C (:56)
     };
 
     // Clear-poly-soup-lists queue element. X360 sizeof == 4 (stride 4, slwi ...,2).
-    struct InEventClearPolySoupLists : public Event
+    class InEventClearPolySoupLists : public Event
     {
+    public:
         u32 miDummy;                                             // +0x00 (:70)
     };
 }

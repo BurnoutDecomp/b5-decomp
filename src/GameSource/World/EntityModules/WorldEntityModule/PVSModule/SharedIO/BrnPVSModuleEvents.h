@@ -30,8 +30,9 @@ namespace BrnWorld
 {
 namespace PVSIO
 {
-struct GetZoneRequest
+class GetZoneRequest
 {
+public:
     // GetVelocity @ 0x822A3A48. Reads back the request's velocity hint: copies the
     // velocity vector into *lpOutVelocity and the use-velocity flag into
     // *lpbOutUseVelocity. const getter.
@@ -103,8 +104,9 @@ struct GetZoneRequest
 //    == mPlayerZoneResponse + 0x2D8) back into the next request's miLookupIndex. So
 //    +0x2D8 is the lookup index and +0x000 is the player index -- the two names were
 //    swapped in the previous slice.
-struct GetZoneResponse
+class GetZoneResponse
 {
+public:
     static const s32 KI_MAX_ZONES = 48;
 
     void Construct( s32 liPlayerIndex, s32 liNumZones, s32 liLookupIndex )

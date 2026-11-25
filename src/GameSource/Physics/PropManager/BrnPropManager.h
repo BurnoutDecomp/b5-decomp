@@ -11,8 +11,8 @@
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"                      // CgsModule::IOBuffer (PropRaceCarContactBuffer base, 2026-08-09)
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"          // CgsResource::ResourcePtr<T>
 
-namespace CgsPhysics { namespace PhysicsSimulationIO { struct InAddPotentialContact; struct OutContactSpy; } }
-namespace CgsSceneManager { namespace SceneManagerIO { struct PotentialContact; } }
+namespace CgsPhysics { namespace PhysicsSimulationIO { struct InAddPotentialContact; class OutContactSpy; } }
+namespace CgsSceneManager { namespace SceneManagerIO { class PotentialContact; } }
 namespace BrnPhysics { namespace ContactSpy { class PropContact; } }
 namespace CgsMemory { struct SimpleDataStreamProducer; }   // pointer-only member (mpPrimitiveWithTriangleStream)
 // ⭐ ADDED 2026-08-06 (big-five #2): SetupAndValidatePropContact collaborators, pointer use only.

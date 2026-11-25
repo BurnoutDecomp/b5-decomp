@@ -30,8 +30,9 @@ namespace SceneManagerIO
     struct EventBaseClearEntityPadding {};
 
     // mClearEntityPaddingQueue element. 4-byte aligned (single u32 EntityId).
-    struct InEventClearEntityPadding : public EventBaseClearEntityPadding
+    class InEventClearEntityPadding : public EventBaseClearEntityPadding
     {
+    public:
         EntityId mEntity; // +0x00 (:249)
     };
 }

@@ -65,8 +65,9 @@ namespace Events
         BundleLoaderEvent& SetFileName(const char* pcFileName);
     };
 
-    struct LoadBundleRequest : public BundleLoaderEvent
+    class LoadBundleRequest : public BundleLoaderEvent
     {
+    public:
         bool mbAllowFailiure;
         bool mbUseHDCache;
     };
@@ -82,8 +83,9 @@ namespace Events
                                    const char* lpcFileName, s32 liPriority);
     };
 
-    struct LoadBundleResponse : public BundleLoaderEvent
+    class LoadBundleResponse : public BundleLoaderEvent
     {
+    public:
         enum EResult
         {
             E_RESULT_SUCCESS       = 0,
@@ -99,7 +101,7 @@ namespace Events
         EResult meResult;
     };
 
-    struct UnloadBundleResponse : public BundleLoaderEvent
+    class UnloadBundleResponse : public BundleLoaderEvent
     {
     };
 
@@ -110,7 +112,7 @@ namespace Events
     // macFileName[128] + miPoolId 4 == 144 on the 32-bit ARTIST target). It is the queued element
     // of CgsModule::BaseEventQueue<UnloadBundleRequest> (drained by
     // CgsResource::ResourceModule::ProcessResourceRequests).
-    struct UnloadBundleRequest : public BundleLoaderEvent
+    class UnloadBundleRequest : public BundleLoaderEvent
     {
     };
 

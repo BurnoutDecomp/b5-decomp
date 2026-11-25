@@ -32,23 +32,26 @@ namespace CgsSceneManager
 namespace TriangleCacheManagerIO
 {
     // EventQueue<InEventAddToCache, 298> element. 4-aligned, sizeof 8.
-    struct InEventAddToCache : public CgsModule::Event
+    class InEventAddToCache : public CgsModule::Event
     {
+    public:
         s32 miCacheSlot;          // +0x00 -- destination cache slot for the added triangle set
         f32 mfCacheSphereRadius;  // +0x04 -- bounding-sphere radius of the cached triangles
     };
 
     // EventQueue<InEventUpdateCachedPosition, 298> element. 16-aligned (carries Vector3Plus),
     // sizeof 32. Homed here by DWARF; produced by DetachedWheelManager::UpdateTriangleCache.
-    struct InEventUpdateCachedPosition : public CgsModule::Event
+    class InEventUpdateCachedPosition : public CgsModule::Event
     {
+    public:
         s32         miCacheSlot;             // +0x00 -- cache slot to reposition
         Vector3Plus mNewPositionAndRadius;   // +0x10 -- new xyz position, w = sphere radius
     };
 
     // EventQueue<InEventRemoveFromCache, 298> element. 4-aligned, sizeof 4 (single s32).
-    struct InEventRemoveFromCache : public CgsModule::Event
+    class InEventRemoveFromCache : public CgsModule::Event
     {
+    public:
         s32 miCacheSlot;  // +0x00 -- cache slot to evict
     };
 }

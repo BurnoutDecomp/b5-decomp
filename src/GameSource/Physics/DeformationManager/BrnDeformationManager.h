@@ -141,7 +141,7 @@ namespace CgsSceneManager
     namespace SceneManagerIO
     {
         struct InSceneUpdateInterface;   // == OutputBuffer::SceneInputInterface (DWARF)
-        struct PotentialContact;         // CgsSceneManager contact record (ReadPotentialContact / fix-up args)
+        class PotentialContact;         // CgsSceneManager contact record (ReadPotentialContact / fix-up args)
         struct InAddPotentialContact;    // SetupPartContact out-param (DWARF InAddPotentialContact&)
         struct TriangleCacheInterface;   // the real home of the world-contact-gen tri-cache arg (see :277)
     }
@@ -258,9 +258,9 @@ namespace Deformation
 }
 }
 // Pointer-only forward declarations of the REAL records (class keys match their homes).
-namespace CgsPhysics { namespace PhysicsSimulationIO { struct OutContactSpy; } }
+namespace CgsPhysics { namespace PhysicsSimulationIO { class OutContactSpy; } }
 namespace BrnPhysics { namespace ContactSpy { class PhysicalCarPartContact; } }
-namespace CgsSceneManager { namespace SceneManagerIO { struct PotentialContact; } }
+namespace CgsSceneManager { namespace SceneManagerIO { class PotentialContact; } }
 namespace CgsSceneManager { namespace CgsCollision { struct PrimitivePairListBuilder; } }
 
 namespace BrnPhysics

@@ -2,6 +2,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 
 #include <basetsd.h>
 #include <cstring>
@@ -42,8 +43,17 @@ namespace CgsModule
             // (the bounds-gated "return false on full" variant is the separate AddEventSafe).
             CGS_ASSERT(mpEvents != 0, CGS_ASSERT_MESSAGE_AT(
                 "mpEvents != NULL", KAC_BASE_EVENT_QUEUE_FILE, 312));
-            CGS_ASSERT(miLength < miMaxLength, CGS_ASSERT_MESSAGE_AT(
-                "EventQueue::AddEvent - Reached Max length", KAC_BASE_EVENT_QUEUE_FILE, 313));
+            if (miLength >= miMaxLength)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+                // ARTIST loads the capacity before the first stream insertion (0x82368280).
+                const s32 liMaxLength = miMaxLength;
+                lStrStream << __FUNCTION__ << "\nReached Max length " << liMaxLength << "\n";
+                CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+                    CGS_ASSERT_LOCATION(KAC_BASE_EVENT_QUEUE_FILE, 313));
+                CgsDev::Assert::EndAssert();
+            }
             mpEvents[miLength] = lEvent;
             ++miLength;
             return true;

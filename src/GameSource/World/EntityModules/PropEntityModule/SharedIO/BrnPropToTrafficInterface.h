@@ -42,8 +42,9 @@ namespace PropEntityIO
     // element only as a 4-byte blob (single stwx / 4*count XMemCpy). Modelled as exactly one
     // 4-byte word so the asm-attested stride and the +0xC inline-buffer offset are exact; the
     // interior (likely a traffic-light/junction id or packed index) is honestly opaque.
-    struct TrafficLightKnockDownEvent
+    class TrafficLightKnockDownEvent
     {
+    public:
         u32 muPayload;   // +0x00  4-byte payload (interior opaque -- see FLAG)
     };
 
@@ -62,8 +63,9 @@ namespace PropEntityIO
     // FLAG (opaque interior): as TrafficLightKnockDownEvent above -- the 4-byte payload's
     // internal field layout is not recovered by this slice; modelled as one 4-byte word so the
     // asm-attested stride and +0xC inline-buffer offset are exact.
-    struct TrafficLightRestoreEvent
+    class TrafficLightRestoreEvent
     {
+    public:
         u32 muPayload;   // +0x00  4-byte payload (interior opaque -- see FLAG)
     };
 

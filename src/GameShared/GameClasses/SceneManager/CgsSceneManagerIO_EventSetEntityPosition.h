@@ -39,8 +39,9 @@ namespace SceneManagerIO
 
     // EventQueue<InEventSetEntityPosition, N> element. 16-byte aligned (carries the
     // leading Vector3 lane), sizeof 0x20 (32).
-    struct CGS_ALIGN(16) InEventSetEntityPosition : public EventBaseSetEntityPosition
+    class CGS_ALIGN(16) InEventSetEntityPosition : public EventBaseSetEntityPosition
     {
+    public:
         Vector3  mPosition;   // +0x00 (16B SIMD lane)
         EntityId mEntityId;   // +0x10
         // +0x14..0x1F trailing pad to the 16-byte alignment forced by the Vector3 lane

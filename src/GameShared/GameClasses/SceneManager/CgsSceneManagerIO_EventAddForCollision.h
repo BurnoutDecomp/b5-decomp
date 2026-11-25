@@ -54,8 +54,9 @@ namespace SceneManagerIO
     };
 
     // CgsSceneManagerIO_SceneUpdate.h:172.
-    struct CGS_ALIGN(16) InEventAddForCollision : public Event
+    class CGS_ALIGN(16) InEventAddForCollision : public Event
     {
+    public:
         // Culling-group tag -- the same u32 typedef the vehicle event family uses
         // (BrnPhysics::Vehicle::SetRaceCarCullingGroupEvent::CullingGroup).
         typedef BrnPhysics::Vehicle::SetRaceCarCullingGroupEvent::CullingGroup CullingGroup;

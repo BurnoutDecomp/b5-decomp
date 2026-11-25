@@ -38,8 +38,9 @@ namespace SceneManagerIO
     struct EventBaseAddEntity {};
 
     // mAddEntityQueue element. 16-byte aligned (carries a vmx Vector3 lane).
-    struct CGS_ALIGN(16) InEventAddEntity : public EventBaseAddEntity
+    class CGS_ALIGN(16) InEventAddEntity : public EventBaseAddEntity
     {
+    public:
         Vector3  mTransformLane;  // +0x00 (stvx128 vmx lane)
         EntityId mEntityId;       // +0x10 (staged from a2)
         s32      miField14;       // +0x14 (staged from a3)

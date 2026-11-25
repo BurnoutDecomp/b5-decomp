@@ -20,6 +20,7 @@
 #include "GameSource/GameState/BrnGameStateSharedIO.h"   // EGameModeType
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleIOQueues.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+#include "rw/math/fpu/scalar_operation.h"
 #include "rw/math/vpu/vector3_operation.h"
 
 #include <algorithm>
@@ -311,7 +312,11 @@ void BoostStrategy::SetOncomingState(OncomingState leOncomingState) // 0x822A613
 
 void BoostStrategy::SetBoostAmount(f32 lfBoostFraction) // 0x822A61E0
 {
-    mfBoostAmount = std::max(mfMaxBoost * lfBoostFraction, 0.0f);
+    mfBoostAmount = mfMaxBoost * lfBoostFraction;
+    if (mfBoostAmount < 0.0f)
+    {
+        mfBoostAmount = 0.0f;
+    }
 }
 
 void BoostStrategy::SetBoostEarningEnabled(bool lbIsEnabled) // 0x822A6208
@@ -321,33 +326,41 @@ void BoostStrategy::SetBoostEarningEnabled(bool lbIsEnabled) // 0x822A6208
 
 void BoostStrategy::AddBoost(f32 lfBoostAmount) // 0x822C0E10
 {
-    if (!mbBoostEarningEnabled || mbCrashing)
-        return;
+    // ARTIST 0x822C0E14 and 0x822C0E40 retain the award as the multiplier below minimum speed.
+    f32 lfSpeedMultiplier = lfBoostAmount;
 
-    f32 lfSpeedMultiplier = 1.0f;
-    if (mfSpeed >= mfSpeedForMinEarning)
+    if (!mbBoostEarningEnabled || mbCrashing)
+    {
+        return;
+    }
+
+    if (!(mfSpeed < mfSpeedForMinEarning))
     {
         const f32 lfEarningLerpValue =
             (mfSpeed - mfSpeedForMinEarning) /
             (mfSpeedForMaxEarning - mfSpeedForMinEarning);
-        lfSpeedMultiplier = 1.0f + std::min(std::max(lfEarningLerpValue, 0.0f), 1.0f);
+        lfSpeedMultiplier = rw::math::fpu::Clamp(
+            1.0f + rw::math::fpu::Clamp(lfEarningLerpValue, 0.0f, 1.0f),
+            1.0f, 2.0f);
     }
 
-    const f32 lfBeforeAward = mfBoostAmount;
-    mfBoostAmount = std::min(
-        std::max(mfBoostAmount + lfSpeedMultiplier * lfBoostAmount, 0.0f),
-        mfMaxBoost);
+    mfBoostAmount = rw::math::fpu::Clamp(
+        mfBoostAmount + lfSpeedMultiplier * lfBoostAmount, 0.0f, mfMaxBoost);
 }
 
 void BoostStrategy::UpdateMaxBoost(bool lbFillToMax) // 0x822C0EB0
 {
     mfMaxBoost = static_cast<f32>(miCombinedBoostLevel) * 10.0f;
     if (mfMaxBoost == 0.0f)
+    {
         mfMaxBoost = 1.0f;
+    }
 
-    mfBoostAmount = std::min(std::max(mfBoostAmount, 0.0f), mfMaxBoost);
+    mfBoostAmount = rw::math::fpu::Clamp(mfBoostAmount, 0.0f, mfMaxBoost);
     if (lbFillToMax)
+    {
         mfBoostAmount = mfMaxBoost;
+    }
 }
 
 void BoostStrategy::SetBoostSegments(s32 liBoostSegments) // 0x822C0F28

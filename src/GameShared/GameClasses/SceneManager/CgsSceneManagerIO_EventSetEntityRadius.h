@@ -37,8 +37,9 @@ namespace SceneManagerIO
     struct EventBaseSetEntityRadius {};
 
     // mSetEntityRadiusQueue element. 4-byte aligned (two adjacent 4-byte fields), sizeof 8.
-    struct InEventSetEntityRadius : public EventBaseSetEntityRadius
+    class InEventSetEntityRadius : public EventBaseSetEntityRadius
     {
+    public:
         EntityId mEntityId; // +0x00 (:98)
         f32      mfRadius;   // +0x04 (:99)
     };

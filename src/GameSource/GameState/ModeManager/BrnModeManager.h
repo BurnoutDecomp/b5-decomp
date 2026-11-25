@@ -144,7 +144,7 @@ namespace BrnNetwork { namespace BrnNetworkModuleIO { struct InGamePlayerStatusI
 namespace BrnGameState
 {
 class GameStateModule;
-struct TakedownEvent;              // (element type; complete in BrnTakedownManagerTypes.h)
+class TakedownEvent;              // (element type; complete in BrnTakedownManagerTypes.h)
 class NetworkRoundManager;
 class TriggerQueryManager;
 struct StreetManager;             // class-key of the real definitions (both are `struct`)

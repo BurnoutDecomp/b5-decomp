@@ -86,15 +86,17 @@ namespace BrnNetwork
     // RoadRulesRecvData == 264).
     using CgsNetwork::PlayerName;
 
-    struct RoadRulesMessageData
+    class RoadRulesMessageData
     {
+    public:
         s32 maScores[2];
         u64 mu64RoadRulesID;
         Road::ChallengeIndex mChallengeIndex;
     };
 
-    struct RoadRulesRecvData : public Event
+    class RoadRulesRecvData : public Event
     {
+    public:
         RoadRulesMessageData maRoadRulesData[10];
         PlayerName           mPlayerName;
         NetworkPlayerID      mPlayerID;
@@ -104,8 +106,9 @@ namespace BrnNetwork
     // DWARF BrnNetworkSharedIO.h:376 -- RoadRulesDownloadEvent : Event. Two player names
     // (the winner + the previous holder being notified) followed by the road-rules score
     // payload. sizeof == 2*16 + 24 == 56, matching the X360 56-byte queue element stride.
-    struct RoadRulesDownloadEvent : public Event
+    class RoadRulesDownloadEvent : public Event
     {
+    public:
         PlayerName           maPlayerNames[2];   // :378
         RoadRulesMessageData mRoadRulesData;     // :379
         void Construct();                        // :376 (declared-only; body is its own TU)
@@ -216,8 +219,9 @@ namespace BrnNetwork
         typedef CgsModule::EventQueue<RoadRulesDownloadEvent, 40> RoadRulesDownloadedQueue;
         typedef CgsModule::EventQueue<RoadRulesMessageData, 40>   LocalRoadRulesDownloadedQueue;
 
-        struct DirtyTrickEvent
+        class DirtyTrickEvent
         {
+        public:
             EActiveRaceCarIndex meAggressorActiveRaceCarIndex;
             EActiveRaceCarIndex meVictimActiveRaceCarIndex;
             EPaybackType        meDirtyTrickType;

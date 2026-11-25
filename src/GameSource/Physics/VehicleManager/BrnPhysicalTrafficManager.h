@@ -230,7 +230,7 @@ namespace BrnPhysics { namespace Deformation { class DeformationInputInterface; 
 
 // ValidateTrafficContact collaborators, pointer use only.
 // Class key `struct`, matching CgsPotentialContact.h / the TriangleCacheInterface home.
-namespace CgsSceneManager { namespace SceneManagerIO { struct PotentialContact;
+namespace CgsSceneManager { namespace SceneManagerIO { class PotentialContact;
                                                        struct TriangleCacheInterface; } }
 
 // PrepareTriangleCache's parameter, pointer use only.

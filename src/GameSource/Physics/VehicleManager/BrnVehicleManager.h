@@ -88,7 +88,7 @@ namespace BrnPhysics { class PhysicsModule; }
 // pointers + one by-value contact, so the declarations need no complete type here).
 namespace BrnPhysics { namespace PhysicsModuleIO { struct PotentialContactInterface; } }
 namespace BrnPhysics { namespace Vehicle { struct VehicleInputInterface; } }
-namespace CgsSceneManager { namespace SceneManagerIO { struct PotentialContact; struct TriangleCacheInterface;
+namespace CgsSceneManager { namespace SceneManagerIO { class PotentialContact; struct TriangleCacheInterface;
                                                        struct OutEventLineTestNearestResult;  // line-test result queue element (UpdateVehiclePhysics wave)
                                                       struct InputBuffer_Update; } }
 // Class key `struct`, matching rw/rwcore_structs.h -- a `class` here mangles differently.
@@ -117,7 +117,7 @@ namespace CgsMemory { struct SimpleDataStreamProducer; }   // stream-producer me
 namespace CgsMemory { struct SimpleDataStreamResultIterator; }  // traction harvest cursor (pointer)
 namespace EA { namespace Jobs { struct Job; } }            // job members (pointers)
 #include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsPrimitivePairListBuilder.h" // PrimitivePairListBuilder (five BY-VALUE members)
-namespace CgsSceneManager { namespace SceneManagerIO { struct OutOverlapPair; } }
+namespace CgsSceneManager { namespace SceneManagerIO { class OutOverlapPair; } }
 namespace BrnPhysics { namespace Deformation { struct DeformationManager; } }   // class key `struct`, matching BrnDeformationManager.h:237
 namespace BrnPhysics { struct ContactGenList; }                            // BrnContactGenerationList.h
 // The REAL namespace, pinned by the X360 mangling of FreeAllocations' DestroyIOBuffer bl target

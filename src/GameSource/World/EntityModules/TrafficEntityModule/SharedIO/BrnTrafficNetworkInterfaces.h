@@ -11,8 +11,9 @@ namespace BrnTraffic
 namespace BrnTrafficIO
 {
     // Network event: activate a new collision hull for an active race car.
-    struct ActivateHullEvent
+    class ActivateHullEvent
     {
+    public:
         EActiveRaceCarIndex meActiveRaceCarIndex;
         u16                 muNewActiveHull;
         u32                 muUpdateFrame;

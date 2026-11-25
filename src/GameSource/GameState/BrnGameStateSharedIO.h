@@ -205,8 +205,9 @@ namespace BrnGameState
         // into BaseEventQueue<...>::AddEvent (0x8258C160) and ::Append (0x823C46A8): s32@0x00 (4B) +
         // 4B implicit pad (u64 alignment) + 256B bit array == 264B, align 8. alignas(16) is DROPPED:
         // with it sizeof would round up to 272 != 264.
-        struct CompletedFburnChallengesData
+        class CompletedFburnChallengesData
         {
+        public:
             s32                      mNetworkPlayerID;             // 0x00 (BrnNetwork::NetworkPlayerID == s32)
             CompletedFburnChallenges mCompletedFreeburnChallenges; // 0x08 (FastBitArray<2000>, 256B)
         };
