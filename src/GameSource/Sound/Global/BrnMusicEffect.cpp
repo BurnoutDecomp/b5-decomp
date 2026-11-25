@@ -637,17 +637,8 @@ void MusicEffect::UpdatePreviewTrack(bool abCustomSoundtrack)
             static_cast<Module::SoundLogicModule*>(mpLogicModule);
         CGS_ASSERT(lpModule, "lpLogicModule");   // BrnMusicEffect.cpp:1755
 
-        // The console hands the RefSpec straight to each generated ctor (its Instance base
-        // takes one); this tree's generated ctors take the resolved Collection, so it is
-        // resolved here -- the committed UpdateParams idiom a few hundred lines above.
-        Attrib::Gen::songlist lSongList(
-            const_cast<Attrib::Collection*>(
-                const_cast<Attrib::RefSpec&>(
-                    lpModule->GetGlobalData().SongList()).GetCollection()), 0);
-        Attrib::RefSpec* lpSongSpec = reinterpret_cast<Attrib::RefSpec*>(
-            lSongList.Songs(static_cast<u32>(liPreviewSong)));
-        Attrib::Gen::song lSong(
-            lpSongSpec ? const_cast<Attrib::Collection*>(lpSongSpec->GetCollection()) : 0, 0);
+        Attrib::Gen::songlist lSongList(lpModule->GetGlobalData().SongList(), 0);
+        Attrib::Gen::song lSong(lSongList.Songs(static_cast<u32>(liPreviewSong)), 0);
 
         const char* lpcStream = lSong.Stream();
         const u32 luContentSpec = lpcStream
@@ -845,16 +836,7 @@ void MusicEffect::UpdateParams(f32 afDeltaTime)
         if (!mEATraxStream.IsPlayingOrQueued() && !mSecondaryStream.IsPlayingOrQueued() &&
             !lbStreamsPaused)
         {
-            // The console passes the RefSpec straight in (its Instance base ctor
-            // resolves it); this tree's generated ctors take the resolved Collection,
-            // so the RefSpec is resolved here -- the committed idiom from
-            // BrnVehicleState.cpp:151. An unresolved spec yields a null collection and
-            // songlist's own DefaultDataArea, i.e. Num_Songs() == 0, which is exactly
-            // what the console does before BurnoutGlobalData.bin is bound.
-            Attrib::Gen::songlist lSongList(
-                const_cast<Attrib::Collection*>(
-                    const_cast<Attrib::RefSpec&>(
-                        lpModule->GetGlobalData().SongList()).GetCollection()), 0);
+            Attrib::Gen::songlist lSongList(lpModule->GetGlobalData().SongList(), 0);
             const s32 liNumSongs = lSongList.Num_Songs();
             s32 liTrack = mEaTraxData.SelectSong(liNumSongs, meMusicType);
             if (liTrack == -1)
@@ -867,18 +849,7 @@ void MusicEffect::UpdateParams(f32 afDeltaTime)
             if (liTrack != -1)
             {
                 mEaTraxData.SetCurrentSong(liTrack);
-                // songlist::Songs returns a pointer INTO the attribute data: one
-                // 0x18-byte Song record, which is an Attrib::RefSpec (same 24-byte
-                // shape; songlist.cpp's own out-of-range fallback is
-                // DefaultDataArea(0x18)). The console hands it straight to song::song
-                // because its Instance base ctor takes a RefSpec (sub_8280A248 @
-                // 0x8280A248 -> RefSpec::GetCollection); this tree's generated ctors
-                // take the resolved Collection, so it is resolved here.
-                Attrib::RefSpec* lpSongSpec = reinterpret_cast<Attrib::RefSpec*>(
-                    lSongList.Songs(static_cast<u32>(liTrack)));
-                Attrib::Gen::song lSong(
-                    lpSongSpec ? const_cast<Attrib::Collection*>(
-                                     lpSongSpec->GetCollection()) : 0, 0);
+                Attrib::Gen::song lSong(lSongList.Songs(static_cast<u32>(liTrack)), 0);
                 const char* lpcStream = lSong.Stream();
                 const u32 luContentSpec = lpcStream
                     ? static_cast<u32>(CgsSound::Playback::Name::MakeHash(lpcStream)) : 0u;

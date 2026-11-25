@@ -57,6 +57,8 @@ namespace shadow
     {
         char maData[renderengine::VertexProgramState::X360NoBindStorageSize];
     };
+    static const char KAC_ARTIST_SHADOW_HEADER[] = "..\\..\\..\\GameShared\\GameClasses\\Graphics/Dispatch/shadowingdevice.h";
+
     static VertexProgramStateData sVertexProgramStateData;
     static rw::Resource sVertexProgramStateResource;
     Device::StateBlockShadow Device::m_Shadow = {};
@@ -388,40 +390,40 @@ namespace shadow
     }
 
     // @0x823F3250: open a force-stencil-write window.
-    void* Device::BeginForceStencilWrite(u32 luStencilValueToWrite)
+    void Device::BeginForceStencilWrite(u32 luStencilValueToWrite)
     {
-        void* lpResult = reinterpret_cast<void*>(static_cast<uintptr_t>(luStencilValueToWrite));
-        CGS_ASSERT(!mbForceStencilWrite, "!mbForceStencilWrite");
-        CGS_ASSERT(luStencilValueToWrite <= 255, "luStencilValueToWrite <= 255");
+        CGS_ASSERT(!mbForceStencilWrite,
+            CGS_ASSERT_MESSAGE_AT("!mbForceStencilWrite", KAC_ARTIST_SHADOW_HEADER, 1246));
+        CGS_ASSERT(luStencilValueToWrite <= 255,
+            CGS_ASSERT_MESSAGE_AT("luStencilValueToWrite <= 255", KAC_ARTIST_SHADOW_HEADER, 1247));
         muStencilValueToWrite = luStencilValueToWrite;
         mbForceStencilWrite = true;
         m_Shadow.m_pDepthStencilState = 0;   // dword_83010A28 = 0 @0x823F32D4
-        return lpResult;
     }
 
     // @0x823F32E0: close a force-stencil-write window.
-    void* Device::EndForceStencilWrite()
+    void Device::EndForceStencilWrite()
     {
-        CGS_ASSERT(mbForceStencilWrite, "mbForceStencilWrite");
+        CGS_ASSERT(mbForceStencilWrite,
+            CGS_ASSERT_MESSAGE_AT("mbForceStencilWrite", KAC_ARTIST_SHADOW_HEADER, 1256));
         mbForceStencilWrite = false;
         m_Shadow.m_pDepthStencilState = 0;   // dword_83010A28 = 0
-        return 0;
     }
 
     // @0x823F3190: lock the rasteriser state.
-    void* Device::LockRasteriserState()
+    void Device::LockRasteriserState()
     {
-        CGS_ASSERT(false == mbRasteriserStateLocked, "false == mbRasteriserStateLocked");
+        CGS_ASSERT(false == mbRasteriserStateLocked,
+            CGS_ASSERT_MESSAGE_AT("false == mbRasteriserStateLocked", KAC_ARTIST_SHADOW_HEADER, 1215));
         mbRasteriserStateLocked = true;
-        return 0;
     }
 
     // @0x823F31F0: unlock the rasteriser state.
-    void* Device::UnlockRasteriserState()
+    void Device::UnlockRasteriserState()
     {
-        CGS_ASSERT(true == mbRasteriserStateLocked, "true == mbRasteriserStateLocked");
+        CGS_ASSERT(true == mbRasteriserStateLocked,
+            CGS_ASSERT_MESSAGE_AT("true == mbRasteriserStateLocked", KAC_ARTIST_SHADOW_HEADER, 1220));
         mbRasteriserStateLocked = false;
-        return 0;
     }
 
     // The depth/stencil twins of the pair above. INLINED on the X360 -- no standalone symbol --
@@ -435,18 +437,18 @@ namespace shadow
     // body nulls m_Shadow.m_pDepthStencilState. Locking is not a state change -- it is a promise that the
     // state on the device is the one the caller just applied and must not be replaced -- so
     // invalidating the shadow here would force a redundant rebind on the next unlocked setter.
-    void* Device::LockDepthStencilState()
+    void Device::LockDepthStencilState()
     {
-        CGS_ASSERT(false == mbDepthStencilStateLocked, "false == mbDepthStencilStateLocked");
+        CGS_ASSERT(false == mbDepthStencilStateLocked,
+            CGS_ASSERT_MESSAGE_AT("false == mbDepthStencilStateLocked", KAC_ARTIST_SHADOW_HEADER, 1235));
         mbDepthStencilStateLocked = true;
-        return 0;
     }
 
-    void* Device::UnlockDepthStencilState()
+    void Device::UnlockDepthStencilState()
     {
-        CGS_ASSERT(true == mbDepthStencilStateLocked, "true == mbDepthStencilStateLocked");
+        CGS_ASSERT(true == mbDepthStencilStateLocked,
+            CGS_ASSERT_MESSAGE_AT("true == mbDepthStencilStateLocked", KAC_ARTIST_SHADOW_HEADER, 1240));
         mbDepthStencilStateLocked = false;
-        return 0;
     }
 
     // @0x827E7D10: push the low-level blend/colour-write/alpha render-state block through the

@@ -32,8 +32,8 @@ namespace Camera
 bool BehaviourLooseAttachment::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo)
 {
     using namespace rw::math::vpu;
-    if (mTarget.mbSet && !mTarget.IsValid(*lrInfo.GetWorld())) Fail(lrCamera, 11);
-    if (!mAttachment.IsValid(*lrInfo.GetWorld())) Fail(lrCamera, 11);
+    if (mTarget.mbSet && !mTarget.IsValid(*lrInfo.GetWorld())) Fail(lrCamera, ValidityAccount::E_FAILED_INVALID_VEHICLE_REF);
+    if (!mAttachment.IsValid(*lrInfo.GetWorld())) Fail(lrCamera, ValidityAccount::E_FAILED_INVALID_VEHICLE_REF);
     mCollisionPolicy.SetVehicleRef(mAttachment);
     mCollisionPolicy.SetTestAgainstWorldOnly(true);
     mCollisionPolicy.SetUseFrustrumResolver(true);

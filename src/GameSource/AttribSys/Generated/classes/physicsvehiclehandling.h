@@ -44,14 +44,6 @@ namespace Gen
     class physicsvehiclehandling : private Instance
     {
     public:
-        // The class id, LOW word (0x7B502EED == 2068852461). This is the operand the
-        // AssertOnClassCheck sites quote: Attrib::Instance::GetClass() is reconstructed as a
-        // 32-bit int (attribinstance.h), so the check narrows to the low word -- the same
-        // modelling choice the physicsvehiclecollisionattribs sibling documents.
-        // (The console truth is wider: GetClass @0x82802F18 ends `ld r3,0(r11)` and both
-        // ctors compare with `cmpld` against the whole doubleword below.)
-        static const int KI_PHYSICSVEHICLEHANDLING_CLASS = 2068852461;         // 0x7B502EED
-
         // The FULL 64-bit class key -- hash64("physicsvehiclehandling"). Anything that goes
         // through the class registry (Attrib::FindCollection, RefSpec::GetClass) hashes the
         // whole doubleword, so the low word alone MISSES.
@@ -171,8 +163,8 @@ namespace Gen
     inline physicsvehiclehandling::physicsvehiclehandling(Collection* lpCollection, void* lpOwner)
         : Instance(lpCollection, lpOwner)
     {
-        if (GetClass() != KI_PHYSICSVEHICLEHANDLING_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_PHYSICSVEHICLEHANDLING_CLASS, GetCollection());
+        if (GetClass() != KU_PHYSICSVEHICLEHANDLING_CLASS_KEY && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_PHYSICSVEHICLEHANDLING_CLASS_KEY, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(KU_LAYOUT_SIZE);
     }
@@ -187,8 +179,8 @@ namespace Gen
     inline physicsvehiclehandling::physicsvehiclehandling(const physicsvehiclehandling& lrOther)
         : Instance(static_cast<const Instance&>(lrOther))
     {
-        if (GetClass() != KI_PHYSICSVEHICLEHANDLING_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_PHYSICSVEHICLEHANDLING_CLASS, GetCollection());
+        if (GetClass() != KU_PHYSICSVEHICLEHANDLING_CLASS_KEY && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_PHYSICSVEHICLEHANDLING_CLASS_KEY, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(KU_LAYOUT_SIZE);
     }

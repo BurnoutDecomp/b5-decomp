@@ -90,7 +90,6 @@ namespace
     const u8 KU_METHOD_ROTATE_ABOUT_PLAYER_CAR = 1;
 
     // CameraState bit 2 (asm mask 4 against camera+320): "do not interpolate me".
-    const u32 KU_STATE_FLAG_NO_INTERPOLATE = 2u;
 
     // The params carry their two 3x3s inside Matrix44Affine storage (rows 0..2 used, row 3
     // scratch) so the Mult()/InverseOfMatrixWithOrthonormal3x3 affine overloads apply
@@ -401,8 +400,8 @@ void CameraInterpolationController::Update(Camera::Camera&       lrCamera,
 
     // ---- the "do not interpolate me" cut -------------------------------------------------
     // asm reads camera+320 (== mState_uFlags, the current-flag low word) and tests mask 4.
-    if (lrCamera.GetState().IsFlagSet(KU_STATE_FLAG_NO_INTERPOLATE) ||
-        lrTo.GetState().IsFlagSet(KU_STATE_FLAG_NO_INTERPOLATE))
+    if (lrCamera.GetState().IsFlagSet(Camera::CameraState::E_FLAG_HIDE_PLAYER) ||
+        lrTo.GetState().IsFlagSet(Camera::CameraState::E_FLAG_HIDE_PLAYER))
     {
         if (lfT >= KF_HALF)
         {

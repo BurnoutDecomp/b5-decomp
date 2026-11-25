@@ -27,9 +27,6 @@ namespace
     const u32 KU_HEAD_FLAG_KEEP_RUNNING   = 29;   // (holding the released gate while the stunt runs)
 
     // Camera-state CURRENT flags the valid body publishes (roles not recovered):
-    const u32 KU_STATE_FLAG_STUNT       = 7;    // mask 0x80 (a plain stunt frame)
-    const u32 KU_STATE_FLAG_CRASH_STUNT = 15;   // mask 0x8000 (a crash-stunt frame)
-    const u32 KU_STATE_FLAG_2DFLASH     = 20;   // mask 0x100000, set and cleared (mirrors the 2dFlash request)
 
     // The requested-post-FX id the 2dFlash mirror compares against (the console build
     // literal 575791 == 0x8C92F; FLAG: the id table's home is not recovered).
@@ -275,10 +272,10 @@ void MomentPlayerStunt::Update(f32 /*lfTimeStep*/, void* lrBehaviourController,
     // The stunt current flags: 7/15 by the crash-stunt latch, 19 always, and
     // flag 20 mirroring whether the camera's requested post-FX is the 2dFlash.
     GetNonConstCamera().mState.SetFlag(
-        mbIsCrashStunt ? KU_STATE_FLAG_CRASH_STUNT : KU_STATE_FLAG_STUNT, true);
+        mbIsCrashStunt ? Camera::CameraState::E_FLAG_CRASH_STUNT : Camera::CameraState::E_FLAG_JUMP_CAMERA, true);
     const bool lb2dFlashRequested =
         GetNonConstCamera().GetEffects().muRequestedPostFxId == KU_POSTFX_2DFLASH_ID;
-    GetNonConstCamera().mState.SetFlag(KU_STATE_FLAG_2DFLASH, lb2dFlashRequested);
+    GetNonConstCamera().mState.SetFlag(Camera::CameraState::E_FLAG_JUMP_PHOTO, lb2dFlashRequested);
 
     if (!mbFirstTimeForThisStunt && lb2dFlashRequested)
     {

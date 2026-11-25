@@ -33,24 +33,15 @@ namespace Gen
 //     lwz r11,4(this) ; if (!mpAttributeData) mpAttributeData = DefaultDataArea(0x10)
 //
 // That is the same shape as the Collection* sibling inlined in iceanim.h, and it is spelled
-// the same way here (same KI_ICEANIM_CLASS constant, same guard order) so the two agree.
+// the same way here (same KU_ICEANIM_CLASS constant, same guard order) so the two agree.
 //
-// ⚠️ ONE KNOWN NARROWING, inherited and NOT introduced here: the console compares the FULL
-// 64-bit class key (`Attrib::Instance::GetClass` @0x82802F18 ends in `ld r3,0(r11)`, a
-// doubleword load of Class +0x00), whereas this tree's Instance::GetClass returns `int` and
-// every generated class in this directory therefore checks only the key's low word
-// (KI_ICEANIM_CLASS == 0xA997C1EE == the low half of ClassKey()). The narrowing affects the
-// diagnostic assert only -- never the construction or the layout pointer. Widening
-// Instance::GetClass to u64 is a whole-directory change (~40 generated headers) and belongs
-// to its own wave.
 iceanim::iceanim(const Attrib::RefSpec& lrRefSpec, void* lpOwner)
     : Instance(lrRefSpec, lpOwner)
 {
-    static const int KI_ICEANIM_CLASS = -1449672210; // Attrib::ClassName::iceanim
-    if (GetClass() != KI_ICEANIM_CLASS && GetClass() != 0)
-        AssertOnClassCheck(GetClass(), KI_ICEANIM_CLASS, GetCollection());
-    if (!mpAttributeData)
-        mpAttributeData = DefaultDataArea(0x10u);
+    static const u64 KU_ICEANIM_CLASS = 0x4644E379A997C1EEULL; // ARTIST 0x821F5900
+    if (GetClass() != KU_ICEANIM_CLASS && GetClass() != 0)
+        AssertOnClassCheck(GetClass(), KU_ICEANIM_CLASS, GetCollection());
+    SetDefaultLayout(0x10u);
 }
 
 // ============================================================================

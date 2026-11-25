@@ -65,9 +65,9 @@ namespace Gen
     inline worldemitter::worldemitter(Collection* lpCollection, void* lpOwner)
         : Instance(lpCollection, lpOwner)
     {
-        static const int KI_WORLDEMITTER_CLASS = -1718129039; // Attrib::ClassName::worldemitter
-        if (GetClass() != KI_WORLDEMITTER_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_WORLDEMITTER_CLASS, GetCollection());
+        static const u64 KU_WORLDEMITTER_CLASS = 0x475A643D99976E71ULL; // ARTIST 0x8269C0DC
+        if (GetClass() != KU_WORLDEMITTER_CLASS && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_WORLDEMITTER_CLASS, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(sizeof(Layout));
     }

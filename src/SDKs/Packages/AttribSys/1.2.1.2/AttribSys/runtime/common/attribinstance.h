@@ -226,10 +226,10 @@ namespace Attrib
     void*       Collection_Get(void* lpOut, Collection* lpCollection,
                                const Instance* lpInstance, u64 luKey);
     Collection* RefSpec_GetCollectionWithDefault(RefSpec* lpRefSpec);
-    // (third argument WIDENED to the collection KEY: Instance::GetCollection
+    // ARTIST uses three full-width keys. Instance::GetCollection
     // @0x82802F40 hands over a 64-bit `ld` and the diagnostic formats it as a
-    // %08x%08x hi/lo pair -- it was never a host pointer.)
-    void        AssertOnClassCheck(int liClass, int liExpectedClass, u64 luCollectionKey);
+    // hi/lo pair. DecFIGS attribsupport.cpp:109 confirms the key parameters.
+    void        AssertOnClassCheck(u64 luClass, u64 luExpected, u64 luCollectionKey);
     void*       DefaultDataArea(u32 luBytes);
 
     // A ref-counted handle onto a Collection. Construction/destruction maintain the

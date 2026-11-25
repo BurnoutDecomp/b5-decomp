@@ -57,9 +57,9 @@ namespace Gen
     inline proptomaterialmappings::proptomaterialmappings(Collection* lpCollection, void* lpOwner)
         : Instance(lpCollection, lpOwner)
     {
-        static const int KI_PROPTOMATERIALMAPPINGS_CLASS = 931143846; // Attrib::ClassName::proptomaterialmappings (0x378020A6)
-        if (GetClass() != KI_PROPTOMATERIALMAPPINGS_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_PROPTOMATERIALMAPPINGS_CLASS, GetCollection());
+
+        if (GetClass() != KU_CLASS_KEY && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_CLASS_KEY, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x1218u);
     }

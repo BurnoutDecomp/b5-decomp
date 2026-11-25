@@ -141,12 +141,12 @@ namespace shadow
         static void FlushVertexProgramState();
 
         // Force-stencil-write window (X360 0x823F3250 / 0x823F32E0).
-        static void* BeginForceStencilWrite(u32 luStencilValueToWrite);
-        static void* EndForceStencilWrite();
+        static void BeginForceStencilWrite(u32 luStencilValueToWrite);
+        static void EndForceStencilWrite();
 
         // Rasteriser-state lock window (X360 0x823F3190 / 0x823F31F0).
-        static void* LockRasteriserState();
-        static void* UnlockRasteriserState();
+        static void LockRasteriserState();
+        static void UnlockRasteriserState();
 
         // Depth/stencil-state lock window. DWARF-declared beside the rasteriser pair
         // (shadowingdevice.h:556/557, dwarfdump file lines 363/366:
@@ -163,13 +163,8 @@ namespace shadow
         //                                    (shadowingdevice.h:1235) / `stb 1`
         //     Unlock  0x8240CCF4-0x8240CD30  `lbz` / assert "true == mbDepthStencilStateLocked"
         //                                    (shadowingdevice.h:1240) / `stb 0`
-        // i.e. exactly the rasteriser pair's shape against the sibling bool. Their return type is
-        // taken as the siblings' `void*` (the X360 leaves r3 dead in both, and no caller reads it);
-        // DWARF says `void` for all four, and the tree already carries `void*` on the two that have
-        // symbols, so the pair below matches its own neighbours rather than introducing a second
-        // convention. RETIRE the `void*` on all four together if it is ever corrected.
-        static void* LockDepthStencilState();
-        static void* UnlockDepthStencilState();
+        static void LockDepthStencilState();
+        static void UnlockDepthStencilState();
 
         // (FlushDepthStencilState / FlushRasterizerState DELETED -- they were INVENTED.) Neither
         // name exists in the X360 export set: scanning all 30,095 exported function names for a

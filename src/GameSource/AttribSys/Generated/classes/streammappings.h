@@ -55,9 +55,9 @@ namespace Gen
     inline streammappings::streammappings(Collection* lpCollection, void* lpOwner)
         : Instance(lpCollection, lpOwner)
     {
-        static const int KI_STREAMMAPPINGS_CLASS = static_cast<int>(3558142457u); // Attrib::ClassName::streammappings (0xD414F1F9)
-        if (GetClass() != KI_STREAMMAPPINGS_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_STREAMMAPPINGS_CLASS, GetCollection());
+        static const u64 KU_STREAMMAPPINGS_CLASS = 0xC7818D7FD414F1F9ULL; // ARTIST 0x8269E544
+        if (GetClass() != KU_STREAMMAPPINGS_CLASS && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_STREAMMAPPINGS_CLASS, GetCollection());
     }
 }
 }

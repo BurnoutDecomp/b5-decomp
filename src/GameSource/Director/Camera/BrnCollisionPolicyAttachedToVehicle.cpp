@@ -406,7 +406,7 @@ void CollisionPolicyAttachedToVehicle::ResolveCollisions(const CollisionPolicySh
     }
 
     if (lbMoved && mbFailOnContact)
-        Fail(lrCamera, 0);
+        Fail(lrCamera, ValidityAccount::E_FAILED_COLLISION);
 
     if (mbUseGroundConstraint)
         mGroundConstraint.ProcessSceneQueryResults(lrSharedInfo.mTimestep.Get(Timestep::E_WORLD), lrCamera);

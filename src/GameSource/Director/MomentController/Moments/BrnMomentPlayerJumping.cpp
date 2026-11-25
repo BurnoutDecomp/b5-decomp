@@ -60,8 +60,6 @@ namespace
     const u32 KU_HEAD_FLAG_INHIBITED = 23;
 
     // The produced camera's state bits VALID raises (`ori 0x80` / `ori 2` on the u64 at camera +0x140).
-    const u32 KU_CAMERA_FLAG_1 = 1;
-    const u32 KU_CAMERA_FLAG_7 = 7;
 
 
 }
@@ -539,8 +537,8 @@ void MomentPlayerJumping::Update(f32 lfTimeStep, void* lrBehaviourController, co
     }
 
     lCamera.SetRequestedBorderPostFX(KF_JUMP_BORDER_POSTFX_AMOUNT);
-    lCamera.mState.SetFlag(KU_CAMERA_FLAG_7, true);
-    lCamera.mState.SetFlag(KU_CAMERA_FLAG_1, true);
+    lCamera.mState.SetFlag(Camera::CameraState::E_FLAG_JUMP_CAMERA, true);
+    lCamera.mState.SetFlag(Camera::CameraState::E_FLAG_VALID, true);
     SetCamera(lCamera);
 }
 

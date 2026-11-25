@@ -45,7 +45,6 @@ namespace
     // the shot clock restarts rather than advancing (X360 0x8223D4F8 `ld r11, 0x140(camera)` /
     // `rlwinm r11,r11,0,25,25` -- the 0x40 mask over the flags word at camera +0x144, which is
     // CameraState::mCurrentFlags' low word).
-    const u32 KU_CAMERA_FLAG_CUT_THIS_FRAME = 6;
 
     // The `iceanim` generated-class key, FULL 64 bits (X360 0x8223D574..0x8223D584:
     // `lis 0xA997 / ori 0xC1EE / lis 0x4644 / ori 0xE379 / insrdi r11, r10, 32,0`). The same
@@ -294,7 +293,7 @@ void KeyAnimShakeController::Update(f32 lfTimeStep, Camera::Camera* lpCamera)
         return;
 
     // The shot clock. A cut restarts the shake; otherwise it runs on.
-    if (lpCamera->GetState().IsFlagSet(KU_CAMERA_FLAG_CUT_THIS_FRAME))
+    if (lpCamera->GetState().IsFlagSet(Camera::CameraState::E_FLAG_NEW_THIS_FRAME))
     {
         mfShotRunningTime = 0.0f;
     }

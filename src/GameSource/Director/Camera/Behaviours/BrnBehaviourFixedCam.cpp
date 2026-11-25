@@ -40,8 +40,6 @@ namespace
     const f32 KF_DEGREES_TO_RADIANS    = 0.017453292f;  // the dutch     flt_82001744 (0x3C8EFA35)
 
     // The validity-account flags Update raises (names from the account's recovered table).
-    const s32 KI_FAILED_POSITION_TOO_FAR_FROM_SUBJECT = 7;    // `li r5, 7` into Behaviour::Fail
-    const s32 KI_NOCUTTO_SUBJECT_LEFT_FRAME           = 16;   // `oris r11, r11, 1` on camera +0x138
 
     // The camera-state flag Update raises while the behaviour has not failed (`ori r11, r11, 2` on
     // camera +0x140) -- the same bit every live behaviour raises (GyroCam, ICECamera).
@@ -141,7 +139,7 @@ bool BehaviourFixedCam::Update(Camera& lrCamera, const BehaviourSharedInfo& lrIn
 
         if (MagnitudeSquared(lOffset) > KF_MAX_DISTANCE_SQUARED)
         {
-            Fail(lrCamera, KI_FAILED_POSITION_TOO_FAR_FROM_SUBJECT);
+            Fail(lrCamera, ValidityAccount::E_FAILED_POSITION_TOO_FAR_FROM_SUBJECT);
         }
 
         if (!IsZero(lOffset, KF_ZERO_TOLERANCE) &&
@@ -174,7 +172,7 @@ bool BehaviourFixedCam::Update(Camera& lrCamera, const BehaviourSharedInfo& lrIn
 
     if (mCollisionPolicy.IsVisibilityInterrupted())
     {
-        SetCantSwitchToMeNow(lrCamera, KI_NOCUTTO_SUBJECT_LEFT_FRAME);
+        SetCantSwitchToMeNow(lrCamera, ValidityAccount::E_NOCUTTO_SUBJECT_LEFT_FRAME);
     }
 
     lrCamera.SetFOV(mpParameters->mfFOV);

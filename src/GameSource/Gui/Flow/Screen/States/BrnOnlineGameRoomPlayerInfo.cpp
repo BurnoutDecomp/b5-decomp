@@ -6135,7 +6135,9 @@ namespace BrnGui
     // The leave request failed: stop waiting on the "leaving game" overlay.
     void OnlineGameRoomPlayerInfo::HandleLeavingGameFailedEvent(const CgsModule::Event* lpEvent)
     {
-        PostOverlayWaitFinish(mpStateInterface, "CNOnlLvgGame");
+        GuiOverlayWaitFinishRequest lWaitFinish;
+        lWaitFinish.Construct("CNOnlLvgGame");
+        mpStateInterface->OutputGuiEvent(lWaitFinish);
     }
 
     // ------------------------------------------------------------ HandleLaunchingEvent

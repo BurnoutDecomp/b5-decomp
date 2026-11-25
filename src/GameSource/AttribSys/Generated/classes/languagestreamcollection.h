@@ -57,9 +57,9 @@ namespace Gen
     inline languagestreamcollection::languagestreamcollection(Collection* lpCollection, void* lpOwner)
         : Instance(lpCollection, lpOwner)
     {
-        static const int KI_LANGUAGESTREAMCOLLECTION_CLASS = 1573411476; // Attrib::ClassName::languagestreamcollection (0x5DC85A94)
-        if (GetClass() != KI_LANGUAGESTREAMCOLLECTION_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_LANGUAGESTREAMCOLLECTION_CLASS, GetCollection());
+        static const u64 KU_LANGUAGESTREAMCOLLECTION_CLASS = 0x658D3CD75DC85A94ULL; // ARTIST 0x8269E5D4
+        if (GetClass() != KU_LANGUAGESTREAMCOLLECTION_CLASS && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_LANGUAGESTREAMCOLLECTION_CLASS, GetCollection());
     }
 
     // X360 @0x82687F00, store-for-store:

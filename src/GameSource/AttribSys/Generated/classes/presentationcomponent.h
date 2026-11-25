@@ -119,9 +119,9 @@ namespace Gen
     inline presentationcomponent::presentationcomponent(Collection* lpCollection, void* lpOwner)
         : Instance(lpCollection, lpOwner)
     {
-        static const int KI_PRESENTATIONCOMPONENT_CLASS = -802641548; // Attrib::ClassName::presentationcomponent
-        if (GetClass() != KI_PRESENTATIONCOMPONENT_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_PRESENTATIONCOMPONENT_CLASS, GetCollection());
+        static const u64 KU_PRESENTATIONCOMPONENT_CLASS = 0xB8AE7988D028A974ULL; // ARTIST 0x8269775C
+        if (GetClass() != KU_PRESENTATIONCOMPONENT_CLASS && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_PRESENTATIONCOMPONENT_CLASS, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0xE30u);
     }

@@ -55,9 +55,9 @@ namespace Gen
     inline audiosurface::audiosurface(Collection* lpCollection, void* lpOwner)
         : Instance(lpCollection, lpOwner)
     {
-        static const int KI_AUDIOSURFACE_CLASS = 594563281; // Attrib::ClassName::audiosurface
-        if (GetClass() != KI_AUDIOSURFACE_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_AUDIOSURFACE_CLASS, GetCollection());
+        static const u64 KU_AUDIOSURFACE_CLASS = 0x64F8A2D1237050D1ULL; // ARTIST 0x8269AD3C
+        if (GetClass() != KU_AUDIOSURFACE_CLASS && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_AUDIOSURFACE_CLASS, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x20u);
     }
@@ -65,9 +65,9 @@ namespace Gen
     inline audiosurface::audiosurface(const RefSpec& lrRefSpec, void* lpOwner)
         : Instance(lrRefSpec, lpOwner)
     {
-        static const int KI_AUDIOSURFACE_CLASS = 594563281;
-        if (GetClass() != KI_AUDIOSURFACE_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_AUDIOSURFACE_CLASS, GetCollection());
+        static const u64 KU_AUDIOSURFACE_CLASS = 0x64F8A2D1237050D1ULL; // ARTIST 0x8269AD3C
+        if (GetClass() != KU_AUDIOSURFACE_CLASS && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_AUDIOSURFACE_CLASS, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x20u);
     }

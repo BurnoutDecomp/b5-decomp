@@ -54,9 +54,9 @@ namespace Gen
     inline crashbinlist::crashbinlist(Collection* lpCollection, void* lpOwner)
         : Instance(lpCollection, lpOwner)
     {
-        static const int KI_CRASHBINLIST_CLASS = static_cast<int>(1439145154u); // Attrib::ClassName::crashbinlist (0x55C79CC2)
-        if (GetClass() != KI_CRASHBINLIST_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_CRASHBINLIST_CLASS, GetCollection());
+
+        if (GetClass() != KU_CLASS_KEY && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_CLASS_KEY, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x4D8u);
     }

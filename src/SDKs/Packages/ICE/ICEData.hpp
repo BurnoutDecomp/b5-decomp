@@ -167,8 +167,6 @@ struct ICETakeData : public bTNode<ICETakeData>
 // ---------------------------------------------------------------------------
 struct IResourceManager
 {
-    virtual ~IResourceManager() {}
-
     virtual const ICETakeData* GetTakeData(CgsResource::ID lId) const = 0;
     virtual const ICETakeData* GetTakeData(s32 liIndex) const = 0;
 };

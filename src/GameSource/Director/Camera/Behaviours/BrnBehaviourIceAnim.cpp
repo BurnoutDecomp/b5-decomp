@@ -607,7 +607,7 @@ bool BehaviourIceAnim::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSha
         // flag stores) is the INLINED Behaviour::Fail -- expressed as the named base call now
         // that the base has a home. Reason 11 is the fork's own bit 11 of +0x138 written as
         // the flag index.
-        Fail(lrCamera, 11);
+        Fail(lrCamera, ValidityAccount::E_FAILED_INVALID_VEHICLE_REF);
         return true;
     }
 
@@ -624,7 +624,7 @@ bool BehaviourIceAnim::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSha
     // The fork's `RequestFollow()` is the camera-state write `camera+0x140 |= 2` -- the
     // exact bit Behaviour::Fail clears. Expressed through CameraState's named ClearFlag/
     // SetFlag pair so no offset is poked (see the FLAG on the flag id in Behaviour.cpp).
-    lrCamera.GetState().SetFlag(1u, true);
+    lrCamera.GetState().SetFlag(CameraState::E_FLAG_VALID, true);
 
     // ⭐ CORRECTED 2026-09-25 (FX-DIRECTOR2) -- THE POLICY IS RE-TARGETED AT THE PLAYER EVERY FRAME.
     // The byte at behaviour +0x2A (the free visibility policy's +0x0A) is mbTargetSet, and it is
@@ -828,7 +828,7 @@ bool BehaviourIceAnim::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSha
             // `mbCanSwitchToMeNow = false` -- ARE Behaviour::SetCantSwitchToMeNow's body. This
             // is that method's first attested call site, and it pins flag 16 into the
             // no-cut-TO band that BrnCameraValidityAccount.h flags as unattested.
-            SetCantSwitchToMeNow(lrCamera, 16);
+            SetCantSwitchToMeNow(lrCamera, ValidityAccount::E_NOCUTTO_SUBJECT_LEFT_FRAME);
         }
     }
 
@@ -836,7 +836,7 @@ bool BehaviourIceAnim::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSha
     // camera +0x138) -- the retired fork threaded the shared info there by mistake. Reason 29
     // sits inside the account's attested no-cut-from band [27,31).
     if (!HasFinishedOrFailed() && !HasFailed())
-        SetCantSwitchFromMeNow(lrCamera, 29);
+        SetCantSwitchFromMeNow(lrCamera, ValidityAccount::E_NOCUTFROM_ICE_MOVIE_NOT_FINISHED);
 
     // --- Debug visibility readout ---
     // The console's `r3` here is the shared info's own DebugPrinter (info +1488), which the

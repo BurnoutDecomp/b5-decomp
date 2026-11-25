@@ -53,9 +53,9 @@ namespace Gen
         // (lis/ori 0x2C485337); the insrdi'd high word 0xFD61B26B is the
         // dead/incidental upper half. Mirrors the surfacelist sibling, whose base
         // word 0x85B5C4F4 is the committed class constant.
-        static const int KI_PHYSICSSURFACE_CLASS = 742937399; // Attrib::ClassName::physicssurface (0x2C485337)
-        if (GetClass() != KI_PHYSICSSURFACE_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_PHYSICSSURFACE_CLASS, GetCollection());
+        static const u64 KU_PHYSICSSURFACE_CLASS = 0xFD61B26B2C485337ULL; // ARTIST 0x825C0D4C
+        if (GetClass() != KU_PHYSICSSURFACE_CLASS && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_PHYSICSSURFACE_CLASS, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0xCu);
     }
@@ -63,9 +63,9 @@ namespace Gen
     inline physicssurface::physicssurface(const RefSpec& lrRefSpec, void* lpOwner)
         : Instance(lrRefSpec, lpOwner)
     {
-        static const int KI_PHYSICSSURFACE_CLASS = 742937399; // low word 0x2C485337
-        if (GetClass() != KI_PHYSICSSURFACE_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_PHYSICSSURFACE_CLASS, GetCollection());
+        static const u64 KU_PHYSICSSURFACE_CLASS = 0xFD61B26B2C485337ULL; // ARTIST 0x825C0D4C
+        if (GetClass() != KU_PHYSICSSURFACE_CLASS && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_PHYSICSSURFACE_CLASS, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0xCu);
     }

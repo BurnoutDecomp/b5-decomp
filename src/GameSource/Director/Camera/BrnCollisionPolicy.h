@@ -2,6 +2,7 @@
 #define GAMESOURCE_DIRECTOR_CAMERA_BRN_COLLISION_POLICY_H
 
 #include "types.hpp"
+#include "GameSource/Director/Camera/BrnCameraValidityAccount.h"
 #include <cfloat>                                    // FLT_MAX (ResetRadiusSmoothing; XEX rodata @0x8200173C)
 #include <cstddef>                                   // offsetof (CollisionPolicyAttachedToVehicle::_AssertLayout)
 #include "BrnCommonTypes.h"                          // Matrix44Affine / Vector3 (SetTarget / SetVelocity)
@@ -219,7 +220,7 @@ public:
     // mbHasFailed. ⭐ SIGNATURE CORRECTED 2026-09-25: the first argument is the Camera (both
     // callers pass the camera they were handed), not a BehaviourSharedInfo*. The body lives in
     // BrnVisibilityCollisionPolicy.cpp (see the note there on why not its DWARF home).
-    void Fail(Camera& lrCamera, s32 leFailedFlag);
+    void Fail(Camera& lrCamera, ValidityAccount::EFailedFlag leFailedFlag);
 
 protected:
     // The counterpart store: every derived policy's Construct opens with `stb 0, 4(this)`

@@ -68,7 +68,7 @@ extern "C"
     void LobbyApiAriesRequest(LobbyApiRefT* pLobbyApi, s32 iKind,
                               const char* pRequest, s32 iCallbackID);
     void LobbyApiListUpdate(LobbyApiRefT* pLobbyApi);
-    s32 LobbyApiAsyncProcess(LobbyApiRefT* pLobbyApi, const char* pData,
+    void LobbyApiAsyncProcess(LobbyApiRefT* pLobbyApi, const char* pData,
                              s32 iKind, s32 iCode);
     s32 LobbyApiAsyncMoveRoom(LobbyApiRefT* pLobbyApi, const char* pData);
     void LobbyApiExtractUserAddr(LobbyApiUserT* pUser, const char* pData);
@@ -82,7 +82,7 @@ extern "C"
                                  void* pRecord, s32 iOperation);
     s32 LobbyApiPopul(LobbyApiRefT* pLobbyApi, s32 iRoomIdent, s32 iPopulation,
                       s32 iGameCount, s32 iGamePopulation);
-    s32 LobbyApiPrintfCode(LobbyApiRefT* pLobbyApi, const char* pFormat, ...);
+    void LobbyApiPrintfCode(LobbyApiRefT* pLobbyApi, const char* pFormat, ...);
     void PingManagerUpdate(PingManagerRefT* pPingManager);
     PingManagerRefT* PingManagerCreate(s32 iCapacity);
     void PingManagerDestroy(PingManagerRefT* pPingManager);
@@ -312,7 +312,9 @@ extern "C" void LobbyApiListUpdate(LobbyApiRefT* pLobbyApi)
     }
 }
 
-static bool _LobbyApiRequestQueuePop(LobbyApiRefT* pLobbyApi,
+// DecFIGS lobbyapi.c:404 identifies this ARTIST 82B1A8D8 queue operation
+// and its 32-bit status result, used by the queue-draining callers.
+static s32 _LobbyApiDequeueRequestCallback(LobbyApiRefT* pLobbyApi,
                                      LobbyCBQueueRefT* pRequest, s32 iKind)
 {
     memset(pRequest, 0, sizeof(*pRequest));
@@ -509,7 +511,7 @@ static bool _LobbyApiDisconnect(LobbyApiRefT* pLobbyApi, s32 iCode, const char* 
     ProtoAriesUnconnect(pLobbyApi->net);
     LobbyApiListFlush(pLobbyApi, -1);
     LobbyCBQueueRefT Request;
-    while (_LobbyApiRequestQueuePop(pLobbyApi, &Request, 0x44515545)) // DQUE
+    while (_LobbyApiDequeueRequestCallback(pLobbyApi, &Request, 0x44515545)) // DQUE
     {
     }
     pLobbyApi->nextServerPingTime = 0;
@@ -776,7 +778,7 @@ extern "C" void LobbyApiUpdate(LobbyApiRefT* pLobbyApi)
             {
                 _LobbyApiResponseLog(pLobbyApi, iKind, iCode, (const u8*)pData, "recv");
                 LobbyCBQueueRefT Request;
-                _LobbyApiRequestQueuePop(pLobbyApi, &Request, iKind);
+                _LobbyApiDequeueRequestCallback(pLobbyApi, &Request, iKind);
                 LobbyApiGlobalCallback(pLobbyApi, Request.iId, LOBBYAPI_CBTYPE_RESP,
                                        iKind, iCode, pData);
 
@@ -851,7 +853,7 @@ extern "C" void LobbyApiUpdate(LobbyApiRefT* pLobbyApi)
                             else
                             {
                                 LobbyCBQueueRefT FailedRequest;
-                                _LobbyApiRequestQueuePop(pLobbyApi, &FailedRequest, 0x6e657773);
+                                _LobbyApiDequeueRequestCallback(pLobbyApi, &FailedRequest, 0x6e657773);
                             }
                         }
                         else
@@ -1022,37 +1024,29 @@ extern "C" void LobbyApiAriesRequest(LobbyApiRefT* pLobbyApi, s32 iKind,
 extern "C" s32 LobbyApiSetCallback(LobbyApiRefT* pLobbyApi, s32 iType,
                                     LobbyApiCallbackT* pCallback, void* pUserData)
 {
-    s32 iCallback;
-    for (iCallback = 0; pLobbyApi->callbacks[iCallback].eType != LOBBYAPI_CBTYPE_INVALID; )
+    for (s32 iCallback = 0; iCallback < 32; ++iCallback)
     {
-        if (++iCallback >= 32)
+        if (pLobbyApi->callbacks[iCallback].eType == LOBBYAPI_CBTYPE_INVALID)
         {
-            return -1;
+            pLobbyApi->callbacks[iCallback].pCallback = pCallback;
+            pLobbyApi->callbacks[iCallback].eType = iType;
+            pLobbyApi->callbacks[iCallback].pUserData = pUserData;
+            return iCallback | 0x1000;
         }
     }
-
-    pLobbyApi->callbacks[iCallback].pCallback = pCallback;
-    pLobbyApi->callbacks[iCallback].eType = iType;
-    pLobbyApi->callbacks[iCallback].pUserData = pUserData;
-    return iCallback | 0x1000;
+    return -1;
 }
 
 extern "C" s32 LobbyApiClearCallback(LobbyApiRefT* pLobbyApi, s32 iCallbackID)
 {
     const u32 iCallback = (u32)iCallbackID & 0xffffefff;
-    if (iCallback > 31)
+    if ((iCallback <= 31) &&
+        (pLobbyApi->callbacks[iCallback].eType != LOBBYAPI_CBTYPE_INVALID))
     {
-        return 0;
+        pLobbyApi->callbacks[iCallback].eType = LOBBYAPI_CBTYPE_INVALID;
+        return 1;
     }
-
-    LobbyGlobalCBRefT* pCallback = &pLobbyApi->callbacks[iCallback];
-    if (pCallback->eType == LOBBYAPI_CBTYPE_INVALID)
-    {
-        return 0;
-    }
-
-    pCallback->eType = LOBBYAPI_CBTYPE_INVALID;
-    return 1;
+    return 0;
 }
 
 extern "C" s32 LobbyApiConnect(LobbyApiRefT* pLobbyApi, const char* pServerName,
@@ -1076,7 +1070,7 @@ extern "C" s32 LobbyApiConnect(LobbyApiRefT* pLobbyApi, const char* pServerName,
     pLobbyApi->uConnTimeout = uConnTimeout;
 
     LobbyCBQueueRefT Request;
-    while (_LobbyApiRequestQueuePop(pLobbyApi, &Request, 0x44515545)) // DQUE
+    while (_LobbyApiDequeueRequestCallback(pLobbyApi, &Request, 0x44515545)) // DQUE
     {
     }
     pLobbyApi->snapopen = 0;
@@ -1090,24 +1084,27 @@ extern "C" s32 LobbyApiConnect(LobbyApiRefT* pLobbyApi, const char* pServerName,
             sizeof(*pCallbackData), 1818325097, pLobbyApi->iMemGroup);
         if (pCallbackData == NULL)
         {
-            return -1;
+            iCallbackID = -1;
+            goto done;
         }
         memset(pCallbackData, 0, sizeof(*pCallbackData));
-        pCallbackData->iKind = 0x6f6e6365; // once
-        pCallbackData->iTick = (s32)CommUDPTick(pLobbyApi->net);
         pCallbackData->pCallback = pCallback;
         pCallbackData->pUserData = pUserData;
+        pCallbackData->iKind = 0x6f6e6365; // once
+        pCallbackData->iTick = (s32)CommUDPTick(pLobbyApi->net);
         iCallbackID = LobbyApiSetCallback(pLobbyApi, LOBBYAPI_CBTYPE_CONN,
                                           _LobbyApiConnectCallback, pCallbackData);
         pCallbackData->iId = iCallbackID;
         if (iCallbackID < 0)
         {
-            return -1;
+            goto done;
         }
     }
 
     ds_strnzcpy(pLobbyApi->strServerName, pServerName, sizeof(pLobbyApi->strServerName));
     pLobbyApi->state = 0x696e6974; // init
+// The allocation and registration failures join at ARTIST 82B1B69C.
+done:
     return iCallbackID;
 }
 
@@ -1503,7 +1500,7 @@ extern "C" s32 LobbyApiRequestCB(LobbyApiRefT* pLobbyApi, s32 iKind, const char*
     if (iSnoopResult < 0)
     {
         LobbyCBQueueRefT Request;
-        _LobbyApiRequestQueuePop(pLobbyApi, &Request, iKind);
+        _LobbyApiDequeueRequestCallback(pLobbyApi, &Request, iKind);
         return iSnoopResult;
     }
     if (iSnoopResult == 0)
@@ -1741,11 +1738,12 @@ extern "C" void LobbyApiExtractUserRecord(LobbyApiUserT* pUser, const char* pDat
     LobbyApiExtractUserAddr(pUser, pData);
 }
 
-extern "C" s32 LobbyApiPrintfCode(LobbyApiRefT* pLobbyApi, const char* pFormat, ...)
+// DecFIGS lobbyapi.c:445 declares void, and the ARTIST async message
+// dispatcher and its caller do not use a diagnostic return value.
+extern "C" void LobbyApiPrintfCode(LobbyApiRefT* pLobbyApi, const char* pFormat, ...)
 {
     char strMessage[4096];
     const char* pMessage = strMessage;
-    s32 iResult = 0;
     va_list Args;
     va_start(Args, pFormat);
 
@@ -1755,7 +1753,7 @@ extern "C" s32 LobbyApiPrintfCode(LobbyApiRefT* pLobbyApi, const char* pFormat, 
     }
     else
     {
-        iResult = vsprintf(strMessage, pFormat, Args);
+        vsprintf(strMessage, pFormat, Args);
     }
     va_end(Args);
 
@@ -1763,7 +1761,6 @@ extern "C" s32 LobbyApiPrintfCode(LobbyApiRefT* pLobbyApi, const char* pFormat, 
     {
         pLobbyApi->debugptr(pLobbyApi->debugref, pMessage);
     }
-    return iResult;
 }
 
 extern "C" void LobbyApiExtractRoomRecord(LobbyApiRoomRecordPrefixT* pRoom,
@@ -2539,7 +2536,7 @@ static const LobbyApiAsyncEntryT _LobbyApiAsyncEntries[] =
     { 0, 0, NULL }
 };
 
-extern "C" s32 LobbyApiAsyncProcess(LobbyApiRefT* pLobbyApi, const char* pData,
+extern "C" void LobbyApiAsyncProcess(LobbyApiRefT* pLobbyApi, const char* pData,
                                       s32 iKind, s32 iCode)
 {
     const LobbyApiAsyncEntryT* pEntry = _LobbyApiAsyncEntries;
@@ -2549,16 +2546,17 @@ extern "C" s32 LobbyApiAsyncProcess(LobbyApiRefT* pLobbyApi, const char* pData,
         {
             if (pEntry->pHandler != NULL)
             {
-                return pEntry->pHandler(pLobbyApi, pData, iCode);
+                pEntry->pHandler(pLobbyApi, pData, iCode);
+                return;
             }
             LobbyApiGlobalCallback(pLobbyApi, 0, LOBBYAPI_CBTYPE_EVNT,
                                    pEntry->iEventKind, iCode, pData);
-            return 0;
+            return;
         }
         ++pEntry;
     }
 
-    return LobbyApiPrintfCode(
+    LobbyApiPrintfCode(
         pLobbyApi,
         "lobbyapi: warning, unhandled async server message '%c%c%c%c'\n",
         ((u32)iKind >> 24) & 0xff, ((u32)iKind >> 16) & 0xff,

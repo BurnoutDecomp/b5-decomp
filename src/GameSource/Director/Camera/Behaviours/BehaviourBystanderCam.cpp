@@ -64,12 +64,6 @@ namespace
     const f32 KF_LEAVE_FRAME_LOOKAHEAD_SECS           = 0.5f;    // lfSecs flt_82001DA0
 
     // The validity-account flags Update raises (names from the account's recovered table).
-    const s32 KI_FAILED_COULDNT_FIND_ROADSIDE         = 6;       // `li r5, 6` into Behaviour::Fail
-    const s32 KI_FAILED_POSITION_TOO_FAR_FROM_SUBJECT = 7;       // `li r5, 7` into Behaviour::Fail
-    const s32 KI_FAILED_INVALID_VEHICLE_REF           = 11;      // the inlined Fail: `ori 0x800` on camera +0x138
-    const s32 KI_NOCUTTO_FINDING_POSITION             = 14;      // `ori 0x4000` on camera +0x138
-    const s32 KI_NOCUTTO_SUBJECT_ABOUT_TO_LEAVE_FRAME = 15;      // `ori 0x8000` on camera +0x138
-    const s32 KI_NOCUTTO_SUBJECT_OCCLUDED             = 17;      // `oris 2` (0x20000) on camera +0x138
 
     // The camera-state flag Update raises while the behaviour has not failed (`ori r11, r11, 2` on
     // camera +0x140, 0x82243FD8) -- CameraState::E_FLAG_VALID, the same bit every live behaviour raises.
@@ -198,7 +192,7 @@ bool BehaviourBystanderCam::Update(Camera& lrCamera, const BehaviourSharedInfo& 
 
     if (!mTarget.IsValid(*lrInfo.GetWorld()))
     {
-        Fail(lrCamera, KI_FAILED_INVALID_VEHICLE_REF);
+        Fail(lrCamera, ValidityAccount::E_FAILED_INVALID_VEHICLE_REF);
         return true;
     }
 
@@ -208,7 +202,7 @@ bool BehaviourBystanderCam::Update(Camera& lrCamera, const BehaviourSharedInfo& 
 
     if (!mbGotPosition || IsTweakerAttached())
     {
-        SetCantSwitchToMeNow(lrCamera, KI_NOCUTTO_FINDING_POSITION);
+        SetCantSwitchToMeNow(lrCamera, ValidityAccount::E_NOCUTTO_FINDING_POSITION);
 
         if (mpParameters->mbUseTargetSpaceInsteadOfPositionFinder)
         {
@@ -230,14 +224,14 @@ bool BehaviourBystanderCam::Update(Camera& lrCamera, const BehaviourSharedInfo& 
 
             if (!mPositionFinder.HasFoundPosition())
             {
-                Fail(lrCamera, KI_FAILED_COULDNT_FIND_ROADSIDE);
+                Fail(lrCamera, ValidityAccount::E_FAILED_COULDNT_FIND_ROADSIDE);
                 return true;
             }
 
             if (Utils::TargetOutsideRange(mPositionFinder.GetPosition(), mTarget.GetTransform(lrInfo).wAxis,
                                           mpParameters->mfMaxInitialDistanceKM * KF_KM_TO_M))
             {
-                Fail(lrCamera, KI_FAILED_POSITION_TOO_FAR_FROM_SUBJECT);
+                Fail(lrCamera, ValidityAccount::E_FAILED_POSITION_TOO_FAR_FROM_SUBJECT);
                 return true;
             }
 
@@ -276,13 +270,13 @@ bool BehaviourBystanderCam::Update(Camera& lrCamera, const BehaviourSharedInfo& 
         Utils::TargetOutsideRange(mTransform.wAxis, mTarget.GetTransform(lrInfo).wAxis,
                                   mpParameters->mfDistanceForFailKM * KF_KM_TO_M))
     {
-        Fail(lrCamera, KI_FAILED_POSITION_TOO_FAR_FROM_SUBJECT);
+        Fail(lrCamera, ValidityAccount::E_FAILED_POSITION_TOO_FAR_FROM_SUBJECT);
         return true;
     }
 
     if (mCollisionPolicy.IsVisibilityInterrupted())
     {
-        SetCantSwitchToMeNow(lrCamera, KI_NOCUTTO_SUBJECT_OCCLUDED);
+        SetCantSwitchToMeNow(lrCamera, ValidityAccount::E_NOCUTTO_SUBJECT_OCCLUDED);
     }
     else if (mpParameters->mbUseRangeTesting &&
              Utils::TargetWillExceedRangeInXSecs(mTransform.wAxis, mTarget.GetTransform(lrInfo).wAxis,
@@ -290,7 +284,7 @@ bool BehaviourBystanderCam::Update(Camera& lrCamera, const BehaviourSharedInfo& 
                                                  mpParameters->mfDistanceForFailKM * KF_KM_TO_M,
                                                  KF_LEAVE_FRAME_LOOKAHEAD_SECS))
     {
-        SetCantSwitchToMeNow(lrCamera, KI_NOCUTTO_SUBJECT_ABOUT_TO_LEAVE_FRAME);
+        SetCantSwitchToMeNow(lrCamera, ValidityAccount::E_NOCUTTO_SUBJECT_ABOUT_TO_LEAVE_FRAME);
     }
 
     return true;

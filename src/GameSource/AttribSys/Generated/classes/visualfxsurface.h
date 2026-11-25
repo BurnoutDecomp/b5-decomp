@@ -62,9 +62,9 @@ namespace Gen
     inline visualfxsurface::visualfxsurface(const RefSpec& lrRefSpec, void* lpOwner)
         : Instance(lrRefSpec, lpOwner)
     {
-        static const int KI_VISUALFXSURFACE_CLASS = -509236432; // Attrib::ClassName::visualfxsurface (0xE1A5AB30)
-        if (GetClass() != KI_VISUALFXSURFACE_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_VISUALFXSURFACE_CLASS, GetCollection());
+        static const u64 KU_VISUALFXSURFACE_CLASS = 0x12B5F62BE1A5AB30ULL; // ARTIST 0x8227FC2C
+        if (GetClass() != KU_VISUALFXSURFACE_CLASS && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_VISUALFXSURFACE_CLASS, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x60u);
     }

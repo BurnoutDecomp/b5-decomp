@@ -132,8 +132,6 @@ namespace
     // The camera-state flag indices Update tests. `ld r11,0x140(r30)` reads the state's
     // current 64-bit flag set (camera +0x138 + 8); `rlwinm rX,rX,0,29,29` masks bit 2 and
     // `rlwinm rX,rX,0,25,25` masks bit 6 (PPC MB/ME numbering: 2^(31-MB)).
-    const u32 KU_CAMERA_FLAG_TRAILS_OFF = 2;   // E_FLAG_HIDE_PLAYER
-    const u32 KU_CAMERA_FLAG_NEW_FRAME  = 6;   // E_FLAG_NEW_THIS_FRAME
 
     typedef CgsResource::Events::AcquireResourceResponse AcquireResponse;
 
@@ -930,11 +928,11 @@ void ParticleModule::Update(f32 lfTimeStep, f32 lfTime, f32 lfTimeStepMultiplier
     if (mbSimpleEnabled)  mRenderData.muFlags |= ParticleRenderData::eRenderDataFlagRenderSimple; // 8
     // ⭐ THE TRAIL RENDER BIT. `ld r11,0x140(r30); rlwinm r11,r11,0,29,29` == camera state
     // flag bit 2; trails render when they are enabled AND that flag is CLEAR.
-    if (mbTrailsEnabled && !lpCamera->GetState().IsFlagSet(KU_CAMERA_FLAG_TRAILS_OFF))
+    if (mbTrailsEnabled && !lpCamera->GetState().IsFlagSet(BrnDirector::Camera::CameraState::E_FLAG_HIDE_PLAYER))
         mRenderData.muFlags |= ParticleRenderData::eRenderDataFlagRenderTrails;                   // 0x20
 
     // `rlwinm r11,r11,0,25,25` == camera state flag bit 6 -> latch mbHasCameraSwitched.
-    if (lpCamera->GetState().IsFlagSet(KU_CAMERA_FLAG_NEW_FRAME))
+    if (lpCamera->GetState().IsFlagSet(BrnDirector::Camera::CameraState::E_FLAG_NEW_THIS_FRAME))
         mbHasCameraSwitched = true;
 
     // Slow motion: the camera's +0x104 sim time scale, through TWO predicates ORed together

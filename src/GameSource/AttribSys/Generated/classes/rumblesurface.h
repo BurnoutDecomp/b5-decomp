@@ -8,9 +8,7 @@
 // ⭐ FX-RUMBLE3 2026-09-24 (crash-parity G10-D6): the ctor at 0x82364828 is the REFSPEC overload
 // (DWARF rumblesurface.h:21) -- its first call is sub_8280A248, Instance(const RefSpec&, owner),
 // and its callers hand it `surfaceLayout + 0x28` (the surface's RumbleSurface ref; see surface.h).
-// The earlier note here attributed that address to the Collection* overload. The class check is the
-// 64-bit key 0x540C6D17_14E37D72 (`insrdi` + `cmpld` @0x82364844..0x82364858); this tree compares the
-// low word, as every sibling generated class does (surface.h, audiosurface.h).
+// The class check uses 0x540C6D1714E37D72 at 0x82364844..0x82364858.
 //
 // THE LAYOUT (0x3C bytes -- DefaultDataArea(0x3C) @0x823648B4). The DWARF (rumblesurface.h:73..:174)
 // names fifteen attributes, fourteen Float and one Int32; their offsets are read off the console's
@@ -95,9 +93,9 @@ namespace Gen
     inline rumblesurface::rumblesurface(Collection* lpCollection, void* lpOwner)
         : Instance(lpCollection, lpOwner)
     {
-        static const int KI_RUMBLESURFACE_CLASS = static_cast<int>(0x14E37D72u); // Attrib::ClassName::rumblesurface (350453106)
-        if (GetClass() != KI_RUMBLESURFACE_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_RUMBLESURFACE_CLASS, GetCollection());
+        static const u64 KU_RUMBLESURFACE_CLASS = 0x540C6D1714E37D72ULL; // ARTIST 0x82364854
+        if (GetClass() != KU_RUMBLESURFACE_CLASS && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_RUMBLESURFACE_CLASS, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x3Cu);
     }
@@ -108,9 +106,9 @@ namespace Gen
     inline rumblesurface::rumblesurface(const RefSpec& lrRefSpec, void* lpOwner)
         : Instance(lrRefSpec, lpOwner)
     {
-        static const int KI_RUMBLESURFACE_CLASS = static_cast<int>(0x14E37D72u); // low word of 0x540C6D1714E37D72
-        if (GetClass() != KI_RUMBLESURFACE_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_RUMBLESURFACE_CLASS, GetCollection());
+        static const u64 KU_RUMBLESURFACE_CLASS = 0x540C6D1714E37D72ULL; // ARTIST 0x82364854
+        if (GetClass() != KU_RUMBLESURFACE_CLASS && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_RUMBLESURFACE_CLASS, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x3Cu);
     }

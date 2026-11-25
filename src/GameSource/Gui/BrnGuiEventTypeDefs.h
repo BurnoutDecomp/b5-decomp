@@ -44,6 +44,7 @@
 #include "GameSource/GameState/Progression/BrnDerivedCars.h"  // BrnProgression::DerivedCarArray (OfflinePostEventData)
 #include "GameSource/BurnoutConstants.h"                // EActiveRaceCarIndex
 #include "SharedClasses/World/BrnWorldRegion.h"         // BrnWorld::ECounty / EDistrict
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"      // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsID.h"          // CgsIDCompress
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"     // CgsGui::GuiEvent<N> (event payload base)
@@ -1121,7 +1122,9 @@ public:
     // body, assert included.
     void Construct(const char* lpcOverlayName)
     {
-        CGS_ASSERT(lpcOverlayName != 0, "Invalid Overlay Id");
+        CGS_ASSERT(lpcOverlayName != 0,
+                   CGS_ASSERT_STREAM_MESSAGE_AT("Invalid Overlay Id",
+                       "..\\..\\..\\GameSource\\Gui/BrnGuiEventTypeDefs.h", 7608));
         mOverlayId = CgsIDCompress(lpcOverlayName);
     }
 };

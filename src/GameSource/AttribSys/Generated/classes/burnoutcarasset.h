@@ -21,9 +21,6 @@ namespace Gen
     class burnoutcarasset : private Instance
     {
     public:
-        // The class key low word, kept for the AssertOnClassCheck site below.
-        static const int KI_BURNOUTCARASSET_CLASS_LOW = -206702987;   // 0xF3ADF675
-
         // ⭐ THE FULL 64-BIT CLASS KEY Attrib::FindCollection resolves against. The X360
         // key-ctor sub_82204998 builds it as `lis r11,-0xC53 / ori r3,r11,0xF675 /
         // lis r11,0x52B8 / ori r11,r11,0x1656 / insrdi r3,r11,32,0` == 0x52B81656F3ADF675,
@@ -114,8 +111,8 @@ namespace Gen
     inline burnoutcarasset::burnoutcarasset(Collection* lpCollection, void* lpOwner)
         : Instance(lpCollection, lpOwner)
     {
-        if (GetClass() != KI_BURNOUTCARASSET_CLASS_LOW && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_BURNOUTCARASSET_CLASS_LOW, GetCollection());
+        if (GetClass() != KU_BURNOUTCARASSET_CLASS_KEY && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_BURNOUTCARASSET_CLASS_KEY, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x228u);
     }

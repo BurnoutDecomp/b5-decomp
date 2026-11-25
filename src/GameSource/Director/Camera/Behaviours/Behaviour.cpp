@@ -41,14 +41,14 @@ namespace Camera
 //                                                : camera-validity-account SetNoCutFromFlag
 //       li   r11,0; stb r11,0xC(this)            : mbCanSwitchFromMeNow = false
 // ============================================================================
-void Behaviour::SetCantSwitchFromMeNow(Camera& lrCamera, s32 leNoCutFromFlag)
+void Behaviour::SetCantSwitchFromMeNow(Camera& lrCamera, ValidityAccount::ENoCutFromFlag leNoCutFromFlag)
 {
     CGS_ASSERT(!mbHasFailed,
         CGS_ASSERT_MESSAGE_AT(
             "Setting \"Cant switch from me now\" when behaviour has failed",
             "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\director\\camera\\behaviours\\Behaviour.h", 460 /* ARTIST 0x822063B4 */));   // Behaviour.h:460
 
-    lrCamera.GetValidityAccount().SetNoCutFromFlag(leNoCutFromFlag);
+    lrCamera.GetValidityAccount().SetFlag(leNoCutFromFlag);
 
     mbCanSwitchFromMeNow = false;   // stb 0, 0xC(this)
 }
@@ -68,9 +68,9 @@ void Behaviour::SetCantSwitchFromMeNow(Camera& lrCamera, s32 leNoCutFromFlag)
 // anywhere in the rodata, and none of the inlined copies above tests +0x09 -- the console raises
 // the bit whether or not the behaviour has failed. The assert was invented.
 // ============================================================================
-void Behaviour::SetCantSwitchToMeNow(Camera& lrCamera, s32 leNoCutToFlag)
+void Behaviour::SetCantSwitchToMeNow(Camera& lrCamera, ValidityAccount::ENoCutToFlag leNoCutToFlag)
 {
-    lrCamera.GetValidityAccount().SetNoCutToFlag(leNoCutToFlag);
+    lrCamera.GetValidityAccount().SetFlag(leNoCutToFlag);
 
     mbCanSwitchToMeNow = false;   // stb 0, 0xB(this)
 }
@@ -96,7 +96,7 @@ void Behaviour::SetCantSwitchToMeNow(Camera& lrCamera, s32 leNoCutToFlag)
 // "drop the follow request bit". Expressed here through CameraState's own named ClearFlag so
 // no offset is poked; the literal 1 is the console's own index, not a guess.
 // ============================================================================
-void Behaviour::Fail(Camera& lrCamera, s32 leFailedFlag)
+void Behaviour::Fail(Camera& lrCamera, ValidityAccount::EFailedFlag leFailedFlag)
 {
     lrCamera.GetValidityAccount().SetFlag(leFailedFlag);
 
@@ -104,7 +104,7 @@ void Behaviour::Fail(Camera& lrCamera, s32 leFailedFlag)
     mbHasFailed          = true;    // stb 1, 9(this)
     mbCanSwitchToMeNow   = false;   // stb 0, 0xB(this)
 
-    lrCamera.GetState().ClearFlag(1u);   // ld/and ~2/std on camera +0x140
+    lrCamera.GetState().ClearFlag(CameraState::E_FLAG_VALID);   // ld/and ~2/std on camera +0x140
 }
 
 // ============================================================================

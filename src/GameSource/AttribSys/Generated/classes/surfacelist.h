@@ -31,14 +31,10 @@ namespace Gen
     class surfacelist : private Instance
     {
     public:
-        // The surfacelist class key the ctor checks and ChangeWithDefault resolves against
-        // (0x85B5C4F4 == -2051685132; the low word of the 64-bit insrdi immediate).
-        static const int KI_SURFACELIST_CLASS = -2051685132; // 0x85B5C4F4
-
         // The FULL 64-bit class key. CheckForResetOnTrackConditions @0x822CE9E0 builds it in
         // one register before calling Attrib::FindCollectionWithDefault:
         //     0x822CE9FC  lis    r11, -0x7A4B
-        //     0x822CEA00  ori    r3, r11, 0xC4F4      ; low  word 0x85B5C4F4 (== the int above)
+        //     0x822CEA00  ori    r3, r11, 0xC4F4      ; low  word 0x85B5C4F4
         //     0x822CEA04  lis    r11, 0x42C2
         //     0x822CEA08  ori    r11, r11, 0x5F49     ; high word 0x42C25F49
         //     0x822CEA0C  insrdi r3, r11, 32, 0
@@ -87,8 +83,8 @@ namespace Gen
     inline surfacelist::surfacelist(Collection* lpCollection, void* lpOwner)
         : Instance(lpCollection, lpOwner)
     {
-        if (GetClass() != KI_SURFACELIST_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_SURFACELIST_CLASS, GetCollection());
+        if (GetClass() != KU_SURFACELIST_CLASS_KEY && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_SURFACELIST_CLASS_KEY, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x18u);
     }

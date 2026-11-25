@@ -12,9 +12,12 @@
 #define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Director/Camera/BrnCameraState.cpp"
 #include "GameSource/Director/Camera/BrnCameraState.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "GameSource/Director/Camera/BrnCameraValidityAccount.h"   // sbFailFlagMaskSet / sFailFlagMask (Clear)
 #include <cstddef>   // offsetof
 #include <cstring>   // strcmp
+
+#define CGS_ARTIST_BITARRAY_FILE "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsBitArray.h"
 
 namespace BrnDirector
 {
@@ -90,17 +93,20 @@ const char* CameraState::GetDebugFlagName(EFlag leFlag)
 //   set:   ldx q,(base); or  q, q, (1<<(luIndex&63)); stdx q,(base)
 //   clear: ldx q,(base); andc q, q, (1<<(luIndex&63)); stdx q,(base)
 // ----------------------------------------------------------------------------
-void CameraState::SetFlag(u32 luIndex, bool lbValue)
+void CameraState::SetFlag(EFlag leFlag, bool lbValue)
 {
+    const u32 luIndex = static_cast<u32>(leFlag);
+    CgsContainers::BitArray<KU_NUM_FLAGS>& lrCurrentFlags = mCurrentFlags;
     if (lbValue)
     {
-        CGS_ASSERT(luIndex < KU_NUM_FLAGS, "luIndex < NUMBITS");
-        mCurrentFlags.SetBit(luIndex);                 // ldx/or/stdx @ this+8
+        CGS_ASSERT_STREAM_AT(luIndex < KU_NUM_FLAGS, "Index: " << luIndex << ", Number of bits: " << KU_NUM_FLAGS,
+                             CGS_ARTIST_BITARRAY_FILE, 222);
+        lrCurrentFlags.SetBit(luIndex);                 // ldx/or/stdx @ this+8
     }
     else
     {
-        CGS_ASSERT(luIndex < KU_NUM_FLAGS, "luIndex < NUMBITS");
-        mCurrentFlags.UnSetBit(luIndex);               // ldx/andc/stdx @ this+8
+        CGS_ASSERT_AT(luIndex < KU_NUM_FLAGS, "luIndex < NUMBITS", CGS_ARTIST_BITARRAY_FILE, 241);
+        lrCurrentFlags.UnSetBit(luIndex);               // ldx/andc/stdx @ this+8
     }
 }
 
@@ -110,10 +116,12 @@ void CameraState::SetFlag(u32 luIndex, bool lbValue)
 // Bound assert (CgsBitArray.h:241), then ANDC-clear bit luIndex in the current set:
 //   ldx q,(this+8); andc q, q, (1<<(luIndex&63)); stdx q,(this+8)
 // ----------------------------------------------------------------------------
-void CameraState::ClearFlag(u32 luIndex)
+void CameraState::ClearFlag(EFlag leFlag)
 {
-    CGS_ASSERT(luIndex < KU_NUM_FLAGS, CGS_ASSERT_MESSAGE_AT("luIndex < NUMBITS", "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsBitArray.h", 241));
-    mCurrentFlags.UnSetBit(luIndex);                   // ldx/andc/stdx @ this+8
+    const u32 luIndex = static_cast<u32>(leFlag);
+    CgsContainers::BitArray<KU_NUM_FLAGS>& lrCurrentFlags = mCurrentFlags;
+    CGS_ASSERT(luIndex < KU_NUM_FLAGS, CGS_ASSERT_MESSAGE_AT("luIndex < NUMBITS", CGS_ARTIST_BITARRAY_FILE, 241));
+    lrCurrentFlags.UnSetBit(luIndex);                   // ldx/andc/stdx @ this+8
 }
 
 // ----------------------------------------------------------------------------
@@ -127,8 +135,9 @@ void CameraState::ClearFlag(u32 luIndex)
 // The asm guards each read with the index-bound assert (CgsBitArray.h:203). The trailing
 // cntlzw/extrwi/xori idiom is the compiler lowering of the boolean `!=` comparison.
 // ----------------------------------------------------------------------------
-bool CameraState::HasChanged(u32 luIndex) const
+bool CameraState::HasChanged(EFlag leFlag) const
 {
+    const u32 luIndex = static_cast<u32>(leFlag);
     CGS_ASSERT(luIndex < KU_NUM_FLAGS, "luIndex < NUMBITS");
     const bool lbCurrent = mCurrentFlags.IsBitSet(luIndex);      // first qword read @ this+8
 
@@ -145,29 +154,20 @@ bool CameraState::HasChanged(u32 luIndex) const
 //   std 0 -> current (+0x08) and previous (+0x10) sets;
 //   assert the ValidityAccount fail-flag mask was set up
 //     ("sbFailFlagMaskSet", BrnCameraValidityAccount.h:193, non-gating);
-//   head set (+0x00) &= sFailFlagMask (the qword_82FAA5D0 AND -- expressed
-//     bit-for-bit through the container API per the named-member parity rule;
-//     the mask only ever carries bits < 32);
-//   ori 1 -> raise bit 0 (CONSISTENCY_TEST) on current and previous.
+//   head set (+0x00) &= sFailFlagMask (ARTIST loads the complete word at 0x82FAA5D0).
+//   Set E_FLAG_WIDESCREEN on the current and previous sets.
 // ----------------------------------------------------------------------------
 void CameraState::Clear()
 {
-    mCurrentFlags.UnSetAll();     // std 0, this+0x08
-    mPreviousFlags.UnSetAll();    // std 0, this+0x10
+    mCurrentFlags.UnSetAll();
+    mPreviousFlags.UnSetAll();
 
-    CGS_ASSERT(sbFailFlagMaskSet, CGS_ASSERT_MESSAGE_AT("sbFailFlagMaskSet", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\director\\camera\\BrnCameraValidityAccount.h", 193));   // :193 (non-gating)
+    CGS_ASSERT_AT(sbFailFlagMaskSet, "sbFailFlagMaskSet",
+                  "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\director\\camera\\BrnCameraValidityAccount.h", 193);
+    mHeadFlags.SetBitField(0, mHeadFlags.GetBitField(0) & sFailFlagMask.GetBitField(0));
 
-    // mHeadFlags &= sFailFlagMask (single-qword AND on the X360).
-    for (u32 luFlag = 0; luFlag < KU_NUM_FLAGS; ++luFlag)
-    {
-        if (!sFailFlagMask.IsBitSet(luFlag))
-        {
-            mHeadFlags.UnSetBit(luFlag);
-        }
-    }
-
-    mCurrentFlags.SetBit(0);      // ori q,q,1
-    mPreviousFlags.SetBit(0);     // ori q,q,1
+    mCurrentFlags.SetBit(E_FLAG_WIDESCREEN);
+    mPreviousFlags.SetBit(E_FLAG_WIDESCREEN);
 }
 
 // ----------------------------------------------------------------------------
@@ -285,4 +285,5 @@ CameraState CameraState::Interpolate(const CameraState& lrFrom, const CameraStat
 } // namespace Camera
 } // namespace BrnDirector
 
+#undef CGS_ARTIST_BITARRAY_FILE
 #undef CGS_ARTIST_FILE

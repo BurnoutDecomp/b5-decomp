@@ -25,8 +25,7 @@ namespace Gen
         // 0xABCDEF0011223344) == 0xFB59833B6E841773, and that is the doubleword the console
         // ctor @0x82697688 compares GetClass() against (`lis 0x6E84 / ori 0x1773`,
         // `lis -0x4A7 / ori 0x833B`, `insrdi`, `cmpld` at 0x826976A4..0x826976B8). It is also
-        // the mClass of the schema's ClassLoadData record at 0x82CD4288. (The ctor below
-        // still compares the low word only -- it is untouched here.)
+        // the mClass of the schema's ClassLoadData record at 0x82CD4288.
         static const u64 KU_CLASS_KEY = 0xFB59833B6E841773ull;
 
         // The serialised layout size: the schema ClassLoadData @0x82CD4288 (mLayoutSize 0x70,
@@ -123,9 +122,9 @@ namespace Gen
     inline passbybin::passbybin(Collection* lpCollection, void* lpOwner)
         : Instance(lpCollection, lpOwner)
     {
-        static const int KI_PASSBYBIN_CLASS = 1854150515; // Attrib::ClassName::passbybin (0x6E841773)
-        if (GetClass() != KI_PASSBYBIN_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_PASSBYBIN_CLASS, GetCollection());
+
+        if (GetClass() != KU_CLASS_KEY && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_CLASS_KEY, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x70u);
     }

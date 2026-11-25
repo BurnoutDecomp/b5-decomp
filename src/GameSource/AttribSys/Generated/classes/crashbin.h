@@ -152,9 +152,9 @@ namespace Gen
     inline crashbin::crashbin(Collection* lpCollection, void* lpOwner)
         : Instance(lpCollection, lpOwner)
     {
-        static const int KI_CRASHBIN_CLASS = -27534889; // Attrib::ClassName::crashbin (0xFE5BD9D7)
-        if (GetClass() != KI_CRASHBIN_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_CRASHBIN_CLASS, GetCollection());
+
+        if (GetClass() != KU_CLASS_KEY && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_CLASS_KEY, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(KU_LAYOUT_SIZE);
     }

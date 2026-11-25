@@ -64,7 +64,6 @@ namespace
     const f32 KF_TWEAK_DOF_BLUR_MARGIN            = 0.05f;   // flt_820047C8 (... less 0.05)
     const f32 KF_TWEAK_DOF_INTENSITY_MAX          = 1.0f;    // flt_82001C98
     const f32 KF_TWEAK_DOF_PLANE_HALF_SIZE        = 8.0f;    // flt_82004C88 (the two DOF planes' half size)
-    const s32 KI_NOCUTTO_SUBJECT_LEFT_FRAME       = 16;      // `oris r11, r11, 1` on camera +0x138 (0x822436F4)
 
     // BehaviourRig::SetupTweaker @0x821F9870.
     const f32 KF_TWEAK_DOF_SCALE                  = 0.05f;   // flt_820047C8 (every mapping's scale)
@@ -465,7 +464,7 @@ BehaviourRig::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo)
 
     if (!HasFailed() && mCollisionPolicy.IsVisibilityInterrupted())
     {
-        SetCantSwitchToMeNow(lrCamera, KI_NOCUTTO_SUBJECT_LEFT_FRAME);
+        SetCantSwitchToMeNow(lrCamera, ValidityAccount::E_NOCUTTO_SUBJECT_LEFT_FRAME);
     }
 
     mfLastMPH = lAttachedTo.mRaceCarState.mfSpeedMPH;

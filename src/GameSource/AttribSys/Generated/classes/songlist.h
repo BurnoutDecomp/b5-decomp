@@ -29,14 +29,14 @@ namespace Gen
         // ctor @ 0x82697978 — chain the Attrib::Instance base ctor, assert the collection's
         // class is ClassName::songlist (skipping the assert when the class is unset/0), then
         // give the instance a default data area (0x970 bytes) if it has none.
-        explicit songlist(Collection* lpCollection = 0, void* lpOwner = 0);
+        explicit songlist(const RefSpec& lrRefSpec, void* lpOwner = 0);
 
         // Bounds-checked accessor for the songlist's variable-length Song array.
         // X360 @0x82683998 (out-of-line; body in songlist.cpp). Reads mpAttributeData
         // (Instance+4), gets the array length via Attrib::Private::GetLength; if luIndex
         // (unsigned) >= length falls back to the shared zero-initialised default block
         // (one Song record, 0x18 bytes); otherwise indexes the array (stride 0x18, base +8).
-        void* Songs(unsigned int luIndex) const;
+        const RefSpec& Songs(u32 luIndex) const;
 
         // The songlist's own element COUNT attribute, at +0x968 inside the 0x970-byte
         // data area (the Songs array occupies +0x08 .. +0x967: 8 + 100*0x18 == 0x968).

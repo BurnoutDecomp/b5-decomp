@@ -3450,7 +3450,7 @@ namespace BrnDirector
                 const Camera::CameraState::EFlag leFlag =
                     static_cast<Camera::CameraState::EFlag>(luFlag);
                 const char* lpcFlagName = Camera::CameraState::GetDebugFlagName(leFlag);
-                if (lCamera.GetState().IsFlagSet(luFlag))
+                if (lCamera.GetState().IsFlagSet(leFlag))
                     lrPrinter.PrintActive(lpcFlagName);
                 else
                     lrPrinter.PrintInactive(lpcFlagName);

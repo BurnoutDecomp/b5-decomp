@@ -54,18 +54,13 @@ namespace Gen
     // Chain the Instance ctor, assert the collection's class is
     // ClassName::proceduralshot (skipping the assert when the class is
     // unset/0), then give the instance a default data area (0x10 bytes) if it
-    // has none. The X360 asm de-inlines the class-key check as a 64-bit
-    // register-pair compare (insrdi builds 0x9B2E3C86E02737B0, cmpld cr6);
-    // per the committed generated-class convention the low word 0xE02737B0 =
-    // -534300752 is the 32-bit ClassName::proceduralshot key and the high word
-    // is incidental -- matching the sibling debrisparams/worldemitter recons
-    // and the Hex-Rays pseudocode's own `GetClass() != -534300752`.
+    // has none. ARTIST 0x82209214 constructs the full key 0x9B2E3C86E02737B0.
     inline proceduralshot::proceduralshot(Collection* lpCollection, void* lpOwner)
         : Instance(lpCollection, lpOwner)
     {
-        static const int KI_PROCEDURALSHOT_CLASS = -534300752; // Attrib::ClassName::proceduralshot (0xE02737B0)
-        if (GetClass() != KI_PROCEDURALSHOT_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_PROCEDURALSHOT_CLASS, GetCollection());
+        static const u64 KU_PROCEDURALSHOT_CLASS = 0x9B2E3C86E02737B0ULL; // ARTIST 0x82209214
+        if (GetClass() != KU_PROCEDURALSHOT_CLASS && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_PROCEDURALSHOT_CLASS, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x10u);
     }
@@ -75,9 +70,9 @@ namespace Gen
     inline proceduralshot::proceduralshot(const Attrib::RefSpec& lrRefSpec, void* lpOwner)
         : Instance(lrRefSpec, lpOwner)
     {
-        static const int KI_PROCEDURALSHOT_CLASS = -534300752; // Attrib::ClassName::proceduralshot (0xE02737B0)
-        if (GetClass() != KI_PROCEDURALSHOT_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_PROCEDURALSHOT_CLASS, GetCollection());
+        static const u64 KU_PROCEDURALSHOT_CLASS = 0x9B2E3C86E02737B0ULL; // ARTIST 0x82209214
+        if (GetClass() != KU_PROCEDURALSHOT_CLASS && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_PROCEDURALSHOT_CLASS, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x10u);
     }

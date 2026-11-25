@@ -33,9 +33,9 @@ namespace Gen
     inline camerabumperbehaviour::camerabumperbehaviour(Collection* lpCollection, void* lpOwner)
         : Instance(lpCollection, lpOwner)
     {
-        static const int KI_CAMERABUMPERBEHAVIOUR_CLASS = -2057351271; // Attrib::ClassName::camerabumperbehaviour
-        if (GetClass() != KI_CAMERABUMPERBEHAVIOUR_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_CAMERABUMPERBEHAVIOUR_CLASS, GetCollection());
+        static const u64 KU_CAMERABUMPERBEHAVIOUR_CLASS = 0xF3E3F8EF855F4F99ULL; // ARTIST 0x8220657C
+        if (GetClass() != KU_CAMERABUMPERBEHAVIOUR_CLASS && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_CAMERABUMPERBEHAVIOUR_CLASS, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x2Cu);
     }

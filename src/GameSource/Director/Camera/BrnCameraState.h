@@ -98,13 +98,13 @@ public:
 
     // Set flag luIndex to lbValue. lbValue!=0 -> SetBit on the current set; lbValue==0 ->
     // UnSetBit on the current set. @0x82204368.
-    void SetFlag(u32 luIndex, bool lbValue);
+    void SetFlag(EFlag leFlag, bool lbValue);
 
     // Clear flag luIndex (UnSetBit on the current set). @0x822044B0.
-    void ClearFlag(u32 luIndex);
+    void ClearFlag(EFlag leFlag);
 
     // True iff flag luIndex's current bit differs from its previous-frame bit. @0x8227D380.
-    bool HasChanged(u32 luIndex) const;
+    bool HasChanged(EFlag leFlag) const;
 
     // @0x82220BC0 (DWARF BrnCameraState.cpp:121 -- the assert line). Merge two states for a
     // camera blend. NOT a numeric interpolation: the flag sets are combined with AND, so a
@@ -116,7 +116,7 @@ public:
     // current flag. The X360 inlines it as the 64-bit field load + mask test (the
     // same bit math as BitArray::IsBitSet); exposed by name so consumers stay off the
     // raw field.
-    bool IsFlagSet(u32 luIndex) const { return mCurrentFlags.IsBitSet(luIndex); }
+    bool IsFlagSet(EFlag leFlag) const { return mCurrentFlags.IsBitSet(static_cast<u32>(leFlag)); }
 
     // X360 0x821F8440; static by the r3-only ABI (there is no this pointer).
     // The 30-entry KAAC_FLAG_NAMES table and body are in BrnCameraState.cpp.
@@ -127,9 +127,9 @@ public:
     // .json does not carry, so a name search for it comes back empty; IDA has the symbol.
     // Its one caller is HUDEffect::UpdateRoadRage, which waits on E_FLAG_TAKEDOWN_CAMERA
     // going unset before playing the "time added" sting -- i.e. as the replay cuts back.
-    bool HasChangedToUnset(u32 luIndex) const
+    bool HasChangedToUnset(EFlag leFlag) const
     {
-        return !IsFlagSet(luIndex) && HasChanged(luIndex);
+        return !IsFlagSet(leFlag) && HasChanged(leFlag);
     }
 
     // DWARF BrnCameraState.h:144 `void CopyFlagsToPrevious(const CameraState &)`. The frame roll

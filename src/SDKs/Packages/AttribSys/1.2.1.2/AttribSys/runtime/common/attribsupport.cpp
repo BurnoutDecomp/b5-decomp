@@ -245,11 +245,9 @@ unsigned int Private::GetLength() const
 // (r6..r10 + one stack word).
 static char sacAssertMessage[1024];
 
-void AssertOnClassCheck(int liClass, int liExpectedClass, u64 luCollectionKey)
+void AssertOnClassCheck(u64 luClass, u64 luExpected, u64 luCollectionKey)
 {
     const u64 luCollection = luCollectionKey;
-    const u64 luClass = static_cast<u64>(static_cast<u32>(liClass));
-    const u64 luExpected = static_cast<u64>(static_cast<u32>(liExpectedClass));
 
     CgsCore::SPrintf(sacAssertMessage, 1024,
         "Collection %08x%08x of incorrect class (%08x%08x) being used to create instance of type %08x%08x",
@@ -257,7 +255,7 @@ void AssertOnClassCheck(int liClass, int liExpectedClass, u64 luCollectionKey)
         static_cast<u32>(luClass >> 32), static_cast<u32>(luClass),
         static_cast<u32>(luExpected >> 32), static_cast<u32>(luExpected));
 
-    if (liClass == liExpectedClass)
+    if (luClass == luExpected)
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(sacAssertMessage,

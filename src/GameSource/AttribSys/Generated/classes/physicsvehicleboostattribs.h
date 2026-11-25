@@ -33,9 +33,9 @@ namespace Gen
     inline physicsvehicleboostattribs::physicsvehicleboostattribs(Collection* lpCollection, void* lpOwner)
         : Instance(lpCollection, lpOwner)
     {
-        static const int KI_PHYSICSVEHICLEBOOSTATTRIBS_CLASS = -1350913250; // Attrib::ClassName::physicsvehicleboostattribs (0xAF7AB31E)
-        if (GetClass() != KI_PHYSICSVEHICLEBOOSTATTRIBS_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_PHYSICSVEHICLEBOOSTATTRIBS_CLASS, GetCollection());
+        static const u64 KU_PHYSICSVEHICLEBOOSTATTRIBS_CLASS = 0xEADE7049AF7AB31EULL; // ARTIST 0x825BDC5C
+        if (GetClass() != KU_PHYSICSVEHICLEBOOSTATTRIBS_CLASS && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_PHYSICSVEHICLEBOOSTATTRIBS_CLASS, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x40u);
     }

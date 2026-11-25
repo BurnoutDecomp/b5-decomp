@@ -2293,18 +2293,19 @@ void CollisionStateManager::SetCameraInfo(
 u32 CollisionStateManager::MapCameraStateToBinFlags(
     const BrnDirector::Camera::Camera& lrCamera) const
 {
-    const BrnDirector::Camera::CameraState& lrState = lrCamera.GetState();
+    typedef BrnDirector::Camera::CameraState CameraState;
+    const CameraState& lrState = lrCamera.GetState();
     u32 luFlags = 0;
-    if (lrState.IsFlagSet(0))  luFlags |= 0x001u;
-    if (lrState.IsFlagSet(3))  luFlags |= 0x002u;
-    if (lrState.IsFlagSet(4))  luFlags |= 0x004u;
-    if (lrState.IsFlagSet(5))  luFlags |= 0x008u;
-    if (lrState.IsFlagSet(7))  luFlags |= 0x010u;
-    if (lrState.IsFlagSet(8))  luFlags |= 0x020u;
-    if (lrState.IsFlagSet(9))  luFlags |= 0x040u;
-    if (lrState.IsFlagSet(10)) luFlags |= 0x080u;
-    if (lrState.IsFlagSet(11)) luFlags |= 0x100u;
-    if (lrState.IsFlagSet(12)) luFlags |= 0x200u;
+    if (lrState.IsFlagSet(CameraState::E_FLAG_WIDESCREEN))  luFlags |= 0x001u;
+    if (lrState.IsFlagSet(CameraState::E_FLAG_RACING_GAMEPLAY_CAMERA))  luFlags |= 0x002u;
+    if (lrState.IsFlagSet(CameraState::E_FLAG_BUMPER_CAM))  luFlags |= 0x004u;
+    if (lrState.IsFlagSet(CameraState::E_FLAG_SUPER_WIDE))  luFlags |= 0x008u;
+    if (lrState.IsFlagSet(CameraState::E_FLAG_JUMP_CAMERA))  luFlags |= 0x010u;
+    if (lrState.IsFlagSet(CameraState::E_FLAG_HARD_STOP_CAMERA))  luFlags |= 0x020u;
+    if (lrState.IsFlagSet(CameraState::E_FLAG_TUMBLING_PLAYER_FOCUSED))  luFlags |= 0x040u;
+    if (lrState.IsFlagSet(CameraState::E_FLAG_CRASH_CAMERA)) luFlags |= 0x080u;
+    if (lrState.IsFlagSet(CameraState::E_FLAG_TAKEDOWN_CAMERA)) luFlags |= 0x100u;
+    if (lrState.IsFlagSet(CameraState::E_FLAG_INTERNAL_CAR_CAMERA)) luFlags |= 0x200u;
     return luFlags ? luFlags : 1u;
 }
 

@@ -44,7 +44,6 @@ namespace
 
     // The camera-state CURRENT flag the valid body raises while framing the
     // PLAYER's own tumble (SetFlag(9) -- mask 0x200; role not yet recovered).
-    const u32 KU_STATE_FLAG_PLAYER_TUMBLE = 9;
 }
 
 namespace detail
@@ -364,7 +363,7 @@ void MomentTumbling::Update(f32 lfTimeStep, void* lrBehaviourController,
     // valid frame after) ----
     SetCamera(mGyroCam.GetProducedCamera());
     if (!mbLookingAtTakedown)
-        GetNonConstCamera().mState.SetFlag(KU_STATE_FLAG_PLAYER_TUMBLE, true);
+        GetNonConstCamera().mState.SetFlag(Camera::CameraState::E_FLAG_TUMBLING_PLAYER_FOCUSED, true);
 
     // Re-evaluate the keep condition (the trigger tests sans the parameter gates).
     bool lbTakedownKeep = false;

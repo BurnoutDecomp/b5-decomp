@@ -87,9 +87,9 @@ namespace Gen
     inline streamsettings::streamsettings(Collection* lpCollection, void* lpOwner)
         : Instance(lpCollection, lpOwner)
     {
-        static const int KI_STREAMSETTINGS_CLASS = 2109924313; // Attrib::ClassName::streamsettings (0x7DC2E3D9)
-        if (GetClass() != KI_STREAMSETTINGS_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_STREAMSETTINGS_CLASS, GetCollection());
+        static const u64 KU_STREAMSETTINGS_CLASS = 0x424AA44D7DC2E3D9ULL; // ARTIST 0x8269742C
+        if (GetClass() != KU_STREAMSETTINGS_CLASS && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_STREAMSETTINGS_CLASS, GetCollection());
     }
 }
 }

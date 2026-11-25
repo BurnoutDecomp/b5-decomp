@@ -38,9 +38,9 @@ namespace Gen
     inline gameplaysurface::gameplaysurface(Collection* lpCollection, void* lpOwner)
         : Instance(lpCollection, lpOwner)
     {
-        static const int KI_GAMEPLAYSURFACE_CLASS = 713126835; // Attrib::ClassName::gameplaysurface (0x2A8173B3)
-        if (GetClass() != KI_GAMEPLAYSURFACE_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_GAMEPLAYSURFACE_CLASS, GetCollection());
+        static const u64 KU_GAMEPLAYSURFACE_CLASS = 0x92D0095C2A8173B3ULL; // ARTIST 0x825C0CA4
+        if (GetClass() != KU_GAMEPLAYSURFACE_CLASS && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_GAMEPLAYSURFACE_CLASS, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x1u);
     }
@@ -48,9 +48,9 @@ namespace Gen
     inline gameplaysurface::gameplaysurface(const RefSpec& lrRefSpec, void* lpOwner)
         : Instance(lrRefSpec, lpOwner)
     {
-        static const int KI_GAMEPLAYSURFACE_CLASS = 713126835; // low word 0x2A8173B3
-        if (GetClass() != KI_GAMEPLAYSURFACE_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_GAMEPLAYSURFACE_CLASS, GetCollection());
+        static const u64 KU_GAMEPLAYSURFACE_CLASS = 0x92D0095C2A8173B3ULL; // ARTIST 0x825C0CA4
+        if (GetClass() != KU_GAMEPLAYSURFACE_CLASS && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_GAMEPLAYSURFACE_CLASS, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x1u);
     }

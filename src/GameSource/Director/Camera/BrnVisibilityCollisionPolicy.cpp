@@ -79,10 +79,10 @@ namespace
 //   ld/and ~2/std on camera +0x140                                  -- drop the follow request
 //   stb 1, 4(this)                                                  -- mbHasFailed
 // ----------------------------------------------------------------------------
-void CollisionPolicy::Fail(Camera& lrCamera, s32 leFailedFlag)
+void CollisionPolicy::Fail(Camera& lrCamera, ValidityAccount::EFailedFlag leFailedFlag)
 {
     lrCamera.GetValidityAccount().SetFlag(leFailedFlag);
-    lrCamera.GetState().ClearFlag(1u);
+    lrCamera.GetState().ClearFlag(CameraState::E_FLAG_VALID);
     mbFailed = true;
 
 }
@@ -272,7 +272,7 @@ void VisibilityCollisionPolicy::ProcessSceneQueryResults(const CollisionPolicySh
     if (mbUseGroundConstraint
         && !mGroundConstraint.ProcessSceneQueryResults(lrSharedInfo.mTimestep.Get(Timestep::E_WORLD), lrCamera))
     {
-        Fail(lrCamera, 3);   // E_FAILED_COULDNT_FIND_GROUND
+        Fail(lrCamera, ValidityAccount::E_FAILED_COULDNT_FIND_GROUND);   // E_FAILED_COULDNT_FIND_GROUND
     }
 
     if (mbDoingCollisionPredictionThisTime)
@@ -291,7 +291,7 @@ void VisibilityCollisionPolicy::ProcessSceneQueryResults(const CollisionPolicySh
     if (mbDoingCollisionPredictionThisTime && mGeometryCollisionPredictor.WillCollide()
         && mGeometryCollisionPredictor.GetTimeUntilCollision() < 1.0f && mbFirstFrame && mbCanFail)
     {
-        Fail(lrCamera, 9);   // E_FAILED_STARTED_TOO_NEAR_GEOMETRY
+        Fail(lrCamera, ValidityAccount::E_FAILED_STARTED_TOO_NEAR_GEOMETRY);   // E_FAILED_STARTED_TOO_NEAR_GEOMETRY
 
     }
 
@@ -299,28 +299,28 @@ void VisibilityCollisionPolicy::ProcessSceneQueryResults(const CollisionPolicySh
         && mVehicleCollisionPredictor.GetSoonestPredictedCollision().mfTimeUntilCollision < 1.0f && mbFirstFrame
         && mbCanFail)
     {
-        Fail(lrCamera, 10);  // E_FAILED_STARTED_TOO_NEAR_VEHICLE
+        Fail(lrCamera, ValidityAccount::E_FAILED_STARTED_TOO_NEAR_VEHICLE);  // E_FAILED_STARTED_TOO_NEAR_VEHICLE
     }
 
     mVisibilityTest.ProcessSceneQueryResults(lrSharedInfo.mTimestep.Get(Timestep::E_WORLD_NO_SLOMO));
 
     if (mbCanFail && mVolumeTest.HasPackage() && mVolumeTest.GetPackage().mbIntersection)
-        Fail(lrCamera, 0);   // E_FAILED_COLLISION
+        Fail(lrCamera, ValidityAccount::E_FAILED_COLLISION);   // E_FAILED_COLLISION
 
     if (mbCanFail && mbFirstFrame && mbDoingVisibilityTestThisTime && mVisibilityTest.IsVisibilityInterrupted())
     {
-        Fail(lrCamera, 1);   // E_FAILED_VISIBILITY
+        Fail(lrCamera, ValidityAccount::E_FAILED_VISIBILITY);   // E_FAILED_VISIBILITY
         if (mVisibilityTest.WillTestLookingAt() && !mVisibilityTest.IsOnScreen())
-            Fail(lrCamera, 2);   // E_FAILED_STARTED_OFF_SCREEN
+            Fail(lrCamera, ValidityAccount::E_FAILED_STARTED_OFF_SCREEN);   // E_FAILED_STARTED_OFF_SCREEN
     }
 
     if (mbCanFail && !mbFirstFrame && mbDoingVisibilityTestThisTime && GetMinTimeToVisibilityFailure() == 0.0f)
     {
         if (mVisibilityTest.WillTestLookingAt() && mVisibilityTest.GetOffscreenTime() > mfOffscreenTimeout)
-            Fail(lrCamera, 12);  // E_FAILED_SUBJECT_LEFT_FRAME
+            Fail(lrCamera, ValidityAccount::E_FAILED_SUBJECT_LEFT_FRAME);  // E_FAILED_SUBJECT_LEFT_FRAME
         if (mVisibilityTest.GetOccludedTime() > mfOcclusionTimeout)
-            Fail(lrCamera, 13);  // E_FAILED_SUBJECT_OCCLUDED
-        Fail(lrCamera, 1);       // E_FAILED_VISIBILITY
+            Fail(lrCamera, ValidityAccount::E_FAILED_SUBJECT_OCCLUDED);  // E_FAILED_SUBJECT_OCCLUDED
+        Fail(lrCamera, ValidityAccount::E_FAILED_VISIBILITY);       // E_FAILED_VISIBILITY
     }
 
     mbFirstFrame = false;                                                           // stb 0, 9

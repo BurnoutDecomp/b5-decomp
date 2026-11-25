@@ -32,8 +32,6 @@ namespace
     const u32 KU_HEAD_FLAG_PREPARING = 20;
     const u32 KU_HEAD_FLAG_INHIBITED = 23;
     const u32 KU_HEAD_FLAG_VALID     = 28;
-
-    const u32 KU_STATE_FLAG_KEEP_GATE = 1;   // mState current flag gating stay-valid
 }
 
 namespace detail
@@ -221,7 +219,7 @@ void MomentStationaryCrash::Update(f32 /*lfTimeStep*/, void* lrBehaviourControll
         SetCanSwitchFromMeNow(false);
         GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_VALID);
 
-        if (!GetNonConstCamera().mState.IsFlagSet(KU_STATE_FLAG_KEEP_GATE)
+        if (!GetNonConstCamera().mState.IsFlagSet(Camera::CameraState::E_FLAG_VALID)
             || mIceCameraHandle.GetBehaviour()->HasFinishedOrFailed())
         {
             Release();   // the live-vtable call (slot 4)

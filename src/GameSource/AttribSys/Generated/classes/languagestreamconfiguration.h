@@ -11,10 +11,7 @@
 // the ContentSpecs array-data accessor are the only languagestreamconfiguration functions
 // in this ledger slice (minimal X360-faithful recon). Derives from Attrib::Instance.
 //
-// class key correction (was 0xE0E111DB in a first pass): the asm's low-32-bit compare value
-// (and Hex-Rays' -720584208) is 0xD50CC1F0 — insrdi puts r10 in the UPPER half, so r11's
-// low word (0xD50CC1F0, first loaded via lis/ori) is what GetClass()'s 32-bit int compares
-// against, matching the sibling aftertouchcam/audiosurface low-word rule.
+// ARTIST 0x8269C93C constructs the full class key 0xE0E111DBD50CC1F0.
 #include "types.hpp"                                                          // u8 / u32
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribinstance.h"
 #include "GameSource/AttribSys/Generated/attrib_private.h"   // Attrib::Private (canonical)
@@ -51,9 +48,9 @@ namespace Gen
     inline languagestreamconfiguration::languagestreamconfiguration(Collection* lpCollection, void* lpOwner)
         : Instance(lpCollection, lpOwner)
     {
-        static const int KI_LANGUAGESTREAMCONFIGURATION_CLASS = static_cast<int>(0xD50CC1F0u); // -720584208, Attrib::ClassName::languagestreamconfiguration
-        if (GetClass() != KI_LANGUAGESTREAMCONFIGURATION_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_LANGUAGESTREAMCONFIGURATION_CLASS, GetCollection());
+        static const u64 KU_LANGUAGESTREAMCONFIGURATION_CLASS = 0xE0E111DBD50CC1F0ULL; // ARTIST 0x8269C93C
+        if (GetClass() != KU_LANGUAGESTREAMCONFIGURATION_CLASS && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_LANGUAGESTREAMCONFIGURATION_CLASS, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x20u);
     }

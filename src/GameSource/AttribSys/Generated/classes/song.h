@@ -19,7 +19,7 @@ namespace Gen
     class song : private Instance
     {
     public:
-        explicit song(Collection* lpCollection = 0, void* lpOwner = 0);
+        explicit song(const RefSpec& lrRefSpec, void* lpOwner = 0);
 
         // The song's stream NAME, a const char* stored at +0x04 inside the 0x14-byte
         // data area. X360-attested by MusicEffect::UpdateParams @0x826FE5C8 --
@@ -27,9 +27,6 @@ namespace Gen
         //     lwz r11, var_13C(r1)   ; the song Instance's mpAttributeData
         //     lwz r3,  4(r11)        ; -> CgsSound::Playback::Name::MakeHash
         // (the generated accessor itself is inlined away on the console).
-        // The 4-byte slot is read and widened the way every committed generated text
-        // accessor does it (crashbin::TextAt, propscrashbin::TextAt): attribute data
-        // keeps its console 32-bit pointer slots and the game heap lives below 4 GB.
         const char* Stream() const { return TextAt(0x04u); }
 
         // The three EA-Trax display strings, X360-attested by the three EaTraxHelper
@@ -46,19 +43,10 @@ namespace Gen
         const char* Album() const  { return TextAt(0x0Cu); }
 
     private:
-        // The committed generated-text-accessor idiom (crashbin::TextAt /
-        // propscrashbin::TextAt): attribute data keeps its console 32-bit pointer slots
-        // and the game heap lives below 4 GB, so the slot is read and widened.
-        const char* TextAt(unsigned int luOffset) const
+        const char* TextAt(u32 luOffset) const
         {
-            const unsigned char* lpData =
-                static_cast<const unsigned char*>(GetLayoutPointer());
-            if (!lpData)
-                return 0;
-            unsigned int luAddress = 0;
-            std::memcpy(&luAddress, lpData + luOffset, sizeof(luAddress));
-            return reinterpret_cast<const char*>(
-                static_cast<unsigned long long>(luAddress));
+            return *reinterpret_cast<const char* const*>(
+                static_cast<const u8*>(GetLayoutPointer()) + luOffset);
         }
 
     public:
@@ -67,14 +55,13 @@ namespace Gen
     // Chain the Instance ctor, assert the collection's class is ClassName::song
     // (skipping the assert when the class is unset/0), then give the instance a
     // default data area (0x14 bytes) if it has none.
-    inline song::song(Collection* lpCollection, void* lpOwner)
-        : Instance(lpCollection, lpOwner)
+    inline song::song(const RefSpec& lrRefSpec, void* lpOwner)
+        : Instance(lrRefSpec, lpOwner)
     {
-        static const int KI_SONG_CLASS = -110802100; // Attrib::ClassName::song (0xF9654B4C)
-        if (GetClass() != KI_SONG_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_SONG_CLASS, GetCollection());
-        if (!mpAttributeData)
-            mpAttributeData = DefaultDataArea(0x14u);
+        static const u64 KU_SONG_CLASS = 0x858461ECF9654B4CULL; // ARTIST 0x826974BC
+        if (GetClass() != KU_SONG_CLASS && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_SONG_CLASS, GetCollection());
+        SetDefaultLayout(0x14u);
     }
 }
 }

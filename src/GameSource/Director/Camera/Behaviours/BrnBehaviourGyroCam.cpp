@@ -87,7 +87,7 @@ bool BehaviourGyroCam::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInf
     CGS_ASSERT(mpParameters != 0, CGS_ASSERT_MESSAGE_AT("mpParameters != NULL", CGS_ARTIST_FILE, 226));
     if (!mAttachedTo.IsValid(*lrInfo.GetWorld()))
     {
-        Fail(lrCamera, 11);
+        Fail(lrCamera, ValidityAccount::E_FAILED_INVALID_VEHICLE_REF);
         return true;
     }
     if (!HasFailed()) lrCamera.mState_uFlags |= 2;
@@ -175,7 +175,7 @@ bool BehaviourGyroCam::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInf
     if (mbIsPlanted)
     {
         lrCamera.SetRequestedTimeDilation(0.2857142985f);
-        if (!HasFailed()) SetCantSwitchFromMeNow(lrCamera, 28);
+        if (!HasFailed()) SetCantSwitchFromMeNow(lrCamera, ValidityAccount::E_NOCUTFROM_MONEY_SHOT);
     }
     if (!HasFailed() && !mbUseVehicleAttachmentCollision)
     {

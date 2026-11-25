@@ -31,9 +31,9 @@ namespace Gen
     inline physicsvehicledriftattribs::physicsvehicledriftattribs(Collection* lpCollection, void* lpOwner)
         : Instance(lpCollection, lpOwner)
     {
-        static const int KI_PHYSICSVEHICLEDRIFTATTRIBS_CLASS = static_cast<int>(0xF8D767ACu); // Attrib::ClassName::physicsvehicledriftattribs (== -120100948)
-        if (GetClass() != KI_PHYSICSVEHICLEDRIFTATTRIBS_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_PHYSICSVEHICLEDRIFTATTRIBS_CLASS, GetCollection());
+        static const u64 KU_PHYSICSVEHICLEDRIFTATTRIBS_CLASS = 0x3F9370FCF8D767ACULL; // ARTIST 0x825BE04C
+        if (GetClass() != KU_PHYSICSVEHICLEDRIFTATTRIBS_CLASS && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_PHYSICSVEHICLEDRIFTATTRIBS_CLASS, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0xA0u);
     }

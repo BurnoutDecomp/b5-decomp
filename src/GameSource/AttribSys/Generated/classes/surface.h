@@ -94,9 +94,9 @@ namespace Gen
     inline surface::surface(Collection* lpCollection, void* lpOwner)
         : Instance(lpCollection, lpOwner)
     {
-        static const int KI_SURFACE_CLASS = 2016857936; // Attrib::ClassName::surface (0x7836CF50)
-        if (GetClass() != KI_SURFACE_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_SURFACE_CLASS, GetCollection());
+        static const u64 KU_SURFACE_CLASS = 0x68428A3C7836CF50ULL; // ARTIST 0x8227FADC
+        if (GetClass() != KU_SURFACE_CLASS && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_SURFACE_CLASS, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x90u);
     }
@@ -106,9 +106,9 @@ namespace Gen
     inline surface::surface(const RefSpec& lrRefSpec, void* lpOwner)
         : Instance(lrRefSpec, lpOwner)
     {
-        static const int KI_SURFACE_CLASS = 2016857936; // low word 0x7836CF50
-        if (GetClass() != KI_SURFACE_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_SURFACE_CLASS, GetCollection());
+        static const u64 KU_SURFACE_CLASS = 0x68428A3C7836CF50ULL; // ARTIST 0x8227FADC
+        if (GetClass() != KU_SURFACE_CLASS && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_SURFACE_CLASS, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x90u);
     }

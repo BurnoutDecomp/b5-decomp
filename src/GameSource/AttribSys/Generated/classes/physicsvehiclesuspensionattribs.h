@@ -31,9 +31,9 @@ namespace Gen
     inline physicsvehiclesuspensionattribs::physicsvehiclesuspensionattribs(Collection* lpCollection, void* lpOwner)
         : Instance(lpCollection, lpOwner)
     {
-        static const int KI_PHYSICSVEHICLESUSPENSIONATTRIBS_CLASS = static_cast<int>(525480399u); // Attrib::ClassName::physicsvehiclesuspensionattribs (0x1F5231CF)
-        if (GetClass() != KI_PHYSICSVEHICLESUSPENSIONATTRIBS_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_PHYSICSVEHICLESUSPENSIONATTRIBS_CLASS, GetCollection());
+        static const u64 KU_PHYSICSVEHICLESUSPENSIONATTRIBS_CLASS = 0x4297B5841F5231CFULL; // ARTIST 0x825BDEFC
+        if (GetClass() != KU_PHYSICSVEHICLESUSPENSIONATTRIBS_CLASS && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_PHYSICSVEHICLESUSPENSIONATTRIBS_CLASS, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x34u);
     }

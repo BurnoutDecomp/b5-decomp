@@ -322,7 +322,7 @@ BehaviourInterpolate::PostCollisionUpdate(Camera& lrCamera, const BehaviourShare
     }
     else if (!mbHasFailed)
     {
-        SetCantSwitchFromMeNow(lrCamera, ValidityAccount::E_FIRST_NOCUTFROM_FLAG);    // 0x1B
+        SetCantSwitchFromMeNow(lrCamera, ValidityAccount::E_NOCUTFROM_INTERPOLATING);    // 0x1B
     }
 
     mfRunningTime += lrInfo.GetTimestep(meTimestepType);

@@ -36,14 +36,10 @@ namespace Gen
     class shotgroup : private Instance
     {
     public:
-        // The shotgroup class key the ctor resolves its collection against, LOW word
-        // (0x3887CBC7 == 948423623). Kept for the AssertOnClassCheck sites that quote it.
-        static const int KI_SHOTGROUP_CLASS = 948423623;
-
         // The FULL 64-bit class key Attrib::FindCollection resolves against. The ctor
         // @0x82208620 builds it in r3 as `lis 0x3887 / ori 0xCBC7 / lis 0x38ED /
         // ori 0x2D37 / insrdi r3,r11,32,0`, i.e. high word 0x38ED2D37 over
-        // KI_SHOTGROUP_CLASS. The class registry is keyed by the whole doubleword, so
+        // KU_SHOTGROUP_CLASS_KEY. The class registry is keyed by the whole doubleword, so
         // the low word alone MISSES.
         static const u64 KU_SHOTGROUP_CLASS_KEY = 0x38ED2D373887CBC7ULL;
 
@@ -152,7 +148,7 @@ namespace Gen
     //     Attrib::Instance::Instance(this, collection, owner)   (r5 = owner)
     //
     // ⭐ FIXED 2026-07-31. This ctor used to read
-    //     `: Instance(FindCollection(KI_SHOTGROUP_CLASS, lpOwner), lpOwner)`
+    //     `: Instance(FindCollection(KU_SHOTGROUP_CLASS_KEY, lpOwner), lpOwner)`
     // with the group-name key COMMENTED OUT -- so every construction resolved the same
     // collection regardless of which shot group was asked for, and the owner pointer was
     // being passed where the collection key belongs. That is the defect
@@ -172,8 +168,8 @@ namespace Gen
     inline shotgroup::shotgroup(Collection* lpCollection, void* lpOwner)
         : Instance(lpCollection, lpOwner)
     {
-        if (GetClass() != KI_SHOTGROUP_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_SHOTGROUP_CLASS, GetCollection());
+        if (GetClass() != KU_SHOTGROUP_CLASS_KEY && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_SHOTGROUP_CLASS_KEY, GetCollection());
     }
 
     inline const void* shotgroup::GetShotListData(bool lbUseSecond) const

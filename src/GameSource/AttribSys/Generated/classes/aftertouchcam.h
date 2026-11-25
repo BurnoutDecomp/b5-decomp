@@ -60,13 +60,9 @@ namespace Gen
     inline aftertouchcam::aftertouchcam(Collection* lpCollection, void* lpOwner)
         : Instance(lpCollection, lpOwner)
     {
-        // X360 asm stages a 64-bit compare (cmpld) built from two lis/ori halves combined
-        // via insrdi: high word 0x75E62FC1 (dead -- GetClass() returns a 32-bit int so only
-        // the low word can ever match), low word 0x632388D6 == 1663273174, the actual class
-        // id compared (matches Hex-Rays' own literal in the pseudocode).
-        static const int KI_AFTERTOUCHCAM_CLASS = 1663273174; // Attrib::ClassName::aftertouchcam
-        if (GetClass() != KI_AFTERTOUCHCAM_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_AFTERTOUCHCAM_CLASS, GetCollection());
+        // Compare the full class key constructed by ARTIST at 0x822066AC.
+        if (GetClass() != KU_AFTERTOUCHCAM_CLASS_KEY && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_AFTERTOUCHCAM_CLASS_KEY, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x18u);
     }
@@ -74,9 +70,9 @@ namespace Gen
     inline aftertouchcam::aftertouchcam(const Attrib::RefSpec& lrRefSpec, void* lpOwner)
         : Instance(lrRefSpec, lpOwner)
     {
-        static const int KI_AFTERTOUCHCAM_CLASS = 1663273174; // Attrib::ClassName::aftertouchcam
-        if (GetClass() != KI_AFTERTOUCHCAM_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_AFTERTOUCHCAM_CLASS, GetCollection());
+
+        if (GetClass() != KU_AFTERTOUCHCAM_CLASS_KEY && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_AFTERTOUCHCAM_CLASS_KEY, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x18u);
     }

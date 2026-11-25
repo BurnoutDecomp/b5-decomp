@@ -3,6 +3,10 @@
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleDebugPrinter.h"   // DebugLog::Append
 
 #include <cstring>   // std::strcmp (SetupFailFlagMask's name-table self-check)
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
+
+#define CGS_ARTIST_BITARRAY_FILE "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsBitArray.h"
+#define CGS_ARTIST_VALIDITY_ACCOUNT_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\director\\camera\\BrnCameraValidityAccount.h"
 
 // BrnDirector::Camera::ValidityAccount -- reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
@@ -131,14 +135,15 @@ void ValidityAccount::Print(DebugLog& lrDebugLog) const
 }
 
 // @ 0x82204028 -- range-check the failure reason (h:219; the streamed
-// CgsBitArray.h:222 index guard folded static per convention), then raise its bit
+// CgsBitArray.h:222 index guard is restored), then raise its bit
 // in the u64-backed set (the X360 inlines the BitArray 64-bit-field SetBit).
-void ValidityAccount::SetFlag(s32 leFlag)
+void ValidityAccount::SetFlag(EFailedFlag leFlag)
 {
     CGS_ASSERT(leFlag >= E_FIRST_FAILED_FLAG && leFlag < E_END_FAILED_FLAG,
-               CGS_ASSERT_MESSAGE_AT("leFlag >= E_FIRST_FAILED_FLAG && leFlag < E_END_FAILED_FLAG", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\director\\camera\\BrnCameraValidityAccount.h", 219));   // h:219 (non-gating)
-    CGS_ASSERT(static_cast<u32>(leFlag) < 32u,
-               "Index < Number of bits");   // CgsBitArray.h:222 (streamed on the X360; folded static)
+               CGS_ASSERT_MESSAGE_AT("leFlag >= E_FIRST_FAILED_FLAG && leFlag < E_END_FAILED_FLAG", CGS_ARTIST_VALIDITY_ACCOUNT_FILE, 219));   // h:219 (non-gating)
+    CGS_ASSERT_STREAM_AT(static_cast<u32>(leFlag) < 32u,
+                         "Index: " << static_cast<u32>(leFlag) << ", Number of bits: " << 32u,
+                         CGS_ARTIST_BITARRAY_FILE, 222);
     mFailedFlags.SetBit(static_cast<u32>(leFlag));
 }
 
@@ -162,15 +167,17 @@ void ValidityAccount::MaskToFailFlags()
 // against [E_FIRST_NOCUTFROM_FLAG, E_END_NOCUTFROM_FLAG) (asm `cmpwi 0x1B` / `cmpwi 0x1F`,
 // assert text at BrnCameraValidityAccount.h:245), then raise its bit in the same u64 set
 // (the X360 inlines the BitArray 64-bit-field SetBit exactly as SetFlag does, with the
-// streamed CgsBitArray.h index guard folded static per convention).
+// streamed CgsBitArray.h index guard).
 // Identified from its single caller, Behaviour::SetCantSwitchFromMeNow @0x82206388, which
 // hands it `camera + 0x138` -- this account.
-void ValidityAccount::SetNoCutFromFlag(s32 leFlag)
+void ValidityAccount::SetFlag(ENoCutFromFlag leFlag)
 {
     CGS_ASSERT(leFlag >= E_FIRST_NOCUTFROM_FLAG && leFlag < E_END_NOCUTFROM_FLAG,
-               "leFlag >= E_FIRST_NOCUTFROM_FLAG && leFlag < E_END_NOCUTFROM_FLAG");  // h:245
-    CGS_ASSERT(static_cast<u32>(leFlag) < 32u,
-               "Index < Number of bits");   // CgsBitArray.h:222 (streamed on the X360)
+               CGS_ASSERT_MESSAGE_AT("leFlag >= E_FIRST_NOCUTFROM_FLAG && leFlag < E_END_NOCUTFROM_FLAG",
+                                     CGS_ARTIST_VALIDITY_ACCOUNT_FILE, 245));
+    CGS_ASSERT_STREAM_AT(static_cast<u32>(leFlag) < 32u,
+                         "Index: " << static_cast<u32>(leFlag) << ", Number of bits: " << 32u,
+                         CGS_ARTIST_BITARRAY_FILE, 222);
     mFailedFlags.SetBit(static_cast<u32>(leFlag));
 }
 
@@ -184,7 +191,7 @@ void ValidityAccount::SetNoCutFromFlag(s32 leFlag)
 // (Behaviour::SetCantSwitchToMeNow) passes the reason straight through, so the bit raised is
 // exactly the one the console raises regardless of where the band boundaries sit.
 // DELETE-WHEN: the no-cut-TO setter's address/band is identified -- then add its range assert.
-void ValidityAccount::SetNoCutToFlag(s32 leFlag)
+void ValidityAccount::SetFlag(ENoCutToFlag leFlag)
 {
     CGS_ASSERT(static_cast<u32>(leFlag) < 32u,
                "Index < Number of bits");   // CgsBitArray.h:222 (streamed on the X360)
@@ -193,3 +200,6 @@ void ValidityAccount::SetNoCutToFlag(s32 leFlag)
 
 }
 }
+
+#undef CGS_ARTIST_VALIDITY_ACCOUNT_FILE
+#undef CGS_ARTIST_BITARRAY_FILE

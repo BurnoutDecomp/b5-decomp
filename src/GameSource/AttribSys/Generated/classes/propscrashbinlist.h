@@ -89,9 +89,9 @@ namespace Gen
     inline propscrashbinlist::propscrashbinlist(Collection* lpCollection, void* lpOwner)
         : Instance(lpCollection, lpOwner)
     {
-        static const int KI_PROPSCRASHBINLIST_CLASS = 1326501919; // Attrib::ClassName::propscrashbinlist
-        if (GetClass() != KI_PROPSCRASHBINLIST_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_PROPSCRASHBINLIST_CLASS, GetCollection());
+
+        if (GetClass() != KU_CLASS_KEY && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_CLASS_KEY, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x4D8u);
     }

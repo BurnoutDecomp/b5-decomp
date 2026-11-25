@@ -31,13 +31,12 @@ namespace
     // The camera-state flag whose set state restarts the inertia (BitArray index 6 of
     // CameraState::mCurrentFlags). FLAG: the producer-side name of flag 6 is not yet
     // recovered; its role here (a hard camera cut) is from this consumer.
-    const u32 KU_CAMERA_FLAG_RESET_INERTIA = 6;
 }
 
 // @ 0x8221ECD0
 void InertiaController::Update(Camera::Camera* lpCamera, f32 lfTimeStep)
 {
-    if (lpCamera->mState.IsFlagSet(KU_CAMERA_FLAG_RESET_INERTIA))
+    if (lpCamera->mState.IsFlagSet(Camera::CameraState::E_FLAG_NEW_THIS_FRAME))
     {
         miFrame = 0;
     }

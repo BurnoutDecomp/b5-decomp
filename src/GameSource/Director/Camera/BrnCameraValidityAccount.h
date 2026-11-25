@@ -8,10 +8,7 @@
 // account the director's shared info carries @ +0x138 (the block the Behaviour /
 // CollisionPolicy Fail paths record their failure reasons into). DWARF home
 // gamesource/director/camera/BrnCameraValidityAccount.h (the SetFlag assert cite).
-// The per-flag NAMES are recovered and committed with the account's own TU (the table in
-// BrnCameraValidityAccount.cpp, which both Print overloads index by flag). The enumerators
-// themselves are still unnamed here; the three bands below are what the asserts attest, and
-// that table's three name prefixes agree with them band for band.
+// DecFIGS declares three distinct reason enums sharing this account's 32 bits.
 namespace BrnDirector
 {
     // The two dev sinks the Print overloads write to. Reference-only here, so the forward
@@ -36,17 +33,53 @@ namespace Camera
     class ValidityAccount
     {
     public:
-        enum
+        enum EFailedFlag
         {
-            E_FIRST_FAILED_FLAG = 0,    // h:219 (lower bound; the asm performs both checks)
-            E_END_FAILED_FLAG   = 14,   // h:219 (exclusive upper bound, asm `cmplwi 0xE`)
+            E_FIRST_FAILED_FLAG = 0,
+            E_FAILED_COLLISION = 0,
+            E_FAILED_VISIBILITY = 1,
+            E_FAILED_STARTED_OFF_SCREEN = 2,
+            E_FAILED_COULDNT_FIND_GROUND = 3,
+            E_FAILED_STARTED_IN_GEOMETRY = 4,
+            E_FAILED_COLLISION_POLICY = 5,
+            E_FAILED_COULDNT_FIND_ROADSIDE = 6,
+            E_FAILED_POSITION_TOO_FAR_FROM_SUBJECT = 7,
+            E_FAILED_ICE_MOVIE_COMPLETE = 8,
+            E_FAILED_STARTED_TOO_NEAR_GEOMETRY = 9,
+            E_FAILED_STARTED_TOO_NEAR_VEHICLE = 10,
+            E_FAILED_INVALID_VEHICLE_REF = 11,
+            E_FAILED_SUBJECT_LEFT_FRAME = 12,
+            E_FAILED_SUBJECT_OCCLUDED = 13,
+            E_END_FAILED_FLAG = 14,
+        };
 
-            // The "the director may not cut AWAY from this behaviour" band. Bounds are
-            // asm-attested from sub_82204148 == SetNoCutFromFlag (`cmpwi 0x1B` /
-            // `cmpwi 0x1F`, assert text "leFlag >= E_FIRST_NOCUTFROM_FLAG && leFlag <
-            // E_END_NOCUTFROM_FLAG", BrnCameraValidityAccount.h:245).
+        enum ENoCutToFlag
+        {
+            E_FIRST_NOCUTTO_FLAG = 14,
+            E_NOCUTTO_FINDING_POSITION = 14,
+            E_NOCUTTO_SUBJECT_ABOUT_TO_LEAVE_FRAME = 15,
+            E_NOCUTTO_SUBJECT_LEFT_FRAME = 16,
+            E_NOCUTTO_SUBJECT_OCCLUDED = 17,
+            E_NOCUTTO_MOMENT_CONDITIONS_NOT_MET = 18,
+            E_NOCUTTO_WAITING_FOR_BEHAVIOUR_TO_PREPARE = 19,
+            E_NOCUTTO_WAITING_TO_CUT_TO_BEHAVIOUR = 20,
+            E_NOCUTTO_OPPORTUNITY_WINDOW_PASSED = 21,
+            E_NOCUTTO_TIME_LIMIT_NEARLY_ELAPSED = 22,
+            E_NOCUTTO_MOMENT_INHIBITED = 23,
+            E_NOCUTTO_BEHAVIOUR_NOCUTTO = 24,
+            E_NOCUTTO_ABOUT_TO_HIT_GEOMETRY = 25,
+            E_NOCUTTO_ABOUT_TO_HIT_VEHICLE = 26,
+            E_END_NOCUTTO_FLAG = 27,
+        };
+
+        enum ENoCutFromFlag
+        {
             E_FIRST_NOCUTFROM_FLAG = 27,
-            E_END_NOCUTFROM_FLAG   = 31,
+            E_NOCUTFROM_INTERPOLATING = 27,
+            E_NOCUTFROM_MONEY_SHOT = 28,
+            E_NOCUTFROM_ICE_MOVIE_NOT_FINISHED = 29,
+            E_NOCUTFROM_BEHAVIOUR_NOCUTFROM = 30,
+            E_END_NOCUTFROM_FLAG = 31,
         };
 
         // ---- the two dev read-outs (DWARF BrnCameraValidityAccount.h:85 / :88) -------------
@@ -67,13 +100,13 @@ namespace Camera
 
         // @0x82204028 (class TU; body in BrnCameraValidityAccount.cpp) -- record a
         // failure reason: range-check it, then raise its bit.
-        void SetFlag(s32 leFlag);
+        void SetFlag(EFailedFlag leFlag);
 
         // @0x82204148 (`sub_82204148` in the ARTIST export; identified by its assert text
         // and by its ONLY caller, Behaviour::SetCantSwitchFromMeNow @0x82206388, which
         // passes `camera + 0x138` == this account). Range-check the no-cut-from reason,
         // then raise its bit in the same u64 set SetFlag uses.
-        void SetNoCutFromFlag(s32 leFlag);
+        void SetFlag(ENoCutFromFlag leFlag);
 
         // Per-frame reset (X360 BehaviourHelper::Update @0x82220688, inlined):
         //     assert(sbFailFlagMaskSet);                       // h:193
@@ -88,7 +121,7 @@ namespace Camera
         // export for it is present in the available dumps, so its flag BAND is NOT
         // attested and is deliberately not fabricated here. DELETE-WHEN: the sibling's
         // address is identified (it is the ICF-adjacent twin of @0x82204148).
-        void SetNoCutToFlag(s32 leFlag);
+        void SetFlag(ENoCutToFlag leFlag);
 
         // @0x82221118 (body in BrnCameraValidityAccount.cpp) -- one-time setup of the
         // module fail-flag mask pair: raise bits [0..E_END_FAILED_FLAG) in sFailFlagMask

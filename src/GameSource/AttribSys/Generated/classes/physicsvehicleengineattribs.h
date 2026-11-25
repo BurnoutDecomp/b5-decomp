@@ -49,9 +49,9 @@ namespace Gen
     inline physicsvehicleengineattribs::physicsvehicleengineattribs(Collection* lpCollection, void* lpOwner)
         : Instance(lpCollection, lpOwner)
     {
-        static const int KI_PHYSICSVEHICLEENGINEATTRIBS_CLASS = static_cast<int>(0xA54C9B92u); // Attrib::ClassName::physicsvehicleengineattribs
-        if (GetClass() != KI_PHYSICSVEHICLEENGINEATTRIBS_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_PHYSICSVEHICLEENGINEATTRIBS_CLASS, GetCollection());
+        static const u64 KU_PHYSICSVEHICLEENGINEATTRIBS_CLASS = 0xF850281CA54C9B92ULL; // ARTIST 0x825BDDAC
+        if (GetClass() != KU_PHYSICSVEHICLEENGINEATTRIBS_CLASS && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_PHYSICSVEHICLEENGINEATTRIBS_CLASS, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x90u);
     }

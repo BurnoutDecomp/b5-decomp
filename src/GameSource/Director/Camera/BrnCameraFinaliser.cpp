@@ -101,7 +101,6 @@ namespace BrnDirector
         // The CameraState flag whose set state means "this camera CUT this frame" -- BitArray
         // index 6, the same one InertiaController::Update reads to restart its history
         // (`ld r11, 0x140(camera)` / `rlwinm r11,r11,0,25,25` == the 0x40 mask).
-        const u32 KU_CAMERA_FLAG_CUT_THIS_FRAME = 6;
 
         // GameState::miThisFramesActionFlags bit 4 -- "a SMASH stunt element completed this
         // frame". MainDirector::ProcessInputQueue's game-action-58 arm raises it for stunt
@@ -146,7 +145,7 @@ namespace BrnDirector
         // [diag] BRN_CAMERA_TRACE -- see the two helpers above.
 
         // ---- Step 2 @0x82250484 / @0x822504B8 -- the shake SCALE accumulator --------------
-        if (lpCameraInOut->GetState().IsFlagSet(KU_CAMERA_FLAG_CUT_THIS_FRAME))
+        if (lpCameraInOut->GetState().IsFlagSet(Camera::CameraState::E_FLAG_NEW_THIS_FRAME))
         {
             mfShakeScale = 0.0f;
         }

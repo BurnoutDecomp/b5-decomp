@@ -73,9 +73,9 @@ namespace Gen
     inline burnoutcargraphicsasset::burnoutcargraphicsasset(Collection* lpCollection, void* lpOwner)
         : Instance(lpCollection, lpOwner)
     {
-        static const int KI_BURNOUTCARGRAPHICSASSET_CLASS = 1712282196; // Attrib::ClassName::burnoutcargraphicsasset (0x660F5A54)
-        if (GetClass() != KI_BURNOUTCARGRAPHICSASSET_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_BURNOUTCARGRAPHICSASSET_CLASS, GetCollection());
+        static const u64 KU_BURNOUTCARGRAPHICSASSET_CLASS = 0xF0FF4DFD660F5A54ULL; // ARTIST 0x822BA104
+        if (GetClass() != KU_BURNOUTCARGRAPHICSASSET_CLASS && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_BURNOUTCARGRAPHICSASSET_CLASS, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(8u);
     }

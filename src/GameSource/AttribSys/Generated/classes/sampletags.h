@@ -28,9 +28,9 @@ namespace Gen
         explicit sampletags(const RefSpec& lrRefSpec, void* lpOwner = 0)
             : Instance(lrRefSpec, lpOwner)
         {
-            static const int KI_SAMPLETAGS_CLASS = -1630207590;
-            if (GetClass() != KI_SAMPLETAGS_CLASS && GetClass() != 0)
-                AssertOnClassCheck(GetClass(), KI_SAMPLETAGS_CLASS, GetCollection());
+            static const u64 KU_SAMPLETAGS_CLASS = 0x2D0B94349ED5019AULL; // ARTIST 0x82696554
+            if (GetClass() != KU_SAMPLETAGS_CLASS && GetClass() != 0)
+                AssertOnClassCheck(GetClass(), KU_SAMPLETAGS_CLASS, GetCollection());
             if (!mpAttributeData)
                 mpAttributeData = DefaultDataArea(0x118u);
         }
@@ -45,14 +45,13 @@ namespace Gen
     };
 
     // Chain the Instance ctor, assert the collection's class is ClassName::sampletags,
-    // then give the instance a default data area (0x118 bytes) if it has none. The class
-    // key is the low word of the 64-bit cmpld immediate (0x2D0B9434_9ED5019A) — 0x9ED5019A.
+    // then give the instance a default layout if needed. ARTIST 0x82696554 constructs the full key.
     inline sampletags::sampletags(Collection* lpCollection, void* lpOwner)
         : Instance(lpCollection, lpOwner)
     {
-        static const int KI_SAMPLETAGS_CLASS = -1630207590; // Attrib::ClassName::sampletags (0x9ED5019A)
-        if (GetClass() != KI_SAMPLETAGS_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_SAMPLETAGS_CLASS, GetCollection());
+        static const u64 KU_SAMPLETAGS_CLASS = 0x2D0B94349ED5019AULL; // ARTIST 0x82696554
+        if (GetClass() != KU_SAMPLETAGS_CLASS && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_SAMPLETAGS_CLASS, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x118u);
     }

@@ -27,15 +27,13 @@ namespace Gen
 
     // Chain the Instance ctor, assert the collection's class is
     // ClassName::physicsvehiclebaseattribs, then give the instance a default data area
-    // (0x140 bytes) if construction left it without one. The class id is the LOW word of
-    // the 64-bit insrdi compare doubleword (0x141DFFA6); the incidental high word
-    // (0xF79C545E) is dead — GetClass() is a 32-bit int occupying the low word.
+    // (0x140 bytes) if needed. ARTIST 0x825BD994 constructs the full key 0xF79C545E141DFFA6.
     inline physicsvehiclebaseattribs::physicsvehiclebaseattribs(Collection* lpCollection, void* lpOwner)
         : Instance(lpCollection, lpOwner)
     {
-        static const int KI_PHYSICSVEHICLEBASEATTRIBS_CLASS = 337510310; // 0x141DFFA6 — Attrib::ClassName::physicsvehiclebaseattribs
-        if (GetClass() != KI_PHYSICSVEHICLEBASEATTRIBS_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_PHYSICSVEHICLEBASEATTRIBS_CLASS, GetCollection());
+        static const u64 KU_PHYSICSVEHICLEBASEATTRIBS_CLASS = 0xF79C545E141DFFA6ULL; // ARTIST 0x825BD994
+        if (GetClass() != KU_PHYSICSVEHICLEBASEATTRIBS_CLASS && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_PHYSICSVEHICLEBASEATTRIBS_CLASS, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x140u);
     }

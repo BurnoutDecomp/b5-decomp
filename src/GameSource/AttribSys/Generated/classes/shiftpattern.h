@@ -82,9 +82,9 @@ namespace Gen
     inline shiftpattern::shiftpattern(Collection* lpCollection, void* lpOwner)
         : Instance(lpCollection, lpOwner)
     {
-        static const int KI_SHIFTPATTERN_CLASS = 1819927603; // Attrib::ClassName::shiftpattern (0x6C79E433)
-        if (GetClass() != KI_SHIFTPATTERN_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_SHIFTPATTERN_CLASS, GetCollection());
+        static const u64 KU_SHIFTPATTERN_CLASS = 0xEB964A6E6C79E433ULL; // ARTIST 0x82696494
+        if (GetClass() != KU_SHIFTPATTERN_CLASS && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_SHIFTPATTERN_CLASS, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0xF0u);
     }

@@ -1084,16 +1084,17 @@ void CrashPlayManager::OnVehicleHitConfirmed( s32 liVehicleBaseScore,
 // =================================================================================================
 f32 CrashPlayManager::GetShowtimeTrafficDensityScale() const
 {
+    static const char KAC_ARTIST_SOURCE_FILE[] = "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/RaceCarEntityModule/CrashPlay/BrnCrashPlayManager.cpp";
     CGS_ASSERT( mfDifficultyLevel >= 0.0f && mfDifficultyLevel <= 1.0f,
-                CGS_ASSERT_MESSAGE_AT( "mfDifficultyLevel>=0 && mfDifficultyLevel<=1.0f", __FILE__, 973 ) );   // 0x822A80E0
+                CGS_ASSERT_MESSAGE_AT( "mfDifficultyLevel>=0 && mfDifficultyLevel<=1.0f", KAC_ARTIST_SOURCE_FILE, 973 ) );   // 0x822A80E0
 
     // `fsubs f12, 1.0, difficulty` ; `fsubs f13, MAX (0x82CDB558), MIN (0x82CDB554)` ;
     // `fmadds f31, f13, f12, f0(MIN)` @0x822A8110 -- ONE rounding.
     // [FX-AIBUZZ 2026-09-24: was MIN + (MAX - MIN) * (1 - d), two roundings]
-    const f32 lfScale = ((KF_MAX_TRAFFIC_DENSITY - KF_MIN_TRAFFIC_DENSITY) * (1.0f - mfDifficultyLevel) + (KF_MIN_TRAFFIC_DENSITY));
+    const f32 lfScale = KF_MIN_TRAFFIC_DENSITY + (KF_MAX_TRAFFIC_DENSITY - KF_MIN_TRAFFIC_DENSITY) * (1.0f - mfDifficultyLevel);
 
     CGS_ASSERT( lfScale >= 0.0f && lfScale <= 1.0f,
-                CGS_ASSERT_MESSAGE_AT( "lfScale >= 0.0f && lfScale <= 1.0f", __FILE__, 977 ) );   // 0x822A812C
+                CGS_ASSERT_MESSAGE_AT( "lfScale >= 0.0f && lfScale <= 1.0f", KAC_ARTIST_SOURCE_FILE, 977 ) );   // 0x822A812C
 
     return lfScale;
 }

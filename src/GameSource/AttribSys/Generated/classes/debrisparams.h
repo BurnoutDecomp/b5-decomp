@@ -19,7 +19,7 @@ namespace Gen
     {
     public:
         // The 64-bit class key the X360 keyed ctor @0x8227EA48 hands FindCollection:
-        // `lis r11,0x26D8 / ori r3,r11,0x1D5F` (the low word, == KI_DEBRISPARAMS_CLASS
+        // `lis r11,0x26D8 / ori r3,r11,0x1D5F` (the low word, == KU_DEBRISPARAMS_CLASS_KEY
         // below) then `lis r11,0x3024 / ori r11,r11,0xA287 / insrdi r3,r11,32,0` (the high
         // word). EffectsModule::Prepare @0x8229E690 calls it with
         // StringToKey("383338"/"595518"/"608203"). Additive (2026-09-02).
@@ -43,9 +43,9 @@ namespace Gen
     inline debrisparams::debrisparams(Collection* lpCollection, void* lpOwner)
         : Instance(lpCollection, lpOwner)
     {
-        static const int KI_DEBRISPARAMS_CLASS = 651697503; // Attrib::ClassName::debrisparams
-        if (GetClass() != KI_DEBRISPARAMS_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_DEBRISPARAMS_CLASS, GetCollection());
+
+        if (GetClass() != KU_DEBRISPARAMS_CLASS_KEY && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_DEBRISPARAMS_CLASS_KEY, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0xE0u);
     }

@@ -1734,7 +1734,7 @@ bool BehaviourGameplayExternal::Update(Camera& lCamera, const BehaviourSharedInf
         // flavour AND raise the camera's "behaviour ran" state bit (X360
         // `ld/ori 2/std` at lCamera + 0x140 == CameraState's current-flag word, bit 1).
         const f32 lfTimestep = lrSharedInfo.GetTimestep(GetTimestepType());
-        lCamera.GetState().SetFlag(1, true);
+        lCamera.GetState().SetFlag(CameraState::E_FLAG_VALID, true);
 
         // .cpp:201 -- frames-at-60Hz, the unit every spring rate below is authored in.
         const f32 lfTimeStepMod = lfTimestep * 60.0f;
@@ -2061,7 +2061,7 @@ bool BehaviourGameplayExternal::Update(Camera& lCamera, const BehaviourSharedInf
         lCamera.ValidateTransformWithDebugInfo();
 
         // .cpp:495 -- flag 3: this behaviour has published a transform this frame.
-        lCamera.GetState().SetFlag(3, true);
+        lCamera.GetState().SetFlag(CameraState::E_FLAG_RACING_GAMEPLAY_CAMERA, true);
         CGS_ASSERT(lfFOV > 0.0f, "FOV is <value> before scaling");
 
         lCamera.SetFOV(lfFOV);                                              // .cpp:495 tail
@@ -2125,11 +2125,11 @@ bool BehaviourGameplayExternal::Update(Camera& lCamera, const BehaviourSharedInf
         if (mRotationController.IsStartingLookbackThisFrame()
             != mRotationController.IsEndingLookbackThisFrame())
         {
-            lCamera.GetState().SetFlag(6, true);
+            lCamera.GetState().SetFlag(CameraState::E_FLAG_NEW_THIS_FRAME, true);
         }
         else
         {
-            lCamera.GetState().ClearFlag(6);
+            lCamera.GetState().ClearFlag(CameraState::E_FLAG_NEW_THIS_FRAME);
         }
     }
 

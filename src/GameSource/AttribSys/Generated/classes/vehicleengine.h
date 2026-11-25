@@ -178,9 +178,9 @@ namespace Gen
     inline vehicleengine::vehicleengine(Collection* lpCollection, void* lpOwner)
         : Instance(lpCollection, lpOwner)
     {
-        static const int KI_VEHICLEENGINE_CLASS = 1210889151; // 0x482CB3BF, Attrib::ClassName::vehicleengine
-        if (GetClass() != KI_VEHICLEENGINE_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_VEHICLEENGINE_CLASS, GetCollection());
+        static const u64 KU_VEHICLEENGINE_CLASS = 0x7F161D94482CB3BFULL; // ARTIST 0x82696F64
+        if (GetClass() != KU_VEHICLEENGINE_CLASS && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_VEHICLEENGINE_CLASS, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x230u);
     }

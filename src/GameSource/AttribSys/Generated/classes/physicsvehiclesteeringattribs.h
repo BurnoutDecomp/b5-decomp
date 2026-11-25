@@ -39,9 +39,9 @@ namespace Gen
     inline physicsvehiclesteeringattribs::physicsvehiclesteeringattribs(Collection* lpCollection, void* lpOwner)
         : Instance(lpCollection, lpOwner)
     {
-        static const int KI_PHYSICSVEHICLESTEERINGATTRIBS_CLASS = 556409804; // Attrib::ClassName::physicsvehiclesteeringattribs (0x212A23CC)
-        if (GetClass() != KI_PHYSICSVEHICLESTEERINGATTRIBS_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_PHYSICSVEHICLESTEERINGATTRIBS_CLASS, GetCollection());
+        static const u64 KU_PHYSICSVEHICLESTEERINGATTRIBS_CLASS = 0x43462C59212A23CCULL; // ARTIST 0x825BDE54
+        if (GetClass() != KU_PHYSICSVEHICLESTEERINGATTRIBS_CLASS && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_PHYSICSVEHICLESTEERINGATTRIBS_CLASS, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x38u);
     }

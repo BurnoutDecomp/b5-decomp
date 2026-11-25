@@ -39,9 +39,9 @@ namespace Gen
     inline cameraexternalbehaviour::cameraexternalbehaviour(Collection* lpCollection, void* lpOwner)
         : Instance(lpCollection, lpOwner)
     {
-        static const int KI_CAMERAEXTERNALBEHAVIOUR_CLASS = -991282044; // Attrib::ClassName::cameraexternalbehaviour (0xC4EA3C84)
-        if (GetClass() != KI_CAMERAEXTERNALBEHAVIOUR_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_CAMERAEXTERNALBEHAVIOUR_CLASS, GetCollection());
+        static const u64 KU_CAMERAEXTERNALBEHAVIOUR_CLASS = 0xE9EDA3B8C4EA3C84ULL; // ARTIST 0x822064D4
+        if (GetClass() != KU_CAMERAEXTERNALBEHAVIOUR_CLASS && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_CAMERAEXTERNALBEHAVIOUR_CLASS, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x44u);
     }

@@ -32,9 +32,9 @@ namespace Gen
     inline physicsvehiclebodyrollattribs::physicsvehiclebodyrollattribs(Collection* lpCollection, void* lpOwner)
         : Instance(lpCollection, lpOwner)
     {
-        static const int KI_PHYSICSVEHICLEBODYROLLATTRIBS_CLASS = -767015842; // Attrib::ClassName::physicsvehiclebodyrollattribs (0xD248445E)
-        if (GetClass() != KI_PHYSICSVEHICLEBODYROLLATTRIBS_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_PHYSICSVEHICLEBODYROLLATTRIBS_CLASS, GetCollection());
+        static const u64 KU_PHYSICSVEHICLEBODYROLLATTRIBS_CLASS = 0x2E3B1DC7D248445EULL; // ARTIST 0x825BDFA4
+        if (GetClass() != KU_PHYSICSVEHICLEBODYROLLATTRIBS_CLASS && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_PHYSICSVEHICLEBODYROLLATTRIBS_CLASS, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x28u);
     }

@@ -26,8 +26,6 @@ namespace
     const u32 KU_HEAD_FLAG_INHIBITED      = 23;
     const u32 KU_HEAD_FLAG_NOT_SWITCHABLE = 24;   // (valid but the behaviour can't be switched to yet)
 
-    const u32 KU_STATE_FLAG_KEEP_GATE = 1;   // mState current flag gating stay-valid
-
     // The motion blur the valid body forces on the mirrored camera each frame.
     const f32 KF_BYSTANDER_CARS_BLUR_AMOUNT  = 0.25f;
     const f32 KF_BYSTANDER_WORLD_BLUR_AMOUNT = 1.0f;
@@ -206,7 +204,7 @@ void MomentBystanderSeesAction::Update(f32 /*lfTimeStep*/, void* lrBehaviourCont
     if ((!MomentSharedInfo_IsPlayerCrashing(lSharedInfo)
          && !MomentSharedInfo_WasTakedown(lSharedInfo))
         || MomentSharedInfo_IsCrashReplayDisabled(lSharedInfo)
-        || !mBystander.GetProducedCamera().mState.IsFlagSet(KU_STATE_FLAG_KEEP_GATE))
+        || !mBystander.GetProducedCamera().mState.IsFlagSet(Camera::CameraState::E_FLAG_VALID))
     {
         Release();   // the live-vtable call (slot 4)
     }

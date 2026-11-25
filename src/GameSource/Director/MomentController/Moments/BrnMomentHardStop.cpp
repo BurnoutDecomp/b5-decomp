@@ -44,8 +44,6 @@ namespace
 
     // The camera-state CURRENT flags the VALID body touches (roles not recovered):
     // SetFlag(8) is raised each valid frame; IsFlagSet(1) gates staying valid.
-    const u32 KU_STATE_FLAG_KEEP_GATE = 1;
-    const u32 KU_STATE_FLAG_HARD_STOP = 8;
 
     // The debug-log colours (packed RGBA words the console build passes literally).
     const u32 KU_LOG_COLOUR_RED    = 0xFFFF0000u;   // candidate-failed lines
@@ -450,7 +448,7 @@ void MomentHardStop::Update(f32 lfTimeStep, void* lrBehaviourController,
             SetCamera(mRigCameraHandleB.GetProducedCamera());
             GetNonConstCamera().mShotSelectionInfo = mShotBSelectionInfo;
         }
-        GetNonConstCamera().mState.SetFlag(KU_STATE_FLAG_HARD_STOP, true);
+        GetNonConstCamera().mState.SetFlag(Camera::CameraState::E_FLAG_HARD_STOP_CAMERA, true);
         GetNonConstCamera().mpCrashAnalysis = &mCrashAnalysisUsedAtSelection;
         if (mbForceUltraSloMo)
             GetNonConstCamera().GetEffects().mfSimTimeScale = mfUltraSloMoTimestepScale;
@@ -471,7 +469,7 @@ void MomentHardStop::Update(f32 lfTimeStep, void* lrBehaviourController,
             && meCrashType == 1;
 
         ++siHardStopDiagFrames;
-        if (!GetNonConstCamera().mState.IsFlagSet(KU_STATE_FLAG_KEEP_GATE)
+        if (!GetNonConstCamera().mState.IsFlagSet(Camera::CameraState::E_FLAG_VALID)
             || !MomentSharedInfo_IsCrashCameraActive(lSharedInfo)
             || (lbActiveCanSwitchFrom && meCrashType != 1)
             || lbCleanEarlyOut)

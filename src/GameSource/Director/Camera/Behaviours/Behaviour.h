@@ -371,7 +371,7 @@ namespace Camera
         bool HasFailed() const          { return mbHasFailed; }                       // :437
 
         // Give up following. Bodies in Behaviour.cpp (@0x822063E8).
-        void Fail(Camera& lrCamera, s32 leFailedFlag);                                // :487
+        void Fail(Camera& lrCamera, ValidityAccount::EFailedFlag leFailedFlag);                                // :487
 
         BrnDirector::Timestep::EType GetTimestepType() const { return meTimestepType; }        // :468
         void SetTimestepType(BrnDirector::Timestep::EType leType) { meTimestepType = leType; } // :477
@@ -384,8 +384,8 @@ namespace Camera
         void SetNotPrepared() { mbIsPrepared = false; }                               // :404
 
         // Bodies in Behaviour.cpp (SetCantSwitchFromMeNow @0x82206388).
-        void SetCantSwitchToMeNow(Camera& lrCamera, s32 leNoCutToFlag);               // :447
-        void SetCantSwitchFromMeNow(Camera& lrCamera, s32 leNoCutFromFlag);           // :458
+        void SetCantSwitchToMeNow(Camera& lrCamera, ValidityAccount::ENoCutToFlag leNoCutToFlag);               // :447
+        void SetCantSwitchFromMeNow(Camera& lrCamera, ValidityAccount::ENoCutFromFlag leNoCutFromFlag);           // :458
 
         bool IsTweakerAttached() const { return mbTweakerAttached; }                  // :502
         bool IsDebugDisplayActive() const;                                            // :510

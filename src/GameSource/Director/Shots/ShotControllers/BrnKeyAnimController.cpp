@@ -92,8 +92,6 @@ static const f32 KF_LETTERBOX_EFFECT_AMOUNT = 0.15f;
 // those bits (0x40 == 1<<6, 0x2000 == 1<<13). FLAG: the flag NAMES are inferred from what
 // raises them -- a take whose sub-take changed this frame is a hard CUT, and an eye/look
 // point authored in eICE_SCENE_SPACE is a world-anchored ("scene") shot.
-static const u32 KU_CAMERA_FLAG_CUT         = 6;    // camera +0x140 bit 0x40
-static const u32 KU_CAMERA_FLAG_SCENE_SPACE = 13;   // camera +0x140 bit 0x2000
 
 // ----------------------------------------------------------------------------
 // The ICE element indices this controller samples. Indices into the engine's
@@ -330,7 +328,7 @@ void KeyAnimController::UpdateCameraFromICE(const ICE::ICETake& lrTake,
     lrEffects.mfBlackBarAmount = (lfLetterbox > 0.0f) ? KF_LETTERBOX_EFFECT_AMOUNT : 0.0f;
 
     // A take that swapped to a new sub-take this frame is a hard CUT.
-    lpCamera->GetState().SetFlag(KU_CAMERA_FLAG_CUT, lrTake.IsNewSubTakeThisFrame());
+    lpCamera->GetState().SetFlag(Camera::CameraState::E_FLAG_NEW_THIS_FRAME, lrTake.IsNewSubTakeThisFrame());
 
     // The game-camera blend / lag request pair (both authored as percentages) and the two
     // blend-shape selectors that go with them.
@@ -379,7 +377,7 @@ void KeyAnimController::UpdateTransformationMatrix(const ICE::ICETake& lrTake,
    // [DIAG] NOT X360
 
     // A shot authored against the SCENE space is a world-anchored shot.
-    lpCamera->GetState().SetFlag(KU_CAMERA_FLAG_SCENE_SPACE,
+    lpCamera->GetState().SetFlag(Camera::CameraState::E_FLAG_DONT_UPDATE_SCENESPACE,
                                  leEyeSpace == ICE::eICE_SCENE_SPACE
                                  || leLookSpace == ICE::eICE_SCENE_SPACE);
 

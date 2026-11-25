@@ -954,7 +954,7 @@ namespace Camera
             lpPolicy->ProcessSceneQueryResults(lrSharedInfo, mCamera);
             if (lpPolicy->HasFailed())
             {
-                lpBehaviour->Fail(mCamera, 5);   // ValidityAccount::E_FAILED_COLLISION_POLICY
+                lpBehaviour->Fail(mCamera, ValidityAccount::E_FAILED_COLLISION_POLICY);   // ValidityAccount::E_FAILED_COLLISION_POLICY
 
             }
         }

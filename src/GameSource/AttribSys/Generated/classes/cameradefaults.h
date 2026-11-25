@@ -25,9 +25,6 @@ namespace Gen
     class cameradefaults : private Instance
     {
     public:
-        // The cameradefaults class key, LOW word (0x5F206F31 == 1595961137).
-        static const int KI_CAMERADEFAULTS_CLASS = 1595961137;
-
         // The FULL 64-bit class key Attrib::FindCollection resolves against. RECOVERED
         // 2026-07-31 from the ctor @0x82208770: `lis 0x5F20 / ori 0x6F31 / lis 0x095B /
         // ori 0x375E / insrdi r3,r11,32,0` -> 0x095B375E_5F206F31. (This one was not
@@ -96,8 +93,8 @@ namespace Gen
     inline cameradefaults::cameradefaults(Collection* lpCollection, void* lpOwner)
         : Instance(lpCollection, lpOwner)
     {
-        if (GetClass() != KI_CAMERADEFAULTS_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_CAMERADEFAULTS_CLASS, GetCollection());
+        if (GetClass() != KU_CAMERADEFAULTS_CLASS_KEY && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_CAMERADEFAULTS_CLASS_KEY, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x38u);
     }

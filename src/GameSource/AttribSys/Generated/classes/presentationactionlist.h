@@ -54,9 +54,9 @@ namespace Gen
     inline presentationactionlist::presentationactionlist(Collection* lpCollection, void* lpOwner)
         : Instance(lpCollection, lpOwner)
     {
-        static const int KI_PRESENTATIONACTIONLIST_CLASS = -1959977425; // Attrib::ClassName::presentationactionlist
-        if (GetClass() != KI_PRESENTATIONACTIONLIST_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_PRESENTATIONACTIONLIST_CLASS, GetCollection());
+        static const u64 KU_PRESENTATIONACTIONLIST_CLASS = 0x781A45228B2D1E2FULL; // ARTIST 0x8269E234
+        if (GetClass() != KU_PRESENTATIONACTIONLIST_CLASS && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_PRESENTATIONACTIONLIST_CLASS, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x1D48u);
     }

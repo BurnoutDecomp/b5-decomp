@@ -1,5 +1,6 @@
 #include "rw/rwcore_structs.h"
 #include "rw/rwcore_general_alloc.h"
+#include "rw/RwHash32String.h"
 #include "rw/core/memory/memoryfunctions.h"
 #include <cstdlib>
 #include <cstring>
@@ -418,10 +419,6 @@ namespace rw
     // subtract the five unsigned size words, and preserve each alignment.
     ResourceDescriptor LinearResourceAllocator::GetAvailable() const
     {
-        ResourceDescriptor lAvailable = m_heapCapacity;
-        for (uint32_t luLane = 0; luLane < KU_RESOURCE_LANE_COUNT; ++luLane)
-            lAvailable.m_baseResourceDescriptors[luLane].m_size -=
-                m_currentUsage.m_baseResourceDescriptors[luLane].m_size;
-        return lAvailable;
+        return m_heapCapacity - m_currentUsage;
     }
 }

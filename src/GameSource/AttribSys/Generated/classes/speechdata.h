@@ -100,9 +100,9 @@ namespace Gen
     inline speechdata::speechdata(Collection* lpCollection, void* lpOwner)
         : Instance(lpCollection, lpOwner)
     {
-        static const int KI_SPEECHDATA_CLASS = -130413976; // Attrib::ClassName::speechdata (0xF83A0A68)
-        if (GetClass() != KI_SPEECHDATA_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_SPEECHDATA_CLASS, GetCollection());
+        static const u64 KU_SPEECHDATA_CLASS = 0x10C9EA23F83A0A68ULL; // ARTIST 0x8269CB0C
+        if (GetClass() != KU_SPEECHDATA_CLASS && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_SPEECHDATA_CLASS, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x188u);
     }

@@ -572,15 +572,37 @@ AptRenderItem* AptRenderItem::PropagateTreeIsVisible(int nVisibleMode)
     return result;
 }
 
+namespace
+{
+    // Both ARTIST revision bodies inline the complete acquisition loop.
+    __forceinline void LockAptRenderTreeRevision()
+    {
+        while (static_cast<unsigned long>(_InterlockedCompareExchange(&gAptRenderTreeRevisionLock, 1, 0)) != 0u)
+        {
+        }
+    }
+
+    inline void UnlockAptRenderTreeRevision()
+    {
+        _InterlockedExchange(&gAptRenderTreeRevisionLock, 0);
+    }
+}
+
 // Manager_CloneNewItem @0x82ADAAE8 -- under the render-tree lock, virtual-Clone
 // THIS item into a fresh non-extended revision, install it as our next revision
 // ([c:0x28]), take its reference, and return it.
+// Native size optimization preserves the lock register schedule at 0x82ADAB00
+// and 0x82ADABB8 through the virtual Clone call and unlock.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 AptRenderItem* AptRenderItem::Manager_CloneNewItem(int nTick)
 {
-    AptRenderItem* pNew = Clone(nTick, false);   // (**a1)(a1, a2, 0)
-    mpManagerNextRevision = pNew;                // [c:0x28]
-    if (pNew)
-        pNew->AddReference();                    // atomic ++mRefCount [c:0x24]
+    LockAptRenderTreeRevision();
+    AptRenderItem* pNew = Clone(nTick, false);
+    mpManagerNextRevision = pNew;
+    pNew->AddReference();
+    UnlockAptRenderTreeRevision();
     return pNew;
 }
 
@@ -588,12 +610,16 @@ AptRenderItem* AptRenderItem::Manager_CloneNewItem(int nTick)
 // the virtual Clone copies the EXTENDED state (mask / depth / manager links).
 AptRenderItem* AptRenderItem::Manager_CreateNewRevision(int nTick)
 {
-    AptRenderItem* pNew = Clone(nTick, true);    // (**a1)(a1, a2, 1)
-    mpManagerNextRevision = pNew;                // [c:0x28]
-    if (pNew)
-        pNew->AddReference();                    // atomic ++mRefCount [c:0x24]
+    LockAptRenderTreeRevision();
+    AptRenderItem* pNew = Clone(nTick, true);
+    mpManagerNextRevision = pNew;
+    pNew->AddReference();
+    UnlockAptRenderTreeRevision();
     return pNew;
 }
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // Manager_GetRenderRevision @0x82ADAC58 -- walk the next-revision chain ([c:0x28])
 // and return the newest revision that is renderable for nTick (aged in + committed,

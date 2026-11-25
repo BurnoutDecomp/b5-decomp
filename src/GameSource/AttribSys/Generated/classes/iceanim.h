@@ -75,9 +75,9 @@ namespace Gen
     inline iceanim::iceanim(Collection* lpCollection, void* lpOwner)
         : Instance(lpCollection, lpOwner)
     {
-        static const int KI_ICEANIM_CLASS = -1449672210; // Attrib::ClassName::iceanim
-        if (GetClass() != KI_ICEANIM_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_ICEANIM_CLASS, GetCollection());
+        static const u64 KU_ICEANIM_CLASS = 0x4644E379A997C1EEULL; // ARTIST 0x821F5900
+        if (GetClass() != KU_ICEANIM_CLASS && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_ICEANIM_CLASS, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x10u);
     }

@@ -877,7 +877,7 @@ void BehaviourRoadRunner::Reverse()
 //     if (!mbIsPrepared)
 //     {
 //         if (!mTrafficLaneTruck.Prepare(*lrInfo.mpWorldMap, lrInfo.<+0x280>))
-//         { Behaviour::Fail(lrCamera, 6); return true; }                // <-- TODAY'S BRANCH
+//         { Behaviour::Fail(lrCamera, ValidityAccount::E_FAILED_COULDNT_FIND_ROADSIDE); return true; }                // <-- TODAY'S BRANCH
 //         <first-frame mode seed>; mbIsPrepared = true;
 //     }
 //     <~280 lines: the two diagonal near-clip line tests, the collision timers, the height
@@ -942,7 +942,7 @@ bool BehaviourRoadRunner::Update(Camera& lrCamera, const BehaviourSharedInfo& lr
 
         if (lpWorldMap == 0 || !mTrafficLaneTruck.Prepare(*lpWorldMap, lSeedPoint))
         {
-            Fail(lrCamera, 6);                         // bl Behaviour::Fail(this, camera, 6)
+            Fail(lrCamera, ValidityAccount::E_FAILED_COULDNT_FIND_ROADSIDE);                         // bl Behaviour::Fail(this, camera, 6)
             return true;
         }
 

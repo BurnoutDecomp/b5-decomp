@@ -53,9 +53,9 @@ namespace Gen
     inline proceduralshake::proceduralshake(Collection* lpCollection, void* lpOwner)
         : Instance(lpCollection, lpOwner)
     {
-        static const int KI_PROCEDURALSHAKE_CLASS = -1191313409; // 0xB8FDFFFF, Attrib::ClassName::proceduralshake
-        if (GetClass() != KI_PROCEDURALSHAKE_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_PROCEDURALSHAKE_CLASS, GetCollection());
+
+        if (GetClass() != KU_PROCEDURALSHAKE_CLASS_KEY && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_PROCEDURALSHAKE_CLASS_KEY, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x1Cu);
     }
@@ -66,15 +66,12 @@ namespace Gen
     //     GetClass() == 0                   ?   -> skip
     //     AssertOnClassCheck(GetClass(), ClassKey(), GetCollection())
     //     if (!mpAttributeData) mpAttributeData = DefaultDataArea(0x1C)
-    // (The class comparison narrows to the low word here for the same reason iceanim.cpp
-    // records: this tree's Instance::GetClass returns `int`. It affects the diagnostic
-    // assert only, never the construction or the layout pointer.)
     inline proceduralshake::proceduralshake(const RefSpec& lrRefSpec, void* lpOwner)
         : Instance(lrRefSpec, lpOwner)
     {
-        static const int KI_PROCEDURALSHAKE_CLASS = -1191313409; // Attrib::ClassName::proceduralshake
-        if (GetClass() != KI_PROCEDURALSHAKE_CLASS && GetClass() != 0)
-            AssertOnClassCheck(GetClass(), KI_PROCEDURALSHAKE_CLASS, GetCollection());
+
+        if (GetClass() != KU_PROCEDURALSHAKE_CLASS_KEY && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KU_PROCEDURALSHAKE_CLASS_KEY, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x1Cu);
     }
