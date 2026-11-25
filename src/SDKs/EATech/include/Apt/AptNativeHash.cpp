@@ -66,14 +66,6 @@ AptNativeHash::AptNativeHash(int32_t nCapacity)
     }
 }
 
-// X360: there is no standalone ~AptNativeHash; the scalar-deleting destructor
-// (@0x82AF0918) and the AptValueWithHash teardown reach the same teardown through
-// DestroyGCPointers. Modelled as the C++ destructor for embedded-by-value use.
-AptNativeHash::~AptNativeHash()
-{
-    if (mpTable)
-        DestroyGCPointers();
-}
 
 // FirstAllocation @0x82AE5190 -- allocate + zero the bucket array.
 void AptNativeHash::FirstAllocation()

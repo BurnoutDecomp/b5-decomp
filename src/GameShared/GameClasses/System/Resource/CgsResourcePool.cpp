@@ -1226,24 +1226,24 @@ namespace CgsResource
     {
         if (!mbIsValid)
             return;
+
+        const u16 luMax = muMaxResources;
         miNumResourcesInPurgatory = 0;
-        for (u32 lu = 0; lu < muMaxResources; ++lu)
+        for (u32 luIndex = 0; luIndex < luMax; ++luIndex)
         {
-            if ((mpx8ResourceStatuses[lu] & 2u) != 0)
+            if ((mpx8ResourceStatuses[luIndex] & 2u) != 0)
             {
-                const s16 liReferences = mpiResourceRefCounts[lu];
-                if (liReferences > -miRefCountThreshold)
+                const s16 liReferences = mpiResourceRefCounts[luIndex];
+                if (liReferences <= -miRefCountThreshold)
+                    DeleteEntry(static_cast<s16>(luIndex));
+                else if (liReferences <= 0)
                 {
-                    if (liReferences <= 0)
-                    {
-                        --mpiResourceRefCounts[lu];
-                        ++miNumResourcesInPurgatory;
-                    }
+                    --mpiResourceRefCounts[luIndex];
+                    ++miNumResourcesInPurgatory;
                 }
-                else
-                    DeleteEntry(static_cast<s16>(lu));
             }
         }
+
         if (IsDefragmenting())
         {
             if (mpCurrentRelocator != 0)
@@ -1251,7 +1251,8 @@ namespace CgsResource
             else if (mpCurrentScratchPool != 0)
                 UpdateDefrag();
             else
-                CGS_ASSERT(false, "Invalid defragmentation mode - don't have a relocator (for emergency frag) or scratch pool (for silent frag)\n");
+                CGS_ASSERT_STREAM_AT(false, "Invalid defragmentation mode - don't have a relocator (for emergency frag) or scratch pool (for silent frag)\n",
+                                     CGS_ARTIST_POOL_FILE, 1556);
         }
     }
 
@@ -1400,18 +1401,16 @@ namespace CgsResource
     // silent path also clears the memory-type selector when all batches finish.
     void Pool::BeginDefragNextSetOfRelocations()
     {
-        CGS_ASSERT(mbIsValid, "Pool is not valid\n");
-        if (muNextRelocation < muNumRelocations)
-        {
-            miDefragFrame = 0;
-            meDefragStage = DEFRAGSTAGE_WAIT_FOR_INITIAL_DEATHS;
-        }
-        else
+        CGS_ASSERT_STREAM_AT(mbIsValid, "Pool is not valid\n", CGS_ARTIST_POOL_FILE, 2088);
+        if (muNextRelocation >= muNumRelocations)
         {
             meDefragStage = DEFRAGSTAGE_IDLE;
             miDefragFrame = -1;
             miDefragMemType = -1;
+            return;
         }
+        miDefragFrame = 0;
+        meDefragStage = DEFRAGSTAGE_WAIT_FOR_INITIAL_DEATHS;
     }
 
     // ARTIST 828FE758: gather -> publish scratch -> wait for old frames ->

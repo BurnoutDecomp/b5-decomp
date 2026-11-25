@@ -94,14 +94,22 @@ namespace CgsGraphics
         void WaitForDecode();
 
         // Movie chunk headers are little-endian; Xenon swaps them before use.
-        static u32 ByteSwap(u32 luValue)
+        // ARTIST 827EA2D0..E0 decodes the signed 32-bit stream fields in two halfwords.
+        static s32 ByteSwap(s32 liValue)
         {
-            return (luValue >> 24) | ((luValue >> 8) & 0x0000FF00u)
-                 | ((luValue << 8) & 0x00FF0000u) | (luValue << 24);
+            const u32 luValue = static_cast<u32>(liValue);
+            const u32 luLowHalf = (static_cast<u32>(liValue >> 8) & 0xFF00u) | (luValue >> 24);
+            const u32 luDuplicatedLowHalf = (luValue << 16) | (luValue & 0xFFFFu);
+            const u32 luHighHalf = (luDuplicatedLowHalf << 8) & 0xFFFF0000u;
+            return static_cast<s32>(luHighHalf | luLowHalf);
         }
-        static s32 ByteSwap(s32 liValue) { return static_cast<s32>(ByteSwap(static_cast<u32>(liValue))); }
         static u16 ByteSwap(u16 luValue) { return static_cast<u16>((luValue >> 8) | (luValue << 8)); }
-        static s16 ByteSwap(s16 lsValue) { return static_cast<s16>(ByteSwap(static_cast<u16>(lsValue))); }
+        static s16 ByteSwap(s16 lsValue)
+        {
+            const s16 lsHigh = static_cast<s16>(static_cast<u16>(lsValue) << 8);
+            const s16 lsLow = (lsValue >> 8) & 0xFF;
+            return static_cast<s16>(lsHigh | lsLow);
+        }
 
         // ARTIST offsets. The critical section belongs to mMovieStream at
         // +0x1E0 (ctor827DD390), not to a separate player-level lock.

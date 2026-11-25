@@ -33,6 +33,7 @@
 // ===========================================================================
 
 #include <cstddef>   // size_t
+#include <xtl.h>
 
 #include "SDKs/EATech/include/Apt/AptObject.h"
 // (AptObject.h -> AptValueWithHash.h transitively provides EAStringC /
@@ -79,3 +80,18 @@ struct AptGlobal : public AptObject
 // ---------------------------------------------------------------------------
 extern AptValueWithHash* gpAptNativeGlobals;
 extern AptValueWithHash* gpAptGlobalFallback;
+
+extern volatile LONG gAptGlobalExtensionLock;
+
+// The ARTIST entry points inline the XDK reservation operations around the hash.
+__forceinline void AptLockNativeGlobals()
+{
+    while (_InterlockedCompareExchange(&gAptGlobalExtensionLock, 1, 0) != 0)
+    {
+    }
+}
+
+__forceinline void AptUnlockNativeGlobals()
+{
+    _InterlockedExchange(&gAptGlobalExtensionLock, 0);
+}

@@ -35,7 +35,7 @@ extern AptValue* gpAptRootTargetMC;   // dword_8324D830 (AptGlobals.cpp; the roo
 // SetInScopeChain (the scope-chain store) and SetVariableFallback (the node/frame-
 // context fallback) are homed members in AptActionInterpreterInterpHelpers.cpp.
 
-int AptActionInterpreter::setVariable(AptValue* pScope, AptValue* pTarget,
+bool AptActionInterpreter::setVariable(AptValue* pScope, AptValue* pTarget,
     const EAStringC* pName, AptValue* pValue, int nAllowScopeChain, int nSearchScopeChain, int nDirect)
 {
     EAStringC name;            // the resolved leaf name (v43)
@@ -55,7 +55,7 @@ int AptActionInterpreter::setVariable(AptValue* pScope, AptValue* pTarget,
 
 
     if (!pContext)
-        return 0;
+        return false;
 
     // A CIH (12, defined) / CIHNone (37) context whose character instance is a
     // SHAPE (type tag 1) refuses the store outright -- console @0x82B03048 bails
@@ -67,20 +67,20 @@ int AptActionInterpreter::setVariable(AptValue* pScope, AptValue* pTarget,
     {
         const AptCharacterInst* const pInst = static_cast<AptCIH*>(pContext)->GetCharacterInst();
         if (pInst && pInst->GetTypeTag() == 1)   // shape inst -> not a variable target
-            return 0;
+            return false;
     }
 
     const bool bRemoving = (!pValue || !pValue->getIsDefined());
 
     // 1) the context object's member set (registered members / AS setters).
     if (pContext->getIsDefined() && pContext->objectMemberSet(pContext, &name, pValue))
-        return 1;
+        return true;
 
     if (nAllowScopeChain)
     {
         // 2) store where the name lives in the function scope chain.
         if (nSearchScopeChain && SetInScopeChain(&name, pValue))   // homed member (InterpHelpers.cpp)
-            return 1;
+            return true;
 
         // 3) the context's own native hash.
         AptNativeHash* pHash = pContext->GetNativeHashVirtual();
@@ -104,11 +104,11 @@ int AptActionInterpreter::setVariable(AptValue* pScope, AptValue* pTarget,
                         pProto->GetNativeHashVirtual()->Set__Proto__(0);
                 }
             }
-            return 1;
+            return true;
         }
 
         // CIH (type 12/37) + frame-context hash fallback -- homed member (InterpHelpers.cpp).
-        return SetVariableFallback(pContext, &name, pValue, nDirect) ? 1 : 0;
+        return SetVariableFallback(pContext, &name, pValue, nDirect);
     }
 
     // No scope-chain search: with a script function executing the store lands in the
@@ -124,7 +124,7 @@ int AptActionInterpreter::setVariable(AptValue* pScope, AptValue* pTarget,
             pFrame = AptScriptFunctionBase::GetActiveFrameStack();
         }
         pFrame->GetNativeHashVirtual()->Set(name, pValue);   // console AptNativeHash::Set(frame + 8, ...)
-        return 1;
+        return true;
     }
     AptNativeHash* pHash = pContext->GetNativeHashVirtual();
     if (pHash)
@@ -132,5 +132,5 @@ int AptActionInterpreter::setVariable(AptValue* pScope, AptValue* pTarget,
         pHash->Set(name, pValue);
         pHash->UpdateObjectMethods(pContext, &name, bRemoving);
     }
-    return 1;
+    return true;
 }

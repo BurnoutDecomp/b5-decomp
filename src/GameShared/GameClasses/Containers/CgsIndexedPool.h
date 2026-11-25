@@ -102,25 +102,24 @@ public:
     // (lppOutBuffer[mpFreeIndices[f]] = 0 for f in [0, msNumFree)); (3) compact the surviving
     // non-null pointers to the front, counting them. Returns the live count. Additive: the original
     // header did not model Get; recovered from the char-pool asm of this instantiation.
-    s32 GetUsedList(T** lppOutBuffer, s32 liBufferCapacity)
+    s32 GetUsedList(T** lpUsedList, s32 liMaxListLength)
     {
-        CGS_ASSERT_STREAM_AT(liBufferCapacity >= msCapacity,
+        CGS_ASSERT_STREAM_AT(liMaxListLength >= msCapacity,
             "You must supply a buffer to contain a minimum of all the objects in the pool\n",
             CGS_INDEXED_POOL_ARTIST_HEADER, 400);
 
-        for (s32 li = 0; li < msCapacity; ++li)
-            lppOutBuffer[li] = &maElements[li];
-
-        for (s32 liFree = 0; liFree < msNumFree; ++liFree)
-            lppOutBuffer[mpFreeIndices[liFree]] = 0;
-
-        s32 liLive = 0;
-        for (s32 li = 0; li < msCapacity; ++li)
+        s32 liIndex;
+        s32 liNewIndex;
+        for (liIndex = 0; liIndex < msCapacity; ++liIndex)
+            lpUsedList[liIndex] = &maElements[liIndex];
+        for (liIndex = 0; liIndex < msNumFree; ++liIndex)
+            lpUsedList[mpFreeIndices[liIndex]] = 0;
+        for (liIndex = 0, liNewIndex = 0; liIndex < msCapacity; ++liIndex)
         {
-            if (lppOutBuffer[li])
-                lppOutBuffer[liLive++] = lppOutBuffer[li];
+            if (lpUsedList[liIndex])
+                lpUsedList[liNewIndex++] = lpUsedList[liIndex];
         }
-        return liLive;
+        return liNewIndex;
     }
 
     // PopIndex (DecFIGS CgsIndexedPool.h:267; recovered from the X360 CgsFileSystem::PhysicalX360Device

@@ -1,5 +1,5 @@
 // X360-native movie-player chunk-buffer accessors + the core-allocator teardown thunk.
-// Reconstructed from BURNOUT_X360_ARTIST.XEX (semantic parity, not byte-match):
+// Reconstructed from BURNOUT_X360_ARTIST.XEX:
 //
 //   CgsGraphics::ChunkBuffer::GetChunkDef                          @ 0x827E9F48
 //   CgsGraphics::ChunkBuffer::GetChunkData                         @ 0x827EA0A0
@@ -8,12 +8,6 @@
 //   virtuals of its vtable after the destructor. As everywhere in this build, the vtable
 //   holds the aligned Alloc ahead of the plain one (overloads in reverse order).
 //
-// Layouts from the DecFIGS DWARF (CgsMoviePlayer.h:113/149/161). The asserts in the
-// console build streamed their messages through CgsDev::StrStream into the assert
-// buffer; the house CGS_ASSERT front-end forwards the plain message string directly, so
-// the StrStreamBase / BasePriorityQueue::Clear call-edges in the Hex-Rays dump are
-// vacuous machinery the substitution elides.
-
 #include "GameShared/GameClasses/Graphics/MoviePlayer/CgsMoviePlayerChunkBuffer.h"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gxMessageFilterFlags / gpDebugPrint
@@ -21,6 +15,7 @@
 #include "rw/rwcore_structs.h"                         // rw::IResourceAllocator / Resource / ResourceDescriptor
 
 #define CGS_ARTIST_MOVIE_PLAYER_FILE "..\\..\\..\\GameShared\\GameClasses\\Graphics/MoviePlayer/CgsMoviePlayer.h"
+#define CGS_ARTIST_MOVIE_CHUNK_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\movieplayer\\CgsMoviePlayer.h"
 
 namespace CgsGraphics
 {
@@ -31,24 +26,20 @@ namespace CgsGraphics
     //   result = a1[luIndex + 2] + a1[1]  ==  mauChunkOffsets[luIndex] + mpcBuffer.
     EacChunkDef* ChunkBuffer::GetChunkDef(u32 luIndex)
     {
-        CGS_ASSERT(luIndex <= muCurrentChunk,
-                   "Chunk index has not been read");                    // CgsMoviePlayer.h:467
-        CGS_ASSERT(!(luIndex == muCurrentChunk && muCurrentChunkRead < 8u),
-                   "Chunk is being read, but header has not been completed"); // :471
+        CGS_ASSERT_STREAM_AT(luIndex <= muCurrentChunk,
+            "Chunk index " << luIndex << " has not been read\n", CGS_ARTIST_MOVIE_CHUNK_FILE, 467);
+        CGS_ASSERT_STREAM_AT(!(luIndex == muCurrentChunk && muCurrentChunkRead < sizeof(EacChunkDef)),
+            "Chunk " << luIndex << " is being read, but header has not been completed\n",
+            CGS_ARTIST_MOVIE_CHUNK_FILE, 471);
 
         return reinterpret_cast<EacChunkDef*>(mpcBuffer + mauChunkOffsets[luIndex]);
     }
 
-    // GetChunkData @ 0x827EA0A0. Validates that the chunk has a non-zero size (the asm
-    // byte-swaps the big-endian-stored muSize and tests it against 0 -- a NULL-chunk
-    // guard; the zero-test is endian-invariant, so it reads muSize directly here) then
-    // returns the payload pointer, 8 bytes past the EacChunkDef header:
-    //   result = a1[luIndex + 2] + a1[1] + 8  ==  mauChunkOffsets[luIndex] + mpcBuffer + 8.
+    // ARTIST 827EA0A0 validates the decoded size before returning the payload.
     void* ChunkBuffer::GetChunkData(u32 luIndex)
     {
-        EacChunkDef* lpChunkDef = GetChunkDef(luIndex);
-        CGS_ASSERT(lpChunkDef->muSize != 0u, "NULL Chunk");             // CgsMoviePlayer.h:493
-
+        CGS_ASSERT(GetChunkSize(luIndex) != 0,
+            CGS_ASSERT_STREAM_MESSAGE_AT("NULL Chunk", CGS_ARTIST_MOVIE_CHUNK_FILE, 493));
         return mpcBuffer + mauChunkOffsets[luIndex] + sizeof(EacChunkDef);
     }
 
@@ -103,4 +94,5 @@ namespace CgsGraphics
     }
 }
 
+#undef CGS_ARTIST_MOVIE_CHUNK_FILE
 #undef CGS_ARTIST_MOVIE_PLAYER_FILE

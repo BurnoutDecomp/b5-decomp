@@ -46,24 +46,7 @@ bool AptExtern::objectMemberSet(AptValue* const /*pThis*/,
 
     // Forward (name, value-string) to the host's extern-variable setter
     // (gAptFuncs.pfnSetExternVariable, X360 dword_8324E854).
-    AptHostSetExternVariable(pName->c_str(), lValueString.c_str());
+    gAptFuncs.pfnSetExternVariable(pName->GetBuffer(), lValueString.GetBuffer());
 
     return true;
-}
-
-// ---------------------------------------------------------------------------
-// AptHostSetExternVariable -- forward an ActionScript extern-variable write to the
-// host's installed callback. The X360 objectMemberSet @0x82AF95F8 issues a single
-// unconditional indirect call `dword_8324E854(name+8, value+8)`; dword_8324E854 is
-// the gAptFuncs (X360 dword_8324E818) host-callback table slot pfnSetExternVariable
-// (Apt.h:405, table +0x3C). Homed here -- the one TU that owns the call -- routed
-// through the named table member rather than the raw .data offset.
-//
-// The console call is unconditional, transcribed verbatim: the host installs the
-// slot before any AS runs (CgsAptAux.cpp AptAux::ConstructApt stamps
-// pfnSetExternVariable at the InitializeApt bring-up, ahead of every movie load).
-// ---------------------------------------------------------------------------
-void AptHostSetExternVariable(const char* szVar, const char* szValue)
-{
-    gAptFuncs.pfnSetExternVariable(szVar, szValue);   // dword_8324E854
 }

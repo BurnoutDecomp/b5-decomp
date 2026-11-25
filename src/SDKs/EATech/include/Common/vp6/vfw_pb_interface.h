@@ -38,6 +38,7 @@ typedef int (*VP6_DECODE_CALLBACK)(s64 FrameNumber, char* YBufferStart, int YWid
 extern "C"
 {
     void VP6_VPInitLibrary(void);
+    void VP6_VPDeInitLibrary(void);
 
     // Create a decoder for ImageWidth x ImageHeight pictures. With UseJobs set the decoder
     // owns two decode/completion job pairs, run on Scheduler with Affinity.

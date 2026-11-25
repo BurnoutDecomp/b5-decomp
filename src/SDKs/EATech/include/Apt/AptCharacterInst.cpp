@@ -72,8 +72,7 @@ AptCharacterInst::~AptCharacterInst()
 {
     if (mpProperties)
     {
-        mpProperties->~AptNativeHash();
-        gpNonGCPoolManager->Deallocate(mpProperties, sizeof(AptNativeHash));
+        delete mpProperties;
         mpProperties = 0;
     }
     if (mpRenderItem)
@@ -367,8 +366,7 @@ void AptCharacterInst::DestroyGCPointers()
         mpProperties->DestroyGCPointers();
         if (mpProperties)
         {
-            mpProperties->~AptNativeHash();
-            gpNonGCPoolManager->Deallocate(mpProperties, sizeof(AptNativeHash));
+            delete mpProperties;
         }
         mpProperties = 0;
     }
@@ -459,16 +457,9 @@ AptCIH* AptCharacterInst::ItemMoved(AptCIH* pNode)
 // ---------------------------------------------------------------------------
 void AptCharacterInst::MoveRenderDataFrom(AptCharacterInst* pSource)
 {
-    // NULL-SAFE (host): the console always has both items; on x64 either render item is
-    // legitimately null when its inst was built with no active Apt target (the ctor's
-    // gpAptTarget guard). Move the render data only when both exist; the property-hash
-    // ownership below transfers either way.
-    AptRenderItem* pDst = GetRenderItemWritable();
-    if (pDst != 0 && pSource->mpRenderItem != 0)
-    {
-        pDst->CopyRenderDataFrom(pSource->mpRenderItem);   // vtbl[+0x14]
-        pDst->mDepth = pSource->mpRenderItem->mDepth;      // [c:0x14]
-    }
+    GetRenderItemWritable()->CopyRenderDataFrom(pSource->mpRenderItem);
+    const uint16_t nDepth = pSource->mpRenderItem->mDepth;
+    GetRenderItemWritable()->mDepth = nDepth;
 
     if (pSource->mpProperties)                                           // [c:0x0C]
     {
@@ -477,8 +468,7 @@ void AptCharacterInst::MoveRenderDataFrom(AptCharacterInst* pSource)
             mpProperties->DestroyGCPointers();
             if (mpProperties)
             {
-                mpProperties->~AptNativeHash();
-                gpNonGCPoolManager->Deallocate(mpProperties, sizeof(AptNativeHash));
+                delete mpProperties;
             }
         }
         mpProperties = pSource->mpProperties;

@@ -32,7 +32,6 @@
 // is inert. (See AptGlobal.h.)
 AptValueWithHash* gpAptNativeGlobals  = 0;   // X360 off_8324E37C
 AptValueWithHash* gpAptGlobalFallback = 0;   // X360 off_8324E380
-extern volatile LONG gAptGlobalExtensionLock; // shared ARTIST unk_8324E71C lock
 
 // ---------------------------------------------------------------------------
 // operator new @ 0x82AE6538
@@ -93,9 +92,9 @@ AptGlobal::~AptGlobal()
 AptValue* AptGlobal::objectMemberLookup(AptValue* const /*pThis*/,
                                         const AptNativeString* const pName) const
 {
-    while (_InterlockedCompareExchange(&gAptGlobalExtensionLock, 1, 0) != 0) {}
+    AptLockNativeGlobals();
     AptValue* lpResult = gpAptNativeGlobals->Lookup(*pName);
-    _InterlockedExchange(&gAptGlobalExtensionLock, 0);
+    AptUnlockNativeGlobals();
 
     if (lpResult == 0 || !lpResult->getIsDefined())
         lpResult = gpAptGlobalFallback->Lookup(*pName);

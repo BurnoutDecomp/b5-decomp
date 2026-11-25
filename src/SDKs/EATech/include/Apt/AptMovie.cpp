@@ -303,8 +303,7 @@ namespace
 
 void AptMovie::resolve(int nBase, AptConstFile* pConstFile, int32_t* pValueCount)
 {
-    void* memory = gpAptPseudoDataPool->Allocate(sizeof(AptNativeHash));
-    mpLabelHash = memory ? ::new (memory) AptNativeHash(2) : 0;
+    mpLabelHash = new AptNativeHash(2);
     AptTimelineRelocate(mpFrames, nBase, false);
     for (int32_t f = 0; f < mnFrameCount; ++f)
     {
@@ -361,6 +360,8 @@ void AptMovie::resolve(int nBase, AptConstFile* pConstFile, int32_t* pValueCount
     }
 }
 
+// ARTIST uses the size-mode hash deleting thunk at this release site.
+#pragma optimize("s", on)
 void AptMovie::unresolve(int nBase, int32_t* pValueCount)
 {
     for (int32_t f = 0; f < mnFrameCount; ++f)
@@ -416,9 +417,8 @@ void AptMovie::unresolve(int nBase, int32_t* pValueCount)
     if (mpLabelHash)
     {
         mpLabelHash->DestroyGCPointers();
-        AptNativeHash* hash = mpLabelHash;
-        hash->~AptNativeHash();
-        gpAptPseudoDataPool->Deallocate(hash, sizeof(AptNativeHash));
+        delete mpLabelHash;
         mpLabelHash = 0;
     }
 }
+#pragma optimize("", on)

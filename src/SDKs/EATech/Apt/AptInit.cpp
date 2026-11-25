@@ -1032,17 +1032,14 @@ volatile LONG gAptGlobalExtensionLock = 0;
 
 // AptValueShutdown @82AF2BE0: destroy GC references before releasing each pinned
 // singleton. The extension object is protected by the original reservation lock.
+// ARTIST uses the size-mode hash deleting thunk at this release site.
+#pragma optimize("s", on)
 void AptValueShutdown()
 {
     if (gpAptClassRegistry)
     {
         gpAptClassRegistry->DestroyGCPointers();
-        if (gpAptClassRegistry)
-        {
-            AptNativeHash* pRegistry = gpAptClassRegistry;
-            pRegistry->~AptNativeHash();
-            gpAptPseudoDataPool->Deallocate(pRegistry, sizeof(AptNativeHash));
-        }
+        delete gpAptClassRegistry;
         gpAptClassRegistry = 0;
     }
 
@@ -1091,6 +1088,7 @@ void AptValueShutdown()
     gpObjRegistrationFunc->Release();
     gpObjRegistrationFunc = 0;
 }
+#pragma optimize("", on)
 
 // ===========================================================================
 // AptUpdateShutdown @0x82B0C170 -- tear down the Apt sim/update side (counterpart of

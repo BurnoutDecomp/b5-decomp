@@ -40,16 +40,6 @@ protected:
     };
     ClassFlags mClassFlags;
 
-    // ARTIST folds this step into its derived constructors. Their common
-    // AptValueWithHash construction remains a separate call to 0x82AEFE98.
-    __forceinline AptObject(AptVirtualFunctionTable_Indices eType, int nHashCapacity)
-        : AptValueWithHash(eType, nHashCapacity)
-    {
-        mClassFlags.mnImplementedCount = 0;
-        mClassFlags.mbHasClass = false;
-        mClassFlags.mbIsInMainInst = false;
-    }
-
     // Layout pinned against the x64 XB1 export (never called; member body gives
     // complete-class offsetof context).
     static void _AssertLayout()
@@ -60,6 +50,16 @@ protected:
     }
 
 public:
+    // ARTIST folds this step into its derived constructors. Their common
+    // AptValueWithHash construction remains a separate call to 0x82AEFE98.
+    __forceinline AptObject(AptVirtualFunctionTable_Indices eType, int nHashCapacity)
+        : AptValueWithHash(eType, nHashCapacity)
+    {
+        mClassFlags.mnImplementedCount = 0;
+        mClassFlags.mbHasClass = false;
+        mClassFlags.mbIsInMainInst = false;
+    }
+
     // GC teardown @0x82AF00D0 -- release the property hash's GC pointers (the
     // compiler folds the inherited ~AptValueWithHash member-dtor here, plus the
     // during-/post-destruction vtable resets). Declared so the scalar deleting

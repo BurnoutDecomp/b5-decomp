@@ -20,6 +20,12 @@ void VP6_VPInitLibrary(void)
     InitVPUtil();
 }
 
+// ARTIST 827EF290 calls the VP6 library shutdown before clearing the allocator.
+// The native shutdown entry folds to the single return at 82AD5078.
+void VP6_VPDeInitLibrary(void)
+{
+}
+
 void VP6_DeleteTmpBuffers(PB_INSTANCE* pbi)
 {
     if (pbi->ReconDataBuffer)

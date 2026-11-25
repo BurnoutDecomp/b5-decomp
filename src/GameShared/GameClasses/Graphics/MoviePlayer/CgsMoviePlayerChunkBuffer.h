@@ -16,8 +16,7 @@ namespace rw { struct IResourceAllocator; }
 namespace CgsGraphics
 {
     // EacChunkDef @ CgsMoviePlayer.h:149. An 8-byte EA-chunk record header: a 4CC id
-    // (aliased as a u32 type) followed by the chunk payload size. Stored big-endian on
-    // the X360 stream; GetChunkData byteswaps muSize when validating.
+    // (aliased as a u32 type) followed by the little-endian chunk size, including the header.
     struct EacChunkDef
     {
         union
@@ -50,6 +49,13 @@ namespace CgsGraphics
 
         // GetChunkDef @ 0x827E9F48: pointer to chunk luIndex's EacChunkDef header.
         EacChunkDef* GetChunkDef(u32 luIndex);
+        // DecFIGS CgsMoviePlayer.h:175. The EA chunk sizes are little-endian.
+        u32 GetChunkSize(u32 luIndex)
+        {
+            const u32 luValue = GetChunkDef(luIndex)->muSize;
+            return (luValue >> 24) | ((luValue >> 8) & 0x0000FF00u)
+                 | ((luValue << 8) & 0x00FF0000u) | (luValue << 24);
+        }
         // GetChunkData @ 0x827EA0A0: pointer to chunk luIndex's payload (past the 8-byte header).
         void*        GetChunkData(u32 luIndex);
         // CgsMoviePlayer.h -- the 4-character tag of chunk luIndex.

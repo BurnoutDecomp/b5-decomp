@@ -120,8 +120,8 @@ public:
 
     // setVariable @0x82B03048 -- getVariable's write side: resolve the path
     // (getContext), then the object member set, the scope chain, or the context's
-    // native hash. Returns 1 if stored.
-    int setVariable(AptValue* pScope, AptValue* pTarget, const EAStringC* pName,
+    // native hash. Returns whether the value was stored.
+    bool setVariable(AptValue* pScope, AptValue* pTarget, const EAStringC* pName,
                     AptValue* pValue, int nAllowScopeChain, int nSearchScopeChain, int nDirect);
 
     // ---- operand stack (PS3 EXTERNAL ELF) --------------------------------

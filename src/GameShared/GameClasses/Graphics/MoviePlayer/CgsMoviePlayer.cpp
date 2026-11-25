@@ -210,6 +210,7 @@ namespace CgsGraphics
         mpRwAllocator->FreeMemoryResource(mpMoviePlayerBuffer);
         mpRwAllocator->FreeMemoryResource(mChunkBuffer.mpcBuffer);
 
+        VP6_VPDeInitLibrary();
         vp6::SetAllocator(0);
         if (mpRwVideoRenderer)
         {
@@ -448,21 +449,20 @@ namespace CgsGraphics
 
     void MoviePlayer::AddVideoStream(u32 luChunkIndex)
     {
-        CGS_ASSERT(strncmp(mChunkBuffer.GetChunkId(luChunkIndex), "MVhd", 4) == 0,
-                   "strncmp(mChunkBuffer.GetChunkId(luChunkIndex),\"MVhd\",4) == 0");
-        CGS_ASSERT(miNumVideos < KI_MAX_VIDEOS, "miNumVideos < KI_MAX_VIDEOS");
+        CGS_ASSERT_AT(strncmp(mChunkBuffer.GetChunkId(luChunkIndex), "MVhd", 4) == 0,
+                   "strncmp(mChunkBuffer.GetChunkId(luChunkIndex),\"MVhd\",4) == 0", CGS_ARTIST_MOVIE_PLAYER_CPP_FILE, 269);
+        CGS_ASSERT_AT(miNumVideos < KI_MAX_VIDEOS, "miNumVideos < KI_MAX_VIDEOS", CGS_ARTIST_MOVIE_PLAYER_CPP_FILE, 270);
 
-        VP6ChunkHeader& lHeader = maVP6Headers[miNumVideos];
-        memcpy(&lHeader, mChunkBuffer.GetChunk(luChunkIndex), sizeof(VP6ChunkHeader));
+        memcpy(&maVP6Headers[miNumVideos], mChunkBuffer.GetChunk(luChunkIndex), sizeof(VP6ChunkHeader));
 
-        lHeader.mLength = ByteSwap(lHeader.mLength);
-        lHeader.mWidth = ByteSwap(lHeader.mWidth);
-        lHeader.mHeight = ByteSwap(lHeader.mHeight);
-        lHeader.mTotalFrames = ByteSwap(lHeader.mTotalFrames);
-        lHeader.mSuggestedBufferSize = ByteSwap(lHeader.mSuggestedBufferSize);
-        lHeader.mFpsNumerator = ByteSwap(lHeader.mFpsNumerator);
-        lHeader.mFpsDenominator = ByteSwap(lHeader.mFpsDenominator);
-        lHeader.mFlags = ByteSwap(lHeader.mFlags);
+        maVP6Headers[miNumVideos].mLength = ByteSwap(maVP6Headers[miNumVideos].mLength);
+        maVP6Headers[miNumVideos].mWidth = ByteSwap(maVP6Headers[miNumVideos].mWidth);
+        maVP6Headers[miNumVideos].mHeight = ByteSwap(maVP6Headers[miNumVideos].mHeight);
+        maVP6Headers[miNumVideos].mTotalFrames = ByteSwap(maVP6Headers[miNumVideos].mTotalFrames);
+        maVP6Headers[miNumVideos].mSuggestedBufferSize = ByteSwap(maVP6Headers[miNumVideos].mSuggestedBufferSize);
+        maVP6Headers[miNumVideos].mFpsNumerator = ByteSwap(maVP6Headers[miNumVideos].mFpsNumerator);
+        maVP6Headers[miNumVideos].mFpsDenominator = ByteSwap(maVP6Headers[miNumVideos].mFpsDenominator);
+        maVP6Headers[miNumVideos].mFlags = ByteSwap(maVP6Headers[miNumVideos].mFlags);
 
         ++miNumVideos;
     }
@@ -491,7 +491,7 @@ namespace CgsGraphics
                     continue;
             }
 
-            const u32 luChunkSize = ByteSwap(lBuffer.GetChunkDef(lBuffer.muCurrentChunk)->muSize);
+            const u32 luChunkSize = lBuffer.GetChunkSize(lBuffer.muCurrentChunk);
             const u32 luWanted = luChunkSize - lBuffer.muCurrentChunkRead;
             const u32 luRead = mMovieStream.Read(luWanted, lBuffer.mpcBuffer + lBuffer.muChunkBufferPos);
             lBuffer.muCurrentChunkRead += luRead;
@@ -521,11 +521,11 @@ namespace CgsGraphics
 
             if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
             {
-                const u32 luSize = ByteSwap(lBuffer.GetChunkDef(liIndex)->muSize);
+                const u32 luSize = lBuffer.GetChunkSize(liIndex);
                 *CgsDev::Log::gpDebugPrint << "Video chunk " << liIndex << " size: " << luSize << "\n";
             }
 
-            const u32 luDataSize = ByteSwap(lBuffer.GetChunkDef(liIndex)->muSize) - sizeof(EacChunkDef);
+            const u32 luDataSize = lBuffer.GetChunkSize(liIndex) - sizeof(EacChunkDef);
             VP6_DecodeFrameToYUV_JOB(maVP6Decoders[liIndex], static_cast<char*>(lBuffer.GetChunkData(liIndex)),
                                      luDataSize, maVP6Headers[liIndex].mWidth, maVP6Headers[liIndex].mHeight,
                                      miCurrentFrame, DecodeCallback, 0, 0, 0);
@@ -535,7 +535,7 @@ namespace CgsGraphics
         {
             if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
             {
-                const u32 luSize = ByteSwap(lBuffer.GetChunkDef(miNumVideos + liIndex)->muSize);
+                const u32 luSize = lBuffer.GetChunkSize(miNumVideos + liIndex);
                 *CgsDev::Log::gpDebugPrint << "Audio chunk " << liIndex << " size: " << luSize << "\n";
             }
         }

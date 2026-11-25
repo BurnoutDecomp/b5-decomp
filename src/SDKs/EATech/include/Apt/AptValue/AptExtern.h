@@ -54,18 +54,6 @@
 // ---------------------------------------------------------------------------
 extern DOGMA_PoolManager* gpAptSharedPtrPool;   // off_8324D808
 
-// ---------------------------------------------------------------------------
-// The Apt host user-function table hop (gAptFuncs == X360 dword_8324E818, the
-// Apt.h AptUserFunctions struct; defined + installed in CgsAptAux.cpp --
-// AptAux::ConstructApt stamps pfnSetExternVariable with AptCallbackVariable::
-// SetExternVariable). Member pfnSetExternVariable (table +0x3C -> X360
-// dword_8324E854) receives a name + value string pair when AS code writes an
-// extern variable. It is reached through a single indirect call; modelled --
-// like the DOGMA heap hooks in DogmaAllocator.h -- as a named free function
-// representing that one table slot, homed in AptExtern.cpp.
-// ---------------------------------------------------------------------------
-void AptHostSetExternVariable(const char* szVar, const char* szValue);
-
 class AptExtern : public AptValueNoGC
 {
 public:

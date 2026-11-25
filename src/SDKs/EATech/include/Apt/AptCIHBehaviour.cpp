@@ -135,28 +135,16 @@ int AptCIH::HasEventMember(int nEventMask)
     return 0;
 }
 
-// ---------------------------------------------------------------------------
-// ForceCleanNativeHash @0x82AF2338 -- tear down + free the character instance's
-// per-instance property hash, then clear the slot. The X360 reads the char inst
-// (mpCharacterInst), grabs its property hash (mpProperties), and -- if present --
-// runs DestroyGCPointers() (release every held value/key + free the bucket table)
-// followed by the scalar-deleting destructor (~AptNativeHash + free the storage),
-// then nulls mpProperties. The pseudocode's `int`/`return result` is a Hex-Rays
-// artifact (r3/this flows through the deleting destructor's return). AptNativeHash
-// is pool-allocated (gpNonGCPoolManager), so the scalar-deleting destructor is the
-// explicit dtor + Deallocate; ~AptNativeHash is a no-op once DestroyGCPointers has
-// run, preserving the X360's two-step order.
-// ---------------------------------------------------------------------------
+// ARTIST 0x82AF2338. Release hash references before freeing the hash, then
+// reload the character instance before clearing its property slot.
 void AptCIH::ForceCleanNativeHash()
 {
-    AptCharacterInst* pCharacterInst = GetCharacterInst();
-    AptNativeHash* pHash = pCharacterInst->mpProperties;
+    AptNativeHash* pHash = GetCharacterInst()->mpProperties;
     if (pHash)
     {
         pHash->DestroyGCPointers();
-        pHash->~AptNativeHash();
-        gpNonGCPoolManager->Deallocate(pHash, sizeof(AptNativeHash));
-        pCharacterInst->mpProperties = 0;
+        delete pHash;
+        GetCharacterInst()->mpProperties = 0;
     }
 }
 

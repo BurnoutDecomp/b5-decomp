@@ -39,6 +39,7 @@
 
 #include <cstddef>   // offsetof (_AssertLayout)
 #include "types.hpp"
+#include "SDKs/EATech/Apt/DogmaAllocator.h"
 
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"   // EAStringC keys (friend access)
 
@@ -69,6 +70,8 @@ struct AptHashItem
 // class (AptString/StringPool.h), whose saConstant is defined in AptStringPool.cpp.
 #include "SDKs/EATech/include/Apt/AptString/StringPool.h"
 
+extern DOGMA_PoolManager* gpNonGCPoolManager;
+
 struct AptNativeHash
 {
     int32_t      mnCapacity;          // +0x00 (x64; console +0x0)
@@ -84,7 +87,21 @@ struct AptNativeHash
     }
 
     explicit AptNativeHash(int32_t nCapacity);   // @0x82AD9EA0
-    ~AptNativeHash();                             // X360: dtor folds into DestroyGCPointers
+    ~AptNativeHash()
+    {
+        if (mpTable)
+            DestroyGCPointers();
+    }
+
+    static void* operator new(size_t size)
+    {
+        return gpNonGCPoolManager->Allocate(size);
+    }
+
+    static void operator delete(void* memory, size_t size)
+    {
+        gpNonGCPoolManager->Deallocate(memory, size);
+    }
 
     // Store/replace pValue under key (routing __proto__/prototype to the slots).
     void Set(const EAStringC& key, AptValue* pValue);     // @0x82AF4B08

@@ -36,6 +36,7 @@
 #endif
 
 #include "SDKs/EATech/include/Apt/AptExtObject.h"
+#include "SDKs/EATech/include/Apt/AptGlobal.h"
 
 #include "SDKs/EATech/include/Apt/AptNativeHash.h"          // the owned member hash
 #include "SDKs/EATech/include/Apt/AptObject.h"              // AptObject::Create (CreateNewAptObject)
@@ -93,63 +94,28 @@ void AptExtObject::operator delete(void* p, size_t size)
 // ---------------------------------------------------------------------------
 // ctor @0x82AE8338
 //
-// X360 sequence: AptValueGC base ctor (sub_82AE3000(this, 29) -- value type
-// AptVFT_Extension); install the AptExtObject vtable (off_82145838); allocate a
-// 20-byte AptNativeHash from the non-GC pool (off_8324D808 == gpNonGCPoolManager) and
-// placement-construct it with iNumMembers (null on pool exhaustion); store it at
-// mpNativeHash (+8); then SetAllowDelayedDeletion(false).
-//
-// The vtable install is the compiler's automatic codegen here; the explicit work is
-// the hash allocation + the delayed-deletion flag.
-// ---------------------------------------------------------------------------
+// Construct the extension's hash in the Apt non-GC pool.
 AptExtObject::AptExtObject(const int32_t iNumMembers)
     : AptValueGC(AptVFT_Extension)
 {
-    // Allocate the native-member hash from the non-GC Apt pool (size 20 / [c:0x14])
-    // and placement-construct it, or leave it null if the pool is exhausted.
-    void* lpHashMem = gpNonGCPoolManager->Allocate(sizeof(AptNativeHash));   // [c:0x14]
-    mpNativeHash = lpHashMem ? ::new (lpHashMem) AptNativeHash(iNumMembers) : 0;
+    mpNativeHash = new AptNativeHash(iNumMembers);
 
     // X360 @0x82AE839C: AptValue::SetAllowDelayedDeletion(this, 0).
     SetAllowDelayedDeletion(false);
 }
 
-// ---------------------------------------------------------------------------
-// dtor @0x82AF2F10
-//
-// X360: read mpNativeHash (a1[2]); install the AptExtObject teardown vtable
-// (off_82145838); if the hash is non-null, run its scalar-deleting destructor
-// (delete mpNativeHash -- the hash is non-GC-pool-allocated, so that is the explicit
-// ~AptNativeHash + Deallocate); then install the base vtable (off_82145594). The two
-// vtable stores are the compiler's destructor codegen (this-class vtable on entry,
-// base vtable on the way down) -- automatic here. The explicit work is deleting the
-// owned hash. ~AptNativeHash itself runs DestroyGCPointers when a table was allocated
-// (matching the committed AptCIH::ForceCleanNativeHash teardown order).
-// ---------------------------------------------------------------------------
+// ARTIST 0x82AF2F10. Release the hash through its pool-owning destructor.
 AptExtObject::~AptExtObject()
 {
-    if (mpNativeHash)   // a1[2] != 0
-    {
-        // The asm runs only AptNativeHash's scalar-deleting destructor (hash, 1) ==
-        // ~AptNativeHash() + Deallocate. ~AptNativeHash itself runs DestroyGCPointers
-        // when a table was allocated, so DO NOT call DestroyGCPointers explicitly here
-        // (that would tear the GC pointers down twice).
-        mpNativeHash->~AptNativeHash();
-        gpNonGCPoolManager->Deallocate(mpNativeHash, sizeof(AptNativeHash));   // [c:0x14]
-        mpNativeHash = 0;
-    }
+    delete mpNativeHash;
 }
 
 // ---------------------------------------------------------------------------
-// CreateNewAptObject @0x82AF07E0 -- a fresh generic AS "new Object()" (value type
-// AptVFT_Object), allocated from the GC pool with a property hash. The X360 inlines
-// AptObject::operator new(32) + AptValueWithHash(AptVFT_Object, 8) + the AptObject
-// vtable + the hasClass-bit clear; that is exactly AptObject::Create (its committed
-// canonical home). Null on pool exhaustion.
-// ---------------------------------------------------------------------------
+// ARTIST 0x82AF07E0. Construct the native AS object in the GC pool with
+// its default eight-bucket property hash.
 AptObject* AptExtObject::CreateNewAptObject()
 {
-    return AptObject::Create();   // default capacity 8 (the X360 li r4, 0x13 / li r5, 8)
+    return new AptObject(AptVFT_Object, 8);
 }
 
 // ---------------------------------------------------------------------------
@@ -213,7 +179,7 @@ AptValue* AptExtObject::GetVariable(AptValue* pContext, const AptNativeString* c
 bool AptExtObject::SetVariable(AptValue* pContext, const AptNativeString* const pName,
                                AptValue* const pValue)
 {
-    return gAptActionInterpreter.setVariable(pContext, 0, pName, pValue, 1, 1, 0) != 0;
+    return gAptActionInterpreter.setVariable(pContext, 0, pName, pValue, 1, 1, 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -224,8 +190,9 @@ bool AptExtObject::SetVariable(AptValue* pContext, const AptNativeString* const 
 bool AptExtObject::objectMemberSet(AptValue* const /*pThis*/, const AptNativeString* const pName,
                                    AptValue* const pValue)
 {
-    if (!mpNativeHash->Lookup(*pName))
-        mpNativeHash->Set(*pName, pValue);
+    AptNativeHash* pHash = mpNativeHash;
+    if (!pHash->Lookup(*pName))
+        pHash->Set(*pName, pValue);
     return true;
 }
 
@@ -247,51 +214,26 @@ void AptExtObject::DestroyGCPointers()
     mpNativeHash->DestroyGCPointers();
 }
 
-// ---------------------------------------------------------------------------
-// AptRegisterExtension @0x82AF7330 -- register a native extension object with the
-// AS VM. X360 sequence (verified against the export pseudocode):
-//   1. v2 = ext->vtbl[+0x3C](ext)      == GetName();  EAStringC name(v2)
-//   2. ext->vtbl[+0x40](ext)           == Initialize()   (the extension installs its
-//      native function members here -- e.g. CgsGui::AptCommunicator::Initialize
-//      @0x8285F0D8 SetFunction's its 6 sMethod_* natives)
-//   3. spinlock unk_8324E71C acquire (lwarx/stwcx.)
-//   4. AptNativeHash::Set(off_8324E37C + 8, name, ext) -- store the extension into
-//      the _global extension object's embedded native hash, keyed by its name; every
-//      AS name lookup then reaches it through AptValue::findChild's global-extension
-//      arm (LookupInObject(gpAptGlobalExtensionObject, name)).
-//   5. spinlock release; name refcount drop (the EAStringC dtor here).
-// The host boot path is single-threaded, so the interlocked latch collapses to the
-// direct Set (the same one-time-guard equivalence AptValueInitialize documents).
-// ---------------------------------------------------------------------------
-extern AptValue* gpAptGlobalExtensionObject;   // off_8324E37C (built by AptValueInitialize)
-
+// ARTIST 0x82AF7330 and 0x82AEDF28. The extension registry uses the
+// same lock as AptGlobal's native member lookup.
 void AptRegisterExtension(AptExtObject* pExtObject)
 {
-    EAStringC lName(pExtObject->GetName());   // step 1 (InitFromBuffer / dtor Decrease)
-    pExtObject->Initialize();                 // step 2 (vtbl +0x40)
+    AptNativeString name(pExtObject->GetName());
+    pExtObject->Initialize();
 
-    AptNativeHash* pGlobalHash = gpAptGlobalExtensionObject
-        ? gpAptGlobalExtensionObject->GetNativeHashVirtual()   // (off_8324E37C + 8)
-        : 0;
-    if (pGlobalHash)
-        pGlobalHash->Set(lName, pExtObject);
+    AptLockNativeGlobals();
+    gpAptNativeGlobals->Set(name, pExtObject);
+    AptUnlockNativeGlobals();
 }
 
-// ---------------------------------------------------------------------------
-// AptUnRegisterExtension @0x82AEDF28 -- remove a native extension from the AS
-// VM. The X360 body obtains the virtual name, takes a temporary reference, unsets
-// that name from the global-extension hash, then releases the temporary reference.
-// The AddRef is load-bearing: AptNativeHash::Unset releases the registry's own
-// reference, so it keeps the extension alive until the unregister operation has
-// finished. The console's uncontended registry spin lock is omitted for the same
-// single-threaded host reason as AptRegisterExtension above.
-// ---------------------------------------------------------------------------
 void AptUnRegisterExtension(AptExtObject* pExtObject)
 {
-    EAStringC lName(pExtObject->GetName());
+    AptNativeString name(pExtObject->GetName());
     pExtObject->AddRef();
 
-    gpAptGlobalExtensionObject->GetNativeHashVirtual()->Unset(lName);
+    AptLockNativeGlobals();
+    gpAptNativeGlobals->AptValueWithHash::GetNativeHashVirtual()->Unset(name);
+    AptUnlockNativeGlobals();
 
     pExtObject->Release();
 }
