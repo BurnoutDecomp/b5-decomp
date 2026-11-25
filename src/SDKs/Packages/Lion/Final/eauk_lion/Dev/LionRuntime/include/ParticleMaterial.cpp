@@ -53,15 +53,15 @@ void cParticleMaterial::Build()
     const U32 luFlags = mFlags;
 
     mNumMeshes = 0;
-    if ((luFlags & 0x2000) != 0)
+    if ((luFlags & eFLAG_DO_MESH0) != 0)
         mNumMeshes = 1;
-    if ((luFlags & 0x4000) != 0)
+    if ((luFlags & eFLAG_DO_MESH1) != 0)
         ++mNumMeshes;
-    if ((luFlags & 0x8000) != 0)
+    if ((luFlags & eFLAG_DO_MESH2) != 0)
         ++mNumMeshes;
-    if ((luFlags & 0x10000) != 0)
+    if ((luFlags & eFLAG_DO_MESH3) != 0)
         ++mNumMeshes;
-    if ((luFlags & 0x20000) != 0)
+    if ((luFlags & eFLAG_DO_MESH4) != 0)
         ++mNumMeshes;
 
     if (mpNormalMapName)
@@ -75,7 +75,10 @@ void cParticleMaterial::Build()
     if (mpTextureName)
     {
         if (gpLionParticleRender != 0)
-            gpLionParticleRender->TextureRegister(this, mpTextureName.Get());
+        {
+            // ARTIST 0x8290E604 calls the concrete renderer directly.
+            gpLionParticleRender->BrnParticle::LionParticleRender::TextureRegister(this, mpTextureName.Get());
+        }
     }
 
     mFrameCount = static_cast<S32>(mYFrames) * static_cast<S32>(mXFrames);
@@ -83,8 +86,8 @@ void cParticleMaterial::Build()
         mFrameCount = 1;
 
     const U32 luFlags2 = mFlags;
-    if ((luFlags2 & 0x2) != 0 && (luFlags2 & 0x1) == 0)
-        mFlags = luFlags2 & 0xFFFFFFFDu;
+    if ((luFlags2 & eFLAG_INTERFRAMEBLEND) != 0 && (luFlags2 & eFLAG_MULTIFRAME) == 0)
+        mFlags = luFlags2 & ~static_cast<U32>(eFLAG_INTERFRAMEBLEND);
 }
 
 // ----------------------------------------------------------------------------

@@ -51,10 +51,10 @@ public:
     // De-inlined back onto the owning type, because the fields have names.
     void Init()
     {
+        mbEnabled = false; // ARTIST TriggerRegister at 0x8290ACCC disables before clearing the times.
         mTime.BuildZero();
         mTimeStart.BuildZero();
         mTimeStop.BuildZero();
-        mbEnabled = false;
     }
 
     // Advances the trigger by the elapsed time for the given update flags.

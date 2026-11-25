@@ -463,17 +463,30 @@ extern "C" s32 ProtoTunnelAlloc(ProtoTunnelRefT* pRef,ProtoTunnelInfoT* pInfo,co
     NetCritEnter(&pRef->TunnelsCritS); NetCritEnter(&pRef->TunnelsCritR);
     for (s32 i=0;i<pRef->iNumTunnels;++i) {
         ProtoTunnelT* pTunnel=&pRef->Tunnels[i];
-        if (pTunnel->Info.uRemoteClientId!=pInfo->uRemoteClientId) continue;
-        NetPrintf(("prototunnel: refcounting tunnel with id=0x%08x key=%s clientId=0x%08x\n",pTunnel->uVirtualAddr,pKey,pTunnel->Info.uRemoteClientId));
-        s32 result=(s32)pTunnel->uVirtualAddr, freeKey=-1;
-        ++pTunnel->uRefCount;
-        for (s32 j=0;j<8;++j) {
-            if (!strcmp(pTunnel->aKeyList[j],pKey)) NetPrintf(("prototunnel: warning - duplicate key %s on alloc\n",pKey));
-            if (freeKey==-1 && !pTunnel->aKeyList[j][0]) freeKey=j;
+        if (pTunnel->Info.uRemoteClientId == pInfo->uRemoteClientId) {
+            // ARTIST 82B2E1D0 through 82B2E23C keeps the requested client ID and snapshots
+            // the assigned tunnel ID before logging.
+            s32 result = static_cast<s32>(pTunnel->uVirtualAddr);
+            NetPrintf(("prototunnel: refcounting tunnel with id=0x%08x key=%s clientId=0x%08x\n", pTunnel->uVirtualAddr, pKey, pInfo->uRemoteClientId));
+            ++pTunnel->uRefCount;
+            s32 keyIndex = 0;
+            s32 freeKey = -1;
+            do {
+                if (!strcmp(pKey, pTunnel->aKeyList[keyIndex]))
+                    NetPrintf(("prototunnel: warning - duplicate key %s on alloc\n", pKey));
+                if (freeKey == -1 && !pTunnel->aKeyList[keyIndex][0])
+                    freeKey = keyIndex;
+            } while (++keyIndex < 8);
+            if (freeKey != -1)
+                ds_strnzcpy(pTunnel->aKeyList[freeKey], pKey, 128);
+            else {
+                NetPrintf(("prototunnel: error - key overflow on alloc\n"));
+                result = -1;
+            }
+            NetCritLeave(&pRef->TunnelsCritR);
+            NetCritLeave(&pRef->TunnelsCritS);
+            return result;
         }
-        if (freeKey==-1) { NetPrintf(("prototunnel: error - key overflow on alloc\n")); result=-1; }
-        else ds_strnzcpy(pTunnel->aKeyList[freeKey],pKey,128);
-        NetCritLeave(&pRef->TunnelsCritR); NetCritLeave(&pRef->TunnelsCritS); return result;
     }
     if (pRef->iNumTunnels==pRef->iMaxTunnels) {
         NetPrintf(("prototunnel: could not allocate a new tunnel\n"));

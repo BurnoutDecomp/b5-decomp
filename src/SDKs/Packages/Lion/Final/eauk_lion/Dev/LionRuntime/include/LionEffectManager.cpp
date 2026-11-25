@@ -37,15 +37,7 @@
 // m_instance, 0x1B28C bytes away). A function-local static would add a guard the console
 // does not have and would make first use non-trivially ordered.
 // ----------------------------------------------------------------------------
-namespace
-{
-    cLionEffectManager gLionEffectManagerSingleton;   // X360 mSingleton @0x83121D94
-}
-
-cLionEffectManager* cLionEffectManager::GetMe()
-{
-    return &gLionEffectManagerSingleton;
-}
+cLionEffectManager cLionEffectManager::mSingleton; // ARTIST 0x83121D94.
 
 // ----------------------------------------------------------------------------
 // cLionEffectManager::AppInit (DWARF LionEffectManager.h:38)

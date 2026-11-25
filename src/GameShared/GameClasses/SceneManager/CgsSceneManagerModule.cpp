@@ -146,10 +146,6 @@ s32 siProcessTriCollisionLineTestNearestsPerfMon = -1;   // (file-external since
 //  (big-endian). The zero w lanes are why the clamped padding's w lane is always 0.
 // ---------------------------------------------------------------------------
 
-// The source path the X360 asserts cite (the build's absolute file path).
-static const char* const KPC_SOURCE_FILE =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\CgsSceneManagerModule.cpp";
-
 namespace
 {
     // Register one perfmon monitor the first time we see it (handle still -1) and
@@ -232,7 +228,7 @@ void SceneManagerModule::CreateCullingTable(rw::IResourceAllocator* lpSceneAlloc
     CGS_ASSERT(lpSceneAllocator != NULL,
         CGS_ASSERT_MESSAGE_AT(
             "lpSceneAllocator != NULL",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\CgsSceneManagerModule.cpp", 1362 /* ARTIST 0x828BACBC */));
+            KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 1362 /* ARTIST 0x828BACBC */));
     mCullingGroupManager.CreateCullingTable(lpSceneAllocator);
 }
 

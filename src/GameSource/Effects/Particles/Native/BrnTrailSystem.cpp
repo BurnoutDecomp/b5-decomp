@@ -53,6 +53,8 @@ namespace Native
     // ---- file-scope constants (DWARF BrnTrailSystem.cpp:32-38) --------------------------
     namespace
     {
+        const char K_TRAIL_SYSTEM_ASSERT_FILE[] =
+            "..\\..\\..\\GameSource\\Effects/Particles/Native/BrnTrailSystem.h";
         // krTrailHeightAdjustment / kTrailHeightAdjustment (BrnTrailSystem.cpp:33/34).
         //
         // ⭐ THE FLAG THAT STOOD HERE IS DISCHARGED (2026-09-15, issue #21). unk_82FAC1E0 reads
@@ -159,7 +161,7 @@ namespace Native
         CGS_ASSERT(mnCurrentSize < KN_TRAIL_EMITTER_POOL_SIZE,
             CGS_ASSERT_MESSAGE_AT(
                 "mnCurrentSize < knTrailEmitterPoolSize",
-                "..\\..\\..\\GameSource\\Effects/Particles/Native/BrnTrailSystem.h", 134 /* ARTIST 0x82277D80 */));
+                K_TRAIL_SYSTEM_ASSERT_FILE, 134 /* ARTIST 0x82277D80 */));
 
         mapEmitters[mnCurrentSize] = lpEmitter;
         ++mnCurrentSize;
@@ -167,17 +169,17 @@ namespace Native
 
     void EmitterArray::RemoveEntry(s32 liIndex)
     {
-        CGS_ASSERT(liIndex < mnCurrentSize, "Element not found in array");
+        CGS_ASSERT_AT(liIndex < mnCurrentSize, "Element not found in array",
+                      K_TRAIL_SYSTEM_ASSERT_FILE, 165); // ARTIST 0x82277DF8.
 
-        const s32 liLastIndex = mnCurrentSize - 1;
-        if (liIndex == liLastIndex)
+        if (liIndex == mnCurrentSize - 1)
         {
             mapEmitters[liIndex] = 0;
         }
         else
         {
-            mapEmitters[liIndex]            = mapEmitters[liLastIndex];
-            mapEmitters[mnCurrentSize - 1]  = 0;
+            mapEmitters[liIndex] = mapEmitters[mnCurrentSize - 1];
+            mapEmitters[mnCurrentSize - 1] = 0;
         }
         --mnCurrentSize;
     }

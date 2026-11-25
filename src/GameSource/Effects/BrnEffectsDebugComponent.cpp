@@ -156,56 +156,55 @@ namespace BrnEffects
     // ====================================================================================
     void EffectsDebugComponent::Construct(EffectsModule* lpEffectsModule)
     {
-        // Base debug-component construction (the X360 inlines DebugComponent's trivial body,
-        // which the linker folded to a shared empty function - semantically the base ctor).
-        CgsDev::DebugComponent::Construct();   // ARTIST 0x82278CB4 (folded at 0x8284CB38)
-        CGS_ASSERT(lpEffectsModule != NULL, CGS_ASSERT_MESSAGE_AT("lpEffectsModule != NULL", __FILE__, 60));
+        CgsDev::DebugComponent::Construct(); // ARTIST 0x82278CB4 folded at 0x8284CB38.
+        CGS_ASSERT_AT(lpEffectsModule != NULL, "lpEffectsModule != NULL",
+                      "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Effects/BrnEffectsDebugComponent.cpp",
+                      60);
         mpEffectsModule = lpEffectsModule;
 
-        // Defaults (verified from the Construct store sequence in the asm).
-        mfSimulationRate            = 1.0f;
-        mfBoostExhaustCutOffSpeed   = 20.0f;
+        // Preserve the default-state initialization order at ARTIST 0x82278D04.
+        mfSimulationRate = 1.0f;
+        mfMotionBlurUserAmountCars = 0.0f;
+        mfMotionBlurUserAmountWorld = 1.0f;
+        mbBypassAllVFXProcessing = false;
+        mfBoostExhaustCutOffSpeed = 20.0f;
 
-        mbBypassAllVFXProcessing    = false;
-        mbSparksEnabled             = true;
-        mbTrailsEnabled             = true;
-        mbDebrisEnabled             = true;
-        mbGlassEnabled              = true;
-        mbPopcornEnabled            = true;
-        mbSimpleEnabled             = true;
-        mbLionEnabled               = true;
-        mbLionStatisticsEnabled     = false;
-        mbUseZFade                  = false;
+        mbSparksEnabled = true;
+        mfJunkyardVfxPosX = 0.0f;
+        mbTrailsEnabled = true;
+        mfJunkyardVfxPosY = 0.0f;
+        mbDebrisEnabled = true;
+        mfJunkyardVfxPosZ = 0.0f;
+        mbGlassEnabled = true;
+        mfJunkyardVfxAngle = 0.0f;
+        mbPopcornEnabled = true;
+        mbSimpleEnabled = true;
+        mbLionEnabled = true;
+        mbLionStatisticsEnabled = false;
         mbEngineCrashEffectsEnabled = false;
-        mbSparksDebugEnabled        = false;
-        mbQAEnabled                 = false;
-        mbEnabled                   = false;
-        mbForceStateBlend           = false;
-        mbBoostTransition           = false;
-        mbForceFinishLineRendering  = false;
-        mbDumpRunningLionEffects    = false;
-        mbForceNonPlayerEffects     = false;
+        mbSparksDebugEnabled = false;
+        mbQAEnabled = false;
+        mbUseZFade = false;
+        mbEnabled = false;
+        mTagPointIndex = 0;
+        mbForceFinishLineRendering = false;
+        mbDumpRunningLionEffects = false;
 
-        mTagPointIndex              = 0;
-
-        mbBloom                     = true;
-        mbVignette                  = true;
-        mbDepthOfField              = true;
-        mbTint                      = true;
-        mbTint2d                    = true;
-        mbMotionBlur                = true;
+        mbBloom = true;
+        mbVignette = true;
+        mbDepthOfField = true;
+        mbTint = true;
+        mbTint2d = true;
+        mbMotionBlur = true;
         mbMotionBlurEnableUserSettings = false;
         mbMotionBlurUserHighQuality = true;
-        mfMotionBlurUserAmountCars  = 0.0f;
-        mfMotionBlurUserAmountWorld = 1.0f;
 
-        mbJunkyardVfxEdit           = false;
-        mbJunkyardVfxShowAxes       = false;
-        mnJunkyardVfxId             = 0;
-        mfJunkyardVfxPosX           = 0.0f;
-        mfJunkyardVfxPosY           = 0.0f;
-        mfJunkyardVfxPosZ           = 0.0f;
-        mfJunkyardVfxAngle          = 0.0f;
+        mbForceStateBlend = false;
+        mbBoostTransition = false;
+        mbForceNonPlayerEffects = false;
+        mbJunkyardVfxEdit = false;
+        mbJunkyardVfxShowAxes = false;
+        mnJunkyardVfxId = 0;
     }
 
     // ====================================================================================

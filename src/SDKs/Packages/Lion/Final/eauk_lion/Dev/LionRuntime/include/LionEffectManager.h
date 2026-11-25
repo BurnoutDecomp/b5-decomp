@@ -53,7 +53,7 @@ struct cLionEffectManager
 {
 public:
     // The manager singleton (DWARF h:33 / h:71 `mSingleton`), X360 0x83121D94.
-    static cLionEffectManager* GetMe();
+    static cLionEffectManager* GetMe() { return &mSingleton; }
 
     // App lifetime (DWARF h:38). NO STANDALONE X360 BODY -- inlined into cLionFX::Init
     // @0x82914A98 (0x82914B08..0x82914B58); re-outlined here as the source's own function.
@@ -80,6 +80,8 @@ public:
     void EffectDestroy(cLionEffectInstance* apInstance);
 
 private:
+    static cLionEffectManager mSingleton;
+
     // ----- members (DWARF order; every offset attested in cLionFX::Init) -----
     u32                              mEffectDefCount;  // +0x00  LionEffectManager.h:73
     u32                              mEffectCount;     // +0x04  LionEffectManager.h:74

@@ -340,6 +340,15 @@ namespace Attrib
         bool              IsModified() const { return (muFlags & 1u) != 0; }
 
     protected:
+        // DecFIGS attribsys.h:522 and LegacySrc attribsys.h:968.
+        void SetDefaultLayout(u32 luBytes) const
+        {
+            if (mpAttributeData == 0)
+            {
+                const_cast<Instance*>(this)->mpAttributeData = DefaultDataArea(luBytes);
+            }
+        }
+
         Collection* mpCollection;     // +0
         void*       mpAttributeData;  // +4
         void*       mpOwner;          // +8

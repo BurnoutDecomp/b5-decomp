@@ -246,8 +246,7 @@ namespace Gen
     inline boostparamsasset::boostparamsasset(u64 luCollectionKey, void* lpOwner)
         : Instance(FindCollection(KU_BOOSTPARAMSASSET_CLASS_KEY, luCollectionKey), lpOwner)
     {
-        if (!GetLayoutPointer())
-            mpAttributeData = DefaultDataArea(KU_LAYOUT_SIZE);
+        SetDefaultLayout(KU_LAYOUT_SIZE);
     }
 }
 }
