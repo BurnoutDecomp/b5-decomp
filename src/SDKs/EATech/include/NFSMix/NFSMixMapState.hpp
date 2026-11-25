@@ -52,12 +52,13 @@ public:
     int  GetStateRefCount();             // @0x82B4C718 -- m_pFirstInstance->m_ThisStateRefCnt
 
     // ---- proc accessors (ARTIST-verified base/bounds offsets) -- each indexes the
-    //   copy at m_pFirstInstance[copyIdx], bounds-checks procIdx, returns base[procIdx].
-    stMixCtlProc*      GetMixCtlProc(unsigned char procIdx, int copyIdx);      // @0x82B4C728 base+0x08 bnd+0x48
-    st3DMixCtlProc*    Get3DMixCtlProc(unsigned char procIdx, int copyIdx);    // @0x82B4C770 base+0x14 bnd+0x4C
-    stEvtMixCtlProc*   GetEvtMixCtlProc(unsigned char procIdx, int copyIdx);   // @0x82B4C7B8 base+0x18 bnd+0x50
-    stSubMixChProc*    GetSubMixChProc(unsigned char procIdx, int copyIdx);    // @0x82B4C800 base+0x0C bnd+0x54
-    stMasterMixChProc* GetMasterMixChProc(unsigned char procIdx, int copyIdx); // @0x82B4C848 base+0x10 bnd+0x58
+    //   copy at m_pFirstInstance[liCopyIndex] and bounds-checks the low byte of liProcID.
+    //   The original symbol map records both parameters as int.
+    stMixCtlProc*      GetMixCtlProc(int liProcID, int liCopyIndex);      // @0x82B4C728 base+0x08 bnd+0x48
+    st3DMixCtlProc*    Get3DMixCtlProc(int liProcID, int liCopyIndex);    // @0x82B4C770 base+0x14 bnd+0x4C
+    stEvtMixCtlProc*   GetEvtMixCtlProc(int liProcID, int liCopyIndex);   // @0x82B4C7B8 base+0x18 bnd+0x50
+    stSubMixChProc*    GetSubMixChProc(int liProcID, int liCopyIndex);    // @0x82B4C800 base+0x0C bnd+0x54
+    stMasterMixChProc* GetMasterMixChProc(int liProcID, int liCopyIndex); // @0x82B4C848 base+0x10 bnd+0x58
 
     // ---- state-array cursor + builder passes (called from NFSMixMap::CreateMainMapState /
     //      SetupStateProcArrays; ARTIST-verified against the X360 asm). ----

@@ -38,83 +38,114 @@ NFSLiveLink::NFSLiveLink(Nicotine::IDynamicMixer* apMixer)
 
 void NFSLiveLink::SetupChannelMonitoring()
 {
+    const int* lpInput = mInput;
     mfTime = 0.0f;
-    if (mInput[0] <= 0)
-        mbMonitorEnabled = false;
-    else
+    if (*lpInput > 0)
     {
         mbMonitorEnabled = true;
-        miMonitorChannel = mInput[1];
-        miMonitorState = mInput[2];
-        rw::core::stdc::MemCopy(mMonitorChannels, mInput + 3, sizeof(mMonitorChannels));
+        ++lpInput;
+        miMonitorChannel = *lpInput++;
+        miMonitorState = *lpInput++;
+        rw::core::stdc::MemCopy(mMonitorChannels, lpInput, sizeof(mMonitorChannels));
         mpMonitorWrite = mMonitorOutput;
         rw::core::stdc::MemFill8(mMonitorOutput, 0, sizeof(mMonitorOutput));
         mbFirstMonitorRecord = true;
         miMonitorRecordSize = 0;
+    }
+    else
+    {
+        mbMonitorEnabled = false;
     }
 }
 
 void NFSLiveLink::ReadSnapshots()
 {
     Nicotine::SnapshotMixer* lpSnapshots = Nicotine::g_pSnapshotMixer;
-    lpSnapshots->SetSnapshotOverride(true);
+    bool lbMore = true;
+    unsigned int luCount = 0;
+    lpSnapshots->SetSnapshotOverride(lbMore);
     lpSnapshots->TurnOffAllSnapshots();
-    int liCount = 0;
-    for (unsigned int i = 0; i < 512; ++i)
+    for (unsigned int luIndex = 0; lbMore; ++luIndex)
     {
-        if (mInput[i] == 0xffff) break;
-        ++liCount;
-        lpSnapshots->TurnOnSnapshot(mInput[i]);
+        if (luIndex >= 512)
+            break;
+        const int liSnapshot = mInput[luIndex];
+        if (liSnapshot == 0xffff)
+            lbMore = false;
+        else
+        {
+            ++luCount;
+            lpSnapshots->TurnOnSnapshot(liSnapshot);
+        }
     }
-    if (!liCount) lpSnapshots->SetSnapshotOverride(false);
+    if (luCount == 0)
+        lpSnapshots->SetSnapshotOverride(false);
 }
 
 void NFSLiveLink::ReadSnapshotData()
 {
-    for (unsigned int i = 1; i < 512; i += 3)
+    const int liSnapshot = mInput[0];
+    bool lbMore = true;
+    Nicotine::SnapshotMixer* lpSnapshots = Nicotine::g_pSnapshotMixer;
+    for (unsigned int luIndex = 1; lbMore; luIndex += 3)
     {
-        if (mInput[i] == 0xffff) break;
-        Nicotine::g_pSnapshotMixer->UpdateSnapshotChannelData(mInput[0], mInput + i, mInput[i + 2]);
+        if (luIndex >= 512)
+            break;
+        const int* lpEntry = mInput + luIndex;
+        if (*lpEntry == 0xffff)
+            lbMore = false;
+        else
+            lpSnapshots->UpdateSnapshotChannelData(liSnapshot, lpEntry, lpEntry[2]);
     }
 }
 
 void NFSLiveLink::ReadMixControlVolumes()
 {
-    if (!g_pNFSMixMaster) return;
-    int* lpInput = mInput;
-    while (*lpInput)
+    NFSMixMaster* lpMaster = g_pNFSMixMaster;
+    const int* lpInput = mInput;
+    if (!lpMaster) return;
+    int liID = *lpInput;
+    for (; liID != 0; liID = *lpInput)
     {
-        const int liID = *lpInput++;
-        const int liVolume = *lpInput++;
-        const unsigned int luState = (static_cast<unsigned int>(liID) >> 16) & 0xff;
-        NFSMixMap* lpMap = g_pNFSMixMaster->m_pMainMixMap;
-        if (!lpMap->m_StateRefCount[luState]) continue;
-        NFSMixMapState* lpState = lpMap->m_pStateProcs[luState];
+        const int liVolume = *++lpInput;
+        ++lpInput;
+        NFSMixMap* lpMap = lpMaster->m_pMainMixMap;
+        const int liState = (liID >> 16) & 0xff;
+        if (!lpMap->m_StateRefCount[liState]) continue;
+        NFSMixMapState* lpState = lpMap->m_pStateProcs[liState];
         if (!lpState) continue;
         if ((liID >> 28) == 0)
         {
-            stMixCtlProc* lpProc = lpState->GetMixCtlProc(static_cast<unsigned char>(liID), 0);
+            stMixCtlProc* lpProc = lpState->GetMixCtlProc(liID, 0);
             if (!lpProc) continue;
-            stMixCtlSharedData* lpShared = lpProc->psdata;
-            if (liVolume & 0x8000)
-                lpShared->nRatio = 0x7fff - NFSMixShape::GetQ15FromHundredthsdB(liVolume | static_cast<int>(0xffff0000u));
+            if (!(liVolume & 0x8000))
+            {
+                lpProc->psdata->nOffset = liVolume & 0x7fff;
+                stMixCtlSharedData* lpShared = lpProc->psdata;
+                lpShared->nRatio =
+                    0x7fff - NFSMixShape::GetQ15FromHundredthsdB(-lpShared->nOffset);
+            }
             else
             {
-                lpShared->nOffset = liVolume & 0x7fff;
-                lpShared->nRatio = 0x7fff - NFSMixShape::GetQ15FromHundredthsdB(-lpShared->nOffset);
+                lpProc->psdata->nRatio =
+                    0x7fff - NFSMixShape::GetQ15FromHundredthsdB(liVolume | static_cast<int>(0xffff0000u));
             }
         }
         else if ((liID >> 28) == 5)
         {
-            stEvtMixCtlProc* lpProc = lpState->GetEvtMixCtlProc(static_cast<unsigned char>(liID), 0);
+            stEvtMixCtlProc* lpProc = lpState->GetEvtMixCtlProc(liID, 0);
             if (!lpProc) continue;
-            stEvtMixCtlSharedData* lpShared = lpProc->pData_S;
-            if (liVolume & 0x8000)
-                lpShared->nRatio = 0x7fff - NFSMixShape::GetQ15FromHundredthsdB(liVolume | static_cast<int>(0xffff0000u));
+            if (!(liVolume & 0x8000))
+            {
+                lpProc->pData_S->nOffset = liVolume & 0x7fff;
+                stEvtMixCtlSharedData* lpShared = lpProc->pData_S;
+                lpShared->nRatio =
+                    0x7fff - NFSMixShape::GetQ15FromHundredthsdB(-lpShared->nOffset);
+            }
             else
             {
-                lpShared->nOffset = liVolume & 0x7fff;
-                lpShared->nRatio = 0x7fff - NFSMixShape::GetQ15FromHundredthsdB(-lpShared->nOffset);
+                lpProc->pData_S->nRatio =
+                    0x7fff - NFSMixShape::GetQ15FromHundredthsdB(liVolume | static_cast<int>(0xffff0000u));
             }
         }
     }
@@ -168,11 +199,13 @@ void NFSLiveLink::ReadVolPresets()
 
 void NFSLiveLink::ReadSnapshotRecall()
 {
+    Nicotine::SnapshotMixer* lpSnapshots = Nicotine::g_pSnapshotMixer;
     const float lfDuration = static_cast<float>(mInput[1]);
+    const int liSnapshot = mInput[0];
     if (lfDuration < 0.0f)
-        Nicotine::g_pSnapshotMixer->Recall(mInput[0]);
+        lpSnapshots->Recall(liSnapshot);
     else
-        Nicotine::g_pSnapshotMixer->Recall(mInput[0], lfDuration);
+        lpSnapshots->Recall(liSnapshot, lfDuration);
 }
 
 void NFSLiveLink::RefreshMap(const void* apMap, int aiMapSize, const void* apSnapshots, int aiSnapshotSize)
@@ -206,8 +239,9 @@ void NFSLiveLink::CheckInputBuffer(int aiCommand)
     switch (aiCommand)
     {
     case 1: case 4: ReadMasterVolumes(); break;
-    case 2: ReadVolPresets(); break;
+    // ARTIST 0x82B461D8 places the controls block before the presets block.
     case 3: ReadMixControlVolumes(); break;
+    case 2: ReadVolPresets(); break;
     case 5: SetupChannelMonitoring(); break;
     case 10: mbSnapshotMonitoring = mInput[0] != 0; break;
     case 11: ReadSnapshotRecall(); break;

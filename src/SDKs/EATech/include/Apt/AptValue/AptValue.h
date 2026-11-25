@@ -209,7 +209,7 @@ public:
     void setGCRoot(uint32_t n);
     void SetAllowDelayedDeletion(bool bAllowed);
 
-    void setIsDefined(bool bDefined) { mValueBitfield.mbIsDefined = bDefined ? 1u : 0u; }
+    void setIsDefined(bool bDefined);
 
     // ---- value-type predicates ----
     // Each tests meValueType (+ mbIsDefined where the asm reads it). Reconstructed

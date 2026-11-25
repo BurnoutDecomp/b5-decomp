@@ -166,6 +166,9 @@ namespace CgsSceneManager
     void DrawCollisionPolyCallbackData::Construct(DrawCollisionPolyCallback* lpfCallback,
                                                   void* lpUserData)
     {
+        CGS_ASSERT(lpfCallback != NULL,
+                   CGS_ASSERT_MESSAGE_AT("lpCallbackFunc != NULL",
+                                         "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\trianglecollision\\CgsTriangleCollisionDebugComponent.h", 323));
         mpCallbackFunc = lpfCallback;
         mpUserData = lpUserData;
     }
@@ -187,15 +190,18 @@ namespace CgsSceneManager
         DrawCollisionPolyCallbackData::DrawCollisionPolyCallback* lpfCallback,
         void* lpUserData)
     {
-        CGS_ASSERT(lpfCallback != 0, "lpHandlerFunc != NULL");
-        if (siNumDrawPolyCallbacks >= KI_MAX_NUM_COLLISION_POLY_CALLBACKS)
-            return false;
-
-        DrawCollisionPolyCallbackData& lrSlot =
-            GetDrawCollisionPolyCallback(siNumDrawPolyCallbacks++);
-        CGS_ASSERT(lpfCallback != 0, "lpCallbackFunc != NULL");
-        lrSlot.Construct(lpfCallback, lpUserData);
-        return true;
+        CGS_ASSERT(lpfCallback != NULL,
+                   CGS_ASSERT_MESSAGE_AT("lpHandlerFunc != NULL",
+                                         "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\TriangleCollision/CgsTriangleCollisionDebugComponent.cpp", 1472));
+        if (siNumDrawPolyCallbacks < KI_MAX_NUM_COLLISION_POLY_CALLBACKS)
+        {
+            ++siNumDrawPolyCallbacks;
+            DrawCollisionPolyCallbackData& lrSlot =
+                GetDrawCollisionPolyCallback(siNumDrawPolyCallbacks - 1);
+            lrSlot.Construct(lpfCallback, lpUserData);
+            return true;
+        }
+        return false;
     }
 
     // ARTIST 0x828B3340. Seed the query controls, collision-test state, map defaults and

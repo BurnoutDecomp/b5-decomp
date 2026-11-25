@@ -51,84 +51,58 @@ int NFSMixMapState::GetStateRefCount()
     return m_pFirstInstance->m_ThisStateRefCnt;
 }
 
-// ---------------------------------------------------------------------------
-// GetXxxProc accessors @0x82B4C728 / 0x770 / 0x7B8 / 0x800 / 0x848.
-// Each: state = &m_pFirstInstance[copyIdx] (X360 stride 0x60); if the proc index is
-// within that copy's count, return &<paramBase>[procIdx]; else 0. The X360 stride for
-// the proc array is 8 (a {shared*,unique*} pair); modelled as the real x64 array index.
-// ---------------------------------------------------------------------------
-stMixCtlProc* NFSMixMapState::GetMixCtlProc(unsigned char procIdx, int copyIdx)
-{
-    // X360 null test is on the COMPUTED &base[copyIdx] (base null + idx 0 -> 0); on the
-    // host that indexing is UB-on-null and the compiler deletes a post-index !st check --
-    // so the guard is hoisted onto the base pointer itself (fixed 2026-08-25, wave 1).
-    if (m_pFirstInstance == 0)
-        return 0;
-    NFSMixMapState* st = &m_pFirstInstance[copyIdx];
-    if (static_cast<int>(procIdx) >= st->m_MixCtlsAdded)
-        return 0;
-    return &st->m_MixStateParams.pMixCtlProcs[procIdx];
-}
-
-st3DMixCtlProc* NFSMixMapState::Get3DMixCtlProc(unsigned char procIdx, int copyIdx)
-{
-    // X360 null test is on the COMPUTED &base[copyIdx] (base null + idx 0 -> 0); on the
-    // host that indexing is UB-on-null and the compiler deletes a post-index !st check --
-    // so the guard is hoisted onto the base pointer itself (fixed 2026-08-25, wave 1).
-    if (m_pFirstInstance == 0)
-        return 0;
-    NFSMixMapState* st = &m_pFirstInstance[copyIdx];
-    if (static_cast<int>(procIdx) >= st->m_3DMixCtlsAdded)
-        return 0;
-    return &st->m_MixStateParams.p3DMixCtlProc[procIdx];
-}
-
-stEvtMixCtlProc* NFSMixMapState::GetEvtMixCtlProc(unsigned char procIdx, int copyIdx)
-{
-    // X360 null test is on the COMPUTED &base[copyIdx] (base null + idx 0 -> 0); on the
-    // host that indexing is UB-on-null and the compiler deletes a post-index !st check --
-    // so the guard is hoisted onto the base pointer itself (fixed 2026-08-25, wave 1).
-    if (m_pFirstInstance == 0)
-        return 0;
-    NFSMixMapState* st = &m_pFirstInstance[copyIdx];
-    if (static_cast<int>(procIdx) >= st->m_EvtMixCtlsAdded)
-        return 0;
-    return &st->m_MixStateParams.pEvtMixCtlProc[procIdx];
-}
-
-stSubMixChProc* NFSMixMapState::GetSubMixChProc(unsigned char procIdx, int copyIdx)
-{
-    // X360 null test is on the COMPUTED &base[copyIdx] (base null + idx 0 -> 0); on the
-    // host that indexing is UB-on-null and the compiler deletes a post-index !st check --
-    // so the guard is hoisted onto the base pointer itself (fixed 2026-08-25, wave 1).
-    if (m_pFirstInstance == 0)
-        return 0;
-    NFSMixMapState* st = &m_pFirstInstance[copyIdx];
-    if (static_cast<int>(procIdx) >= st->m_SubMixChannelsAdded)
-        return 0;
-    return &st->m_MixStateParams.pSubMixChProcs[procIdx];
-}
-
-stMasterMixChProc* NFSMixMapState::GetMasterMixChProc(unsigned char procIdx, int copyIdx)
-{
-    // X360 null test is on the COMPUTED &base[copyIdx] (base null + idx 0 -> 0); on the
-    // host that indexing is UB-on-null and the compiler deletes a post-index !st check --
-    // so the guard is hoisted onto the base pointer itself (fixed 2026-08-25, wave 1).
-    if (m_pFirstInstance == 0)
-        return 0;
-    NFSMixMapState* st = &m_pFirstInstance[copyIdx];
-    if (static_cast<int>(procIdx) >= st->m_MasterChannelsAdded)
-        return 0;
-    return &st->m_MixStateParams.pMasterMixChProcs[procIdx];
-}
-
-// ---------------------------------------------------------------------------
-// NFSMixMapState::GetMixMapProc @0x82B4D648
-//   return &m_pFirstInstance[liIndex];   (96*idx + *(this+0x5C), stride 0x60)
-// ---------------------------------------------------------------------------
+// ARTIST 0x82B4D648 computes the copy's native address. The proc getters
+// check that computed address for null, so keep the offset arithmetic unsigned.
 NFSMixMapState* NFSMixMapState::GetMixMapProc(int liIndex)
 {
-    return &m_pFirstInstance[liIndex];
+    const uintptr_t luBase = reinterpret_cast<uintptr_t>(m_pFirstInstance);
+    return reinterpret_cast<NFSMixMapState*>(luBase + sizeof(NFSMixMapState) * liIndex);
+}
+
+// ARTIST 0x82B4C728..0x82B4C888 uses only the low byte of the packed procedure ID.
+stMixCtlProc* NFSMixMapState::GetMixCtlProc(int liProcID, int liCopyIndex)
+{
+    const int liProcIndex = liProcID & 0xff;
+    NFSMixMapState* lpState = GetMixMapProc(liCopyIndex);
+    if (lpState && liProcIndex < lpState->m_MixCtlsAdded)
+        return &lpState->m_MixStateParams.pMixCtlProcs[liProcIndex];
+    return 0;
+}
+
+st3DMixCtlProc* NFSMixMapState::Get3DMixCtlProc(int liProcID, int liCopyIndex)
+{
+    const int liProcIndex = liProcID & 0xff;
+    NFSMixMapState* lpState = GetMixMapProc(liCopyIndex);
+    if (lpState && liProcIndex < lpState->m_3DMixCtlsAdded)
+        return &lpState->m_MixStateParams.p3DMixCtlProc[liProcIndex];
+    return 0;
+}
+
+stEvtMixCtlProc* NFSMixMapState::GetEvtMixCtlProc(int liProcID, int liCopyIndex)
+{
+    const int liProcIndex = liProcID & 0xff;
+    NFSMixMapState* lpState = GetMixMapProc(liCopyIndex);
+    if (lpState && liProcIndex < lpState->m_EvtMixCtlsAdded)
+        return &lpState->m_MixStateParams.pEvtMixCtlProc[liProcIndex];
+    return 0;
+}
+
+stSubMixChProc* NFSMixMapState::GetSubMixChProc(int liProcID, int liCopyIndex)
+{
+    const int liProcIndex = liProcID & 0xff;
+    NFSMixMapState* lpState = GetMixMapProc(liCopyIndex);
+    if (lpState && liProcIndex < lpState->m_SubMixChannelsAdded)
+        return &lpState->m_MixStateParams.pSubMixChProcs[liProcIndex];
+    return 0;
+}
+
+stMasterMixChProc* NFSMixMapState::GetMasterMixChProc(int liProcID, int liCopyIndex)
+{
+    const int liProcIndex = liProcID & 0xff;
+    NFSMixMapState* lpState = GetMixMapProc(liCopyIndex);
+    if (lpState && liProcIndex < lpState->m_MasterChannelsAdded)
+        return &lpState->m_MixStateParams.pMasterMixChProcs[liProcIndex];
+    return 0;
 }
 
 // ---------------------------------------------------------------------------

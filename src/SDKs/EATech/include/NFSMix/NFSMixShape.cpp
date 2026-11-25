@@ -67,14 +67,15 @@ float GetPitchMultFromCents(int liCents)
 }
 
 // ---------------------------------------------------------------------------
-// GetIntPitchMultFromCents @0x82B45690 -- sign-extend the 16-bit cents, scale by 4096.
-//   if (cents & 0x8000) cents |= 0xFFFF0000;   (extsh / oris)
+// ARTIST 0x82B4569C extends bit 15 when set, preserving the full input otherwise.
+// The parameter is int (original symbol map).
 //   return (int)(GetPitchMultFromCents(cents) * 4096.0);   (flt_821478DC; fctiwz)
 // ---------------------------------------------------------------------------
 int GetIntPitchMultFromCents(int liCents)
 {
-    const short lsCents = static_cast<short>(liCents);   // sign-extend 16-bit
-    return static_cast<int>(GetPitchMultFromCents(lsCents) * 4096.0f);
+    if (liCents & 0x8000)
+        liCents |= static_cast<int>(0xffff0000u);
+    return static_cast<int>(GetPitchMultFromCents(liCents) * 4096.0f);
 }
 
 

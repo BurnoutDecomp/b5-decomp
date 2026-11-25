@@ -970,9 +970,9 @@ int** NFSMixMap::GetSubChannelInputPtr(int liN)
 // GetMapStateCopies @0x82B49658 -- the state's ref-count, or 0 if out of range.
 int NFSMixMap::GetMapStateCopies(int liState)
 {
-    if (liState >= m_pMMHdr->NumStates)   // *(+0x74) -> NumStates (+0x04)
-        return 0;
-    return m_StateRefCount[liState];      // *(this + 8 + 4*liState)
+    if (liState < m_pMMHdr->NumStates)
+        return m_StateRefCount[liState];
+    return 0;
 }
 
 // ---------------------------------------------------------------------------

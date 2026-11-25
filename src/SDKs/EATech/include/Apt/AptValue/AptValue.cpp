@@ -24,7 +24,7 @@
 #include "SDKs/EATech/include/Apt/AptNativeHash.h"              // mp__Proto__ (the MC parent-chain walk)
 #include "eathread/eathread.h"                                    // EA::Thread::GetThreadId / ThreadId
 
-#include <xtl.h>   // _InterlockedExchange (the Apt GC flag lock)
+#include <xtl.h>   // _InterlockedCompareExchange / _InterlockedExchange
 
 // The Apt GC reference-registration callback. The GC value types' RegisterReferences
 // call through it, so the mark walk is inert while it is null. The callback BODY is
@@ -36,25 +36,47 @@ AptValue::ReferenceRegistrationCb AptValue::sReferenceRegistrationCb = 0;
 // AptGC::CleanAll sets this while it tears the value graph down (X360 byte_8324E38E).
 bool AptValue::sbSuspendRefcountDeletions = false;
 
-// The Apt GC lock (X360 unk_8324E75C) -- a single-word spin lock guarding the GC
-// mark / deferred-release flag bit mutations; the console's lwarx/stwcx.
-// interrupt-masked idiom modelled as an interlocked test-and-set (see the leaf
-// FLAG below; host-portable, uncontended on the single-thread bring-up path).
+// ARTIST 0x8324E75C serializes changes to the packed AptValue flags.
 namespace
 {
     volatile long gAptGCFlagLock = 0;
+
+    // ARTIST inlines the native lock and unlock at every flag write (0x82AD7E08–0x82AD82A8).
+    __forceinline void LockAptGCFlags()
+    {
+        while (static_cast<unsigned long>(_InterlockedCompareExchange(&gAptGCFlagLock, 1, 0)) != 0u)
+        {
+        }
+    }
+
+    __forceinline void UnlockAptGCFlags()
+    {
+        _InterlockedExchange(&gAptGCFlagLock, 0);
+    }
+}
+
+// setIsDefined @0x82AD7F98 uses the same lock and preserves the other flags.
+void AptValue::setIsDefined(bool bDefined)
+{
+    LockAptGCFlags();
+    mValueBitfield.mbIsDefined = bDefined ? 1u : 0u;
+    UnlockAptGCFlags();
 }
 
 // setGCMark @0x82AD8020 -- set mbHasRegisterReferenceMark under the GC lock.
 void AptValue::setGCMark(bool bMark)
 {
+    LockAptGCFlags();
     mValueBitfield.mbHasRegisterReferenceMark = bMark ? 1u : 0u;
+    UnlockAptGCFlags();
 }
 
 // ClearReleaseAtEnd @0x82AD82A8 -- clear mbIsInDeferredVector under the GC lock.
 void AptValue::ClearReleaseAtEnd()
 {
+    LockAptGCFlags();
     mValueBitfield.mbIsInDeferredVector = 0u;
+    UnlockAptGCFlags();
 }
 
 // incGCRoot @0x82AD8120 -- bump the GC-root count one, under the Apt GC flag
@@ -65,8 +87,10 @@ void AptValue::ClearReleaseAtEnd()
 // manipulates the word inline, and setGCRoot takes this same non-recursive lock).
 void AptValue::incGCRoot()
 {
+    LockAptGCFlags();
     if (mValueBitfield.mnGCRootCount < MAX_GCROOT)
         mValueBitfield.mnGCRootCount = mValueBitfield.mnGCRootCount + 1u;
+    UnlockAptGCFlags();
 }
 
 // decGCRoot @0x82AD81A8 -- drop the GC-root count one (floored at 0), under the
@@ -76,8 +100,10 @@ void AptValue::incGCRoot()
 // Direct field write (see incGCRoot).
 void AptValue::decGCRoot()
 {
+    LockAptGCFlags();
     if (mValueBitfield.mnGCRootCount != 0u)
         mValueBitfield.mnGCRootCount = mValueBitfield.mnGCRootCount - 1u;
+    UnlockAptGCFlags();
 }
 
 // setRefCount @0x82AD7E90 -- store the reference count under the Apt GC flag
@@ -86,19 +112,23 @@ void AptValue::decGCRoot()
 // 0x80`) and clamps to 0xFFF; then insrwi the 12-bit count and release the lock.
 void AptValue::setRefCount(uint32_t n)
 {
+    LockAptGCFlags();
     if (n > MAX_REFCOUNT)
     {
         mValueBitfield.mnMaxRefCountHit = 1u;   // X360 ori r10,r10,0x80
         n = MAX_REFCOUNT;                       // X360 li r4,0xFFF
     }
     mValueBitfield.mnReferenceCount = n;        // X360 insrwi r10,r4,12,6
+    UnlockAptGCFlags();
 }
 
 // setVtblIndex @0x82AD7F20 -- store the 7-bit value-type tag under the Apt GC
 // flag lock (X360 insrwi r9,r4,7,25).
 void AptValue::setVtblIndex(AptVirtualFunctionTable_Indices n)
 {
+    LockAptGCFlags();
     mValueBitfield.meValueType = n;
+    UnlockAptGCFlags();
 }
 
 // setGCRoot @0x82AD80A8 -- store the 6-bit GC-root count under the Apt GC flag
@@ -106,14 +136,18 @@ void AptValue::setVtblIndex(AptVirtualFunctionTable_Indices n)
 // bits); the MAX_GCROOT guard lives in incGCRoot.
 void AptValue::setGCRoot(uint32_t n)
 {
+    LockAptGCFlags();
     mValueBitfield.mnGCRootCount = n & MAX_GCROOT;   // the 6-bit field mask
+    UnlockAptGCFlags();
 }
 
 // SetAllowDelayedDeletion @0x82AD7E08 -- store the delayed-deletion flag under
 // the Apt GC flag lock (X360 insrwi r8,r9,1,5).
 void AptValue::SetAllowDelayedDeletion(bool bAllowed)
 {
+    LockAptGCFlags();
     mValueBitfield.mbAllowsDelayedDeletion = bAllowed ? 1u : 0u;
+    UnlockAptGCFlags();
 }
 
 // SetReleaseAtEnd @0x82AD8230 -- mark this value as queued in the GC deferred-
@@ -123,7 +157,9 @@ void AptValue::SetAllowDelayedDeletion(bool bAllowed)
 // (The "second locked block" in the pseudocode is the lock release itself.)
 void AptValue::SetReleaseAtEnd()
 {
+    LockAptGCFlags();
     mValueBitfield.mbIsInDeferredVector = 1u;
+    UnlockAptGCFlags();
 }
 
 // DeleteThis @ 0x824ED4B8
