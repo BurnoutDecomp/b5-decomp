@@ -25,10 +25,17 @@ namespace CgsCore
 
     __forceinline void StrCpy(char* lpcDest, u32 luBytes, const char* lpcSource)
     {
-        CGS_ASSERT_STREAM_AT(strlen(lpcSource) < luBytes,
-            "String " << lpcSource << " is too long. Buffer size = " << luBytes
-                << ", string length = " << static_cast<u32>(strlen(lpcSource)) << "\n",
-            CGS_ARTIST_STRING_UTILS_FILE, 65);
+        if (strlen(lpcSource) >= luBytes)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+            const u32 luLength = static_cast<u32>(strlen(lpcSource)); // ARTIST measures the length here at 0x828DE11C.
+            lStrStream << "String " << lpcSource << " is too long. Buffer size = " << luBytes
+                << ", string length = " << luLength << "\n";
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+                CGS_ASSERT_LOCATION(CGS_ARTIST_STRING_UTILS_FILE, 65));
+            CgsDev::Assert::EndAssert();
+        }
         strcpy(lpcDest, lpcSource);
     }
 

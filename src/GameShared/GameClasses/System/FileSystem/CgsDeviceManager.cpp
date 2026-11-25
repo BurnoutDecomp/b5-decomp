@@ -17,12 +17,14 @@
 // ThreadTime); the body lives in vendor/EAThread/source/pc/eathread_x360align.cpp.
 namespace EA { namespace Thread { unsigned int ThreadSleep(const unsigned int* pMilliseconds); } }
 
+#define CGS_DEVICE_MANAGER_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsDeviceManager.cpp"
+
 namespace CgsFileSystem
 {
     // ---- statics ----
     // X360 globals: dword_830EA400 (singleton), off_830EA404 (allocator).
     DeviceManager* DeviceManager::mpDeviceManager = 0;
-    void*          DeviceManager::mpAllocator     = 0;
+    rw::IResourceAllocator* DeviceManager::mpAllocator = 0;
 
     // CgsFileSystem::GetDeviceManager @ 0x8264AD88
     DeviceManager* GetDeviceManager()
@@ -35,13 +37,13 @@ namespace CgsFileSystem
     void* DeviceManager::operator new(size_t luSize)
     {
         const rw::ResourceDescriptor lDescriptor(luSize, 16u);
-        return static_cast<rw::IResourceAllocator*>(mpAllocator)->DoAllocate(lDescriptor, 0).m_baseResources[0];
+        return mpAllocator->DoAllocate(lDescriptor, 0).m_baseResources[0];
     }
     void DeviceManager::operator delete(void* lpBlock)
     {
         rw::Resource lResource;
         lResource.m_baseResources[0] = lpBlock;
-        static_cast<rw::IResourceAllocator*>(mpAllocator)->DoFree(lResource);
+        mpAllocator->DoFree(lResource);
     }
 
     // ctor @ 0x828F0C90.
@@ -63,32 +65,25 @@ namespace CgsFileSystem
     // free (mpDevice = 0) and flag the manager initialised.
     void DeviceManager::InitInternal()
     {
-        mDeviceListFutex.Lock();
-
+        EA::Thread::AutoFutex lAutoFutex(mDeviceListFutex);
         for (s32 liIndex = 0; liIndex < KI_MAX_PHYSICAL_DEVICES; ++liIndex)
             maPhysicalDevices[liIndex].mpDevice = 0;
         for (s32 liIndex = 0; liIndex < KI_MAX_VIRTUAL_DEVICES; ++liIndex)
             maVirtualDevices[liIndex].mpDevice = 0;
-
         macDefaultPath[0] = 0;
         mbInitialized = true;
-
-        mDeviceListFutex.Unlock();
     }
 
-    // InitializeDeviceManager @ 0x828F91E0 — create + init the singleton. Asserts it does not
-    // already exist and that an allocator was supplied; stores the allocator, allocates +
-    // constructs the DeviceManager, then runs InitInternal.
-    bool DeviceManager::InitializeDeviceManager(void* lpAllocator)
+    // Native allocator and diagnostic sites at ARTIST 0x828F91E0.
+    void DeviceManager::InitializeDeviceManager(rw::IResourceAllocator* lpAllocator)
     {
-        CGS_ASSERT(mpDeviceManager == 0, "Device manager already exists\n");
-        CGS_ASSERT(lpAllocator != 0, "Allocator required\n");
-
-        mpAllocator     = lpAllocator;
-        mpDeviceManager = new DeviceManager();
-        if (mpDeviceManager)
-            mpDeviceManager->InitInternal();
-        return mpDeviceManager != 0;
+        CGS_ASSERT_STREAM_AT(mpDeviceManager == 0, "Device manager already exists\n",
+            CGS_DEVICE_MANAGER_ARTIST_FILE, 44);
+        CGS_ASSERT_STREAM_AT(lpAllocator != 0, "Allocator required\n",
+            CGS_DEVICE_MANAGER_ARTIST_FILE, 45);
+        mpAllocator = lpAllocator;
+        mpDeviceManager = new DeviceManager;
+        mpDeviceManager->InitInternal();
     }
 
     // ARTIST 0x828DE230 searches the physical and virtual device registries in order.
@@ -197,13 +192,7 @@ namespace CgsFileSystem
 
     void DeviceManager::SetDefaultPath(const char* lpcPath)
     {
-        CGS_ASSERT(lpcPath != 0, "Default path required\n");
-        if (!lpcPath)
-            return;
-        const size_t luLength = strlen(lpcPath);
-        CGS_ASSERT(luLength < sizeof(macDefaultPath), "Default path is too long\n");
-        strncpy(macDefaultPath, lpcPath, sizeof(macDefaultPath) - 1);
-        macDefaultPath[sizeof(macDefaultPath) - 1] = 0;
+        CgsCore::StrCpy(macDefaultPath, sizeof(macDefaultPath), lpcPath);
     }
 
     // Open @0x828F11B8. Resolve the optional "prefix:" selector (or prepend the configured
@@ -484,3 +473,5 @@ namespace CgsFileSystem
     }
 
 } // namespace CgsFileSystem
+
+#undef CGS_DEVICE_MANAGER_ARTIST_FILE

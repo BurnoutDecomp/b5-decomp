@@ -280,3 +280,11 @@ CGS_STATIC_ASSERT((offsetof(EAStringC::StaticStringHelperT, sd.m_uMaxSize) == 4)
 CGS_STATIC_ASSERT((offsetof(EAStringC::StaticStringHelperT, sd.m_uHash) == 6), "ARTIST string hash");
 CGS_STATIC_ASSERT((offsetof(EAStringC::StaticStringHelperT, pbuf) == 8), "ARTIST string bytes");
 CGS_STATIC_ASSERT((sizeof(EAStringC::StaticStringHelperT) == 0x108), "ARTIST static string stride");
+
+inline void EAStringC::ReserveSize(const uint32_t uSize)
+{
+    uint32_t uKeep = m_pData->m_uSize;
+    if (uKeep > uSize)
+        uKeep = uSize;
+    ChangeBuffer(uSize, 0, uKeep, CB_PUSH_ZERO, uKeep);
+}

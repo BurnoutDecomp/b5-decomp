@@ -139,73 +139,7 @@ namespace CgsGraphics
 // return the slot index. Asserts the chosen slot's pixel entry is empty and that we did not run past
 // the program table. (Identical shape to the Im3dZOnly / SkyDome AddProgram -- same param-word stores.)
 // ---------------------------------------------------------------------------------------------------
-template <typename V>
-s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
-                             const void* lpVertexProgramBinary, u32 luVertexProgramSize,
-                             const void* lpPixelProgramBinary, u32 luPixelProgramSize)
-{
-    s8 li8ProgramIndex = 0;
-    while (mapVertexProgramBuffer[li8ProgramIndex] != 0)
-    {
-        li8ProgramIndex = static_cast<s8>(li8ProgramIndex + 1);
-        if (li8ProgramIndex >= KI8_MAX_PROGRAMS)
-        {
-            break;
-        }
-    }
-
-    if (li8ProgramIndex < KI8_MAX_PROGRAMS)
-    {
-        CGS_ASSERT(mapPixelProgramBuffer[li8ProgramIndex] == 0,
-                   "mapPixelProgramBuffer[ li8ProgramIndex ] == NULL");
-    }
-
-    CGS_ASSERT(li8ProgramIndex < KI8_MAX_PROGRAMS,
-               "Adding too many shader programs to the immediate mode renderer");
-
-    // ---- vertex program (muFunction = binary, muReserved8 = size, muShaderType = 0 -> vertex) ----
-    // The X360 zeroes exactly muShaderType / muMicrocodePart1 / muMicrocodePart3 / muConstantTableSize
-    // / muNumVariables (param words [1],[4],[6],[8],[9]); the inline-microcode words [3],[5],[7] are
-    // only consumed on the muFunction==0 path (not taken here) and are left untouched by the asm.
-    renderengine::ProgramBufferParameters lVertexParams;
-    lVertexParams.miShaderType        = 0;
-    lVertexParams.mMicrocodeParts.cbCachedPartSize    = 0;
-    lVertexParams.mMicrocodeParts.cbPhysicalPartSize    = 0;
-    lVertexParams.muConstantTableSize = 0;
-    lVertexParams.muNumVariables      = 0;
-    lVertexParams.mpFunction          = lpVertexProgramBinary;
-    lVertexParams.muProgramSize         = luVertexProgramSize;
-
-    rw::ResourceDescriptor lVertexDescriptor;
-    renderengine::ProgramBuffer::GetResourceDescriptor(&lVertexDescriptor, &lVertexParams);
-
-    rw::Resource lVertexLayout = lpAllocator->DoAllocate(lVertexDescriptor, 0);
-    mapVertexProgramBuffer[li8ProgramIndex] =
-        reinterpret_cast<renderengine::ProgramBuffer*>(
-            renderengine::ProgramBuffer::Initialize(&lVertexLayout, &lVertexParams));
-
-    // ---- pixel program (muShaderType = 1 -> pixel) ----------------------------------------------
-    // Same zeroed param words as the vertex case ([1],[4],[6],[8],[9]); muShaderType is set to 1
-    // (the X360 stores li 1 into v17[1] after the GetResourceDescriptor stores -- the asm order).
-    renderengine::ProgramBufferParameters lPixelParams;
-    lPixelParams.mMicrocodeParts.cbCachedPartSize    = 0;
-    lPixelParams.mMicrocodeParts.cbPhysicalPartSize    = 0;
-    lPixelParams.muConstantTableSize = 0;
-    lPixelParams.muNumVariables      = 0;
-    lPixelParams.mpFunction          = lpPixelProgramBinary;
-    lPixelParams.muProgramSize         = luPixelProgramSize;
-    lPixelParams.miShaderType        = 1;
-
-    rw::ResourceDescriptor lPixelDescriptor;
-    renderengine::ProgramBuffer::GetResourceDescriptor(&lPixelDescriptor, &lPixelParams);
-
-    rw::Resource lPixelLayout = lpAllocator->DoAllocate(lPixelDescriptor, 0);
-    mapPixelProgramBuffer[li8ProgramIndex] =
-        reinterpret_cast<renderengine::ProgramBuffer*>(
-            renderengine::ProgramBuffer::Initialize(&lPixelLayout, &lPixelParams));
-
-    return li8ProgramIndex;
-}
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRendererAddProgram.inl"
 
 // ---------------------------------------------------------------------------------------------------
 // ImRenderer<LionBlendVertex>::BeginRendering  @ 0x8227C3A8   (the signed-char overload)

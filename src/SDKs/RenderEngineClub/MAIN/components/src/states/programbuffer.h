@@ -74,8 +74,7 @@ namespace renderengine
     class ProgramBuffer
     {
     public:
-        static rw::BaseResourceDescriptors<5>* GetResourceDescriptor(rw::BaseResourceDescriptors<5>* lpDescriptor,
-                                                                     const ProgramBufferParameters* lpParams);
+        static rw::ResourceDescriptor GetResourceDescriptor(const ProgramBufferParameters& lrParameters);
         static bool GetVariableHandleByName(const ProgramBufferData* lpData, const u8* lpName,
                                             ProgramVariableHandle* lpHandle);
         static ProgramBufferData* Initialize(rw::Resource* lpResource, const ProgramBufferParameters* lpParams);

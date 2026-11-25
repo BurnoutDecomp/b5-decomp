@@ -941,8 +941,8 @@ void BrnPostFxShader::Shader::Construct(rw::IResourceAllocator* lpAllocator,
     lVsParameters.mMicrocodeParts.cbPhysicalPartSize = 0;
     lVsParameters.muConstantTableSize = 0;
     lVsParameters.muNumVariables = 0;
-    rw::ResourceDescriptor lVsResDesc;
-    renderengine::ProgramBuffer::GetResourceDescriptor(&lVsResDesc, &lVsParameters);
+    const rw::ResourceDescriptor lVsResDesc =
+        renderengine::ProgramBuffer::GetResourceDescriptor(lVsParameters);
     rw::Resource lVsResource = lpAllocator->DoAllocate(lVsResDesc, 0);
     mpVertexProgram = renderengine::ProgramBuffer::Initialize(&lVsResource, &lVsParameters);
     CGS_ASSERT(mpVertexProgram != 0, "NULL != mpVertexProgram");
@@ -955,8 +955,8 @@ void BrnPostFxShader::Shader::Construct(rw::IResourceAllocator* lpAllocator,
     lPsParameters.mMicrocodeParts.cbPhysicalPartSize = 0;
     lPsParameters.muConstantTableSize = 0;
     lPsParameters.muNumVariables = 0;
-    rw::ResourceDescriptor lPsResDesc;
-    renderengine::ProgramBuffer::GetResourceDescriptor(&lPsResDesc, &lPsParameters);
+    const rw::ResourceDescriptor lPsResDesc =
+        renderengine::ProgramBuffer::GetResourceDescriptor(lPsParameters);
     rw::Resource lPsResource = lpAllocator->DoAllocate(lPsResDesc, 0);
     mpPixelProgram = renderengine::ProgramBuffer::Initialize(&lPsResource, &lPsParameters);
     CGS_ASSERT(mpPixelProgram != 0, "NULL != mpPixelProgram");

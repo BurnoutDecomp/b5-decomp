@@ -116,8 +116,8 @@ renderengine::ProgramBufferData* CreateProgram(rw::IResourceAllocator* lpAllocat
     lParameters.muConstantTableSize = 0;
     lParameters.muNumVariables = 0;
 
-    rw::ResourceDescriptor lDescriptor;
-    renderengine::ProgramBuffer::GetResourceDescriptor(&lDescriptor, &lParameters);
+    const rw::ResourceDescriptor lDescriptor =
+        renderengine::ProgramBuffer::GetResourceDescriptor(lParameters);
     rw::Resource lResource = lpAllocator->DoAllocate(lDescriptor, 0);
     // ARTIST82400B0C/B98/C30/CB0 passes the actual five-lane resource.
     // ProgramBuffer::Initialize consumes its existing lane-zero/lane-two view.

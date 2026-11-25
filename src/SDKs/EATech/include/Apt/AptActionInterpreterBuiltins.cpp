@@ -10,6 +10,7 @@
 
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"
 
+#include "SDKs/EATech/include/Apt/AptValue/AptInteger.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptBoolean.h"   // AptBoolean::Create (shared true/false)
 #include "SDKs/EATech/include/Apt/AptValue/AptString.h"        // the isNaN string arm
 #include "SDKs/EATech/include/Apt/AptValue/AptStringObject.h"  // the boxed string form
@@ -246,29 +247,26 @@ AptValue* AptActionInterpreter::cbCallMethod_unescape(AptValue* /*pThis*/, int /
 // with a one-character string whose single byte is the operand's integer character
 // code. An undefined operand yields the shared `undefined` value instead.
 // ---------------------------------------------------------------------------
+// ARTIST keeps the defined and undefined operand replacement paths separate.
+#pragma optimize("s", on)
 void AptActionInterpreter::_FunctionAptActionAsciiToChar(AptActionInterpreter* pInterp,
                                                          LocalContextT* /*pContext*/)
 {
-    AptValue* pTop = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
-
-    AptValue* pResult;
-    if (pTop->getIsDefined())
+    AptValue* pValue = pInterp->stackAt(0);
+    if (pValue->getIsDefined())
     {
-        AptString* pStr = AptString::Create("");
-        const int nCharCode = pTop->toInteger();
-        EAStringC strChar(static_cast<uint32_t>(nCharCode), 1u);   // one byte = the char code
-        *pStr->GetInternalString() = strChar;
-        pResult = pStr;
+        AptString* pResult = AptString::Create();
+        *pResult->GetInternalString() = AptNativeString(pValue->toInteger(), 1);
+        pInterp->stackPop();
+        pInterp->stackPush(pResult);
     }
     else
     {
-        pResult = gpUndefinedValue;
+        pInterp->stackPop();
+        pInterp->stackPush(gpUndefinedValue);
     }
-
-    pInterp->stackPop();                                  // pop the operand (Release)
-    pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = pResult;    // push the result
-    pResult->AddRef();
 }
+#pragma optimize("", on)
 
 // ---------------------------------------------------------------------------
 // The getURL/getURL2 ".swf" arm loads through the SAME homed member the loadMovie
@@ -397,34 +395,26 @@ void AptActionInterpreter::_FunctionAptActionGetUrl2(AptActionInterpreter* pInte
 // list). The PC then advances past the inline count operand -- by the count itself
 // when trace-bytecode skipping is enabled (mbSkipTraceBytecodes), else by one word.
 // ---------------------------------------------------------------------------
+// ARTIST inlines the constant-count pops and keeps the variable-count pop out of line.
+#pragma optimize("s", on)
 void AptActionInterpreter::_FunctionAptActionTraceStart(AptActionInterpreter* pInterp,
                                                         LocalContextT* pContext)
 {
-    // The inline count operand the PC points at (read as a raw word, like the console).
-    const int32_t nInlineCount = *reinterpret_cast<const int32_t*>(pContext->mpProgramCounter);
+    const uint32_t nJumpOffset = *reinterpret_cast<const uint32_t*>(pContext->mpProgramCounter);
 
-    // Take the current top operand as the trace target, popping it if present.
-    AptValue* pTarget = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
-    if (pInterp->mOperandStack.mnTop >= 1)
-        pInterp->stackPop();
-
-    // A `_global` target resolves through to the next operand below it.
-    if (pTarget == static_cast<AptValue*>(gpAptGlobalFallback))
+    AptValue* pTarget = pInterp->stackAt(0);
+    pInterp->stackPop(1);
+    if (pTarget == gpAptGlobalFallback)
     {
-        pTarget = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
-        if (pInterp->mOperandStack.mnTop >= 1)
-            pInterp->stackPop();
+        pTarget = pInterp->stackAt(0);
+        pInterp->stackPop(1);
     }
+    if (pTarget->isInteger())
+        pInterp->stackPop(pTarget->c_integer()->GetInt());
 
-    // A defined integer target -> pop that many further operands (its value at +8 is
-    // the integer datum the console reads).
-    if (pTarget->getVtblIndex() == AptVFT_Integer && pTarget->getIsDefined())
-        pInterp->stackPop(pTarget->toInteger());
-
-    // Advance the PC: by the inline count when trace-bytecode skipping is on, else by
-    // a single (word-aligned) operand slot.
     if (pInterp->mbSkipTraceBytecodes)
-        pContext->mpProgramCounter += nInlineCount;
+        pContext->mpProgramCounter += nJumpOffset;
     else
-        pContext->mpProgramCounter += 4;
+        pContext->mpProgramCounter += sizeof(nJumpOffset);
 }
+#pragma optimize("", on)

@@ -204,10 +204,14 @@ namespace CgsGraphics
 {
     bool Im2d::SetProgram(s8 li8Program)
     {
-        s8 li8Slot = static_cast<s8>(2 * li8Program);
-        const bool lbMasked = li8Program < 4 && mu32NumMasks != 0;
-        if (lbMasked) li8Slot = static_cast<s8>(li8Slot + 1);
-        const bool lbChanged = ImRenderer<Basic2dColouredTexturedVertex>::SetProgram(li8Slot);
+        bool lbMasked = false;
+        s32 liSlot = 2 * li8Program;
+        if (li8Program < 4 && mu32NumMasks > 0)
+        {
+            ++liSlot;
+            lbMasked = true;
+        }
+        const bool lbChanged = ImRenderer<Basic2dColouredTexturedVertex>::SetProgram(static_cast<s8>(liSlot));
         if (lbChanged)
         {
             SetTransform(mCurrentTransform);

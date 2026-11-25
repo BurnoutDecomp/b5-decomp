@@ -9,6 +9,8 @@
 #include "rw/rwcore_structs.h"
 #include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"
 
+static const char* const KAC_IM_RENDERER_ASSERT_FILE = "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/CgsImRenderer.h";
+
 namespace CgsGraphics
 {
 namespace
@@ -374,66 +376,7 @@ static const u32 kaIm2dPixel7[162] = {
 };
 }
 
-template <typename V>
-s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
-                             const void* lpVertexProgramBinary, u32 luVertexProgramSize,
-                             const void* lpPixelProgramBinary, u32 luPixelProgramSize)
-{
-    s8 li8ProgramIndex = 0;
-    while (mapVertexProgramBuffer[li8ProgramIndex] != 0)
-    {
-        li8ProgramIndex = static_cast<s8>(li8ProgramIndex + 1);
-        if (li8ProgramIndex >= KI8_MAX_PROGRAMS)
-        {
-            break;
-        }
-    }
-
-    if (li8ProgramIndex < KI8_MAX_PROGRAMS)
-    {
-        CGS_ASSERT(mapPixelProgramBuffer[li8ProgramIndex] == 0,
-                   "mapPixelProgramBuffer[ li8ProgramIndex ] == NULL");
-    }
-
-    CGS_ASSERT(li8ProgramIndex < KI8_MAX_PROGRAMS,
-               "Adding too many shader programs to the immediate mode renderer");
-
-    renderengine::ProgramBufferParameters lVertexParams;
-    lVertexParams.miShaderType        = 0;
-    lVertexParams.mMicrocodeParts.cbCachedPartSize    = 0;
-    lVertexParams.mMicrocodeParts.cbPhysicalPartSize    = 0;
-    lVertexParams.muConstantTableSize = 0;
-    lVertexParams.muNumVariables      = 0;
-    lVertexParams.mpFunction          = lpVertexProgramBinary;
-    lVertexParams.muProgramSize         = luVertexProgramSize;
-
-    rw::ResourceDescriptor lVertexDescriptor;
-    renderengine::ProgramBuffer::GetResourceDescriptor(&lVertexDescriptor, &lVertexParams);
-
-    rw::Resource lVertexLayout = lpAllocator->DoAllocate(lVertexDescriptor, 0);
-    mapVertexProgramBuffer[li8ProgramIndex] =
-        reinterpret_cast<renderengine::ProgramBuffer*>(
-            renderengine::ProgramBuffer::Initialize(&lVertexLayout, &lVertexParams));
-
-    renderengine::ProgramBufferParameters lPixelParams;
-    lPixelParams.mMicrocodeParts.cbCachedPartSize    = 0;
-    lPixelParams.mMicrocodeParts.cbPhysicalPartSize    = 0;
-    lPixelParams.muConstantTableSize = 0;
-    lPixelParams.muNumVariables      = 0;
-    lPixelParams.mpFunction          = lpPixelProgramBinary;
-    lPixelParams.muProgramSize         = luPixelProgramSize;
-    lPixelParams.miShaderType        = 1;
-
-    rw::ResourceDescriptor lPixelDescriptor;
-    renderengine::ProgramBuffer::GetResourceDescriptor(&lPixelDescriptor, &lPixelParams);
-
-    rw::Resource lPixelLayout = lpAllocator->DoAllocate(lPixelDescriptor, 0);
-    mapPixelProgramBuffer[li8ProgramIndex] =
-        reinterpret_cast<renderengine::ProgramBuffer*>(
-            renderengine::ProgramBuffer::Initialize(&lPixelLayout, &lPixelParams));
-
-    return li8ProgramIndex;
-}
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRendererAddProgram.inl"
 
 template <typename V>
 void ImRenderer<V>::Construct(rw::IResourceAllocator* lpAllocator,
@@ -518,7 +461,6 @@ void Im2dConstructAssert(const char* message, const char* file, int line)
 {
     CgsDev::Assert::BeginAssert(); CgsDev::Assert::FireAssert(message, file, line); CgsDev::Assert::EndAssert();
 }
-const char* const kRendererFile = "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/CgsImRenderer.h";
 const char* const kIm2dFile = "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\ImmediateMode/CgsIm2d.cpp";
 }
 
@@ -542,7 +484,7 @@ void Im2d::Construct(rw::IResourceAllocator* allocator)
             &maHandleColourShift[i], &maHandleColourScale[i] };
         for (u32 j = 0; j < 4; ++j)
         {
-            if (!mapVertexProgramBuffer[i]) Im2dConstructAssert("mapVertexProgramBuffer[ li8Program ] != NULL", CGS_ASSERT_LOCATION(kRendererFile, 570));
+            if (!mapVertexProgramBuffer[i]) Im2dConstructAssert("mapVertexProgramBuffer[ li8Program ] != NULL", CGS_ASSERT_LOCATION(KAC_IM_RENDERER_ASSERT_FILE, 570));
             renderengine::ProgramBuffer::GetVariableHandleByName(
                 reinterpret_cast<const renderengine::ProgramBufferData*>(mapVertexProgramBuffer[i]),
                 reinterpret_cast<const u8*>(transformNames[j]), handles[j]);
@@ -557,12 +499,12 @@ void Im2d::Construct(rw::IResourceAllocator* allocator)
     for (u32 m = 0; m < 4; ++m)
     {
         const u32 program = 2 * m + 1;
-        if (!mapVertexProgramBuffer[program]) Im2dConstructAssert("mapVertexProgramBuffer[ li8Program ] != NULL", CGS_ASSERT_LOCATION(kRendererFile, 570));
+        if (!mapVertexProgramBuffer[program]) Im2dConstructAssert("mapVertexProgramBuffer[ li8Program ] != NULL", CGS_ASSERT_LOCATION(KAC_IM_RENDERER_ASSERT_FILE, 570));
         if (!renderengine::ProgramBuffer::GetVariableHandleByName(
             reinterpret_cast<const renderengine::ProgramBufferData*>(mapVertexProgramBuffer[program]),
             reinterpret_cast<const u8*>("gvMaskUseFlags"), &maMask[m].mPixelMaskUseHandle))
         {
-            if (!mapPixelProgramBuffer[program]) Im2dConstructAssert("mapPixelProgramBuffer[ li8Program ] != NULL", CGS_ASSERT_LOCATION(kRendererFile, 554));
+            if (!mapPixelProgramBuffer[program]) Im2dConstructAssert("mapPixelProgramBuffer[ li8Program ] != NULL", CGS_ASSERT_LOCATION(KAC_IM_RENDERER_ASSERT_FILE, 554));
             if (!renderengine::ProgramBuffer::GetVariableHandleByName(
                 reinterpret_cast<const renderengine::ProgramBufferData*>(mapPixelProgramBuffer[program]),
                 reinterpret_cast<const u8*>("gvMaskUseFlags"), &maMask[m].mPixelMaskUseHandle))
@@ -577,12 +519,12 @@ void Im2d::Construct(rw::IResourceAllocator* allocator)
             for (u32 k = 0; k < 3; ++k)
             {
                 char name[256]; CgsCore::SPrintf(name, 256, formats[k], 'A' + lane);
-                if (!mapVertexProgramBuffer[program]) Im2dConstructAssert("mapVertexProgramBuffer[ li8Program ] != NULL", CGS_ASSERT_LOCATION(kRendererFile, 570));
+                if (!mapVertexProgramBuffer[program]) Im2dConstructAssert("mapVertexProgramBuffer[ li8Program ] != NULL", CGS_ASSERT_LOCATION(KAC_IM_RENDERER_ASSERT_FILE, 570));
                 if (!renderengine::ProgramBuffer::GetVariableHandleByName(
                     reinterpret_cast<const renderengine::ProgramBufferData*>(mapVertexProgramBuffer[program]),
                     reinterpret_cast<const u8*>(name), handles[k]))
                 {
-                    if (!mapPixelProgramBuffer[program]) Im2dConstructAssert("mapPixelProgramBuffer[ li8Program ] != NULL", CGS_ASSERT_LOCATION(kRendererFile, 554));
+                    if (!mapPixelProgramBuffer[program]) Im2dConstructAssert("mapPixelProgramBuffer[ li8Program ] != NULL", CGS_ASSERT_LOCATION(KAC_IM_RENDERER_ASSERT_FILE, 554));
                     if (!renderengine::ProgramBuffer::GetVariableHandleByName(
                         reinterpret_cast<const renderengine::ProgramBufferData*>(mapPixelProgramBuffer[program]),
                         reinterpret_cast<const u8*>(name), handles[k]))
@@ -596,12 +538,12 @@ void Im2d::Construct(rw::IResourceAllocator* allocator)
     for (u32 i = 0; i < 2; ++i)
     {
         const u32 program = i + 6;
-        if (!mapPixelProgramBuffer[program]) Im2dConstructAssert("mapPixelProgramBuffer[ li8Program ] != NULL", CGS_ASSERT_LOCATION(kRendererFile, 554));
+        if (!mapPixelProgramBuffer[program]) Im2dConstructAssert("mapPixelProgramBuffer[ li8Program ] != NULL", CGS_ASSERT_LOCATION(KAC_IM_RENDERER_ASSERT_FILE, 554));
         if (!renderengine::ProgramBuffer::GetVariableHandleByName(
             reinterpret_cast<const renderengine::ProgramBufferData*>(mapPixelProgramBuffer[program]),
             reinterpret_cast<const u8*>("gv3OuterColour"), &maBoostBarOuterColours[i]))
             Im2dConstructAssert("GetPixelProgram(liShader + E_SHADERS_BOOSTBAR)->GetVariableHandleByName( \"gv3OuterColour\", maBoostBarOuterColours[ liShader ] )", CGS_ASSERT_LOCATION(kIm2dFile, 245));
-        if (!mapPixelProgramBuffer[program]) Im2dConstructAssert("mapPixelProgramBuffer[ li8Program ] != NULL", CGS_ASSERT_LOCATION(kRendererFile, 554));
+        if (!mapPixelProgramBuffer[program]) Im2dConstructAssert("mapPixelProgramBuffer[ li8Program ] != NULL", CGS_ASSERT_LOCATION(KAC_IM_RENDERER_ASSERT_FILE, 554));
         if (!renderengine::ProgramBuffer::GetVariableHandleByName(
             reinterpret_cast<const renderengine::ProgramBufferData*>(mapPixelProgramBuffer[program]),
             reinterpret_cast<const u8*>("gv3InnerColour"), &maBoostBarInnerColours[i]))
@@ -635,9 +577,9 @@ template <typename V>
 bool ImRenderer<V>::SetProgram(s8 li8Program)
 {
     CGS_ASSERT(mapVertexProgramBuffer[li8Program] != 0,
-        CGS_ASSERT_MESSAGE_AT("mapVertexProgramBuffer[ li8Program ] != NULL", kRendererFile, 526));
+        CGS_ASSERT_MESSAGE_AT("mapVertexProgramBuffer[ li8Program ] != NULL", KAC_IM_RENDERER_ASSERT_FILE, 526));
     CGS_ASSERT(mapPixelProgramBuffer[li8Program] != 0,
-        CGS_ASSERT_MESSAGE_AT("mapPixelProgramBuffer[ li8Program ] != NULL", kRendererFile, 527));
+        CGS_ASSERT_MESSAGE_AT("mapPixelProgramBuffer[ li8Program ] != NULL", KAC_IM_RENDERER_ASSERT_FILE, 527));
     if (shadow::Device::SetVertexProgram(
         reinterpret_cast<const renderengine::ProgramBufferData*>(mapVertexProgramBuffer[li8Program])))
     {
@@ -655,11 +597,11 @@ template <typename V>
 void ImRenderer<V>::BeginRendering()
 {
     CGS_ASSERT(mapVertexProgramBuffer[0] != 0,
-        CGS_ASSERT_MESSAGE_AT("mapVertexProgramBuffer[ 0 ] != NULL", kRendererFile, 588));
+        CGS_ASSERT_MESSAGE_AT("mapVertexProgramBuffer[ 0 ] != NULL", KAC_IM_RENDERER_ASSERT_FILE, 588));
     CGS_ASSERT(mapPixelProgramBuffer[0] != 0,
-        CGS_ASSERT_MESSAGE_AT("mapPixelProgramBuffer[ 0 ] != NULL", kRendererFile, 589));
+        CGS_ASSERT_MESSAGE_AT("mapPixelProgramBuffer[ 0 ] != NULL", KAC_IM_RENDERER_ASSERT_FILE, 589));
     CGS_ASSERT(mgpActiveRenderer == 0,
-        CGS_ASSERT_MESSAGE_AT("mgpActiveRenderer == NULL", kRendererFile, 590));
+        CGS_ASSERT_MESSAGE_AT("mgpActiveRenderer == NULL", KAC_IM_RENDERER_ASSERT_FILE, 590));
     mgpActiveRenderer = this;
     shadow::Device::ResetShadowing();
     const renderengine::ProgramBufferData* const lpVertex =
@@ -677,7 +619,7 @@ template <typename V>
 void ImRenderer<V>::EndRendering()
 {
     CGS_ASSERT(mgpActiveRenderer == static_cast<ImRendererBase*>(this),
-        CGS_ASSERT_MESSAGE_AT("mgpActiveRenderer == this", kRendererFile, 645));
+        CGS_ASSERT_MESSAGE_AT("mgpActiveRenderer == this", KAC_IM_RENDERER_ASSERT_FILE, 645));
     mgpActiveRenderer = 0;
 }
 

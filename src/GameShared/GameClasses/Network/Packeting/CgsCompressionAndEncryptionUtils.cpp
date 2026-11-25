@@ -7,7 +7,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                         // CgsDev::Log::gpDebugPrint
 
 #include <xtl.h>
-#include <cstring>   // memcpy, memset
+#include <cstring>   // memcpy
 
 // CgsNetwork::CompressionAndEncryptionUtils -- the packet packer and the shared bandwidth
 // ledger.
@@ -54,39 +54,23 @@ s32 CompressionAndEncryptionUtils::miHistoricalIndex;
 s32 CompressionAndEncryptionUtils::maaaaiHistoricalBitsTransmitted[KI_MAX_BANDWIDTH_HISTORY][E_SEND_RECV_COUNT]
                                                                   [KI_ALL_PLAYERS + 1][KE_ALL_MESSAGE_TYPES + 1];
 
-// ---- GetBandwidthUsedInBits ----------------------------------------------------------
-// Bounds-check each key, then read one cell of the published averages.
-s32 CompressionAndEncryptionUtils::GetBandwidthUsedInBits(
-        s32 leAverageType, s32 leSendRecv, s32 liPlayerIndex, s32 liMessageType)
-{
-    CGS_ASSERT(leSendRecv < E_SEND_RECV_COUNT,     "leSendRecv < E_SEND_RECV_COUNT");
-    CGS_ASSERT(leSendRecv >= 0,                    "leSendRecv >= 0");
-    CGS_ASSERT(leAverageType < E_AVERAGE_TYPE_COUNT,"leAverageType < E_AVERAGE_TYPE_COUNT");
-    CGS_ASSERT(leAverageType >= 0,                 "leAverageType >= 0");
-    CGS_ASSERT(liPlayerIndex < KI_ALL_PLAYERS + 1, "liPlayerIndex < KI_ALL_PLAYERS+1");
-    CGS_ASSERT(liPlayerIndex >= 0,                 "liPlayerIndex >= 0");
-    CGS_ASSERT(liMessageType < KE_ALL_MESSAGE_TYPES + 1, "liMessageType < KE_ALL_MESSAGE_TYPES+1");
-    CGS_ASSERT(liMessageType >= 0,                 "liMessageType >= 0");
-
-    return maaaaiAvgBitsTransmitted[leAverageType][leSendRecv][liPlayerIndex][liMessageType];
-}
-
 // ---- ResetBandwidthUsed --------------------------------------------------------------
 // Restart the history ring and the averaging clock, forget every ledger entry's player
 // and zero all three tables.
 void CompressionAndEncryptionUtils::ResetBandwidthUsed(const CgsSystem::TimerStatus* lpTimerStatus)
 {
+    const CgsSystem::Time lTime = lpTimerStatus->GetTime();
     miHistoricalIndex = 0;
-    mLastAverageTime  = lpTimerStatus->GetTime();
+    mLastAverageTime = lTime;
 
     for (s32 liEntryIndex = 0; liEntryIndex < KI_MAX_PLAYERS; ++liEntryIndex)
     {
         maNetworkPlayerID[liEntryIndex] = K_INVALID_PLAYER_ID;
     }
 
-    memset(maaaiBitsTransmitted, 0, sizeof(maaaiBitsTransmitted));
-    memset(maaaaiAvgBitsTransmitted, 0, sizeof(maaaaiAvgBitsTransmitted));
-    memset(maaaaiHistoricalBitsTransmitted, 0, sizeof(maaaaiHistoricalBitsTransmitted));
+    XMemSet(maaaiBitsTransmitted, 0, sizeof(maaaiBitsTransmitted));
+    XMemSet(maaaaiAvgBitsTransmitted, 0, sizeof(maaaaiAvgBitsTransmitted));
+    XMemSet(maaaaiHistoricalBitsTransmitted, 0, sizeof(maaaaiHistoricalBitsTransmitted));
 }
 
 // ---- UpdateBandwidthHistory ----------------------------------------------------------
@@ -113,7 +97,7 @@ void CompressionAndEncryptionUtils::UpdateBandwidthHistory()
 // range assert.
 void CompressionAndEncryptionUtils::UpdateMaxBandwidth()
 {
-    for (s32 leSendRecv = E_SEND_BANDWIDTH; leSendRecv < E_SEND_RECV_COUNT; )
+    for (ESendRecvBandwidth leSendRecv = E_SEND_RECV_START; leSendRecv < E_SEND_RECV_COUNT; leSendRecv++)
     {
         for (s32 liPlayerIndex = 0; liPlayerIndex < KI_ALL_PLAYERS + 1; ++liPlayerIndex)
         {
@@ -127,38 +111,32 @@ void CompressionAndEncryptionUtils::UpdateMaxBandwidth()
                 }
             }
         }
-
-        ++leSendRecv;
-        CGS_ASSERT(leSendRecv <= CompressionAndEncryptionUtils::E_SEND_RECV_COUNT,
-                   "leEnumIndex <= CompressionAndEncryptionUtils::E_SEND_RECV_COUNT");
     }
 
-    for (s32 leSendRecv = E_SEND_BANDWIDTH; leSendRecv < E_SEND_RECV_COUNT; )
+    for (ESendRecvBandwidth leSendRecv = E_SEND_RECV_START; leSendRecv < E_SEND_RECV_COUNT; leSendRecv++)
     {
         for (s32 liPlayerIndex = 0; liPlayerIndex < KI_ALL_PLAYERS + 1; ++liPlayerIndex)
         {
             for (s32 liMessageType = KE_HEADER; liMessageType <= KE_ALL_MESSAGE_TYPES; ++liMessageType)
             {
-                const s32 liBits = maaaiBitsTransmitted[leSendRecv][liPlayerIndex][liMessageType];
-
-                CGS_ASSERT(GetBandwidthUsedInBits(E_MAX_OVER_SECOND, leSendRecv, liPlayerIndex,
-                                                  liMessageType) >= liBits,
-                           "GetBandwidthUsedInBits(E_MAX_OVER_SECOND, leSendRecv, liPlayerIndex, static_cast<EMessageType>( liMessageType ) ) >= maaaiBitsTransmitted[leSendRecv][liPlayerIndex][liMessageType]");
-                CGS_ASSERT(GetBandwidthUsedInBits(E_MAX_OVER_SECOND, leSendRecv, KI_ALL_PLAYERS,
-                                                  liMessageType) >= liBits,
-                           "GetBandwidthUsedInBits(E_MAX_OVER_SECOND, leSendRecv, KI_ALL_PLAYERS, static_cast<EMessageType>( liMessageType ) ) >= maaaiBitsTransmitted[leSendRecv][liPlayerIndex][liMessageType]");
-                CGS_ASSERT(GetBandwidthUsedInBits(E_MAX_OVER_SECOND, leSendRecv, liPlayerIndex,
-                                                  KE_ALL_MESSAGE_TYPES) >= liBits,
-                           "GetBandwidthUsedInBits(E_MAX_OVER_SECOND, leSendRecv, liPlayerIndex, KE_ALL_MESSAGE_TYPES) >= maaaiBitsTransmitted[leSendRecv][liPlayerIndex][liMessageType]");
-                CGS_ASSERT(GetBandwidthUsedInBits(E_MAX_OVER_SECOND, leSendRecv, KI_ALL_PLAYERS,
-                                                  KE_ALL_MESSAGE_TYPES) >= liBits,
-                           "GetBandwidthUsedInBits(E_MAX_OVER_SECOND, leSendRecv, KI_ALL_PLAYERS, KE_ALL_MESSAGE_TYPES) >= maaaiBitsTransmitted[leSendRecv][liPlayerIndex][liMessageType]");
+                CGS_ASSERT_AT(GetBandwidthUsedInBits(E_MAX_OVER_SECOND, leSendRecv, liPlayerIndex,
+                                                     liMessageType) >= maaaiBitsTransmitted[leSendRecv][liPlayerIndex][liMessageType],
+                              "GetBandwidthUsedInBits(E_MAX_OVER_SECOND, leSendRecv, liPlayerIndex, static_cast<EMessageType>( liMessageType ) ) >= maaaiBitsTransmitted[leSendRecv][liPlayerIndex][liMessageType]",
+                              CGS_ARTIST_FILE, 725);
+                CGS_ASSERT_AT(GetBandwidthUsedInBits(E_MAX_OVER_SECOND, leSendRecv, KI_ALL_PLAYERS,
+                                                     liMessageType) >= maaaiBitsTransmitted[leSendRecv][liPlayerIndex][liMessageType],
+                              "GetBandwidthUsedInBits(E_MAX_OVER_SECOND, leSendRecv, KI_ALL_PLAYERS, static_cast<EMessageType>( liMessageType ) ) >= maaaiBitsTransmitted[leSendRecv][liPlayerIndex][liMessageType]",
+                              CGS_ARTIST_FILE, 727);
+                CGS_ASSERT_AT(GetBandwidthUsedInBits(E_MAX_OVER_SECOND, leSendRecv, liPlayerIndex,
+                                                     KE_ALL_MESSAGE_TYPES) >= maaaiBitsTransmitted[leSendRecv][liPlayerIndex][liMessageType],
+                              "GetBandwidthUsedInBits(E_MAX_OVER_SECOND, leSendRecv, liPlayerIndex, KE_ALL_MESSAGE_TYPES) >= maaaiBitsTransmitted[leSendRecv][liPlayerIndex][liMessageType]",
+                              CGS_ARTIST_FILE, 729);
+                CGS_ASSERT_AT(GetBandwidthUsedInBits(E_MAX_OVER_SECOND, leSendRecv, KI_ALL_PLAYERS,
+                                                     KE_ALL_MESSAGE_TYPES) >= maaaiBitsTransmitted[leSendRecv][liPlayerIndex][liMessageType],
+                              "GetBandwidthUsedInBits(E_MAX_OVER_SECOND, leSendRecv, KI_ALL_PLAYERS, KE_ALL_MESSAGE_TYPES) >= maaaiBitsTransmitted[leSendRecv][liPlayerIndex][liMessageType]",
+                              CGS_ARTIST_FILE, 731);
             }
         }
-
-        ++leSendRecv;
-        CGS_ASSERT(leSendRecv <= CompressionAndEncryptionUtils::E_SEND_RECV_COUNT,
-                   "leEnumIndex <= CompressionAndEncryptionUtils::E_SEND_RECV_COUNT");
     }
 }
 
@@ -206,16 +184,13 @@ s32 CompressionAndEncryptionUtils::GetEntryIndex(NetworkPlayerID liPlayerID)
 // ---- RecordBitsTransmitted -----------------------------------------------------------
 // Book liBits against (player, type), (player, all types), (all players, type) and
 // (all players, all types) of the current period.
-void CompressionAndEncryptionUtils::RecordBitsTransmitted(ESendRecv leSendRecv,
+void CompressionAndEncryptionUtils::RecordBitsTransmitted(ESendRecvBandwidth leSendRecv,
                                                           NetworkPlayerID liPlayerID,
-                                                          s32 leMessageType, s32 liBits)
+                                                          EMessageType leMessageType, s32 liBits)
 {
     const s32 liEntryIndex = GetEntryIndex(liPlayerID);
-    CGS_ASSERT(liEntryIndex >= 0,
-        CGS_ASSERT_MESSAGE_AT("liEntryIndex >= 0", __FILE__, 647 /* ARTIST 0x828805F4 */));
-    CGS_ASSERT(liEntryIndex < KI_MAX_PLAYERS,
-        CGS_ASSERT_MESSAGE_AT(
-            "liEntryIndex < KI_MAX_PLAYERS", __FILE__, 648 /* ARTIST 0x82880618 */));
+    CGS_ASSERT_AT(liEntryIndex >= 0, "liEntryIndex >= 0", CGS_ARTIST_FILE, 647);
+    CGS_ASSERT_AT(liEntryIndex < KI_MAX_PLAYERS, "liEntryIndex < KI_MAX_PLAYERS", CGS_ARTIST_FILE, 648);
 
     maaaiBitsTransmitted[leSendRecv][liEntryIndex][leMessageType]          += liBits;
     maaaiBitsTransmitted[leSendRecv][liEntryIndex][KE_ALL_MESSAGE_TYPES]   += liBits;
@@ -339,7 +314,7 @@ bool CompressionAndEncryptionUtils::Pack(NetworkPlayerID liPlayerID,
 
         lppMessagesToPack[liMessageIndex]->SetMessageInvalid();
         RecordBitsTransmitted(E_SEND_BANDWIDTH, liPlayerID,
-                              lppMessagesToPack[liMessageIndex]->GetType(), liPackedSizeInBits);
+                              static_cast<EMessageType>(lppMessagesToPack[liMessageIndex]->GetType()), liPackedSizeInBits);
 
         if (lHeader.mu8GameID == KU8_INVALID_GAME_ID)
         {
@@ -526,7 +501,7 @@ void CompressionAndEncryptionUtils::UnPack(NetworkPlayerID liPlayerID,
         lpMessageToUnpackInto->UnPack(lpPackedBody, liBufferOffsetInBits, liBufferLengthInBits,
                                       &liPackedSizeInBits);
         liBufferOffsetInBits += liPackedSizeInBits;
-        RecordBitsTransmitted(E_RECV_BANDWIDTH, liPlayerID, leMessageType, liPackedSizeInBits);
+        RecordBitsTransmitted(E_RECV_BANDWIDTH, liPlayerID, static_cast<EMessageType>(leMessageType), liPackedSizeInBits);
 
         const RecvMessageData& lSlot = lpaMessagesToUnPackInto[liMessageToUnPackInto];
         lSlot.mpMsgUnpackedCallback(lpMessageToUnpackInto, lSlot.mpCallbackUserData);

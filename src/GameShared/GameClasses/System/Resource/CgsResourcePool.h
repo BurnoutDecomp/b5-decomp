@@ -261,7 +261,7 @@ namespace CgsResource
         void FixUpEntry(Entry* lpEntry);
         void PostFixUpEntry(Entry* lpEntry);
         BundleV2::ImportEntry* GetResourceEntryImports(u16 luIndex);
-        bool AllocateMemoryForResource(Entry* lpEntry, const char* lpcDebugName, s32 liSlot, const Type* lpResourceType);
+        bool AllocateMemoryForResource(Entry* lpEntry, const char* lpcDebugName, void* lpOwner, const Type* lpResourceType);
         void UpdateDefrag();
         void UpdateEmergencyDefrag();
         void BeginDefragNextSetOfRelocations();

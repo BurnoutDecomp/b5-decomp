@@ -345,70 +345,81 @@ bool AptActionInterpreter::isObjectOfType(AptValue* pObject, AptValue* pClass)
 // copies. The console advances two past the '%' unconditionally, tolerating a
 // pair that straddles the terminator (EAStringC reps are NUL-terminated with
 // slack); reproduced with the loop re-checking the cursor each iteration.
-namespace
+#pragma optimize("s", on)
+// ARTIST calls this helper from the decoder at 0x82AEE1AC.
+static __declspec(noinline) char _escape2Char(char cFirst, char cSecond)
 {
-    char AptUnEscape2Char(char c1, char c2)
+    if (!isxdigit(cFirst))
+        return cSecond;
+
+    char aBuffer[3];
+    aBuffer[0] = cFirst;
+    aBuffer[1] = cSecond;
+    aBuffer[2] = 0;
+    return static_cast<char>(strtoul(aBuffer, 0, 16));
+}
+
+void _escape(AptNativeString& rString)
+{
+    char aEscaped[6] = "";
+    const uint32_t uReserve = 3 * rString.GetLength();
+    char aCharacter[2] = "";
+    AptNativeString encoded;
+    encoded.ReserveSize(uReserve);
+
+    const char* pBuffer = rString.GetBuffer();
+    aCharacter[1] = 0;
+    for (;;)
     {
-        if (!isxdigit(static_cast<unsigned char>(c1)))
-            return c2;
-        char aBuf[3] = { c1, c2, 0 };
-        return static_cast<char>(strtoul(aBuf, 0, 16));
+        const unsigned char c = static_cast<unsigned char>(*pBuffer++);
+        if (!c)
+            break;
+        if (c >= 0x80 || !isalnum(c))
+        {
+            sprintf(aEscaped, "%%%X", c);
+            encoded += aEscaped;
+        }
+        else
+        {
+            aCharacter[0] = static_cast<char>(c);
+            encoded += aCharacter;
+        }
     }
+    rString = encoded;
 }
 
 void _unEscape(AptNativeString& rString)
 {
-    EAStringC lDecoded("");
-    const char* p = rString.GetBuffer();
-    while (*p != 0)
+    const uint32_t uReserve = rString.GetLength();
+    char aCharacter[2] = "*";
+    AptNativeString decoded;
+    decoded.ReserveSize(uReserve);
+
+    const char* pBuffer = rString.GetBuffer();
+    for (;;)
     {
-        const char c = *p++;
-        char cOut;
+        const unsigned char c = static_cast<unsigned char>(*pBuffer++);
+        if (!c)
+            break;
         if (c == '+')
         {
-            cOut = ' ';
+            aCharacter[0] = ' ';
         }
-        else if (c == '%' && *p != 0)
+        else if (c == '%' && *pBuffer)
         {
-            cOut = AptUnEscape2Char(p[0], p[1]);
-            p += 2;   // the console consumes both unconditionally
+            aCharacter[0] = _escape2Char(pBuffer[0], pBuffer[1]);
+            pBuffer += 2;
         }
         else
         {
-            cOut = c;
+            aCharacter[0] = static_cast<char>(c);
         }
-        const char aOne[2] = { cOut, 0 };
-        lDecoded += aOne;
+        decoded += aCharacter;
     }
-    rString = lDecoded;
+    rString = decoded;
 }
 
-// ---------------------------------------------------------------------------
-// escape @0x82AEE008 -- the URL percent-ENCODER (the inverse of unEscape): every
-// byte that is not an ASCII alphanumeric is emitted as "%XX" (uppercase hex);
-// alphanumerics copy through.
-// ---------------------------------------------------------------------------
-void _escape(AptNativeString& rString)
-{
-    EAStringC lEncoded("");
-    const char* p = rString.GetBuffer();
-    while (*p != 0)
-    {
-        const unsigned char c = static_cast<unsigned char>(*p++);
-        if (c < 0x80 && isalnum(c))
-        {
-            const char aOne[2] = { static_cast<char>(c), 0 };
-            lEncoded += aOne;
-        }
-        else
-        {
-            char aHex[8];
-            sprintf(aHex, "%%%X", c);   // reference: sprintf(strBuffer, "%%%X", cChar)
-            lEncoded += aHex;
-        }
-    }
-    rString = lEncoded;
-}
+#pragma optimize("", on)
 
 const char* AptActionInterpreter::urlDecode(const char* pStream, EAStringC* pOutKey, EAStringC* pOutValue)
 {

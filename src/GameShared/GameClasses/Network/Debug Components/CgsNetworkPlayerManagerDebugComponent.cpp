@@ -7,7 +7,7 @@
 #include "GameShared/GameClasses/Network/Players/CgsPlayerManager.h"                  // CgsNetwork::PlayerManager
 #include "GameShared/GameClasses/Network/Players/CgsNetworkPlayer.h"                  // CgsNetwork::NetworkPlayer (GetRegisteredSendMessage)
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsMessage.h"            // CgsNetwork::Message
-#include "GameShared/GameClasses/Network/Packeting/CgsCompressionAndEncryptionUtils.h" // GetBandwidthUsedInBits + EAverageType
+#include "GameShared/GameClasses/Network/Packeting/CgsCompressionAndEncryptionUtils.h" // bandwidth ledger lookup
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h" // CgsDev::Debug2DImmediateRender (DrawBar: DrawLine + GetVirtualScreenSize + RGBA/Vector2)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
@@ -44,8 +44,8 @@ namespace CgsNetwork
         // the registered range is 0..1. Keep the original table extent instead of appending a row.
         const CgsDev::DebugUI::StringList KA_AVERAGE_TYPES[2] =
         {
-            { CompressionAndEncryptionUtils::E_AVERAGE_TYPE_INSTANT, "Average Over Last Second" },
-            { CompressionAndEncryptionUtils::E_AVERAGE_TYPE_RUNNING, "Maximum Over Second"      },
+            { CompressionAndEncryptionUtils::E_AVERAGE_OVER_SECOND, "Average Over Last Second" },
+            { CompressionAndEncryptionUtils::E_MAX_OVER_SECOND, "Maximum Over Second"      },
         };
     }
 
@@ -142,11 +142,7 @@ namespace CgsNetwork
     // byte usage -- sorted largest-first in running-average mode, or in message-type order in instant
     // mode -- skipping the empty rows.
     //
-    // The per-message-type byte usage the X360 inlines as a direct index into the packeting build's
-    // bandwidth ledger (dword_83060940[828*averageType + messageType], i.e. [averageType][send][
-    // player 0][messageType]) is reconstructed here as the equivalent call to the homed accessor
-    // CompressionAndEncryptionUtils::GetBandwidthUsedInBits -- which carries the same bounds asserts
-    // the X360 inlined -- so the inlined assert chain is not duplicated in this body.
+    // Bandwidth counts use the all-players row. The first remote player provides the message names.
     // ================================================================================================
     void PlayerManagerDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpRender)
     {
@@ -155,31 +151,29 @@ namespace CgsNetwork
         if (mbDrawBandwidthUsage)
         {
             // Bar 0: the CompAndEnc application bandwidth = the "all message types" aggregate cell
-            // (instant average, send direction, player 0, message-type KE_ALL_MESSAGE_TYPES).
-            const s32 liBits = CompressionAndEncryptionUtils::GetBandwidthUsedInBits(
-                CompressionAndEncryptionUtils::E_AVERAGE_TYPE_INSTANT,
-                CompressionAndEncryptionUtils::E_SEND, 0,
+            // (last-second average, send direction, all players, all message types).
+            const s32 liBytes = mCompressionUtils.GetBandwidthUsedInBytes(
+                CompressionAndEncryptionUtils::E_AVERAGE_OVER_SECOND,
+                CompressionAndEncryptionUtils::E_SEND_BANDWIDTH,
+                CompressionAndEncryptionUtils::KI_ALL_PLAYERS,
                 CompressionAndEncryptionUtils::KE_ALL_MESSAGE_TYPES);
-            const s32 liBytes = (liBits + 7) / 8;
             DrawBar(0, "CompAndEnc Application Bandwidth (kpbs)", KF_DRAWBAR_BASELINE,
                     mfMaxBandwidth, mfMaxBandwidthForGraph,
                     static_cast<f32>(liBytes) * KF_BITS_PER_BYTE * KF_BITS_TO_KILOBITS, lpRender);
 
             DrawBar(1, "DirtySock Application Bandwidth (kpbs)", KF_DRAWBAR_BASELINE,
                     mfMaxBandwidth, mfMaxBandwidthForGraph,
-                    static_cast<f32>(mpPlayerManager->GetTotalBytesSentToDirtySock())
+                    static_cast<f32>(static_cast<s32>(mpPlayerManager->GetTotalBytesSentToDirtySock()))
                         * KF_BITS_PER_BYTE * KF_BITS_TO_KILOBITS, lpRender);
 
             DrawBar(2, "DirtySock Actual Bandwidth (kbps)", KF_DRAWBAR_BASELINE,
                     mfMaxBandwidth, mfMaxBandwidthForGraph,
-                    static_cast<f32>(mpPlayerManager->GetTotalBytesSent())
+                    static_cast<f32>(static_cast<s32>(mpPlayerManager->GetTotalBytesSent()))
                         * KF_BITS_PER_BYTE * KF_BITS_TO_KILOBITS, lpRender);
 
-            // NOTE: the 4th bar's X360 label string is truncated in the available export
-            // ("DirtySock Estimated Bandwidth with esti"...); the tail is reconstructed here.
             DrawBar(3, "DirtySock Estimated Bandwidth with estimated overhead (kbps)", KF_DRAWBAR_BASELINE,
                     mfMaxBandwidth, mfMaxBandwidthForGraph,
-                    static_cast<f32>(mpPlayerManager->GetTotalBytesSentWithOverhead())
+                    static_cast<f32>(static_cast<s32>(mpPlayerManager->GetTotalBytesSentWithOverhead()))
                         * KF_BITS_PER_BYTE * KF_BITS_TO_KILOBITS, lpRender);
 
             liIndex = 4;
@@ -191,19 +185,34 @@ namespace CgsNetwork
             if (mpPlayerManager->GetNextRemotePlayerID(&liPlayerID))
             {
                 NetworkPlayer* lpNetworkPlayer = mpPlayerManager->GetPlayerByID(liPlayerID);
-                CGS_ASSERT(lpNetworkPlayer != 0, "lpNetworkPlayer");
+                CGS_ASSERT_AT(lpNetworkPlayer != 0, "lpNetworkPlayer", "..\\..\\..\\GameShared\\GameClasses\\Network/Debug Components/CgsNetworkPlayerManagerDebugComponent.cpp", 246);
 
-                if (miAverageType != CompressionAndEncryptionUtils::E_AVERAGE_TYPE_INSTANT)
+                if (miAverageType == CompressionAndEncryptionUtils::E_AVERAGE_OVER_SECOND)
+                {
+                    // Instant view: draw each message type in order, skipping the empty ones.
+                    for (s32 liMessageType = 0; liMessageType <= 44; ++liMessageType)
+                    {
+                        const s32 liMaxBytes = mCompressionUtils.GetBandwidthUsedInBytes(
+                            static_cast<CompressionAndEncryptionUtils::EAverageType>(miAverageType), CompressionAndEncryptionUtils::E_SEND_BANDWIDTH,
+                            CompressionAndEncryptionUtils::KI_ALL_PLAYERS, liMessageType);
+                        if (liMaxBytes > 0)
+                        {
+                            DrawRow(liIndex, liMessageType, liMaxBytes, lpNetworkPlayer, lpRender);
+                            ++liIndex;
+                        }
+                    }
+                }
+                else
                 {
                     // Running-average view: collect each message type's max byte count, sort them
                     // largest-first, then draw the non-empty rows in that order.
                     MessageTypeAndMax laMessages[45];
                     for (s32 liMessageType = 0; liMessageType <= 44; ++liMessageType)
                     {
-                        const s32 liTypeBits = CompressionAndEncryptionUtils::GetBandwidthUsedInBits(
-                            miAverageType, CompressionAndEncryptionUtils::E_SEND, 0, liMessageType);
                         laMessages[liMessageType].meMessageType = liMessageType;
-                        laMessages[liMessageType].miMaxBytes    = (liTypeBits + 7) / 8;
+                        laMessages[liMessageType].miMaxBytes = mCompressionUtils.GetBandwidthUsedInBytes(
+                            static_cast<CompressionAndEncryptionUtils::EAverageType>(miAverageType), CompressionAndEncryptionUtils::E_SEND_BANDWIDTH,
+                            CompressionAndEncryptionUtils::KI_ALL_PLAYERS, liMessageType);
                     }
 
                     qsort(laMessages, 44, sizeof(MessageTypeAndMax), _QSortMessageAndMax);
@@ -217,21 +226,6 @@ namespace CgsNetwork
                         DrawRow(liIndex, laMessages[liRow].meMessageType, laMessages[liRow].miMaxBytes,
                                 lpNetworkPlayer, lpRender);
                         ++liIndex;
-                    }
-                }
-                else
-                {
-                    // Instant view: draw each message type in order, skipping the empty ones.
-                    for (s32 liMessageType = 0; liMessageType <= 44; ++liMessageType)
-                    {
-                        const s32 liTypeBits = CompressionAndEncryptionUtils::GetBandwidthUsedInBits(
-                            miAverageType, CompressionAndEncryptionUtils::E_SEND, 0, liMessageType);
-                        const s32 liMaxBytes = (liTypeBits + 7) / 8;
-                        if (liMaxBytes > 0)
-                        {
-                            DrawRow(liIndex, liMessageType, liMaxBytes, lpNetworkPlayer, lpRender);
-                            ++liIndex;
-                        }
                     }
                 }
             }

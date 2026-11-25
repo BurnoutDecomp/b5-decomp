@@ -235,13 +235,6 @@ void     EAStringC::InvalidateHashValue() const { m_pData->m_uHash = 0; }
 // ---------------------------------------------------------------------------
 // Capacity.  PS3 External 0x7F5414 / 0x7F54E0 / 0x7E87A0.
 // ---------------------------------------------------------------------------
-void EAStringC::ReserveSize(const uint32_t uSize)
-{
-    uint32_t uKeep = m_pData->m_uSize;
-    if (uKeep > uSize)
-        uKeep = uSize;
-    ChangeBuffer(uSize, 0, uKeep, CB_PUSH_ZERO, uKeep);
-}
 
 void EAStringC::Reserve(const int32_t iSize) { ReserveSize(static_cast<uint32_t>(iSize)); }
 

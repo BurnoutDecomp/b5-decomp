@@ -1,6 +1,9 @@
 #include "GameShared/GameClasses/System/Resource/CgsBundleLoaderModuleIO.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
+
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsBundleLoaderModuleIO.h"
 
 // CgsResource::BundleLoaderIO::InputBuffer_Update write-locked accessors, reconstructed from
 // BURNOUT_X360_ARTIST.XEX. Bodies the two X360-emitted WRITE-locked request-queue accessors of
@@ -25,15 +28,19 @@ namespace BundleLoaderIO
     // X360 0x828E1DF0: write-lock; return &mLoadBundleRequestQueue (this + 4).
     InputBuffer_Update::LoadBundleRequestQueue* InputBuffer_Update::GetLoadBundleRequestQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");   // :79
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
+            "Not locked for writing\n", CGS_ARTIST_FILE, 79));
         return &mLoadBundleRequestQueue;
     }
 
     // X360 0x828E1F40: write-lock; return &mUnloadBundleRequestQueue (this + 0x9410).
     InputBuffer_Update::UnloadBundleRequestQueue* InputBuffer_Update::GetUnloadBundleRequestQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");   // :82
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
+            "Not locked for writing\n", CGS_ARTIST_FILE, 82));
         return &mUnloadBundleRequestQueue;
     }
 }
 }
+
+#undef CGS_ARTIST_FILE

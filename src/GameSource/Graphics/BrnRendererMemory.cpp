@@ -138,8 +138,8 @@ renderengine::ProgramBufferData* CreateBlitProgram(rw::IResourceAllocator* alloc
     parameters.mMicrocodeParts.cbPhysicalPartSize = 0;
     parameters.muConstantTableSize = 0;
     parameters.muNumVariables = 0;
-    rw::ResourceDescriptor descriptor;
-    renderengine::ProgramBuffer::GetResourceDescriptor(&descriptor, &parameters);
+    const rw::ResourceDescriptor descriptor =
+        renderengine::ProgramBuffer::GetResourceDescriptor(parameters);
     rw::Resource resource = allocator->DoAllocate(descriptor, 0);
     return renderengine::ProgramBuffer::Initialize(
         &resource, &parameters);

@@ -47,32 +47,27 @@ namespace renderengine
         return luCount;
     }
 
-    // ARTIST 82B634B0 sizes the cached and GPU resource lanes separately.
-    rw::BaseResourceDescriptors<5>* ProgramBuffer::GetResourceDescriptor(rw::BaseResourceDescriptors<5>* lpDescriptor,
-                                                                         const ProgramBufferParameters* lpParams)
+    // ARTIST 82B634B0 writes a returned descriptor, with separate cached and GPU lanes.
+    rw::ResourceDescriptor ProgramBuffer::GetResourceDescriptor(const ProgramBufferParameters& lrParameters)
     {
         ProgramMicrocodeParts lParts;
         u32 luConstantTableSize = 0;
-        if (lpParams->mpFunction != 0)
+        if (lrParameters.mpFunction != 0)
         {
-            XGGetMicrocodeShaderParts(lpParams->mpFunction, &lParts);
-            Xbox2CreateConstantTable(lpParams->mpFunction, 0, &luConstantTableSize);
+            XGGetMicrocodeShaderParts(lrParameters.mpFunction, &lParts);
+            Xbox2CreateConstantTable(lrParameters.mpFunction, 0, &luConstantTableSize);
         }
         else
         {
-            lParts = lpParams->mMicrocodeParts;
-            luConstantTableSize = lpParams->muConstantTableSize;
+            lParts = lrParameters.mMicrocodeParts;
+            luConstantTableSize = lrParameters.muConstantTableSize;
         }
 
         const u32 luProgramSize = lParts.cbCachedPartSize + luConstantTableSize + sizeof(ProgramBufferData);
-        for (u32 luLane = 0; luLane < 5; ++luLane)
-        {
-            lpDescriptor->m_baseResourceDescriptors[luLane].m_size = 0;
-            lpDescriptor->m_baseResourceDescriptors[luLane].m_alignment = 1;
-        }
-        lpDescriptor->m_baseResourceDescriptors[0] = rw::BaseResourceDescriptor(luProgramSize, 16);
-        lpDescriptor->m_baseResourceDescriptors[2] = rw::BaseResourceDescriptor(lParts.cbPhysicalPartSize, D3DSHADER_ALIGNMENT);
-        return lpDescriptor;
+        rw::ResourceDescriptor lDescriptor;
+        lDescriptor.m_baseResourceDescriptors[0] = rw::BaseResourceDescriptor(luProgramSize, 16);
+        lDescriptor.m_baseResourceDescriptors[2] = rw::BaseResourceDescriptor(lParts.cbPhysicalPartSize, D3DSHADER_ALIGNMENT);
+        return lDescriptor;
     }
 
     // ARTIST 82B62478 constructs the cached header, registers the physical part

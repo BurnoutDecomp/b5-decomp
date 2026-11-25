@@ -119,11 +119,12 @@ template<class V> void ImRenderBuffer<V>::EndRendering()
 
 template<class V> V* ImRenderBuffer<V>::AllocVertices(u32 count)
 {
-    const u32 position = mpWriteBuffer->muVertexBufferWritePos;
-    const u32 next = position + sizeof(V) * count;
-    if (next > muVertexBufferSize) return 0;
-    __dcbz128(128, mpWriteBuffer->mpu8VertexBuffer + position);
-    V* vertices = reinterpret_cast<V*>(mpWriteBuffer->mpu8VertexBuffer + position);
+    const u32 next = mpWriteBuffer->muVertexBufferWritePos + sizeof(V) * count;
+    if (next > muVertexBufferSize)
+        return 0;
+    // ARTIST 824489D8 reloads the write cursor after pre-zeroing the next cache line.
+    __dcbz128(128, mpWriteBuffer->mpu8VertexBuffer + mpWriteBuffer->muVertexBufferWritePos);
+    V* vertices = reinterpret_cast<V*>(mpWriteBuffer->mpu8VertexBuffer + mpWriteBuffer->muVertexBufferWritePos);
     mpWriteBuffer->muVertexBufferWritePos = next;
     return vertices;
 }

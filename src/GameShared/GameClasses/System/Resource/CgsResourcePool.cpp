@@ -396,7 +396,7 @@ namespace CgsResource
     // types (Type::GetCachedCanDefrag) allocate from the top of the heap, others from the
     // bottom. On any Malloc failure the already-allocated pools are freed and false is
     // returned (the X360 also fires a formatted "heap out of space" assert).
-    bool Pool::AllocateMemoryForResource(Entry* lpEntry, const char* lpcDebugName, s32 liSlot, const Type* lpResourceType)
+    bool Pool::AllocateMemoryForResource(Entry* lpEntry, const char* lpcDebugName, void* lpOwner, const Type* lpResourceType)
     {
         CGS_ASSERT(mbIsValid, "Pool is not valid\n");   // CgsResourcePool.cpp:573
 
@@ -415,7 +415,7 @@ namespace CgsResource
 
             u16   luFoundIndex = CgsContainers::IndexedLinkedList<HeapEntry, u16>::KI_LIST_INVALID;
             void* lpMemory = maHeaps[luMemType].Malloc(luSize, lpcDebugName,
-                                                       reinterpret_cast<void*>(static_cast<uintptr_t>(liSlot)),
+                                                       lpOwner,
                                                        0xFFFF, &luFoundIndex, false, lbAllocateFromTop, 0);
             lpEntry->mPtr.mResourceMemory.m_baseResources[luMemType] = lpMemory;
             lpEntry->mauHeapIndices[luMemType]            = luFoundIndex;
@@ -440,29 +440,38 @@ namespace CgsResource
     // allocation fails, else CREATERESULT_OK with *lppOutEntry set.
     Pool::ECreateResult Pool::CreateEntryInSlot(const NewResource* lpNewResource, Entry** lppOutEntry, s32 liSlot, bool lbAllocateMemory)
     {
-        CGS_ASSERT(mbIsValid, "Pool is not valid\n");   // :1045
+        CGS_ASSERT(mbIsValid, CGS_ASSERT_STREAM_MESSAGE_AT("Pool is not valid\n", CGS_ARTIST_POOL_FILE, 1045));
 
         Entry* lpEntry = &mpResourceEntries[liSlot];
-        lpEntry->mID                 = lpNewResource->mID;
+        lpEntry->mID = lpNewResource->mID;
+        lpEntry->mpResourceType = lpNewResource->mpResourceType;
         lpEntry->mResourceDescriptor = lpNewResource->mResourceDescriptor;
-        lpEntry->mpResourceType      = lpNewResource->mpResourceType;
         lpEntry->muImportTableOffset = lpNewResource->muImportTableOffset;
-        lpEntry->mpDebugInfo         = 0;
+        lpEntry->mpDebugInfo = 0;
 
-        if (!lbAllocateMemory)
+        if (lbAllocateMemory)
+        {
+            if (!AllocateMemoryForResource(lpEntry, "", reinterpret_cast<void*>(static_cast<uintptr_t>(liSlot)),
+                                           lpNewResource->mpResourceType))
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+                lStrStream << "Could not allocate memory for resource - SYSTEM ERROR: should have been picked up earlier\n";
+                CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, CGS_ASSERT_LOCATION(CGS_ARTIST_POOL_FILE, 1067));
+                CgsDev::Assert::EndAssert();
+                FreeResourceEntry(static_cast<s16>(liSlot));
+                return CREATERESULT_OUTOFMEMORY;
+            }
+        }
+        else
         {
             lpEntry->mPtr.mResourceMemory.m_baseResources[0] = 0;
             lpEntry->mPtr.mResourceMemory.m_baseResources[1] = 0;
             lpEntry->mPtr.mResourceMemory.m_baseResources[2] = 0;
         }
-        else if (!AllocateMemoryForResource(lpEntry, "", liSlot, lpNewResource->mpResourceType))
-        {
-            FreeResourceEntry(static_cast<s16>(liSlot));
-            return CREATERESULT_OUTOFMEMORY;
-        }
 
-        mpx8ResourceStatuses[liSlot]    = 1;
-        mpiResourceRefCounts[liSlot]    = 1;
+        mpx8ResourceStatuses[liSlot] = 1;
+        mpiResourceRefCounts[liSlot] = 1;
         mpiResourceImportCounts[liSlot] = lpNewResource->miNumImports;
         mHashTable.AddEntry(lpEntry->mID, liSlot);
 
@@ -561,18 +570,29 @@ namespace CgsResource
     // CREATERESULT_OUTOFENTRIES if the pool has no free slots.
     Pool::ECreateResult Pool::CreateEntry(const NewResource* lpNewResource, Entry** lppOutEntry, s32* lpiOutIndex, bool lbAllocateMemory)
     {
-        CGS_ASSERT(mbIsValid, "Pool is not valid\n");   // :1008
-
-        Entry* lpReservedEntry;   // AllocateResourceEntry sets this; the slot fill uses lppOutEntry
-        s32    liSlot;
-        if (!AllocateResourceEntry(&lpReservedEntry, &liSlot))
+        if (!mbIsValid)
         {
-            CGS_ASSERT(false, "Could not create resource - out of entries. Try allocating pool with a larger possible entry count (see muMaxResources in request event)\n");   // :1016
+            CgsDev::Assert::BeginAssert();
+            CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+            lStrStream << "Pool is not valid\n";
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, CGS_ASSERT_LOCATION(CGS_ARTIST_POOL_FILE, 1008));
+            CgsDev::Assert::EndAssert();
+        }
+
+        Entry* lpEntry;
+        s32 liEntryIndex;
+        if (!AllocateResourceEntry(&lpEntry, &liEntryIndex))
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+            lStrStream << "Could not create resource - out of entries. Try allocating pool with a larger possible entry count (see muMaxResources in request event)\n";
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, CGS_ASSERT_LOCATION(CGS_ARTIST_POOL_FILE, 1016));
+            CgsDev::Assert::EndAssert();
             return CREATERESULT_OUTOFENTRIES;
         }
 
-        *lpiOutIndex = liSlot;
-        return CreateEntryInSlot(lpNewResource, lppOutEntry, liSlot, lbAllocateMemory);
+        *lpiOutIndex = liEntryIndex;
+        return CreateEntryInSlot(lpNewResource, lppOutEntry, liEntryIndex, lbAllocateMemory);
     }
 
     // 0x828F5B28 - bring the management data up: size + initialise the id->index hash, then
@@ -610,26 +630,13 @@ namespace CgsResource
     // requirement returned above.
     u32 Pool::PrintOverheadMemoryRequired(const InitOptions* lpOptions)
     {
-        const u32 luMaxResources = lpOptions->muMaxResources;
-        const s64 liSignedMaxResources = (luMaxResources & 0x80000000u) != 0
-            ? static_cast<s64>(luMaxResources) - 0x100000000ll
-            : static_cast<s64>(luMaxResources);
-
-        u64 luSpreadHashValue = static_cast<u64>(3 * liSignedMaxResources - 1);
-        luSpreadHashValue |= luSpreadHashValue >> 1;
-        luSpreadHashValue |= luSpreadHashValue >> 2;
-        luSpreadHashValue |= luSpreadHashValue >> 4;
-        luSpreadHashValue |= luSpreadHashValue >> 8;
-
-        const u32 luFoldedHashValue = static_cast<u32>(luSpreadHashValue)
-            | static_cast<u32>(luSpreadHashValue >> 16);
-        u32 luTotalOverhead = 16u * (luFoldedHashValue + 1u) + 100u * luMaxResources;
+        HashTable lHashTable;
+        const u32 luResources = lpOptions->muMaxResources;
+        const u32 luHashSlots = static_cast<u32>(lHashTable.CalculateRequiredSize(static_cast<s32>(luResources)));
+        u32 luTotalOverhead = 16u * luHashSlots + 100u * luResources;
 
         if ((CgsDev::Message::gxMessageFilterFlags & 1u) != 0)
-        {
-            CgsDev::StrStreamBase& lrStream = *CgsDev::Log::gpDebugPrint;
-            lrStream << "    Entry management overhead: " << luTotalOverhead << "\n";
-        }
+            *CgsDev::Log::gpDebugPrint << "    Entry management overhead: " << luTotalOverhead << "\n";
 
         for (u32 luMemType = 0; luMemType < KI_NUM_TYPES; ++luMemType)
         {
@@ -637,15 +644,18 @@ namespace CgsResource
             if ((CgsDev::Message::gxMessageFilterFlags & 1u) != 0)
             {
                 CgsDev::StrStreamBase& lrStream = *CgsDev::Log::gpDebugPrint;
-                lrStream << "Heap [" << luMemType << "] overhead: " << luHeapNodeOverhead << "\n";
+                lrStream << "Heap [";
+                lrStream.PrintUnsignedInteger(luMemType);
+                lrStream << "] overhead: ";
+                lrStream.PrintUnsignedInteger(luHeapNodeOverhead);
+                lrStream << "\n";
             }
             luTotalOverhead += luHeapNodeOverhead;
         }
 
         if ((CgsDev::Message::gxMessageFilterFlags & 1u) != 0)
         {
-            CgsDev::StrStreamBase& lrStream = *CgsDev::Log::gpDebugPrint;
-            lrStream << "    Total: " << luTotalOverhead << "\n";
+            (*CgsDev::Log::gpDebugPrint << "    Total: ").PrintUnsignedInteger(luTotalOverhead) << "\n";
         }
 
         return luTotalOverhead;
@@ -1047,25 +1057,32 @@ namespace CgsResource
     // allocations and must not be allocated again. No-room takes precedence over defrag.
     Pool::ECreateResult Pool::ExecuteBatchAllocations(AllocListSet* lpSet, bool lbRetryFailedOnly)
     {
-        CGS_ASSERT(mbIsValid, "Pool is not valid\n");
+        CGS_ASSERT(mbIsValid, CGS_ASSERT_STREAM_MESSAGE_AT("Pool is not valid\n", CGS_ARTIST_POOL_FILE, 1110));
         bool lbNoRoom = false;
         bool lbNeedDefrag = false;
         for (s32 t = 0; t < 3; ++t)
         {
-            if (lpSet->manAllocRequestCounts[t] == 0)
-                lpSet->maeAllocRequestResults[t] = E_BATCHALLOCRESULT_SUCCESS;
-            else if (!lbRetryFailedOnly || lpSet->maeAllocRequestResults[t] != E_BATCHALLOCRESULT_SUCCESS)
+            if (lpSet->manAllocRequestCounts[t] > 0)
             {
-                const EBatchAllocResult leResult = ExecuteBatchAllocation(lpSet, t);
-                lpSet->maeAllocRequestResults[t] = leResult;
-                lbNoRoom |= leResult == E_BATCHALLOCRESULT_FAIL_NO_ROOM;
-                lbNeedDefrag |= leResult == E_BATCHALLOCRESULT_FAIL_NEED_DEFRAG;
+                if (!lbRetryFailedOnly || lpSet->maeAllocRequestResults[t] != E_BATCHALLOCRESULT_SUCCESS)
+                {
+                    const EBatchAllocResult leResult = ExecuteBatchAllocation(lpSet, t);
+                    if (leResult == E_BATCHALLOCRESULT_FAIL_NO_ROOM)
+                        lbNoRoom = true;
+                    else if (leResult == E_BATCHALLOCRESULT_FAIL_NEED_DEFRAG)
+                        lbNeedDefrag = true;
+                    lpSet->maeAllocRequestResults[t] = leResult;
+                }
             }
+            else
+                lpSet->maeAllocRequestResults[t] = E_BATCHALLOCRESULT_SUCCESS;
         }
-        // The console additionally resets its debug allocation-failure injector here.
-        // That diagnostic selector is not part of the native heap interface.
-        return lbNoRoom ? CREATERESULT_OUTOFMEMORY
-            : (lbNeedDefrag ? CREATERESULT_NEEDDEFRAGGING : CREATERESULT_OK);
+        static s32 _liForceFailMemType = -1;
+        _liForceFailMemType = -1;
+
+        if (lbNoRoom)
+            return CREATERESULT_OUTOFMEMORY;
+        return lbNeedDefrag ? CREATERESULT_NEEDDEFRAGGING : CREATERESULT_OK;
     }
 
     // 828E31D0: graphics allocations must be installed before main memory publishes
@@ -1073,30 +1090,40 @@ namespace CgsResource
     Pool::ECreateResult Pool::MergeBatchAllocations(AllocListSet* lpSet,
         const BundleV2::ResourceEntry* lpEntries, SmallResource* lpResources)
     {
-        CGS_ASSERT(mbIsValid, "Pool is not valid\n");
-        for (s32 t = 1; t < 3; ++t)
+        CGS_ASSERT(mbIsValid, CGS_ASSERT_STREAM_MESSAGE_AT("Pool is not valid\n", CGS_ARTIST_POOL_FILE, 1241));
+        for (u32 luMemType = 1; luMemType < KI_NUM_TYPES; ++luMemType)
         {
-            for (u32 i = 0; i < lpSet->manAllocRequestCounts[t]; ++i)
+            const u32 luAllocCount = lpSet->manAllocRequestCounts[luMemType];
+            const AllocRequest* lpRequests = lpSet->mapAllocRequests[luMemType];
+            const AllocResult* lpResults = lpSet->mapAllocResults[luMemType];
+            for (u32 luAllocation = 0; luAllocation < luAllocCount; ++luAllocation)
             {
-                const u32 luSlot = static_cast<u32>(reinterpret_cast<uintptr_t>(lpSet->mapAllocRequests[t][i].mpOwner));
-                Entry& lrEntry = mpResourceEntries[luSlot];
-                lrEntry.mPtr.mResourceMemory.m_baseResources[t] = lpSet->mapAllocResults[t][i].mpData;
-                lrEntry.mauHeapIndices[t] = lpSet->mapAllocResults[t][i].muIndex;
+                const u16 luEntryIndex = static_cast<u16>(reinterpret_cast<uintptr_t>(lpRequests[luAllocation].mpOwner));
+                Entry* lpResource = &mpResourceEntries[luEntryIndex];
+                lpResource->mPtr.mResourceMemory.m_baseResources[luMemType] = lpResults[luAllocation].mpData;
+                lpResource->mauHeapIndices[luMemType] = lpResults[luAllocation].muIndex;
             }
         }
-        for (u32 i = 0; i < lpSet->manAllocRequestCounts[0]; ++i)
+
+        const u32 luAllocCount = lpSet->manAllocRequestCounts[0];
+        const AllocRequest* lpRequests = lpSet->mapAllocRequests[0];
+        const AllocResult* lpResults = lpSet->mapAllocResults[0];
+        for (u32 luAllocation = 0; luAllocation < luAllocCount; ++luAllocation)
         {
-            const u32 luSlot = static_cast<u32>(reinterpret_cast<uintptr_t>(lpSet->mapAllocRequests[0][i].mpOwner));
-            Entry& lrEntry = mpResourceEntries[luSlot];
-            lrEntry.mPtr.mResourceMemory.m_baseResources[0] = lpSet->mapAllocResults[0][i].mpData;
-            lrEntry.mauHeapIndices[0] = lpSet->mapAllocResults[0][i].muIndex;
-            const s32 liSourceIndex = mpiResourceImportCounts[luSlot];
-            if (liSourceIndex == -1) // the generated entry-list resource has no input bundle entry
-                mpiResourceImportCounts[luSlot] = 0;
+            const u16 luEntryIndex = static_cast<u16>(reinterpret_cast<uintptr_t>(lpRequests[luAllocation].mpOwner));
+            Entry* lpResource = &mpResourceEntries[luEntryIndex];
+            lpResource->mPtr.mResourceMemory.m_baseResources[0] = lpResults[luAllocation].mpData;
+            lpResource->mauHeapIndices[0] = lpResults[luAllocation].muIndex;
+
+            const s32 liBundleIndex = mpiResourceImportCounts[luEntryIndex];
+            if (liBundleIndex != -1)
+            {
+                mpiResourceImportCounts[luEntryIndex] = lpEntries[liBundleIndex].muImportCount;
+                lpResources[liBundleIndex] = lpResource->mPtr.mResourceMemory;
+            }
             else
             {
-                mpiResourceImportCounts[luSlot] = lpEntries[liSourceIndex].muImportCount;
-                lpResources[liSourceIndex] = lrEntry.mPtr.mResourceMemory;
+                mpiResourceImportCounts[luEntryIndex] = 0;
             }
         }
         return CREATERESULT_OK;
@@ -1111,7 +1138,7 @@ namespace CgsResource
     // result array and its request count) goes straight to the heap, always freeing on failure.
     EBatchAllocResult Pool::ExecuteBatchAllocation(AllocListSet* lpAllocListSet, s32 liMemType)
     {
-        CGS_ASSERT(mbIsValid, "Pool is not valid\n");
+        CGS_ASSERT(mbIsValid, CGS_ASSERT_STREAM_MESSAGE_AT("Pool is not valid\n", CGS_ARTIST_POOL_FILE, 1216));
         return maHeaps[liMemType].ExecuteBatchAllocation(lpAllocListSet->mapAllocRequests[liMemType],
                                                         lpAllocListSet->mapAllocResults[liMemType],
                                                         lpAllocListSet->manAllocRequestCounts[liMemType],

@@ -41,8 +41,9 @@ namespace CgsSceneManager
     //   +0x10  mfMinusYMaxInterval  (lfs 0x10(a2) -> stack lane[2])
     //   +0x14  mu16ObjectIndex      (lhz 0x14(a2) -> mpuIndexData[len])
     //   +0x16  mu16Flags            (0 == min-role endpoint, 1 == max-role endpoint)
-    struct Interval
+    class Interval
     {
+    public:
         f32 mfXInterval;          // +0x00
         f32 mfZMinInterval;       // +0x04
         f32 mfMinusZMaxInterval;  // +0x08

@@ -479,31 +479,27 @@ const char* TagFieldFind(const char* pRecord_, const char* pName_)
         return NULL;
     }
 
-    // scan the rest for "<separator>name="
-    for (pCmp1 = pRecord + 1; *pCmp1 != 0; ++pCmp1)
+    // ARTIST 82B18320 through 82B183BC scans field delimiters, then matches the
+    // candidate name with the original record and name cursors.
+    for (++pRecord; *pRecord != 0; ++pRecord)
     {
-        const unsigned char* pStart;
-        s32 iIndex;
-
-        if (*pCmp1 != '=')
+        if (*pRecord == '=')
         {
-            continue;
-        }
-        pStart = pCmp1 - iNameLen;
-        if (pCmp1[-1] <= ' ')
-        {
-            return NULL;
-        }
-        if (pStart[-1] > ' ')
-        {
-            continue;
-        }
-        for (iIndex = 0; to_upper[pStart[iIndex]] == to_upper[pName[iIndex]]; ++iIndex)
-        {
-        }
-        if (pStart + iIndex == pCmp1)
-        {
-            return (const char*)(pCmp1 + 1);
+            if (pRecord[-1] <= ' ')
+            {
+                return NULL;
+            }
+            pCmp1 = pRecord - iNameLen;
+            if (pCmp1[-1] <= ' ')
+            {
+                for (pCmp2 = pName; to_upper[*pCmp1] == to_upper[*pCmp2]; ++pCmp1, ++pCmp2)
+                {
+                }
+                if (pCmp1 == pRecord)
+                {
+                    return (const char*)(pRecord + 1);
+                }
+            }
         }
     }
     return NULL;
@@ -866,8 +862,9 @@ s32 TagFieldGetToken(const char* pData_, s32 iDefault)
         }
         if (uByte == '%')
         {
-            uByte = (unsigned char)((hex_decode[pData[0]] << 4) | hex_decode[pData[1]]);
-            pData += 2;
+            // ARTIST 82B18C0C through 82B18C28 consumes and combines the two digits in order.
+            uByte = (unsigned char)(hex_decode[*pData++] << 4);
+            uByte |= hex_decode[*pData++];
         }
         uToken = (uToken << 8) | uByte;
     }
@@ -1088,20 +1085,20 @@ s32 TagFieldGetBinary(const char* pData_, void* pBuffer_, s32 iBuflen)
     // no buffer: return the decoded size
     if (pBuffer == NULL)
     {
-        pBinary = pData + 1;
         if (*pData == '$')
         {
-            while ((pBinary[0] >= '0') && (pBinary[1] >= '0'))
+            for (pBinary = pData + 1; (pBinary[0] >= '0') && (pBinary[1] >= '0'); pBinary += 2)
             {
-                pBinary += 2;
             }
             return (s32)(pBinary - pData - 1) / 2;
         }
-        while (*pBinary >= 0x80)
+        else
         {
-            ++pBinary;
+            for (pBinary = pData + 1; *pBinary >= 0x80; ++pBinary)
+            {
+            }
+            return ((s32)(pBinary - pData - 1) * 7) / 8;
         }
-        return ((s32)(pBinary - pData - 1) * 7) / 8;
     }
 
     if (iBuflen < 1)
@@ -1117,7 +1114,11 @@ s32 TagFieldGetBinary(const char* pData_, void* pBuffer_, s32 iBuflen)
     }
     else
     {
-        for (pBinary = pData + 1, iBits = 0, uBin7 = 0; (*pBinary >= 0x80) && (pBuffer < pBufend); ++pBinary)
+        // ARTIST 82B190F4 through 82B190FC initializes the seven-bit decoder.
+        pBinary = pData + 1;
+        uBin7 = 0;
+        iBits = 0;
+        for (; (*pBinary >= 0x80) && (pBuffer < pBufend); ++pBinary)
         {
             uBin7 |= (u32)(*pBinary & 0x7F) << iBits;
             iBits += 7;

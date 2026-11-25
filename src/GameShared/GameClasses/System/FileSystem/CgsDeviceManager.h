@@ -27,6 +27,8 @@
 #include "eathread/eathread_thread.h"                                           // EA::Thread::Thread
 #include "eathread/eathread_futex.h"                                            // EA::Thread::Futex
 
+namespace rw { class IResourceAllocator; }
+
 namespace CgsFileSystem
 {
     // Completion callback the async device ops invoke when an operation finishes: the result code,
@@ -60,7 +62,7 @@ namespace CgsFileSystem
         // ---- lifecycle ----
         DeviceManager();                                       // 0x828F0C90
         void InitInternal();                                   // 0x828E9788
-        static bool InitializeDeviceManager(void* lpAllocator);// 0x828F91E0
+        static void InitializeDeviceManager(rw::IResourceAllocator* lpAllocator); // 0x828F91E0
 
         // The singleton if already created (null otherwise) — lets a one-time bring-up (e.g.
         // FileSystem::Prepare) avoid re-initialising without tripping GetDeviceManager's assert.
@@ -121,7 +123,7 @@ namespace CgsFileSystem
         }
         // ---- statics (CgsDeviceManager.cpp) ----
         static DeviceManager* mpDeviceManager;   // X360 dword_830EA400 (singleton)
-        static void*          mpAllocator;       // X360 off_830EA404
+        static rw::IResourceAllocator* mpAllocator; // X360 off_830EA404
 
         // CgsFileSystem::GetDeviceManager() is a namespace-scope free function that reads the
         // private singleton (DWARF CgsDeviceManager.h:176).

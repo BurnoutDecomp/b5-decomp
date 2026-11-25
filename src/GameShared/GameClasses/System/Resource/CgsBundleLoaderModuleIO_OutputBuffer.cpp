@@ -13,12 +13,11 @@
 //   GetLoadBundleResponseQueue()         @ 0x828E2330 -> (this + 0x1014),  write-lock (bit 3)  (:146)
 //   GetUnloadBundleResponseQueue() const @ 0x828E23D8 -> (this + 0xA420),  read-lock  (bit 4)  (:148)
 //   GetUnloadBundleResponseQueue()       @ 0x828E2480 -> (this + 0xA420),  write-lock (bit 3)  (:149)
-//   GetStream()        const @ 0x828E2528 -> &mStreamRequestQueue  (this + 0x1342C), read-lock  (bit 4)  (:151)
+//   GetStreamRequestQueue() const @ 0x828E2528 -> &mStreamRequestQueue  (this + 0x1342C), read-lock  (bit 4)  (:151)
 //
 // Each loads the 1-byte FlagSet status (lbz 0(this)) and tests its lock bit (read: extrwi ...,27 ==
 // (status>>4)&1; write: extrwi ...,28 == (status>>3)&1), asserts when clear (the read/write assert
-// strings carry a trailing \n), then returns the payload address. GetPool/GetStream are the
-// historical names for mPoolSendQueue (+4) / mStreamRequestQueue (+0x1342C).
+// strings carry a trailing \n), then returns the payload address.
 
 namespace CgsResource
 {
@@ -37,17 +36,19 @@ namespace BundleLoaderIO
 
     const OutputBuffer::PoolSendQueue* OutputBuffer::GetPoolSendQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
+            "Not locked for reading\n", CGS_ARTIST_FILE, 142));
         return &mPoolSendQueue;
     }
 
     OutputBuffer::PoolSendQueue* OutputBuffer::GetPoolSendQueue() { return GetPool(); }
 
-    const OutputBuffer::StreamRequestQueue* OutputBuffer::GetStreamRequestQueue() const { return GetStream(); }
+    const OutputBuffer::StreamStorage* OutputBuffer::GetStream() const { return GetStreamRequestQueue(); }
 
     OutputBuffer::StreamRequestQueue* OutputBuffer::GetStreamRequestQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
+            "Not locked for writing\n", CGS_ARTIST_FILE, 152));
         return &mStreamRequestQueue;
     }
 
@@ -65,7 +66,8 @@ namespace BundleLoaderIO
     // CgsResource::ResourceModule::ProcessResourceResponses.
     const OutputBuffer::LoadBundleResponseQueue* OutputBuffer::GetLoadBundleResponseQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");   // :145
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
+            "Not locked for reading\n", CGS_ARTIST_FILE, 145));
         return &mLoadBundleResponseQueue;
     }
 
@@ -82,7 +84,8 @@ namespace BundleLoaderIO
     // (DWARF CgsBundleLoaderModuleIO.h:148, const overload.)
     const OutputBuffer::UnloadBundleResponseQueue* OutputBuffer::GetUnloadBundleResponseQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");   // :148
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
+            "Not locked for reading\n", CGS_ARTIST_FILE, 148));
         return &mUnloadBundleResponseQueue;
     }
 
@@ -91,14 +94,16 @@ namespace BundleLoaderIO
     // CgsResource::BundleLoaderModule::CheckForUnloads.
     OutputBuffer::UnloadBundleResponseQueue* OutputBuffer::GetUnloadBundleResponseQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");   // :149
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT(
+            "Not locked for writing\n", CGS_ARTIST_FILE, 149));
         return &mUnloadBundleResponseQueue;
     }
 
     // X360 0x828E2528: read-lock; return this + 0x1342C (the stream-request queue).
-    const OutputBuffer::StreamStorage* OutputBuffer::GetStream() const
+    const OutputBuffer::StreamRequestQueue* OutputBuffer::GetStreamRequestQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");   // :151
+        CGS_ASSERT(IsBufferLockedForReading(), CGS_ASSERT_STREAM_MESSAGE_AT(
+            "Not locked for reading\n", CGS_ARTIST_FILE, 151));
         return &mStreamRequestQueue;
     }
 }

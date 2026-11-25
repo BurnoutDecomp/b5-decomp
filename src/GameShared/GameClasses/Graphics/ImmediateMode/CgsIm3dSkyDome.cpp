@@ -35,66 +35,7 @@ namespace shadow
 namespace CgsGraphics
 {
 
-template <typename V>
-s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
-                             const void* lpVertexProgramBinary, u32 luVertexProgramSize,
-                             const void* lpPixelProgramBinary, u32 luPixelProgramSize)
-{
-    s8 li8ProgramIndex = 0;
-    while (mapVertexProgramBuffer[li8ProgramIndex] != 0)
-    {
-        li8ProgramIndex = static_cast<s8>(li8ProgramIndex + 1);
-        if (li8ProgramIndex >= KI8_MAX_PROGRAMS)
-        {
-            break;
-        }
-    }
-
-    if (li8ProgramIndex < KI8_MAX_PROGRAMS)
-    {
-        CGS_ASSERT(mapPixelProgramBuffer[li8ProgramIndex] == 0,
-                   "mapPixelProgramBuffer[ li8ProgramIndex ] == NULL");
-    }
-
-    CGS_ASSERT(li8ProgramIndex < KI8_MAX_PROGRAMS,
-               "Adding too many shader programs to the immediate mode renderer");
-
-    renderengine::ProgramBufferParameters lVertexParams;
-    lVertexParams.miShaderType        = 0;
-    lVertexParams.mMicrocodeParts.cbCachedPartSize    = 0;
-    lVertexParams.mMicrocodeParts.cbPhysicalPartSize    = 0;
-    lVertexParams.muConstantTableSize = 0;
-    lVertexParams.muNumVariables      = 0;
-    lVertexParams.mpFunction          = lpVertexProgramBinary;
-    lVertexParams.muProgramSize         = luVertexProgramSize;
-
-    rw::ResourceDescriptor lVertexDescriptor;
-    renderengine::ProgramBuffer::GetResourceDescriptor(&lVertexDescriptor, &lVertexParams);
-
-    rw::Resource lVertexLayout = lpAllocator->DoAllocate(lVertexDescriptor, 0);
-    mapVertexProgramBuffer[li8ProgramIndex] =
-        reinterpret_cast<renderengine::ProgramBuffer*>(
-            renderengine::ProgramBuffer::Initialize(&lVertexLayout, &lVertexParams));
-
-    renderengine::ProgramBufferParameters lPixelParams;
-    lPixelParams.mMicrocodeParts.cbCachedPartSize    = 0;
-    lPixelParams.mMicrocodeParts.cbPhysicalPartSize    = 0;
-    lPixelParams.muConstantTableSize = 0;
-    lPixelParams.muNumVariables      = 0;
-    lPixelParams.mpFunction          = lpPixelProgramBinary;
-    lPixelParams.muProgramSize         = luPixelProgramSize;
-    lPixelParams.miShaderType        = 1;
-
-    rw::ResourceDescriptor lPixelDescriptor;
-    renderengine::ProgramBuffer::GetResourceDescriptor(&lPixelDescriptor, &lPixelParams);
-
-    rw::Resource lPixelLayout = lpAllocator->DoAllocate(lPixelDescriptor, 0);
-    mapPixelProgramBuffer[li8ProgramIndex] =
-        reinterpret_cast<renderengine::ProgramBuffer*>(
-            renderengine::ProgramBuffer::Initialize(&lPixelLayout, &lPixelParams));
-
-    return li8ProgramIndex;
-}
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRendererAddProgram.inl"
 
 template <typename V>
 void ImRenderer<V>::Construct(rw::IResourceAllocator* lpAllocator,

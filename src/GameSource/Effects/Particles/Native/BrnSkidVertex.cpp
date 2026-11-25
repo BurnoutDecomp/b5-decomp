@@ -25,11 +25,14 @@
 #include "GameSource/Effects/Particles/Native/BrnSkidVertex.h"
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"
 #include "rw/rwcore_structs.h"
 #include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"
+
+static const char KAC_IM_RENDERER_ASSERT_FILE[] =
+    "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/CgsImRenderer.h";
 
 namespace CgsGraphics
 {
@@ -129,68 +132,7 @@ namespace CgsGraphics
 // return the slot index. Asserts the chosen slot's pixel entry is empty and that we did not run past
 // the program table. (Identical shape to the Im3dSkyDome AddProgram -- vertex-type-agnostic.)
 // ---------------------------------------------------------------------------------------------------
-template <typename V>
-s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
-                             const void* lpVertexProgramBinary, u32 luVertexProgramSize,
-                             const void* lpPixelProgramBinary, u32 luPixelProgramSize)
-{
-    s8 li8ProgramIndex = 0;
-    while (mapVertexProgramBuffer[li8ProgramIndex] != 0)
-    {
-        li8ProgramIndex = static_cast<s8>(li8ProgramIndex + 1);
-        if (li8ProgramIndex >= KI8_MAX_PROGRAMS)
-        {
-            break;
-        }
-    }
-
-    if (li8ProgramIndex < KI8_MAX_PROGRAMS)
-    {
-        CGS_ASSERT(mapPixelProgramBuffer[li8ProgramIndex] == 0,
-                   "mapPixelProgramBuffer[ li8ProgramIndex ] == NULL");
-    }
-
-    CGS_ASSERT(li8ProgramIndex < KI8_MAX_PROGRAMS,
-               "Adding too many shader programs to the immediate mode renderer");
-
-    // ---- vertex program (muFunction = binary, muReserved8 = size, muShaderType = 0 -> vertex) ----
-    renderengine::ProgramBufferParameters lVertexParams;
-    lVertexParams.miShaderType        = 0;
-    lVertexParams.mMicrocodeParts.cbCachedPartSize    = 0;
-    lVertexParams.mMicrocodeParts.cbPhysicalPartSize    = 0;
-    lVertexParams.muConstantTableSize = 0;
-    lVertexParams.muNumVariables      = 0;
-    lVertexParams.mpFunction          = lpVertexProgramBinary;
-    lVertexParams.muProgramSize         = luVertexProgramSize;
-
-    rw::ResourceDescriptor lVertexDescriptor;
-    renderengine::ProgramBuffer::GetResourceDescriptor(&lVertexDescriptor, &lVertexParams);
-
-    rw::Resource lVertexLayout = lpAllocator->DoAllocate(lVertexDescriptor, 0);
-    mapVertexProgramBuffer[li8ProgramIndex] =
-        reinterpret_cast<renderengine::ProgramBuffer*>(
-            renderengine::ProgramBuffer::Initialize(&lVertexLayout, &lVertexParams));
-
-    // ---- pixel program (muShaderType = 1 -> pixel) ----------------------------------------------
-    renderengine::ProgramBufferParameters lPixelParams;
-    lPixelParams.mMicrocodeParts.cbCachedPartSize    = 0;
-    lPixelParams.mMicrocodeParts.cbPhysicalPartSize    = 0;
-    lPixelParams.muConstantTableSize = 0;
-    lPixelParams.muNumVariables      = 0;
-    lPixelParams.mpFunction          = lpPixelProgramBinary;
-    lPixelParams.muProgramSize         = luPixelProgramSize;
-    lPixelParams.miShaderType        = 1;
-
-    rw::ResourceDescriptor lPixelDescriptor;
-    renderengine::ProgramBuffer::GetResourceDescriptor(&lPixelDescriptor, &lPixelParams);
-
-    rw::Resource lPixelLayout = lpAllocator->DoAllocate(lPixelDescriptor, 0);
-    mapPixelProgramBuffer[li8ProgramIndex] =
-        reinterpret_cast<renderengine::ProgramBuffer*>(
-            renderengine::ProgramBuffer::Initialize(&lPixelLayout, &lPixelParams));
-
-    return li8ProgramIndex;
-}
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRendererAddProgram.inl"
 
 // ---------------------------------------------------------------------------------------------------
 // ImRenderer<SkidVertex>::Construct  @ 0x8228E1D8

@@ -241,8 +241,8 @@ namespace postfx
         params.mpFunction = microcode;
         params.miShaderType = type;
         params.muProgramSize = size;
-        rw::ResourceDescriptor descriptor;
-        renderengine::ProgramBuffer::GetResourceDescriptor(&descriptor, &params);
+        const rw::ResourceDescriptor descriptor =
+            renderengine::ProgramBuffer::GetResourceDescriptor(params);
         rw::Resource resource = AllocateResource(allocator, descriptor);
         return renderengine::ProgramBuffer::Initialize(
             &resource, &params);

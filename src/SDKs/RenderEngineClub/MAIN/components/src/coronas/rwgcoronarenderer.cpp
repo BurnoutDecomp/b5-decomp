@@ -100,16 +100,16 @@ void CoronaRenderer::Initialize(rw::IResourceAllocator& lrAllocator)
     lProgram.mMicrocodeParts.cbPhysicalPartSize = 0;
     lProgram.muConstantTableSize = 0;
     lProgram.muNumVariables = 0;
-    rw::ResourceDescriptor lDescriptor;
-    ProgramBuffer::GetResourceDescriptor(&lDescriptor, &lProgram);
-    gsPixelProgramResource = lrAllocator.DoAllocate(lDescriptor, 0);
+    const rw::ResourceDescriptor lPixelDescriptor =
+        ProgramBuffer::GetResourceDescriptor(lProgram);
+    gsPixelProgramResource = lrAllocator.DoAllocate(lPixelDescriptor, 0);
     s_pixelProgram = ProgramBuffer::Initialize(&gsPixelProgramResource, &lProgram);
 
     lProgram.mpFunction = gaCoronaVertexProgram;
     lProgram.miShaderType = 0;
     lProgram.muProgramSize = sizeof(gaCoronaVertexProgram);
-    ProgramBuffer::GetResourceDescriptor(&lDescriptor, &lProgram);
-    gsVertexProgramResource = lrAllocator.DoAllocate(lDescriptor, 0);
+    const rw::ResourceDescriptor lVertexDescriptor = ProgramBuffer::GetResourceDescriptor(lProgram);
+    gsVertexProgramResource = lrAllocator.DoAllocate(lVertexDescriptor, 0);
     s_vertexProgram = ProgramBuffer::Initialize(&gsVertexProgramResource, &lProgram);
     ProgramBuffer::GetVariableHandleByName(s_vertexProgram, reinterpret_cast<const u8*>("viewProjectionMatrix"), &s_viewProjectionMatrixHandle);
     ProgramBuffer::GetVariableHandleByName(s_vertexProgram, reinterpret_cast<const u8*>("cameraPositionPlusBrightness"), &s_cameraPositionHandle);
@@ -128,8 +128,9 @@ void CoronaRenderer::Initialize(rw::IResourceAllocator& lrAllocator)
     lVertexDecl.maElements[3].mu16Stream = 0;
     lVertexDecl.maElements[3].miOffset = 0x14C86;
     lVertexDecl.maElements[3].mu8UsageIndex = 4;
-    static_cast<rw::BaseResourceDescriptors<5>&>(lDescriptor) = VertexDescriptor::GetResourceDescriptor(lVertexDecl);
-    gsVertexDescriptorResource = lrAllocator.DoAllocate(lDescriptor, 0);
+    rw::ResourceDescriptor lVertexDeclDescriptor;
+    static_cast<rw::BaseResourceDescriptors<5>&>(lVertexDeclDescriptor) = VertexDescriptor::GetResourceDescriptor(lVertexDecl);
+    gsVertexDescriptorResource = lrAllocator.DoAllocate(lVertexDeclDescriptor, 0);
     s_vertexDescriptor = VertexDescriptor::Initialize(&gsVertexDescriptorResource, &lVertexDecl);
 }
 
