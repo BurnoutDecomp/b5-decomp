@@ -23,7 +23,7 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"               // CGS_ASSERT_STREAM
 #include "GameShared/GameClasses/Development/CgsStrStream.h"   // the streamed assert messages
-
+#define CGS_ARTIST_INDEXED_LIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsIndexedLinkList.h"
 namespace CgsContainers
 {
 
@@ -420,7 +420,15 @@ IndexedLinkedList<DataType,IndexType>::Init( IndexedLinkedListNode<DataType,Inde
     }
     else
     {
-        CGS_ASSERT_STREAM(lpNodeBase, "Indexed list must be initialized with a base pointer\n");
+        if (!lpNodeBase)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+            lStrStream << "Indexed list must be initialized with a base pointer\n";
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+                CGS_ASSERT_LOCATION(CGS_ARTIST_INDEXED_LIST_FILE, 423));
+            CgsDev::Assert::EndAssert();
+        }
 
         miCount = liNodeCount;
         miFirst = 0;
@@ -437,14 +445,6 @@ IndexedLinkedList<DataType,IndexType>::Init( IndexedLinkedListNode<DataType,Inde
         }
     }
 }
-
-
-
-
-
-
-
-
 
 
 
@@ -1106,7 +1106,7 @@ template<class DataType, class IndexType>
 __forceinline void
 IndexedLinkedList<DataType,IndexType>::InternalAddTail( IndexedLinkedListNode<DataType,IndexType>* lpNewNode )
 {
-    CGS_ASSERT_STREAM_AT(miCount > 0, "To add node to a zero length list call InternalAddFirstNode\n", "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsIndexedLinkList.h", 1109);
+    CGS_ASSERT_STREAM_AT(miCount > 0, "To add node to a zero length list call InternalAddFirstNode\n", CGS_ARTIST_INDEXED_LIST_FILE, 1109);
 
     IndexType liIndex = GetNodeOffset( lpNewNode );
 
@@ -1134,7 +1134,7 @@ template<class DataType, class IndexType>
 __forceinline IndexedLinkedListNode<DataType,IndexType>*
 IndexedLinkedList<DataType,IndexType>::InternalRemoveLastNode( )
 {
-    CGS_ASSERT_STREAM_AT(miCount == 1, "This should only be called to add a node to list when it is zero length\n", "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsIndexedLinkList.h", 1137);
+    CGS_ASSERT_STREAM_AT(miCount == 1, "This should only be called to add a node to list when it is zero length\n", CGS_ARTIST_INDEXED_LIST_FILE, 1137);
 
     IndexedLinkedListNode<DataType,IndexType>* lpNode = &mpBase[miFirst];
 
@@ -1198,3 +1198,5 @@ IndexedLinkedList<DataType,IndexType>::InternalRemoveTail( )
 
 
 } // namespace CgsContainers
+
+#undef CGS_ARTIST_INDEXED_LIST_FILE

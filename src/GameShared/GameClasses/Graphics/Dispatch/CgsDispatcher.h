@@ -43,6 +43,8 @@ namespace rw
     struct IResourceAllocator;
 }
 
+struct ObjectToMeshJob;
+
 namespace CgsGraphics
 {
 
@@ -250,7 +252,11 @@ public:
     DispatchCommand* GetBinCurrent() const { return m_pNextWord; }
     void SetBinCurrent(DispatchCommand* lpCurrent) { m_pNextWord = lpCurrent; }
     void SetBinRange(DispatchCommand* lpBegin, DispatchCommand* lpEnd)
-    { m_pBin = m_pNextWord = lpBegin; m_uSize = static_cast<u32>(lpEnd - lpBegin); }
+    {
+        m_pBin = lpBegin;
+        m_pNextWord = lpBegin;
+        m_uSize = static_cast<u32>(lpEnd - lpBegin);
+    }
     void SetMemoryCallback(void (*lpCallback)(void*), void* lpContext)
     { mpMemoryCallback = lpCallback; mpMemoryContext = lpContext; }
 
@@ -344,6 +350,8 @@ public:
     u32 GetNumDispatchLists() const { return muNumDispatchLists; }
 
 private:
+    friend struct ::ObjectToMeshJob;
+
     DispatchList* m_paLists;                            // 0x000
     DispatchBin   m_Bin;                                // 0x080 (embedded bin)
     u32           muNumDispatchLists;                   // 0x100

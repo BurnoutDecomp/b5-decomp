@@ -2,7 +2,8 @@
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsReliableMessage.h"
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsTestConnectionMessage.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h"
 
 // CgsNetwork::MessageWithPlayerIDs -- the two out-of-line id getters and the packed-size
 // override. Each getter logs an unset (negative) id together with the message type before
@@ -11,15 +12,20 @@
 namespace CgsNetwork
 {
 
+// ARTIST 0x82541050 reports an unset sender through the network log.
 MessageWithPlayerIDs::NetworkPlayerID MessageWithPlayerIDs::GetSendingPlayerID() const
 {
     if (mSendingPlayerID < 0)
     {
-        *CgsDev::Log::gpDebugPrint << "We have received a message with sending player index "
-                                   << mSendingPlayerID << ", the message is of type "
-                                   << static_cast<s32>(mi8Type) << "\n";
+        const EMessageType leMessageType = GetType();
+        ServerInterfaceDirtySock::mNetStreamLogChannelOutput
+            << "We have received a message with sending player index "
+            << mSendingPlayerID << ", the message is of type "
+            << static_cast<s32>(leMessageType) << "\n";
     }
-    CGS_ASSERT(mSendingPlayerID >= 0, "mSendingPlayerID >= 0");
+    CGS_ASSERT(mSendingPlayerID >= 0, CGS_ASSERT_MESSAGE_AT(
+        "mSendingPlayerID >= 0",
+        "..\\..\\..\\GameShared\\GameClasses\\Network/Packeting/Messages/CgsMessageWithPlayerIDs.h", 147));
     return mSendingPlayerID;
 }
 

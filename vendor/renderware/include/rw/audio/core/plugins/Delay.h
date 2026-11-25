@@ -83,10 +83,10 @@ public:
     static void  *VectorDeletingDestructor(Delay *self, char flags);
 
     // ---- per-frame processing / configuration ----
-    static int    Process(Delay *self, AudioProcessContext *ctx);  // @0x82BA2A08
-    static void   UpdateLatencyAndDecay(Delay *self);              // @0x82B9DE50
+    static BufferStatus Process(PlugIn *plugIn, Mixer *ctx, bool discontinuity);  // @0x82BA2A08
+    void UpdateLatencyAndDecay();              // @0x82B9DE50
     static void   RwacTimerClient(void *context, f32 time);       // @0x82B972C8
-    static void   ReleaseEvent(Delay *self);                      // @0x82B97278
+    void ReleaseEvent();                      // @0x82B97278
 
     // ---- layout (X360 offsets documentary; access by name) ----
     PlugInBaseView mBase;                 // +0x00 .. +0x23 (mbFlag20 @+0x20 = input channels)

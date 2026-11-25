@@ -2,6 +2,12 @@
 #include "dirtylib.h"
 #include "dirtylib_x360_internal.h"
 
+// ARTIST 82F82BDC initializes the print dispatch slot to NetPrintfCode.
+extern "C"
+{
+s32 (*_NetLib_pPrintf)(const char* pFormat, ...) = NetPrintfCode;
+}
+
 namespace {
 struct NetIdleEntry { void (*proc)(void*); void* ref; };
 NetCritT gGlobalCrit;

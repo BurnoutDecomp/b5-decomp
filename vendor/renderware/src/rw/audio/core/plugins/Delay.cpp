@@ -50,9 +50,7 @@ static void *const KDL_BasePlugInVTable = 0; // off_820AA810
 
 // The delay targets the fixed 48 kHz internal rate (flt_820AA808); the latency form uses the
 // shared 5.0 scale (flt_8200426C, grounded == 5.0 across the image); flt_82001CC0 == 0.0.
-static const f32 KF_ZERO          = 0.0f;     // flt_82001CC0
 static const f32 KF_INTERNAL_RATE = 48000.0f; // flt_820AA808
-static const f32 KF_LATENCY_SCALE = 5.0f;     // flt_8200426C
 
 // The per-frame scratch local buffer Process reserves for the delay line: 704 f32 samples
 // (0xB00 bytes) carved off the top of the System object table's scratch cursor (word [3]).
@@ -139,11 +137,11 @@ int Delay::CreateInstance(Delay *self, f32 *pMaxDelayTime)
     Delay_ctor(self);
     self->mBase.mpAttributes = &self->mfDelayTime; // attribute table base @ self+0x28
 
-    self->mfDelayTime    = KF_ZERO;          // +0x28
+    self->mfDelayTime    = 0.0f;          // +0x28
     self->mbActive       = 0;                // +0xB0 (byte)
-    self->mfFeedback     = KF_ZERO;          // +0x30
+    self->mfFeedback     = 0.0f;          // +0x30
     self->mState         = 0;                // +0x38 (word)
-    self->mfMaxDelayTime = KF_ZERO;          // +0x40
+    self->mfMaxDelayTime = 0.0f;          // +0x40
     self->mfSampleRate   = KF_INTERNAL_RATE; // +0x3C = 48000
     if (pMaxDelayTime)
         self->mfMaxDelayTime = *pMaxDelayTime;
@@ -178,8 +176,13 @@ int Delay::CreateInstance(Delay *self, f32 *pMaxDelayTime)
 // and ping-pong the src/dst context buffers. Finally refresh the reported latency and
 // restore the scratch cursor. Always returns 1.
 // -------------------------------------------------------------------------------------
-int Delay::Process(Delay *self, AudioProcessContext *ctx)
+#if defined(_XBOX) && defined(_MSC_VER)
+// The original rwAudio plug-in object uses the scalar size form at these entries.
+#pragma optimize("s", on)
+#endif
+BufferStatus Delay::Process(PlugIn *plugIn, Mixer *ctx, bool)
 {
+    Delay *self = reinterpret_cast<Delay *>(plugIn);
     DelayFilter *pFilter    = &self->mFilter;
     DelayLine   *pDelayLine = &self->mDelayLine;
 
@@ -187,15 +190,13 @@ int Delay::Process(Delay *self, AudioProcessContext *ctx)
     pFilter->mpResetFunc = &DelayFilter::DelayFilterResetFunc;
     pDelayLine->SetFilter(pFilter);
 
-    // Reserve a 704-sample scratch region off the System object table's scratch cursor
-    // (word [3]); the value is restored at the tail. (The object table is the shared runtime
-    // word-table System::mpObjectTable points at; slot [3] is its scratch stack top.)
-    System *pSystem = reinterpret_cast<System *>(self->mBase.mpSystem);
-    f32 **ppScratchTable = reinterpret_cast<f32 **>(pSystem->mpObjectTable);
-    f32 *pScratchTop = ppScratchTable[3];              // r26 (saved to restore)
-    f32 *pLocalBuffer = pScratchTop - KI_SCRATCH_SAMPLES; // r26 - 0xB00 bytes
-    ppScratchTable[3] = pLocalBuffer;
-    pDelayLine->SetLocalBuffer(pLocalBuffer, KI_SCRATCH_SAMPLES);
+    // Reserve a 704-sample region from the System scratch stack.
+    System *system = static_cast<System *>(self->mBase.mpSystem);
+    StackAllocator *scratch = static_cast<StackAllocator *>(system->mpObjectTable);
+    u8 *scratchTop = scratch->mpTop;
+    u8 *localBuffer = scratchTop - KI_SCRATCH_SAMPLES * sizeof(f32);
+    scratch->mpTop = localBuffer;
+    pDelayLine->SetLocalBuffer(reinterpret_cast<f32 *>(localBuffer), KI_SCRATCH_SAMPLES);
 
     // The requested delay this frame, in samples (output sample rate * live delay time).
     const s32 requestedDelay =
@@ -214,40 +215,26 @@ int Delay::Process(Delay *self, AudioProcessContext *ctx)
         }
         break;
 
-    case 1: // running -- re-tune, or drop to state 2 if the new delay is not yet valid
-        if (requestedDelay > 0)
-        {
-            if (pDelayLine->GetValidDelaySamples() >= requestedDelay)
-            {
-                pFilter->SetFeedback(feedback);
-                pDelayLine->SetDelay(requestedDelay);
-                // (no state change; the re-delay took effect immediately)
-            }
-            else
-            {
-                self->mState = 2;
-            }
-        }
+    case 1: // running
+        if (requestedDelay <= 0)
+            self->mState = 0;
+        else if (pDelayLine->GetValidDelaySamples() < requestedDelay)
+            self->mState = 2;
         else
         {
-            self->mState = 0;
+            pFilter->SetFeedback(feedback);
+            pDelayLine->SetDelay(requestedDelay);
         }
         break;
 
-    case 2: // re-delaying -- complete once enough samples are valid
-        if (requestedDelay > 0)
-        {
-            if (requestedDelay <= pDelayLine->GetValidDelaySamples())
-            {
-                pFilter->SetFeedback(feedback);
-                pDelayLine->SetDelay(requestedDelay);
-                self->mState = 1;
-            }
-            // else: not enough valid samples yet -- leave state 2, filter below
-        }
-        else
-        {
+    case 2: // waiting until the new delay becomes valid
+        if (requestedDelay <= 0)
             self->mState = 0;
+        else if (requestedDelay <= pDelayLine->GetValidDelaySamples())
+        {
+            pFilter->SetFeedback(feedback);
+            pDelayLine->SetDelay(requestedDelay);
+            self->mState = 1;
         }
         break;
 
@@ -259,16 +246,19 @@ int Delay::Process(Delay *self, AudioProcessContext *ctx)
     if (self->mState)
     {
         pDelayLine->ApplyFilter(256, ctx->mpSrcBuffer, ctx->mpDstBuffer, IFilter::OVERWRITE);
-        AudioChannelBuffer *pSwap = ctx->mpSrcBuffer;
-        ctx->mpSrcBuffer = ctx->mpDstBuffer;
-        ctx->mpDstBuffer = pSwap;
+        ctx->SwapBuffers();
     }
 
-    UpdateLatencyAndDecay(self);
+    self->UpdateLatencyAndDecay();
 
-    ppScratchTable[3] = pScratchTop; // restore the scratch cursor
-    return 1;
+    System *owner = static_cast<System *>(self->mBase.mpSystem);
+    static_cast<StackAllocator *>(owner->mpObjectTable)->mpTop = scratchTop;
+    return BUFFERSTATUS_AVAILABLE;
 }
+
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", off)
+#endif
 
 // -------------------------------------------------------------------------------------
 // UpdateLatencyAndDecay @0x82B9DE50 -- recompute the delay's latency (mLatencyInSamples,
@@ -280,35 +270,43 @@ int Delay::Process(Delay *self, AudioProcessContext *ctx)
 // (2026-08-25 wave 4: the "+0x28 latency word" naming here was WRONG -- the
 // accumulator is the fade/decay deadline System::UpdateExpellingVoices consumes.)
 // -------------------------------------------------------------------------------------
-void Delay::UpdateLatencyAndDecay(Delay *self)
+#if defined(_XBOX) && defined(_MSC_VER)
+// The original rwAudio plug-in object uses the scalar size form at these entries.
+#pragma optimize("s", on)
+#endif
+void Delay::UpdateLatencyAndDecay()
 {
     f32 newDecay;   // v5
     f32 decayDelta; // v7
 
-    if (self->mState == 1)
+    if (mState == 1)
     {
-        const f32 delaySamples = static_cast<f32>(self->mDelayLine.miReadPosition); // v4
-        const f32 feedback     = self->mFilter.mfFeedback;                          // v3
+        const f32 delaySamples = static_cast<f32>(mDelayLine.miReadPosition); // v4
+        const f32 feedback     = mFilter.mfFeedback;                          // v3
         newDecay = delaySamples;                                                    // v5 = v4
-        if (feedback != KF_ZERO)
+        if (feedback != 0.0f)
             newDecay = delaySamples - static_cast<f32>(
-                (delaySamples * KF_LATENCY_SCALE)
+                (delaySamples * 5.0f)
                 / static_cast<f32>(log10(std::fabs(feedback))));
-        decayDelta = newDecay - self->mBase.mDecaySamples; // v5 - v6 (old +0x18)
-        self->mBase.mLatencyInSamples = delaySamples;      // *(this+0x14) = v4
+        decayDelta = newDecay - mBase.mDecaySamples; // v5 - v6 (old +0x18)
+        mBase.mLatencyInSamples = delaySamples;      // *(this+0x14) = v4
     }
     else
     {
-        decayDelta = -self->mBase.mDecaySamples;       // v7 = -*(this+0x18)
-        newDecay = KF_ZERO;                            // v5 = 0
-        self->mBase.mLatencyInSamples = KF_ZERO;       // *(this+0x14) = 0
+        decayDelta = -mBase.mDecaySamples;       // v7 = -*(this+0x18)
+        newDecay = 0.0f;                            // v5 = 0
+        mBase.mLatencyInSamples = 0.0f;       // *(this+0x14) = 0
     }
 
     // Fold the decay change into the owning voice's decay accumulator
     // (voice+0x28 == Voice::mfFadeStart, by name), then latch it.
-    self->mBase.mpVoice->mfFadeStart += decayDelta;
-    self->mBase.mDecaySamples = newDecay; // *(this+0x18) = v5
+    mBase.mpVoice->mfFadeStart = decayDelta + mBase.mpVoice->mfFadeStart;
+    mBase.mDecaySamples = newDecay; // *(this+0x18) = v5
 }
+
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", off)
+#endif
 
 // -------------------------------------------------------------------------------------
 // RwacTimerClient @0x82B972C8 -- the per-frame reconfigure timer callback. Clamp the max
@@ -339,14 +337,22 @@ void Delay::RwacTimerClient(void *context, f32)
 // and (if it was registered) remove the reconfigure timer through the shared System
 // singleton. The Xbox 360 audio PDB declares the hook void.
 // -------------------------------------------------------------------------------------
-void Delay::ReleaseEvent(Delay *self)
+#if defined(_XBOX) && defined(_MSC_VER)
+// The original rwAudio plug-in object uses the scalar size form at these entries.
+#pragma optimize("s", on)
+#endif
+void Delay::ReleaseEvent()
 {
-    self->mDelayLine.Release();
+    mDelayLine.Release();
 
-    if (self->mbActive)
-        System::RemoveTimer(off_83271928, &self->mTimer);
+    if (mbActive)
+        System::RemoveTimer(off_83271928, &mTimer);
 
 }
+
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", off)
+#endif
 
 } // namespace core
 } // namespace audio

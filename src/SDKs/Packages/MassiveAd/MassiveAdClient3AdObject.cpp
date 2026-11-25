@@ -177,7 +177,7 @@ int CMassiveAdObject::AssetIDAdd(unsigned int uAssetID)
 // match list size; the first delivered id when nothing is current yet.
 int CMassiveAdObject::GetNextAssetID()
 {
-    if (!mAssetIDList.GetCount())
+    if (!mAssetIDList.GetSize())
     {
         SetLastError(-397, "No Assets for MAO: %s", mpcAdObjectName);
         SetValid(E_STATE_INVALID);
@@ -193,7 +193,7 @@ int CMassiveAdObject::GetNextAssetID()
     bool lbTakeCursor = false;
     if (!mpCurrentAsset && !mpDownloadAsset)
     {
-        lbTakeCursor = mAssetIDList.GetCount() != 0;
+        lbTakeCursor = mAssetIDList.GetSize() != 0;
     }
     else
     {
@@ -216,7 +216,7 @@ int CMassiveAdObject::GetNextAssetID()
             mAssetIDList.GoToNext();
         }
 
-        if (!lbFound && mAssetIDList.GetCount())
+        if (!lbFound && mAssetIDList.GetSize())
         {
             mAssetIDList.GoToStart();
             lbTakeCursor = true;
@@ -239,7 +239,7 @@ int CMassiveAdObject::StateInit()
             mpCurrentRecord = lpDefaultAsset->RecordFind(mnInvElementID);
     }
 
-    if ((CMassiveClientCore::Instance()->IsFlagSet(2) || mSubscriberList.GetCount()) && !mpCurrentAsset &&
+    if ((CMassiveClientCore::Instance()->IsFlagSet(2) || mSubscriberList.GetSize() > 0) && !mpCurrentAsset &&
         !mpDownloadAsset)
     {
         SetValid(E_STATE_REQUEST_MEDIA);
@@ -299,7 +299,7 @@ int CMassiveAdObject::StateClearBuffer()
 int CMassiveAdObject::SetCurrentRecord(int bDefaultAsset)
 {
     CMassiveAsset* lpAsset = mpCurrentAsset;
-    if (!lpAsset || bDefaultAsset || !mSubscriberList.GetCount())
+    if (!lpAsset || bDefaultAsset || !mSubscriberList.GetSize())
     {
         lpAsset = mpZone->AssetFind(0);
         if (!lpAsset)
@@ -311,7 +311,7 @@ int CMassiveAdObject::SetCurrentRecord(int bDefaultAsset)
 
 int CMassiveAdObject::StateRotate()
 {
-    bool lbRotate = mnRotationType != 1 && mAssetIDList.GetCount() >= 2;
+    bool lbRotate = mnRotationType != 1 && mAssetIDList.GetSize() >= 2;
     if (!lbRotate)
     {
         mAssetIDList.GoToStart();
@@ -326,7 +326,7 @@ int CMassiveAdObject::StateRotate()
     }
 
     MassiveLog(5, GetName(), "Rotate failed for MAO: %s Type: %d Assets: %d", mpcAdObjectName, mnRotationType,
-               mAssetIDList.GetCount());
+               mAssetIDList.GetSize());
     SetValid(E_STATE_REPORTING);
     return -395;
 }
@@ -346,7 +346,7 @@ int CMassiveAdObject::CheckRotation()
 
     int lbRotate = 0;
     CMassiveOrder* lpOrder = mpCurrentAsset->mpOrder;
-    if (GetValid() == E_STATE_REPORTING && mAssetIDList.GetCount() > 1 &&
+    if (GetValid() == E_STATE_REPORTING && mAssetIDList.GetSize() > 1 &&
         static_cast<unsigned int>(lpOrder->mnField1C) > static_cast<unsigned int>(mpCurrentAsset->mnField4C))
     {
         MassiveLog(5, GetName(), "Rotate: Minimum Time Reached for Mao: %s IE: %d Crex: %d", mpcAdObjectName,
@@ -357,7 +357,7 @@ int CMassiveAdObject::CheckRotation()
     int lnState = GetValid();
     if ((lnState == E_STATE_REPORTING || lnState == E_STATE_DOWNLOADING || lnState == E_STATE_DOWNLOAD_COMPLETE ||
          lnState == E_STATE_CLEAR_BUFFER) &&
-        (mAssetIDList.GetCount() > 1 || mnRotationType == 16) && lpOrder && lpOrder->mnType &&
+        (mAssetIDList.GetSize() > 1 || mnRotationType == 16) && lpOrder && lpOrder->mnType &&
         static_cast<unsigned int>(lpOrder->mnField20) > static_cast<unsigned int>(lpOrder->mnType))
     {
         MassiveLog(6, GetName(), "Rotate: Frequency Cap Reached for Crex: %d", GetCrexID());
@@ -380,7 +380,7 @@ int CMassiveAdObject::CheckRotation()
 // placement's only asset.
 int CMassiveAdObject::SetAssetExpired(int nAssetID)
 {
-    if (mAssetIDList.GetCount() == 1)
+    if (mAssetIDList.GetSize() == 1)
     {
         MassiveLog(6, GetName(), "%s - FAILED: Only Asset for MAO, NOT removing", mpcAdObjectName);
         return 0;
@@ -492,7 +492,7 @@ int CMassiveAdObject::SubscriberAdd(XMassiveAdClientSubscriber* pSubscriber)
     mSubscriberList.Append(lpNode);
     pSubscriber->mpAdObject = this;
 
-    if (static_cast<unsigned int>(GetValid()) >= E_STATE_REPORTING)
+    if (GetValid() != E_STATE_INVALID && GetValid() != E_STATE_INIT)
     {
         SetValid(E_STATE_REQUEST_MEDIA);
         MassiveLog(4, GetName(), "New Subscriber Added To MAO, Forcing a Media Download State Change");
@@ -516,7 +516,7 @@ int CMassiveAdObject::SubscriberRemove(XMassiveAdClientSubscriber* pSubscriber)
                 mpDownloadAsset->mnRefCount = mpDownloadAsset->mnRefCount ? mpDownloadAsset->mnRefCount - 1 : 0;
 
             mSubscriberList.Remove(mSubscriberList.GetCurrent(), 1);
-            if (!mSubscriberList.GetCount())
+            if (!mSubscriberList.GetSize())
             {
                 mpDownloadAsset = 0;
                 mpCurrentAsset = 0;
@@ -565,7 +565,7 @@ int CMassiveAdObject::MediaDownloadComplete(const void* pData, int nSize, unsign
 
 // Clears the stale "last sample" stamps of every record of every delivered asset, then
 // leaves the suspended state.
-int CMassiveAdObject::Resume()
+void CMassiveAdObject::Resume()
 {
     if (mbSuspended)
     {
@@ -590,7 +590,6 @@ int CMassiveAdObject::Resume()
     MassiveLog(5, GetName(), "MAO Resume: %s", mpcAdObjectName);
     mbSuspended = 0;
     // The console leaves the logger's scratch in the return register; no caller reads it.
-    return 0;
 }
 
 // Picks the asset to show next and starts its media download (or falls back to reporting on
@@ -689,7 +688,7 @@ int CMassiveAdObject::StateDownloadComplet()
     }
 
     CMassiveAsset* lpRecordAsset = mpCurrentAsset;
-    if (!lpRecordAsset || !mSubscriberList.GetCount())
+    if (!lpRecordAsset || !mSubscriberList.GetSize())
         lpRecordAsset = mpZone->AssetFind(0);
     if (lpRecordAsset)
         mpCurrentRecord = lpRecordAsset->RecordFind(mnInvElementID);
@@ -797,7 +796,7 @@ int CMassiveAdObject::SaveImpressionRecord(MAD_Impression* pImpression)
 // the "not in view" state (suspend).
 int CMassiveAdObject::UpdateImpressions(int bOutOfView)
 {
-    if (!mSubscriberList.GetCount())
+    if (!mSubscriberList.GetSize())
         return 0;
 
     unsigned long long luLastTick = static_cast<unsigned long long>(CMassiveClientCore::Instance()->GetTimeTickLast());
@@ -844,14 +843,13 @@ int CMassiveAdObject::UpdateImpressions(int bOutOfView)
     return SaveImpressionRecord(&lBest);
 }
 
-int CMassiveAdObject::Suspend()
+void CMassiveAdObject::Suspend()
 {
     if (!mbSuspended)
         UpdateImpressions(1);
     MassiveLog(5, GetName(), "MAO Suspend: %s", mpcAdObjectName);
     mbSuspended = 1;
     // The console leaves the logger's scratch in the return register; no caller reads it.
-    return 0;
 }
 
 // Runs one step of the download state machine, scores impressions while the placement is

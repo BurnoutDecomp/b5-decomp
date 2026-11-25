@@ -474,7 +474,7 @@ int CMassiveAsset::ReportImpressions()
             SendReport(lpRecord->mnField18, 0, &lpRecord->mImpression1);
 
         // Interaction sub-records: one interaction report per listed entry.
-        if (lpRecord->mInteractionRecords.GetCount() != 0)  // *(record + 0xF0)
+        if (lpRecord->mInteractionRecords.GetSize() != 0)  // *(record + 0xF0)
         {
             lpRecord->mInteractionRecords.GoToStart();
             while (lpRecord->mInteractionRecords.GetCurrent())  // *(record + 0xEC)

@@ -123,9 +123,15 @@ namespace rw { namespace core { namespace filesys {
     }
     u64 XenonFileDeviceDriver::GetSize(void* lpFile)
     {
+        const HANDLE lhFile = static_cast<File*>(lpFile)->mpHandle;
         LARGE_INTEGER lSize;
-        if (GetFileSizeEx(static_cast<File*>(lpFile)->mpHandle, &lSize) != TRUE) return 0;
-        return static_cast<u64>(lSize.QuadPart);
+        const BOOL lbSucceeded = ::GetFileSizeEx(lhFile, &lSize);
+        u64 luSize;
+        if (lbSucceeded == TRUE)
+            luSize = static_cast<u64>(lSize.QuadPart);
+        else
+            luSize = 0;
+        return luSize;
     }
     bool XenonFileDeviceDriver::Resize(void* lpFile, u64 luSize)
     {
@@ -143,8 +149,11 @@ namespace rw { namespace core { namespace filesys {
     }
     u64 XenonFileDeviceDriver::QueryLocation(void* lpFile)
     {
-        const DWORD luKey = XGetFilePhysicalSortKey(static_cast<File*>(lpFile)->mpHandle);
-        return luKey == 0xffffffffu ? 0 : static_cast<u64>(luKey) << 11;
+        const u64 lu64Key = XGetFilePhysicalSortKey(static_cast<File*>(lpFile)->mpHandle);
+        u64 lu64Location = 0;
+        if (lu64Key != static_cast<DWORD>(-1))
+            lu64Location = lu64Key << 11;
+        return lu64Location;
     }
     bool XenonFileDeviceDriver::Delete(const char* lpcPath)
     {

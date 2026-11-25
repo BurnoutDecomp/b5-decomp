@@ -139,14 +139,11 @@ int CMassiveAdObjectModelDynamic::ReportImpressions()
 // CMassiveAdObjectModelDynamic::Suspend @ 0x82BDEBC8
 //   (absent from the ledger and .ida-exports -- recovered from the off_821872B4
 //    vftable, slot 5, and disassembled headlessly; the asm is identical to
-//    Resume @ 0x82BDEC38 except the dispatched slave slot, +0x14 vs +0x18, and
-//    like Resume the per-slave result is discarded)
+//    Resume @ 0x82BDEC38 except the dispatched slave slot, +0x14 vs +0x18)
 //
-// Suspends every slave (slave vftable +0x14). The X360 returns the last
-// list-walk result, which is the exhausted (null) cursor on every exit path --
-// modelled as 0, exactly as the committed Resume does.
+// Suspends every slave (slave vftable +0x14).
 // ---------------------------------------------------------------------------
-int CMassiveAdObjectModelDynamic::Suspend()
+void CMassiveAdObjectModelDynamic::Suspend()
 {
     mSlaveList.GoToStart();
     while (mSlaveList.GetCurrent())
@@ -156,17 +153,14 @@ int CMassiveAdObjectModelDynamic::Suspend()
         pSlave->Suspend();
         mSlaveList.GoToNext();
     }
-    return 0;
 }
 
 // ---------------------------------------------------------------------------
 // CMassiveAdObjectModelDynamic::Resume @ 0x82BDEC38
 //
-// Resumes every slave (slave vftable +0x18). The X360 returns the last list-walk
-// result, which is the exhausted cursor (null) once the loop drains -- modelled
-// as 0.
+// Resumes every slave (slave vftable +0x18).
 // ---------------------------------------------------------------------------
-int CMassiveAdObjectModelDynamic::Resume()
+void CMassiveAdObjectModelDynamic::Resume()
 {
     mSlaveList.GoToStart();
     while (mSlaveList.GetCurrent())
@@ -176,7 +170,6 @@ int CMassiveAdObjectModelDynamic::Resume()
         pSlave->Resume();
         mSlaveList.GoToNext();
     }
-    return 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -283,7 +276,7 @@ int CMassiveAdObjectModelDynamic::GetNextAssetID()
             mAssetIDList.GoToNext();
         }
     }
-    else if (!mAssetIDList.GetCount())  // lwz +0x5C == 0
+    else if (!mAssetIDList.GetSize())  // lwz +0x5C == 0
     {
         return 0;  // no current asset (or a single one) and an empty list
     }
@@ -529,8 +522,7 @@ namespace MassiveAdClient3
 // no-zone path that is GetCurrentZone's 0, and on the drained-loop path it is
 // GoToNext's exhausted cursor, also 0; only the never-entered-loop path (a zone
 // with an empty pre-subscriber queue) leaves strlen's length there. No recovered
-// caller reads the result, so this is modelled as `return 0` -- the same stance
-// the committed Suspend/Resume take for their exhausted-cursor returns.
+// caller reads the result, so this returns 0.
 // ---------------------------------------------------------------------------
 int CMassiveAdObjectModelDynamic::Initialize()
 {

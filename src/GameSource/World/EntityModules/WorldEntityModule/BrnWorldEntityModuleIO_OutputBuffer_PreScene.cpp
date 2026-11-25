@@ -103,11 +103,11 @@ namespace WorldEntityIO
         return &mSoundWorldLoadInterface;
     }
 
-    // Queue trio member :146 (X360 +4). Called by BrnWorld::WorldEntityModule::UpdateStream.
+    // X360 0x822BA570: write-lock; returns this + 4. UpdateStream calls it at 0x822F999C.
     OutputBuffer_PreScene::PropInstancesNeededForZoneQueue*
     OutputBuffer_PreScene::GetPropInstancesNeededForZoneQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 130));
         return &mPropInstancesNeededForZoneQueue;
     }
 

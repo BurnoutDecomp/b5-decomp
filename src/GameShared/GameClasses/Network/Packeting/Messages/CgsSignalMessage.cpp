@@ -39,54 +39,41 @@
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsSignalMessage.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
+#define CGS_ARTIST_SIGNAL_MESSAGE "..\\..\\..\\GameShared\\GameClasses\\Network/Packeting/Messages/CgsSignalMessage.h"
+
 namespace CgsNetwork
 {
-    // X360 0x8286F658.
+
+    // ARTIST 0x8286F658.
     void SignalMessage::PrepareAck(Message* lpMessage,
-                                   NetworkPlayerID liSendingPlayerID,
-                                   NetworkPlayerID liRecvingPlayerID)
+                                   NetworkPlayerID lSendingPlayerID,
+                                   NetworkPlayerID lRecvingPlayerID)
     {
-        CGS_ASSERT((mx8Flags & KX8_FLAGS_VALID) == 0, "!IsMessageValid()");
+        CGS_ASSERT(!IsMessageValid(), CGS_ASSERT_MESSAGE_AT(
+            "!IsMessageValid()", CGS_ARTIST_SIGNAL_MESSAGE, 98));
+        SetSendingPlayerID(lSendingPlayerID);
+        SetRecvingPlayerID(lRecvingPlayerID);
+        CGS_ASSERT(lpMessage->GetU16Frame() != KU16_INVALID_FRAME, CGS_ASSERT_MESSAGE_AT(
+            "lpMessage->GetU16Frame() != KU16_INVALID_FRAME", CGS_ARTIST_SIGNAL_MESSAGE, 103));
 
-        CGS_ASSERT(liSendingPlayerID >= 0, "lSendingPlayerID>=0");
-        mSendingPlayerID = liSendingPlayerID;
-
-        CGS_ASSERT(liRecvingPlayerID >= 0, "lRecvingPlayerID>=0");
-        mRecvingPlayerID = liRecvingPlayerID;
-
-        CGS_ASSERT(lpMessage->mu16Frame != KU16_INVALID_FRAME,
-                   "lpMessage->GetU16Frame() != KU16_INVALID_FRAME");
-
-        const s32 liType  = static_cast<s32>(lpMessage->mi8Type);
-        const u16 lu16Frame = lpMessage->mu16Frame;
-        const u8  lu8GameID = lpMessage->GetGameID();
-
-        Message::PrepareAck(liType, lu16Frame, lu8GameID);
+        Message::PrepareAck(lpMessage->GetType(), lpMessage->GetU16Frame(), lpMessage->GetGameID());
     }
 
-    // X360 0x8286F758.
+    // ARTIST 0x8286F758.
     void SignalMessage::PrepareNack(Message* lpMessage,
-                                    NetworkPlayerID liSendingPlayerID,
-                                    NetworkPlayerID liRecvingPlayerID)
+                                    NetworkPlayerID lSendingPlayerID,
+                                    NetworkPlayerID lRecvingPlayerID)
     {
-        CGS_ASSERT((mx8Flags & KX8_FLAGS_VALID) == 0, "!IsMessageValid()");
+        CGS_ASSERT(!IsMessageValid(), CGS_ASSERT_MESSAGE_AT(
+            "!IsMessageValid()", CGS_ARTIST_SIGNAL_MESSAGE, 126));
+        CGS_ASSERT(lSendingPlayerID != KI_INVALID_PLAYER_ID, CGS_ASSERT_MESSAGE_AT(
+            "lSendingPlayerID != K_INVALID_PLAYER_ID", CGS_ARTIST_SIGNAL_MESSAGE, 127));
+        CGS_ASSERT(lRecvingPlayerID != KI_INVALID_PLAYER_ID, CGS_ASSERT_MESSAGE_AT(
+            "lRecvingPlayerID != K_INVALID_PLAYER_ID", CGS_ARTIST_SIGNAL_MESSAGE, 128));
+        SetSendingPlayerID(lSendingPlayerID);
+        SetRecvingPlayerID(lRecvingPlayerID);
 
-        CGS_ASSERT(liSendingPlayerID != KI_INVALID_PLAYER_ID,
-                   "lSendingPlayerID != K_INVALID_PLAYER_ID");
-        CGS_ASSERT(liRecvingPlayerID != KI_INVALID_PLAYER_ID,
-                   "lRecvingPlayerID != K_INVALID_PLAYER_ID");
-
-        CGS_ASSERT(liSendingPlayerID >= 0, "lSendingPlayerID>=0");
-        mSendingPlayerID = liSendingPlayerID;
-
-        CGS_ASSERT(liRecvingPlayerID >= 0, "lRecvingPlayerID>=0");
-        mRecvingPlayerID = liRecvingPlayerID;
-
-        const s32 liType  = static_cast<s32>(lpMessage->mi8Type);
-        const u16 lu16Frame = lpMessage->mu16Frame;
-        const u8  lu8GameID = lpMessage->GetGameID();
-
-        Message::PrepareNack(liType, lu16Frame, lu8GameID);
+        Message::PrepareNack(lpMessage->GetType(), lpMessage->GetU16Frame(), lpMessage->GetGameID());
     }
 
     // A signal carries the header of the message it acknowledges, so every base scalar
@@ -118,3 +105,5 @@ namespace CgsNetwork
         return Message::GetPackedMessageSize();
     }
 } // namespace CgsNetwork
+
+#undef CGS_ARTIST_SIGNAL_MESSAGE

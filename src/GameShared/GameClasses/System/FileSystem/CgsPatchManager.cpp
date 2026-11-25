@@ -16,6 +16,8 @@
 #include <xtl.h>   // FindFirstFileA / FindNextFileA / FindClose (the X360 file enumerator)
 #include <cstring>     // strchr / strlen
 
+#define CGS_PATCH_MANAGER_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsPatchManager.cpp"
+
 namespace CgsFileSystem
 {
     // The X360 publishes the live PatchManager into a global so the file-system open path can reach
@@ -44,11 +46,10 @@ namespace CgsFileSystem
 
         // ARTIST828F0980 allocates two independent0x4000-byte arrays.
         // Its int-key Add/Find instances use divwu, so path hashes stay unsigned.
-        rw::ResourceDescriptor lDescriptor;
-        lDescriptor.m_baseResourceDescriptors[0].m_size = KU_PATCH_FILE_MAP_SIZE * sizeof(u32);
-        lDescriptor.m_baseResourceDescriptors[0].m_alignment = 16;
-        s32* lpKeys = static_cast<s32*>(mpAllocator->DoAllocate(lDescriptor, 0).m_baseResources[0]);
-        s32* lpValues = static_cast<s32*>(mpAllocator->DoAllocate(lDescriptor, 0).m_baseResources[0]);
+        s32* lpKeys = static_cast<s32*>(
+            lpAllocator->AllocateMemoryResource(KU_PATCH_FILE_MAP_SIZE * sizeof(s32), 16, 0));
+        s32* lpValues = static_cast<s32*>(
+            mpAllocator->AllocateMemoryResource(KU_PATCH_FILE_MAP_SIZE * sizeof(s32), 16, 0));
         mPatchFileMap.Initialize(lpKeys, lpValues, KU_PATCH_FILE_MAP_SIZE);
 
         mbPatching     = false;
@@ -56,9 +57,9 @@ namespace CgsFileSystem
     }
 
     // @0x828F8F80.
-    bool PatchManager::AddPatch(const char* lpcFolder, s32 liValue)
+    void PatchManager::AddPatch(const char* lpcFolder, s32 liValue)
     {
-        CGS_ASSERT(!mbPatching, "Already patching");
+        CGS_ASSERT_STREAM_AT(!mbPatching, "Already patching\n", CGS_PATCH_MANAGER_ARTIST_FILE, 87);
 
         mbPatching = true;
 
@@ -71,13 +72,12 @@ namespace CgsFileSystem
         // Kick the background directory walk that fills the file map (name + priority grounded by
         // the X360 asm: "PatchManDirSearchThread", priority 0x64 == 100).
         EA::Thread::ThreadParameters lParams;
-        lParams.mpName     = "PatchManDirSearchThread";
-        lParams.mnPriority = 100;
-        lParams.mnProcessor = 0;
         lParams.mbSuspended = false;
+        lParams.mnProcessor = 0;
+        lParams.mpName = "PatchManDirSearchThread";
+        lParams.mnPriority = 100;
         mDirSearchThread.Begin(DirSearchThreadProc, this, &lParams,
             EA::Thread::Thread::GetGlobalRunnableFunctionUserWrapper());
-        return true;
     }
 
     // @0x828F0B88. Background worker; `lpContext` is the PatchManager.
@@ -231,3 +231,5 @@ namespace CgsFileSystem
         }
     }
 }
+
+#undef CGS_PATCH_MANAGER_ARTIST_FILE

@@ -432,7 +432,7 @@ namespace BrnWorld
 
             for ( s32 liEvent = 0; liEvent < liNumUnloaded; ++liEvent )
             {
-                const u32 luZone = lpUnloaded->GetEvent( liEvent ).muPropGraphicsId;
+                const u32 luZone = lpUnloaded->GetEvent( liEvent ).GetZone();
                 CGS_ASSERT( luZone < KU_MAX_ZONES,
                             "luZone < KU_MAX_ZONES" );          // cpp:549
 
@@ -457,7 +457,7 @@ namespace BrnWorld
 
             for ( s32 liEvent = 0; liEvent < liNumLoaded; ++liEvent )
             {
-                const u32 luZone = lpLoaded->GetEvent( liEvent ).muPropGraphicsId;
+                const u32 luZone = lpLoaded->GetEvent( liEvent ).GetZone();
 
                 RequestPropGraphicsList( GetGameDataRequestInterface( lpOutput ),
                                          &mReceiverQueue,

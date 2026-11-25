@@ -112,8 +112,8 @@ public:
     // on the frame after a filter change), unmarshal the result back into the ring, and
     // advance the ring cursors by one frame. `pInput`/`pOutput` are the graph's per-channel
     // sample descriptors. The mode controls whether the filter adds to the output.
-    void ApplyFilter(s32 count, const AudioChannelBuffer *pInput,
-                     const AudioChannelBuffer *pOutput, IFilter::FilterOutputMode mode); // @0x82B6E4A0
+    void ApplyFilter(s32 count, SampleBuffer *pInput,
+                     SampleBuffer *pOutput, IFilter::FilterOutputMode mode); // @0x82B6E4A0
 
     // Free the ring back to the System allocator and clear the book-keeping pointers.
     void Release();                                                // @0x82B6CC08

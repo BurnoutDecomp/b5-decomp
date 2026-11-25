@@ -46,7 +46,7 @@
 //     +0x00  mpHead                   (a1[0]; first node, 0 when empty)
 //     +0x04  mpTail                   (a1[1]; last node)
 //     +0x08  mpCurrent                (a1[2]; iterator cursor)
-//     +0x0C  mnCount                  (a1[3]; live node count)
+//     +0x0C  muCount                  (a1[3]; live node count)
 // ===========================================================================
 //
 // CMassiveList bodies reconstructed from the X360 ARTIST.XEX:
@@ -341,7 +341,7 @@ public:
     // CRequestBuilder::CRequestBuilder zeroes the four list dwords in place at
     // +0x14..+0x20 -- so it never appears as its own function; reconstructed here
     // as the real member initialisation the inline stores perform.
-    CMassiveList() : mpHead(0), mpTail(0), mpCurrent(0), mnCount(0) {}
+    CMassiveList() : mpHead(0), mpTail(0), mpCurrent(0), muCount(0) {}
 
     // @ 0x82BCF1F0. Tail-calls RemoveAll: destroys and frees every remaining
     // node. The X360 dtor is non-virtual (a plain branch into RemoveAll).
@@ -381,16 +381,16 @@ public:
     CMassiveListNode* GetCurrent() const { return mpCurrent; }
 
     // Additive accessor (FLAG: not its own X360 function). CRequestBuilder::
-    // Suspend / Resume read the live node count directly (mnCount at list +0x0C)
+    // Suspend / Resume read the live node count directly (muCount at list +0x0C)
     // to skip the iteration entirely when the collection is empty. Exposes that
     // count BY NAME so the owning builder does not reach into the private member.
-    int GetCount() const { return mnCount; }
+    unsigned int GetSize() { return muCount; }
 
 private:
     CMassiveListNode* mpHead;    // +0x00
     CMassiveListNode* mpTail;    // +0x04
     CMassiveListNode* mpCurrent; // +0x08
-    int               mnCount;   // +0x0C
+    int               muCount;   // +0x0C
 };
 
 // ---------------------------------------------------------------------------

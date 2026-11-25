@@ -356,7 +356,7 @@ namespace CgsNetwork
     // lifecycle word is re-read after the u8 call.
     PackOrUnpackResult Message::PackOrUnpack(bool* lpbField)
     {
-        u8 lu8Value = 0;   // left unset by the console when the lifecycle word is invalid
+        u8 lu8Value; // Packing initializes the value here. The byte overload writes it when unpacking.
         if (mePackOrUnpack == E_PACK_INTO_BITSTREAM)
         {
             lu8Value = (*lpbField != false) ? 1 : 0;
@@ -694,32 +694,32 @@ namespace CgsNetwork
     {
         CGS_ASSERT(lu16Frame != KU16_INVALID_FRAME,
             CGS_ASSERT_MESSAGE_AT(
-                "lu16Frame != KU16_INVALID_FRAME", __FILE__, 594 /* ARTIST 0x8257D624 */));
+                "lu16Frame != KU16_INVALID_FRAME", KAC_ARTIST_HEADER, 594 /* ARTIST 0x8257D624 */));
         SetType(static_cast<::EMessageType>(leType));
         mu16Frame = lu16Frame;
         mx8Flags |= KX8_FLAGS_VALID;
     }
 
     // ---- PrepareAck @ 0x8286F488 ----------------------------------------------
-    void Message::PrepareAck(s32 leType, u16 lu16Frame, u8 lu8GameID)
+    void Message::PrepareAck(::EMessageType leType, u16 lu16Frame, u8 lu8GameID)
     {
         CGS_ASSERT((mx8Flags & KX8_FLAGS_VALID) == 0,
-            CGS_ASSERT_MESSAGE_AT("!IsMessageValid()", __FILE__, 888 /* ARTIST 0x8286F4BC */));
+            CGS_ASSERT_MESSAGE_AT("!IsMessageValid()", KAC_ARTIST_HEADER, 888 /* ARTIST 0x8286F4BC */));
         mu16Frame = lu16Frame;
         mx8Flags  = KX8_FLAGS_ACK;
-        SetType(static_cast<::EMessageType>(leType));
+        SetType(leType);
         mu8GameID = lu8GameID;
         mx8Flags |= KX8_FLAGS_VALID;
     }
 
     // ---- PrepareNack @ 0x8286F508 ---------------------------------------------
-    void Message::PrepareNack(s32 leType, u16 lu16Frame, u8 lu8GameID)
+    void Message::PrepareNack(::EMessageType leType, u16 lu16Frame, u8 lu8GameID)
     {
         CGS_ASSERT((mx8Flags & KX8_FLAGS_VALID) == 0,
-            CGS_ASSERT_MESSAGE_AT("!IsMessageValid()", __FILE__, 915 /* ARTIST 0x8286F53C */));
+            CGS_ASSERT_MESSAGE_AT("!IsMessageValid()", KAC_ARTIST_HEADER, 915 /* ARTIST 0x8286F53C */));
         mu16Frame = lu16Frame;
         mx8Flags  = KX8_FLAGS_NACK;
-        SetType(static_cast<::EMessageType>(leType));
+        SetType(leType);
         mu8GameID = lu8GameID;
         mx8Flags |= KX8_FLAGS_VALID;
     }

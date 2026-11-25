@@ -26,6 +26,8 @@
 //   Initialize @ 0x828EA3C8  (KeyType=u64 <ImportHashTableValue> -- body in CgsResourceImportHashTable.cpp)
 //   AddEntry   @ 0x828DF260  (LinearSOAHashTable<int,int>)
 //   FindEntry  @ 0x828DF3E0  (LinearSOAHashTable<int,int>)
+#define CGS_LINEAR_SOA_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsLinearSOAHashTable.h"
+
 namespace CgsContainers
 {
     // A signed 32-bit hash key carries the same unsigned hash bits as a u32.
@@ -51,15 +53,17 @@ namespace CgsContainers
 
         // X360 0x828EA3C8 (CgsLinearSOAHashTable.h:167) for the <ImportHashTableValue> (KeyType=u64)
         // instantiation. Definition lives in CgsResourceImportHashTable.cpp (2-param form).
-        void Initialize(KeyType* lpKeys, ValueType* lpValues, KeyType luLength)
+        // ARTIST 0x828F0A60 calls the separately emitted int-table initializer.
+        __declspec(noinline) void Initialize(KeyType* lpKeys, ValueType* lpValues, HashBits luLength)
         {
-            CGS_ASSERT(luLength != 0 && ((luLength - 1) & luLength) == 0,
-                       "Length of hash table must be more than 0 and a power of 2");
+            CGS_ASSERT_STREAM_AT(luLength != 0 && ((luLength - 1) & luLength) == 0,
+                "Length of hash table must be more than 0 and a power of 2\n",
+                CGS_LINEAR_SOA_ARTIST_FILE, 167);
             miLength = luLength;
             mpKeys = lpKeys;
             mpValues = lpValues;
             miInvalidKey = KU_EMPTY_KEY;
-            for (KeyType luSlot = 0; luSlot < miLength; ++luSlot)
+            for (HashBits luSlot = 0; luSlot < static_cast<HashBits>(miLength); ++luSlot)
                 mpKeys[luSlot] = miInvalidKey;
         }
 
@@ -70,7 +74,7 @@ namespace CgsContainers
         {
             CGS_ASSERT_STREAM_AT(static_cast<HashBits>(luKey) != static_cast<HashBits>(miInvalidKey),
                 "Can not add entry with invalid key value to table\n",
-                "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsLinearSOAHashTable.h", 242);
+                CGS_LINEAR_SOA_ARTIST_FILE, 242);
 
             const HashBits luLength = static_cast<HashBits>(miLength);
             const HashBits luStart = static_cast<HashBits>(luKey) % luLength;
@@ -133,3 +137,5 @@ namespace CgsContainers
         ValueType* mpValues;     // value array base
     };
 }
+
+#undef CGS_LINEAR_SOA_ARTIST_FILE

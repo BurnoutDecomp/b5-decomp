@@ -87,7 +87,7 @@ namespace CgsNetwork
 
     public:
         // --- layout (frozen; the compiler's vptr is +0x00) ---
-        s32            mePackOrUnpack;           // +0x04
+        EPackOrUnpack  mePackOrUnpack;           // +0x04
         SmartBitStream mBitstream;               // +0x08 (0x10 console bytes)
         u8             mu8GameID;                // +0x18
         u8             mx8Flags;                 // +0x19
@@ -107,13 +107,14 @@ namespace CgsNetwork
         void SetGameID(u8 lu8GameID)        { mu8GameID = lu8GameID; }
         // DecFIGS CgsMessage.h:663. ARTIST stores this field at +0x1C.
         void SetU16Frame(u16 lu16Frame)     { mu16Frame = lu16Frame; }
-        s8   GetType() const                { return mi8Type; }
+        ::EMessageType GetType() const       { return static_cast<::EMessageType>(mi8Type); }
+        u16  GetU16Frame() const            { return mu16Frame; }
         bool IsMessageValid() const         { return (mx8Flags & KX8_FLAGS_VALID) != 0; }
         void SetMessageValid()              { mx8Flags |=  KX8_FLAGS_VALID; }
         void SetMessageInvalid()            { mx8Flags &= ~KX8_FLAGS_VALID; }
         void PrepareForSend(s32 leType, u16 lu16Frame);
-        void PrepareAck(s32 leType, u16 lu16Frame, u8 lu8GameID);
-        void PrepareNack(s32 leType, u16 lu16Frame, u8 lu8GameID);
+        void PrepareAck(::EMessageType leType, u16 lu16Frame, u8 lu8GameID);
+        void PrepareNack(::EMessageType leType, u16 lu16Frame, u8 lu8GameID);
 
         // Pack/UnPack attach mBitstream to the caller's buffer, call the virtual
         // PackOrUnpack() through the vtable (slot 4, +0x10), report the bits

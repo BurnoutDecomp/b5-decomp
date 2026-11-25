@@ -240,7 +240,7 @@ namespace BrnWorld
 
                 for ( s32 liZone = 0; liZone < liNumZonesNeeded; ++liZone )
                 {
-                    lrTargetZones.Insert( lpNeeded->GetEvent( liZone ).muZoneId );
+                    lrTargetZones.Insert( lpNeeded->GetEvent( liZone ).GetZone() );
                 }
             }
             break;

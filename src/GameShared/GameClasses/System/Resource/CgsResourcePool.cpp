@@ -1019,21 +1019,26 @@ namespace CgsResource
 
     // 828D8B88: reserve the free slots in one sweep. CreateEntryInSlot will mark them
     // loading; this step only records their indices and accounts for the reservation.
-    const s16* Pool::CreateBatchEntrySlots(s16 liNumSlots)
+    const s16* Pool::CreateBatchEntrySlots(s16 liNumEntries)
     {
-        CGS_ASSERT(mbIsValid, "Pool is not valid\n");
-        const u16 luCount = static_cast<u16>(liNumSlots);
-        if (muNumFreeResources < luCount)
+        CGS_ASSERT_STREAM_AT(mbIsValid, "Pool is not valid\n", CGS_ARTIST_POOL_FILE, 955);
+
+        u16 luCurrentIndex = 0;
+        const u16 luNumEntries = static_cast<u16>(liNumEntries);
+        if (muNumFreeResources < luNumEntries)
             return 0;
-        u16 luFound = 0;
-        for (u16 luSlot = 0; luFound < luCount; ++luSlot)
+
+        u16 luCurrentEntry = 0;
+        while (luCurrentIndex < luNumEntries)
         {
-            CGS_ASSERT(luSlot < muMaxResources,
-                "Somehow gone past end of resources array even though the number free is definately big enough\n");
-            if (mpx8ResourceStatuses[luSlot] == 0)
-                mpnBatchIndices[luFound++] = static_cast<s16>(luSlot);
+            CGS_ASSERT_STREAM_AT(luCurrentEntry < muMaxResources,
+                "Somehow gone past end of resources array even though the number free is definately big enough\n",
+                CGS_ARTIST_POOL_FILE, 971);
+            if (mpx8ResourceStatuses[luCurrentEntry] == 0)
+                mpnBatchIndices[luCurrentIndex++] = static_cast<s16>(luCurrentEntry);
+            ++luCurrentEntry;
         }
-        muNumFreeResources -= luCount;
+        muNumFreeResources -= luNumEntries;
         return mpnBatchIndices;
     }
 

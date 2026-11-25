@@ -62,7 +62,7 @@ CMassiveAdObject* CMassiveAdObjectVideoDynamic::CreateSlaveMAO(XMassiveAdClientS
 // restarts the step count), bounded by the primary match list size.
 int CMassiveAdObjectVideoDynamic::GetNextAssetID()
 {
-    if (!muAssetIDCount || !mAssetIDList.GetCount())
+    if (!muAssetIDCount || !mAssetIDList.GetSize())
         return 0;
 
     mAssetIDList.GoToStart();
@@ -137,7 +137,7 @@ int CMassiveAdObjectVideoDynamic::ReportImpressions()
     return 0;
 }
 
-int CMassiveAdObjectVideoDynamic::Suspend()
+void CMassiveAdObjectVideoDynamic::Suspend()
 {
     mSlaveList.GoToStart();
     while (mSlaveList.GetCurrent())
@@ -145,11 +145,9 @@ int CMassiveAdObjectVideoDynamic::Suspend()
         static_cast<CMassiveAdObject*>(mSlaveList.GetCurrData())->Suspend();
         mSlaveList.GoToNext();
     }
-    // The console returns the list cursor's last value; no caller reads it.
-    return 0;
 }
 
-int CMassiveAdObjectVideoDynamic::Resume()
+void CMassiveAdObjectVideoDynamic::Resume()
 {
     mSlaveList.GoToStart();
     while (mSlaveList.GetCurrent())
@@ -157,8 +155,6 @@ int CMassiveAdObjectVideoDynamic::Resume()
         static_cast<CMassiveAdObject*>(mSlaveList.GetCurrData())->Resume();
         mSlaveList.GoToNext();
     }
-    // The console returns the list cursor's last value; no caller reads it.
-    return 0;
 }
 
 // Each subscriber gets its own slave.

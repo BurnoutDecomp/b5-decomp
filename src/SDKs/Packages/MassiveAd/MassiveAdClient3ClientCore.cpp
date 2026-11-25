@@ -554,7 +554,7 @@ int CMassiveClientCore::EnterZone(const char* pcZoneName)
     }
 
     int lbEntered;
-    if (spInstance->mZoneNameList.GetCount() != 0 && !spInstance->ZoneNameFind(pcZoneName))
+    if (spInstance->mZoneNameList.GetSize() != 0 && !spInstance->ZoneNameFind(pcZoneName))
     {
         spInstance->SetLastError(-300, "Cannot Find Zone in List: %s", pcZoneName);
         lbEntered = 0;

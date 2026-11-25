@@ -43,6 +43,7 @@
 #endif
 
 #include "rw/audio/core/plugins/ReverbModel1.h"
+#include <xtl.h>
 #include "rw/audio/core/Voice.h"   // the owning Voice (mfFadeStart decay accumulator)
 #include "rw/audio/core/PlugIn.h"        // rw::audio::core::System (mTimerManager @+0x60)
 #include "rw/audio/core/TimerManager.h"  // rw::audio::core::TimerManager::AddTimer
@@ -832,8 +833,7 @@ void ReverbModel1::ReleaseEvent(ReverbModel1 *self)
 //
 // Every call re-installs the comb / all-pass sections' IFilter apply+reset dispatch funcs and
 // hands each section to its delay line together with a shared 768-sample scratch buffer
-// carved off the System object table's scratch cursor (word [3]; restored at the tail) --
-// exactly the Delay::Process idiom.
+// reserved from the System's scratch stack and restored before returning.
 //
 // While the reverb time is positive the six comb sections are run over the frame (the first
 // overwrites the destination, the other five accumulate into it), the context's src/dst slots
@@ -842,19 +842,19 @@ void ReverbModel1::ReleaseEvent(ReverbModel1 *self)
 // swapped BACK (the pair is a net no-op, but both swaps are real stores and are reproduced).
 // When the reverb time has fallen to zero the frame is silenced instead.
 // -------------------------------------------------------------------------------------
-int ReverbModel1::Process(ReverbModel1 *self, AudioProcessContext *ctx)
+BufferStatus ReverbModel1::Process(PlugIn *plugIn, Mixer *ctx, bool)
 {
+    ReverbModel1 *self = reinterpret_cast<ReverbModel1 *>(plugIn);
     // The frame's channel-buffer descriptors, latched at entry (r25 / r24).
-    AudioChannelBuffer *pSrc = ctx->mpSrcBuffer;
-    AudioChannelBuffer *pDst = ctx->mpDstBuffer;
+    SampleBuffer *pSrc = ctx->mpSrcBuffer;
+    SampleBuffer *pDst = ctx->mpDstBuffer;
 
-    // Reserve the shared 768-sample scratch region off the System object table's scratch
-    // cursor (word [3]); the cursor is restored at the tail.
-    System *pSystem = reinterpret_cast<System *>(self->mBase.mpSystem);
-    f32 **ppScratchTable = reinterpret_cast<f32 **>(pSystem->mpObjectTable);
-    f32 *pScratchTop = ppScratchTable[3];                        // r21 (saved to restore)
-    f32 *pLocalBuffer = pScratchTop - KI_REVERB_SCRATCH_SAMPLES; // r21 - 0xC00 bytes
-    ppScratchTable[3] = pLocalBuffer;
+    System *system = static_cast<System *>(self->mBase.mpSystem);
+    StackAllocator *scratch = static_cast<StackAllocator *>(system->mpObjectTable);
+    u8 *scratchTop = scratch->mpTop;
+    u8 *localBuffer = scratchTop - KI_REVERB_SCRATCH_SAMPLES * sizeof(f32);
+    scratch->mpTop = localBuffer;
+    f32 *pLocalBuffer = reinterpret_cast<f32 *>(localBuffer);
 
     for (int i = 0; i < 6; ++i)
     {
@@ -875,7 +875,13 @@ int ReverbModel1::Process(ReverbModel1 *self, AudioProcessContext *ctx)
         self->mAllPassDelay[i].SetLocalBuffer(pLocalBuffer, KI_REVERB_SCRATCH_SAMPLES);
     }
 
-    if (self->mfDecayTime > KF_ZERO)
+    if (!(self->mfDecayTime > KF_ZERO))
+    {
+        // Reverb time has fallen to zero: silence every channel of the frame's src buffer.
+        for (u32 channel = 0; channel < self->mBase.mbChannelCount; ++channel)
+            XMemSet(pSrc->LockChannel(channel), 0, 0x400); // XMemSet
+    }
+    else
     {
         // The first comb section overwrites the destination. The rest accumulate.
         self->mCombDelay[0].ApplyFilter(256, pSrc, pDst, IFilter::OVERWRITE);
@@ -883,14 +889,12 @@ int ReverbModel1::Process(ReverbModel1 *self, AudioProcessContext *ctx)
             self->mCombDelay[i].ApplyFilter(256, pSrc, pDst, IFilter::ADD);
 
         // Ping-pong the context slots: the comb output becomes the all-pass input.
-        AudioChannelBuffer *pOldSrc = ctx->mpSrcBuffer; // r31
-        AudioChannelBuffer *pOldDst = ctx->mpDstBuffer; // r29
-        ctx->mpDstBuffer = pOldSrc;
-        ctx->mpSrcBuffer = pOldDst;
+        ctx->SwapBuffers();
+        SampleBuffer *pOldDst = ctx->mpSrcBuffer;
+        SampleBuffer *pOldSrc = ctx->mpDstBuffer;
 
-        // All-pass ladder: input = pOldDst (the comb sum), output = pOldSrc. Each memcpy
-        // duplicates the freshly written channel 0 of pOldSrc into another channel
-        // (channel k lives at mpSamples + muStride * k; 0x400 bytes == the 256-sample frame).
+        // The comb output feeds the all-pass ladder. Copy each tap's channel zero
+        // to the other channels served by that tap.
         const u8 mode = self->mBase.mbChannelCount;
         if (mode == 1)
         {
@@ -899,53 +903,38 @@ int ReverbModel1::Process(ReverbModel1 *self, AudioProcessContext *ctx)
         else if (mode == 2)
         {
             self->mAllPassDelay[1].ApplyFilter(256, pOldDst, pOldSrc, IFilter::OVERWRITE);
-            memcpy(pOldSrc->mpSamples + pOldSrc->muStride * 1,
-                   pOldSrc->mpSamples, 0x400); // XMemCpy -- channel 1 <- channel 0
+            XMemCpy(pOldSrc->LockChannel(1), pOldSrc->LockChannel(0), 0x400); // XMemCpy -- channel 1 <- channel 0
             self->mAllPassDelay[0].ApplyFilter(256, pOldDst, pOldSrc, IFilter::OVERWRITE);
         }
         else if (mode == 4)
         {
             self->mAllPassDelay[1].ApplyFilter(256, pOldDst, pOldSrc, IFilter::OVERWRITE);
-            memcpy(pOldSrc->mpSamples + pOldSrc->muStride * 1,
-                   pOldSrc->mpSamples, 0x400); // XMemCpy -- channel 1 <- channel 0
-            memcpy(pOldSrc->mpSamples + pOldSrc->muStride * 3,
-                   pOldSrc->mpSamples, 0x400); // XMemCpy -- channel 3 <- channel 0
+            const f32 *source = pOldSrc->LockChannel(0);
+            XMemCpy(pOldSrc->LockChannel(1), source, 0x400);
+            XMemCpy(pOldSrc->LockChannel(3), source, 0x400); // XMemCpy -- channel 3 <- channel 0
             self->mAllPassDelay[0].ApplyFilter(256, pOldDst, pOldSrc, IFilter::OVERWRITE);
-            memcpy(pOldSrc->mpSamples + pOldSrc->muStride * 2,
-                   pOldSrc->mpSamples, 0x400); // XMemCpy -- channel 2 <- channel 0
+            XMemCpy(pOldSrc->LockChannel(2), pOldSrc->LockChannel(0), 0x400); // XMemCpy -- channel 2 <- channel 0
         }
         else
         {
             self->mAllPassDelay[2].ApplyFilter(256, pOldDst, pOldSrc, IFilter::OVERWRITE);
-            memcpy(pOldSrc->mpSamples + pOldSrc->muStride * 2,
-                   pOldSrc->mpSamples, 0x400); // XMemCpy -- channel 2 <- channel 0
-            memcpy(pOldSrc->mpSamples + pOldSrc->muStride * 4,
-                   pOldSrc->mpSamples, 0x400); // XMemCpy -- channel 4 <- channel 0
+            const f32 *source = pOldSrc->LockChannel(0);
+            XMemCpy(pOldSrc->LockChannel(2), source, 0x400);
+            XMemCpy(pOldSrc->LockChannel(4), source, 0x400); // XMemCpy -- channel 4 <- channel 0
             self->mAllPassDelay[1].ApplyFilter(256, pOldDst, pOldSrc, IFilter::OVERWRITE);
-            memcpy(pOldSrc->mpSamples + pOldSrc->muStride * 1,
-                   pOldSrc->mpSamples, 0x400); // XMemCpy -- channel 1 <- channel 0
+            XMemCpy(pOldSrc->LockChannel(1), pOldSrc->LockChannel(0), 0x400); // XMemCpy -- channel 1 <- channel 0
             self->mAllPassDelay[0].ApplyFilter(256, pOldDst, pOldSrc, IFilter::OVERWRITE);
-            memcpy(pOldSrc->mpSamples + pOldSrc->muStride * 3,
-                   pOldSrc->mpSamples, 0x400); // XMemCpy -- channel 3 <- channel 0
-            memset(pOldSrc->mpSamples + pOldSrc->muStride * 5,
-                   0, 0x400);                  // XMemSet -- channel 5 silenced
+            XMemCpy(pOldSrc->LockChannel(3), pOldSrc->LockChannel(0), 0x400); // XMemCpy -- channel 3 <- channel 0
+            XMemSet(pOldSrc->LockChannel(5), 0, 0x400);                  // XMemSet -- channel 5 silenced
         }
 
-        // Swap the slots back (loc_82B9FB0C) -- the pair is a net no-op but both are real
-        // stores, so both are reproduced.
-        AudioChannelBuffer *pSwap = ctx->mpSrcBuffer;
-        ctx->mpSrcBuffer = ctx->mpDstBuffer;
-        ctx->mpDstBuffer = pSwap;
-    }
-    else
-    {
-        // Reverb time has fallen to zero: silence every channel of the frame's src buffer.
-        for (u32 channel = 0; channel < self->mBase.mbChannelCount; ++channel)
-            memset(pSrc->mpSamples + pSrc->muStride * channel, 0, 0x400); // XMemSet
+        // Publish the all-pass output in the mixer's source slot.
+        ctx->SwapBuffers();
     }
 
-    ppScratchTable[3] = pScratchTop; // restore the scratch cursor
-    return 1;
+    System *owner = static_cast<System *>(self->mBase.mpSystem);
+    static_cast<StackAllocator *>(owner->mpObjectTable)->mpTop = scratchTop;
+    return BUFFERSTATUS_AVAILABLE;
 }
 
 // -------------------------------------------------------------------------------------

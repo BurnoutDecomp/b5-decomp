@@ -109,7 +109,7 @@ int CRequestBuilder::Suspend()
         CRequestManager::Instance()->GetSharedCriticalSection()->TryEnter(GetName()))
     {
         int lnResult;
-        if (mRequestList.GetCount() > 0)  // *(this + 0x20) = list.mnCount
+        if (mRequestList.GetSize() > 0)  // *(this + 0x20) = list.muCount
         {
             mRequestList.GoToStart();
 
@@ -147,7 +147,7 @@ int CRequestBuilder::Resume()
     if (CRequestManager::Instance()->GetSharedCriticalSection()->TryEnter(GetName()))
     {
         int lnResult;
-        if (mRequestList.GetCount() > 0)  // *(this + 0x20) = list.mnCount
+        if (mRequestList.GetSize() > 0)  // *(this + 0x20) = list.muCount
         {
             mRequestList.GoToStart();
 

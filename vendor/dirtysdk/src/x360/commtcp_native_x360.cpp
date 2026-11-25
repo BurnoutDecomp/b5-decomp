@@ -19,7 +19,13 @@ struct CommTCPRef {
     u32 sendtick, recvtick, dnsid; char dnsquery[256]; char* dnsbuf; s32 dnslen; char dnsdiv;
     NetCritT crit; volatile s32 callback; s32 gotevent; void (*callproc)(CommRef*,s32);
 };
-struct CommTCPPacket { u32 when; s16 len; char data[1]; };
+struct RawTCPPacketT
+{
+    struct { u32 when; } head;
+    struct { s16 len; char data[2048]; } body;
+};
+CGS_STATIC_ASSERT(offsetof(RawTCPPacketT, body) == 4, "CommTCP packet header");
+CGS_STATIC_ASSERT(offsetof(CommTCPRef, common) == 0, "CommTCP common prefix");
 CGS_STATIC_ASSERT((sizeof(CommRef)==124), "CommRef size");
 CGS_STATIC_ASSERT((sizeof(CommTCPRef)==544), "CommTCPRef size");
 // The private XDK IPv4 address occupies the original ARTIST slot.
@@ -43,7 +49,8 @@ s32 SocketRecvfrom(SocketT*,char*,s32,s32,sockaddr*,s32*);
 s32 SocketSendto(SocketT*,const char*,s32,s32,const sockaddr*,s32);
 s32 SockaddrInParse(sockaddr*,const char*); // ARTIST 82B2D718; shared provider
 s32 CommTCPStatus(CommRef*); // shared native body at 82B3FA80, in CommUDP
-u32 CommUDPTick(void*); // native body 82B2A960 returns NetTick
+struct CommUDPRef;
+u32 CommUDPTick(CommUDPRef*); // native shared body 82B2A960
 }
 static const s32 kCommTCPMem=0x63746370;
 static CommTCPRef* Tcp(CommRef* p) { return reinterpret_cast<CommTCPRef*>(p); }
@@ -59,52 +66,68 @@ static void CommTCPSetAddrInfo(CommTCPRef* ref)
     ref->common.hostip=((u32)b[4]<<24)|((u32)b[5]<<16)|((u32)b[6]<<8)|b[7];
     NetPrintfCode("commtcp: peer=0x%08x:%d, host=0x%08x:%d\n",ref->common.peerip,ref->common.peerport,ref->common.hostip,ref->common.hostport);
 }
+static void _CommTCPSetSocket(CommTCPRef* ref, SocketT* socket)
+{
+    ref->socket = socket;
+    ref->common.sockptr = socket;
+}
+
 static s32 CommTCPEventExclusive(CommTCPRef* ref,u32 tick)
 {
     s32 count=0;
+    s32 len;
+    RawTCPPacketT* packet;
+    char* buffer;
     if (ref->state==2 && SocketInfo(ref->socket,0x73746174,0,0,0)>0) { ref->state=4; CommTCPSetAddrInfo(ref); }
     if (ref->state==3) {
         sockaddr addr; s32 size=16; SocketT* accepted=SocketAccept(ref->socket,&addr,&size);
         if (accepted) {
-            SocketClose(ref->socket); ref->socket=accepted; ref->common.sockptr=accepted;
-            SocketCallback(accepted,2,100,ref,CommTCPEvent); ref->state=4; CommTCPSetAddrInfo(ref);
+            SocketClose(ref->socket); _CommTCPSetSocket(ref, accepted);
+            SocketCallback(ref->socket,2,100,ref,CommTCPEvent); ref->state=4; CommTCPSetAddrInfo(ref);
         }
     }
-    while (ref->state==4) {
-        if ((ref->rcvwid+ref->rcvinp)%ref->rcvlen==ref->rcvout) break;
-        CommTCPPacket* packet=reinterpret_cast<CommTCPPacket*>(ref->rcvbuf+ref->rcvinp);
-        s32 want=ref->rcvoff<2?2:packet->len+2;
-        s32 got=SocketRecvfrom(ref->socket,reinterpret_cast<char*>(&packet->len)+ref->rcvoff,want-ref->rcvoff,0,0,0);
-        if (!got) break;
-        if (got<0) { ref->state=5; break; }
-        u32 now=NetTick(); ref->recvtick=now;
-        if (!ref->rcvoff) packet->when=now;
-        count+=got; ref->rcvoff+=got;
-        if (ref->rcvoff>=2 && ref->rcvoff>=packet->len+2) {
+    while (ref->state==4 && (ref->rcvwid+ref->rcvinp)%ref->rcvlen!=ref->rcvout) {
+        packet=reinterpret_cast<RawTCPPacketT*>(ref->rcvbuf+ref->rcvinp);
+        buffer=reinterpret_cast<char*>(&packet->body)+ref->rcvoff;
+        len=sizeof(packet->body.len);
+        if (ref->rcvoff>=2) len+=packet->body.len;
+        len-=ref->rcvoff;
+        len=SocketRecvfrom(ref->socket,buffer,len,0,0,0);
+        if (!len) break;
+        if (len<0) { ref->state=5; break; }
+        ref->recvtick=NetTick();
+        if (!ref->rcvoff) packet->head.when=ref->recvtick;
+        count+=len; ref->rcvoff+=len;
+        if (ref->rcvoff>=2 && ref->rcvoff>=packet->body.len+2) {
             ref->rcvoff=0;
-            if (packet->len) {
+            if (packet->body.len) {
                 ++ref->callback; ref->rcvinp=(ref->rcvwid+ref->rcvinp)%ref->rcvlen;
-                if (ref->common.RecvCallback) ref->common.RecvCallback(&ref->common,packet->data,packet->len,packet->when);
+                if (ref->common.RecvCallback) ref->common.RecvCallback(&ref->common,packet->body.data,packet->body.len,packet->head.when);
                 --ref->callback; ref->gotevent|=1;
             }
         }
     }
     if (ref->state==4 && ref->sndoff<0 && ref->sndinp==ref->sndout && NetTick()>ref->sendtick+50) {
-        CommTCPPacket* packet=reinterpret_cast<CommTCPPacket*>(ref->sndbuf+ref->sndinp);
-        packet->when=NetTick(); packet->len=0; ref->sndinp=(ref->sndwid+ref->sndinp)%ref->sndlen;
+        packet=reinterpret_cast<RawTCPPacketT*>(ref->sndbuf+ref->sndinp);
+        packet->head.when=NetTick(); packet->body.len=0; ref->sndinp=(ref->sndwid+ref->sndinp)%ref->sndlen;
     }
     while (ref->state==4) {
         if (ref->sndoff<0) {
             if (ref->sndinp==ref->sndout) break;
-            CommTCPPacket* packet=reinterpret_cast<CommTCPPacket*>(ref->sndbuf+ref->sndout);
             ref->sndoff=0;
-            if (ref->common.SendCallback) ref->common.SendCallback(&ref->common,packet->data,packet->len,0);
+            if (ref->common.SendCallback) {
+                packet=reinterpret_cast<RawTCPPacketT*>(ref->sndbuf+ref->sndout);
+                ref->common.SendCallback(&ref->common,packet->body.data,packet->body.len,0);
+            }
         }
-        CommTCPPacket* packet=reinterpret_cast<CommTCPPacket*>(ref->sndbuf+ref->sndout);
-        s32 sent=SocketSendto(ref->socket,reinterpret_cast<const char*>(&packet->len)+ref->sndoff,packet->len-ref->sndoff+2,0,0,0);
-        if (sent<=0) break;
-        ref->sendtick=NetTick(); ref->sndoff+=sent;
-        if (ref->sndoff==packet->len+2) { ref->sndoff=-1; ref->sndout=(ref->sndwid+ref->sndout)%ref->sndlen; }
+        packet=reinterpret_cast<RawTCPPacketT*>(ref->sndbuf+ref->sndout);
+        buffer=reinterpret_cast<char*>(&packet->body)+ref->sndoff;
+        len=packet->body.len+2;
+        len-=ref->sndoff;
+        len=SocketSendto(ref->socket,buffer,len,0,0,0);
+        if (len<=0) break;
+        ref->sendtick=NetTick(); ref->sndoff+=len;
+        if (ref->sndoff==packet->body.len+sizeof(packet->body.len)) { ref->sndoff=-1; ref->sndout=(ref->sndwid+ref->sndout)%ref->sndlen; }
     }
     if (!ref->callback && ref->gotevent) {
         ++ref->callback;
@@ -147,8 +170,8 @@ extern "C" s32 CommTCPSend(CommRef* common,const void* buffer,s32 length,u32)
     if ((ref->sndwid+ref->sndinp)%ref->sndlen==ref->sndout) { NetPrintfCode("TCP: output buffer full\n"); return 0; }
     if (length>ref->sndwid-8) { NetPrintfCode("CommTCP: Oversized packet send (%d bytes)\n",length); return -6; }
     if (!length) return ((ref->sndlen-ref->sndout+ref->sndinp)%ref->sndlen)/ref->sndwid+1;
-    CommTCPPacket* packet=reinterpret_cast<CommTCPPacket*>(ref->sndbuf+ref->sndinp);
-    packet->len=(s16)length; memcpy(packet->data,buffer,length); packet->when=NetTick();
+    RawTCPPacketT* packet=reinterpret_cast<RawTCPPacketT*>(ref->sndbuf+ref->sndinp);
+    packet->body.len=(s16)length; memcpy(packet->body.data,buffer,length); packet->head.when=NetTick();
     ref->sndinp=(ref->sndwid+ref->sndinp)%ref->sndlen; CommTCPEvent(ref->socket,0,ref);
     s32 queued=((ref->sndlen-ref->sndout+ref->sndinp)%ref->sndlen)/ref->sndwid;
     return queued>0?queued:1;
@@ -156,9 +179,9 @@ extern "C" s32 CommTCPSend(CommRef* common,const void* buffer,s32 length,u32)
 extern "C" s32 CommTCPPeek(CommRef* common,void* data,s32 length,u32* tick)
 {
     CommTCPRef* ref=Tcp(common); if (ref->rcvout==ref->rcvinp) return -7;
-    CommTCPPacket* packet=reinterpret_cast<CommTCPPacket*>(ref->rcvbuf+ref->rcvout);
-    if (packet->len<length) length=packet->len;
-    memcpy(data,packet->data,length); if (tick) *tick=packet->when; return packet->len;
+    RawTCPPacketT* packet=reinterpret_cast<RawTCPPacketT*>(ref->rcvbuf+ref->rcvout);
+    if (packet->body.len<length) length=packet->body.len;
+    memcpy(data,packet->body.data,length); if (tick) *tick=packet->head.when; return packet->body.len;
 }
 extern "C" s32 CommTCPRecv(CommRef* common,void* data,s32 length,u32* tick)
 {
@@ -211,23 +234,30 @@ extern "C" s32 CommTCPConnect(CommRef* common,const char* text)
     if (!ref->socket) return -4;
     SocketConnect(ref->socket,reinterpret_cast<const sockaddr*>(&ref->peeraddr),16); SocketCallback(ref->socket,2,100,ref,CommTCPEvent); ref->state=2; return 0;
 }
-extern "C" CommTCPRef* CommTCPConstruct(s32,s32,s32);
-static CommRef* CommTCPConstructForCommRef(s32 width,s32 input,s32 output)
-{
-    CommTCPRef* ref=CommTCPConstruct(width,input,output); return ref?&ref->common:0;
-}
-static u32 CommTCPTick(CommRef* common) { return CommUDPTick(common); }
 extern "C" CommTCPRef* CommTCPConstruct(s32 width,s32 input,s32 output)
 {
-    s32 group=DirtyMemGroupQuery(); CommTCPRef* ref=(CommTCPRef*)DirtyMemAlloc(544,kCommTCPMem,group);
+    s32 group=DirtyMemGroupQuery();
+    CommTCPRef* ref=(CommTCPRef*)DirtyMemAlloc(sizeof(CommTCPRef),kCommTCPMem,group);
     if (!ref) return 0;
-    memset(ref,0,544); CommRef& c=ref->common;
-    c.memgroup=group; c.maxwid=(u16)width; c.maxinp=(u8)input; c.maxout=(u8)output;
-    c.Construct=CommTCPConstructForCommRef; c.Destroy=CommTCPDestroy; c.Resolve=CommTCPResolve; c.Unresolve=CommTCPUnresolve;
+    memset(ref,0,sizeof(*ref));
+    CommRef& c=ref->common;
+    c.memgroup=group;
+    c.Construct=reinterpret_cast<CommRef* (*)(s32,s32,s32)>(CommTCPConstruct);
+    c.Destroy=CommTCPDestroy; c.Resolve=CommTCPResolve; c.Unresolve=CommTCPUnresolve;
     c.Listen=CommTCPListen; c.Unlisten=CommTCPUnlisten; c.Connect=CommTCPConnect; c.Unconnect=CommTCPUnconnect;
-    c.Callback=CommTCPCallback; c.Status=CommTCPStatus; c.Tick=CommTCPTick; c.Send=CommTCPSend; c.Peek=CommTCPPeek; c.Recv=CommTCPRecv;
-    NetCritInit(&ref->crit,"commtcp"); s32 stride=(width+11)&0x7ffc;
-    ref->rcvwid=stride; ref->rcvlen=stride*input; ref->rcvbuf=(char*)DirtyMemAlloc(ref->rcvlen,kCommTCPMem,group);
-    ref->sndwid=stride; ref->sndlen=stride*output; ref->sndbuf=(char*)DirtyMemAlloc(ref->sndlen,kCommTCPMem,group);
-    ref->socket=0; c.sockptr=0; ref->state=1; ref->connident=0; return ref;
+    c.Callback=CommTCPCallback; c.Status=CommTCPStatus;
+    c.Tick=reinterpret_cast<u32 (*)(CommRef*)>(CommUDPTick);
+    c.Send=CommTCPSend; c.Peek=CommTCPPeek; c.Recv=CommTCPRecv;
+    c.maxwid=(u16)width; c.maxinp=(u8)input; c.maxout=(u8)output;
+    NetCritInit(&ref->crit,"commtcp");
+    ref->rcvwid=width+8;
+    ref->rcvwid=(ref->rcvwid+3)&0x7ffc;
+    ref->rcvlen=ref->rcvwid*input;
+    ref->rcvbuf=(char*)DirtyMemAlloc(ref->rcvlen,kCommTCPMem,ref->common.memgroup);
+    ref->sndwid=width+8;
+    ref->sndwid=(ref->sndwid+3)&0x7ffc;
+    ref->sndlen=ref->sndwid*output;
+    ref->sndbuf=(char*)DirtyMemAlloc(ref->sndlen,kCommTCPMem,ref->common.memgroup);
+    _CommTCPSetSocket(ref, 0);
+    ref->state=1; ref->connident=0; return ref;
 }

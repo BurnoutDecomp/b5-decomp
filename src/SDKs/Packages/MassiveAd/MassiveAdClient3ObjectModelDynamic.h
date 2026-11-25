@@ -22,8 +22,8 @@ public:
     virtual ~CMassiveAdObjectModelDynamic();
 
     int Tick() ;
-    int Resume() ;
-    int Suspend() ;
+    void Resume();
+    void Suspend();
     int SetAssetExpired(int nAssetId) ;
     int ReportImpressions() ;
     int SubscriberAdd(XMassiveAdClientSubscriber* pSubscriber) ;

@@ -202,20 +202,29 @@ f32 CombFilterFunc(s32 count, f32 g1, f32 g2, f32 g3, f32 g4, f32 previousState,
 // Save the comb's damping state after applying a block. The crossfade
 // fallback clears the output without advancing that state.
 // -------------------------------------------------------------------------------------
+#if defined(_XBOX) && defined(_MSC_VER)
+// The Xbox 360 common audio object keeps the active path and clear path in one frame.
+#pragma optimize("s", on)
+#endif
 void CombFilter::CombFilterApplyFunc(IFilter *filter, s32 count, FilterOutputMode mode,
                                     s32, LocationParams *ctx)
 {
-    if (ctx->pDelayCross)
+    if (!ctx->pDelayCross)
+    {
+        CombFilter *self = static_cast<CombFilter *>(filter);
+        self->mfState = CombFilterFunc(count, self->mfGain1, self->mfGain2,
+                                      self->mfGain3, self->mfGain4, self->mfState,
+                                      ctx->pInput, ctx->pDelayFull, ctx->pDelayZero, ctx->pOutput, mode);
+    }
+    else
     {
         std::memset(ctx->pOutput, 0, static_cast<usize>(count) * sizeof(f32));
-        return;
     }
-
-    CombFilter *self = static_cast<CombFilter *>(filter);
-    self->mfState = CombFilterFunc(count, self->mfGain1, self->mfGain2,
-                                  self->mfGain3, self->mfGain4, self->mfState,
-                                  ctx->pInput, ctx->pDelayFull, ctx->pDelayZero, ctx->pOutput, mode);
 }
+
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", off)
+#endif
 
 // -------------------------------------------------------------------------------------
 // CombFilter::CombFilterResetFunc @0x82B64D88 -- clear the loop damping state.

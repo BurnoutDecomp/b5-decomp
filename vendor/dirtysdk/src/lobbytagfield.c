@@ -24,6 +24,9 @@
 #include <string.h>
 #include <time.h>
 
+// Native DirtyLib print dispatch slot used by the ARTIST cancel path at 82B18214.
+extern s32 (*_NetLib_pPrintf)(const char* pFormat, ...);
+
 // DecFIGS lobbytagfield.c:51 through :100 identifies the four translation tables.
 // ARTIST preserves their order at 82146148 through 82146457.
 static const unsigned char char_encode[256] =
@@ -246,7 +249,7 @@ static s32 _TagFieldSetupCancel(unsigned char* pRecord, unsigned char* pAppend)
             break;
         }
     }
-    NetPrintf(("lobbytagfield: tagfield buffer overflow appending record %s\n", pAppend));
+    _NetLib_pPrintf("lobbytagfield: tagfield buffer overflow appending record %s\n", pAppend);
     *pAppend = 0;
     return -1;
 }

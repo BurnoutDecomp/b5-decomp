@@ -3,8 +3,8 @@
 // rw::audio::core::Delay plug-in and rw::audio::core::ReverbModel1 reverb.
 //
 // EARenderWare "rwaudio". Reconstructed from BURNOUT_X360_ARTIST.XEX; the PowerPC asm is
-// authoritative for every store, cursor and branch. No LegacySrc reference source and no DecFIGS
-// DWARF exist. See DelayLine.h for the byte-exact layout and the per-function addresses.
+// authoritative for the stores, cursors and branches. LegacySrc delayline.h gives
+// the SampleBuffer interface and the delay and crossfade constants.
 //
 // The `_savegprlr_* / _restgprlr_*` calls in the pseudocode are the compiler's register
 // save/restore prologue/epilogue helpers -- not source-level calls -- so they are dropped.
@@ -48,8 +48,6 @@ const char KA_DELAY_BUFFER[] = "rw::audio::core::DelayLine::DelayBuffer";
 const f32 KF_ZERO = 0.0f;
 // The crossfade ramp seed / step: flt_8214B27C == 0.9921875 (127/128) and
 // flt_8214B278 == 0.0078125 (1/128). The 128-entry ramp descends 127/128 .. 0.
-const f32 KF_RAMP_START = 0.9921875f;
-const f32 KF_RAMP_STEP  = 0.0078125f;
 const s32 KI_RAMP_LEN   = 128;
 } // namespace
 
@@ -384,19 +382,19 @@ void DelayLine::UnmarshalDelayData(s32 channel, s32 count, TapContext *pCtx)
 // ramp, then the remainder with no ramp; each chunk advances the whole context. After every
 // channel the ring cursors advance one frame and the filter-changed flag clears.
 // -------------------------------------------------------------------------------------
-void DelayLine::ApplyFilter(s32 count, const AudioChannelBuffer *pInput,
-                            const AudioChannelBuffer *pOutput, IFilter::FilterOutputMode mode)
+void DelayLine::ApplyFilter(s32 count, SampleBuffer *pInput,
+                            SampleBuffer *pOutput, IFilter::FilterOutputMode mode)
 {
     // Descending crossfade coefficients 127/128 .. 0 (only built when a filter change is
     // pending; ApplyFilter re-tests the flag per channel below).
     f32 ramp[KI_RAMP_LEN];
     if (mbFilterChanged)
     {
-        f32 coeff = KF_RAMP_START;
+        f32 coeff = 127.0f / 128.0f;
         for (s32 k = 0; k < KI_RAMP_LEN; ++k)
         {
             ramp[k] = coeff;
-            coeff -= KF_RAMP_STEP;
+            coeff -= 1.0f / 128.0f;
         }
     }
 
@@ -405,8 +403,8 @@ void DelayLine::ApplyFilter(s32 count, const AudioChannelBuffer *pInput,
         s32 rampRemaining = 0;
 
         TapContext ctx;
-        ctx.pInput = pInput->mpSamples + static_cast<usize>(pInput->muStride) * channel;
-        ctx.pOutput = pOutput->mpSamples + static_cast<usize>(pOutput->muStride) * channel;
+        ctx.pInput = pInput->LockChannel(channel);
+        ctx.pOutput = pOutput->LockChannel(channel);
         ctx.pDelayCross = 0;
         ctx.pCrossFadeCoeff = 0;
         if (mbFilterChanged)
@@ -422,9 +420,7 @@ void DelayLine::ApplyFilter(s32 count, const AudioChannelBuffer *pInput,
 
             if (rampRemaining)
             {
-                s32 chunk = rampRemaining;
-                if (rampRemaining >= total)
-                    chunk = total;
+                const s32 chunk = rampRemaining < total ? rampRemaining : total;
 
                 ctx.pCrossFadeCoeff = ramp + (KI_RAMP_LEN - rampRemaining);
                 mpFilter->mpApplyFunc(mpFilter, chunk, mode, channel, &ctx);
@@ -457,24 +453,25 @@ void DelayLine::ApplyFilter(s32 count, const AudioChannelBuffer *pInput,
         }
     }
 
-    // Advance the ring cursors by one frame.
-    const s32 capacity = miCapacity;
-    s32 writePhase = (count + miWritePhase) % capacity;
+    // Store the wrapped position before clamping the guard (ARTIST 0x82B6E70C).
+    // The clean cursor and readable sample count both saturate at capacity.
+    s32 capacity = miCapacity;
+    s32 writePhase = (miWritePhase + count) % capacity;
+    miWritePhase = writePhase;
     if (writePhase <= miGuardSamples)
         writePhase = miGuardSamples;
-    miWritePhase = writePhase;                       // +0x34
+    miWritePhase = writePhase;
 
-    s32 clean = count + miCleanCursor;
+    s32 clean = miCleanCursor + count;
     if (clean >= capacity)
         clean = capacity;
-    miCleanCursor = clean;                           // +0x24
+    miCleanCursor = clean;
 
-    s32 avail = miAvailableSamples + count;
-    if (avail >= capacity)
-        avail = capacity;
-    miAvailableSamples = avail;                      // +0x20
-
-    mbFilterChanged = 0;                             // +0x38
+    const s32 avail = miAvailableSamples + count;
+    if (avail < capacity)
+        capacity = avail;
+    miAvailableSamples = capacity;
+    mbFilterChanged = 0;
 }
 
 // -------------------------------------------------------------------------------------

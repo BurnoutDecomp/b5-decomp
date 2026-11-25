@@ -22,8 +22,8 @@ public:
     int SetAssetExpired(int nAssetID) ;
     int Tick() ;
     int ReportImpressions() ;
-    int Suspend() ;
-    int Resume() ;
+    void Suspend();
+    void Resume();
     int SubscriberAdd(XMassiveAdClientSubscriber* pSubscriber) ;
     int GetNextAssetID() ;
 

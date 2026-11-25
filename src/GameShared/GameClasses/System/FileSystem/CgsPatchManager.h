@@ -63,7 +63,7 @@ namespace CgsFileSystem
         // kick the background directory-search thread (name "PatchManDirSearchThread", priority 100)
         // that populates the file map. Asserts if a patch search is already running, or if the folder
         // path does not fit a PatchEntry::miacFolder buffer.
-        bool AddPatch(const char* lpcFolder, s32 liValue);
+        void AddPatch(const char* lpcFolder, s32 liValue);
 
         // @0x828E9488. If the requested path `lpcSource` is claimed by a patch, write
         // "<patchFolder>/<sourcePath>" into `lpcDest` (capacity `luDestSize`) and return true.

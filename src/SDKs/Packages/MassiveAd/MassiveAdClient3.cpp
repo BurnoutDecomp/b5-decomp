@@ -199,10 +199,10 @@ int CMassiveList::Append(CMassiveListNode* pNode)
         pNode->mpPrev = mpTail;
     }
 
-    int lnCount = mnCount;            // v3 = *(a1 + 12)
+    unsigned int luCount = muCount;            // v3 = *(a1 + 12)
     mpTail    = pNode;                // *(a1 + 4) = a2
     mpCurrent = pNode;                // *(a1 + 8) = a2
-    mnCount   = lnCount + 1;          // *(a1 + 12) = v3 + 1
+    muCount   = luCount + 1;          // *(a1 + 12) = v3 + 1
     return 1;
 }
 
@@ -245,7 +245,7 @@ int CMassiveList::Remove(CMassiveListNode* pNode, int bDelete)
         CMassiveBaseObject::operator delete(pNode); // ...::operator delete(a2)
     }
 
-    --mnCount;                             // --a1[3]
+    --muCount;                             // --a1[3]
     return 1;
 }
 

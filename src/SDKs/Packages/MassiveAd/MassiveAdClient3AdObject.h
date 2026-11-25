@@ -61,8 +61,9 @@ public:
     virtual int SetAssetExpired(int nAssetID);
     virtual int Tick();
     virtual int ReportImpressions();
-    virtual int Suspend();
-    virtual int Resume();
+    // These callbacks update placement state without producing a status.
+    virtual void Suspend();
+    virtual void Resume();
     virtual int SubscriberAdd(XMassiveAdClientSubscriber* pSubscriber);
     virtual int GetNextAssetID();
 

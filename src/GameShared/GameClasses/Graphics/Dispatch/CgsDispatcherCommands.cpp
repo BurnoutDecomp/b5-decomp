@@ -229,6 +229,14 @@ void DispatchFrame::ConstructWithSharedBinMemory(DispatchList* lpaDispatchListAr
     }
 }
 
+// DecFIGS CgsDispatcherCommands.cpp:86. Keep the null links in a relocated chain.
+template<class T>
+inline void CgsDispatchCommands_RelocatePointer(T*& lrpPointer, intptr_t liOffset)
+{
+    if (lrpPointer)
+        lrpPointer = reinterpret_cast<T*>(reinterpret_cast<uintptr_t>(lrpPointer) + liOffset);
+}
+
 // ARTIST 827EE868. Rebase the block chain and publish it for the shared-bin join.
 void DispatchList::RelocateForMainMemory(uintptr_t luBinBase, uintptr_t luBinOutput,
                                         uintptr_t /*luBinMaster*/)
@@ -239,16 +247,12 @@ void DispatchList::RelocateForMainMemory(uintptr_t luBinBase, uintptr_t luBinOut
         for (SortKeyBlock* lpBlock = mpBlockListHead; lpBlock != 0;)
         {
             SortKeyBlock* const lpNext = lpBlock->mpNextBlock;
-            if (lpBlock->mpKeyArray)
-                lpBlock->mpKeyArray = reinterpret_cast<SortKey*>(reinterpret_cast<uintptr_t>(lpBlock->mpKeyArray) + luDelta);
-            if (lpBlock->mpNextBlock)
-                lpBlock->mpNextBlock = reinterpret_cast<SortKeyBlock*>(reinterpret_cast<uintptr_t>(lpBlock->mpNextBlock) + luDelta);
+            CgsDispatchCommands_RelocatePointer(lpBlock->mpKeyArray, static_cast<intptr_t>(luDelta));
+            CgsDispatchCommands_RelocatePointer(lpBlock->mpNextBlock, static_cast<intptr_t>(luDelta));
             lpBlock = lpNext;
         }
-        if (mpBlockListHead)
-            mpBlockListHead = reinterpret_cast<SortKeyBlock*>(reinterpret_cast<uintptr_t>(mpBlockListHead) + luDelta);
-        if (mpBlockListTail)
-            mpBlockListTail = reinterpret_cast<SortKeyBlock*>(reinterpret_cast<uintptr_t>(mpBlockListTail) + luDelta);
+        CgsDispatchCommands_RelocatePointer(mpBlockListHead, static_cast<intptr_t>(luDelta));
+        CgsDispatchCommands_RelocatePointer(mpBlockListTail, static_cast<intptr_t>(luDelta));
     }
     if (mpBlockListHead)
     {
@@ -284,15 +288,30 @@ void DispatchFrame::FlushBlockToSharedMemory()
     mpDispatchBinOutputAddress = 0;
 }
 
-// X360-native members used by 827FF380 and 827EE760. The PS3 DMA staging
-// buffers are unnecessary for the shared-address-space X360/PC path.
+// DecFIGS CgsDispatcherCommands.cpp:141..215. ARTIST 827FF380 places the local
+// output list array at job state +0xC80, followed by the command and packet storage.
 struct DispatchObjectContext_JobState
 {
+    static const u32 KU_MAX_OUTPUT_DISPATCH_LISTS = 26;
+    static const u32 KU_MAX_RENDERABLE_PACKET_LENGTH = 256;
+
     DispatchFrame lDispatchFrameLocal;
     DispatchList lInputDispatchList;
+    // Local input staging is unused by the native shared-address-space path.
+    u8 mau8LocalInputScratch[0xC80 - sizeof(DispatchFrame) - sizeof(DispatchList)];
+    DispatchList laOutputDispatchListArray[KU_MAX_OUTPUT_DISPATCH_LISTS];
+    DrawRenderable lDrawRenderableCommand;
+    Vector4 laPacketContents[KU_MAX_RENDERABLE_PACKET_LENGTH];
     ObjectToMeshJobInfo* lpObjectToMeshJobInfo;
     uintptr_t luOffsetToMainMemory;
 };
+
+CGS_STATIC_ASSERT((offsetof(DispatchObjectContext_JobState, laOutputDispatchListArray) == 0xC80),
+    "ARTIST job-state output list array");
+CGS_STATIC_ASSERT((offsetof(DispatchObjectContext_JobState, lpObjectToMeshJobInfo) == 0x4390),
+    "ARTIST job-state input descriptor");
+CGS_STATIC_ASSERT((offsetof(DispatchObjectContext_JobState, luOffsetToMainMemory) == 0x4394),
+    "ARTIST job-state main-memory offset");
 
 } // namespace CgsGraphics
 
@@ -1086,7 +1105,8 @@ void ObjectToMeshJob::SharedMemoryChangeCallback(void* lpContext)
     const uintptr_t luMaster = lrFrame.GetDispatchBinMasterAddress()
         + reinterpret_cast<uintptr_t>(lrFrame.GetBin().GetBase()) - lrFrame.GetActiveBlockInSharedMemory();
     for (u32 luList = 0; luList < lrFrame.GetNumDispatchLists(); ++luList)
-        lrFrame.GetList(luList)->SetDispatchBinMasterStart(reinterpret_cast<CgsGraphics::DispatchCommand*>(luMaster));
+        lrFrame.m_paLists[luList].SetDispatchBinMasterStart(
+            reinterpret_cast<CgsGraphics::DispatchCommand*>(luMaster));
 }
 
 // ARTIST827FF380: private context/input view, bounded key-block walks, shared
@@ -1105,7 +1125,8 @@ void ObjectToMeshJob::ExecuteImplementation(ObjectToMeshJobInfo* lpData)
     lContext.mpJobState = &lState;
     lState.lpObjectToMeshJobInfo = lpData;
     lState.lInputDispatchList = *lpData->mpDispatchListInput;
-    CGS_ASSERT(lpData->muDispatchListOutputCount <= 26u, "Try increasing KU_MAX_OUTPUT_DISPATCH_LISTS");
+    CGS_ASSERT(lpData->muDispatchListOutputCount <= DispatchObjectContext_JobState::KU_MAX_OUTPUT_DISPATCH_LISTS,
+        CGS_ASSERT_MESSAGE_AT("Try increasing KU_MAX_OUTPUT_DISPATCH_LISTS", kDispatcherSource, 3021));
     DispatchFrame& lrOutput = lState.lDispatchFrameLocal;
     lrOutput.ConstructWithSharedBinMemory(lpData->mpaDispatchListOutputArray,
         lpData->muDispatchListOutputCount, reinterpret_cast<uintptr_t>(lpData->mpDispatchBinMasterAddress),

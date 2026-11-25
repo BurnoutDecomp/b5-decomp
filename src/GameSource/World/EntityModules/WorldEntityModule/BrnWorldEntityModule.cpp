@@ -699,7 +699,7 @@ WorldEntityModule::UpdateStream( WorldEntityIO::OutputBuffer_PreScene* lpOutputB
         if ( mPlayerZoneResponse.IsZoneRequired( luZone ) )
         {
             PropEntityIO::PropInstancesNeededForZoneEvent lEvent;
-            lEvent.muZoneId = static_cast<u16>( liZoneNumber );
+            lEvent.Construct( static_cast<u16>( liZoneNumber ) );
             lpOutputBuffer->GetPropInstancesNeededForZoneQueue()->AddEvent( lEvent );
         }
     }
@@ -836,7 +836,7 @@ WorldEntityModule::OnWorldGraphicsLoadComplete( const BrnResource::GameDataIO::G
 
     {
         PropEntityIO::PropGraphicsLoadedEvent lPropEvent;
-        lPropEvent.muPropGraphicsId = luZoneNumber;
+        lPropEvent.Construct( luZoneNumber );
         mpTempCachePreSceneOutput->GetPropGraphicsLoadedQueue()->AddEvent( lPropEvent );
     }
 
@@ -933,7 +933,7 @@ WorldEntityModule::OnWorldGraphicsUnloadBegin( s32 liListIndex )
 
     {
         PropEntityIO::PropGraphicsUnloadedEvent lPropEvent;
-        lPropEvent.muPropGraphicsId = luZoneNumber;
+        lPropEvent.Construct( luZoneNumber );
         mpTempCachePreSceneOutput->GetPropGraphicsUnloadedQueue()->AddEvent( lPropEvent );
     }
 
