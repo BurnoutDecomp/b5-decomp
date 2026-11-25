@@ -312,12 +312,11 @@ void ImRenderer<V>::Construct(rw::IResourceAllocator* lpAllocator,
     lParameters.maElements[2].miOffset      = static_cast<s32>(KU_ELEMENT_WORD_A);
     lParameters.maElements[2].mu8UsageIndex = 6;                                  // element type 6 -> TEXCOORD0
 
-    u8 lauDescriptor[144] = {};
-    renderengine::VertexDescriptor::GetResourceDescriptor(lauDescriptor, &lParameters);
+    const rw::BaseResourceDescriptors<5> lVertexDescriptor = renderengine::VertexDescriptor::GetResourceDescriptor(lParameters);
 
     ResourceAllocator* lpAllocatorIf = reinterpret_cast<ResourceAllocator*>(lpAllocator);
     rw::Resource lDescriptorResource;
-    lpAllocatorIf->Create(&lDescriptorResource, lpAllocatorIf, lauDescriptor, 0);
+    lpAllocatorIf->Create(&lDescriptorResource, lpAllocatorIf, &lVertexDescriptor, 0);
     mpVertexDescriptor =
         reinterpret_cast<renderengine::VertexDescriptor*>(
             renderengine::VertexDescriptor::Initialize(&lDescriptorResource, &lParameters));

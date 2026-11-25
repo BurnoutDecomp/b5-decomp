@@ -322,10 +322,11 @@ namespace MemoryIO
     };
 
     // CgsMemoryModuleIO.h:741 (DWARF) -- inbound memory-request payload buffer.
-    struct InputBuffer : public CgsModule::IOBuffer
+    class InputBuffer : public CgsModule::IOBuffer
     {
-        // CgsMemoryModuleIO.h:865 (DWARF): the request queue is a 13312-byte, 16-aligned VEQ.
-        typedef CgsModule::VariableEventQueue<13312, 16> MemoryRequestQueue;
+    public:
+        // ARTIST CreateIOBuffer at 0x828E00B0 allocates 0x3014 bytes for this buffer.
+        typedef CgsModule::VariableEventQueue<12288, 16> MemoryRequestQueue;
 
         // Lifecycle (DWARF :746/:750) -- DECLARE-ONLY; defined in their own TUs.
         void Construct();
@@ -341,6 +342,7 @@ namespace MemoryIO
         // CgsMemoryModuleIO.h:869 (DWARF) -- embedded by value at this+4 (X360).
         MemoryRequestQueue mMemoryRequestQueue;
     };
+    CGS_STATIC_ASSERT(sizeof(InputBuffer) == 0x3014, "ARTIST memory request buffer size");
 
     // CgsMemoryModuleIO.h:887 (DWARF) -- outbound memory-response payload buffer (mirror of InputBuffer).
     // The Process* request handlers append their responses here; Update hands it to ProcessMemoryRequest.

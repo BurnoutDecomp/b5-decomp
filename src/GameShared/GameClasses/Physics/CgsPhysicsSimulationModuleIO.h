@@ -110,7 +110,7 @@ namespace PhysicsSimulationIO
         typedef CgsModule::EventQueue<InUpdateJointLimits, 36>       InUpdateJointLimitsQueue;      // DWARF :407 (16 +  36*80  =  2896)
         typedef CgsModule::EventQueue<InSetJointSpy, 36>             InSetJointSpyQueue;            // DWARF :414 (16 +  36*16  =   592)
         typedef CgsModule::EventQueue<InAddDrive, 1>                 InAddDriveQueue;               // DWARF :421 (16 +   1*144 =   160)
-        typedef CgsModule::EventQueue<InRemoveDrive, 1>              InRemoveDriveQueue;            // DWARF :428 (16 +   1*16  =    32)
+        typedef CgsModule::EventQueue<InRemoveDrive, 1>              InRemoveDriveQueue;            // 16 + 8 bytes
         typedef CgsModule::EventQueue<InUpdateDriveFrames, 1>        InUpdateDriveFramesQueue;      // DWARF :435 (16 +   1*80  =    96)
         typedef CgsModule::EventQueue<InUpdateDriveDynamics, 1>      InUpdateDriveDynamicsQueue;    // DWARF :442 (16 +   1*48  =    64)
         typedef CgsModule::EventQueue<InSetDriveSpy, 1>              InSetDriveSpyQueue;            // DWARF :449 (16 +   1*16  =    32)

@@ -56,6 +56,7 @@
 // ===================================================================================
 
 #include "types.hpp"
+#include "netgamelink.h"
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsPingMessage.h"
 #include "GameShared/GameClasses/Network/Packeting/CgsNetworkAdapterBase.h"  // NetworkAdapter, ConnectionData
@@ -198,6 +199,41 @@ namespace CgsNetwork
         NetworkPlayerID GetPlayerID() const                    { return mPlayerID; }
         void            SetConnectionData(ConnectionData lConnectionData) { mConnectionData = lConnectionData; }
         ConnectionData  GetConnectionData() const              { return mConnectionData; }
+
+        // Read the current per-player link rate from the existing DirtySock statistics.
+        u32 GetBytesSentToNetwork()
+        {
+            if (GetConnectionData().IsValid())
+            {
+                const NetGameLinkStatT* lpStats = NetGameLinkStatus(GetConnectionData().mpNetGameLink);
+                if (lpStats != 0)
+                    return lpStats->outrps;
+            }
+            return 0;
+        }
+
+        u32 GetBytesSentToDirtySock()
+        {
+            if (GetConnectionData().IsValid())
+            {
+                const NetGameLinkStatT* lpStats = NetGameLinkStatus(GetConnectionData().mpNetGameLink);
+                if (lpStats != 0)
+                    return lpStats->outbps;
+            }
+            return 0;
+        }
+
+        u32 GetBytesSentToNetworkWithOverhead()
+        {
+            if (GetConnectionData().IsValid())
+            {
+                const NetGameLinkStatT* lpStats = NetGameLinkStatus(GetConnectionData().mpNetGameLink);
+                if (lpStats != 0)
+                    return lpStats->outnps;
+            }
+            return 0;
+        }
+
         const char*     GetName() const                        { return macName; }
         void            SetLocalConsoleFrameRate(CgsSystem::EFrameRate leFrameRate);
         void            SetRemoteConsoleFrameRate(CgsSystem::EFrameRate leFrameRate);

@@ -1347,21 +1347,12 @@ u32 PlayerManager::GetTotalBytesSent()
     NetworkPlayerID lPlayerID = K_INVALID_PLAYER_ID;
     while (GetNextRemotePlayerID(&lPlayerID))
     {
-        const NetworkPlayer* lpNetworkPlayer = GetPlayerByID(lPlayerID);
+        NetworkPlayer* lpNetworkPlayer = GetPlayerByID(lPlayerID);
         CGS_ASSERT(lpNetworkPlayer, CGS_ASSERT_MESSAGE_AT(
             "lpNetworkPlayer",
             CGS_ARTIST_FILE, 2134 /* ARTIST 0x828741B8 */));
 
-        u32 luRate = 0;
-        if (lpNetworkPlayer->GetConnectionData().IsValid())
-        {
-            const NetGameLinkStatT* lpStat = NetGameLinkStatus(lpNetworkPlayer->GetConnectionData().mpNetGameLink);
-            if (lpStat != 0)
-            {
-                luRate = static_cast<u32>(lpStat->outrps);
-            }
-        }
-        luTotal += luRate;
+        luTotal += lpNetworkPlayer->GetBytesSentToNetwork();
     }
     return luTotal;
 }
@@ -1374,21 +1365,12 @@ u32 PlayerManager::GetTotalBytesSentToDirtySock()
     NetworkPlayerID lPlayerID = K_INVALID_PLAYER_ID;
     while (GetNextRemotePlayerID(&lPlayerID))
     {
-        const NetworkPlayer* lpNetworkPlayer = GetPlayerByID(lPlayerID);
+        NetworkPlayer* lpNetworkPlayer = GetPlayerByID(lPlayerID);
         CGS_ASSERT(lpNetworkPlayer, CGS_ASSERT_MESSAGE_AT(
             "lpNetworkPlayer",
             CGS_ARTIST_FILE, 2162 /* ARTIST 0x828742E0 */));
 
-        u32 luRate = 0;
-        if (lpNetworkPlayer->GetConnectionData().IsValid())
-        {
-            const NetGameLinkStatT* lpStat = NetGameLinkStatus(lpNetworkPlayer->GetConnectionData().mpNetGameLink);
-            if (lpStat != 0)
-            {
-                luRate = static_cast<u32>(lpStat->outbps);
-            }
-        }
-        luTotal += luRate;
+        luTotal += lpNetworkPlayer->GetBytesSentToDirtySock();
     }
     return luTotal;
 }
@@ -1401,21 +1383,12 @@ u32 PlayerManager::GetTotalBytesSentWithOverhead()
     NetworkPlayerID lPlayerID = K_INVALID_PLAYER_ID;
     while (GetNextRemotePlayerID(&lPlayerID))
     {
-        const NetworkPlayer* lpNetworkPlayer = GetPlayerByID(lPlayerID);
+        NetworkPlayer* lpNetworkPlayer = GetPlayerByID(lPlayerID);
         CGS_ASSERT(lpNetworkPlayer, CGS_ASSERT_MESSAGE_AT(
             "lpNetworkPlayer",
             CGS_ARTIST_FILE, 2191 /* ARTIST 0x82874408 */));
 
-        u32 luRate = 0;
-        if (lpNetworkPlayer->GetConnectionData().IsValid())
-        {
-            const NetGameLinkStatT* lpStat = NetGameLinkStatus(lpNetworkPlayer->GetConnectionData().mpNetGameLink);
-            if (lpStat != 0)
-            {
-                luRate = static_cast<u32>(lpStat->outnps);
-            }
-        }
-        luTotal += luRate;
+        luTotal += lpNetworkPlayer->GetBytesSentToNetworkWithOverhead();
     }
     return luTotal;
 }

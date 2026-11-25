@@ -9,7 +9,8 @@
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"   // CgsDev::StrStream (buffer-size assert)
-#include "SDKs/EATech/eajobs/entry_point.h"
+#include "GameShared/GameClasses/System/CgsHardwareInit.h"
+#include "SDKs/EATech/eajobs/job_scheduler.h"
 #include "ppmalloc/EAGeneralAllocator.h"
 
 #include <xtl.h>
@@ -246,99 +247,74 @@ void NetworkTextureDXTCompress::SetNewTextureToDecompress(
 // advances the write buffer; a finished job moves its output buffer to the read side, advances
 // the job's write buffer and fires (and clears) the lane's callback.
 //
-// [PC platform layer] THE DISPATCH, AND ONLY THE DISPATCH. The console submits each job to the
-// process-wide EA::Jobs::JobScheduler (gJobManager), which does not exist on this build. As
-// RelocatorEntry, TrafficJobEntry, the tint blend and the collision generators already do, the
-// job's own entry point runs here instead, over the same data block SetData attached. The job
-// wiring (Clear, SetCode, SetData, SetName), the running latch and the reaping are the
-// console's: Job::IsDone reports a never-submitted job as done, so the next Update reaps the
-// finished job and fires the callback one tick later, as it would after a worker finished.
-// The cost is that the compression (or decode) runs on the calling thread.
 void NetworkTextureDXTCompress::Update()
 {
-    // ---- Compression lane ----
-    if (!mbRunningCompressionJob)
+    if (!mbRunningCompressionJob && mbNewImageToCompress)
     {
-        if (mbNewImageToCompress)
-        {
-            const s32 liSource = miWriteToSource;
-            mbRunningCompressionJob = true;
-            miJobReadFromSource     = liSource;
-            mbNewImageToCompress    = false;
-            miWriteToSource         = (liSource + 1) % KI_NUM_IMAGE_BUFFERS;
+        mbRunningCompressionJob = true;
+        miJobReadFromSource = miWriteToSource;
+        mbNewImageToCompress = false;
+        miWriteToSource = (miWriteToSource + 1) % KI_NUM_IMAGE_BUFFERS;
 
-            mDXTCompressData.mpSrcPixels = mapUncompressedBuffers[liSource];
-            mDXTCompressData.mpDstPixels = mapCompressedBuffers[miJobWriteToTexture];
-
-            mDXTCompressJob.Clear();
-            mDXTCompressJob.mEntryPoint.SetCode(EA::Jobs::JOB_ENVIRONMENT_LOCAL,
-                                                reinterpret_cast<const void*>(&DXTCompressEntry), 0);
-            mDXTCompressJob.SetData(&mDXTCompressData, 128);
-            mDXTCompressJob.mEntryPoint.SetName("DXTCompressJob");
-
-            DXTCompressEntry(EA::Jobs::Param(), EA::Jobs::Param(static_cast<void*>(&mDXTCompressData)),
-                             EA::Jobs::Param(), EA::Jobs::Param());
-            return;
-        }
+        mDXTCompressData.mpSrcPixels = mapUncompressedBuffers[miJobReadFromSource];
+        mDXTCompressData.mpDstPixels = mapCompressedBuffers[miJobWriteToTexture];
+        mDXTCompressJob.Clear();
+        mDXTCompressJob.GetEntryPoint().SetCode(EA::Jobs::JOB_ENVIRONMENT_LOCAL,
+                                               reinterpret_cast<const void*>(&DXTCompressEntry), 0);
+        mDXTCompressJob.SetData(&mDXTCompressData, sizeof(mDXTCompressData));
+        mDXTCompressJob.GetEntryPoint().SetName("DXTCompressJob");
+        CgsSystem::JobManager()->AddJobs(&mDXTCompressJob, 1);
+        return;
     }
-    else if (mDXTCompressJob.IsDone())
+
+    if (mbRunningCompressionJob && mDXTCompressJob.IsDone())
     {
-        const s32 liTexture = miJobWriteToTexture;
-        miReadFromTexture       = liTexture;
+        miReadFromTexture = miJobWriteToTexture;
         mbRunningCompressionJob = false;
-        miJobWriteToTexture     = (liTexture + 1) % KI_NUM_IMAGE_BUFFERS;
+        miJobWriteToTexture = (miJobWriteToTexture + 1) % KI_NUM_IMAGE_BUFFERS;
 
-        const CompressionCompleteCallback lCallback = mCompressionCompleteCallback;
-        if (lCallback)
+        if (mCompressionCompleteCallback)
         {
-            void* const lpData = mpCompressionCompleteData;
+            const CompressionCompleteCallback lCompressionCompleteCallback = mCompressionCompleteCallback;
+            void* const lpUserData = mpCompressionCompleteData;
             mCompressionCompleteCallback = 0;
-            mpCompressionCompleteData    = 0;
-            lCallback(mapCompressedBuffers[miReadFromTexture], lpData);
+            mpCompressionCompleteData = 0;
+            lCompressionCompleteCallback(mapCompressedBuffers[miReadFromTexture], lpUserData);
         }
         return;
     }
 
-    // ---- Decode lane ----
-    if (!mbRunningDecodeJob)
+    if (!mbRunningDecodeJob && mbNewImageToDecode)
     {
-        if (mbNewImageToDecode)
-        {
-            const s32 liSource = miWriteToSource;
-            mbRunningDecodeJob  = true;
-            miJobReadFromSource = liSource;
-            mbNewImageToDecode  = false;
-            miWriteToSource     = (liSource + 1) % KI_NUM_IMAGE_BUFFERS;
+        mbRunningDecodeJob = true;
+        miJobReadFromSource = miWriteToSource;
+        mbNewImageToDecode = false;
+        miWriteToSource = (miWriteToSource + 1) % KI_NUM_IMAGE_BUFFERS;
 
-            mDXTDecodeData.mpCompressedPixels = mapCompressedBuffers[liSource];
-            mDXTDecodeData.mpDecodedPixels    = mapUncompressedBuffers[miJobWriteToTexture];
-
-            mDXTDecodeJob.Clear();
-            mDXTDecodeJob.mEntryPoint.SetCode(EA::Jobs::JOB_ENVIRONMENT_LOCAL,
-                                              reinterpret_cast<const void*>(&DXTDecodeEntry), 0);
-            mDXTDecodeJob.SetData(&mDXTDecodeData, 128);
-            mDXTDecodeJob.mEntryPoint.SetName("DXTDecodeJob");
-
-            DXTDecodeEntry(EA::Jobs::Param(), EA::Jobs::Param(static_cast<void*>(&mDXTDecodeData)),
-                           EA::Jobs::Param(), EA::Jobs::Param());
-        }
+        mDXTDecodeData.mpCompressedPixels = mapCompressedBuffers[miJobReadFromSource];
+        mDXTDecodeData.mpDecodedPixels = mapUncompressedBuffers[miJobWriteToTexture];
+        mDXTDecodeJob.Clear();
+        mDXTDecodeJob.GetEntryPoint().SetCode(EA::Jobs::JOB_ENVIRONMENT_LOCAL,
+                                             reinterpret_cast<const void*>(&DXTDecodeEntry), 0);
+        mDXTDecodeJob.SetData(&mDXTDecodeData, sizeof(mDXTDecodeData));
+        mDXTDecodeJob.GetEntryPoint().SetName("DXTDecodeJob");
+        CgsSystem::JobManager()->AddJobs(&mDXTDecodeJob, 1);
         return;
     }
 
-    if (mDXTDecodeJob.IsDone())
+    if (mbRunningDecodeJob && mDXTDecodeJob.IsDone())
     {
-        const s32 liTexture = miJobWriteToTexture;
-        miReadFromTexture   = liTexture;
-        mbRunningDecodeJob  = false;
-        miJobWriteToTexture = (liTexture + 1) % KI_NUM_IMAGE_BUFFERS;
+        miReadFromTexture = miJobWriteToTexture;
+        mbRunningDecodeJob = false;
+        miJobWriteToTexture = (miJobWriteToTexture + 1) % KI_NUM_IMAGE_BUFFERS;
 
-        const CompressionCompleteCallback lCallback = mDecodeCompleteCallback;
-        if (lCallback)
+        if (mDecodeCompleteCallback)
         {
-            void* const lpData = mpDecodeCompleteData;
+            const CompressionCompleteCallback lDecodeCompleteCallback = mDecodeCompleteCallback;
+            void* const lpDecodeCompleteData = mpDecodeCompleteData;
             mDecodeCompleteCallback = 0;
-            mpDecodeCompleteData    = 0;
-            lCallback(mapUncompressedBuffers[miReadFromTexture], lpData);
+            mpDecodeCompleteData = 0;
+            lDecodeCompleteCallback(mapUncompressedBuffers[miReadFromTexture], lpDecodeCompleteData);
         }
     }
 }

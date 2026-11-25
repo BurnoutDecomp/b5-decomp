@@ -39,7 +39,7 @@ namespace rw
                 mbIsReadOp = false;
                 miPriority = 0;
                 mpFileHandle = 0;
-                mUserData = 0;
+                mpContext = 0;
                 mpfnComplete = &DefaultCompletion;
                 mu64Position = 0;
                 mu64ByteCount = 0;
@@ -57,7 +57,7 @@ namespace rw
             {
                 ::MemoryBarrier();      // lwsync
                 mpFileHandle  = 0;    // result[4] (+0x10) = 0
-                mUserData = 0;          // result[5] (+0x14) = 0
+                mpContext = 0;          // result[5] (+0x14) = 0
                 mpBuffer  = 0;    // result[12] (+0x30) = 0
                 mpDevice  = 0;    // result[16] (+0x40) = 0
                 mpNext    = 0;    // *result (+0x00) = 0
@@ -71,8 +71,8 @@ namespace rw
             // queue the op on its device (the default device when the device is "shared").
             //   a1=this a2=path a3=flags a4=callback a5=userData a6=priority
             // -----------------------------------------------------------------------------
-            s32 AsyncOp::Open(const char* lpcPath, u32 luFlags, CompletionCallback lpfnComplete,
-                              uintptr_t luUserData, s32 liPriority)
+            void AsyncOp::Open(const char* lpcPath, u32 luFlags, CompletionCallback lpfnComplete,
+                              void* lpContext, s32 liPriority)
             {
                 ::MemoryBarrier();              // lwsync
                 mStatus = OPSTATUS_PENDING;                   // *(a1+4) = 0
@@ -82,7 +82,7 @@ namespace rw
                 mbIsReadOp    = false;              // *(a1+9) = 0
                 miPriority    = liPriority;     // stw r8, 0xC
                 mpFileHandle  = 0;        // stw r11(=0), 0x10
-                mUserData     = luUserData;     // stw r7, 0x14
+                mpContext     = lpContext;     // stw r7, 0x14
                 mu64Position  = luFlags;        // std clrldi(r5,32), 0x20  (flags zero-extended)
                 mu64ByteCount = 0;              // std r11(=0), 0x28
                 mu64BytesDone = 0;              // std r11(=0), 0x38
@@ -107,7 +107,7 @@ namespace rw
                 Device* lpQueue = mpDevice;
                 if (lpQueue->IsExternalThread()) // *(v16+6) -- external-thread device flag
                     lpQueue = gpFileSysManager->mpDefaultDevice;  // *(off_8327F078+10)
-                return lpQueue->InsertOp(this);
+                lpQueue->InsertOp(this);
             }
 
             // -----------------------------------------------------------------------------
@@ -119,8 +119,8 @@ namespace rw
             // redirect -- the asm reads *(a1+64) straight into r3).
             //   a1=this a2=stream a3=buffer a4=position a5=callback a6=userData a7=priority
             // -----------------------------------------------------------------------------
-            s32 AsyncOp::Read(Handle* lpFileHandle, void* lpBuffer, u64 lu64Position, u64 lu64Count,
-                              CompletionCallback lpfnComplete, uintptr_t luUserData, s32 liPriority)
+            void AsyncOp::Read(Handle* lpFileHandle, void* lpBuffer, u64 lu64Position, u64 lu64Count,
+                              CompletionCallback lpfnComplete, void* lpContext, s32 liPriority)
             {
                 ::MemoryBarrier();              // lwsync
                 mStatus = OPSTATUS_PENDING;                   // *(a1+4) = 0
@@ -135,18 +135,18 @@ namespace rw
                 mpBuffer      = lpBuffer;       // *(a1+48) = a3  (stw r5, 0x30)
                 mu64ByteCount = lu64Count;      // std r7, 0x28
                 mu64BytesDone = 0;              // std r3(=0), 0x38
-                mUserData     = luUserData;     // *(a1+20) = a6
+                mpContext     = lpContext;     // *(a1+20) = a6
 
                 if (!lpfnComplete)
                     lpfnComplete = &DefaultCompletion;
                 mpfnComplete = lpfnComplete;    // *(a1+24) = a5
                 mpfnDoIo = &AsyncOp::DoRead;    // *(a1+68) = DoRead
 
-                return mpDevice->InsertOp(this);
+                mpDevice->InsertOp(this);
             }
 
-            s32 AsyncOp::Write(Handle* lpFileHandle, const void* lpBuffer, u64 lu64Position, u64 lu64Count,
-                               CompletionCallback lpfnComplete, uintptr_t luUserData, s32 liPriority)
+            void AsyncOp::Write(Handle* lpFileHandle, const void* lpBuffer, u64 lu64Position, u64 lu64Count,
+                               CompletionCallback lpfnComplete, void* lpContext, s32 liPriority)
             {
                 ::MemoryBarrier();              // lwsync
                 mStatus = OPSTATUS_PENDING;                   // *(a1+4) = 0
@@ -161,14 +161,14 @@ namespace rw
                 mpBuffer      = const_cast<void*>(lpBuffer);       // *(a1+48) = a3  (stw r5, 0x30)
                 mu64ByteCount = lu64Count;      // std r7, 0x28
                 mu64BytesDone = 0;              // std r3(=0), 0x38
-                mUserData     = luUserData;     // *(a1+20) = a6
+                mpContext     = lpContext;     // *(a1+20) = a6
 
                 if (!lpfnComplete)
                     lpfnComplete = &DefaultCompletion;
                 mpfnComplete = lpfnComplete;    // *(a1+24) = a5
                 mpfnDoIo = &AsyncOp::DoWrite;   // *(a1+68) = DoWrite
 
-                return mpDevice->InsertOp(this);
+                mpDevice->InsertOp(this);
             }
 
             // -----------------------------------------------------------------------------
@@ -178,8 +178,8 @@ namespace rw
             // and queue. The callback defaults to STUB. (Close stores the stream at +0x10.)
             //   a1=this a2=stream a3=callback a4=userData a5=priority
             // -----------------------------------------------------------------------------
-            s32 AsyncOp::Close(Handle* lpFileHandle, CompletionCallback lpfnComplete,
-                               uintptr_t luUserData, s32 liPriority)
+            void AsyncOp::Close(Handle* lpFileHandle, CompletionCallback lpfnComplete,
+                               void* lpContext, s32 liPriority)
             {
                 ::MemoryBarrier();              // lwsync
                 mStatus = OPSTATUS_PENDING;                   // *(a1+4) = 0
@@ -189,7 +189,7 @@ namespace rw
                 mbIsReadOp    = false;              // *(a1+9) = 0
                 miPriority    = liPriority;     // *(a1+12) = a5
                 mpFileHandle  = lpFileHandle; // *(a1+16) = a2
-                mUserData     = luUserData;     // *(a1+20) = a4
+                mpContext     = lpContext;     // *(a1+20) = a4
 
                 if (!lpfnComplete)
                     lpfnComplete = &DefaultCompletion;
@@ -202,7 +202,7 @@ namespace rw
                 Device* lpDevice = lpFileHandle->mpDevice; // v6 = *(a2+12)
                 mpfnDoIo = &AsyncOp::DoClose;   // *(a1+68) = DoClose
                 mpDevice = lpDevice;            // *(a1+64) = v6
-                return lpDevice->InsertOp(this);
+                lpDevice->InsertOp(this);
             }
 
             // -----------------------------------------------------------------------------
@@ -355,18 +355,17 @@ namespace rw
             // -----------------------------------------------------------------------------
             // AsyncOp::SetPriority @0x82BBFD80 -- if the priority actually changes, re-queue
             // via Device::ChangeOpPriority (redirecting to the default device when shared).
-            // The X360 returns `this` (r3) when unchanged, else the ChangeOpPriority result.
+            // An unchanged priority leaves the current queue entry alone.
             // -----------------------------------------------------------------------------
-            s32 AsyncOp::SetPriority(s32 liPriority)
+            void AsyncOp::SetPriority(s32 liPriority)
             {
                 if (miPriority != liPriority)            // *(result+12) != a2
                 {
                     Device* lpDevice = mpDevice;         // *(result+64)
                     if (lpDevice->IsExternalThread())    // *(v2+6)
                         lpDevice = gpFileSysManager->mpDefaultDevice;
-                    return lpDevice->ChangeOpPriority(this, liPriority);
+                    lpDevice->ChangeOpPriority(this, liPriority);
                 }
-                return static_cast<s32>(reinterpret_cast<intptr_t>(this)); // r3 == this
             }
         }
     }

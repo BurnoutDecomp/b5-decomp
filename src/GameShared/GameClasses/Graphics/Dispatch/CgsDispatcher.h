@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>   // offsetof
+#include "GameShared/Jobs/RadixSort/RadixSort.h"
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
@@ -109,9 +110,9 @@ struct DispatchObjectContext;
 //                                                "mpDispatchBin != NULL" @0x827FA730)
 //   0x08  m_pBinBase         DispatchCommand*  (a1[2]) -- base for packet-local offset
 //   0x0C  muCount            u32               (a1[3]) -- total records submitted
-//   0x10  mpBlockListHead    KeyBlock*         (a1[4]) -- first key block (walkers start here)
-//   0x14  mpBlockListTail    KeyBlock*         (a1[5]) -- current (last) key block
-//   0x18  mpSortedKeys       u64*              (a1[6]) -- flat sorted record array
+//   0x10  mpBlockListHead    SortKeyBlock*         (a1[4]) -- first key block (walkers start here)
+//   0x14  mpBlockListTail    SortKeyBlock*         (a1[5]) -- current (last) key block
+//   0x18  mpaSortedKeyArray       SortKey*          (a1[6]) -- flat sorted record array
 //                                                (PrepareSortJobInfo fills; walkers read)
 //   0x01C mapChainBlockArray[64] -- saved chains from shared-bin blocks
 //   0x11C muChainBlockCount     -- consumed by ReconnectChainBlocks
@@ -119,54 +120,20 @@ struct DispatchObjectContext;
 class CGS_ALIGN(128) DispatchList
 {
 public:
-    // One block in the key-block chain. Submit appends the 64-bit sort record at
-    // mpKeys[muCount] and bumps muCount; ReserveKey rolls to a fresh block (via
-    // AllocateKeyBlock) once muCount reaches muCapacity. Field offsets attested by
-    // the asm: *block (0x00) = key array, +0x04 = count, +0x08 = cap, +0x0C = next
-    // (AllocateKeyBlock chain append @0x827FA730; DispatchAllObjectToMesh walk).
-    struct KeyBlock
-    {
-        u64*      mpKeys;      // 0x00 -- packed 64-bit sort records
-        u32       muCount;     // 0x04 -- records used
-        u32       muCapacity;  // 0x08 -- records this block can hold
-        KeyBlock* mpNext;      // 0x0C -- next block in the chain (NULL = tail)
-    };
-
-    // AllocateKeyBlock @0x827FA730 sizes each block at 64 records; the block is carved
-    // from the list's bin as [header][64 x u64 keys].
     static const u32 KU_KEYBLOCK_CAPACITY = 64u;
     static const u32 KU_MAX_BLOCKS_PER_CHAIN = 64u;
 
-    // Packed 64-bit sort record: the sort key in the high bits, the packet's
-    // bin-local quad-word offset in the low 20 bits.
-    struct SortKey
-    {
-        static const u32 KU_MASK_OFFSET = 0x000FFFFFu;  // low 20 bits = packet-local qword offset
-        static const u32 KU_SHIFT_KEY   = 20u;          // sort key occupies bits [20..]
-    };
-
-    // The per-list sort-job parameter block PrepareSortJobInfo fills (the leading
-    // words of the 128-byte RadixSort job data @ jobData+20; BrnRendererModule
-    // sub_823F5EA0 packages it). Only the three words PrepareSortJobInfo writes are
-    // modelled; the job-side repackaging stays with the job system.
-    struct SortJobInfo
-    {
-        KeyBlock* mpBlockListHead;  // +0x00 -- the (rewritten) head block
-        u64*      mpaFlatKeys;      // +0x04 -- the flat 128-aligned key array
-        u32       muKeyCount;       // +0x08 -- records to sort
-    };
-
     // ---- Functions bodied by this TU (CgsGraphicsDispatchList.cpp) -----------
-    DispatchList* ReserveKey();                                       // @ 0x822A0788
+    void ReserveKey();                                       // @ 0x822A0788
     void Reset();
     void Submit(u64 lu64SortKey, DispatchCommand* lpPacket);           // @ 0x822A0808
-    // @ 0x827FA730 -- append a fresh 64-record KeyBlock (carved from the list's bin)
+    // @ 0x827FA730 -- append a fresh 64-record SortKeyBlock (carved from the list's bin)
     // to the chain and make it the tail.
-    DispatchList* AllocateKeyBlock();
+    void AllocateKeyBlock();
     // @ 0x827FA7D0 -- flatten every key block into one 128-aligned array carved from
-    // the list's bin, collapse the chain onto it, publish it as mpSortedKeys, and
+    // the list's bin, collapse the chain onto it, publish it as mpaSortedKeyArray, and
     // fill lrJobInfo for the RadixSort job.
-    void PrepareSortJobInfo(SortJobInfo& lrJobInfo);
+    void PrepareSortJobInfo(SortJobInputOutput& lrJobInfo);
     // @0x82AD2020) between PrepareSortJobInfo and the dispatch walk. The PC
     // bring-up has no job scheduler yet, so this member runs the same
     // prepare-then-sort synchronously. Despite the job name, ARTIST
@@ -181,14 +148,14 @@ public:
         CGS_ASSERT(luIndex < muCount,
             CGS_ASSERT_MESSAGE_AT("luIndex < muTotalKeyCount",
                 "..\\..\\..\\GameShared\\GameClasses\\Graphics\\Dispatch\\CgsDispatcher.h", 622));
-        return m_pBinBase + (static_cast<u32>(mpSortedKeys[luIndex]) & SortKey::KU_MASK_OFFSET);
+        return m_pBinBase + (static_cast<u32>(mpaSortedKeyArray[luIndex].mu64Whole & SortKey::KU_MASK_OFFSET));
     }
 
-    KeyBlock* GetFirstKeyBlock() const { return mpBlockListHead; }
-    void SetSingleKeyBlock(KeyBlock* lpBlock)
+    SortKeyBlock* GetFirstKeyBlock() const { return mpBlockListHead; }
+    void SetSingleKeyBlock(SortKeyBlock* lpBlock)
     {
         mpBlockListHead = mpBlockListTail = lpBlock;
-        muCount = lpBlock->muCount;
+        muCount = lpBlock->muKeyCount;
     }
     void SetDispatchBinMasterStart(DispatchCommand* lpBase) { m_pBinBase = lpBase; }
 
@@ -230,10 +197,10 @@ private:
     DispatchBin*     mpDispatchBin;        // 0x04 (a1[1]) -- the owning frame's bin
     DispatchCommand* m_pBinBase;           // 0x08 (a1[2])
     u32              muCount;              // 0x0C (a1[3])
-    KeyBlock*        mpBlockListHead;      // 0x10 (a1[4])
-    KeyBlock*        mpBlockListTail;      // 0x14 (a1[5])
-    u64*             mpSortedKeys;         // 0x18 (a1[6]) -- flat sorted record array
-    KeyBlock*        mapChainBlockArray[KU_MAX_BLOCKS_PER_CHAIN]; // X360 +0x1C
+    SortKeyBlock*        mpBlockListHead;      // 0x10 (a1[4])
+    SortKeyBlock*        mpBlockListTail;      // 0x14 (a1[5])
+    SortKey*         mpaSortedKeyArray;         // 0x18 (a1[6]) -- flat sorted record array
+    SortKeyBlock*        mapChainBlockArray[KU_MAX_BLOCKS_PER_CHAIN]; // X360 +0x1C
     u32              muChainBlockCount;                        // X360 +0x11C
 
     // Compile-time native member gates; this helper emits no runtime code.

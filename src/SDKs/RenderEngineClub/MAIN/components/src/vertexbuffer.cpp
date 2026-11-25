@@ -4,14 +4,17 @@
 #include <xgraphics.h>
 #include <cstring>
 
+// The native constructor calls the XDK libcMT memset provider at 82C0B180.
+#pragma function(memset)
+
 namespace renderengine
 {
-// ARTIST sub_82B61FE0, reached by Xbox2UnSet's tail branch at 82B63058.
+// ARTIST 82B61FE0, reached by Xbox2UnSet's tail branch at 82B63058.
 // GetStreamSource adds a reference; release it before comparing the binding.
-void VertexBuffer::Xbox2UnSet()
+static void UnbindVertexStreams(VertexBuffer* lpBuffer)
 {
     D3DDevice* const device = ::gpD3DDevice;
-    if (D3DResource_IsSet(this, device))
+    if (D3DResource_IsSet(lpBuffer, device))
     {
         for (u32 stream = 0; stream < 16; ++stream)
         {
@@ -20,7 +23,7 @@ void VertexBuffer::Xbox2UnSet()
             if (buffer)
             {
                 D3DResource_Release(buffer);
-                if (buffer == this)
+                if (buffer == lpBuffer)
                     D3DDevice_SetStreamSource_Inline(device, stream, 0, 0, 0);
             }
         }
@@ -31,8 +34,8 @@ void VertexBuffer::Xbox2UnSet()
 VertexBuffer* VertexBuffer::Initialize(const rw::Resource& resource, const Parameters& parameters)
 {
     VertexBuffer* const buffer = static_cast<VertexBuffer*>(resource.m_baseResources[0]);
-    std::memset(buffer, 0, sizeof(VertexBuffer));
-    buffer->Common = 1;
+    memset(buffer, 0, sizeof(VertexBuffer));
+    buffer->Common = D3DCOMMON_TYPE_VERTEXBUFFER;
     buffer->Fence = 0;
     buffer->ReadFence = 0;
     buffer->ReferenceCount = 1;
@@ -50,15 +53,8 @@ VertexBuffer* VertexBuffer::Initialize(const rw::Resource& resource, const Param
 rw::ResourceDescriptor VertexBuffer::GetResourceDescriptor(const Parameters& parameters)
 {
     rw::ResourceDescriptor descriptor;
-    for (u32 i = 0; i != 5; ++i)
-    {
-        descriptor.m_baseResourceDescriptors[i].m_size = 0;
-        descriptor.m_baseResourceDescriptors[i].m_alignment = 1;
-    }
-    descriptor.m_baseResourceDescriptors[0].m_size = sizeof(VertexBuffer);
-    descriptor.m_baseResourceDescriptors[0].m_alignment = 4;
-    descriptor.m_baseResourceDescriptors[2].m_size = parameters.bufferSize;
-    descriptor.m_baseResourceDescriptors[2].m_alignment = 4;
+    descriptor.m_baseResourceDescriptors[0] = rw::BaseResourceDescriptor(sizeof(VertexBuffer), 4);
+    descriptor.m_baseResourceDescriptors[2] = rw::BaseResourceDescriptor(parameters.bufferSize, D3DVERTEXBUFFER_ALIGNMENT);
     return descriptor;
 }
 
@@ -76,32 +72,13 @@ void VertexBuffer::Xbox2CheckPhysicalMemoryFlags()
     if (base)
     {
         const DWORD flags = XQueryMemoryProtect(base);
+        u32 common = Common;
         if (flags & (PAGE_NOCACHE | PAGE_WRITECOMBINE))
-            Common &= ~D3DCOMMON_CPU_CACHED_MEMORY;
+            common &= ~D3DCOMMON_CPU_CACHED_MEMORY;
         else
-            Common |= D3DCOMMON_CPU_CACHED_MEMORY;
+            common |= D3DCOMMON_CPU_CACHED_MEMORY;
+        Common = common;
     }
-}
-
-// ARTIST 8227D0A0: offset and size describe the iterator; SDK maps the whole VB.
-bool VertexBuffer::Lock(u32 flags, BatchIterator& iterator, u32 offset, u32 size)
-{
-    if (!size) size = m_bufferSize;
-    Xbox2UnSet();
-    DWORD lockFlags = 0;
-    if ((flags & LOCK_READ) && !(flags & LOCK_WRITE))
-    {
-        if (XMemGetPageSize(reinterpret_cast<void*>(Format.dword[0] & ~3u)) <= 4096)
-            lockFlags = D3DLOCK_READONLY;
-    }
-    else if ((flags & LOCK_WRITE) && (flags & LOCK_DISCARD))
-        lockFlags = D3DLOCK_NOOVERWRITE;
-    u8* const data = static_cast<u8*>(D3DVertexBuffer_Lock(this, 0, 0, lockFlags));
-    iterator.m_bufferSize = size;
-    iterator.m_flags = flags;
-    iterator.m_vb = this;
-    iterator.m_lockedBuffer = data + offset;
-    return true;
 }
 
 // The native inline Unlock is also emitted at 82B63FF0 by VertexBufferHelper.
@@ -114,7 +91,7 @@ void VertexBuffer::Unlock(const BatchIterator&)
 void VertexBuffer::Destruct(VertexBuffer* buffer)
 {
     D3DDevice* const device = ::gpD3DDevice;
-    buffer->Xbox2UnSet();
+    UnbindVertexStreams(buffer);
     if (!D3DResource_IsSet(buffer, device))
     {
         if (buffer->Fence)
@@ -134,8 +111,15 @@ void VertexBuffer::Release()
     {
         Destruct(this);
         if (Common & D3DCOMMON_D3DCREATED) D3DResource_Release(this);
+        const u32 format = Format.dword[0] & 3;
         Common = 0;
-        Format.dword[0] &= 3;
+        Format.dword[0] = format;
     }
+}
+
+// ARTIST 82B63058 forwards the vertex stream unbind to its resource owner.
+void VertexBuffer::Xbox2UnSet()
+{
+    UnbindVertexStreams(this);
 }
 }

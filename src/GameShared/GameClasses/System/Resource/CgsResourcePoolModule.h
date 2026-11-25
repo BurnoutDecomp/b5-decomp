@@ -19,7 +19,7 @@
 
 // Async pool-create dispatch (CreateResourceRequest -> MemoryModule -> CreateResourceResponse).
 namespace CgsModule { struct IOBufferStack; }
-namespace CgsMemory { namespace MemoryIO { struct InputBuffer; struct CreateResourceResponse; struct DestroyBankResponse; } }
+namespace CgsMemory { namespace MemoryIO { class InputBuffer; struct CreateResourceResponse; struct DestroyBankResponse; } }
 namespace CgsResource { namespace PoolIO { struct InputBuffer; struct OutputBuffer; } }
 namespace CgsResource { namespace Events { struct CreatePoolRequest; struct AcquireResourceRequest; struct AcquireResourceListRequest; } }
 namespace CgsResource { namespace Events { struct CreatePoolResponse; struct UnacquireResourceRequest; struct InvalidatePoolRequest; struct ValidatePoolRequest; struct DeletePoolRequest; } }

@@ -21,6 +21,7 @@
 #include "GameShared/GameClasses/Development/CgsStrStream.h"            // CgsDev::StrStream (streamed asserts)
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // CgsDev::PerfMonCpu
 
+#include "rw/math/fpu/scalar_operation.h"
 #include <xtl.h>
 #include <cstring>   // std::memset / std::memcpy (the X360 XMemSet / XMemCpy)
 
@@ -145,30 +146,34 @@ namespace CgsNetwork
     {
         CgsDev::PerfMonCpu::StartMonitor(miXToRPM);
 
-        const char* lpcSrcRow = lpSrcTexture->GetTexture();
-        char*       lpcDstRow = lpDstTexture->GetTexture();
+        char* lpcSrcBuffer = lpSrcTexture->GetTexture();
+        char* lpcDstBuffer = lpDstTexture->GetTexture();
         const s32   liSrcStride = lpSrcTexture->GetStride();
         const s32   liDstStride = lpDstTexture->GetStride();
 
+        char* lpcSrcRow = lpcSrcBuffer;
+        char* lpcDstRow = lpcDstBuffer;
+
         CGS_ASSERT(lpSrcTexture->GetWidth()  == lpDstTexture->GetWidth(), CGS_ASSERT_MESSAGE_AT(
             "lpSrcTexture->GetWidth() == lpDstTexture->GetWidth()",
-            __FILE__, 195 /* ARTIST 0x8288ED04 */));
+            CGS_ARTIST_FILE, 195 /* ARTIST 0x8288ED04 */));
         CGS_ASSERT(lpSrcTexture->GetHeight() == lpDstTexture->GetHeight(), CGS_ASSERT_MESSAGE_AT(
             "lpSrcTexture->GetHeight() == lpDstTexture->GetHeight()",
-            __FILE__, 196 /* ARTIST 0x8288ED30 */));
+            CGS_ARTIST_FILE, 196 /* ARTIST 0x8288ED30 */));
 
-        for (s32 liRow = 0; liRow < lpDstTexture->GetHeight(); ++liRow)
+        for (s32 liRowIndex = 0; liRowIndex < lpDstTexture->GetHeight(); ++liRowIndex)
         {
-            const u32* lpuSrc = reinterpret_cast<const u32*>(lpcSrcRow);
-            u16*       lpuDst = reinterpret_cast<u16*>(lpcDstRow);
+            const s32* lpiSrcPixel = reinterpret_cast<const s32*>(lpcSrcRow);
+            s16* lpi16DstPixel = reinterpret_cast<s16*>(lpcDstRow);
 
-            for (s32 liColumn = 0; liColumn < lpDstTexture->GetWidth(); ++liColumn)
+            for (s32 liPixelIndex = 0; liPixelIndex < lpDstTexture->GetWidth(); ++liPixelIndex)
             {
-                const u32 luSource = *lpuSrc++;
-                const u32 luRed    = (luSource >> 19) & 0x1Fu;
-                const u32 luGreen  = (luSource >> 11) & 0x1Fu;
-                const u32 luBlue   = (luSource >>  3) & 0x1Fu;
-                *lpuDst++ = static_cast<u16>(0x8000u | (luRed << 10) | (luGreen << 5) | luBlue);
+                const s32 liSourcePixel = *lpiSrcPixel++;
+                const s32 liRed = (liSourcePixel >> 19) & 31;
+                const s32 liGreen = (liSourcePixel >> 11) & 31;
+                const s32 liBlue = (liSourcePixel >> 3) & 31;
+                // Subtract 32 from the red term to set bit 15 in the packed A1R5G5B5 pixel.
+                *lpi16DstPixel++ = static_cast<s16>(((liRed - 32) * 32 + liGreen) * 32 + liBlue);
             }
 
             lpcSrcRow += liSrcStride;
@@ -185,11 +190,11 @@ namespace CgsNetwork
                                                  NetworkTexture* lpDstTexture,
                                                  s32 liStartColumn, s32 liEndColumn)
     {
-        CGS_ASSERT(liStartColumn >= 0,                          "(liStartColumn >= 0)");
-        CGS_ASSERT(liStartColumn < liEndColumn,                 "(liStartColumn < liEndColumn)");
-        CGS_ASSERT(liStartColumn < lpDstTexture->GetWidth(),    "(liStartColumn < lpDstTexture->GetWidth() )");
-        CGS_ASSERT(liEndColumn > 0,                             "(liEndColumn > 0)");
-        CGS_ASSERT(liEndColumn <= lpDstTexture->GetWidth(),     "(liEndColumn <= lpDstTexture->GetWidth() )");
+        CGS_ASSERT_AT(liStartColumn >= 0, "(liStartColumn >= 0)", CGS_ARTIST_FILE, 144);
+        CGS_ASSERT_AT(liStartColumn < liEndColumn, "(liStartColumn < liEndColumn)", CGS_ARTIST_FILE, 145);
+        CGS_ASSERT_AT(liStartColumn < lpDstTexture->GetWidth(), "(liStartColumn < lpDstTexture->GetWidth() )", CGS_ARTIST_FILE, 146);
+        CGS_ASSERT_AT(liEndColumn > 0, "(liEndColumn > 0)", CGS_ARTIST_FILE, 148);
+        CGS_ASSERT_AT(liEndColumn <= lpDstTexture->GetWidth(), "(liEndColumn <= lpDstTexture->GetWidth() )", CGS_ARTIST_FILE, 149);
 
         if (lpSrcTexture->GetFormat() == renderengine::PIXELFORMAT_X8R8G8B8 &&
             lpDstTexture->GetFormat() == renderengine::PIXELFORMAT_A1R5G5B5)
@@ -198,11 +203,12 @@ namespace CgsNetwork
         }
         else
         {
-            char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "Cannot convert and resize these formats!";
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), __FILE__, __LINE__);
+            CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer,
+                                         CgsDev::Assert::giMessageBufferSize);
+            lStrStream << "Cannot convert and resize these formats!";
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+                                       CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 161));
             CgsDev::Assert::EndAssert();
         }
     }
@@ -424,59 +430,53 @@ namespace CgsNetwork
     void NetworkImageConverter::UnpackFromNetworkTexture(const NetworkTexture* lpcSrcTexture,
                                                           renderengine::Texture::Locked* lpDstLocked)
     {
-        const s32 liSrcStride  = lpcSrcTexture->GetStride();
-        const s32 liDstStride  = static_cast<s32>(lpDstLocked->muStride);
-        const s32 liBytesToCopy = (liDstStride < liSrcStride) ? liDstStride : liSrcStride;
-
-        const char* lpcSrcPointer = lpcSrcTexture->GetTexture();
-        char*       lpcDstPointer = static_cast<char*>(lpDstLocked->mpPixelData);
-
-        const renderengine::PixelFormat leFormat = lpcSrcTexture->GetFormat();
-        const s32 liLockedHeight = static_cast<s32>(lpDstLocked->muHeight);
-
+        const s32 liDestStride = static_cast<s32>(lpDstLocked->muStride);
+        const s32 liSrcStride = lpcSrcTexture->GetStride();
         s32 liRowsToCopy;
+        const s32 liBytesToCopy = rw::math::fpu::Min(liDestStride, liSrcStride);
+        const char* lpcSrcPointer = lpcSrcTexture->GetTexture();
+        char* lpcDstPointer = static_cast<char*>(lpDstLocked->mpPixelData);
+        const renderengine::PixelFormat leFormat = lpcSrcTexture->GetFormat();
+
         if (leFormat == renderengine::PIXELFORMAT_A1R5G5B5 ||
             leFormat == renderengine::PIXELFORMAT_G8B8 ||
             leFormat == renderengine::PIXELFORMAT_A8R8G8B8)
         {
+            const s32 liDestHeight = lpDstLocked->muHeight;
             liRowsToCopy = lpcSrcTexture->GetHeight();
-            if (liRowsToCopy >= liLockedHeight)
-                liRowsToCopy = liLockedHeight;
+            if (liRowsToCopy >= liDestHeight)
+                liRowsToCopy = liDestHeight;
         }
         else if (leFormat == renderengine::PIXELFORMAT_DXT1)
         {
-            liRowsToCopy = liLockedHeight;
-            const s32 liSrcHeightInBlocks = lpcSrcTexture->GetHeightInBlocks();
-            if (liSrcHeightInBlocks < liRowsToCopy)
-                liRowsToCopy = liSrcHeightInBlocks;
+            liRowsToCopy = rw::math::fpu::Min(lpcSrcTexture->GetHeightInBlocks(), static_cast<s32>(lpDstLocked->muHeight));
         }
         else
         {
             liRowsToCopy = 0;
-            char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "Unexpected texture format: " << static_cast<u32>(leFormat) << "\n";
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), __FILE__, __LINE__);
+            CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer,
+                                         CgsDev::Assert::giMessageBufferSize);
+            lStrStream << "Unexpected texture format: " << static_cast<s32>(lpcSrcTexture->GetFormat()) << "\n";
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+                                       CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 674));
             CgsDev::Assert::EndAssert();
         }
 
-        if (liSrcStride == liDstStride)
+        if (liSrcStride != static_cast<s32>(lpDstLocked->muStride))
         {
-            // Same pitch: one contiguous copy of the whole image.
-            std::memcpy(lpcDstPointer, lpcSrcPointer, static_cast<size_t>(liDstStride) * liRowsToCopy);
+            for (s32 liRowIndex = 0; liRowIndex < liRowsToCopy; ++liRowIndex)
+            {
+                XMemCpy(lpcDstPointer, lpcSrcPointer, static_cast<size_t>(liBytesToCopy));
+                lpcSrcPointer += liSrcStride;
+                lpcDstPointer += lpDstLocked->muStride;
+            }
         }
         else
         {
-            // Differing pitch: copy row by row, advancing each pointer by its own stride.
-            for (s32 liRowIndex = 0; liRowIndex < liRowsToCopy; ++liRowIndex)
-            {
-                std::memcpy(lpcDstPointer, lpcSrcPointer, static_cast<size_t>(liBytesToCopy));
-                lpcSrcPointer += liSrcStride;
-                lpcDstPointer += liDstStride;
-            }
+            XMemCpy(lpDstLocked->mpPixelData, lpcSrcTexture->GetTexture(),
+                    static_cast<size_t>(static_cast<s32>(lpDstLocked->muStride) * liRowsToCopy));
         }
-
     }
 }
 

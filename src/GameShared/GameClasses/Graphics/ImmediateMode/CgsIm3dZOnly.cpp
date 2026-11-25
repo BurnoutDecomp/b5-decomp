@@ -113,11 +113,10 @@ void ImRenderer<V>::Construct(rw::IResourceAllocator* lpAllocator,
     lParameters.maElements[0].mu8Usage      = 0;
     lParameters.maElements[0].mu8UsageIndex = 1;
 
-    u8 lauDescriptor[48] = {};
-    renderengine::VertexDescriptor::GetResourceDescriptor(lauDescriptor, &lParameters);
+    const rw::BaseResourceDescriptors<5> lVertexDescriptor = renderengine::VertexDescriptor::GetResourceDescriptor(lParameters);
 
     rw::Resource lDescriptorResource;
-    CgsGraphics::ResourceAllocatorCreate(lpAllocator, &lDescriptorResource, lauDescriptor);
+    CgsGraphics::ResourceAllocatorCreate(lpAllocator, &lDescriptorResource, &lVertexDescriptor);
     mpVertexDescriptor =
         reinterpret_cast<renderengine::VertexDescriptor*>(
             renderengine::VertexDescriptor::Initialize(&lDescriptorResource, &lParameters));

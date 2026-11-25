@@ -274,8 +274,7 @@ namespace postfx
         lVertexParams.maElements[1].miOffset      = static_cast<s32>(KU_VIGNETTE_VTX_ELEMENT1);
         lVertexParams.maElements[1].mu8UsageIndex = 6;   // ELEMENTTYPE_TEX0 (stb r11, var_155)
 
-        rw::BaseResourceDescriptors<5> lVertexDescriptor;
-        renderengine::VertexDescriptor::GetResourceDescriptor(&lVertexDescriptor, &lVertexParams);
+        rw::BaseResourceDescriptors<5> lVertexDescriptor = renderengine::VertexDescriptor::GetResourceDescriptor(lVertexParams);
         m_vertexDescriptorResource = AllocateStateResource(m_allocator, lVertexDescriptor);
         m_vertexDescriptor = renderengine::VertexDescriptor::Initialize(
             reinterpret_cast<rw::Resource*>(&m_vertexDescriptorResource), &lVertexParams);

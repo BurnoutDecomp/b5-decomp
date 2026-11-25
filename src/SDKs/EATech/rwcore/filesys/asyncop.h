@@ -50,11 +50,7 @@ namespace rw
                 bool               mbIsReadOp;      // +0x09
                 volatile s32       miPriority;      // +0x0C  scheduling priority
                 Handle*            mpFileHandle;    // +0x10
-                uintptr_t          mUserData;       // +0x14  opaque user word for the callback
-                                                    //        (pointer-width: the filesys Stream
-                                                    //        stashes its engine pointer here and
-                                                    //        recovers it in its op callbacks --
-                                                    //        X360 stored a 32-bit word)
+                void*              mpContext;       // +0x14  opaque completion context
                 CompletionCallback mpfnComplete;     // +0x18
                 u64                mu64Position;    // +0x20  64-bit file offset
                 u64                mu64ByteCount;   // +0x28  64-bit byte count requested
@@ -72,14 +68,14 @@ namespace rw
 
                 // The four request entry points (@0x82BC00C0 / @0x82BC01D0 / @0x82BBFCF0 /
                 // @0x82BBFB48): fill the op, pick the Device, and Device::InsertOp it.
-                s32 Open(const char* lpcPath, u32 luFlags, CompletionCallback lpfnComplete,
-                         uintptr_t luUserData, s32 liPriority);
-                s32 Read(Handle* lpFileHandle, void* lpBuffer, u64 lu64Position, u64 lu64Count,
-                         CompletionCallback lpfnComplete, uintptr_t luUserData, s32 liPriority);
-                s32 Write(Handle* lpFileHandle, const void* lpBuffer, u64 lu64Position, u64 lu64Count,
-                          CompletionCallback lpfnComplete, uintptr_t luUserData, s32 liPriority);
-                s32 Close(Handle* lpFileHandle, CompletionCallback lpfnComplete,
-                          uintptr_t luUserData, s32 liPriority);
+                void Open(const char* lpcPath, u32 luFlags, CompletionCallback lpfnComplete,
+                         void* lpContext, s32 liPriority);
+                void Read(Handle* lpFileHandle, void* lpBuffer, u64 lu64Position, u64 lu64Count,
+                         CompletionCallback lpfnComplete, void* lpContext, s32 liPriority);
+                void Write(Handle* lpFileHandle, const void* lpBuffer, u64 lu64Position, u64 lu64Count,
+                          CompletionCallback lpfnComplete, void* lpContext, s32 liPriority);
+                void Close(Handle* lpFileHandle, CompletionCallback lpfnComplete,
+                          void* lpContext, s32 liPriority);
 
                 // The transfer callbacks the scheduler invokes (@0x82BBFA70 / @0x82BBFBB8 /
                 // @0x82BBD450 / @0x82BBE010). Static because mpfnDoIo points at them.
@@ -92,9 +88,10 @@ namespace rw
                 Handle* GetResultHandle() const;
                 u64 GetResultSize() const;
                 OpStatus GetStatus(const EA::Thread::ThreadTime& lTimeoutAbsolute);
+                void* GetContext() const { return mpContext; }
 
                 // SetPriority @0x82BBFD80 -- re-prioritise via Device::ChangeOpPriority.
-                s32 SetPriority(s32 liPriority);
+                void SetPriority(s32 liPriority);
             };
 
             CGS_STATIC_ASSERT((sizeof(AsyncOp) == 0x48), "ARTIST async operation size");

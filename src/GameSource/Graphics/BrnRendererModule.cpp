@@ -989,9 +989,9 @@ void PrepareRadixSortJob(EA::Jobs::Job* job, SortInfo* data, CgsGraphics::Dispat
         CgsDev::Assert::EndAssert();
     }
 
-    const u32 address = reinterpret_cast<u32>(data->mInputOutputInfo.mpaFlatKeys);
+    const u32 address = reinterpret_cast<u32>(data->mInputOutputInfo.mpSortedPointerArray);
     data->mu64KeyInAddress = address;
-    data->mu16Count = static_cast<u16>(data->mInputOutputInfo.muKeyCount);
+    data->mu16Count = static_cast<u16>(data->mInputOutputInfo.muSortedPointerCount);
     data->mu64KeyOutAddress = address;
     job->Clear();
     job->GetEntryPoint().SetCode(EA::Jobs::JOB_ENVIRONMENT_LOCAL,

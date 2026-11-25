@@ -52,6 +52,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Physics/CgsRigidBody.h"
+#include "GameShared/GameClasses/Physics/DriveId.h"
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"
 #include "GameShared/GameClasses/Containers/CgsNonConstructedClassContainer.h"
 #include "rw/math/vpu/types.h"      // Matrix44Affine / Vector3  (NewRigidBody)
@@ -335,19 +336,11 @@ namespace PhysicsSimulationIO
     };
 
     // Remove a previously-added vehicle drive from the simulation (symmetric partner of
-    // InAddDrive). Queued with capacity 1 in PhysicsSimulationIO::InputBuffer (X360
-    // EventQueue<InRemoveDrive,1>::Construct @ 0x828A64C8). Only Construct is in scope (no
-    // Append/AddEvent to pin the stride, and the InputBuffer::Construct offset map @ 0x828A71B8
-    // that would pin it is not in scope), so the payload is sized only to the 16-byte alignment
-    // class the asm proves (addi r30, r31, 0x10).
-    //
-    // ⭐ FIELD RECOVERED 2026-08-04 (task #143). DWARF CgsPhysicsSimulationModuleIO.h:283..:288
-    // declares exactly ONE member, and the consumer agrees: `ProcessRemoveDriveQueue`
-    // @0x8289FF98 issues a single `ld 0(event)` and reads nothing else out of the element.
-    // The stride 16 already committed is unchanged (u64 under alignas(16)).
-    struct CGS_ALIGN(16) InRemoveDrive : public Event
+    // InAddDrive). The queue's inline storage begins at +0x10 (ARTIST
+    // 828A64E0), and GetEvent uses an eight-byte element stride (8289DE0C).
+    struct InRemoveDrive : public Event
     {
-        u64 mu64Id;  // @+0x00  DWARF :286 "mId" (a CgsPhysics::DriveId handle) -- the drain's only read
+        DriveId mId;
     };
 
     // Remove ALL rigid bodies belonging to one owner from the simulation, addressed by an
@@ -791,7 +784,7 @@ namespace PhysicsSimulationIO
     CGS_STATIC_ASSERT((sizeof(InSetJointSpy)            ==  16), "InSetJointSpy stride 16       ((203472-202880-16)/36)");
     // drive group
     CGS_STATIC_ASSERT((sizeof(InAddDrive)               == 144), "InAddDrive stride 144         ((203632-203472-16)/1)");
-    CGS_STATIC_ASSERT((sizeof(InRemoveDrive)            ==  16), "InRemoveDrive stride 16       ((203664-203632-16)/1)");
+    CGS_STATIC_ASSERT((sizeof(InRemoveDrive)            ==   8), "InRemoveDrive stride 8 (GetEvent @0x8289DE0C)");
     CGS_STATIC_ASSERT((sizeof(InUpdateDriveFrames)      ==  80), "InUpdateDriveFrames 80        ((203760-203664-16)/1)   [was 16 -- CORRECTED #142]");
     CGS_STATIC_ASSERT((sizeof(InUpdateDriveDynamics)    ==  48), "InUpdateDriveDynamics 48      ((203824-203760-16)/1)   [was 16 -- CORRECTED #142]");
     CGS_STATIC_ASSERT((sizeof(InSetDriveSpy)            ==  16), "InSetDriveSpy stride 16       ((203856-203824-16)/1)");
@@ -823,7 +816,7 @@ namespace PhysicsSimulationIO
     CGS_STATIC_ASSERT((sizeof(((InAddDrive*)0)->mDriveFrames)       ==  64), "InAddDrive DriveFrames 64B  (the FOUR lvx128 lanes the drain copies)");
     CGS_STATIC_ASSERT((sizeof(((InAddDrive*)0)->mDriveDynamics)     ==  32), "InAddDrive DriveDynamics 32B (the FOUR ld/std pairs the drain copies)");
 
-    CGS_STATIC_ASSERT((offsetof(InRemoveDrive, mu64Id)        ==   0), "InRemoveDrive::mId @+0x00        (drain @0x8289FF98 `ld 0(event)`, its only read)");
+    CGS_STATIC_ASSERT((offsetof(InRemoveDrive, mId)           ==   0), "InRemoveDrive::mId @+0x00 (8289FFF8)");
 
     CGS_STATIC_ASSERT((offsetof(InSetDriveSpy, mu64Id)        ==   0), "InSetDriveSpy::mId @+0x00        (drain @0x8289FE88 `ld 0(event)`)");
     CGS_STATIC_ASSERT((offsetof(InSetDriveSpy, mbSpy)         ==   8), "InSetDriveSpy::mbSpy @+0x08      (drain @0x8289FE88 `lbz 8(event)`)");

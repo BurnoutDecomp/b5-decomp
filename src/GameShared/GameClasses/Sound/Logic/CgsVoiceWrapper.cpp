@@ -79,7 +79,12 @@ void VoiceWrapper::Stop()
 
 f32 VoiceWrapper::GetGain(const s32* apSendName) const
 {
-    return mVoice.GetVoiceObject() ? mVoice.GetGain(apSendName) : 0.0f;
+    if (mVoice.IsCreated())
+    {
+        const s32 liSendName = *apSendName;
+        return mVoice.GetGain(&liSendName);
+    }
+    return 0.0f;
 }
 
 void VoiceWrapper::SetGain(u32 au32SendIndex, f32 af32Gain,
@@ -127,11 +132,7 @@ void VoiceWrapper::Update()
                                mCreateParams.mReverbSubMixVoiceID);
             }
 
-            Playback::Content* lpContent = mContent.GetObject();
-            Playback::Handle<Playback::Content> lhContent(lpContent);
-            if (lpContent)
-                lpContent->Acquire();
-            mVoice.Attach(static_cast<s32>(mCreateParams.mSlotName), &lhContent);
+            mVoice.Attach(static_cast<s32>(mCreateParams.mSlotName), mContent);
             meUpdateStage = E_UPDATE_STAGE_WAIT;
             // ARTIST checks the content state immediately after attachment.
         }
@@ -174,7 +175,7 @@ void VoiceWrapper::Update()
 // ARTIST @ 0x826C5270.
 void VoiceWrapper::Release()
 {
-    if (mVoice.GetVoiceObject())
+    if (mVoice.IsCreated())
     {
         if (mVoice.IsPlaying())
             mVoice.Stop();
@@ -182,10 +183,9 @@ void VoiceWrapper::Release()
         mVoice.Destruct();
     }
 
-    Playback::Content* lpContent = mContent.GetObject();
-    if (mCreateParams.mContentSpecName && lpContent)
-        lpContent->BeginRemove();
-    if (lpContent)
+    if (mCreateParams.mContentSpecName && mContent)
+        mContent->BeginRemove();
+    if (Playback::Content* lpContent = mContent.GetObject())
         lpContent->Release();
     mContent.SetObject(0);
 

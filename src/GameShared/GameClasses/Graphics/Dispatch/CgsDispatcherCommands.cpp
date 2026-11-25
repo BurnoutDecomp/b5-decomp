@@ -222,7 +222,7 @@ void DispatchFrame::ConstructWithSharedBinMemory(DispatchList* lpaDispatchListAr
         lrList.muChainBlockCount = 0;
         lrList.muWord00 = 0;
         lrList.mpBlockListHead = lrList.mpBlockListTail = 0;
-        lrList.mpSortedKeys = 0;
+        lrList.mpaSortedKeyArray = 0;
         lrList.m_pBinBase = m_Bin.GetBase();
     }
 }
@@ -777,23 +777,23 @@ DispatchCommand* DispatchList::DispatchAllObjectToMesh(DispatchPacketInterpreter
         CGS_ASSERT(mpBlockListHead != 0, "mpBlockListHead != NULL");
 
         s32 liBlockBase = 0;
-        for (KeyBlock* lpBlock = mpBlockListHead; lpBlock != 0; lpBlock = lpBlock->mpNext)
+        for (SortKeyBlock* lpBlock = mpBlockListHead; lpBlock != 0; lpBlock = lpBlock->mpNextBlock)
         {
             const s32 liRemaining = liEnd - liBlockBase;
             if (liRemaining <= 0)
                 break;
 
             s32 liFrom = liFirst - liBlockBase;
-            if (liFrom < static_cast<s32>(lpBlock->muCount))
+            if (liFrom < static_cast<s32>(lpBlock->muKeyCount))
             {
                 if (liFrom < 0) liFrom = 0;
                 s32 liTo = liRemaining;
-                if (liTo > static_cast<s32>(lpBlock->muCount))
-                    liTo = static_cast<s32>(lpBlock->muCount);
+                if (liTo > static_cast<s32>(lpBlock->muKeyCount))
+                    liTo = static_cast<s32>(lpBlock->muKeyCount);
 
                 for (s32 liKey = liFrom; liKey < liTo; ++liKey)
                 {
-                    u32* lpPacket = PacketFromRecord(m_pBinBase, lpBlock->mpKeys[liKey]);
+                    u32* lpPacket = PacketFromRecord(m_pBinBase, lpBlock->mpKeyArray[liKey].mu64Whole);
                     CGS_ASSERT(lpPacket != 0, "pPacket");
                     CGS_ASSERT(CommandIdOf(lpPacket[0]) == DispatchCommand::E_DRAWRENDERABLE,
                                "pCommand->GetCommandID() == DRAWRENDERABLE");
@@ -802,7 +802,7 @@ DispatchCommand* DispatchList::DispatchAllObjectToMesh(DispatchPacketInterpreter
                     lpLast = reinterpret_cast<DispatchCommand*>(lpPacket);
                 }
             }
-            liBlockBase += static_cast<s32>(lpBlock->muCount);
+            liBlockBase += static_cast<s32>(lpBlock->muKeyCount);
         }
     }
     return lpLast;
@@ -840,12 +840,12 @@ s32 DispatchList::DispatchAllMeshes(const DispatchPacketInterpreter* lpInterpret
     if (luFirst >= luEnd)
         return -1;
 
-    CGS_ASSERT(mpSortedKeys != 0, "mpSortedKeys != NULL (PrepareSortJobInfo/SortForDispatch must run first)");
+    CGS_ASSERT(mpaSortedKeyArray != 0, "mpaSortedKeyArray != NULL (PrepareSortJobInfo/SortForDispatch must run first)");
 
     for (u32 luIndex = luFirst; luIndex < luEnd; ++luIndex)
     {
         CGS_ASSERT(luIndex < muCount, "luIndex < muTotalKeyCount");
-        u32* lpPacket = PacketFromRecord(m_pBinBase, mpSortedKeys[luIndex]);
+        u32* lpPacket = PacketFromRecord(m_pBinBase, mpaSortedKeyArray[luIndex].mu64Whole);
         CGS_ASSERT(CommandIdOf(lpPacket[0]) == DispatchCommand::E_DRAWRENDERABLEMESH,
                    "lpCommand->GetCommandID() == DRAWRENDERABLEMESH");
 
@@ -1079,18 +1079,18 @@ void ObjectToMeshJob::ExecuteImplementation(ObjectToMeshJobInfo* lpData)
     lrOutput.GetBin().HandleMemoryOverflow(1);
 
     s32 liBlockBase = 0;
-    for (DispatchList::KeyBlock* lpBlock = lpData->mpDispatchListInput->GetFirstKeyBlock();
-         lpBlock; lpBlock = lpBlock->mpNext)
+    for (SortKeyBlock* lpBlock = lpData->mpDispatchListInput->GetFirstKeyBlock();
+         lpBlock; lpBlock = lpBlock->mpNextBlock)
     {
         lState.lInputDispatchList.SetSingleKeyBlock(lpBlock);
         s32 liFirst = lpData->miStartIndex - liBlockBase;
         if (liFirst < 0) liFirst = 0;
         s32 liEnd = lpData->miEndIndex - liBlockBase;
         if (liEnd < 0) liEnd = 0;
-        if (liEnd > static_cast<s32>(lpBlock->muCount)) liEnd = static_cast<s32>(lpBlock->muCount);
+        if (liEnd > static_cast<s32>(lpBlock->muKeyCount)) liEnd = static_cast<s32>(lpBlock->muKeyCount);
         lState.lInputDispatchList.DispatchAllObjectToMesh(lpData->mpDispatchInterpreter,
             &lrOutput, &lContext, liFirst, liEnd - liFirst);
-        liBlockBase += lpBlock->muCount;
+        liBlockBase += lpBlock->muKeyCount;
     }
     lrOutput.FlushBlockToSharedMemory();
 }

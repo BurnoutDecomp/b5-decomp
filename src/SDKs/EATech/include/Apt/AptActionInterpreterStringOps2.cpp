@@ -11,7 +11,7 @@
 // string and parsed -- an AptInteger when there is no '.' , else an AptFloat;
 // non-numeric -> undefined.
 //
-// Dependencies (all homed): isNaN(AptValue*) -- the value NaN test -- lives in
+// Dependencies (all homed): _isNaN(AptValue*) -- the value NaN test -- lives in
 // AptActionInterpreterBuiltins.cpp; EAStringC::UTF8_Mid / UTF8_Find are the
 // EAString.cpp text suite; gpUndefinedValue is the AptGlobals.cpp singleton
 // (built at AptInit); AptGetSwfVersion is AptLinker.cpp.
@@ -28,9 +28,9 @@
 
 // gpUndefinedValue: AptGlobals.cpp (built at AptInit). AptGetSwfVersion: AptLinker.cpp.
 extern AptValue*    gpUndefinedValue;
-extern unsigned int AptGetSwfVersion();
+extern int gnAptSwfVersion;
 // The value NaN test (console isNaN; homed in AptActionInterpreterBuiltins.cpp).
-extern bool         isNaN(AptValue* pValue);
+extern bool         _isNaN(AptValue* pValue);
 
 // ---------------------------------------------------------------------------
 // SubString @0x82AF3AE0 (0x15) -- AS substring(str, start, len).
@@ -64,28 +64,34 @@ void AptActionInterpreter::_FunctionAptActionSubString(AptActionInterpreter* pIn
 // ---------------------------------------------------------------------------
 // ToNumber @0x82AFABA8 (0x4A) -- coerce the top to a number in place.
 // ---------------------------------------------------------------------------
-void AptActionInterpreter::_FunctionAptActionToNumber(AptActionInterpreter* pInterp,
-                                                      LocalContextT* /*pContext*/)
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
+void AptActionInterpreter::_FunctionAptActionToNumber(AptActionInterpreter* pInterp, LocalContextT*)
 {
-    AptValue* pTop = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
-    const AptVirtualFunctionTable_Indices eType = pTop->getVtblIndex();
-    if ((eType == AptVFT_Float && pTop->getIsDefined())
-        || (eType == AptVFT_Integer && pTop->getIsDefined()))
-        return;   // already a number -> nothing to do
-
-    AptValue* pResult = gpUndefinedValue;
-    if (!isNaN(pTop) && (AptGetSwfVersion() != 7 || pTop->getIsDefined()))   // isNaN (AptActionInterpreterBuiltins.cpp)
+    AptValue* pValue = pInterp->stackAt(0);
+    if (!pValue->isFloat() && !pValue->isInteger())
     {
-        EAStringC scratch;
-        const EAStringC* pStr = AptValue::Get_ToString(pTop, &scratch);
-        const int nDot = pStr->UTF8_Find(".", 0);
-        if (nDot == -1 || nDot == static_cast<int>(pStr->GetLength()))
-            pResult = AptInteger::Create(pTop->toInteger());
-        else
-            pResult = AptFloat::Create(pTop->toFloat());
-    }
+        AptValue* pResult = gpUndefinedValue;
+        if (!_isNaN(pValue))
+        {
+            if (gnAptSwfVersion == 7 && !pValue->getIsDefined())
+            {
+                pInterp->stackPop();
+                pInterp->stackPush(pResult);
+                return;
+            }
 
-    pInterp->stackPop();
-    pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = pResult;
-    pResult->AddRef();
+            EAStringC lBuffer;
+            const EAStringC* pString = AptValue::Get_ToString(pValue, &lBuffer);
+            const int nDot = pString->UTF8_Find(".", 0);
+            if (nDot != -1 && nDot != static_cast<int>(pString->GetInternalSize()))
+                pResult = AptFloat::Create(pValue->toFloat());
+            else
+                pResult = AptInteger::Create(pValue->toInteger());
+        }
+        pInterp->stackPop();
+        pInterp->stackPush(pResult);
+    }
 }

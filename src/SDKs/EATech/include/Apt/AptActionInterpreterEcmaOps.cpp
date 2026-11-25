@@ -29,6 +29,7 @@
 // gpUndefinedValue: AptGlobals.cpp (built at AptInit). AptGetSwfVersion: AptLinker.cpp.
 extern AptValue*    gpUndefinedValue;
 extern unsigned int AptGetSwfVersion();
+extern int gnAptSwfVersion;
 
 namespace
 {
@@ -45,35 +46,49 @@ namespace
 // ---------------------------------------------------------------------------
 // StringEquals @0x82AE9898 (0x13) -- push AptBoolean(toString(top) == toString(under)).
 // ---------------------------------------------------------------------------
-void AptActionInterpreter::_FunctionAptActionStringEquals(AptActionInterpreter* pInterp,
-                                                          LocalContextT* /*pContext*/)
-{
-    AptValue* pTop   = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
-    AptValue* pUnder = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 2];
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 
+void AptActionInterpreter::_FunctionAptActionStringEquals(AptActionInterpreter* pInterp, LocalContextT*)
+{
+    AptValue* pTop = pInterp->stackAt(0);
+    AptValue* pUnder = pInterp->stackAt(1);
     AptValue* pResult = 0;
-    if (AptGetSwfVersion() == 7)
+    int nUndefined = 0;
+    if (gnAptSwfVersion == 7)
     {
-        // v7: count undefined operands -- one undefined => undefined, two => equal.
-        int nUndefined = (pTop->getIsDefined() ? 0 : 1) + (pUnder->getIsDefined() ? 0 : 1);
-        if (nUndefined == 1)
+        if (!pTop->getIsDefined())
+            ++nUndefined;
+        if (!pUnder->getIsDefined())
+            ++nUndefined;
+        switch (nUndefined)
+        {
+        case 1:
             pResult = gpUndefinedValue;
-        else if (nUndefined == 2)
+            break;
+        case 2:
             pResult = AptBoolean::Create(true);
+            break;
+        }
     }
 
     if (!pResult)
     {
-        EAStringC topScratch, underScratch;
-        const EAStringC* pTopStr   = AptValue::Get_ToString(pTop, &topScratch);
-        const EAStringC* pUnderStr = AptValue::Get_ToString(pUnder, &underScratch);
-        pResult = AptBoolean::Create(*pTopStr == *pUnderStr);
+        EAStringC lTop;
+        const EAStringC* pTopString = AptValue::Get_ToString(pTop, &lTop);
+        EAStringC lUnder;
+        const EAStringC* pUnderString = AptValue::Get_ToString(pUnder, &lUnder);
+        pResult = AptBoolean::Create(*pTopString == *pUnderString);
     }
 
     pInterp->stackPop(2);
-    pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = pResult;
-    pResult->AddRef();
+    pInterp->stackPush(pResult);
 }
+
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // ---------------------------------------------------------------------------
 // Add2 @0x82AF9E88 (0x47) -- ECMA `+`: concat if either operand is a string, else

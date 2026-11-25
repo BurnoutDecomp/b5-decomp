@@ -244,158 +244,121 @@ namespace rw
             // out any new chunks, then either move to the next request (cancelled / drained /
             // at end) or refill the buffer.
             // -----------------------------------------------------------------------------
-            s32 Stream::readcallback(StreamState* lpState)
+            void Stream::readcallback(StreamState* lpState)
             {
                 Request* lpReq = lpState->mpReqCurrent;
 
-                u64 luReadPos = lpState->mu64ReadPos;
-                s64 liTransferred;
-                u64 luAlignAdjust;
-                if (lpReq->muField10 == 1)
+                s64 li64Transferred;
+                s64 li64AlignAdjust = 0;
+                if (lpReq->miRequestType == 1)
                 {
-                    liTransferred = static_cast<s64>(lpState->mu64ChunkBytes);
-                    lpReq->mbAtEnd = (luReadPos + lpState->mu64ChunkBytes >= lpReq->mu64Size) ? 1 : 0;
-                    luAlignAdjust = 0;
+                    li64Transferred = lpState->mi64ChunkBytes;
+                    lpReq->mbAtEnd = lpState->mi64ReadPos + li64Transferred >= lpReq->mi64Size;
                 }
                 else
                 {
-                    s64 liResultSize = static_cast<s64>(lpState->mAsyncOp.GetResultSize());
-                    lpReq->mbAtEnd = (liResultSize < static_cast<s64>(lpState->mu64ChunkBytes)) ? 1 : 0;
-                    liTransferred = liResultSize;
-                    luAlignAdjust = luReadPos & 3u;
+                    li64Transferred = static_cast<s32>(lpState->mAsyncOp.GetResultSize());
+                    lpReq->mbAtEnd = li64Transferred < lpState->mi64ChunkBytes;
+                    li64AlignAdjust = lpState->mi64ReadPos & 3;
                 }
 
-                u8* lpDataEnd = lpState->mpDataEndPtr;
-                u8* lpParse   = lpState->mpParsePtr;
-                lpState->mpDataEndPtr = lpDataEnd + liTransferred;
-                lpState->mu64ReadPos  = (luReadPos - luAlignAdjust) + static_cast<u64>(liTransferred);
-                lpState->mpParsePtr   = lpParse + luAlignAdjust;
+                lpState->mpDataEndPtr += static_cast<s32>(li64Transferred);
+                lpState->mi64ReadPos = (lpState->mi64ReadPos - li64AlignAdjust) + li64Transferred;
+                lpState->mpParsePtr += static_cast<s32>(li64AlignAdjust);
 
                 s32 liResult = parsechunks(lpState);
 
-                if (lpReq->miState == 4)
-                    return startnextrequest(lpState, lpState->miUrgentPriority);
-
-                if (liResult == 2 || lpReq->mbAtEnd)
+                const s32 liState = lpReq->miState;
+                if (liState != 4)
                 {
+                    if (liResult != 2 && !lpReq->mbAtEnd)
+                    {
+                        if (liResult == 1)
+                            restartstream(lpState, lpState->miUrgentPriority - 1);
+                        return;
+                    }
+
                     lpState->mLock.Lock();
                     if (lpReq->miState != 4)
                         lpReq->miState = 3;
                     lpState->mLock.Unlock();
-                    return startnextrequest(lpState, lpState->miUrgentPriority);
                 }
-
-                if (liResult == 1)
-                    return restartstream(lpState, lpState->miUrgentPriority - 1);
-
-                return liResult;
+                startnextrequest(lpState, lpState->miUrgentPriority);
             }
 
             // -----------------------------------------------------------------------------
             // Stream::startnextrequest @0x82BC02C0 -- select the next request, align the
             // parse buffer, and either reuse a handle or queue its close/open operation.
+            // ARTIST 0x82BC037C restarts memory-backed requests before file-path dispatch.
             // -----------------------------------------------------------------------------
-            s32 Stream::startnextrequest(StreamState* lpState, s32 liPriority)
+            void Stream::startnextrequest(StreamState* lpState, s32 liPriority)
             {
                 lpState->mLock.Lock();
 
                 Request* lpReq = lpState->mpReqCurrent;
-                bool bNoRequest = (lpReq == 0);
-                if (lpReq)
+                bool lbIdle = false;
+                if (!lpReq || (lpReq->miState != 1 && !lpReq->mpNext))
                 {
-                    if (lpReq->miState == 1)
-                    {
-                        bNoRequest = false;
-                    }
-                    else if (lpReq->mpNext)
-                    {
-                        lpReq = lpReq->mpNext;
-                        lpState->mpReqCurrent = lpReq;
-                        bNoRequest = false;
-                    }
-                }
-
-                if (bNoRequest)
-                {
+                    lbIdle = true;
                     lpState->miState = 0;
                 }
                 else
                 {
-                    uintptr_t luAligned =
-                        (reinterpret_cast<uintptr_t>(lpState->mpParsePtr) + 0x0Fu)
-                        & ~static_cast<uintptr_t>(0x0Fu);
+                    if (lpReq->miState != 1)
+                        lpState->mpReqCurrent = lpReq->mpNext;
+                    lpReq = lpState->mpReqCurrent;
+                    const uintptr_t luAligned =
+                        (reinterpret_cast<uintptr_t>(lpState->mpParsePtr) + 15)
+                        & ~static_cast<uintptr_t>(15);
                     lpState->mpParsePtr = reinterpret_cast<u8*>(luAligned);
                     lpReq->mpBufferPos = lpState->mpParsePtr;
                     lpReq->miState = 2;
-                    lpReq->mbAtEnd = 0;
+                    lpReq->mbAtEnd = false;
                 }
-
                 lpState->mLock.Unlock();
 
-                if (bNoRequest)
-                    return 0;
+                if (lbIdle)
+                    return;
 
                 lpState->mpDataEndPtr = lpState->mpParsePtr;
-                if (lpReq->muField10 == 1)
-                    lpState->mu64ReadPos = 0;
-                else
-                    lpState->mu64ReadPos = lpReq->mu64Size;
+                if (lpReq->miRequestType == 1)
+                {
+                    lpState->mi64ReadPos = 0;
+                    lpState->mu64FileSize = lpReq->mi64Size;
+                    restartstream(lpState, liPriority);
+                    return;
+                }
 
-                lpState->mu64FileSize = lpReq->mu64Size;
-
+                lpState->mi64ReadPos = lpReq->mi64Size;
                 if (lpReq->mpPreOpenHandle)
                 {
                     lpState->macOpenPath[0] = 0;
-                    if (lpState->mpHandle && (lpState->muFlags & 1u) == 0)
+                    if (!lpState->mpHandle || (lpState->muFlags & 1u))
                     {
-                        return lpState->mAsyncOp.Close(
-                            lpState->mpHandle,
-                            reinterpret_cast<CompletionCallback>(&Stream::closecallback),
-                            reinterpret_cast<uintptr_t>(lpState),
-                            liPriority);
+                        lpState->muFlags |= 1u;
+                        lpState->mpHandle = lpReq->mpPreOpenHandle;
+                        lpState->mu64FileSize = lpState->mpHandle->mu64Size;
+                        restartstream(lpState, liPriority);
+                        return;
+                    }
+                }
+                else
+                {
+                    if (::strcmp(lpReq->macPath, lpState->macOpenPath) == 0)
+                    {
+                        restartstream(lpState, liPriority);
+                        return;
                     }
 
-                    lpState->muFlags |= 1u;
-                    lpState->mpHandle = lpReq->mpPreOpenHandle;
-                    lpState->mu64FileSize = lpReq->mpPreOpenHandle->mu64Size;
-                    return restartstream(lpState, liPriority);
+                    ::strcpy(lpState->macOpenPath, lpReq->macPath);
+                    if (!lpState->mpHandle || (lpState->muFlags & 1u))
+                    {
+                        lpState->mAsyncOp.Open(lpState->macOpenPath, 0, &Stream::opencallback, lpState, liPriority);
+                        return;
+                    }
                 }
 
-                const u8* lpOldPath = reinterpret_cast<const u8*>(lpState->macOpenPath);
-                const u8* lpNewPath = reinterpret_cast<const u8*>(lpReq->macPath);
-                while (*lpNewPath && *lpOldPath == *lpNewPath)
-                {
-                    ++lpOldPath;
-                    ++lpNewPath;
-                }
-
-                if (*lpOldPath == *lpNewPath)
-                    return restartstream(lpState, liPriority);
-
-                const char* lpSource = lpReq->macPath;
-                char* lpDestination = lpState->macOpenPath;
-                char cPathByte;
-                do
-                {
-                    cPathByte = *lpSource++;
-                    *lpDestination++ = cPathByte;
-                } while (cPathByte != 0);
-
-                if (lpState->mpHandle && (lpState->muFlags & 1u) == 0)
-                {
-                    return lpState->mAsyncOp.Close(
-                        lpState->mpHandle,
-                        reinterpret_cast<CompletionCallback>(&Stream::closecallback),
-                        reinterpret_cast<uintptr_t>(lpState),
-                        liPriority);
-                }
-
-                return lpState->mAsyncOp.Open(
-                    lpState->macOpenPath,
-                    0,
-                    reinterpret_cast<CompletionCallback>(&Stream::opencallback),
-                    reinterpret_cast<uintptr_t>(lpState),
-                    liPriority);
+                lpState->mAsyncOp.Close(lpState->mpHandle, &Stream::closecallback, lpState, liPriority);
             }
 
             // -----------------------------------------------------------------------------
@@ -404,7 +367,7 @@ namespace rw
             // enough room, then issue the next read (or copy the next slice from a mapped
             // request). If there is not a granule's worth of room, park the engine (state 2).
             // -----------------------------------------------------------------------------
-            s32 Stream::restartstream(StreamState* lpState, s32 liPriority)
+            void Stream::restartstream(StreamState* lpState, s32 liPriority)
             {
                 lpState->mLock.Lock();
 
@@ -479,7 +442,6 @@ namespace rw
                 }
 
                 lpState->mLock.Unlock();
-                s32 liResult = 0;
 
                 // Phase 3: work out how much contiguous room is free, compacting the buffer if
                 // that recovers a granule.
@@ -500,7 +462,7 @@ namespace rw
                         {
                             u8* lpDst;
                             s32 liRem = liKeep % 16;
-                            if (liRem == 0 || lpState->mpReqCurrent->muField10 == 1)
+                            if (liRem == 0 || lpState->mpReqCurrent->miRequestType == 1)
                                 lpDst = lpState->mpBufferBase;
                             else
                                 lpDst = lpState->mpBufferBase - liRem + 16;
@@ -518,31 +480,31 @@ namespace rw
                 if (liSpace >= lpState->miReadGranularity)
                 {
                     Request* lpReq = lpState->mpReqCurrent;
-                    if (lpReq->muField10 == 1)
+                    if (lpReq->miRequestType == 1)
                     {
                         // Mapped request: copy the next slice straight from memory.
-                        u64 luReadPos = lpState->mu64ReadPos;
-                        if (luReadPos + static_cast<u64>(static_cast<s64>(liSpace)) <= lpReq->mu64Size)
-                            lpState->mu64ChunkBytes = static_cast<u64>(static_cast<s64>(liSpace));
+                        const s64 li64ReadPos = lpState->mi64ReadPos;
+                        if (li64ReadPos + liSpace > lpReq->mi64Size)
+                            lpState->mi64ChunkBytes = lpReq->mi64Size - li64ReadPos;
                         else
-                            lpState->mu64ChunkBytes = lpReq->mu64Size - luReadPos;
+                            lpState->mi64ChunkBytes = liSpace;
 
                         ::memcpy(lpState->mpDataEndPtr, lpReq->mpMappedData,
-                                 static_cast<size_t>(lpState->mu64ChunkBytes));
-                        lpReq->mpMappedData += lpState->mu64ChunkBytes;
-                        liResult = readcallback(lpState);
+                                 static_cast<size_t>(lpState->mi64ChunkBytes));
+                        lpReq->mpMappedData += static_cast<s32>(lpState->mi64ChunkBytes);
+                        readcallback(lpState);
                     }
                     else
                     {
                         // Async request: issue a granule-sized read at the aligned position.
-                        lpState->mu64ChunkBytes = static_cast<u64>(static_cast<s64>(lpState->miReadGranularity));
-                        liResult = lpState->mAsyncOp.Read(
+                        lpState->mi64ChunkBytes = lpState->miReadGranularity;
+                        lpState->mAsyncOp.Read(
                             lpState->mpHandle,
                             lpState->mpDataEndPtr,
-                            lpState->mu64ReadPos & ~static_cast<u64>(3),
-                            static_cast<u64>(static_cast<s64>(lpState->miReadGranularity)),
-                            reinterpret_cast<CompletionCallback>(&Stream::filereadcallback),
-                            reinterpret_cast<uintptr_t>(lpState),
+                            lpState->mi64ReadPos & ~static_cast<s64>(3),
+                            lpState->mi64ChunkBytes,
+                            &Stream::filereadcallback,
+                            lpState,
                             liPriority);
                     }
                 }
@@ -551,7 +513,6 @@ namespace rw
                     lpState->miState = 2;
                 }
 
-                return liResult;
             }
 
             // -----------------------------------------------------------------------------
@@ -559,30 +520,32 @@ namespace rw
             // latch the handle + file size and restart streaming; on failure free the request
             // and move on to the next queued one.
             // -----------------------------------------------------------------------------
-            s32 Stream::opencallback(AsyncOp* lpOp)
+            void Stream::opencallback(AsyncOp* lpOp)
             {
-                StreamState* lpState = reinterpret_cast<StreamState*>(lpOp->mUserData);
-                Handle* lpHandle = static_cast<Handle*>(lpOp->GetResultHandle());
+                StreamState* lpState = static_cast<StreamState*>(lpOp->GetContext());
+                Handle* lpHandle = lpOp->GetResultHandle();
                 lpState->mpHandle = lpHandle;
-
-                if (lpHandle)
+                if (!lpHandle)
                 {
-                    s32 liPriority = lpState->miUrgentPriority;
+                    lpState->mLock.Lock();
+                    const s32 liState = lpState->miState;
+                    lpState->macOpenPath[0] = 0;
+                    if (liState == 1)
+                        lpState->miState = 0;
+                    freerequest(lpState, lpState->mpReqCurrent);
+                    lpState->mLock.Unlock();
+
+                    const s32 liPriority = lpState->mbNeedMore ? lpState->miUrgentPriority
+                                                             : lpState->miNormalPriority;
+                    startnextrequest(lpState, liPriority);
+                }
+                else
+                {
+                    const s32 liPriority = lpState->miUrgentPriority;
                     lpState->muFlags &= ~1u;
                     lpState->mu64FileSize = lpHandle->mu64Size;
-                    return restartstream(lpState, liPriority);
+                    restartstream(lpState, liPriority);
                 }
-
-                lpState->mLock.Lock();
-                s32 liEngineState = lpState->miState;
-                lpState->macOpenPath[0] = 0;
-                if (liEngineState == 1)
-                    lpState->miState = 0;
-                freerequest(lpState, lpState->mpReqCurrent);
-                lpState->mLock.Unlock();
-
-                s32 liNext = lpState->mbNeedMore ? lpState->miUrgentPriority : lpState->miNormalPriority;
-                return startnextrequest(lpState, liNext);
             }
 
             // -----------------------------------------------------------------------------
@@ -590,36 +553,36 @@ namespace rw
             // If the next request pre-opened its handle, adopt it and restart; otherwise kick
             // off the Open for the next file.
             // -----------------------------------------------------------------------------
-            s32 Stream::closecallback(AsyncOp* lpOp)
+            void Stream::closecallback(AsyncOp* lpOp)
             {
-                StreamState* lpState = reinterpret_cast<StreamState*>(lpOp->mUserData);
+                StreamState* lpState = static_cast<StreamState*>(lpOp->GetContext());
                 Request* lpReq = lpState->mpReqCurrent;
 
                 if (!lpReq->mpPreOpenHandle)
                 {
-                    return lpState->mAsyncOp.Open(
+                    lpState->mAsyncOp.Open(
                         lpState->macOpenPath,
                         0,
-                        reinterpret_cast<CompletionCallback>(&Stream::opencallback),
-                        reinterpret_cast<uintptr_t>(lpState),
+                        &Stream::opencallback,
+                        lpState,
                         lpState->miUrgentPriority);
+                    return;
                 }
 
-                Handle* lpHandle = lpReq->mpPreOpenHandle;
                 s32 liPriority = lpState->miUrgentPriority;
                 lpState->muFlags |= 1u;
-                lpState->mpHandle = lpHandle;
-                lpState->mu64FileSize = lpHandle->mu64Size;
-                return restartstream(lpState, liPriority);
+                lpState->mpHandle = lpReq->mpPreOpenHandle;
+                lpState->mu64FileSize = lpState->mpHandle->mu64Size;
+                restartstream(lpState, liPriority);
             }
 
             // -----------------------------------------------------------------------------
             // Stream::filereadcallback @0x82BC06C8 -- the read op's completion trampoline:
             // recover the engine from the op and forward to readcallback.
             // -----------------------------------------------------------------------------
-            s32 Stream::filereadcallback(AsyncOp* lpOp)
+            void Stream::filereadcallback(AsyncOp* lpOp)
             {
-                return readcallback(reinterpret_cast<StreamState*>(lpOp->mUserData));
+                readcallback(static_cast<StreamState*>(lpOp->GetContext()));
             }
 
             // -----------------------------------------------------------------------------
@@ -628,7 +591,7 @@ namespace rw
             // kick the pipeline if the engine was idle. Returns the new request id (0 if the
             // request pool is exhausted).
             // -----------------------------------------------------------------------------
-            s32 Stream::QueueFile(const char* lpcPath, Handle* lpPreOpenHandle, u64 lu64Size,
+            s32 Stream::QueueFile(const char* lpcPath, Handle* lpPreOpenHandle, s64 li64Size,
                                   ChunkParseCallback lpfnParse, void* lpParseContext)
             {
                 StreamState* lpState = mpState;
@@ -637,11 +600,11 @@ namespace rw
                 if (!lpReq)
                     return 0;
 
-                lpReq->muField10 = 0;
+                lpReq->miRequestType = 0;
                 ::strncpy(lpReq->macPath, lpcPath, 255);
                 lpReq->mbField113      = 0;
                 lpReq->mpPreOpenHandle = lpPreOpenHandle;
-                lpReq->mu64Size        = lu64Size;
+                lpReq->mi64Size        = li64Size;
 
                 if (!lpfnParse)
                     lpfnParse = lpState->mpfnDefaultParse;
@@ -720,7 +683,7 @@ namespace rw
             // it released, debit its bytes, and, if the engine had parked waiting for room,
             // restart streaming.
             // -----------------------------------------------------------------------------
-            s32 Stream::ReleaseChunk(Chunk* lpChunk)
+            void Stream::ReleaseChunk(Chunk* lpChunk)
             {
                 StreamState* lpState = mpState;
                 lpState->mLock.Lock();
@@ -733,15 +696,13 @@ namespace rw
                 if (liEngineState == 2)
                     lpState->miState = 1;
                 lpState->mLock.Unlock();
-                s32 liResult = 0;
 
                 if (liEngineState == 2)
                 {
                     s32 liPriority = lpState->mbNeedMore ? lpState->miUrgentPriority
                                                          : lpState->miNormalPriority;
-                    liResult = restartstream(lpState, liPriority);
+                    restartstream(lpState, liPriority);
                 }
-                return liResult;
             }
 
             // -----------------------------------------------------------------------------
@@ -749,7 +710,7 @@ namespace rw
             // queued, free it; if active, mark it cancelled, release every buffered chunk that
             // belongs to it, and re-home each region's current chunk.
             // -----------------------------------------------------------------------------
-            s32 Stream::CancelRequest(u32 luRequestId)
+            void Stream::CancelRequest(u32 luRequestId)
             {
                 StreamState* lpState = mpState;
                 lpState->mLock.Lock();
@@ -813,7 +774,6 @@ namespace rw
                 }
 
                 lpState->mLock.Unlock();
-                return 0;
             }
 
             // -----------------------------------------------------------------------------
@@ -865,10 +825,9 @@ namespace rw
             // region's usage, drop the buffered-byte total, release all chunks, and idle the
             // engine.
             // -----------------------------------------------------------------------------
-            s32 Stream::Kill()
+            void Stream::Kill()
             {
                 StreamState* lpState = mpState;
-                s32 liResult = 0;
 
                 Request* lpReq = lpState->mpReqTail;
                 if (lpReq)
@@ -878,7 +837,7 @@ namespace rw
                         s32 liState = lpReq->miState;
                         if (liState != 1 && liState != 2)
                             break;
-                        CancelRequest(static_cast<u32>(lpReq->miId));
+                        CancelRequest(lpReq->miId);
                         lpReq = lpState->mpReqTail;
                     }
 
@@ -897,10 +856,7 @@ namespace rw
                     if (lpState->miState == 2)
                         lpState->miState = 0;
                     lpState->mLock.Unlock();
-                    liResult = 0;
                 }
-
-                return liResult;
             }
         }
     }

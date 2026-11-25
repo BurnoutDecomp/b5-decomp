@@ -3,6 +3,9 @@
 #include "SDKs/RenderEngineClub/MAIN/components/src/device.h"
 #include <cstring>
 
+// ARTIST 82B63080 uses the XDK libcMT memset call for the native descriptor.
+#pragma function(memset)
+
 namespace renderengine
 {
 // ARTIST8214AD50: sixteen native {usage, usageIndex} pairs. The PS3 enum's
@@ -52,7 +55,7 @@ VertexDescriptorData* VertexDescriptor::Initialize(rw::Resource* lpResource,
 {
     VertexDescriptorData* const lpData =
         static_cast<VertexDescriptorData*>(lpResource->m_baseResources[0]);
-    std::memset(lpData, 0, 0x20);
+    memset(lpData, 0, 0x20);
     lpData->muType2Mask = 0;
     u32 lauStreamStrides[16] = { 0 };
     u32 luCount = 0;
@@ -114,5 +117,58 @@ void VertexDescriptor::Release(VertexDescriptorData* lpData)
         lpData->mpDeclaration->Release();
         lpData->mpDeclaration = 0;
     }
+}
+
+// ARTIST 82B61260 copies the compact descriptor elements back into their
+// native parameter slots, then fills the unused slots with the format sentinel.
+void VertexDescriptor::GetParameters(const void* lpData, Parameters* lpParamsOut)
+{
+    const VertexDescriptorData* lpDescriptor = static_cast<const VertexDescriptorData*>(lpData);
+    u32 luIndex = 0;
+    if (lpDescriptor->muElementCount != 0)
+    {
+        const VertexElement* lpSource = lpDescriptor->maElements;
+        Parameters::Element* lpDest = lpParamsOut->maElements;
+        do
+        {
+            std::memcpy(lpDest++, lpSource++, sizeof(Parameters::Element));
+            ++luIndex;
+        }
+        while (luIndex < lpDescriptor->muElementCount);
+
+        if (luIndex >= 16)
+            return;
+    }
+
+    Parameters::Element* lpDest = lpParamsOut->maElements + luIndex;
+    for (u32 luRemaining = 16 - luIndex; luRemaining != 0; --luRemaining, ++lpDest)
+    {
+        lpDest->mu16Stream = 0;
+        lpDest->mu8Type = 0;
+        lpDest->mu8Pad1 = 0xFF;
+        lpDest->mu8Usage = 0xFF;
+        lpDest->mu8UsageIndex = 0;
+        lpDest->mu16Pad0 = 0xFFFF;
+        lpDest->miOffset = VERTEXFORMAT_NA;
+        lpDest->muElementClass = 0;
+    }
+}
+
+// ARTIST 82B637D0. Every retained element has a 16-byte record and a stride byte.
+rw::BaseResourceDescriptors<5> VertexDescriptor::GetResourceDescriptor(const Parameters& lrParameters)
+{
+    u32 luElementCount = 0;
+    const Parameters::Element* lpElement = lrParameters.maElements;
+    for (u32 luRemaining = 16; luRemaining != 0; --luRemaining, ++lpElement)
+    {
+        if (lpElement->miOffset != VERTEXFORMAT_NA)
+            ++luElementCount;
+    }
+
+    const u32 luSize = offsetof(VertexDescriptorData, maElements)
+        + (sizeof(VertexElement) + sizeof(u8)) * luElementCount;
+    rw::BaseResourceDescriptors<5> lDescriptor;
+    lDescriptor.m_baseResourceDescriptors[0] = rw::BaseResourceDescriptor(luSize, 4);
+    return lDescriptor;
 }
 }

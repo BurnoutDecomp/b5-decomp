@@ -40,7 +40,7 @@ struct internal_state {
   } sub;        /* submode */
 
   /* mode independent information */
-  uInt method;          /* ARTIST +0x0c: initialized at 0x82ACCFD0, updated at 0x82ACD1D0 */
+  int method;           /* ARTIST +0x0c, compared as signed at 0x82ACE3C0 and 0x82ACF44C */
   int  nowrap;          /* flag for no wrapper */
   uInt wbits;           /* log2(window size)  (8..15, defaults to 15) */
   inflate_blocks_statef *blocks; /* current inflate_blocks state */

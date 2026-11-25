@@ -294,9 +294,9 @@ void InAirEffect::ProcessUpdate()
     const f32 lfAzimuth =
         GetMixerOutputValue(2, Nicotine::DMixIO::DMX_VOL) / 32767.0f;
 
-    mLandingVoices.SetGain(0, lfLandingGain, 0, &KU_SEND01);
-    mLandingVoices.SetParameter(0, lfPitch, 0, &KU_SPLICE_PITCH);
-    mLandingVoices.SetParameter(1, lfAzimuth, 0, &KU_SPLICE_AZIMUTH);
+    mLandingVoices.SetGain(0, lfLandingGain, CgsSound::Playback::Name(static_cast<uintptr_t>(KU_SEND01)));
+    mLandingVoices.SetParameter(0, lfPitch, CgsSound::Playback::Name(static_cast<uintptr_t>(KU_SPLICE_PITCH)));
+    mLandingVoices.SetParameter(1, lfAzimuth, CgsSound::Playback::Name(static_cast<uintptr_t>(KU_SPLICE_AZIMUTH)));
 
     SetSplicerVoiceParams(
         mJumpCamLandingVoice,

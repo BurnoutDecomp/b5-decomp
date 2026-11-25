@@ -21,6 +21,9 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceType.h"
 #include "rw/rwcore_structs.h"
 
+#include "rw/math/fpu/scalar_operation.h"
+
+#include <limits>
 #include <new>
 
 namespace CgsSound
@@ -193,17 +196,9 @@ bool Slot::Attach(Voice& arVoice, Handle<Content> ahContent)
 bool Voice::Attach(Name akName, Handle<Content>& arhContent)
 {
     Slot* lpSlot = FindNamedSlot(akName);
-    if (!lpSlot)
-    {
-        return false;
-    }
-
-    // Construct the by-value Slot::Attach argument.  The original Handle copy
-    // constructor takes this reference; Slot::Attach destroys it on all paths.
-    Content* lpContent = arhContent.GetObject();
-    if (lpContent)
-        lpContent->Acquire();
-    return lpSlot->Attach(*this, Handle<Content>(lpContent));
+    if (lpSlot)
+        return lpSlot->Attach(*this, arhContent);
+    return false;
 }
 
 // @ 0x826ACA78. Notify the bound content, release the handle, and clear the
@@ -507,29 +502,19 @@ InputParameter& Voice::GetInputParameter(u32 au32Index) const
     return reinterpret_cast<InputParameter*>(lpu8Table)[au32Index];
 }
 
-// @ 0x826ACDC8. Read a parameter's current value by name. Input parameters return their
-// value clamped to [Min,Max]; output parameters return their raw value. If neither table
-// has the name, the rodata default flt_82F93D88 (== 1.0f, unity-gain default; corroborated
-// by the committed Logic::Voice::GetGain sibling @0x826AD808) is returned.
+// ARTIST 0x826ACDC8. Inputs use RenderWare's ordered floating-point min/max
+// Clamp helper. Outputs return the stored value. A missing name yields the CRT NaN.
 f32 Voice::GetParameter(Name akName)
 {
-    // Not-found default: rodata float flt_82F93D88 == 1.0f (unity-gain).
-    static const f32 KF_PARAMETER_NOT_FOUND_DEFAULT = 1.0f;
-
-    InputParameter* lpIn = FindNamedInputParameter(akName);   // v10=*a2 -> stack Name
-    if (lpIn)
+    if (InputParameter* lpInput = FindNamedInputParameter(akName))
     {
-        // fsel pair: min(max(Value, Min), Max) == clamp(Value, Min, Max).
-        f32 lfLo = (lpIn->GetMin() >= lpIn->GetValueRaw()) ? lpIn->GetMin()
-                                                          : lpIn->GetValueRaw();
-        return (lpIn->GetMax() >= lfLo) ? lfLo : lpIn->GetMax();
+        return rw::math::fpu::Clamp(lpInput->GetValueRaw(), lpInput->GetMin(), lpInput->GetMax());
     }
 
-    OutputParameter* lpOut = FindNamedOutputParameter(akName); // *a2 reloaded to stack Name
-    if (lpOut)
-        return lpOut->Get();                                   // *(p+4) == mf32Value
+    if (OutputParameter* lpOutput = FindNamedOutputParameter(akName))
+        return lpOutput->Get();
 
-    return KF_PARAMETER_NOT_FOUND_DEFAULT;
+    return std::numeric_limits<f32>::quiet_NaN();
 }
 
 // @ 0x826ACD38. Set the value of the input parameter at as32Index (the caller passes its

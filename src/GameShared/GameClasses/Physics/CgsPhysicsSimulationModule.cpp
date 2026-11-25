@@ -364,11 +364,14 @@ namespace CgsPhysics
         return &maScaledDynamics[liIndex];
     }
 
-    // DWARF h:241. Inlined by the console into AllocateMemoryAndInitialiseRW as the bare
-    // `lwz r4, 0x47B0(r31)` at 0x828A25CC -- maRWDrives[0] with no tripwire of its own,
-    // because the mabUsedSlot test two instructions earlier is the guard.
+    // DecFIGS names the checked accessor in both drive drains. ARTIST
+    // 828A0048/828A0070 and 8289FF30/8289FF58 record its diagnostics.
+    // AllocateMemoryAndInitialiseRW already guards slot zero before calling it.
     rw_physics::Drive* DriveData::GetDrive(s32 liIndex)
     {
+        CGS_ASSERT(liIndex < KI_SIZE, CGS_ASSERT_MESSAGE_AT("liIndex < knSize", KAC_ARTIST_ASSERT_FILE, 657));
+        const bool* const lpSlot = mabUsedSlot + liIndex;
+        CGS_ASSERT_AT(*lpSlot, "mabUsedSlot[liIndex]", KAC_ARTIST_ASSERT_FILE, 658);
         return maRWDrives[liIndex];
     }
 
@@ -411,7 +414,7 @@ namespace CgsPhysics
     {
         for (s32 li = 0; li < KI_SIZE; ++li)
         {
-            if (mabUsedSlot[li] && maGameIDs[li].muId == lId.muId)
+            if (mabUsedSlot[li] && maGameIDs[li] == lId)
                 return li;
         }
         return -1;
@@ -464,7 +467,7 @@ namespace CgsPhysics
     // re-allocatable. Zeroing the pointer "to be tidy" would be inventing a store.
     bool DriveData::RemoveDrive(s32 liIndex)
     {
-        CGS_ASSERT(liIndex < KI_SIZE, "liIndex < knSize");   // .cpp:2803 tripwire (blt skips)
+        CGS_ASSERT(liIndex < KI_SIZE, CGS_ASSERT_MESSAGE_AT("liIndex < knSize", KAC_ARTIST_ASSERT_SOURCE, 2803));
         mabUsedSlot[liIndex] = false;
         return true;
     }
@@ -1449,7 +1452,7 @@ namespace CgsPhysics
             // before the solver drive exists, exactly as ProcessAddRigidBodyQueue does.
             // The timestep argument is read from the simulation and then ignored by the
             // callee; see DriveData::AddDrive.
-            const DriveId lGameId = { lrEvent.mu64Id };
+            const DriveId lGameId(lrEvent.mu64Id);
             const s32 liDriveIndex = mDriveData.AddDrive(
                 0,
                 lFrames,
@@ -1501,13 +1504,9 @@ namespace CgsPhysics
         {
             const PhysicsSimulationIO::InRemoveDrive& lrEvent = lpQueue->GetEvent(li);
 
-            const DriveId lGameId = { lrEvent.mu64Id };
-            const s32 liDriveIndex = mDriveData.GetIndexFromGameID(lGameId);
+            const s32 liDriveIndex = mDriveData.GetIndexFromGameID(lrEvent.mId);
             if (liDriveIndex == -1)
                 continue;
-
-            CGS_ASSERT(liDriveIndex < DriveData::KI_SIZE, "liIndex < knSize");        // h:657
-            CGS_ASSERT(mDriveData.IsSlotUsed(liDriveIndex), "mabUsedSlot[liIndex]");  // h:658
 
             rw::physics::Drive* const lpDrive = mDriveData.GetDrive(liDriveIndex);
 
@@ -1540,7 +1539,7 @@ namespace CgsPhysics
         {
             const PhysicsSimulationIO::InUpdateDriveFrames& lrEvent = lpQueue->GetEvent(li);
 
-            const DriveId lGameId = { lrEvent.mu64Id };
+            const DriveId lGameId(lrEvent.mu64Id);
             const s32 liDriveIndex = mDriveData.GetIndexFromGameID(lGameId);
             if (liDriveIndex == -1)
                 continue;
@@ -1569,8 +1568,7 @@ namespace CgsPhysics
         {
             const PhysicsSimulationIO::InUpdateDriveDynamics& lrEvent = lpQueue->GetEvent(li);
 
-            const DriveId lGameId = { lrEvent.mu64Id };
-            const s32 liDriveIndex = mDriveData.GetIndexFromGameID(lGameId);
+            const s32 liDriveIndex = mDriveData.GetIndexFromGameID(DriveId(lrEvent.mu64Id));
             if (liDriveIndex == -1)
                 continue;
 
@@ -1600,13 +1598,10 @@ namespace CgsPhysics
         {
             const PhysicsSimulationIO::InSetDriveSpy& lrEvent = lpQueue->GetEvent(li);
 
-            const DriveId lGameId = { lrEvent.mu64Id };
+            const DriveId lGameId(lrEvent.mu64Id);
             const s32 liDriveIndex = mDriveData.GetIndexFromGameID(lGameId);
             if (liDriveIndex == -1)
                 continue;
-
-            CGS_ASSERT(liDriveIndex < DriveData::KI_SIZE, "liIndex < knSize");        // h:657
-            CGS_ASSERT(mDriveData.IsSlotUsed(liDriveIndex), "mabUsedSlot[liIndex]");  // h:658
 
             mDriveData.GetDrive(liDriveIndex)->SetSpy(lrEvent.mbSpy);
         }
@@ -2747,7 +2742,7 @@ namespace CgsPhysics
             const s32 liDriveIndex = static_cast<s32>(lpSpy->mpDrive->GetTag());   // `lwz 0x18(drive)`
 
             PhysicsSimulationIO::OutDriveSpy lEvent;
-            lEvent.mID = mDriveData.GetGameID(liDriveIndex).muId;       // h:648/h:649
+            lEvent.mID = mDriveData.GetGameID(liDriveIndex);            // h:648/h:649
             lEvent.mLinearStress = lpSpy->mForce.mV;
             lEvent.mAngularStress = lpSpy->mTorque.mV;
             lEvent.mLinearDistanceToKey  = lpSpy->mSeparation;          // `lfs 0x20(spy)`

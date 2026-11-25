@@ -32,11 +32,16 @@
 
 #include "GameShared/GameClasses/Sound/Logic/CgsVoice.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+
+#define CGS_VOICE_ARTIST_CPP "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/CgsVoice.cpp"
+#define CGS_VOICE_ARTIST_H "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/CgsVoice.h"
+#define CGS_HANDLE_ARTIST_H "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsHandle.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsContent.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"  // Playback::Name::MakeHash (reused)
 #include "GameShared/GameClasses/Sound/Playback/CgsVoice.h"   // the REAL Playback::Voice layout
 #include "GameShared/GameClasses/Sound/Logic/CgsSoundLogicModule.h"
+#include <limits>
 
 namespace CgsSound
 {
@@ -49,13 +54,9 @@ namespace Logic
 // private overload @ 0x826DC4C8, which consumes the copy.
 void Voice::Attach(s32 liSlotName, const Content& arContent)
 {
-    CGS_ASSERT(arContent.IsCreated(), "Content not yet created!");
-
-    Playback::Content* lpContent = arContent.GetContent().GetObject();
-    if (lpContent)
-        lpContent->Acquire();
-    Playback::Handle<Playback::Content> lhContent(lpContent);
-    Attach(liSlotName, &lhContent);
+    CGS_ASSERT(arContent.IsCreated(), CGS_ASSERT_MESSAGE_AT("Content not yet created!",
+        "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/CgsContent.h", 201));
+    Attach(liSlotName, arContent.GetContent());
 }
 
 // ----------------------------------------------------------------------------
@@ -133,18 +134,8 @@ void Voice::Destruct()
 // ----------------------------------------------------------------------------
 void Voice::Connect(Ident luSendNameHash, Ident luSubmixIdent)
 {
-    CGS_ASSERT(mVoiceHandle.GetObject(), "Voice not yet created!");
-
-    Playback::Voice* lpVoice = mVoiceHandle.GetObject();
-
-    // Take a temporary reference for the duration of the connect -- the X360
-    // `++*(v7+4)` is Playback::Object::Acquire inlined (mu32RefCount by name).
-    if (lpVoice)
-        lpVoice->Acquire();
-
-    Playback::Handle<Playback::Voice> lhVoice(lpVoice);
-    mpOwnerModule->GetPlaybackModule().ConnectVoice(
-        &lhVoice, luSendNameHash, luSubmixIdent);
+    CGS_ASSERT(mVoiceHandle, CGS_ASSERT_MESSAGE_AT("Voice not yet created!", CGS_VOICE_ARTIST_CPP, 104));
+    mpOwnerModule->GetPlaybackModule().ConnectVoice(mVoiceHandle, luSendNameHash, luSubmixIdent);
 }
 
 // ----------------------------------------------------------------------------
@@ -155,12 +146,9 @@ void Voice::Connect(Ident luSendNameHash, Ident luSubmixIdent)
 // ----------------------------------------------------------------------------
 s32 Voice::GetIdent() const
 {
-    CGS_ASSERT(mVoiceHandle.GetObject(), "Content not yet created!");
-    CGS_ASSERT(mVoiceHandle.GetObject(), "mpObject");
-
-    // The X360 `*(obj+12)` == Playback::Voice::mIdent, read by name.
-    const Playback::Voice* lpVoice = mVoiceHandle.GetObject();
-    return static_cast<s32>(lpVoice->GetIdent());
+    CGS_ASSERT(mVoiceHandle, CGS_ASSERT_MESSAGE_AT("Content not yet created!", CGS_VOICE_ARTIST_H, 629));
+    CGS_ASSERT(mVoiceHandle, CGS_ASSERT_MESSAGE_AT("mpObject", CGS_HANDLE_ARTIST_H, 296));
+    return static_cast<s32>(mVoiceHandle.GetObject()->GetIdent());
 }
 
 // ----------------------------------------------------------------------------
@@ -170,11 +158,10 @@ s32 Voice::GetIdent() const
 // ----------------------------------------------------------------------------
 bool Voice::IsPlaying() const
 {
-    const Playback::Voice* lpVoice = mVoiceHandle.GetObject();
-    if (!lpVoice)
-        return false;
-
-    return lpVoice->GetPlaybackState() == Playback::E_PLAYBACK_STATE_PLAYING;
+    bool lbResult = false;
+    if (mVoiceHandle)
+        lbResult = mVoiceHandle->GetPlaybackState() == Playback::E_PLAYBACK_STATE_PLAYING;
+    return lbResult;
 }
 
 // ----------------------------------------------------------------------------
@@ -187,31 +174,27 @@ bool Voice::IsPlaying() const
 // ----------------------------------------------------------------------------
 bool Voice::IsReady() const
 {
-    const Playback::Voice* lpVoice = mVoiceHandle.GetObject();
-    if (!lpVoice)
-        return false;
-
-    return lpVoice->GetPlaybackState() != Playback::E_PLAYBACK_STATE_INVALID;
+    bool lbResult = false;
+    if (mVoiceHandle)
+        lbResult = mVoiceHandle->GetPlaybackState() != Playback::E_PLAYBACK_STATE_INVALID;
+    return lbResult;
 }
 
 // ----------------------------------------------------------------------------
-// Voice::GetGain(lpSendName)  @ 0x826AD808
-//   Assert the voice exists (CgsVoice.h:593) + dereference guard, find the named
-//   send on the playback voice, return its gain (send+0x04) or the 1.0 default.
-//     asm: v5=*(a1+4); v8=*a2; NamedSend=Playback::Voice::FindNamedSend(v5,&v8);
-//          return NamedSend ? *(NamedSend+4) : flt_82F93D88;
-// FLAG: STUB -- depends on the Playback layer.
-//   BLOCKS ON: CgsSound::Playback::Voice::FindNamedSend (not reconstructed).
-//   flt_82F93D88 is the unity-gain default (1.0f) returned when no send is found;
-//   we return that as the safe default for the whole stub.
-// ----------------------------------------------------------------------------
+// ARTIST 0x826AD808. Return the named send's gain or the XDK CRT's quiet NaN
+// at 0x82F93D88 when the voice has no corresponding send.
 f32 Voice::GetGain(const s32* lpSendName) const
 {
-    CGS_ASSERT(mVoiceHandle.GetObject(), "Voice not yet created!");
-    CGS_ASSERT(mVoiceHandle.GetObject(), "mpObject");
-    Playback::Send* lpSend = mVoiceHandle.GetObject()->FindNamedSend(
-        Playback::Name(static_cast<uintptr_t>(*lpSendName)));
-    return lpSend ? lpSend->Get() : 1.0f;
+    CGS_ASSERT(mVoiceHandle, CGS_ASSERT_MESSAGE_AT("Voice not yet created!", CGS_VOICE_ARTIST_H, 593));
+    const s32 liSendHash = *lpSendName;
+    CGS_ASSERT(mVoiceHandle, CGS_ASSERT_MESSAGE_AT("mpObject", CGS_HANDLE_ARTIST_H, 287));
+    Playback::Send* lpSend = mVoiceHandle.GetObject()->FindNamedSend(Playback::Name(static_cast<uintptr_t>(liSendHash)));
+    f32 lfGain;
+    if (lpSend)
+        lfGain = lpSend->Get();
+    else
+        lfGain = std::numeric_limits<f32>::quiet_NaN();
+    return lfGain;
 }
 
 // ----------------------------------------------------------------------------
@@ -235,10 +218,9 @@ f32 Voice::GetGain(const s32* lpSendName) const
 // ----------------------------------------------------------------------------
 void Voice::SetGain(u32 luSendIndex, f32 lfGain, const u32* lpSendName)
 {
-    CGS_ASSERT(mVoiceHandle.GetObject(), "mpObject");
-    Playback::Send& lrSend = mVoiceHandle.GetObject()->GetSend(luSendIndex);
-    CGS_ASSERT(lrSend.GetName() == Playback::Name(static_cast<uintptr_t>(*lpSendName)),
-               "lSend.GetName() == lSendName");
+    Playback::Send& lrSend = mVoiceHandle->GetSend(luSendIndex);
+    CGS_ASSERT(Playback::Name(static_cast<uintptr_t>(*lpSendName)) == lrSend.GetName(),
+        CGS_ASSERT_MESSAGE_AT("lSend.GetName() == lSendName", CGS_VOICE_ARTIST_H, 180));
     lrSend.Set(lfGain);
 }
 
@@ -260,12 +242,12 @@ void Voice::SetGain(u32 luSendIndex, f32 lfGain, const u32* lpSendName)
 // ----------------------------------------------------------------------------
 void Voice::SetParameter(s32 liParameterIndex, f32 lfValue, const u32* lpParamName)
 {
-    CGS_ASSERT(liParameterIndex >= 0, "liParameterIndex >= 0");   // CgsVoice.h:611
-    CGS_ASSERT(mVoiceHandle.GetObject(), "Voice not yet created!");  // CgsVoice.h:612
-    mVoiceHandle.GetObject()->SetParameter(
-        liParameterIndex,
-        lfValue,
-        Playback::Name(static_cast<uintptr_t>(*lpParamName)));
+    CGS_ASSERT(liParameterIndex >= 0,
+        CGS_ASSERT_MESSAGE_AT("liParameterIndex >= 0", CGS_VOICE_ARTIST_H, 611));
+    CGS_ASSERT(mVoiceHandle,
+        CGS_ASSERT_MESSAGE_AT("Voice not yet created!", CGS_VOICE_ARTIST_H, 612));
+    const Playback::Name lParamName(static_cast<uintptr_t>(*lpParamName));
+    mVoiceHandle->SetParameter(liParameterIndex, lfValue, lParamName);
 }
 
 // ----------------------------------------------------------------------------
@@ -306,26 +288,12 @@ Voice::~Voice()
 //   BLOCKS ON: CgsSound::Playback::Module::Module::AttachVoice +
 //              CgsSound::Playback::Object::Release. Not reconstructed.
 // ----------------------------------------------------------------------------
-s32 Voice::Attach(s32 liSlotName, Playback::Handle<Playback::Content>* lphContent)
+void Voice::Attach(s32 liSlotName, Playback::Handle<Playback::Content> ahContent)
 {
-    CGS_ASSERT(mVoiceHandle.GetObject(), "Voice not yet created!");
-
-    Playback::Content* lpContent = lphContent->GetObject();
-    if (lpContent)
-        lpContent->Acquire();
-    Playback::Handle<Playback::Content> lhContent(lpContent);
-
-    Playback::Voice* lpVoice = mVoiceHandle.GetObject();
-    if (lpVoice)
-        lpVoice->Acquire();
-    Playback::Handle<Playback::Voice> lhVoice(lpVoice);
-
-    mpOwnerModule->GetPlaybackModule().AttachVoice(
-        &lhVoice, &lhContent, static_cast<u32>(liSlotName));
-
-    if (lphContent->GetObject())
-        lphContent->GetObject()->Release();
-    return 0;
+    CGS_ASSERT(mVoiceHandle, CGS_ASSERT_MESSAGE_AT("Voice not yet created!", CGS_VOICE_ARTIST_CPP, 162));
+    Playback::Module::Module::AttachVoice(mVoiceHandle, ahContent, static_cast<u32>(liSlotName));
+    if (Playback::Content* lpContent = ahContent.GetObject())
+        lpContent->Release();
 }
 
 // ----------------------------------------------------------------------------
@@ -358,21 +326,22 @@ void* Voice::Detach(s32 liSlotName)
 //   BLOCKS ON: CgsSound::Playback::Voice::GetSlot / SetPlaybackState +
 //              CgsSound::Playback::Slot::Play + Playback::Object::Release.
 // ----------------------------------------------------------------------------
-s32 Voice::Play(s32 liParam)
+void Voice::Play(u32 luParam)
 {
-    CGS_ASSERT(mVoiceHandle.GetObject(), "Voice not yet created!");
-    CGS_ASSERT(mVoiceHandle.GetObject(), "mpObject");
+    CGS_ASSERT(mVoiceHandle, CGS_ASSERT_MESSAGE_AT("Voice not yet created!", CGS_VOICE_ARTIST_CPP, 200));
     Playback::Voice* lpVoice = mVoiceHandle.GetObject();
-    lpVoice->Acquire();
+    if (lpVoice)
+        lpVoice->Acquire();
+    else
+        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("mpObject", CGS_HANDLE_ARTIST_H, 287));
+
     if (lpVoice->GetRemoveState() == Playback::E_VOICE_REMOVE_ALIVE)
     {
         Playback::Slot& lrSlot = lpVoice->GetSlot(0);
-        if (lrSlot.Play(static_cast<Playback::PlayerVoice&>(*lpVoice),
-                        static_cast<u32>(liParam)))
+        if (lrSlot.Play(static_cast<Playback::PlayerVoice&>(*lpVoice), luParam))
             lpVoice->SetPlaybackState(Playback::E_PLAYBACK_STATE_PLAYING);
     }
     lpVoice->Release();
-    return 0;
 }
 
 // ----------------------------------------------------------------------------
@@ -384,12 +353,15 @@ s32 Voice::Play(s32 liParam)
 //   BLOCKS ON: CgsSound::Playback::Voice::GetSlot / SetPlaybackState +
 //              CgsSound::Playback::Slot::Stop + Playback::Object::Release.
 // ----------------------------------------------------------------------------
-s32 Voice::Stop()
+void Voice::Stop()
 {
-    CGS_ASSERT(mVoiceHandle.GetObject(), "Voice not yet created!");
-    CGS_ASSERT(mVoiceHandle.GetObject(), "mpObject");
+    CGS_ASSERT(mVoiceHandle, CGS_ASSERT_MESSAGE_AT("Voice not yet created!", CGS_VOICE_ARTIST_CPP, 220));
     Playback::Voice* lpVoice = mVoiceHandle.GetObject();
-    lpVoice->Acquire();
+    if (lpVoice)
+        lpVoice->Acquire();
+    else
+        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("mpObject", CGS_HANDLE_ARTIST_H, 287));
+
     if (lpVoice->GetRemoveState() == Playback::E_VOICE_REMOVE_ALIVE)
     {
         Playback::Slot& lrSlot = lpVoice->GetSlot(0);
@@ -397,7 +369,6 @@ s32 Voice::Stop()
             lpVoice->SetPlaybackState(Playback::E_PLAYBACK_STATE_STOPPED);
     }
     lpVoice->Release();
-    return 0;
 }
 
 } // namespace Logic

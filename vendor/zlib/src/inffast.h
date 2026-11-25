@@ -12,7 +12,7 @@
 
 /* ARTIST 0x82ACF444 and 0x82ACE3BC read the same private method.
    This limit does not select which methods the stream accepts. */
-local uInt inflate_fast_min_output(uInt method)
+local uInt inflate_fast_min_output(int method)
 {
   uInt limit = MAX_MATCH;
   if (method == 9)

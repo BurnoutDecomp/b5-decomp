@@ -2,20 +2,27 @@
 #include "rw/rwcore_structs.h"
 #include <cstring>
 
+// The native constructor calls the XDK libcMT memset provider at 82C0B180.
+#pragma function(memset)
+
 namespace renderengine
 {
 // ARTIST 82B62100: the allocator supplies the native header and physical data.
 IndexBuffer* IndexBuffer::Initialize(const rw::Resource& resource, const Parameters& parameters)
 {
     IndexBuffer* const buffer = static_cast<IndexBuffer*>(resource.m_baseResources[0]);
-    std::memset(buffer, 0, sizeof(IndexBuffer));
+    memset(buffer, 0, sizeof(IndexBuffer));
     buffer->ReferenceCount = 1;
+    buffer->Common = D3DCOMMON_TYPE_INDEXBUFFER;
     buffer->BaseFlush = D3DFLUSH_INITIAL_VALUE;
     buffer->Address = reinterpret_cast<u32>(resource.m_baseResources[2]);
     const u32 bytesPerIndex = parameters.depth == 16 ? 2u : 4u;
     buffer->Size = (bytesPerIndex * parameters.numIndices + 15u) & ~15u;
     buffer->m_numIndices = parameters.numIndices;
-    buffer->Common = 2u | (parameters.depth == 32 ? 0xC0000000u : 0x20000000u);
+    const u32 formatFlags = parameters.depth == 32
+        ? D3DINDEXBUFFER_INDEX32 | (GPUENDIAN_8IN32 << D3DINDEXBUFFER_ENDIAN_SHIFT)
+        : GPUENDIAN_8IN16 << D3DINDEXBUFFER_ENDIAN_SHIFT;
+    buffer->Common = D3DCOMMON_TYPE_INDEXBUFFER | formatFlags;
     buffer->Xbox2CheckPhysicalMemoryFlags();
     return buffer;
 }
@@ -35,7 +42,7 @@ bool IndexBuffer::Lock(u32 flags, Locked& locked)
     void* const indices = D3DIndexBuffer_Lock(this, 0, 0, sdkFlags);
     locked.indices = indices;
     if (!indices) return false;
-    locked.indexStride = static_cast<s32>(Common) >= 0 ? 1 : 6;
+    locked.indexStride = (Common & D3DINDEXBUFFER_INDEX32) ? D3DFMT_INDEX32 : D3DFMT_INDEX16;
     return true;
 }
 
@@ -61,10 +68,12 @@ void IndexBuffer::Xbox2CheckPhysicalMemoryFlags()
     if (Address)
     {
         const DWORD flags = XQueryMemoryProtect(reinterpret_cast<void*>(Address));
+        u32 common = Common;
         if (flags & (PAGE_NOCACHE | PAGE_WRITECOMBINE))
-            Common &= ~D3DCOMMON_CPU_CACHED_MEMORY;
+            common &= ~D3DCOMMON_CPU_CACHED_MEMORY;
         else
-            Common |= D3DCOMMON_CPU_CACHED_MEMORY;
+            common |= D3DCOMMON_CPU_CACHED_MEMORY;
+        Common = common;
     }
 }
 }

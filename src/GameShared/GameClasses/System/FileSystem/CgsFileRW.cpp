@@ -147,7 +147,7 @@ namespace CgsFileSystem
         }
 
         AsyncOp* lpOperator = AllocateAsyncOp();
-        lpOperator->Open(lpcFileName, luFileAccess, &File::OpenCallback, reinterpret_cast<uintptr_t>(this), 0);
+        lpOperator->Open(lpcFileName, luFileAccess, &File::OpenCallback, this, 0);
         lpOperator->SetPriority(miPriority);
 
         rw::core::stdc::StringnCopy(macFileName, lpcFileName, 255);
@@ -217,7 +217,7 @@ namespace CgsFileSystem
         mpAttemptedReadOpAddress = lpBuffer;
 
         AsyncOp* lpOperator = AllocateAsyncOp();
-        lpOperator->Read(mpHandle, lpBuffer, luPosition, luSize, &File::ReadCallback, reinterpret_cast<uintptr_t>(this), 0);
+        lpOperator->Read(mpHandle, lpBuffer, luPosition, luSize, &File::ReadCallback, this, 0);
         lpOperator->SetPriority(miPriority);
         ++muPendingOperationCount;
         return true;
@@ -249,7 +249,7 @@ namespace CgsFileSystem
 
         // Write @0x828E81F8 -- queue the async device write.
         AsyncOp* lpOperator = AllocateAsyncOp();
-        lpOperator->Write(mpHandle, const_cast<void*>(lpBuffer), luPosition, luSize, &File::WriteCallback, reinterpret_cast<uintptr_t>(this), 0);
+        lpOperator->Write(mpHandle, lpBuffer, luPosition, luSize, &File::WriteCallback, this, 0);
         lpOperator->SetPriority(miPriority);
         ++muPendingOperationCount;
         return true;
@@ -277,7 +277,7 @@ namespace CgsFileSystem
 
         // Close @0x828F03E0 -- queue the async device close.
         AsyncOp* lpOperator = AllocateAsyncOp();
-        lpOperator->Close(mpHandle, &File::CloseCallback, reinterpret_cast<uintptr_t>(this), 0);
+        lpOperator->Close(mpHandle, &File::CloseCallback, this, 0);
         lpOperator->SetPriority(miPriority);
         ++muPendingOperationCount;
         return true;
@@ -338,7 +338,7 @@ namespace CgsFileSystem
                 meFileState = E_FILESTATE_CLOSED;
                 break;
             case 1:
-                mpHandle    = static_cast<rw::core::filesys::Handle*>(lpOperator->GetResultHandle());
+                mpHandle    = lpOperator->GetResultHandle();
                 meFileState = E_FILESTATE_OPEN;
                 break;
         }
@@ -514,7 +514,7 @@ namespace CgsFileSystem
 
     void File::OpenCallback(AsyncOp* lpOperator)
     {
-        File* lpFile = reinterpret_cast<File*>(lpOperator->mUserData);
+        File* lpFile = static_cast<File*>(lpOperator->GetContext());
         lpFile->OnOpen(lpOperator);
     }
 
@@ -529,7 +529,7 @@ namespace CgsFileSystem
 
     void File::ReadCallback(AsyncOp* lpOperator)
     {
-        File* lpFile = reinterpret_cast<File*>(lpOperator->mUserData);
+        File* lpFile = static_cast<File*>(lpOperator->GetContext());
         lpFile->OnRead(lpOperator);
     }
 
@@ -544,7 +544,7 @@ namespace CgsFileSystem
 
     void File::WriteCallback(AsyncOp* lpOperator)
     {
-        File* lpFile = reinterpret_cast<File*>(lpOperator->mUserData);
+        File* lpFile = static_cast<File*>(lpOperator->GetContext());
         lpFile->OnWrite(lpOperator);
     }
 
@@ -559,7 +559,7 @@ namespace CgsFileSystem
 
     void File::CloseCallback(AsyncOp* lpOperator)
     {
-        File* lpFile = reinterpret_cast<File*>(lpOperator->mUserData);
+        File* lpFile = static_cast<File*>(lpOperator->GetContext());
         lpFile->OnClose(lpOperator);
     }
 

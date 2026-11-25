@@ -279,7 +279,7 @@ public:
     // existed and this is its recovered shape, not an invention.
     EPlaybackState GetPlaybackState() const
     {
-        return static_cast<EPlaybackState>(mu8PlaybackState & 0x7F);
+        return static_cast<EPlaybackState>(mu8PlaybackState & ~E_PLAYBACK_STATE_CHANGED);
     }
 
     // DWARF CgsVoice.h:1454 / :1461 -- the CHANGED-bit pair (test / clear of the

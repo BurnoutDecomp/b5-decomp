@@ -1,148 +1,73 @@
-// ===========================================================================
-// EATech Apt -- AptActionInterpreter ActionScript logic opcodes.
-//   DECOMPILED from the PS3 EXTERNAL ELF:
-//     _FunctionAptActionNot @0x7F3BB8
-//     _FunctionAptActionAnd @0x7FD4D4
-//     _FunctionAptActionOr  @0x7FD29C
-//
-// Each pops its operand(s) off the interpreter's evaluation stack, coerces them,
-// and pushes an AptBoolean. And/Or share one shape:
-//   * peek the top two operands (top = a, top-1 = b) without consuming them;
-//   * SWF v7 only: if either operand is undefined the result is `undefined`
-//     (unless gpUndefinedValue is null), short-circuiting the compute;
-//   * fast path -- both defined integers: compare the raw ints (And: both non-zero,
-//     Or: either non-zero);
-//   * otherwise coerce both with toFloat and test against zero;
-//   * collapse: release the two operands, push the AptBoolean result (AddRef).
-// Not is the unary form: push !toBool(top).
-//
-// The console selects AptBoolean::spBooleanTrue / spBooleanFalse directly; here
-// that is AptBoolean::Create(b), which returns those same shared singletons. The
-// stack collapse is written inline to mirror the asm exactly (the compiler inlined
-// it rather than calling stackPopAndPush).
-//
-// EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
-// ===========================================================================
+// Native ActionScript logical opcodes.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"
-#include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptBoolean.h"
-#include "SDKs/EATech/include/Apt/AptValue/AptInteger.h"   // c_integer()->GetInt()
+#include "SDKs/EATech/include/Apt/AptValue/AptInteger.h"
 
-// The `undefined` singleton (AptGlobals.cpp, built at AptInit) and the active
-// movie's SWF version (AptGetSwfVersion, AptLinker.cpp).
-extern AptValue*    gpUndefinedValue;
-extern unsigned int AptGetSwfVersion();
+extern AptValue* gpUndefinedValue;
+extern int gnAptSwfVersion;
 
-// ---------------------------------------------------------------------------
-// _FunctionAptActionNot @0x7F3BB8 -- push !toBool(top), replacing the operand.
-// ---------------------------------------------------------------------------
 void AptActionInterpreter::_FunctionAptActionNot(AptActionInterpreter* pInterp, LocalContextT*)
 {
-    bool b = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1]->toBool();
-    AptValue* pResult = AptBoolean::Create(!b);
-
-    int top = pInterp->mOperandStack.mnTop;
-    if (top > 0)
-    {
-        pInterp->mOperandStack.mppItems[top - 1]->Release();
-        --top;
-        pInterp->mOperandStack.mnTop = top;
-    }
-    pInterp->mOperandStack.mppItems[top] = pResult;
-    pInterp->mOperandStack.mnTop = top + 1;
-    pResult->AddRef();
+    AptValue* pValue = pInterp->stackAt(0);
+    AptValue* pResult = AptBoolean::Create(!pValue->toBool());
+    pInterp->stackPop();
+    pInterp->stackPush(pResult);
 }
 
-// ---------------------------------------------------------------------------
-// _FunctionAptActionAnd @0x7FD4D4 -- (top-1) && (top) -> AptBoolean.
-// ---------------------------------------------------------------------------
 void AptActionInterpreter::_FunctionAptActionAnd(AptActionInterpreter* pInterp, LocalContextT*)
 {
-    AptValue* pA = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];   // top
-    AptValue* pB = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 2];   // below top
+    AptValue* pTop = pInterp->stackAt(0);
+    AptValue* pUnder = pInterp->stackAt(1);
+    AptValue* pResult = 0;
+    if (gnAptSwfVersion == 7 && (!pTop->getIsDefined() || !pUnder->getIsDefined()))
+        pResult = gpUndefinedValue;
 
-    AptValue* pResult = gpUndefinedValue;
-    bool bCompute = true;
-
-    // SWF v7: an undefined operand makes the result undefined.
-    if (AptGetSwfVersion() == 7 &&
-        !(pA->getIsDefined() && pB->getIsDefined()) &&
-        gpUndefinedValue)
+    if (!pResult)
     {
-        bCompute = false;
-    }
-
-    if (bCompute)
-    {
-        if (pA->getVtblIndex() == AptVFT_Integer && pA->getIsDefined() &&
-            pB->getVtblIndex() == AptVFT_Integer && pB->getIsDefined())
+        if (pTop->isInteger() && pUnder->isInteger())
         {
-            pResult = AptBoolean::Create(pA->c_integer()->GetInt() && pB->c_integer()->GetInt());
+            const int nTop = pTop->c_integer()->GetInt();
+            const int nUnder = pUnder->c_integer()->GetInt();
+            pResult = AptBoolean::Create(nTop && nUnder);
         }
         else
         {
-            float fa = pA->toFloat();
-            float fb = pB->toFloat();
-            pResult = AptBoolean::Create(!(fa == 0.0f || fb == 0.0f));
+            const float fTop = pTop->toFloat();
+            const float fUnder = pUnder->toFloat();
+            pResult = AptBoolean::Create(fTop != 0.0f && fUnder != 0.0f);
         }
     }
-
-    int top = pInterp->mOperandStack.mnTop;
-    if (top >= 2)
-    {
-        pInterp->mOperandStack.mppItems[top - 1]->Release();
-        pInterp->mOperandStack.mppItems[top - 2]->Release();
-        top -= 2;
-        pInterp->mOperandStack.mnTop = top;
-    }
-    pInterp->mOperandStack.mppItems[top] = pResult;
-    pInterp->mOperandStack.mnTop = top + 1;
-    pResult->AddRef();
+    pInterp->stackPop(2);
+    pInterp->stackPush(pResult);
 }
 
-// ---------------------------------------------------------------------------
-// _FunctionAptActionOr @0x7FD29C -- (top-1) || (top) -> AptBoolean.
-// ---------------------------------------------------------------------------
 void AptActionInterpreter::_FunctionAptActionOr(AptActionInterpreter* pInterp, LocalContextT*)
 {
-    AptValue* pA = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];   // top
-    AptValue* pB = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 2];   // below top
+    AptValue* pTop = pInterp->stackAt(0);
+    AptValue* pUnder = pInterp->stackAt(1);
+    AptValue* pResult = 0;
+    if (gnAptSwfVersion == 7 && (!pTop->getIsDefined() || !pUnder->getIsDefined()))
+        pResult = gpUndefinedValue;
 
-    AptValue* pResult = gpUndefinedValue;
-    bool bCompute = true;
-
-    if (AptGetSwfVersion() == 7 &&
-        !(pA->getIsDefined() && pB->getIsDefined()) &&
-        gpUndefinedValue)
+    if (!pResult)
     {
-        bCompute = false;
-    }
-
-    if (bCompute)
-    {
-        if (pA->getVtblIndex() == AptVFT_Integer && pA->getIsDefined() &&
-            pB->getVtblIndex() == AptVFT_Integer && pB->getIsDefined())
+        if (pTop->isInteger() && pUnder->isInteger())
         {
-            pResult = AptBoolean::Create((pA->c_integer()->GetInt() | pB->c_integer()->GetInt()) != 0);
+            const int nTop = pTop->c_integer()->GetInt();
+            const int nUnder = pUnder->c_integer()->GetInt();
+            pResult = AptBoolean::Create(nTop || nUnder);
         }
         else
         {
-            float fa = pA->toFloat();
-            float fb = pB->toFloat();
-            pResult = AptBoolean::Create(!(fa == 0.0f && fb == 0.0f));
+            const float fTop = pTop->toFloat();
+            const float fUnder = pUnder->toFloat();
+            pResult = AptBoolean::Create(fTop != 0.0f || fUnder != 0.0f);
         }
     }
-
-    int top = pInterp->mOperandStack.mnTop;
-    if (top >= 2)
-    {
-        pInterp->mOperandStack.mppItems[top - 1]->Release();
-        pInterp->mOperandStack.mppItems[top - 2]->Release();
-        top -= 2;
-        pInterp->mOperandStack.mnTop = top;
-    }
-    pInterp->mOperandStack.mppItems[top] = pResult;
-    pInterp->mOperandStack.mnTop = top + 1;
-    pResult->AddRef();
+    pInterp->stackPop(2);
+    pInterp->stackPush(pResult);
 }

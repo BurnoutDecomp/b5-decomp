@@ -50,8 +50,7 @@ namespace postfx
         lParameters.maElements[1].miOffset = 0x002C23A5;
         lParameters.maElements[1].mu8UsageIndex = 6;
 
-        rw::BaseResourceDescriptors<5> lDescriptor;
-        renderengine::VertexDescriptor::GetResourceDescriptor(&lDescriptor, &lParameters);
+        rw::BaseResourceDescriptors<5> lDescriptor = renderengine::VertexDescriptor::GetResourceDescriptor(lParameters);
 
         rw::IResourceAllocator* lpAllocator =
             rw::ResourceAllocatorRegistry::GetDefaultAllocator();

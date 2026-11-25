@@ -107,10 +107,10 @@ public:
     PooledVoice* GetFreeVoice();
 
     // Broadcast gain (scaled by each slot's mfSecondaryGain) to PLAYING slots. @ 0x8269A9D0.
-    void SetGain(s32 liSendNameHash, f32 lfGain, s32 liReserved, const u32* lpSendName);
+    void SetGain(s32 liSendIndex, f32 lfGain, Playback::Name aSendName);
 
     // Broadcast a parameter to every live slot. @ 0x826B6628.
-    void SetParameter(s32 liSendNameHash, f32 lfValue, s32 liReserved, const u32* lpSendName);
+    void SetParameter(s32 liParameterIndex, f32 lfValue, Playback::Name aParameterName);
 
     // true iff any slot is currently playing. @ 0x82685A10 (committed in CgsVoicePool.cpp).
     virtual bool IsPlaying() const;

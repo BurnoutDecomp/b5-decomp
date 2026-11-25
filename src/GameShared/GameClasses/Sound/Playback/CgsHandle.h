@@ -72,9 +72,8 @@ public:
     // consistent with the empty inline dtor below. Revisit with the handle slice.
     explicit Handle(T* lpObject) : mpObject(lpObject) {}
 
-    // CgsHandle.h -- copy (acquires the copied object). Declared-only: the
-    // build never odr-uses it (handle returns are elided).
-    Handle(const Handle& lkrOther);
+    // The original copy constructor acquires the reference passed to the playback operation.
+    Handle(const Handle& lkrOther) : mpObject(lkrOther.mpObject) { AcquireObject(); }
     // CgsHandle.h -- the console destructor drops the owned reference
     // (ReleaseObject). Here it is empty because the committed call sites pair
     // Acquire/Release explicitly around adopt-constructed and destroyed handles
@@ -113,7 +112,8 @@ public:
     }
     const T* operator->() const
     {
-        CGS_ASSERT(mpObject, "mpObject");
+        CGS_ASSERT(mpObject, CGS_ASSERT_MESSAGE_AT("mpObject",
+            CGS_ARTIST_CGSHANDLE_FILE, 296));
         return mpObject;
     }
 
@@ -172,6 +172,16 @@ private:
     // `*a1` in the X360 asm (lwz r11, 0(r31)).
     T* mpObject;
 };
+
+struct Content;
+
+// ARTIST VoiceWrapper::Release calls the Content handle's non-const accessor.
+template <>
+__declspec(noinline) inline Content* Handle<Content>::operator->()
+{
+    CGS_ASSERT(mpObject, CGS_ASSERT_MESSAGE_AT("mpObject", CGS_ARTIST_CGSHANDLE_FILE, 287));
+    return mpObject;
+}
 
 } // namespace Playback
 } // namespace CgsSound

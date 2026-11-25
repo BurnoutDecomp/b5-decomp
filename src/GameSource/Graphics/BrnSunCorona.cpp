@@ -171,7 +171,7 @@ void BrnSunCorona::Construct(rw::IResourceAllocator* lpAllocator)
     lVertexParameters.maElements[1].miOffset = 0x002C23A5;
     lVertexParameters.maElements[1].mu8UsageIndex = 6;
     rw::ResourceDescriptor lVertexDescriptor;
-    renderengine::VertexDescriptor::GetResourceDescriptor(&lVertexDescriptor, &lVertexParameters);
+    static_cast<rw::BaseResourceDescriptors<5>&>(lVertexDescriptor) = renderengine::VertexDescriptor::GetResourceDescriptor(lVertexParameters);
     mVertexDescriptorResource = lpAllocator->DoAllocate(lVertexDescriptor, 0);
     mpVertexDescriptor = renderengine::VertexDescriptor::Initialize(&mVertexDescriptorResource, &lVertexParameters);
 

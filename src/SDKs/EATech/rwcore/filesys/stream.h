@@ -109,11 +109,11 @@ namespace rw
             //   +0x00 miId          : request id (generation<<8 | slot index)
             //   +0x04 miState       : 0 free, 1 queued, 2/3 active, 4 cancelled/done
             //   +0x08 mpPrev/+0x0C mpNext : active-list links (also free-list via mpNext)
-            //   +0x10 muField10     : 1 == data mapped in memory (mpMappedData), else async
+            //   +0x10 miRequestType : 1 for a memory-backed request
             //   +0x14 macPath[255]  : file path
             //   +0x114 mpPreOpenHandle : optional already-open Handle (0 -> Open via path)
             //   +0x118 mpMappedData : source pointer for the in-memory (mapped) read path
-            //   +0x120 mu64Size     : file/stream byte size
+            //   +0x120 mi64Size     : signed size or initial file offset, depending on request type
             //   +0x128 mpBufferPos  : the request's target ring-buffer position
             //   +0x12C mbAtEnd      : end-of-stream reached
             //   +0x130 mpfnParse    : chunk-parse callback
@@ -125,12 +125,12 @@ namespace rw
                 s32                miState;          // +0x04
                 Request*           mpPrev;           // +0x08
                 Request*           mpNext;           // +0x0C
-                u32                muField10;        // +0x10
+                s32                miRequestType;        // +0x10
                 char               macPath[255];     // +0x14
                 u8                 mbField113;       // +0x113
                 Handle*            mpPreOpenHandle;  // +0x114
                 u8*                mpMappedData;     // +0x118
-                u64                mu64Size;         // +0x120
+                s64                mi64Size;         // +0x120
                 u8*                mpBufferPos;      // +0x128
                 u8                 mbAtEnd;          // +0x12C
                 ChunkParseCallback mpfnParse;        // +0x130
@@ -142,7 +142,7 @@ namespace rw
             struct StreamState
             {
                 u32                muReserved00;         // X360 +0x00
-                u32                muFlags;              // X360 +0x04  (bit0 = open-in-progress)
+                u32                muFlags;              // X360 +0x04  (bit 0 = borrowed handle)
                 EA::Thread::Mutex  mLock;                // X360 +0x08
                 Request*           mpRequests;           // X360 +0x38  (fixed array; stride 0x140)
                 u32                muRequestCount;       // X360 +0x3C
@@ -169,9 +169,9 @@ namespace rw
                 void*              mpDefaultParseContext;// X360 +0xA8
                 char               macOpenPath[256];     // X360 +0xAC .. +0x1AB
                 Handle*            mpHandle;             // X360 +0x1AC
-                u64                mu64ReadPos;          // X360 +0x1B0
+                s64                mi64ReadPos;          // X360 +0x1B0
                 AsyncOp            mAsyncOp;             // X360 +0x1B8 (0x48 bytes)
-                u64                mu64ChunkBytes;       // X360 +0x200
+                s64                mi64ChunkBytes;       // X360 +0x200
                 s32                miReadGranularity;    // X360 +0x208
                 u64                mu64FileSize;         // X360 +0x210
             };
@@ -200,16 +200,16 @@ namespace rw
                 ChunkNode*   mpCurrentChunk;  // +0x10
 
                 // ---- public API (this == the cursor handle) --------------------------------
-                s32    QueueFile(const char* lpcPath, Handle* lpPreOpenHandle, u64 lu64Size,
+                s32    QueueFile(const char* lpcPath, Handle* lpPreOpenHandle, s64 li64Size,
                                  ChunkParseCallback lpfnParse, void* lpParseContext);
                 Chunk* GetChunk();
-                s32    ReleaseChunk(Chunk* lpChunk);
-                s32    CancelRequest(u32 luRequestId);
+                void    ReleaseChunk(Chunk* lpChunk);
+                void    CancelRequest(u32 luRequestId);
                 s32    GetRequestState(u32 luRequestId) const;
                 s32    GetState() const;
                 bool   IsEndOfStream() const;
                 u64    GetFileSize() const;
-                s32    Kill();
+                void    Kill();
 
                 // ---- private engine helpers (the asm passes the engine in r3) ---------------
                 static void         freerequest(StreamState* lpState, Request* lpReq);
@@ -217,16 +217,15 @@ namespace rw
                 static void         queuerequest(StreamState* lpState, Request* lpReq);
                 static void         decbufferusage(StreamState* lpState, s32 liBytes);
                 static s32          parsechunks(StreamState* lpState);
-                static s32          readcallback(StreamState* lpState);
-                static s32          restartstream(StreamState* lpState, s32 liPriority);
+                static void          readcallback(StreamState* lpState);
+                static void          restartstream(StreamState* lpState, s32 liPriority);
 
-                // Owned by its own (not-yet-homed) TU; declared so this one compiles.
-                static s32          startnextrequest(StreamState* lpState, s32 liPriority);
+                static void          startnextrequest(StreamState* lpState, s32 liPriority);
 
-                // ---- async-op completion callbacks (op->mUserData carries the engine) -------
-                static s32          opencallback(AsyncOp* lpOp);
-                static s32          closecallback(AsyncOp* lpOp);
-                static s32          filereadcallback(AsyncOp* lpOp);
+                // ---- async-op completion callbacks (GetContext returns the engine) -------
+                static void          opencallback(AsyncOp* lpOp);
+                static void          closecallback(AsyncOp* lpOp);
+                static void          filereadcallback(AsyncOp* lpOp);
             };
         }
     }

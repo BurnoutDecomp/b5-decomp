@@ -72,7 +72,7 @@ namespace renderengine
         };
 
         static void GetParameters(const void* lpData, Parameters* lpParamsOut);
-        static void GetResourceDescriptor(void* lpDescriptorOut, const Parameters* lpParameters);
+        static rw::BaseResourceDescriptors<5> GetResourceDescriptor(const Parameters& lrParameters);
         static VertexDescriptorData* Initialize(rw::Resource* lpResource, const Parameters* lpParameters);
         static D3DVertexDeclaration* CreateD3DObject(VertexDescriptorData* lpData);
         static void Release(VertexDescriptorData* lpData);

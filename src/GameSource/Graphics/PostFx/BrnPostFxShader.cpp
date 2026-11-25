@@ -1035,8 +1035,7 @@ void BrnPostFxShader::Construct(rw::IResourceAllocator* lpAllocator)
     lVertexDescriptorParams.maElements[1].mu8UsageIndex = 6;
 
     rw::ResourceDescriptor lVertexDescriptorResDesc;
-    renderengine::VertexDescriptor::GetResourceDescriptor(&lVertexDescriptorResDesc,
-                                                          &lVertexDescriptorParams);
+    static_cast<rw::BaseResourceDescriptors<5>&>(lVertexDescriptorResDesc) = renderengine::VertexDescriptor::GetResourceDescriptor(lVertexDescriptorParams);
     mVertexDescriptorResource = lpAllocator->DoAllocate(lVertexDescriptorResDesc, 0);
     mpVertexDescriptor = renderengine::VertexDescriptor::Initialize(&mVertexDescriptorResource,
                                                                     &lVertexDescriptorParams);

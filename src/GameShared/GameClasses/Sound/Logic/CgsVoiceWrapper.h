@@ -128,8 +128,8 @@ public:
     // i.e. BOTH terminal stages are dead, not just IDLE.
     bool IsAlive() const
     {
-        return meUpdateStage != E_UPDATE_STAGE_IDLE &&
-               meUpdateStage != E_UPDATE_STAGE_FINISHED;
+        return meUpdateStage != E_UPDATE_STAGE_FINISHED &&
+               meUpdateStage != E_UPDATE_STAGE_IDLE;
     }
     bool IsPlaying() const { return meUpdateStage == E_UPDATE_STAGE_PLAYING; }
     const CreateParams& GetCreateParams() const { return mCreateParams; }

@@ -82,7 +82,7 @@ int stream_size;
     inflateEnd(z);
     return Z_STREAM_ERROR;
   }
-  z->state->method = (uInt)method;
+  z->state->method = method;
   z->state->wbits = (uInt)w;
 
   /* create inflate_blocks state */

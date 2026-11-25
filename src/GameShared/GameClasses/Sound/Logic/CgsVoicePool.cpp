@@ -40,8 +40,7 @@ bool VoicePoolBase::IsPlaying() const
     const u32 luCount = muPooledVoiceCount;
     for (u32 luIndex = 0; luIndex < luCount; ++luIndex)
     {
-        const s32 liState = mpaPooledVoices[luIndex].mWrapper.GetState();
-        if (liState != KI_VOICE_STATE_STOPPED && liState != KI_VOICE_STATE_FREE)
+        if (mpaPooledVoices[luIndex].mWrapper.IsAlive())
             return true;
     }
     return false;
@@ -169,46 +168,45 @@ PooledVoice* VoicePoolBase::GetFreeVoice()
 }
 
 // ----------------------------------------------------------------------------
-// VoicePoolBase::SetGain(liSendNameHash, lfGain, liReserved, lpSendName)  @ 0x8269A9D0
+// VoicePoolBase::SetGain(liSendIndex, lfGain, aSendName)  @ 0x8269A9D0
 //   Broadcast a gain change to every PLAYING pooled voice (state @+0x48 == 6) whose
 //   wrapped handle (+0x38) is live. Applied gain is scaled by the slot's
 //   mfSecondaryGain (+0x50), then forwarded to the logic Voice sub-object (+0x34) via
 //   Voice::SetGain with a stack copy of the send name.
-// FLAG: Voice::SetGain itself is a Playback-dependent stub (CgsVoice.cpp).
 // ----------------------------------------------------------------------------
-void VoicePoolBase::SetGain(s32 liSendNameHash, f32 lfGain, s32 liReserved, const u32* lpSendName)
+void VoicePoolBase::SetGain(s32 liSendIndex, f32 lfGain, Playback::Name aSendName)
 {
     for (u32 luIndex = 0; luIndex < muPooledVoiceCount; ++luIndex)
     {
         PooledVoice& lrSlot = mpaPooledVoices[luIndex];
-        if (lrSlot.mWrapper.GetState() == KI_VOICE_STATE_PLAYING && lrSlot.mWrapper.HasLiveVoice())
+        if (lrSlot.mWrapper.IsPlaying())
         {
-            const f32 lfScaledGain = lrSlot.mfSecondaryGain * lfGain;
-            u32 luSendNameCopy = *lpSendName;
-            lrSlot.mWrapper.GetVoice().SetGain(
-                static_cast<u32>(liSendNameHash), lfScaledGain, &luSendNameCopy);
+            if (lrSlot.mWrapper.GetVoice().IsCreated())
+            {
+                const u32 luSendName = static_cast<u32>(aSendName.GetValue());
+                lrSlot.mWrapper.GetVoice().SetGain(static_cast<u32>(liSendIndex), lrSlot.mfSecondaryGain * lfGain,
+                    &luSendName);
+            }
         }
     }
 }
 
 // ----------------------------------------------------------------------------
-// VoicePoolBase::SetParameter(liSendNameHash, lfValue, liReserved, lpSendName)  @ 0x826B6628
+// VoicePoolBase::SetParameter(liParameterIndex, lfValue, aParameterName)  @ 0x826B6628
 //   Broadcast a parameter change to every pooled voice whose wrapped handle (+0x38)
 //   is live -- regardless of play state (contrast SetGain, which also gates on
 //   state==PLAYING). Forwards to the logic Voice sub-object (+0x34) via
 //   Voice::SetParameter with a stack copy of the send name and the raw value.
-// FLAG: Voice::SetParameter is a Playback-dependent stub (CgsVoice.cpp).
 // ----------------------------------------------------------------------------
-void VoicePoolBase::SetParameter(s32 liSendNameHash, f32 lfValue, s32 liReserved, const u32* lpSendName)
+void VoicePoolBase::SetParameter(s32 liParameterIndex, f32 lfValue, Playback::Name aParameterName)
 {
     for (u32 luIndex = 0; luIndex < muPooledVoiceCount; ++luIndex)
     {
-        PooledVoice& lrSlot = mpaPooledVoices[luIndex];
-        if (lrSlot.mWrapper.HasLiveVoice())
+        VoiceWrapper& lrWrapper = mpaPooledVoices[luIndex].mWrapper;
+        if (lrWrapper.GetVoice().IsCreated())
         {
-            u32 luSendNameCopy = *lpSendName;
-            lrSlot.mWrapper.GetVoice().SetParameter(
-                liSendNameHash, lfValue, &luSendNameCopy);
+            const u32 luParameterName = static_cast<u32>(aParameterName.GetValue());
+            lrWrapper.GetVoice().SetParameter(liParameterIndex, lfValue, &luParameterName);
         }
     }
 }

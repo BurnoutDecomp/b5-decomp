@@ -29,6 +29,7 @@
 // header no longer carries a copy (task #141). Cheap and cycle-free: CgsRigidBody.h is
 // header-only and reaches nothing but types.hpp + CgsEntityId.h.
 #include "GameShared/GameClasses/Physics/CgsRigidBody.h"
+#include "GameShared/GameClasses/Physics/DriveId.h"
 
 // ⭐ THE REAL rw::physics::Inertia, by value -- `CgsPhysics::Inertia` is now an alias onto it
 // (see the block below) and RigidBodyData embeds 200 of them, so a forward declaration will
@@ -180,7 +181,6 @@ namespace CgsPhysics
     // Opaque handle tables -- single u64 ids / single pointers; sized to the
     // DWARF (JointId/DriveId == uint64_t).
     struct JointId { u64 muId; };
-    struct DriveId { u64 muId; };
 
     // ⚠️ THE SECOND TYPE FORK RETIRED ON 2026-08-04 (task #141, right behind Inertia).
     // `CgsPhysics::RigidBodyId` and its `K_INVALID_RIGID_BODY_ID` sentinel were declared HERE
@@ -363,10 +363,9 @@ namespace CgsPhysics
         // mabUsedSlot[liIndex], then returns &maScaledDynamics[liIndex].
         DriveDynamics* GetScaledDriveDynamics(s32 liIndex);
 
-        // DWARF CgsPhysicsSimulationModule.h:241. The console inlines it into
-        // AllocateMemoryAndInitialiseRW as the bare `lwz` of maRWDrives[0] at 0x828A25CC
-        // (no assert -- the slot-used test guarding it IS the tripwire), so the body is
-        // the raw slot read.
+        // DecFIGS CgsPhysicsSimulationModule.h:241. The drive drains check the
+        // index and occupancy before reading the slot. The allocator guards
+        // slot zero separately and ARTIST simplifies its access to a load.
         rw_physics::Drive* GetDrive(s32 liIndex);
 
         // Same provenance as JointData::IsSlotUsed above -- X360-attested read

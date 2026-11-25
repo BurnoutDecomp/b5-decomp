@@ -138,7 +138,7 @@ int r;
         c->mode = LIT;
         break;
       }
-      if ((e & HUFT_FLAGS) == HUFT_LENGTH_DISTANCE) /* length */
+      if (e & HUFT_LENGTH_DISTANCE) /* length */
       {
         c->sub.copy.get = e & HUFT_EXTRA_MASK;
         c->len = t->base;
@@ -151,7 +151,7 @@ int r;
         c->sub.code.tree = t + t->base;
         break;
       }
-      if ((e & HUFT_FLAGS) == HUFT_END) /* end of block */
+      if (e & HUFT_END) /* end of block */
       {
         Tracevv((stderr, "inflate:         end of block\n"));
         c->mode = WASH;
@@ -176,7 +176,7 @@ int r;
       t = c->sub.code.tree + ((uInt)b & inflate_mask[j]);
       DUMPBITS(t->bits)
       e = (uInt)(t->exop);
-      if ((e & HUFT_FLAGS) == HUFT_LENGTH_DISTANCE) /* distance */
+      if (e & HUFT_LENGTH_DISTANCE) /* distance */
       {
         c->sub.copy.get = e & HUFT_EXTRA_MASK;
         c->sub.copy.dist = t->base;

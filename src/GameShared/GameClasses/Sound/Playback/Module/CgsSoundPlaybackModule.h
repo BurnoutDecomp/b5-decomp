@@ -323,12 +323,12 @@ public:
     // Handle<Content>, u32) -- the content param is a CONTENT handle; the old rival
     // typed it Handle<Voice>). Attaches content to a voice slot through the real
     // Voice::Attach, then releases both transient handle references.
-    void AttachVoice(Handle<Voice>* lphVoice, Handle<Content>* lphContent, u32 lu32SlotName);
+    static void AttachVoice(Handle<Voice> lhVoice, Handle<Content> lhContent, u32 lu32SlotName);
 
     // Module::ConnectVoice @ 0x826C14E0 (DWARF h:336). Looks up the submix voice
     // for a submix id, connects the given voice's send to it, then releases the
     // transient handles.
-    void ConnectVoice(Handle<Voice>* lphVoice, u32 lu32SendName, u32 lu32SubmixId);
+    void ConnectVoice(Handle<Voice> lhVoice, u32 lu32SendName, u32 lu32SubmixId);
 
     // Module::CreateVoice @ 0x826D7B00 (DWARF h:318: `Handle<Voice>
     // CreateVoice(u32,u32,u32)` -- the by-value Handle return is lowered on PPC as

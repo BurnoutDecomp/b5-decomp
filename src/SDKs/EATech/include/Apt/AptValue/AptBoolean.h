@@ -35,7 +35,7 @@ public:
     bool GetBool() const { return mbValue; }
     static AptBoolean* Create(const bool bValue)
     {
-        return bValue ? spBooleanTrue : spBooleanFalse;
+        return bValue == true ? spBooleanTrue : spBooleanFalse;
     }
 
 protected:

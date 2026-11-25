@@ -23,7 +23,8 @@
 #include <cstring>  // std::memset
 #include <xtl.h>    // XMemCpy
 
-// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameShared\\GameClasses\\Network/CgsNetworkTexture.cpp".
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameShared\\GameClasses\\Network/CgsNetworkTexture.cpp";
 
 namespace CgsNetwork
 {
@@ -36,14 +37,14 @@ namespace CgsNetwork
     // (PIXELFORMAT_A8R8G8B8). The X360 also clears the two trailing bool flags.
     void NetworkTexture::Construct()
     {
-        mpHeapMalloc               = 0;   // +0x00
-        miBitsPerPixel             = 0;         // +0x04
-        miWidth                    = 0;         // +0x08
-        miHeight                   = 0;         // +0x0C
-        mFormat                    = renderengine::PIXELFORMAT_A8R8G8B8;   // +0x10  (0x18280086)
-        mpcTexture                 = 0;   // +0x14
-        mbTextureAllocatedFromHeap = false;     // +0x18
-        mbIsUncompressedYUV        = false;     // +0x19
+        mpHeapMalloc = 0;
+        mpcTexture = 0;
+        mbTextureAllocatedFromHeap = false;
+        miWidth = 0;
+        miHeight = 0;
+        miBitsPerPixel = 0;
+        mFormat = renderengine::PIXELFORMAT_A8R8G8B8;
+        mbIsUncompressedYUV = false;
     }
 
     // ---- Destruct @ 0x8287E678 -----------------------------------------------------------------
@@ -52,19 +53,18 @@ namespace CgsNetwork
     // leaves +0x18 alone (Release() is expected to have already freed + cleared it).
     void NetworkTexture::Destruct()
     {
-        mpHeapMalloc        = 0;   // +0x00
-        miBitsPerPixel      = 0;         // +0x04
-        miWidth             = 0;         // +0x08
-        miHeight            = 0;         // +0x0C
-        mFormat             = renderengine::PIXELFORMAT_A8R8G8B8;   // +0x10
-        mpcTexture          = 0;   // +0x14
-        mbIsUncompressedYUV = false;     // +0x19
+        mpHeapMalloc = 0;
+        mpcTexture = 0;
+        miWidth = 0;
+        miHeight = 0;
+        miBitsPerPixel = 0;
+        mFormat = renderengine::PIXELFORMAT_A8R8G8B8;
+        mbIsUncompressedYUV = false;
     }
 
     // ---- GetBitsPerPixel(PixelFormat) @ 0x8287E6A8 ---------------------------------------------
     // Map a pixel format to its bit depth. The X360 switches on the raw 32-bit format word; the
     // recognised formats are named here, and the unrecognised case asserts and returns 0.
-    // (0x28280044 -- a 16bpp X1R5G5B5-style format with no DWARF name -- is accepted as 16bpp.)
     s32 NetworkTexture::GetBitsPerPixel(renderengine::PixelFormat lFormat)
     {
         switch (lFormat)
@@ -74,7 +74,7 @@ namespace CgsNetwork
 
             case renderengine::PIXELFORMAT_A1R5G5B5:    // 0x18280043
             case renderengine::PIXELFORMAT_G8B8:        // 0x1A20000B
-            case 0x28280044:                            // unnamed 16bpp X1R5G5B5-style format
+            case static_cast<renderengine::PixelFormat>(D3DFMT_LIN_R5G6B5):
                 return 16;
 
             case renderengine::PIXELFORMAT_A8R8G8B8:    // 0x18280086
@@ -83,11 +83,13 @@ namespace CgsNetwork
 
             default:
             {
-                char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-                CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-                lStrStream << "Invalid pixel format!";
                 CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), __FILE__, __LINE__);
+                CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer,
+                                             CgsDev::Assert::giMessageBufferSize);
+                CgsDev::StrStreamBase& lrStream = lStrStream;
+                lrStream << "Invalid pixel format!";
+                CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+                                           CGS_ASSERT_LOCATION(KAC_ARTIST_ASSERT_FILE, 225));
                 CgsDev::Assert::EndAssert();
                 return 0;
             }
@@ -190,11 +192,12 @@ namespace CgsNetwork
     {
         CGS_ASSERT(renderengine::PIXELFORMAT_DXT1 == mFormat, CGS_ASSERT_MESSAGE_AT(
             "rw::graphics::core::PIXELFORMAT_LIN_DXT1 == mFormat",
-            __FILE__, 308 /* ARTIST 0x8287E7E0 */));
+            KAC_ARTIST_ASSERT_FILE, 308 /* ARTIST 0x8287E7E0 */));
 
+        s32 liWidthInBlocks = 1;
         if (miWidth > KI_DXT1_BLOCK_WIDTH)
-            return (miWidth + (KI_DXT1_BLOCK_WIDTH - 1)) / KI_DXT1_BLOCK_WIDTH;
-        return 1;
+            liWidthInBlocks = (miWidth + (KI_DXT1_BLOCK_WIDTH - 1)) / KI_DXT1_BLOCK_WIDTH;
+        return liWidthInBlocks;
     }
 
     // ---- GetHeightInBlocks @ 0x8287E818 --------------------------------------------------------
@@ -203,11 +206,12 @@ namespace CgsNetwork
     {
         CGS_ASSERT(renderengine::PIXELFORMAT_DXT1 == mFormat, CGS_ASSERT_MESSAGE_AT(
             "rw::graphics::core::PIXELFORMAT_LIN_DXT1 == mFormat",
-            __FILE__, 339 /* ARTIST 0x8287E858 */));
+            KAC_ARTIST_ASSERT_FILE, 339 /* ARTIST 0x8287E858 */));
 
+        s32 liHeightInBlocks = 1;
         if (miHeight > KI_DXT1_BLOCK_HEIGHT)
-            return (miHeight + (KI_DXT1_BLOCK_HEIGHT - 1)) / KI_DXT1_BLOCK_HEIGHT;
-        return 1;
+            liHeightInBlocks = (miHeight + (KI_DXT1_BLOCK_HEIGHT - 1)) / KI_DXT1_BLOCK_HEIGHT;
+        return liHeightInBlocks;
     }
 
     // ---- GetStride @ 0x8288B910 ----------------------------------------------------------------
@@ -217,29 +221,33 @@ namespace CgsNetwork
     // An unrecognised format asserts and returns 0.
     s32 NetworkTexture::GetStride() const
     {
-        if (mFormat == renderengine::PIXELFORMAT_DXT1)
-        {
-            const s32 liBytesPerBlock =
-                (KI_DXT1_BLOCK_WIDTH * KI_DXT1_BLOCK_HEIGHT * miBitsPerPixel) / 8;
-            return GetWidthInBlocks() * liBytesPerBlock;
-        }
-
         switch (mFormat)
         {
+            case renderengine::PIXELFORMAT_DXT1:
+            {
+                const s32 liBitsPerPixel = GetBitsPerPixel();
+                const s32 liWidthInBlocks = GetWidthInBlocks();
+                const s32 liBytesPerBlock =
+                    (KI_DXT1_BLOCK_WIDTH * KI_DXT1_BLOCK_HEIGHT * liBitsPerPixel) / 8;
+                return liWidthInBlocks * liBytesPerBlock;
+            }
+
             case renderengine::PIXELFORMAT_A1R5G5B5:    // 0x18280043
             case renderengine::PIXELFORMAT_A8R8G8B8:    // 0x18280086
             case renderengine::PIXELFORMAT_G8B8:        // 0x1A20000B
             case renderengine::PIXELFORMAT_X8R8G8B8:    // 0x28280086
-            case 0x28280044:                            // unnamed 16bpp X1R5G5B5-style format
+            case static_cast<renderengine::PixelFormat>(D3DFMT_LIN_R5G6B5):
                 return (miWidth * miBitsPerPixel + 7) / 8;
 
             default:
             {
-                char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-                CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-                lStrStream << "Invalid pixel format!";
                 CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), __FILE__, __LINE__);
+                CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer,
+                                             CgsDev::Assert::giMessageBufferSize);
+                CgsDev::StrStreamBase& lrStream = lStrStream;
+                lrStream << "Invalid pixel format!";
+                CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+                                           CGS_ASSERT_LOCATION(KAC_ARTIST_ASSERT_FILE, 285));
                 CgsDev::Assert::EndAssert();
                 return 0;
             }

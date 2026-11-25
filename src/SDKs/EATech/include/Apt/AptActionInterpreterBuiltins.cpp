@@ -65,7 +65,7 @@ extern unsigned int AptGetSwfVersion();
 //   * undefined / Boolean -> NaN exactly when the movie is SWF7
 //     (AptGetSwfVersion() == 7 -- the SWF7 undefined-coercion change).
 // ---------------------------------------------------------------------------
-bool isNaN(AptValue* pValue)
+bool _isNaN(AptValue* pValue)
 {
     const AptVirtualFunctionTable_Indices eType = pValue->getVtblIndex();
     const bool bDefined = pValue->getIsDefined();
@@ -142,7 +142,7 @@ bool isNaN(AptValue* pValue)
 }
 
 // ---------------------------------------------------------------------------
-// cbCallMethod_isNaN @0x82AF99E8 -- AS isNaN(x): true with no argument, or when the
+// cbCallMethod_isNaN @0x82AF99E8 -- AS _isNaN(x): true with no argument, or when the
 // single argument is Not-a-Number. Returns the shared true/false singleton.
 // ---------------------------------------------------------------------------
 AptValue* AptActionInterpreter::cbCallMethod_isNaN(AptValue* /*pThis*/, int nArgCount)
@@ -151,7 +151,7 @@ AptValue* AptActionInterpreter::cbCallMethod_isNaN(AptValue* /*pThis*/, int nArg
         return AptBoolean::Create(true);
 
     AptValue* pArg = gppAptNativeArgStack[gnAptNativeArgCount - 1];
-    return AptBoolean::Create(isNaN(pArg));
+    return AptBoolean::Create(_isNaN(pArg));
 }
 
 // ---------------------------------------------------------------------------
@@ -179,7 +179,7 @@ AptValue* AptActionInterpreter::cbCallMethod_boolean(AptValue* /*pThis*/, int nA
     // A defined number -- or any other value whose numeric coercion is well-defined
     // (not NaN) -- is true iff that number is non-zero.
     const bool bNumber = (eType == AptVFT_Float || eType == AptVFT_Integer) && pArg->getIsDefined();
-    if (bNumber || !isNaN(pArg))
+    if (bNumber || !_isNaN(pArg))
         return AptBoolean::Create(pArg->toFloat() != 0.0f);
 
     // NaN bucket: a defined Boolean returns its own value.

@@ -40,18 +40,13 @@
 // gpUndefinedValue: AptGlobals.cpp (built at AptInit). AptGetSwfVersion: AptLinker.cpp.
 extern AptValue*    gpUndefinedValue;
 extern unsigned int AptGetSwfVersion();
+extern int gnAptSwfVersion;
 // The value NaN test (console isNaN @0x82AF9768); homed in
 // AptActionInterpreterBuiltins.cpp.
-extern bool         isNaN(AptValue* pValue);
+extern bool         _isNaN(AptValue* pValue);
 
 namespace
 {
-    inline bool BothDefinedInts(const AptValue* pTop, const AptValue* pUnder)
-    {
-        return pTop->getVtblIndex()   == AptVFT_Integer && pTop->getIsDefined()
-            && pUnder->getVtblIndex() == AptVFT_Integer && pUnder->getIsDefined();
-    }
-
     inline bool ShouldCompute(const AptValue* pTop, const AptValue* pUnder)
     {
         if (AptGetSwfVersion() == 7 &&
@@ -188,57 +183,67 @@ void AptActionInterpreter::_FunctionAptActionStrictEquals(AptActionInterpreter* 
     pInterp->stackPopAndPush(2, AptBoolean::Create(bEqual));
 }
 
-// ---------------------------------------------------------------------------
-// _FunctionAptActionEquals @0x7FD938 -- under == top.
-// ---------------------------------------------------------------------------
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 void AptActionInterpreter::_FunctionAptActionEquals(AptActionInterpreter* pInterp, LocalContextT*)
 {
-    AptValue* pTop   = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
-    AptValue* pUnder = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 2];
+    AptValue* pTop = pInterp->stackAt(0);
+    AptValue* pUnder = pInterp->stackAt(1);
+    AptValue* pResult = 0;
+    if (gnAptSwfVersion == 7 && (!pTop->getIsDefined() || !pUnder->getIsDefined()))
+        pResult = gpUndefinedValue;
 
-    AptValue* pResult = gpUndefinedValue;
-    if (ShouldCompute(pTop, pUnder))
+    if (!pResult)
     {
-        if (BothDefinedInts(pTop, pUnder))
+        if (pTop->isInteger() && pUnder->isInteger())
         {
-            pResult = AptBoolean::Create(pTop->c_integer()->GetInt() == pUnder->c_integer()->GetInt());
+            const int nTop = pTop->c_integer()->GetInt();
+            const int nUnder = pUnder->c_integer()->GetInt();
+            pResult = AptBoolean::Create(nTop == nUnder);
         }
         else
         {
-            float ftop   = pTop->toFloat();
-            float funder = pUnder->toFloat();
-            pResult = AptBoolean::Create(fabsf(ftop - funder) < 0.001f);
+            const float fTop = pTop->toFloat();
+            const float fUnder = pUnder->toFloat();
+            pResult = AptBoolean::Create(fabsf(fTop - fUnder) < 0.001);
         }
     }
-
-    CollapseTwo(pInterp, pResult);
+    pInterp->stackPop(2);
+    pInterp->stackPush(pResult);
 }
 
-// ---------------------------------------------------------------------------
-// _FunctionAptActionLessThan @0x7FD714 -- under < top (asm computes top > under).
-// ---------------------------------------------------------------------------
 void AptActionInterpreter::_FunctionAptActionLessThan(AptActionInterpreter* pInterp, LocalContextT*)
 {
-    AptValue* pTop   = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
-    AptValue* pUnder = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 2];
+    AptValue* pTop = pInterp->stackAt(0);
+    AptValue* pUnder = pInterp->stackAt(1);
+    AptValue* pResult = 0;
+    if (gnAptSwfVersion == 7 && (!pTop->getIsDefined() || !pUnder->getIsDefined()))
+        pResult = gpUndefinedValue;
 
-    AptValue* pResult = gpUndefinedValue;
-    if (ShouldCompute(pTop, pUnder))
+    if (!pResult)
     {
-        if (BothDefinedInts(pTop, pUnder))
+        if (pTop->isInteger() && pUnder->isInteger())
         {
-            pResult = AptBoolean::Create(pTop->c_integer()->GetInt() > pUnder->c_integer()->GetInt());
+            const int nTop = pTop->c_integer()->GetInt();
+            const int nUnder = pUnder->c_integer()->GetInt();
+            pResult = AptBoolean::Create(nUnder < nTop);
         }
         else
         {
-            float ftop   = pTop->toFloat();
-            float funder = pUnder->toFloat();
-            pResult = AptBoolean::Create(ftop > funder);
+            const float fTop = pTop->toFloat();
+            const float fUnder = pUnder->toFloat();
+            pResult = AptBoolean::Create(fUnder < fTop);
         }
     }
-
-    CollapseTwo(pInterp, pResult);
+    pInterp->stackPop(2);
+    pInterp->stackPush(pResult);
 }
+
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // ---------------------------------------------------------------------------
 // _FunctionAptActionGreater @0x7FCF30 -- under > top (type-aware).
@@ -294,7 +299,7 @@ void AptActionInterpreter::_FunctionAptActionLessThan2(AptActionInterpreter* pIn
             const char* sTop   = pTop->c_string()->GetInternalString()->GetBuffer();
             pResult = AptBoolean::Create(strcmp(sUnder, sTop) < 0);
         }
-        else if (isNaN(pTop) || isNaN(pUnder))   // isNaN @0x82AF9768 (Builtins.cpp)
+        else if (_isNaN(pTop) || _isNaN(pUnder))   // isNaN @0x82AF9768 (Builtins.cpp)
         {
             pResult = gpUndefinedValue;
         }
@@ -414,7 +419,7 @@ void AptActionInterpreter::_FunctionAptActionEquals2(AptActionInterpreter* pInte
 
 MixedCompare:
     {
-        // asm: if ( (v15 != 7 && v15 != 6) || isNaN(v5) ) { ...maybe LABEL_105... }
+        // asm: if ( (v15 != 7 && v15 != 6) || _isNaN(v5) ) { ...maybe LABEL_105... }
         // The string/identity ladder (LABEL_105) is entered when BOTH:
         //   (top is not a number)  OR (under is NaN)        -- the outer guard
         //   (under is not a number) OR (top is NaN)          -- the inner guard
@@ -423,9 +428,9 @@ MixedCompare:
         const bool bUnderIsNumberType = (nUnder == AptVFT_Integer || nUnder == AptVFT_Float);
 
         bool bStringLadder = false;
-        if (!bTopIsNumberType || isNaN(pUnder))   // isNaN -- outer guard
+        if (!bTopIsNumberType || _isNaN(pUnder))   // isNaN -- outer guard
         {
-            if (!bUnderIsNumberType || isNaN(pTop))   // isNaN -- inner guard
+            if (!bUnderIsNumberType || _isNaN(pTop))   // isNaN -- inner guard
                 bStringLadder = true;
         }
 

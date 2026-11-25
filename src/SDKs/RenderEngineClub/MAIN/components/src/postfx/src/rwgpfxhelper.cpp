@@ -532,7 +532,7 @@ namespace postfx
             params.maElements[1].miOffset = 0x002C23A5;
             params.maElements[1].mu8UsageIndex = 6;
             rw::ResourceDescriptor descriptor;
-            renderengine::VertexDescriptor::GetResourceDescriptor(&descriptor, &params);
+            static_cast<rw::BaseResourceDescriptors<5>&>(descriptor) = renderengine::VertexDescriptor::GetResourceDescriptor(params);
             rw::Resource resource = AllocateResource(m_allocator, descriptor);
             m_quadVertexDescriptor = renderengine::VertexDescriptor::Initialize(&resource, &params);
         }

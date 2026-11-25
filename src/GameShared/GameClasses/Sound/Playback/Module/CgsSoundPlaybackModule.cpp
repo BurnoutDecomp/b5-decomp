@@ -19,6 +19,8 @@
 #include "GameShared/GameClasses/Sound/Playback/Module/CgsSoundPlaybackModule.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
+#define CGS_ARTIST_PLAYBACK_MODULE_CPP "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/Module/CgsSoundPlaybackModule.cpp"
+
 #include "rw/rwcore_structs.h"   // rw::Resource / rw::IResourceAllocator (the Release-machine DoFree wraps)
 
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"                 // Prepare's stream-buffer bump path
@@ -585,23 +587,19 @@ void Module::AddRegistry(Registry& arRegistry, u32 au32RegistryId)
 // passes by reference IS the interned slot Name), then releases the transient
 // references held by both handles (the X360 drops a ref on each owned object).
 // ---------------------------------------------------------------------------
-void Module::AttachVoice(Handle<Voice>* lphVoice, Handle<Content>* lphContent,
-                         u32 lu32SlotName)
+void Module::AttachVoice(Handle<Voice> lhVoice, Handle<Content> lhContent, u32 lu32SlotName)
 {
-    CGS_ASSERT(lphVoice->GetObject(), "lhVoice");
-    CGS_ASSERT(lphContent->GetObject(), "lhContent");
+    CGS_ASSERT(lhVoice, CGS_ASSERT_MESSAGE_AT("lhVoice", CGS_ARTIST_PLAYBACK_MODULE_CPP, 1128));
+    CGS_ASSERT(lhContent, CGS_ASSERT_MESSAGE_AT("lhContent", CGS_ARTIST_PLAYBACK_MODULE_CPP, 1129));
 
-    CGS_ASSERT(lphVoice->GetObject(), "mpObject");
+    const Name lSlotName(static_cast<uintptr_t>(lu32SlotName));
+    const bool lbAttached = lhVoice->Attach(lSlotName, lhContent);
+    CGS_ASSERT(lbAttached, CGS_ASSERT_MESSAGE_AT("lhVoice->Attach(lSlotName, lhContent)", CGS_ARTIST_PLAYBACK_MODULE_CPP, 1130));
 
-    bool lbAttached =
-        lphVoice->GetObject()->Attach(Name(static_cast<uintptr_t>(lu32SlotName)),
-                                      *lphContent);
-    CGS_ASSERT(lbAttached, "lhVoice->Attach(lSlotName, lhContent)");
-
-    if (lphVoice->GetObject())
-        lphVoice->GetObject()->Release();
-    if (lphContent->GetObject())
-        lphContent->GetObject()->Release();
+    if (Voice* lpVoice = lhVoice.GetObject())
+        lpVoice->Release();
+    if (Content* lpContent = lhContent.GetObject())
+        lpContent->Release();
 }
 
 // ---------------------------------------------------------------------------
@@ -610,7 +608,7 @@ void Module::AttachVoice(Handle<Voice>* lphVoice, Handle<Content>* lphContent,
 // reference on it, connects lphVoice's send lu32SendName to it, then releases the
 // transient references.
 // ---------------------------------------------------------------------------
-void Module::ConnectVoice(Handle<Voice>* lphVoice, u32 lu32SendName, u32 lu32SubmixId)
+void Module::ConnectVoice(Handle<Voice> lhVoice, u32 lu32SendName, u32 lu32SubmixId)
 {
     Environment* lpEnvironment = mhEnvironment.GetObject();
     CGS_ASSERT(lpEnvironment, "mpObject");
@@ -625,24 +623,24 @@ void Module::ConnectVoice(Handle<Voice>* lphVoice, u32 lu32SendName, u32 lu32Sub
     if (lhSubmixLookup.GetObject())
         lhSubmixLookup.GetObject()->Release();
 
-    CGS_ASSERT(lphVoice->GetObject(), "lhVoice");
+    CGS_ASSERT(lhVoice.GetObject(), "lhVoice");
     CGS_ASSERT(lpSubmixVoice, "lhVoice");  // X360 streams "Submix ID: <id>" here
 
-    CGS_ASSERT(lphVoice->GetObject(), "mpObject");
+    CGS_ASSERT(lhVoice.GetObject(), "mpObject");
 
     // The real Voice::Connect(Name, Handle<SubmixVoice>&) @0x826ACC90 -- the u32
     // built on the stack is the interned send Name, and the submix voice is the
     // SubmixVoice subclass (CgsSubmixVoice.h).
     Handle<SubmixVoice> lhSubmix(static_cast<SubmixVoice*>(lpSubmixVoice));
     bool lbConnected =
-        lphVoice->GetObject()->Connect(Name(static_cast<uintptr_t>(lu32SendName)),
+        lhVoice.GetObject()->Connect(Name(static_cast<uintptr_t>(lu32SendName)),
                                        lhSubmix);
     CGS_ASSERT(lbConnected, "lhVoice->Connect(lSendName, lhSubmixVoice)");
 
     if (lpSubmixVoice)
         lpSubmixVoice->Release();
-    if (lphVoice->GetObject())
-        lphVoice->GetObject()->Release();
+    if (lhVoice.GetObject())
+        lhVoice.GetObject()->Release();
 }
 
 // ---------------------------------------------------------------------------

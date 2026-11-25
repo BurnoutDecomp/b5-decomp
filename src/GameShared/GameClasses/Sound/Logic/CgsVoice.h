@@ -110,7 +110,7 @@ public:
     s32 GetIdent() const;
 
     // GetGain(send)  @ 0x826AD808. Find the named send on the playback voice and
-    // return its gain (send+0x04); flt_82F93D88 (1.0f default) when not found.
+    // return its gain (send+0x04); the CRT quiet NaN at 0x82F93D88 when not found.
     f32 GetGain(const s32* lpSendName) const;
 
     // SetGain(sendNameHash, gain, ..., sendNameCheck)  @ 0x826942C0. Look up the send
@@ -131,13 +131,13 @@ public:
     // Private handle overload @ 0x826DC4C8 -> Playback::Module::AttachVoice.
     // Kept public temporarily for the VoiceWrapper staging path, whose content
     // is already represented as the exact acquired by-value handle.
-    s32 Attach(s32 liSlotName, Playback::Handle<Playback::Content>* lphContent);
+    void Attach(s32 liSlotName, Playback::Handle<Playback::Content> ahContent);
     // Detach  @ 0x826C4F98 -> Playback::Voice::FindNamedSlot + Playback::Slot::Detach
     void* Detach(s32 liSlotName);
     // Play    @ 0x826C5068 -> Playback::Voice::GetSlot + Playback::Slot::Play
-    s32 Play(s32 liParam);
+    void Play(u32 luParam);
     // Stop    @ 0x826C5148 -> Playback::Voice::GetSlot + Playback::Slot::Stop
-    s32 Stop();
+    void Stop();
 
     // @ 0x826C7E18. Empty out-of-line virtual dtor: the mVoiceHandle member dtor
     // Releases the wrapped Playback::Voice; the vtable-install + operator-delete tail

@@ -128,7 +128,7 @@ void CoronaRenderer::Initialize(rw::IResourceAllocator& lrAllocator)
     lVertexDecl.maElements[3].mu16Stream = 0;
     lVertexDecl.maElements[3].miOffset = 0x14C86;
     lVertexDecl.maElements[3].mu8UsageIndex = 4;
-    VertexDescriptor::GetResourceDescriptor(&lDescriptor, &lVertexDecl);
+    static_cast<rw::BaseResourceDescriptors<5>&>(lDescriptor) = VertexDescriptor::GetResourceDescriptor(lVertexDecl);
     gsVertexDescriptorResource = lrAllocator.DoAllocate(lDescriptor, 0);
     s_vertexDescriptor = VertexDescriptor::Initialize(&gsVertexDescriptorResource, &lVertexDecl);
 }

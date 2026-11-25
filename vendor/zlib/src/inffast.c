@@ -72,7 +72,7 @@ z_streamp z;
     }
     do {
       DUMPBITS(t->bits)
-      if ((e & HUFT_FLAGS) == HUFT_LENGTH_DISTANCE)
+      if (e & HUFT_LENGTH_DISTANCE)
       {
         /* get extra bits for length */
         e &= HUFT_EXTRA_MASK;
@@ -92,7 +92,7 @@ z_streamp z;
         e = (t = td + ((uInt)b & md))->exop;
         do {
           DUMPBITS(t->bits)
-          if ((e & HUFT_FLAGS) == HUFT_LENGTH_DISTANCE)
+          if (e & HUFT_LENGTH_DISTANCE)
           {
             /* get extra bits to add to distance base */
             e &= HUFT_EXTRA_MASK;
@@ -169,7 +169,7 @@ z_streamp z;
           break;
         }
       }
-      else if ((e & HUFT_FLAGS) == HUFT_END)
+      else if (e & HUFT_END)
       {
         Tracevv((stderr, "inflate:         * end of block\n"));
         UNGRAB

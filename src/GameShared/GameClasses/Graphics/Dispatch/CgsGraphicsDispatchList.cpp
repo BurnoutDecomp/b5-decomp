@@ -24,21 +24,29 @@
 namespace CgsGraphics
 {
 
+namespace
+{
+    bool SortRecordLess(const SortKey& lrLeft, const SortKey& lrRight)
+    {
+        return lrLeft.mu64Whole < lrRight.mu64Whole;
+    }
+}
+
 static const char KAC_ARTIST_ASSERT_CPP[] = "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\Dispatch/CgsDispatcher.cpp";
+static const char KAC_ARTIST_ASSERT_HEADER[] = "..\\..\\..\\GameShared\\GameClasses\\Graphics\\Dispatch\\CgsDispatcher.h";
 
 // @ 0x822A0788
 // Ensure the tail key block can hold one more record: allocate a fresh block when
 // the tail is missing or full, then assert the tail exists.
-DispatchList* DispatchList::ReserveKey()
+void DispatchList::ReserveKey()
 {
-    KeyBlock* lpTail = mpBlockListTail;
-    if (lpTail == NULL || lpTail->muCount >= lpTail->muCapacity)
+    SortKeyBlock* lpTail = mpBlockListTail;
+    if (lpTail == NULL || lpTail->muKeyCount >= lpTail->muKeyCapacity)
     {
         AllocateKeyBlock();
     }
 
-    CGS_ASSERT(mpBlockListTail != NULL, "mpBlockListTail != NULL");
-    return this;
+    CGS_ASSERT_AT(mpBlockListTail != NULL, "mpBlockListTail != NULL", KAC_ARTIST_ASSERT_HEADER, 559);
 }
 
 // @ 0x822A0808
@@ -46,49 +54,52 @@ DispatchList* DispatchList::ReserveKey()
 // the tail block's next slot, then advance the block and list counts.
 void DispatchList::Submit(u64 lu64SortKey, DispatchCommand* lpPacket)
 {
-    CGS_ASSERT(lpPacket != NULL, "lpPacket != NULL");
+    CGS_ASSERT_AT(lpPacket != NULL, "lpPacket != NULL", KAC_ARTIST_ASSERT_HEADER, 567);
 
     ReserveKey();
 
-    CGS_ASSERT(mpBlockListTail != NULL, "mpBlockListTail != NULL");
+    CGS_ASSERT_AT(mpBlockListTail != NULL, "mpBlockListTail != NULL", KAC_ARTIST_ASSERT_HEADER, 571);
 
     // Packet offset within the bin, in quad-words (DispatchCommand pointer diff
     // already scales by sizeof(DispatchCommand) == 16 == the PPC `>> 4`).
-    const u32 luPacketLocalOffset = static_cast<u32>(lpPacket - m_pBinBase);
+    const s32 liPacketLocalOffset = lpPacket - m_pBinBase;
 
     const u64 luKey =
         (lu64SortKey << SortKey::KU_SHIFT_KEY)
-        | (luPacketLocalOffset & SortKey::KU_MASK_OFFSET);
+        | (static_cast<u64>(liPacketLocalOffset) & SortKey::KU_MASK_OFFSET);
 
     // Store the record first, then range-check the offset (matches the asm order).
-    KeyBlock* lpTail = mpBlockListTail;
-    lpTail->mpKeys[lpTail->muCount] = luKey;
+    SortKeyBlock* lpTail = mpBlockListTail;
+    lpTail->mpKeyArray[lpTail->muKeyCount].mu64Whole = luKey;
 
-    CGS_ASSERT(luPacketLocalOffset <= SortKey::KU_MASK_OFFSET,
-               "uint32_t(liPacketLocalOffset) <= SortKey::KU_MASK_OFFSET");
+    CGS_ASSERT_AT(static_cast<u32>(liPacketLocalOffset) <= SortKey::KU_MASK_OFFSET,
+                  "uint32_t(liPacketLocalOffset) <= SortKey::KU_MASK_OFFSET",
+                  KAC_ARTIST_ASSERT_HEADER, 588);
 
-    ++lpTail->muCount;
+    ++mpBlockListTail->muKeyCount;
     ++muCount;
 }
 
 // @ 0x827FA730
-// Append a fresh 64-record KeyBlock to the chain and make it the tail. The block
+// Append a fresh 64-record SortKeyBlock to the chain and make it the tail. The block
 // is carved from the list's bin: X360 allocates 33 quad-words (= the 16-byte block
 // header + 64 * 8-byte keys) with the key array starting right after the header.
 // The x64 gate sizes the header by the host struct (semantic parity: header first,
 // then the 64-key array, whole carve rounded up to quad-words).
-DispatchList* DispatchList::AllocateKeyBlock()
+void DispatchList::AllocateKeyBlock()
 {
-    CGS_ASSERT(mpDispatchBin != NULL, "mpDispatchBin != NULL");
+    CGS_ASSERT_AT(mpDispatchBin != NULL, "mpDispatchBin != NULL", KAC_ARTIST_ASSERT_CPP, 163);
 
-    const u32 luHeaderBytes = (sizeof(void*) == 4) ? 16u : static_cast<u32>((sizeof(KeyBlock) + 15u) & ~15u);
-    const u32 luCarveQwords = (luHeaderBytes + KU_KEYBLOCK_CAPACITY * 8u) >> 4;
+    const u32 luHeaderBytes = sizeof(SortKeyBlock);
+    const u32 luCarveQwords = (luHeaderBytes + KU_KEYBLOCK_CAPACITY * sizeof(SortKey)) >> 4;
 
-    KeyBlock* lpBlock = reinterpret_cast<KeyBlock*>(mpDispatchBin->AllocateMemoryFast(luCarveQwords));
+    char* lpRawMemory = static_cast<char*>(mpDispatchBin->AllocateMemoryFast(luCarveQwords));
+    SortKeyBlock* lpBlock = reinterpret_cast<SortKeyBlock*>(lpRawMemory);
+    SortKeyBlock* lpPreviousListTail = mpBlockListTail;
 
     if (mpBlockListTail != 0)
     {
-        mpBlockListTail->mpNext = lpBlock;
+        mpBlockListTail->mpNextBlock = lpBlock;
     }
     else
     {
@@ -96,51 +107,50 @@ DispatchList* DispatchList::AllocateKeyBlock()
     }
     mpBlockListTail = lpBlock;
 
-    lpBlock->mpKeys     = reinterpret_cast<u64*>(reinterpret_cast<u8*>(lpBlock) + luHeaderBytes);
-    lpBlock->muCount    = 0;
-    lpBlock->muCapacity = KU_KEYBLOCK_CAPACITY;
-    lpBlock->mpNext     = 0;
-    return this;
+    lpBlock->mpKeyArray     = reinterpret_cast<SortKey*>(lpRawMemory + luHeaderBytes);
+    lpBlock->muKeyCount    = 0;
+    lpBlock->muKeyCapacity = KU_KEYBLOCK_CAPACITY;
+    lpBlock->mpNextBlock     = 0;
 }
 
 // @ 0x827FA7D0
 // Flatten every key block into one 128-byte-aligned record array carved from the
 // list's own bin, collapse the block chain onto that array (the head block is
 // rewritten to cover it: count == capacity == muCount, next == NULL, tail == head),
-// publish it as mpSortedKeys and fill the sort-job parameter block.
-void DispatchList::PrepareSortJobInfo(SortJobInfo& lrJobInfo)
+// publish it as mpaSortedKeyArray and fill the sort-job parameter block.
+void DispatchList::PrepareSortJobInfo(SortJobInputOutput& lrJobInfo)
 {
-    lrJobInfo.mpaFlatKeys     = 0;
-    lrJobInfo.muKeyCount      = muCount;
-    lrJobInfo.mpBlockListHead = mpBlockListHead;
+    lrJobInfo.mpSortedPointerArray     = 0;
+    lrJobInfo.muSortedPointerCount      = muCount;
+    lrJobInfo.mpKeyBlockListHeader = mpBlockListHead;
 
-    mpSortedKeys = 0;
+    mpaSortedKeyArray = 0;
 
     if (muCount != 0)
     {
         // X360 carve: (8*count + 399) >> 4 quad-words, then align the pointer up to
         // 128 (the extra 399/16 qwords carry the alignment slop).
         void* lpRaw = mpDispatchBin->AllocateMemoryFast((8u * muCount + 399u) >> 4);
-        u64*  lpaFlat = reinterpret_cast<u64*>(
+        SortKey* lpaFlat = reinterpret_cast<SortKey*>(
             (reinterpret_cast<uintptr_t>(lpRaw) + 127u) & ~static_cast<uintptr_t>(127u));
-        lrJobInfo.mpaFlatKeys = lpaFlat;
+        lrJobInfo.mpSortedPointerArray = lpaFlat;
 
         u32 luKeysCopied = 0;
-        for (KeyBlock* lpBlock = mpBlockListHead; lpBlock != 0; lpBlock = lpBlock->mpNext)
+        for (SortKeyBlock* lpBlock = mpBlockListHead; lpBlock != 0; lpBlock = lpBlock->mpNextBlock)
         {
-            std::memcpy(lrJobInfo.mpaFlatKeys + luKeysCopied, lpBlock->mpKeys,
-                lpBlock->muCount * sizeof(*lpBlock->mpKeys));
-            luKeysCopied += lpBlock->muCount;
+            std::memcpy(lrJobInfo.mpSortedPointerArray + luKeysCopied, lpBlock->mpKeyArray,
+                lpBlock->muKeyCount * sizeof(*lpBlock->mpKeyArray));
+            luKeysCopied += lpBlock->muKeyCount;
         }
         CGS_ASSERT(luKeysCopied == muCount,
             CGS_ASSERT_MESSAGE_AT("luKeysCopied == muTotalKeyCount", KAC_ARTIST_ASSERT_CPP, 317));
 
-        mpBlockListHead->mpKeys     = lrJobInfo.mpaFlatKeys;
-        mpBlockListHead->muCount    = muCount;
-        mpBlockListHead->muCapacity = muCount;
-        mpBlockListHead->mpNext     = 0;
+        mpBlockListHead->mpKeyArray     = lrJobInfo.mpSortedPointerArray;
+        mpBlockListHead->muKeyCount    = muCount;
+        mpBlockListHead->muKeyCapacity = muCount;
+        mpBlockListHead->mpNextBlock     = 0;
         mpBlockListTail = mpBlockListHead;
-        mpSortedKeys    = lrJobInfo.mpaFlatKeys;
+        mpaSortedKeyArray    = lrJobInfo.mpSortedPointerArray;
     }
 }
 
@@ -151,11 +161,11 @@ void DispatchList::PrepareSortJobInfo(SortJobInfo& lrJobInfo)
 // identical records refer to the same packet and require no stable-sort storage.
 void DispatchList::SortForDispatch()
 {
-    SortJobInfo lJobInfo;
+    SortJobInputOutput lJobInfo;
     PrepareSortJobInfo(lJobInfo);
-    if (mpSortedKeys != 0 && muCount > 1)
+    if (mpaSortedKeyArray != 0 && muCount > 1)
     {
-        std::sort(mpSortedKeys, mpSortedKeys + muCount);
+        std::sort(mpaSortedKeyArray, mpaSortedKeyArray + muCount, SortRecordLess);
     }
 }
 
@@ -168,19 +178,19 @@ void DispatchList::RelocateForMainMemory(uintptr_t luBinBase, uintptr_t luBinOut
     const uintptr_t luDelta = luBinOutput - luBinBase;
     if (luDelta != 0)
     {
-        for (KeyBlock* lpBlock = mpBlockListHead; lpBlock != 0;)
+        for (SortKeyBlock* lpBlock = mpBlockListHead; lpBlock != 0;)
         {
-            KeyBlock* lpNext = lpBlock->mpNext;
-            if (lpBlock->mpKeys)
-                lpBlock->mpKeys = reinterpret_cast<u64*>(reinterpret_cast<uintptr_t>(lpBlock->mpKeys) + luDelta);
+            SortKeyBlock* lpNext = lpBlock->mpNextBlock;
+            if (lpBlock->mpKeyArray)
+                lpBlock->mpKeyArray = reinterpret_cast<SortKey*>(reinterpret_cast<uintptr_t>(lpBlock->mpKeyArray) + luDelta);
             if (lpNext)
-                lpBlock->mpNext = reinterpret_cast<KeyBlock*>(reinterpret_cast<uintptr_t>(lpNext) + luDelta);
+                lpBlock->mpNextBlock = reinterpret_cast<SortKeyBlock*>(reinterpret_cast<uintptr_t>(lpNext) + luDelta);
             lpBlock = lpNext;
         }
         if (mpBlockListHead)
-            mpBlockListHead = reinterpret_cast<KeyBlock*>(reinterpret_cast<uintptr_t>(mpBlockListHead) + luDelta);
+            mpBlockListHead = reinterpret_cast<SortKeyBlock*>(reinterpret_cast<uintptr_t>(mpBlockListHead) + luDelta);
         if (mpBlockListTail)
-            mpBlockListTail = reinterpret_cast<KeyBlock*>(reinterpret_cast<uintptr_t>(mpBlockListTail) + luDelta);
+            mpBlockListTail = reinterpret_cast<SortKeyBlock*>(reinterpret_cast<uintptr_t>(mpBlockListTail) + luDelta);
     }
     if (mpBlockListHead)
     {
@@ -210,21 +220,21 @@ void DispatchList::ReconnectChainBlocks()
     {
         for (u32 luChain = 0; luChain < muChainBlockCount; ++luChain)
         {
-            KeyBlock* lpBlockWithinChain = mapChainBlockArray[luChain];
-            CGS_ASSERT(lpBlockWithinChain->muCapacity <= KU_KEYBLOCK_CAPACITY,
+            SortKeyBlock* lpBlockWithinChain = mapChainBlockArray[luChain];
+            CGS_ASSERT(lpBlockWithinChain->muKeyCapacity <= KU_KEYBLOCK_CAPACITY,
                 CGS_ASSERT_MESSAGE_AT("lpBlockWithinChain->muKeyCapacity <= KU_MAX_KEYS_PER_BLOCK",
                     KAC_ARTIST_ASSERT_CPP, 249));
-            while (lpBlockWithinChain->mpNext != NULL)
+            while (lpBlockWithinChain->mpNextBlock != NULL)
             {
-                CGS_ASSERT(lpBlockWithinChain->muCapacity <= KU_KEYBLOCK_CAPACITY,
+                CGS_ASSERT(lpBlockWithinChain->muKeyCapacity <= KU_KEYBLOCK_CAPACITY,
                     CGS_ASSERT_MESSAGE_AT("lpBlockWithinChain->muKeyCapacity <= KU_MAX_KEYS_PER_BLOCK",
                         KAC_ARTIST_ASSERT_CPP, 253));
-                muCount += lpBlockWithinChain->muCount;
-                lpBlockWithinChain = lpBlockWithinChain->mpNext;
+                muCount += lpBlockWithinChain->muKeyCount;
+                lpBlockWithinChain = lpBlockWithinChain->mpNextBlock;
             }
-            muCount += lpBlockWithinChain->muCount;
+            muCount += lpBlockWithinChain->muKeyCount;
             if (luChain + 1 < muChainBlockCount)
-                lpBlockWithinChain->mpNext = mapChainBlockArray[luChain + 1];
+                lpBlockWithinChain->mpNextBlock = mapChainBlockArray[luChain + 1];
             else
                 mpBlockListTail = lpBlockWithinChain;
         }
@@ -241,8 +251,8 @@ void DispatchList::Append(DispatchList* lpOther)
     {
         if (mpBlockListTail)
         {
-            CGS_ASSERT(mpBlockListTail->mpNext == 0, "mpBlockListTail->mpNext == NULL");
-            mpBlockListTail->mpNext = lpOther->mpBlockListHead;
+            CGS_ASSERT(mpBlockListTail->mpNextBlock == 0, "mpBlockListTail->mpNextBlock == NULL");
+            mpBlockListTail->mpNextBlock = lpOther->mpBlockListHead;
         }
         else
         {

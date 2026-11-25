@@ -495,8 +495,7 @@ namespace postfx
             lParameters.maElements[4].miOffset      = KI_VERTEX_FORMAT_EXTRA;
             lParameters.maElements[4].mu8UsageIndex = 9;
 
-            rw::BaseResourceDescriptors<5> lDescriptor;
-            renderengine::VertexDescriptor::GetResourceDescriptor(&lDescriptor, &lParameters);
+            rw::BaseResourceDescriptors<5> lDescriptor = renderengine::VertexDescriptor::GetResourceDescriptor(lParameters);
             m_quadVertexDescriptorResource = m_allocator->DoAllocate(
                 reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), 0);
             m_quadVertexDescriptor = renderengine::VertexDescriptor::Initialize(
@@ -538,8 +537,7 @@ namespace postfx
             lParameters.maElements[2].miOffset      = KI_VERTEX_FORMAT_EXTRA;
             lParameters.maElements[2].mu8UsageIndex = 7;
 
-            rw::BaseResourceDescriptors<5> lDescriptor;
-            renderengine::VertexDescriptor::GetResourceDescriptor(&lDescriptor, &lParameters);
+            rw::BaseResourceDescriptors<5> lDescriptor = renderengine::VertexDescriptor::GetResourceDescriptor(lParameters);
             m_scatterVertexDescriptorResource = m_allocator->DoAllocate(
                 reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), 0);
             m_scatterVertexDescriptor = renderengine::VertexDescriptor::Initialize(

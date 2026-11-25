@@ -243,16 +243,16 @@ namespace CgsMemory
         lpOutput->LockForWrite();
         lpInput->LockForRead();
 
-        const MemoryIO::InputBuffer::MemoryRequestQueue* lpQueue = lpInput->GetMemoryRequestQueue();
-        const CgsModule::Event* lpEvent = 0;
-        s32 liSize = 0;
-        s32 liId = lpQueue->GetFirstEvent(&lpEvent, &liSize);
-        while (liId != -1 && lpEvent != 0)
+        const CgsModule::Event* lpEvent;
+        s32 liSize;
+        if (lpInput->GetMemoryRequestQueue()->GetFirstEvent(&lpEvent, &liSize) != -1)
         {
-            ProcessMemoryRequest(static_cast<const MemoryIO::MemoryRequest*>(lpEvent), lpOutput);
-            const CgsModule::Event* lpNext = 0;
-            liId = lpQueue->GetNextEvent(lpEvent, &lpNext, &liSize);
-            lpEvent = lpNext;
+            const CgsModule::Event* lpCurrent;
+            do
+            {
+                lpCurrent = lpEvent;
+                ProcessMemoryRequest(static_cast<const MemoryIO::MemoryRequest*>(lpCurrent), lpOutput);
+            } while (lpInput->GetMemoryRequestQueue()->GetNextEvent(lpCurrent, &lpEvent, &liSize) != -1);
         }
 
         lpInput->UnlockForRead();

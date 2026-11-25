@@ -31,7 +31,7 @@ namespace CgsModule { struct IOBufferStack; }
 // pass. MemoryBank/MemoryBlock stay forward-declared (used only via pointer members until then).
 namespace CgsMemory
 {
-    namespace MemoryIO { struct InputBuffer; struct OutputBuffer; struct CreateBankRequest; struct DestroyBankRequest; struct MemoryRequest; }
+    namespace MemoryIO { class InputBuffer; struct OutputBuffer; struct CreateBankRequest; struct DestroyBankRequest; struct MemoryRequest; }
 
     class MemoryModule : public CgsModule::ModuleSingleBuffered
     {

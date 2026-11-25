@@ -230,7 +230,7 @@ void DispatchFrame::Construct(u32 luNumLists, u32 luBinSizeBytes, rw::IResourceA
         DispatchCommand* lpBinBase = lpList->mpDispatchBin->GetBase();
         lpList->mpBlockListHead = 0;
         lpList->mpBlockListTail = 0;
-        lpList->mpSortedKeys    = 0;
+        lpList->mpaSortedKeyArray    = 0;
         lpList->m_pBinBase      = lpBinBase;
     }
 }
@@ -251,7 +251,7 @@ void DispatchList::Reset()
     mpBlockListTail = NULL;
     muCount = 0;
     muChainBlockCount = 0;
-    mpSortedKeys = NULL;
+    mpaSortedKeyArray = NULL;
     AllocateKeyBlock();
 }
 
