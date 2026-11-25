@@ -884,10 +884,12 @@ namespace BrnGui
         if (lbVisible == mbVisible)
             return;
 
-        if (lbVisible)
+        if (lbVisible == true)
         {
-            mPlayerNameTextField.SetText(mPlayerNameTextField.GetText());
-            mNextRankTextField.SetText(mNextRankTextField.GetText());
+            TextField& lrPlayerName = mPlayerNameTextField;
+            lrPlayerName.SetText(lrPlayerName.GetText());
+            TextField& lrNextRank = mNextRankTextField;
+            lrNextRank.SetText(lrNextRank.GetText());
 
             if (mbFinishedGame || mbElite)
             {
@@ -901,7 +903,8 @@ namespace BrnGui
 
             UpdateDirt();
 
-            CGS_ASSERT(mpProfile != 0, "mpProfile");   // cpp:1122
+            CGS_ASSERT_AT(mpProfile != 0, "mpProfile",
+                          "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnLicenseComponent.cpp", 1122);
 
             mbShowingProfilePicture = (mpProfile->GetPlayerLicencePicture() != 0);
             if (!mbShowingProfilePicture)

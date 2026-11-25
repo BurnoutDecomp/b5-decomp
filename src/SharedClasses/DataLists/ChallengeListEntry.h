@@ -75,7 +75,7 @@ struct ChallengeListEntryAction
         E_CHALLENGE_ACTION_BARREL_ROLLS_REVERSE  = 19,
         E_CHALLENGE_ACTION_FLATSPIN_REVERSE      = 20,
         E_CHALLENGE_ACTION_LAND_SUCCESSFUL_REVERSE = 21,
-        E_ACTION_COUNT                           = 22,
+        E_ACTION_COUNT                           = 41, // ARTIST 0x82509F04 / 0x8250A328
     };
 
     // -- ChallengeListEntry.h:90 --
@@ -326,11 +326,7 @@ private:
 // range-guards it via CGS_ASSERT and returns it cast to EChallengeActionType. The guard
 // is non-fatal (the binary returns the raw byte even when it fails).
 //
-// X360/DWARF DRIFT (binary authoritative): the X360 fires the assert when the type byte
-// is >= 0x29 (41), whereas the committed/PS3-DWARF EChallengeActionType has
-// E_ACTION_COUNT == 22. We do NOT redefine the committed enum (same call recorded for
-// GetChallengeStyle below); the condition is written against the named constant for
-// source fidelity (the byte-exact X360 threshold is 0x29).
+// ARTIST's action range ends at 41 (0x82509F04 and 0x8250A328).
 inline ChallengeListEntryAction::EChallengeActionType
 ChallengeListEntryAction::GetActionType() const
 {
@@ -346,7 +342,7 @@ ChallengeListEntryAction::GetActionType() const
 // X360 pseudocode: `return 80 * a2 + a1;` with a1==this, a2==liActionIndex. Since
 // sizeof(ChallengeListEntryAction)==0x50 and maAction is at offset 0, this is simply
 // `&maAction[liActionIndex]`. Two range asserts guard the index via the project
-// CGS_ASSERT macro at ARTIST's h:941/942 (the const overload's are h:865/866).
+// CGS_ASSERT macro at ARTIST's h:941/942, including the const caller at 0x8240EC88.
 // The asserts are non-fatal (binary continues and returns the pointer even on an
 // out-of-range index).
 inline ChallengeListEntryAction* ChallengeListEntry::GetAction( int32_t liActionIndex )
@@ -368,10 +364,7 @@ inline ChallengeListEntryAction* ChallengeListEntry::GetAction( int32_t liAction
 // via the named accessor maAction[0].GetActionType() rather than a raw byte read. The range
 // guard is the project CGS_ASSERT (non-fatal; binary continues even on out-of-range type).
 //
-// X360/DWARF DRIFT (binary authoritative): the X360 fires the assert when the type byte is
-// >= 0x29 (41), whereas the committed/PS3-DWARF EChallengeActionType has E_ACTION_COUNT == 22.
-// We do NOT redefine the committed enum; the condition is written against the named constant
-// for source fidelity (the byte-exact X360 threshold is 0x29).
+// Use the same ARTIST action range as GetActionType.
 inline ChallengeListEntry::EFreeburnChallengeStyle
 ChallengeListEntry::GetChallengeStyle() const
 {
@@ -502,9 +495,9 @@ inline void ChallengeListEntryAction::SetCombineAction( ECombineActionType leTyp
 
 inline const ChallengeListEntryAction* ChallengeListEntry::GetAction( int32_t liActionIndex ) const
 {
-    CGS_ASSERT( liActionIndex >= 0, CGS_ASSERT_MESSAGE_AT( "liActionIndex >= 0", CGS_ARTIST_CHALLENGELISTENTRY_FILE, 865 ) );
+    CGS_ASSERT( liActionIndex >= 0, CGS_ASSERT_MESSAGE_AT( "liActionIndex >= 0", CGS_ARTIST_CHALLENGELISTENTRY_FILE, 941 ) );
     CGS_ASSERT( liActionIndex < KI_MAX_ACTIONS_PER_CHALLENGE,
-                CGS_ASSERT_MESSAGE_AT( "liActionIndex < KI_MAX_ACTIONS_PER_CHALLENGE", CGS_ARTIST_CHALLENGELISTENTRY_FILE, 866 ) );
+                CGS_ASSERT_MESSAGE_AT( "liActionIndex < KI_MAX_ACTIONS_PER_CHALLENGE", CGS_ARTIST_CHALLENGELISTENTRY_FILE, 942 ) );
 
     return &maAction[ liActionIndex ];
 }

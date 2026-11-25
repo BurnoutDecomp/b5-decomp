@@ -4083,18 +4083,20 @@ s32 ProgressionManager::HACK_SetupRaces(Race* lpaRaceScratch)
 // --------------------------------------------------------------------------------------------
 // ProgressionManager::ProcessLoadedPresetRaces  (X360 0x8236FDF8)
 //
-//   0x8236FE04  a 2080-byte STACK scratch buffer (`var_820`) is handed to HACK_SetupRaces
+//   0x8236FE04  the stack array at +0x50 is handed to HACK_SetupRaces
 //   0x8236FE20  muNumPresetRaces = its answer  (`stw r3, 0(r28)`, r28 == this + 0x208D8)
 //   0x8236FE3C  per race: Array<Race,64>::Append(&maPresetRaces, &scratch[i])   (stride 0x78)
 // The loop bound is re-read from muNumPresetRaces every iteration, exactly as written.
 //
-// The console's stack scratch is 2080 bytes -- room for 17 races, of which HACK_SetupRaces only
-// ever writes 5. Sized here at the count the two share, so it cannot silently overrun if that
-// count ever grows.
+// DecFIGS 0x287EE4 initializes 17 Race entries. ARTIST 0x8236FE00 reserves the
+// corresponding stack frame, and 0x8236FE48 advances by the 120-byte Race stride.
 // --------------------------------------------------------------------------------------------
 void ProgressionManager::ProcessLoadedPresetRaces()
 {
-    Race laRaceScratch[KI_HACK_RACE_COUNT];
+    const s32 KI_PRESET_RACE_SCRATCH_CAPACITY = 17;
+    CGS_STATIC_ASSERT((KI_HACK_RACE_COUNT <= KI_PRESET_RACE_SCRATCH_CAPACITY),
+        "preset race scratch capacity");
+    Race laRaceScratch[KI_PRESET_RACE_SCRATCH_CAPACITY];
 
     muNumPresetRaces = static_cast<u32>(HACK_SetupRaces(laRaceScratch));
 

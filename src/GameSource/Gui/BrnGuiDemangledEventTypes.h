@@ -941,7 +941,11 @@ namespace BrnGui
     // BrnGui::GuiEventAudioSettings -- genuinely un-homed here (the same-named type in
     // BrnMixerControl.h is BrnSound::Logic::GuiEventAudioSettings, a different type). id 463 size 8,
     // OutputGuiEvent offset 12 (payload 4-aligned per @0x82493728).
-    struct GuiEventAudioSettings { u8 maData[8]; s32 GetEventType() const { return 463; } };  // id 463 size 8
+    struct GuiEventAudioSettings : public CgsGui::GuiEvent<463>
+    {
+        s32 miMusicVolume;
+        s32 miSfxVolume;
+    };
     // [EA Trax wave 2026-09-16] GuiEventAudioTraxUpdate (id 458) has been RECOVERED and now
     // lives in GameSource/Gui/Events/BrnGuiEventAudioTrax.h with its real 32-byte field set
     // (two FastBitArray<128>, no GuiEvent header -- OutputGuiEvent<T> @0x824C30A0 copies four
@@ -1238,7 +1242,10 @@ namespace BrnGui
         s32 miIndex;   // payload +0x00
     };
     struct GuiEventSetPlayer0ControllerPort { u8 maData[4]; s32 GetEventType() const { return 143; } };  // id 143 size 4
-    struct GuiEventVoipSettings { u8 maData[4]; s32 GetEventType() const { return 474; } };  // id 474 size 4
+    struct GuiEventVoipSettings : public CgsGui::GuiEvent<474>
+    {
+        s32 miVoipVolume;
+    };
     struct GuiImageGalleryRequestCollectedDataEvent { u8 maData[4]; s32 GetEventType() const { return 521; } };  // id 521 size 4
     // DWARF BrnGuiEventTypeDefs.h: four word members; ARTIST OutputGuiEvent<GuiImageGalleryRequestEvent> 0x82493AD8
     // copies them as four lwz/stw pairs (id 0x205, size 16).

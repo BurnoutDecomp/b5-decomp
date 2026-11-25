@@ -782,8 +782,8 @@ namespace CgsNetwork
     {
         for (EComponents le = E_COMPONENTS_START; le < E_COMPONENTS_COUNT; le++)
         {
+            maComponents[le].mpComponent = lapComponents[le];
             maComponents[le].mConnApiCallback = 0;
-            maComponents[le].mpComponent      = lapComponents[le];
         }
     }
 

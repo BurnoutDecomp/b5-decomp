@@ -93,12 +93,7 @@ struct ImageFilesSavedEvent
     s32 maSavedFileInfos[3 * 4]; // each saved entry is 4 words (the X360 strides a2 by 16); id @ entry+0
 };
 
-// Read by HandleWorldRegionChangeEvent (X360 0x82357C68). A WorldRegion (county + district).
-struct WorldRegionChangeEvent
-{
-    BrnWorld::ECounty   meCounty;    // +0x00
-    BrnWorld::EDistrict meDistrict;  // +0x04
-};
+namespace GameStateModuleIO { struct WorldRegionChangeEvent; }
 
 // Read by HandleImageGalleryCountRequest (X360 0x82385E78). The gallery (image) type to count.
 struct ImageGalleryCountRequestEvent
@@ -181,7 +176,7 @@ public:
     void HandleImageGalleryDataRequest(const ImageGalleryDataRequestEvent* lpImageGalleryDataReqEvent,
                                        GameStateModuleIO::OutputBuffer* lpOutput);
     // X360 0x82357C68. The world region changed -> remember the current region.
-    void HandleWorldRegionChangeEvent(const WorldRegionChangeEvent* lpWorldRegionChangeEvent);
+    void HandleWorldRegionChangeEvent(const GameStateModuleIO::WorldRegionChangeEvent* lpWorldRegionChangeEvent);
     // X360 0x82357CD8. Mugshot image files finished saving -> clear their locked-for-save slots.
     void HandleImageFilesSavedEvent(const ImageFilesSavedEvent* lpImageFilesSavedEvent);
 

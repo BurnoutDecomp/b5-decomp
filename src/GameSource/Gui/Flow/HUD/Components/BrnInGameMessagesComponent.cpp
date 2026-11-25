@@ -483,7 +483,7 @@ namespace
     // is now empty and the other slot is WAITING, flip to it and start its message.
     void InGameMessagesComponent::TerminateMessages()
     {
-        CGS_ASSERT(mpDirector != NULL, "mpDirector");
+        CGS_ASSERT_AT(mpDirector != NULL, "mpDirector", CGS_ARTIST_FILE, 670);
 
         if (mpInGameMessagesQueue->maeMessageState[0] != E_MESSAGESTATE_NOMESSAGE)
         {
@@ -505,7 +505,8 @@ namespace
             }
         }
 
-        CGS_ASSERT(mpInGameMessagesQueue != NULL, "mpInGameMessagesQueue != NULL");
+        CGS_ASSERT_AT(mpInGameMessagesQueue != NULL, "mpInGameMessagesQueue != NULL",
+                      CGS_ARTIST_BRNINGAMEMESSAGESCOMPONENT_FILE, 397);
         if (mpInGameMessagesQueue->maeMessageState[mpInGameMessagesQueue->muCurrentMessageIndex] ==
             E_MESSAGESTATE_NOMESSAGE)
         {

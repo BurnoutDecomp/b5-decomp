@@ -319,36 +319,42 @@ namespace BrnWorld
                                  BrnReplays::PropEntitySerialiser* lpSerialiser,
                                  const u16* lpuZoneStartIndices)
     {
-        CGS_ASSERT(miNumPropsInSim == static_cast<s32>(mPhysicalProps.CountSetBits()),
-                   "miNumPropsInSim == static_cast< int32_t >( mPhysicalProps.CountSetBits() )");
-        CGS_ASSERT(miNumPartsInSim == static_cast<s32>(mPhysicalParts.CountSetBits()),
-                   "miNumPartsInSim == static_cast< int32_t >( mPhysicalParts.CountSetBits() )");
+        static const char KAC_ARTIST_ASSERT_FILE[] =
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../World/EntityModules/PropEntityModule/BrnPropCellManager.cpp";
+        CGS_ASSERT_AT(miNumPropsInSim == static_cast<s32>(mPhysicalProps.CountSetBits()),
+                      "miNumPropsInSim == static_cast< int32_t > ( mPhysicalProps.CountSetBits() )",
+                      KAC_ARTIST_ASSERT_FILE, 153);
+        CGS_ASSERT_AT(miNumPartsInSim == static_cast<s32>(mPhysicalParts.CountSetBits()),
+                      "miNumPartsInSim == static_cast< int32_t > ( mPhysicalParts.CountSetBits() )",
+                      KAC_ARTIST_ASSERT_FILE, 154);
 
         GenerateTargetList(lv3Position);
 
         for (s32 liCell = 0; liCell < miNumLoadedCells; ++liCell)
         {
-            PropCellRecord& lrCell = maCells[liCell];
+            PropCellRecord* const lpCell = &maCells[liCell];
+            const PropCellId lCurrentCellId = lpCell->GetId();
 
             bool lbInTargetList = false;
             for (s32 liTarget = 0; liTarget < miSizeOfTargetList; ++liTarget)
             {
-                if (maTargetList[liTarget] == lrCell.GetId())
+                if (lCurrentCellId == maTargetList[liTarget])
                 {
                     lbInTargetList = true;
                     break;
                 }
             }
 
-            if (!lbInTargetList && lrCell.IsActive())
+            if (!lbInTargetList && lpCell->IsActive())
             {
-                const s32 liZoneId = lrCell.GetZoneId();
-                DeactivateCell(&lrCell, lpTypes, lpRecentlyBroken, lpOutput, lpSerialiser,
+                const s32 liZoneId = lpCell->GetZoneId();
+                DeactivateCell(lpCell, lpTypes, lpRecentlyBroken, lpOutput, lpSerialiser,
                                liZoneId, lpuZoneStartIndices[liZoneId]);
             }
-            if (lbInTargetList && !lrCell.IsActive())
+            if (lbInTargetList && !lpCell->IsActive())
             {
-                ActivateCell(&lrCell, lpTypes, GetSceneInterface(lpOutput));
+                ActivateCell(lpCell, lpTypes, GetSceneInterface(lpOutput), lpSerialiser);
             }
         }
     }
@@ -362,8 +368,10 @@ namespace BrnWorld
     // -- start == end -- is registered in maActiveCells but never marked active.
     // Reproduced as-shipped rather than hoisted, because hoisting would change behaviour
     // for empty cells.
+    // ARTIST 0x822FCBA8 passes the replay serialiser in r7. This body does not read it.
     void PropCellManager::ActivateCell(PropCellRecord* lpCell, const PropPhysicsDataHeader* lpTypes,
-                                       InSceneUpdateInterface* lpScene)
+                                       InSceneUpdateInterface* lpScene,
+                                       BrnReplays::PropEntitySerialiser*)
     {
         // Owner byte (E_ENTITYTYPE_PROP) seeded into the top byte of the embedded entity
         // word; the slot index is spliced in per prop below (asm `li 3; sldi 56; std`).

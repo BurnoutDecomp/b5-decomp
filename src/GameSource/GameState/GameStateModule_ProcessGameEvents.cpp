@@ -1937,23 +1937,20 @@ void GameStateModule::ProcessGameEvents_Group4(s32                              
 
     case GameStateModuleIO::E_EVENT_CHANGE_WORLD_REGION:
     {
-        const WorldRegionChangeEvent* lpWorldRegionChangeEvent =
-            reinterpret_cast<const WorldRegionChangeEvent*>(lpEvent);
+        const GameStateModuleIO::WorldRegionChangeEvent* lpWorldRegionChangeEvent =
+            reinterpret_cast<const GameStateModuleIO::WorldRegionChangeEvent*>(lpEvent);
 
         GetImageManager()->HandleWorldRegionChangeEvent(lpWorldRegionChangeEvent);
 
         // The event's region goes out verbatim as action 112.
         GameStateModuleIO::WorldRegionChangeAction lWorldRegionChangeAction;
-        CGS_STATIC_ASSERT((sizeof(lWorldRegionChangeAction.mNewWorldRegion) == sizeof(WorldRegionChangeEvent)),
-                      "action 112 carries the event's 8-byte region");
-        std::memcpy(&lWorldRegionChangeAction.mNewWorldRegion, lpWorldRegionChangeEvent,
-                    sizeof(lWorldRegionChangeAction.mNewWorldRegion));
+        lWorldRegionChangeAction.mNewWorldRegion = lpWorldRegionChangeEvent->mNewWorldRegion;
         lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lWorldRegionChangeAction),
                                 GameStateModuleIO::E_ACTION_WORLD_REGION_CHANGE,
                                 static_cast<s32>(sizeof(lWorldRegionChangeAction)));
 
         // The rich-presence manager publishes the new district on its next update.
-        GetRichPresenceManager()->OnDistrictChange(lpWorldRegionChangeEvent->meDistrict);
+        GetRichPresenceManager()->OnDistrictChange(lpWorldRegionChangeEvent->mNewWorldRegion.GetDistrict());
         break;
     }
 

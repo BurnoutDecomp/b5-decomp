@@ -61,7 +61,13 @@ public:
 
     // ---- declared-only (each reconstructed in its own TU) ----
     const ChallengeListEntry*  GetChallengeData(s32 liIndex) const;                  // :98
-    const ChallengeListEntry*  GetChallengeData(CgsID lID) const;                    // :101
+    const ChallengeListEntry*  GetChallengeData(CgsID lID) const
+    {
+        const s32 liIndex = GetChallengeIndex(lID);
+        if (liIndex >= 0)
+            return GetChallengeData(liIndex);
+        return 0;
+    }
     s32                        GetChallengeIndex(CgsID lID) const;                   // :104
     bool                       IsChallengeInList(CgsID lID) const;                   // :107
     bool                       IsChallengeContentBought(s32 liIndex) const;          // :110

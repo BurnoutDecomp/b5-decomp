@@ -311,30 +311,6 @@ const ChallengeListEntry* ChallengeList::GetChallengeData( s32 liIndex ) const
     return maStaticDataLists[ lrSlot.miListIndex ]->GetEntry( lrSlot.miEntryIndex );
 }
 
-// [gateui] ChallengeList::GetChallengeData(CgsID) -- the id-keyed overload.
-// LEDGER IDENTITY: the X360 emitted it as the UNNAMED `sub_82337200` (the ledger's only
-// `GetChallengeData` row, 0x82326080, is the s32 overload above). Its body is unambiguous:
-//     0x82337214  bl    BrnResource__ChallengeList__GetChallengeIndex
-//     0x82337218  mr    r4, r3
-//     0x8233721C  cmpwi cr6, r4, 0
-//     0x82337220  blt   -> li r3, 0 ; return NULL
-//     0x82337228  bl    BrnResource__ChallengeList__GetChallengeData   (r3 = this, r4 = index)
-// and its seven callers are exactly the id-keyed sites (ChallengeManager::ProcessEvent
-// @0x8233D6A8, four FriendsListComponent entries, OnlineGameRoomPlayerInfo
-// @0x824A4B60, and HudMessageAnalyzer::TriggerChallengeEndedMessage @0x82520078, whose
-// baked assert text is literally "lpChallengeList->GetChallengeData( mCha...").
-// Note it does NOT re-range-check: the s32 overload's own "Index out of range" assert is
-// what guards the second hop, and a negative index short-circuits before it.
-const ChallengeListEntry* ChallengeList::GetChallengeData( CgsID lID ) const
-{
-    const s32 liIndex = GetChallengeIndex( lID );
-    if ( liIndex < 0 )
-    {
-        return 0;
-    }
-    return GetChallengeData( liIndex );
-}
-
 // ChallengeList::GetChallengeIndex(CgsID) @ 0x82326168
 // X360: linear scan [0, miCount); return the first slot whose challenge data has
 // GetChallengeData(i)->mChallengeID == lID (the 8-byte CgsID compared at entry +0xC0),

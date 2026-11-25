@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "SharedClasses/World/BrnWorldRegion.h"
 #include "BrnCommonTypes.h"                                  // CgsID
 #include "GameSource/GameState/BrnGameStateSharedIO.h"       // EPlayerTeam
 #include "GameSource/GameState/BrnGameStateTypes.h"          // BrnGameState::LandmarkIndex (StartNetworkRoundEvent)
@@ -363,6 +364,14 @@ enum EGameEventType
 
 template <EGameEventType T>
 struct GameEvent { };
+
+// DecFIGS BrnGameEvents.h:1934. ARTIST event 115 carries the two words
+// copied by HandleWorldRegionChangeEvent at 0x82357CAC-0x82357CBC.
+struct WorldRegionChangeEvent : public GameEvent<E_EVENT_CHANGE_WORLD_REGION>
+{
+    BrnWorld::WorldRegion mNewWorldRegion;
+};
+CGS_STATIC_ASSERT((sizeof(WorldRegionChangeEvent) == 8), "ARTIST world-region event size");
 
 // DWARF BrnGameEvents.h:400; ARTIST posts a one-byte empty signal.
 struct PlayerCrashEndingEvent : public GameEvent<E_EVENT_PLAYER_CRASH_ENDING> {};

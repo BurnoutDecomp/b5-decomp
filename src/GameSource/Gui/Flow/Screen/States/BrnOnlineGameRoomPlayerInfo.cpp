@@ -1,4 +1,5 @@
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineGameRoomPlayerInfo.h"
+#include "GameSource/Gui/BrnGuiDemangledEventTypes.h"
 static const char KAC_BRN_ONLINE_GAME_ROOM_PLAYER_INFO_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineGameRoomPlayerInfo.cpp"; // ARTIST filename 0x820607A0
 // ===================================================================================
 // BrnGui::OnlineGameRoomPlayerInfo -- reconstructed from BURNOUT_X360_ARTIST.XEX
@@ -2787,21 +2788,18 @@ namespace BrnGui
                 }
                 else
                 {
-                    // The X360 reads the two volumes into one stack record, plays the
-                    // back-out cue, publishes the audio settings, then overwrites the
-                    // record's first word with the voip volume and publishes that.
-                    const s32 liMusicVolume = mpGuiCache->GetMenuOptionsData()->GetMusicVolume();
-                    const s32 liSFXVolume   = mpGuiCache->GetMenuOptionsData()->GetSFXVolume();
+                    GuiEventAudioSettings lAudioSettings;
+                    lAudioSettings.miMusicVolume = mpGuiCache->GetMenuOptionsData()->GetMusicVolume();
+                    lAudioSettings.miSfxVolume = mpGuiCache->GetMenuOptionsData()->GetSFXVolume();
 
                     GuiAudioTriggerEvent lAudioPayload;
                     lAudioPayload.Construct(KI_AUDIO_ACTION_MENU_CUE, "", "GO_BACK", "");
                     mpStateInterface->OutputGuiEvent(lAudioPayload);
 
-                    GuiEventAudioSettingsWire lAudioSettings(liMusicVolume, liSFXVolume);
                     mpStateInterface->OutputGuiEvent(lAudioSettings);
 
-                    GuiEventVoipSettingsWire lVoipSettings(
-                        mpGuiCache->GetMenuOptionsData()->GetVoipVolume());
+                    GuiEventVoipSettings lVoipSettings;
+                    lVoipSettings.miVoipVolume = mpGuiCache->GetMenuOptionsData()->GetVoipVolume();
                     mpStateInterface->OutputGuiEvent(lVoipSettings);
 
                     mSettingToggle.Unloaded();

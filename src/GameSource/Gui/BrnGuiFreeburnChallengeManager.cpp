@@ -8,8 +8,7 @@
 //   * the state-transition handlers (StartChallenge @0x82509D60, TriggerChallenge
 //     @0x8250A160, HandleNewData @0x824F3FC8) -- which latch a challenge / fold a live
 //     progress update into the tracked per-target state.
-// The X360-baked assert file/line are discarded per project convention; the stringized
-// condition matches the X360 assert message text.
+// Matching builds use the original assertion paths and lines where recovered.
 
 #include "GameSource/Gui/BrnGuiFreeburnChallengeManager.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
@@ -18,6 +17,8 @@
 #include "SharedClasses/DataLists/ChallengeList.h"      // BrnResource::ChallengeList
 
 #include <cstring>                                      // std::memcpy (X360 XMemCpy)
+
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/BrnGuiFreeburnChallengeManager.cpp"
 
 static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Gui/BrnGuiFreeburnChallengeManager.h";
 
@@ -212,11 +213,8 @@ f32 FreeburnChallengeManager::GetCurrentContributionOverall() const
 // GetTargetDataType(0) accessor).
 void FreeburnChallengeManager::StartChallenge( const GuiChallengeStartEvent* lpEvent )
 {
-    const BrnResource::ChallengeList* lpList = mpGuiCache->GetFreeburnChallengeList();
-    const s32 liChallengeIndex = lpList->GetChallengeIndex( lpEvent->mChallengeID );
-    mpCurrentChallenge = ( liChallengeIndex < 0 )
-                       ? 0
-                       : lpList->GetChallengeData( liChallengeIndex );
+    const CgsID lChallengeId = lpEvent->mChallengeID;
+    mpCurrentChallenge = mpGuiCache->GetFreeburnChallengeList()->GetChallengeData(lChallengeId);
 
     miTargetsCount       = 0;
     miCurrentTargetIndex = 0;
@@ -227,19 +225,15 @@ void FreeburnChallengeManager::StartChallenge( const GuiChallengeStartEvent* lpE
 
     const BrnResource::ChallengeListEntryAction* lpCurrentAction = GetCurrentAction();
 
-    // X360/DWARF DRIFT (binary authoritative): the X360 breaks the scan when the action
-    // type byte == 22 (asm `cmplwi r11, 0x16` @0x82509F28). The X360 action-type enum is
-    // EXPANDED relative to the committed PS3-DWARF EChallengeActionType (whose meet-up is
-    // 16 and whose E_ACTION_COUNT is 22; the binary asserts the byte < 0x29 == 41). We do
-    // NOT redefine the committed enum (ODR); the literal 22 is the attested X360 meet-up
-    // ordinal -- mirrors the documented `< 0x29` drift on GetActionType/GetChallengeStyle.
+    // ARTIST compares the meet-up action byte to 22 at 0x82509F28.
     const u8 KU_X360_MEET_UP_ACTION_TYPE = 22;
 
     bool lbHasMeetUp = false;
     for ( s32 liIndex = 0; liIndex < mpCurrentChallenge->GetNumActions(); ++liIndex )
     {
-        CGS_ASSERT( mpCurrentChallenge, "mpCurrentChallenge" );
-        CGS_ASSERT( mpCurrentChallenge->GetAction( liIndex ), "mpCurrentChallenge->GetAction(liIndex)" );
+        CGS_ASSERT_AT( mpCurrentChallenge, "mpCurrentChallenge", CGS_ARTIST_FILE, 134 );
+        CGS_ASSERT_AT( mpCurrentChallenge->GetAction( liIndex ), "mpCurrentChallenge->GetAction(liIndex)",
+                       CGS_ARTIST_FILE, 135 );
         if ( mpCurrentChallenge->GetAction( liIndex )->GetActionType()
                 == KU_X360_MEET_UP_ACTION_TYPE )
         {
@@ -248,10 +242,9 @@ void FreeburnChallengeManager::StartChallenge( const GuiChallengeStartEvent* lpE
         }
     }
 
-    const BrnResource::ChallengeListEntryAction::ECombineActionType leCombine =
-        lpCurrentAction->GetCombineAction();
-    if ( leCombine == BrnResource::ChallengeListEntryAction::E_COMBINE_ACTION_INDEPENDENT ||
-         leCombine == BrnResource::ChallengeListEntryAction::E_COMBINE_ACTION_COUNT )
+    const u32 luCombine = lpCurrentAction->GetCombineAction();
+    if ( luCombine == BrnResource::ChallengeListEntryAction::E_COMBINE_ACTION_COUNT ||
+         luCombine == BrnResource::ChallengeListEntryAction::E_COMBINE_ACTION_INDEPENDENT )
     {
         for ( s32 liIndex = 0; liIndex < mpCurrentChallenge->GetNumActions(); ++liIndex )
         {
@@ -289,35 +282,29 @@ void FreeburnChallengeManager::StartChallenge( const GuiChallengeStartEvent* lpE
 // combine-type / meet-up / single-action target-list build follows.
 void FreeburnChallengeManager::TriggerChallenge( const GuiChallengeTriggerResponse* lpEvent )
 {
-    const BrnResource::ChallengeList* lpList = mpGuiCache->GetFreeburnChallengeList();
-    const s32 liChallengeIndex = lpList->GetChallengeIndex( lpEvent->mChallengeID );
-    mpCurrentChallenge = ( liChallengeIndex < 0 )
-                       ? 0
-                       : lpList->GetChallengeData( liChallengeIndex );
+    const CgsID lChallengeId = lpEvent->mChallengeID;
+    mpCurrentChallenge = mpGuiCache->GetFreeburnChallengeList()->GetChallengeData(lChallengeId);
 
+    const bool lbIsLocalHost = lpEvent->mbIsLocalHost;
     miTargetsCount       = 0;
     miCurrentTargetIndex = 0;
     miCurrentAction      = 0;
     mePageState          = E_PAGE_STATE_AUTO_ROTATE;
     meInternalState      = E_INTERNAL_STATE_RUNNING;
-    mbIsLocalHost        = lpEvent->mbIsLocalHost;
+    mbIsLocalHost        = lbIsLocalHost;
 
     const BrnResource::ChallengeListEntryAction* lpCurrentAction = GetCurrentAction();
-    CGS_ASSERT( lpCurrentAction, "lpCurrentAction" );
+    CGS_ASSERT_AT( lpCurrentAction, "lpCurrentAction", CGS_ARTIST_FILE, 248 );
 
-    // X360/DWARF DRIFT (binary authoritative): the X360 breaks the scan when the action
-    // type byte == 22 (asm `cmplwi r11, 0x16` @0x8250A34C). The X360 action-type enum is
-    // EXPANDED relative to the committed PS3-DWARF EChallengeActionType (whose meet-up is
-    // 16 and whose E_ACTION_COUNT is 22; the binary asserts the byte < 0x29 == 41). We do
-    // NOT redefine the committed enum (ODR); the literal 22 is the attested X360 meet-up
-    // ordinal -- mirrors the documented `< 0x29` drift on GetActionType/GetChallengeStyle.
+    // ARTIST compares the meet-up action byte to 22 at 0x8250A34C.
     const u8 KU_X360_MEET_UP_ACTION_TYPE = 22;
 
     bool lbHasMeetUp = false;
     for ( s32 liIndex = 0; liIndex < mpCurrentChallenge->GetNumActions(); ++liIndex )
     {
-        CGS_ASSERT( mpCurrentChallenge, "mpCurrentChallenge" );
-        CGS_ASSERT( mpCurrentChallenge->GetAction( liIndex ), "mpCurrentChallenge->GetAction(liIndex)" );
+        CGS_ASSERT_AT( mpCurrentChallenge, "mpCurrentChallenge", CGS_ARTIST_FILE, 254 );
+        CGS_ASSERT_AT( mpCurrentChallenge->GetAction( liIndex ), "mpCurrentChallenge->GetAction(liIndex)",
+                       CGS_ARTIST_FILE, 255 );
         if ( mpCurrentChallenge->GetAction( liIndex )->GetActionType()
                 == KU_X360_MEET_UP_ACTION_TYPE )
         {
@@ -326,10 +313,9 @@ void FreeburnChallengeManager::TriggerChallenge( const GuiChallengeTriggerRespon
         }
     }
 
-    const BrnResource::ChallengeListEntryAction::ECombineActionType leCombine =
-        lpCurrentAction->GetCombineAction();
-    if ( leCombine == BrnResource::ChallengeListEntryAction::E_COMBINE_ACTION_INDEPENDENT ||
-         leCombine == BrnResource::ChallengeListEntryAction::E_COMBINE_ACTION_COUNT )
+    const u32 luCombine = lpCurrentAction->GetCombineAction();
+    if ( luCombine == BrnResource::ChallengeListEntryAction::E_COMBINE_ACTION_COUNT ||
+         luCombine == BrnResource::ChallengeListEntryAction::E_COMBINE_ACTION_INDEPENDENT )
     {
         for ( s32 liIndex = 0; liIndex < mpCurrentChallenge->GetNumActions(); ++liIndex )
         {
@@ -451,3 +437,5 @@ void FreeburnChallengeManager::HandleCompletionStatus(
 }
 
 } // namespace BrnGui
+
+#undef CGS_ARTIST_FILE

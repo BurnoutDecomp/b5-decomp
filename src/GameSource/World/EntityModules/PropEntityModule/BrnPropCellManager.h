@@ -250,7 +250,8 @@ namespace BrnWorld
         // X360 @0x822DFCB8 / @0x822F1940 -- push a loaded cell's props into / out of
         // contact generation (and, on deactivate, out of the sim and the scene).
         void ActivateCell(PropCellRecord* lpCell, const PropPhysicsDataHeader* lpTypes,
-                          InSceneUpdateInterface* lpScene);
+                          InSceneUpdateInterface* lpScene,
+                          BrnReplays::PropEntitySerialiser* lpSerialiser);
         void DeactivateCell(PropCellRecord* lpCell, const PropPhysicsDataHeader* lpTypes,
                             RecentlyBrokenPropsArray* lpRecentlyBroken,
                             PropEntityIO::OutputBuffer_PreScene* lpOutput,

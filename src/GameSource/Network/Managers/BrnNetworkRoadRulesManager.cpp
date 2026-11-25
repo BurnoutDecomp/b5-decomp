@@ -985,13 +985,13 @@ namespace BrnNetwork
             "lpNetworkRoadRulesPBEvent",
             CGS_ARTIST_FILE, 586 /* ARTIST 0x82561044 */));
 
-        if ( lpNetworkRoadRulesPBEvent->mbLobbyPersonalBest )
+        if ( !lpNetworkRoadRulesPBEvent->mbLobbyPersonalBest )
         {
-            UpdateLocalLobbyScoresWithNewPB( lpNetworkRoadRulesPBEvent );
+            UpdateLocalRoadRulesScoresWithNewPB( lpNetworkRoadRulesPBEvent );
         }
         else
         {
-            UpdateLocalRoadRulesScoresWithNewPB( lpNetworkRoadRulesPBEvent );
+            UpdateLocalLobbyScoresWithNewPB( lpNetworkRoadRulesPBEvent );
         }
     }
 

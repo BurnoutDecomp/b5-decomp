@@ -25,6 +25,7 @@
 #include <cstring>   // std::memcpy / std::memset (model the X360 XMemCpy / XMemSet block intrinsics)
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/GameState/ImageManager/BrnGameStateImageManagerBase.h"
+#include "GameSource/GameState/BrnGameEvents.h"
 #include "GameShared/GameClasses/Gui/CgsImageFileInfo.h" // typed image-load records (host-native pointer width)
 #include "GameSource/GameState/BrnGameActions.h" // typed image-gallery/image-save action records 289..294
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"   // VariableEventQueue<13312,16>::AddEvent
@@ -206,12 +207,11 @@ void GameStateImageManagerBase::PreWorldUpdate(::EActiveRaceCarIndex lePlayerRac
 // ---------------------------------------------------------------------------
 // HandleWorldRegionChangeEvent -- X360 0x82357C68. Remember the current world region.
 // ---------------------------------------------------------------------------
-void GameStateImageManagerBase::HandleWorldRegionChangeEvent(const WorldRegionChangeEvent* lpWorldRegionChangeEvent)
+void GameStateImageManagerBase::HandleWorldRegionChangeEvent(const GameStateModuleIO::WorldRegionChangeEvent* lpWorldRegionChangeEvent)
 {
     CGS_ASSERT(lpWorldRegionChangeEvent != 0, CGS_ASSERT_MESSAGE_AT("lpWorldRegionChangeEvent", CGS_ARTIST_FILE, 1425));
 
-    // v3[39]=*a2 / v3[40]=a2[1] -> meCurrentWorldRegion {county@+0x9C, district@+0xA0}.
-    meCurrentWorldRegion.Construct(lpWorldRegionChangeEvent->meDistrict);
+    meCurrentWorldRegion = lpWorldRegionChangeEvent->mNewWorldRegion;
 }
 
 // ---------------------------------------------------------------------------

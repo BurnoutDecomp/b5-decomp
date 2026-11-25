@@ -85,7 +85,7 @@ void TrafficDrawState(bool state, u32 colour, CgsDev::Debug3DImmediateRender* di
 }
 }
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
+static const char* const KPC_ARTIST_ASSERT_FILE =
     "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
     "../World/EntityModules/TrafficEntityModule/BrnTrafficDebugComponent.cpp";
 
@@ -218,11 +218,24 @@ namespace BrnTraffic
         UpdateStats();
     }
 
+    namespace
+    {
+        struct TrafficDebugDisplayConstants
+        {
+            f32 mfDrawSize;
+            f32 mfJunctionFUPThreshold;
+        };
+
+        // ARTIST 0x82764224 loads these adjacent floats from 0x820C0BCC.
+        // DrawPlayerCarHullId reads the same first word at 0x8275CA40.
+        const TrafficDebugDisplayConstants K_TRAFFIC_DEBUG_DISPLAY = {60.0f, 65.0f};
+    }
+
     // @0x82763E78. Preserve the original X360 dispatch order and route each toggle to its
     // recovered draw consumer.
     void DebugComponent::RenderWorld(CgsDev::Debug3DImmediateRender* lpDisplay)
     {
-        CGS_ASSERT(mpModule != 0, "mpModule != NULL");
+        CGS_ASSERT_AT(mpModule != 0, "mpModule != NULL", KPC_ARTIST_ASSERT_FILE, 297);
 
         if (mbDrawSegments)              DrawSegments(lpDisplay);
         if (mbDrawSections)              DrawSections(lpDisplay);
@@ -266,8 +279,10 @@ namespace BrnTraffic
             // X360 @0x82764214..0x8276425C: compare mfJunctionFUP with 65.0, select the exact
             // packed colour, then DrawSolidSphere(mAveragePhysicalCentre, 60.0, colour).
             rw::RGBA lColour;
-            lColour.m_rgba = (mpModule->mfJunctionFUP < 65.0f) ? 0x64640000u : 0x640000FFu;
-            lpDisplay->DrawSolidSphere(mpModule->mAveragePhysicalCentre, 60.0f, lColour);
+            lColour.m_rgba = (mpModule->mfJunctionFUP < K_TRAFFIC_DEBUG_DISPLAY.mfJunctionFUPThreshold)
+                ? 0x64640000u : 0x640000FFu;
+            lpDisplay->DrawSolidSphere(mpModule->mAveragePhysicalCentre,
+                                       K_TRAFFIC_DEBUG_DISPLAY.mfDrawSize, lColour);
         }
 
         if (mpModule->mbDEBUGPickVehicleFromCamera)
@@ -278,7 +293,7 @@ namespace BrnTraffic
     void DebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDisplay)
     {
         CGS_ASSERT(mpModule != 0,
-            CGS_ASSERT_MESSAGE_AT("mpModule != NULL", KAC_ARTIST_ASSERT_FILE, 495 /* ARTIST 0x82760AE0 */));
+            CGS_ASSERT_MESSAGE_AT("mpModule != NULL", KPC_ARTIST_ASSERT_FILE, 495 /* ARTIST 0x82760AE0 */));
 
         if (mbDrawPlayerHullId)
             DrawPlayerCarHullId(lpDisplay);
@@ -508,7 +523,7 @@ namespace BrnTraffic
     {
         DebugComponent* const lpComponent = static_cast<DebugComponent*>(lpUserData);
         CGS_ASSERT(lpComponent != 0,
-            CGS_ASSERT_MESSAGE_AT("lpComponent", KAC_ARTIST_ASSERT_FILE, 2719 /* ARTIST 0x8275052C */));
+            CGS_ASSERT_MESSAGE_AT("lpComponent", KPC_ARTIST_ASSERT_FILE, 2719 /* ARTIST 0x8275052C */));
         lpComponent->mpModule->meDEBUGAirRamToFire = lpComponent->miAirRamTypeToFire;
     }
 
@@ -547,7 +562,7 @@ namespace BrnTraffic
     {
         DebugComponent* const lpComponent = static_cast<DebugComponent*>(lpUserData);
         CGS_ASSERT(lpComponent != 0,
-            CGS_ASSERT_MESSAGE_AT("lpComponent", KAC_ARTIST_ASSERT_FILE, 3593 /* ARTIST 0x827614FC */));
+            CGS_ASSERT_MESSAGE_AT("lpComponent", KPC_ARTIST_ASSERT_FILE, 3593 /* ARTIST 0x827614FC */));
         lpComponent->mpModule->mFuzzyBehaviours.ReloadBehaviours();
     }
 
@@ -983,14 +998,12 @@ void DebugComponent::DrawAllKillZones(CgsDev::Debug3DImmediateRender* lpDisplay)
 // ARTIST 0x827611A8.
 void DebugComponent::DrawRecentKillZones(CgsDev::Debug3DImmediateRender* lpDisplay) const
 {
-    static const char KAC_ARTIST_SOURCE_FILE[] =
-        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/TrafficEntityModule/BrnTrafficDebugComponent.cpp";
-    CGS_ASSERT_AT(mpModule != 0, "mpModule", KAC_ARTIST_SOURCE_FILE, 2545);
+    CGS_ASSERT_AT(mpModule != 0, "mpModule", KPC_ARTIST_ASSERT_FILE, 2545);
     for (u32 luZone = 0; luZone < mpModule->mDEBUGRecentlyFiredKillZones.GetLength(); ++luZone)
     {
         const u64 luId = mpModule->mDEBUGRecentlyFiredKillZones.GetItem(luZone).mKillZoneId;
         const KillZone* lpZone = mpModule->mpData->FindKillZone(luId);
-        CGS_ASSERT_AT(lpZone != 0, "lpKillZone", KAC_ARTIST_SOURCE_FILE, 2551);
+        CGS_ASSERT_AT(lpZone != 0, "lpKillZone", KPC_ARTIST_ASSERT_FILE, 2551);
         DrawKillZone(lpZone, luId, lpDisplay);
     }
 }
@@ -2181,7 +2194,7 @@ void DebugComponent::DrawPlayerCarHullId(CgsDev::Debug2DImmediateRender* lpDispl
     char lacText[256];
     CgsCore::SPrintf(lacText, sizeof(lacText), "Traf Hull: %u",
                     static_cast<u32>(mpModule->maaRaceCarHulls[0].GetItem(0)));
-    lpDisplay->DrawText(lacText, 60.0f, 100.0f, 16.0f, 0xFFFFFFFFu);
+    lpDisplay->DrawText(lacText, K_TRAFFIC_DEBUG_DISPLAY.mfDrawSize, 100.0f, 16.0f, 0xFFFFFFFFu);
 }
 
 // ARTIST 0x82750AE8. stwu allocates 0x10C0 and the stream's capacity is 0x1000:
