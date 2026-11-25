@@ -337,7 +337,6 @@ u8    gAptAStickRight[8 * 16] = {};  // unk_8324E2D8 (player stride 16 bytes)
 typedef void (*AptVarNotFoundCb)(const char* pName);   // matches AptActionInterpreterVariable.cpp:57
 enum AptMaskRenderOperation ;                     // matches the Apt render headers
 
-void (*gpAptFSCommandHook)(const char* pCommand, const char* pArgs)      = 0;
 // (gpAptBackToScriptHook RETIRED 2026-07-12: dword_8324E828 is NOT a standalone
 //  hook -- it is &gAptFuncs (dword_8324E818) + 0x10 == pfnSetBackgroundColour.
 //  The tag-5 arm in AptMovie::doFrameControls now calls the table slot directly.)

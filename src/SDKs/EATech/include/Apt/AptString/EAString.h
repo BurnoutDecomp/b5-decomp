@@ -113,7 +113,7 @@ public:
 
     EAStringC& Duplicate(const EAStringC& strText);
 
-    uint32_t GetLength() const;
+    uint32_t GetLength() const { return GetInternalSize(); }
     void     Clear();
     void     ClearConstantValue();
 
@@ -212,7 +212,7 @@ public:
     void            CalculateHashValue() const;
     static uint16_t CalculateHashValue(const char* const pText);
 
-    uint32_t GetInternalSize() const;
+    uint32_t GetInternalSize() const { return m_pData->m_uSize; }
     uint32_t GetInternalMaxSize() const;
     uint32_t GetInternalRefCount() const;
 

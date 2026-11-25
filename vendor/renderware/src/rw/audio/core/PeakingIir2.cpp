@@ -145,6 +145,10 @@ PeakingIir2 *PeakingIir2::CreateInstance(PeakingIir2 *self)
 // gain == 1; otherwise activate, clamp Q into [0.2, 20], recompute on a changed
 // (omega, gain, Q) and filter every channel, then ping-pong.
 // -------------------------------------------------------------------------------------
+#if defined(_XBOX) && defined(_MSC_VER)
+// ARTIST shares a single function epilogue between the filter and bypass paths.
+#pragma optimize("s", on)
+#endif
 int PeakingIir2::Process(AudioProcessContext *ctx)
 {
     const f32 KF_TWO_PI = 6.2831855f;
@@ -159,9 +163,7 @@ int PeakingIir2::Process(AudioProcessContext *ctx)
     if (omega > KF_OMEGA_HI)
         omega = KF_OMEGA_HI;
 
-    const f32 gain = mfGain;
-
-    if (gain == 1.0f)
+    if (mfGain == 1.0f)
     {
         if (mbActive == 1)
         {
@@ -185,9 +187,9 @@ int PeakingIir2::Process(AudioProcessContext *ctx)
         else if (mfQ > KF_Q_MAX)
             mfQ = KF_Q_MAX;
 
-        if (omega != mfLastOmega || gain != mfLastGain || mfQ != mfLastQ)
+        if (omega != mfLastOmega || mfGain != mfLastGain || mfQ != mfLastQ)
         {
-            CalculateFilterCoefficients(omega, gain, mfQ);
+            CalculateFilterCoefficients(omega, mfGain, mfQ);
             mfLastOmega = omega;
             mfLastGain = mfGain;
             mfLastQ = mfQ;
@@ -201,12 +203,14 @@ int PeakingIir2::Process(AudioProcessContext *ctx)
                               src->mpSamples + src->muStride * ch,
                               &mCoeffs);
         }
-        AudioChannelBuffer *tmp = ctx->mpSrcBuffer;
-        ctx->mpSrcBuffer = ctx->mpDstBuffer;
-        ctx->mpDstBuffer = tmp;
+        ctx->SwapBuffers();
     }
     return 1;
 }
+
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 } // namespace core
 } // namespace audio

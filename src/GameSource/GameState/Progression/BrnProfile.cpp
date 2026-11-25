@@ -456,11 +456,7 @@ LiveryData* Profile::GetChosenLiveryDataForBaseCar(CgsID lBaseCarId)
 // ====================================================================================
 CgsID Profile::GetChosenLiveryIdForBaseCar(CgsID lBaseCarId) const
 {
-    s32 liCount = miLiveryDataCount;
-    if (liCount <= 0)
-        return lBaseCarId;
-
-    for (s32 liIndex = 0; liIndex < liCount; ++liIndex)
+    for (s32 liIndex = 0; liIndex < miLiveryDataCount; ++liIndex)
     {
         if (maLiveryChoices[liIndex].mBaseCarId == lBaseCarId)
             return maLiveryChoices[liIndex].mChosenLiveryCarId;
@@ -496,11 +492,10 @@ void Profile::SetChosenLiveryIdForBaseCar(CgsID lBaseCarId, CgsID lChosenLiveryI
         CGS_ASSERT(liIndex < KI_MAX_PROFILE_CAR_COUNT, CGS_ASSERT_MESSAGE_AT("liIndex < KI_MAX_PROFILE_CAR_COUNT", CGS_ARTIST_FILE, 601));
     }
 
-    LiveryData& lLivery = maLiveryChoices[liIndex];
-    lLivery.mBaseCarId        = lBaseCarId;
-    lLivery.mChosenLiveryCarId = lChosenLiveryId;
+    maLiveryChoices[liIndex].mBaseCarId        = lBaseCarId;
+    maLiveryChoices[liIndex].mChosenLiveryCarId = lChosenLiveryId;
     if (lbIsNewlyAdded)
-        lLivery.mfDistanceDriven = 0.0f;
+        maLiveryChoices[liIndex].mfDistanceDriven = 0.0f;
 
     ++miLiveryDataCount;
 }
@@ -1287,7 +1282,9 @@ void Profile::AddStuntElement(BrnGameState::StuntElementType leStuntElementType,
     CGS_ASSERT(leStuntElementType < BrnGameState::E_STUNT_ELEMENT_TYPE_COUNT,
                CGS_ASSERT_MESSAGE_AT("leStuntElementType < BrnGameState::E_STUNT_ELEMENT_TYPE_COUNT", CGS_ARTIST_FILE_BRNPROFILE, 2328));
 
-    if (maStuntElements[leStuntElementType].Find(lId) == CgsContainers::Set<CgsID, 512u>::KU_INVALID &&
+    // ARTIST 0x8236AB4C copies the key for Find, while Insert uses the argument slot.
+    const CgsID lStuntID = lId;
+    if (maStuntElements[leStuntElementType].Find(lStuntID) == CgsContainers::Set<CgsID, 512u>::KU_INVALID &&
         leCounty < BrnWorld::E_COUNTY_VALID_COUNT)
     {
         ++maaiStuntCountsByCounty[leStuntElementType][leCounty];

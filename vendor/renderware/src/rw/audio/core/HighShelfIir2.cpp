@@ -133,6 +133,10 @@ HighShelfIir2 *HighShelfIir2::CreateInstance(HighShelfIir2 *self)
 // deactivate) when omega is at/above the high edge OR gain == 1; otherwise activate,
 // clamp omega up to the low edge, recompute on a changed (omega, gain) and filter.
 // -------------------------------------------------------------------------------------
+#if defined(_XBOX) && defined(_MSC_VER)
+// ARTIST shares a single function epilogue between the filter and bypass paths.
+#pragma optimize("s", on)
+#endif
 int HighShelfIir2::Process(AudioProcessContext *ctx)
 {
     const f32 KF_TWO_PI = 6.2831855f;
@@ -140,9 +144,8 @@ int HighShelfIir2::Process(AudioProcessContext *ctx)
     const f32 KF_OMEGA_LO = 0.003141593f;
 
     f32 omega = (mfCutoffFreq / ctx->mpFormat->mfSampleRate) * KF_TWO_PI;
-    const f32 gain = mfGain;
 
-    if (omega >= KF_OMEGA_HI || gain == 1.0f)
+    if (omega >= KF_OMEGA_HI || mfGain == 1.0f)
     {
         if (mbActive == 1)
         {
@@ -159,9 +162,9 @@ int HighShelfIir2::Process(AudioProcessContext *ctx)
             mbActive = 1;
         if (omega < KF_OMEGA_LO)
             omega = KF_OMEGA_LO;
-        if (omega != mfLastOmega || gain != mfLastGain)
+        if (omega != mfLastOmega || mfGain != mfLastGain)
         {
-            CalculateFilterCoefficients(omega, gain);
+            CalculateFilterCoefficients(omega, mfGain);
             mfLastGain = mfGain;
             mfLastOmega = omega;
         }
@@ -174,12 +177,14 @@ int HighShelfIir2::Process(AudioProcessContext *ctx)
                               src->mpSamples + src->muStride * ch,
                               &mCoeffs);
         }
-        AudioChannelBuffer *tmp = ctx->mpSrcBuffer;
-        ctx->mpSrcBuffer = ctx->mpDstBuffer;
-        ctx->mpDstBuffer = tmp;
+        ctx->SwapBuffers();
     }
     return 1;
 }
+
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 } // namespace core
 } // namespace audio

@@ -144,7 +144,15 @@ public:
     // matching the console). Returns null on an empty stack.
     void       stackPop();                            // @0x7F3248 (x64 QEAAXXZ: void)
     // Pop nCount values, releasing each (no-op unless mnStackTop >= nCount).
-    void       stackPop(int nCount);                  // @0x7FDB68
+    void stackPop(int nCount)
+    {
+        if (mnStackTop >= nCount)
+        {
+            for (int i = 1; i <= nCount; ++i)
+                mpStack[mnStackTop - i]->Release();
+            mnStackTop -= nCount;
+        }
+    }
     // As stackPop(nCount) but with the extra nCount>0 guard (bounds-safe form).
     void       stackSafePop(int nCount);              // @0x7DF7F8
 

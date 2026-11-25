@@ -51,16 +51,19 @@ void AptActionInterpreter::_FunctionAptActionStringLength(AptActionInterpreter* 
     AptValue* pTop = pInterp->mpStack[pInterp->mnStackTop - 1];
     EAStringC scratch;
     const EAStringC* pStr = AptValue::Get_ToString(pTop, &scratch);
-    AptInteger* pLen = AptInteger::Create(static_cast<int>(pStr->GetLength()));
-    pInterp->stackPop();                                // pop the string
-    pInterp->mpStack[pInterp->mnStackTop++] = pLen;
-    pLen->AddRef();
+    AptInteger* pLength = AptInteger::Create(pStr->GetLength());
+    pInterp->stackPop(1);
+    pInterp->stackPush(pLength);
 }
 
 // ---------------------------------------------------------------------------
 // StringAdd @0x82AF9DE8 (0x21) -- concatenate the top two operands as strings
 // (under + top), replacing both with the new string.
 // ---------------------------------------------------------------------------
+// ARTIST 0x82AF9E4C calls the counted pop helper for two operands.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 void AptActionInterpreter::_FunctionAptActionStringAdd(AptActionInterpreter* pInterp,
                                                        LocalContextT* /*pContext*/)
 {
@@ -73,6 +76,9 @@ void AptActionInterpreter::_FunctionAptActionStringAdd(AptActionInterpreter* pIn
     pInterp->mpStack[pInterp->mnStackTop++] = pResult;
     pResult->AddRef();
 }
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // ---------------------------------------------------------------------------
 // Random @0x82AE9BE8 (0x30) -- push AptInteger(AptRand() % top); 0 if the top is

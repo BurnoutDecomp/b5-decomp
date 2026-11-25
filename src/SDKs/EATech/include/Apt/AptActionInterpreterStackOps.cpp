@@ -1100,39 +1100,35 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
 // ---------------------------------------------------------------------------
 // NewMethod @0x82B091B8 (0x53) -- AS new <object>.<method>(args): the top operand
 // is the method name (coerced to a string), top-2 the constructor object, top-3 the
-// argument count. The name + count are popped, _createObject builds the instance
-// (with the construct flag), and the new object (or `undefined`) is pushed.
+// argument count. The name and count are released. The constructor is popped
+// without releasing it, then released after _createObject returns.
 // ---------------------------------------------------------------------------
 void AptActionInterpreter::_FunctionAptActionNewMethod(AptActionInterpreter* pInterp,
                                                        LocalContextT* pContext)
 {
-    AptValue* const pNameValue  = pInterp->mpStack[pInterp->mnStackTop - 1];  // console v7
-    AptValue* const pCtorObject = pInterp->mpStack[pInterp->mnStackTop - 2];  // console v8
-    AptValue* const pCountValue = pInterp->mpStack[pInterp->mnStackTop - 3];  // console v9
+    AptValue* pNameValue = pInterp->mpStack[pInterp->mnStackTop - 1];
+    AptValue* pConstructor = pInterp->mpStack[pInterp->mnStackTop - 2];
+    AptValue* pCountValue = pInterp->mpStack[pInterp->mnStackTop - 3];
 
     EAStringC scratch;
-    const EAStringC* const pName = AptValue::Get_ToString(pNameValue, &scratch);  // console v10
-    const int nArgs = pCountValue->toInteger();                                   // console v11
+    const EAStringC* pName = AptValue::Get_ToString(pNameValue, &scratch);
+    const int nArgs = pCountValue->toInteger();
 
-    pInterp->stackPop();                                   // console Pop (name)
-    if (pInterp->mnStackTop > 0)
-        --pInterp->mnStackTop;                             // console: drop the count slot (no release)
-    pInterp->stackPop();                                   // console Pop (the object slot's ref)
+    pInterp->stackPop();
+    pInterp->stackPopNoDec();
+    pInterp->stackPop();
 
-        AptValue* const pObject = pInterp->_createObject(   // real member @0x82B08088
-        pCtorObject, pContext->mpPendingReleaseValue, pName, nArgs, 1);
-    pCtorObject->Release();                                // console (*(*v8+4))(v8)
+    AptValue* pObject = pInterp->_createObject(pConstructor, pContext->mpPendingReleaseValue, pName, nArgs, 1);
+    pConstructor->Release();
 
     if (pObject)
     {
-        pInterp->mpStack[pInterp->mnStackTop++] = pObject; // inlined stackPush
-        pObject->AddRef();
-        pObject->Release();   // console: (**Object)(Object) then (*(*Object+4))(Object) -- net no ref
+        pInterp->stackPush(pObject);
+        pObject->Release();
     }
     else
     {
-        pInterp->mpStack[pInterp->mnStackTop++] = gpUndefinedValue;
-        gpUndefinedValue->AddRef();
+        pInterp->stackPush(gpUndefinedValue);
     }
 }
 

@@ -131,6 +131,10 @@ LowPassIir2 *LowPassIir2::CreateInstance(LowPassIir2 *self)
 // slots. Above the band it clears the running state (on the first frame that crosses
 // the threshold) and parks omega. Constants: 2pi=6.2831855, hi=3.1384511, lo=0.003141593.
 // -------------------------------------------------------------------------------------
+#if defined(_XBOX) && defined(_MSC_VER)
+// ARTIST shares a single function epilogue between the filter and bypass paths.
+#pragma optimize("s", on)
+#endif
 int LowPassIir2::Process(AudioProcessContext *ctx)
 {
     const f32 KF_TWO_PI = 6.2831855f;
@@ -139,7 +143,16 @@ int LowPassIir2::Process(AudioProcessContext *ctx)
 
     f32 omega = (mfCutoffFreq / ctx->mpFormat->mfSampleRate) * KF_TWO_PI;
 
-    if (omega < KF_OMEGA_HI)
+    if (!(omega < KF_OMEGA_HI))
+    {
+        if (mfLastCutoffOmega < KF_OMEGA_HI)
+        {
+            for (u32 ch = 0; ch < mBase.mbChannelCount; ++ch)
+                mState[ch].ClearBuffer();
+        }
+        mfLastCutoffOmega = omega;
+    }
+    else
     {
         if (omega < KF_OMEGA_LO)
             omega = KF_OMEGA_LO;
@@ -159,21 +172,14 @@ int LowPassIir2::Process(AudioProcessContext *ctx)
                               &mCoeffs);
         }
         // Ping-pong the source/destination buffer slots.
-        AudioChannelBuffer *tmp = ctx->mpSrcBuffer;
-        ctx->mpSrcBuffer = ctx->mpDstBuffer;
-        ctx->mpDstBuffer = tmp;
-    }
-    else
-    {
-        if (mfLastCutoffOmega < KF_OMEGA_HI)
-        {
-            for (u32 ch = 0; ch < mBase.mbChannelCount; ++ch)
-                mState[ch].ClearBuffer();
-        }
-        mfLastCutoffOmega = omega;
+        ctx->SwapBuffers();
     }
     return 1;
 }
+
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 } // namespace core
 } // namespace audio

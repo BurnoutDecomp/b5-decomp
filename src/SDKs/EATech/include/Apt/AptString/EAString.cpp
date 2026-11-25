@@ -188,13 +188,11 @@ EAStringC::EAStringC(const uint32_t cChar, const uint32_t uLength)
 // Length / buffer accessors.  PS3 External 0x7EE6C8 / 0x7E6AFC / 0x7E6DC0 /
 // 0x7EE6D4 / 0x7DEB6C.
 // ---------------------------------------------------------------------------
-uint32_t    EAStringC::GetLength()    const { return m_pData->m_uSize; }
 const char* EAStringC::c_str()        const { return GetInternalBuffer(); }
 const char* EAStringC::ConstRawPtr()  const { return GetInternalBuffer(); }
 int         EAStringC::Size()         const { return m_pData->m_uSize; }
 bool        EAStringC::IsEmpty()      const { return m_pData == reinterpret_cast<DebugDataC*>(&s_EmptyInternalData); }
 
-uint32_t EAStringC::GetInternalSize()     const { return m_pData->m_uSize; }
 uint32_t EAStringC::GetInternalMaxSize()  const { return m_pData->m_uMaxSize; }
 uint32_t EAStringC::GetInternalRefCount() const { return m_pData->m_uRefCount; }
 

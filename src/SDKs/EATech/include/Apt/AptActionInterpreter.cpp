@@ -22,6 +22,7 @@
 #endif
 
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"
+#include "SDKs/EATech/include/Apt/Apt.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptLookup.h"       // AptLookup::GetIndex (Lookup indirection)
 #include "SDKs/EATech/include/Apt/AptValue/AptRegister.h"     // AptRegister::GetIndex (Register indirection)
 #include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h"    // GetRegisterValue (Register indirection)
@@ -38,20 +39,6 @@ void AptActionInterpreter::stackPop()
     {
         mpStack[mnStackTop - 1]->Release();
         --mnStackTop;
-    }
-}
-
-// ---------------------------------------------------------------------------
-// stackPop @0x7FDB68 -- pop nCount values (releasing each), only if the stack
-// holds at least that many.
-// ---------------------------------------------------------------------------
-void AptActionInterpreter::stackPop(int nCount)
-{
-    if (mnStackTop >= nCount)
-    {
-        for (int i = 1; i <= nCount; ++i)
-            mpStack[mnStackTop - i]->Release();
-        mnStackTop -= nCount;
     }
 }
 
@@ -159,14 +146,8 @@ extern AptValue* gpUndefinedValue;
 extern AptValue** gppAptNativeArgStack;   // off_8324E768
 extern int        gnAptNativeArgCount;    // dword_8324E760
 
-// The host FSCommand sink (console dword_8324E848, installed by the host): the
-// getURL("FSCommand:...") callback. Invoked as hook(command, args). Null until the
-// host installs it, exactly as on the console; defined in AptGlobals.cpp.
-extern void (*gpAptFSCommandHook)(const char* pCommand, const char* pArgs);
-
-// The "FSCommand:" url prefix literal (console off_82F7300C). A plain C string
-// constant in the X360 .rodata; reproduced verbatim.
-static const char* const kAptFSCommandPrefix = "FSCommand:";
+// ARTIST loads the prefix pointer at 0x82F7300C and scans the string at 0x82144A40.
+const char* FSCOMMAND = "FSCommand:";
 
 // AptScriptFunctionBase::PopStaticData (console @0x82AE9388's tail call) is the real
 // static member (AptScriptFunctionBase.cpp): pop the register-block window back to the
@@ -224,14 +205,11 @@ AptValue* AptActionInterpreter::cbCallMethod_ASSetPropFlags(AptValue* /*pThis*/,
 }
 
 // ---------------------------------------------------------------------------
-// isFSCommand @0x82AD9148 -- does pUrl begin with the "FSCommand:" prefix? (The
-// console computes the prefix length by scanning to its NUL, then strncmp; folded
-// here to strlen + strncmp.)
+// isFSCommand @0x82AD9148 -- compare the URL with the configured command prefix.
 // ---------------------------------------------------------------------------
 bool AptActionInterpreter::isFSCommand(const char* pUrl)
 {
-    const size_t nPrefix = std::strlen(kAptFSCommandPrefix);
-    return std::strncmp(pUrl, kAptFSCommandPrefix, nPrefix) == 0;
+    return std::strncmp(pUrl, FSCOMMAND, std::strlen(FSCOMMAND)) == 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -240,8 +218,8 @@ bool AptActionInterpreter::isFSCommand(const char* pUrl)
 // ---------------------------------------------------------------------------
 int AptActionInterpreter::doFSCommand(const char* pUrl, const char* pArgs)
 {
-    const size_t nPrefix = std::strlen(kAptFSCommandPrefix);
-    gpAptFSCommandHook(pUrl + nPrefix, pArgs);   // host FSCommand sink (AptGlobals.cpp; host-installed, unguarded as on console)
+    pUrl += std::strlen(FSCOMMAND);
+    gAptFuncs.pfnCommand(pUrl, pArgs);
     return 1;
 }
 

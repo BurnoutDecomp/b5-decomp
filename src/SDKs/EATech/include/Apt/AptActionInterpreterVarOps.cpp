@@ -101,6 +101,10 @@ void AptActionInterpreter::_FunctionAptActionGetVariable(AptActionInterpreter* p
 // value through setVariable, then pop both. When the pop empties the operand
 // stack, drain the deferred-release vector (GC housekeeping).
 // ---------------------------------------------------------------------------
+// ARTIST 0x82B039E4 calls the counted pop helper for two operands.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 void AptActionInterpreter::_FunctionAptActionSetVariable(AptActionInterpreter* pInterp,
                                                          LocalContextT* pContext)
 {
@@ -118,3 +122,6 @@ void AptActionInterpreter::_FunctionAptActionSetVariable(AptActionInterpreter* p
     if (gpValuesToRelease->GetNumValues() != 0 && pInterp->mnStackTop == 0)
         gpValuesToRelease->ReleaseValues();
 }
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif

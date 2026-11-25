@@ -362,8 +362,14 @@ namespace renderengine
         if (!primaryRingBufferSize) primaryRingBufferSize = 0x8000;
         if (!secondaryRingBufferSize) secondaryRingBufferSize = 0x200000;
         if (!ringBufferSegmentCount)
-            ringBufferSegmentCount = secondaryRingBufferSize > 0x1000000
-                ? (secondaryRingBufferSize * 2) & 0xFFFFFC00 : 32;
+        {
+            const u32 luSecondaryRingBufferSize = secondaryRingBufferSize;
+            ringBufferSegmentCount = 32;
+            if (luSecondaryRingBufferSize > 0x1000000)
+            {
+                ringBufferSegmentCount = (luSecondaryRingBufferSize * 2) & 0xFFFFFC00;
+            }
+        }
     }
 
     // ARTIST 82B61540..82B616A8. Unknown modes deliberately preserve the

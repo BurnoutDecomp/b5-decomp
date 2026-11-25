@@ -930,6 +930,20 @@ StreetManager::HasPlayerBeatenFriendScore( BrnStreetData::ChallengeIndex liIndex
 namespace BrnGameState
 {
 
+// ARTIST 0x82335E74, 0x82335FE8 and 0x82349FB8 inline the slot lookup.
+inline s32 StreetManager::GetSaveGameChallengeIndexByRoadID( ::CgsID lRoadID ) const
+{
+    for ( s32 liChallengeIndex = 0; liChallengeIndex < KI_MAX_CHALLENGES; ++liChallengeIndex )
+    {
+        if ( KAA_SAVE_GAME_CHALLENGE_ROAD_IDS[liChallengeIndex] == lRoadID )
+        {
+            return liChallengeIndex;
+        }
+    }
+
+    return -1;
+}
+
 // @ 0x82335E08. Copy the local player's ChallengePlayerScoreEntry for a slot into
 // lpData (constructed empty first). When lbByRoadIndex is set, liIndex is first the
 // road index and is remapped to its save-game challenge slot via the road id scan;
@@ -942,29 +956,20 @@ void StreetManager::GetChallengeUserScore( BrnStreetData::ChallengeIndex liIndex
 
     lpData->Construct();
 
+    BrnStreetData::ChallengeIndex liChallengeIndex = liIndex;
     if ( lbByRoadIndex )
     {
         const BrnStreetData::Road* lpRoad = mpStreetData->GetRoad( liIndex );
 
-        liIndex = 0;
-        const ::CgsID* lpSlotRoadId = KAA_SAVE_GAME_CHALLENGE_ROAD_IDS;
-        while ( *lpSlotRoadId != lpRoad->GetId() )
-        {
-            ++lpSlotRoadId;
-            ++liIndex;
-            if ( lpSlotRoadId >= &KAA_SAVE_GAME_CHALLENGE_ROAD_IDS[KI_MAX_CHALLENGES] )
-            {
-                return;
-            }
-        }
+        liChallengeIndex = GetSaveGameChallengeIndexByRoadID( lpRoad->GetId() );
     }
 
-    if ( liIndex >= 0 )
+    if ( liChallengeIndex >= 0 )
     {
-        CGS_ASSERT( liIndex < BrnGameState::KI_MAX_CHALLENGES,
+        CGS_ASSERT( liChallengeIndex < BrnGameState::KI_MAX_CHALLENGES,
                     CGS_ASSERT_MESSAGE_AT("liChallengeIndex < BrnGameState::KI_MAX_CHALLENGES", CGS_ARTIST_FILE, 3606) );
 
-        const BrnStreetData::ChallengePlayerScoreEntry* lpChallenge = &maChallengeData[liIndex];
+        const BrnStreetData::ChallengePlayerScoreEntry* lpChallenge = &maChallengeData[liChallengeIndex];
         CGS_ASSERT( lpChallenge, CGS_ASSERT_MESSAGE_AT("lpChallenge", CGS_ARTIST_FILE, 3610) );
         lpData->Copy( lpChallenge );
     }
@@ -989,17 +994,7 @@ void StreetManager::GetChallengeFriendHighScore( BrnStreetData::ChallengeIndex l
     {
         const BrnStreetData::Road* lpRoad = mpStreetData->GetRoad( liIndex );
 
-        liSlotIndex = 0;
-        const ::CgsID* lpSlotRoadId = KAA_SAVE_GAME_CHALLENGE_ROAD_IDS;
-        while ( *lpSlotRoadId != lpRoad->GetId() )
-        {
-            ++lpSlotRoadId;
-            ++liSlotIndex;
-            if ( lpSlotRoadId >= &KAA_SAVE_GAME_CHALLENGE_ROAD_IDS[KI_MAX_CHALLENGES] )
-            {
-                return;
-            }
-        }
+        liSlotIndex = GetSaveGameChallengeIndexByRoadID( lpRoad->GetId() );
     }
 
     if ( liSlotIndex >= 0 )
@@ -3120,7 +3115,8 @@ namespace BrnGameState
     // high-score entry (base ChallengeData::Construct + blank owner names) then
     // the local-player score entry, for all KI_MAX_CHALLENGES rows.
     // -----------------------------------------------------------------------
-    void StreetManager::ClearAllChallengeData()
+    // ARTIST 0x8234A1D8 calls the out-of-line reset at 0x82324CA8.
+    __declspec(noinline) void StreetManager::ClearAllChallengeData()
     {
         for ( BrnStreetData::ChallengeIndex liChallenge = 0;
               liChallenge < KI_MAX_CHALLENGES;
@@ -3353,17 +3349,7 @@ void StreetManager::ProcessNetworkHighScoreEvent(
 
     const BrnStreetData::Road* lpRoad = mpStreetData->GetRoad( liChallengeIndex );
 
-    BrnStreetData::ChallengeIndex liSlotIndex = 0;
-    const ::CgsID* lpSlotRoadId = KAA_SAVE_GAME_CHALLENGE_ROAD_IDS;
-    while ( *lpSlotRoadId != lpRoad->GetId() )
-    {
-        ++lpSlotRoadId;
-        ++liSlotIndex;
-        if ( lpSlotRoadId >= &KAA_SAVE_GAME_CHALLENGE_ROAD_IDS[KI_MAX_CHALLENGES] )
-        {
-            return;
-        }
-    }
+    BrnStreetData::ChallengeIndex liSlotIndex = GetSaveGameChallengeIndexByRoadID( lpRoad->GetId() );
 
     if ( liSlotIndex >= 0 )
     {
@@ -3391,8 +3377,8 @@ void StreetManager::ProcessNetworkHighScoreEvent(
                     CGS_ASSERT( lpOutput, CGS_ASSERT_MESSAGE_AT("lpOutput", CGS_ARTIST_FILE, 3016) );
                     CGS_ASSERT( lpOutput->GetGameActionQueue(), CGS_ASSERT_MESSAGE_AT("lpOutput->GetGameActionQueue()", CGS_ARTIST_FILE, 3017) );
 
-                    CgsModule::VariableEventQueue<13312, 16>* lpQueue = lpOutput->GetGuiOutputQueue();
-                    lpQueue->AddEvent( reinterpret_cast<const CgsModule::Event*>( &lRecord ),
+                    GameStateModuleIO::GameActionQueue* lpQueue = lpOutput->GetGameActionQueue();
+                    lpQueue->AddEvent( &lRecord,
                        GameStateModuleIO::E_ACTION_ROAD_RULES_UPDATE_TARGET_ROAD_SCORE, sizeof( lRecord ) );
                 }
             }
@@ -3419,32 +3405,22 @@ void StreetManager::ProcessBuddyRemoved(
     {
         const ::CgsID lCurrentRoadID = mpRoadRulesManager->GetCurrentRoadID();
 
-        BrnStreetData::ChallengeIndex liRoadIndex = 0;
-        const ::CgsID* lpSlotRoadId = KAA_SAVE_GAME_CHALLENGE_ROAD_IDS;
-        while ( *lpSlotRoadId != lCurrentRoadID )
-        {
-            ++lpSlotRoadId;
-            ++liRoadIndex;
-            if ( lpSlotRoadId >= &KAA_SAVE_GAME_CHALLENGE_ROAD_IDS[KI_MAX_CHALLENGES] )
-            {
-                liRoadIndex = -1;
-                break;
-            }
-        }
+        const s32 liRoadIndex = GetSaveGameChallengeIndexByRoadID( lCurrentRoadID );
 
         GameStateModuleIO::RoadRulesUpdateTargetScoreAction lRecord;
         GetChallengeUserScore( liRoadIndex, &lRecord.mUserScores, false );
         GetChallengeFriendHighScore( liRoadIndex, &lRecord.mFriendScores, false );
         lRecord.mRoadId = mpRoadRulesManager->GetCurrentRoadID();
 
-        CgsModule::VariableEventQueue<13312, 16>* lpQueue = lpOutput->GetGuiOutputQueue();
-        lpQueue->AddEvent( reinterpret_cast<const CgsModule::Event*>( &lRecord ),
+        GameStateModuleIO::GameActionQueue* lpQueue = lpOutput->GetGameActionQueue();
+        lpQueue->AddEvent( &lRecord,
                        GameStateModuleIO::E_ACTION_ROAD_RULES_UPDATE_TARGET_ROAD_SCORE, sizeof( lRecord ) );
     }
 
-    const u8 luBuddyScrubbedFlag = 0;
-    CgsModule::VariableEventQueue<13312, 16>* lpQueue = lpOutput->GetGuiOutputQueue();
-    lpQueue->AddEvent( reinterpret_cast<const CgsModule::Event*>( &luBuddyScrubbedFlag ), 55, 1 );
+    GameStateModuleIO::RequestAutoSaveAction lRequestAutoSave;
+    lRequestAutoSave.mbForceAutosave = false;
+    GameStateModuleIO::GameActionQueue* lpQueue = lpOutput->GetGameActionQueue();
+    lpQueue->AddEvent( &lRequestAutoSave, GameStateModuleIO::E_ACTION_REQUEST_AUTOSAVE, sizeof( lRequestAutoSave ) );
 }
 
 } // namespace BrnGameState
@@ -4217,29 +4193,6 @@ void StreetManager::ProcessScoreRequestEvent(
 
 namespace BrnGameState
 {
-    namespace
-    {
-        // The 16-byte road-rules score-summary game action (type 232) all three
-        // handlers post. The X360 builds it as three contiguous stack slots --
-        // the profile's road-rules session id (8B), the download timestamp (4B)
-        // and the posting StreetManager (4B) -- and hands the leading address to
-        // VariableEventQueue<13312,16>::AddEvent(&payload, 232, 16).
-        //
-        // HOST-vs-CONSOLE (gotcha 1). The X360 immediate is 16 because 32-bit
-        // pointers pack mpStreetManager at +12. MEASURED on the x64 gate: the
-        // pointer aligns to +16 and the struct is sizeof == 24. Posting the
-        // console 16 here would copy the u64, the u32 and 4 bytes of padding and
-        // DROP THE MANAGER POINTER ENTIRELY, so the byte count is sizeof(lSummary)
-        // and the console value survives only in this comment. The payload is
-        // zero-initialised so the alignment hole is never an indeterminate read.
-        // The event id 232 IS verbatim from the asm.
-        struct RoadRulesScoreSummaryPayload
-        {
-            u64            mu64RoadRulesID;       // +0
-            u32            muDownloadTimestamp;   // +8
-            StreetManager* mpStreetManager;       // +12 (X360)
-        };
-    }
 
     // -----------------------------------------------------------------------
     // @ 0x82349E20. The profile finished loading: adopt its persisted road-rules
@@ -4251,18 +4204,20 @@ namespace BrnGameState
         CGS_ASSERT( mpProgressionManager, CGS_ASSERT_MESSAGE_AT("mpProgressionManager", CGS_ARTIST_FILE, 2938) );
         CGS_ASSERT( mpProgressionManager->GetProfile(), CGS_ASSERT_MESSAGE_AT("mpProgressionManager->GetProfile()", CGS_ARTIST_FILE, 2939) );
 
-        BrnProgression::Profile* lpProfile = mpProgressionManager->GetProfile();
+        BrnProgression::ProgressionManager* lpProgressionManager = mpProgressionManager;
+        memcpy( maNetworkChallengeData, lpProgressionManager->GetProfile()->GetNetworkChallengeData( 0 ), sizeof( maNetworkChallengeData ) );
+        const BrnStreetData::ChallengePlayerScoreEntry* lpUserScores = lpProgressionManager->GetProfile()->GetUserChallengeData( 0 );
+        memcpy( maChallengeData, lpUserScores, sizeof( maChallengeData ) );
 
-        memcpy( maNetworkChallengeData, lpProfile->GetNetworkChallengeData( 0 ), sizeof( maNetworkChallengeData ) );
-        memcpy( maChallengeData,        lpProfile->GetUserChallengeData( 0 ),    sizeof( maChallengeData ) );
+        GameStateModuleIO::RoadRulesChallengeScoresAction lUserChallengeScoresAction;
+        lUserChallengeScoresAction.Construct(
+            mpProgressionManager->GetProfile()->GetRoadRulesID(),
+            mpProgressionManager->GetProfile()->GetNetworkChallengeDownloadTimestamp(),
+            this );
 
-        RoadRulesScoreSummaryPayload lSummary = {};
-        lSummary.mu64RoadRulesID     = lpProfile->GetRoadRulesID();
-        lSummary.muDownloadTimestamp = lpProfile->GetNetworkChallengeDownloadTimestamp();
-        lSummary.mpStreetManager     = this;
-
-        lpOutput->GetGuiOutputQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>( &lSummary ), 232, sizeof( lSummary ) );
+        GameStateModuleIO::GameActionQueue* lpQueue = lpOutput->GetGameActionQueue();
+        lpQueue->AddEvent( &lUserChallengeScoresAction,
+            GameStateModuleIO::E_ACTION_ROAD_RULES_CHALLENGE_SCORES, sizeof( lUserChallengeScoresAction ) );
     }
 
     // -----------------------------------------------------------------------
@@ -4283,15 +4238,13 @@ namespace BrnGameState
         {
             ClearAllChallengeData();
 
-            BrnProgression::Profile* lpProfile = mpProgressionManager->GetProfile();
+            GameStateModuleIO::RoadRulesChallengeScoresAction lUserChallengeScoresAction;
+            lUserChallengeScoresAction.Construct( mpProgressionManager->GetProfile()->GetRoadRulesID(),
+                mpProgressionManager->GetProfile()->GetNetworkChallengeDownloadTimestamp(), this );
 
-            RoadRulesScoreSummaryPayload lSummary = {};
-            lSummary.mu64RoadRulesID     = lpProfile->GetRoadRulesID();
-            lSummary.muDownloadTimestamp = lpProfile->GetNetworkChallengeDownloadTimestamp();
-            lSummary.mpStreetManager     = this;
-
-            lpOutput->GetGuiOutputQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>( &lSummary ), 232, sizeof( lSummary ) );
+            GameStateModuleIO::GameActionQueue* lpQueue = lpOutput->GetGameActionQueue();
+            lpQueue->AddEvent( &lUserChallengeScoresAction,
+                GameStateModuleIO::E_ACTION_ROAD_RULES_CHALLENGE_SCORES, sizeof( lUserChallengeScoresAction ) );
 
             mpProgressionManager->GetProfile()->SetLastRoadRulesResetTime(
                 lpConnectInfoEvent->muLastRoadRulesResetTime );
@@ -4398,13 +4351,13 @@ namespace BrnGameState
                 SetChallengeUserScore( liRoadIndex, &lLocalEntry, false );
             }
 
-            RoadRulesScoreSummaryPayload lSummary = {};
-            lSummary.mu64RoadRulesID     = mpProgressionManager->GetProfile()->GetRoadRulesID();
-            lSummary.muDownloadTimestamp = 0;
-            lSummary.mpStreetManager     = this;
+            GameStateModuleIO::RoadRulesChallengeScoresAction lUserChallengeScoresAction;
+            lUserChallengeScoresAction.Construct( mpProgressionManager->GetProfile()->GetRoadRulesID(),
+                0, this );
 
-            lpOutput->GetGuiOutputQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>( &lSummary ), 232, sizeof( lSummary ) );
+            GameStateModuleIO::GameActionQueue* lpQueue = lpOutput->GetGameActionQueue();
+            lpQueue->AddEvent( &lUserChallengeScoresAction,
+                GameStateModuleIO::E_ACTION_ROAD_RULES_CHALLENGE_SCORES, sizeof( lUserChallengeScoresAction ) );
 
             if ( lbDroppedForeignRecords )
             {
@@ -4412,7 +4365,7 @@ namespace BrnGameState
                 // notification carries no payload); zero-initialised here so the
                 // reconstruction has no indeterminate read.
                 u8 lu8ForeignRecordsNotification = 0;
-                lpOutput->GetGuiOutputQueue()->AddEvent(
+                lpOutput->GetGameActionQueue()->AddEvent(
                     reinterpret_cast<const CgsModule::Event*>( &lu8ForeignRecordsNotification ), 234, 1 );
             }
 
