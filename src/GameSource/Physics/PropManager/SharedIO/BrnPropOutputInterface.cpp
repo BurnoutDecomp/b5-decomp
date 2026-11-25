@@ -49,14 +49,14 @@ namespace Props
 
         for (s32 liIndex = 0; liIndex < liCount; ++liIndex)
         {
-            PropUpdateNotification& lrDest = mPropUpdateNotificationQueue.AddEvent();
+            PropUpdateNotification* const lpDest = mPropUpdateNotificationQueue.AllocateEvent();
             const UpdatePropEvent&  lrSrc  = lpUpdatedProps->GetEvent(liIndex);
 
-            lrDest.mPosition        = lrSrc.mTransform.wAxis;   // src+0x30 -> dest+0x00
-            lrDest.mLinearVelocity  = lrSrc.mLinearVelocity;    // src+0x40 -> dest+0x10
-            lrDest.mAngularVelocity = lrSrc.mAngularVelocity;   // src+0x50 -> dest+0x20
-            lrDest.mEntityId        = lrSrc.mEntityId;          // src+0x60 -> dest+0x30
-            lrDest.mi16TypeId       = lrSrc.miTypeId;           // src+0x66 -> dest+0x34
+            lpDest->mPosition        = lrSrc.mTransform.wAxis;   // src+0x30 -> dest+0x00
+            lpDest->mLinearVelocity  = lrSrc.mLinearVelocity;    // src+0x40 -> dest+0x10
+            lpDest->mAngularVelocity = lrSrc.mAngularVelocity;   // src+0x50 -> dest+0x20
+            lpDest->mEntityId        = lrSrc.mEntityId;          // src+0x60 -> dest+0x30
+            lpDest->mi16TypeId       = lrSrc.miTypeId;           // src+0x66 -> dest+0x34
         }
     }
 }

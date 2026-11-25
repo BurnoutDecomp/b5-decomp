@@ -4344,16 +4344,10 @@ namespace BrnWorld
 
                     if ( lbRecord )
                     {
-                        // ⭐ ROUND 2: this is the leg the wave-Q spec called "genuinely
-                        // unrecovered" and round 1 landed through a reinterpret_cast. Both are
-                        // gone -- mRecordHitPropQueue is a real
-                        // EventQueue<RecordPropHitEvent,50> and the accessor is typed. The
-                        // no-arg AddEvent() reserves the tail slot and returns a reference to
-                        // it, which is exactly the console shape (`bl GetRecordHitPropQueue ;
-                        // bl AddEvent` at 0x822FAC58/0x822FAC5C, result in r3 -> r31, then six
-                        // stores through r31).
-                        BrnGameState::GameStateModuleIO::RecordPropHitEvent& lrHitEvent =
-                            lpOutput->GetRecordHitPropQueue()->AddEvent();
+                        // ARTIST 0x822FAC58 calls the typed queue accessor before allocating
+                        // the RecordPropHitEvent at 0x822FAC5C.
+                        BrnGameState::GameStateModuleIO::RecordPropHitEvent* const lpHitEvent =
+                            lpOutput->GetRecordHitPropQueue()->AllocateEvent();
 
                         const s16 li16Zone = mZoneManager.GetZone( lHitPropEntityId );
 
@@ -4361,17 +4355,17 @@ namespace BrnWorld
                         // the instance transform's translation row straight into the event's
                         // leading Vector3. The stores are in this order in the console too
                         // (position, zone, index-in-zone, hit-before).
-                        lrHitEvent.mPosition = lpInstance->mWorldTransform.wAxis;
-                        lrHitEvent.muZoneId  = static_cast<u16>( li16Zone );
+                        lpHitEvent->mPosition = lpInstance->mWorldTransform.wAxis;
+                        lpHitEvent->muZoneId  = static_cast<u16>( li16Zone );
                         // The prop's index WITHIN its zone. asm 0x822FAD18..0x822FAD3C does the
                         // `lhzx` from mauStartIndexOfZone by hand (`2*(zone + 0x662A1)`);
                         // routed through the named accessor instead (gotcha 1).
-                        lrHitEvent.muPropId  = static_cast<u16>(
+                        lpHitEvent->muPropId  = static_cast<u16>(
                             lHitPropEntityId.GetEntityIndex()
                             - mZoneManager.GetStartIndexOfZone( static_cast<u16>( li16Zone ) ) );
-                        lrHitEvent.mbHitBefore = mZoneManager.HasPropBeenHit( lHitPropEntityId );
+                        lpHitEvent->mbHitBefore = mZoneManager.HasPropBeenHit( lHitPropEntityId );
 
-                        if ( !lrHitEvent.mbHitBefore )
+                        if ( !lpHitEvent->mbHitBefore )
                         {
                             mZoneManager.RecordHitProp( lHitPropEntityId );
                         }

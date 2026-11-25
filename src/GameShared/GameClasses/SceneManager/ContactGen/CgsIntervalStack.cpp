@@ -191,13 +191,10 @@ namespace CgsSceneManager
 
             if (!(lfZLow > 0.0f) && !(lfZHigh > 0.0f) && !(lfYLow > 0.0f) && !(lfYHigh > 0.0f))
             {
-                // sub_828B8C60 == BaseEventQueue<OverlappingIntervalPair>::AllocateEvent()
-                // (asserts "mpEvents != NULL" / "GetLength() < GetMaxLength()" at
-                // CgsBaseEventQueue.h:360/361, element stride 4). The tree spells that member
-                // AddEvent() -- see the naming-defect note in CgsBaseEventQueue.h.
-                OverlappingIntervalPair& lrPair = lpOverlappingPairQueue->AddEvent();
-                lrPair.muObjectIndexA = lrInterval.mu16ObjectIndex;  // sth r10,0(r3)
-                lrPair.muObjectIndexB = mpuIndexData[luEntry];       // sth r11,2(r3)
+                // ARTIST 0x828B8C60 reserves the pair before its two index stores.
+                OverlappingIntervalPair* const lpPair = lpOverlappingPairQueue->AllocateEvent();
+                lpPair->muObjectIndexA = lrInterval.mu16ObjectIndex;
+                lpPair->muObjectIndexB = mpuIndexData[luEntry];
             }
         }
     }

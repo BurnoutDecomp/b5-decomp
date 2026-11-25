@@ -465,22 +465,22 @@ void VehicleOutputInterface::AddTrafficState(EntityId lEntityID,
     }
 
     const SimpleVehiclePhysics& lrPhysics = *lpPhysicalTrafficVehicle->mpVehicleBody;
-    PhysicalTrafficState&       lrState   = mTrafficStateQueue.AddEvent();
+    PhysicalTrafficState* const lpState = mTrafficStateQueue.AllocateEvent();
 
-    lrState.mEntityID           = lEntityID;
-    lrState.mTransform          = lrPhysics.GetGraphicsVehicleTransform();
-    lrState.mLinearVelocity     = lrPhysics.GetLinearVelocity();
-    lrState.mfSpeed             = lrPhysics.GetSpeed().GetFloat();
-    lrState.mbFrozen            = lrPhysics.IsFrozen();
-    lrState.mbIsDeforming       = lrPhysics.HasStartedDeforming();
-    lrState.mbIsFatallyCrashing = lrPhysics.IsFatallyCrashing();
-    lrState.mfSteering          = lrPhysics.GetSteeringAngle().GetFloat();
+    lpState->mEntityID           = lEntityID;
+    lpState->mTransform          = lrPhysics.GetGraphicsVehicleTransform();
+    lpState->mLinearVelocity     = lrPhysics.GetLinearVelocity();
+    lpState->mfSpeed             = lrPhysics.GetSpeed().GetFloat();
+    lpState->mbFrozen            = lrPhysics.IsFrozen();
+    lpState->mbIsDeforming       = lrPhysics.HasStartedDeforming();
+    lpState->mbIsFatallyCrashing = lrPhysics.IsFatallyCrashing();
+    lpState->mfSteering          = lrPhysics.GetSteeringAngle().GetFloat();
 
     // The four wheel meshes' world matrices. lbHackDontReverseRightWheels is false at every
     // committed call site, this one included (`li r6, 0` before each bl).
     for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
     {
-        lrState.maWheelTransforms[liWheel] =
+        lpState->maWheelTransforms[liWheel] =
             lrPhysics.GetWheelsWorldTransfrom(static_cast<EVehicleDrivenWheel>(liWheel), false);
     }
 
@@ -489,7 +489,7 @@ void VehicleOutputInterface::AddTrafficState(EntityId lEntityID,
     for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
     {
         const Wheel& lrWheel     = *lrPhysics.GetWheel(static_cast<EVehicleDrivenWheel>(liWheel));
-        WheelLite&   lrWheelLite = lrState.maWheels[liWheel];
+        WheelLite&   lrWheelLite = lpState->maWheels[liWheel];
 
         lrWheelLite.mVelocity          = lrWheel.mBodyPointVelocity;
         lrWheelLite.mfRadiansPerSecond = lrWheel.mIntegrationVariables.X();
@@ -543,12 +543,12 @@ void VehicleOutputInterface::AddTrafficState(EntityId lEntityID,
         const AboveGroundTestResult& lrAboveGround =
             *lrPhysics.GetAboveGroundTestResult();
 
-        const f32 lfDeltaY = lPhysicsTransform.wAxis.Y() - lrState.mTransform.wAxis.Y();
+        const f32 lfDeltaY = lPhysicsTransform.wAxis.Y() - lpState->mTransform.wAxis.Y();
 
-        lrState.mvRoadTestNormal_HeightAboveRoad.X() = lrAboveGround.mIntersectionNormal.X();
-        lrState.mvRoadTestNormal_HeightAboveRoad.Y() = lrAboveGround.mIntersectionNormal.Y();
-        lrState.mvRoadTestNormal_HeightAboveRoad.Z() = lrAboveGround.mIntersectionNormal.Z();
-        lrState.mvRoadTestNormal_HeightAboveRoad.GetComponent(3) = lrAboveGround.mfVerticalDistance - lfDeltaY;
+        lpState->mvRoadTestNormal_HeightAboveRoad.X() = lrAboveGround.mIntersectionNormal.X();
+        lpState->mvRoadTestNormal_HeightAboveRoad.Y() = lrAboveGround.mIntersectionNormal.Y();
+        lpState->mvRoadTestNormal_HeightAboveRoad.Z() = lrAboveGround.mIntersectionNormal.Z();
+        lpState->mvRoadTestNormal_HeightAboveRoad.GetComponent(3) = lrAboveGround.mfVerticalDistance - lfDeltaY;
     }
 }
 

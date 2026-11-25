@@ -2352,7 +2352,7 @@ namespace Props
 //  1. 0x8260F02C..0x8260F048 -- the SIMULATION request, and it is a SINGLE event for the whole
 //     owner, not one per body:
 //         bl sub_825BD000   == InputBuffer::GetRemoveAllRigidBodiesQueue()  [WRITE side]
-//         bl sub_825E4020   == BaseEventQueue<InRemoveAllRigidBodies>::AddEvent()  (no-arg
+//         bl sub_825E4020   == BaseEventQueue<InRemoveAllRigidBodies>::AllocateEvent()  (tail
 //                              slot reserve; returns the slot -- `add r3, mLength, mpEvents`
 //                              with NO stride multiply, which is itself the proof that
 //                              sizeof(InRemoveAllRigidBodies) == 1)
@@ -2367,12 +2367,7 @@ namespace Props
 //       * sub_825E4020, 40 insns: asserts "mpEvents != NULL" (line 0x168 == 360) and
 //         "GetLength() < GetMaxLength()" (line 0x169 == 361) -- byte-for-byte the two source
 //         lines the committed CgsBaseEventQueue.h:42-70 records for its no-arg reserve.
-//     ⚠️ The tree spells that member `T& AddEvent()`. The DecFIGS DWARF's real name for it is
-//     `T* AllocateEvent()` @CgsBaseEventQueue.h:356, and the DWARF for THIS function names its
-//     local `InRemoveAllRigidBodies* lpEvent` -- i.e. the console source held a POINTER. That
-//     name/return-type defect is already FILED by the header's owner (CgsBaseEventQueue.h:51-62,
-//     "NAME DEFECT, FILED NOT FIXED 2026-08-18"); it is deliberately not re-discovered or
-//     re-fixed here. The `&` below is what bridges the two, and it costs nothing.
+//     DecFIGS also names the caller's local InRemoveAllRigidBodies* lpEvent.
 //
 //  2. 0x8260F040..0x8260F2C8 -- the PROP loop. The fully inlined BitArray<15>::
 //     GetFirstNonZeroBit / GetNextNonZeroBit / IsBitSet walk over `addi r14, r30, 0x80` ==
@@ -2466,7 +2461,7 @@ namespace Props
 //   * This TU introduces NO new unresolved external. Its five callees are:
 //       InputBuffer::GetRemoveAllRigidBodiesQueue()  -- bodied this wave in the already-mounted
 //                                                      CgsPhysicsSimulationModuleIO_InputBuffer.cpp
-//       BaseEventQueue<InRemoveAllRigidBodies>::AddEvent()          header inline
+//       BaseEventQueue<InRemoveAllRigidBodies>::AllocateEvent()     header inline
 //       BaseEventQueue<InEventRemoveFromCache>::AddEvent(const T&)  header inline
 //       BitArray<15>/<30>::{GetFirstNonZeroBit,GetNextNonZeroBit,UnSetAll}  header inline
 //     Everything it touches on `this` is a data member.
@@ -2498,11 +2493,8 @@ namespace Props
         CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInput )
     {
         // Step 1 -- one owner-scoped "remove every rigid body I own" request. 0x8260F02C..0x8260F048.
-        // The `&` is the AddEvent/AllocateEvent return-type defect filed at
-        // CgsBaseEventQueue.h:51-62; the DWARF local (:422) is a pointer, so a pointer is what
-        // the console source held.
         CgsPhysics::PhysicsSimulationIO::InRemoveAllRigidBodies* const lpEvent =
-            &lpSimModuleInputBuffer->GetRemoveAllRigidBodiesQueue()->AddEvent();
+            lpSimModuleInputBuffer->GetRemoveAllRigidBodiesQueue()->AllocateEvent();
 
         lpEvent->mu8OwnerId = static_cast<u8>( BrnWorld::E_ENTITYTYPE_PROP );   // li r11,3 ; stb
 
@@ -3734,7 +3726,7 @@ void PropManager::ProcessRemovePartInstanceEvents(
 //      the bounds-GATED reserve: assert "mpEvents != NULL" (CgsBaseEventQueue.h:381,
 //      `li r5,0x17D`), then `lwz 8 / lwz 4 / cmpw / bge -> li r3,0 ; blr` == SIGNED
 //      miLength >= miMaxLength returns NULL WITHOUT appending, else reserve the tail slot and
-//      bump miLength. ⚠️ NOT interchangeable with the committed no-arg `T& AddEvent()`, which
+//      bump miLength. ⚠️ NOT interchangeable with `T* AllocateEvent()`, which
 //      appends unconditionally.
 //
 //   4. BrnPropManager.h -- the ClampAcceleration and ApplyAntiHerdingForce parameter NAMES were

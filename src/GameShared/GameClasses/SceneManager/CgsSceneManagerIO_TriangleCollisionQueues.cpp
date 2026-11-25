@@ -74,3 +74,13 @@ CgsModule::BaseEventQueue<CgsSceneManager::SceneManagerIO::InEventTriangleCollis
 template bool
 CgsModule::BaseEventQueue<CgsSceneManager::SceneManagerIO::InEventTriangleCollisionSphereTest>::Append(
     const CgsModule::BaseEventQueue<CgsSceneManager::SceneManagerIO::InEventTriangleCollisionSphereTest>&);
+
+// BaseEventQueue<InEventTriangleCollisionLineTest>::Append @ 0x828B9668, called at 0x828D5528.
+template bool
+CgsModule::BaseEventQueue<CgsSceneManager::SceneManagerIO::InEventTriangleCollisionLineTest>::Append(
+    const CgsModule::BaseEventQueue<CgsSceneManager::SceneManagerIO::InEventTriangleCollisionLineTest>&);
+
+// BaseEventQueue<InEventTriangleCollisionLineTestNearest>::Append @ 0x828B9758, called at 0x828D5544.
+template bool
+CgsModule::BaseEventQueue<CgsSceneManager::SceneManagerIO::InEventTriangleCollisionLineTestNearest>::Append(
+    const CgsModule::BaseEventQueue<CgsSceneManager::SceneManagerIO::InEventTriangleCollisionLineTestNearest>&);

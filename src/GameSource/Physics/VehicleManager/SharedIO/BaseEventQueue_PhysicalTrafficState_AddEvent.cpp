@@ -1,8 +1,8 @@
-#include "GameShared/GameClasses/Module/CgsBaseEventQueue.h"                       // BaseEventQueue<T>::AddEvent() (inline generic)
+#include "GameShared/GameClasses/Module/CgsBaseEventQueue.h"                       // BaseEventQueue<T>::AllocateEvent() (inline generic)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"           // BrnPhysics::Vehicle::PhysicalTrafficState (816-byte element)
 
-// CgsModule::BaseEventQueue<BrnPhysics::Vehicle::PhysicalTrafficState>::AddEvent()  @ 0x825E5010
-// Reconstructed from BURNOUT_X360_ARTIST.XEX. The no-arg "reserve next slot" AddEvent body is
+// CgsModule::BaseEventQueue<BrnPhysics::Vehicle::PhysicalTrafficState>::AllocateEvent()  @ 0x825E5010
+// Reconstructed from BURNOUT_X360_ARTIST.XEX. The slot reservation body is
 // already inline in CgsBaseEventQueue.h; this is the thin explicit instantiation. Called by
 // VehicleOutputInterface::AddTrafficState to grab the next free PhysicalTrafficState slot.
 //
@@ -12,5 +12,5 @@
 // i.e. reserves &mpEvents[miLength] and post-increments the live count. The 816-byte multiplier
 // (`mulli r10, miLength, 0x330`) is sizeof(PhysicalTrafficState) == 816, matching the element
 // stride asserted in BrnVehicleEvents.h / the PhysicalTrafficState Construct+Append siblings.
-template BrnPhysics::Vehicle::PhysicalTrafficState&
-CgsModule::BaseEventQueue<BrnPhysics::Vehicle::PhysicalTrafficState>::AddEvent();
+template BrnPhysics::Vehicle::PhysicalTrafficState*
+CgsModule::BaseEventQueue<BrnPhysics::Vehicle::PhysicalTrafficState>::AllocateEvent();

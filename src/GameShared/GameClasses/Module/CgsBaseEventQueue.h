@@ -59,36 +59,18 @@ namespace CgsModule
             return true;
         }
 
-        // No-arg "reserve next slot" variant (X360 BaseEventQueue<T>::AddEvent(), DWARF
-        // CgsBaseEventQueue.h:358; asserts at :360/:361). Reserves the slot at the current tail,
-        // bumps miLength, and returns a reference to the freshly-reserved (uninitialised) element
-        // so the caller can fill it in place -- the X360 body computes &mpEvents[miLength], stores
-        // miLength+1 back, and returns the slot pointer. Appends UNCONDITIONALLY; the two asserts
-        // are non-gating tripwires. Used by VehicleOutputInterface::AddTrafficState (816-byte
-        // PhysicalTrafficState element). ADDITIVE GROW (flagged): new no-arg overload, no change to
-        // existing members/behaviour.
-        //
-        // ⚠️ NAME DEFECT, FILED NOT FIXED 2026-08-18 (wave Q round 2, shared-header owner; the
-        // fix touches a consumer file this owner does not own). The DecFIGS DWARF member list
-        // for BaseEventQueue<T> has NO no-arg AddEvent at all. Its members in source order are
-        // AddEvent(const T&) :310, AddEventSafe(const T&) :329, `T* AllocateEvent()` :356,
-        // `T* AllocateEventSafe()` :379, Append :411, AppendSafe :438. So THIS member is the
-        // DWARF's AllocateEvent() @:356 (its two asserts at :360/:361 sit inside that body,
-        // which is what the banner's ":358" was reaching for), spelled with a `T&` return
-        // instead of the DWARF's `T*`. Renaming it to AllocateEvent() and retyping the return
-        // would touch its live consumer CgsSceneManagerIO_SceneUpdate.cpp:218
-        // (`mRemoveAllEntitiesQueue.AddEvent().mu8Owner = ...`), so it is left alone here and
-        // reported. Do not "discover" this again -- and do NOT reach for this member when you
-        // want the bounds-gated reserve; that is AllocateEventSafe below.
-        T& AddEvent()
+        // Reserve a tail slot for the producer (DecFIGS CgsBaseEventQueue.h:356).
+        // ARTIST 0x825E5010 asserts the buffer and capacity before incrementing the length
+        // and returning the previous tail pointer.
+        T* AllocateEvent()
         {
             CGS_ASSERT(mpEvents != 0, CGS_ASSERT_MESSAGE_AT(
                 "mpEvents != NULL", KAC_BASE_EVENT_QUEUE_FILE, 360));
             CGS_ASSERT(GetLength() < GetMaxLength(), CGS_ASSERT_MESSAGE_AT(
                 "GetLength() < GetMaxLength()", KAC_BASE_EVENT_QUEUE_FILE, 361));
-            s32 liIndex = miLength;
+            T* const lpEvent = &mpEvents[miLength];
             ++miLength;
-            return mpEvents[liIndex];
+            return lpEvent;
         }
 
         // Bounds-gated append (X360 BaseEventQueue<T>::AddEventSafe, DWARF CgsBaseEventQueue.h:329):
@@ -139,9 +121,7 @@ namespace CgsModule
         // quoted here as provenance only; it is also the evidence that T is InUpdateRigidBody
         // (192) rather than the address-adjacent InApplyForce family (32).
         //
-        // ⚠️ NOT interchangeable with the no-arg AddEvent() above: that one appends
-        // UNCONDITIONALLY (its bounds check is a non-gating assert), this one returns NULL on a
-        // full queue.
+        // Returns NULL on a full queue. AllocateEvent reserves its slot after the assertions.
         // ⚠️ CORRECTED 2026-08-18 (round 3): this line used to add "and the caller must test
         // it". True as an API contract, FALSE as a statement about the only console consumer,
         // and a lander reading it would insert a guard the X360 build has no counterpart for.
