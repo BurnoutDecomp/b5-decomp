@@ -471,12 +471,12 @@ namespace CgsGui
             if (lpValue->miFormatType == 0)
             {
                 mLanguageManager.FormatMinutesAndSecondsString(
-                    lacFormattedValue, lpValue->mfTimeInSeconds, 128);
+                    reinterpret_cast<CgsUnicode::CgsUtf8*>(lacFormattedValue), lpValue->mfTimeInSeconds, 128);
             }
             else if (lpValue->miFormatType == 1)
             {
                 mLanguageManager.FormatSecondsString(
-                    lacFormattedValue, lpValue->mfTimeInSeconds, 128);
+                    reinterpret_cast<CgsUnicode::CgsUtf8*>(lacFormattedValue), lpValue->mfTimeInSeconds, 128);
             }
             else
             {

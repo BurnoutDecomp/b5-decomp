@@ -1,3 +1,4 @@
+#include "GameSource/Gui/Events/BrnGuiEventNetworkPlayerStats.h"
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineGameRoomPlayerInfo.h"
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"
 static const char KAC_BRN_ONLINE_GAME_ROOM_PLAYER_INFO_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineGameRoomPlayerInfo.cpp"; // ARTIST filename 0x820607A0
@@ -1092,7 +1093,7 @@ namespace BrnGui
 
                 // Inlined by the X360 into a pair of compares against 15/16 (0x824A450C).
                 if (BrnGameState::GameStateModuleIO::IsOnlineFreeBurnLobby(
-                        static_cast<BrnGameState::GameStateModuleIO::EGameModeType>(mpGuiCache->meOnlineGameMode)))
+                        static_cast<BrnGameState::GameStateModuleIO::EGameModeType>(mpGuiCache->GetOnlineGameModeOptions()->meGameMode)))
                 {
                     if (mbShownFromPause)
                     {
@@ -1128,9 +1129,9 @@ namespace BrnGui
 
                 // Clamp the displayed round into the game's round count (upper clamp
                 // stored first, then the lower clamp -- two stores in the asm).
-                if (miCurrentRoundDisplayed >= mpGuiCache->miOnlineNumRounds - 1)
+                if (miCurrentRoundDisplayed >= mpGuiCache->GetOnlineGameModeOptions()->miNumRounds - 1)
                 {
-                    miCurrentRoundDisplayed = mpGuiCache->miOnlineNumRounds - 1;
+                    miCurrentRoundDisplayed = mpGuiCache->GetOnlineGameModeOptions()->miNumRounds - 1;
                 }
                 if (miCurrentRoundDisplayed <= 0)
                 {
@@ -1254,7 +1255,7 @@ namespace BrnGui
 //
 // ShowPlayerList repaints the whole 8-row lobby list: for each active player it walks
 // TWO parallel GuiCache mirrors -- maPlayerInfo[i] (the 312-byte in-game status record)
-// and maLobbyPlayerInfo[i] (the 56-byte lobby status record) -- and pushes eight status
+// and mLobbyPlayerInfoList.maPlayerLobbyInfo[i] (the 56-byte lobby status record) -- and pushes eight status
 // icon states per row, then blanks the unused rows and restores the highlight.
 //
 // TWO Hex-Rays MISREADINGS arbitrated from the assembly:
@@ -1283,11 +1284,11 @@ namespace BrnGui
 // layout (39149 = mPlayerNameComponent.miHighlightedIndex, 87516 = mpGuiCache,
 // 24928 + 1184*i = maIcons[i], 71104 = mPlayerStatsDisplay, 84880 =
 // mPlayersButtonPromptsAnimation, cache+0xAC80/312*i = maPlayerInfo[i],
-// cache+0xB640/56*i = maLobbyPlayerInfo[i], cache+0xA9DF = mbOnlineRanked,
+// cache+0xB640/56*i = mLobbyPlayerInfoList.maPlayerLobbyInfo[i], cache+0xA9DF = mGameOptions.mbRanked,
 // cache+0xB864 = mbIsOnlineHost, row+0x100 = mPlayerName, row+248 =
 // mLiveRevengeRelationship's +112 score word) -- so NONE of them is
 // reproduced as a number here; the console values live in comments only. The two array
-// strides that ARE reproduced (maPlayerInfo/maLobbyPlayerInfo row addressing) go through
+// strides that ARE reproduced (maPlayerInfo and maPlayerLobbyInfo row addressing) go through
 // the named `u8[8][N]` cache members, whose row width is pinned host-side by
 // static_assert(sizeof(InGamePlayerStatusData) == 312 / sizeof(LobbyPlayerStatusData) == 56)
 // in those records' own headers.
@@ -1418,8 +1419,7 @@ namespace BrnGui
             // byte-storage member, exactly as GuiCache::GetOnlinePlayerInfo does for
             // maPlayerInfo.
             const LobbyPlayerStatusData* lpLobbyPlayerInfo =
-                reinterpret_cast<const LobbyPlayerStatusData*>(
-                    mpGuiCache->maLobbyPlayerInfo[liPlayerIndex]);
+                &mpGuiCache->GetLobbyPlayerList()->maPlayerLobbyInfo[liPlayerIndex];
 
             Icons& lIcons = maIcons[liPlayerIndex];
 
@@ -1535,8 +1535,7 @@ namespace BrnGui
         for (; liFoundIndex < liNumActivePlayers; ++liFoundIndex)
         {
             const LobbyPlayerStatusData* lpLobbyPlayerInfo =
-                reinterpret_cast<const LobbyPlayerStatusData*>(
-                    mpGuiCache->maLobbyPlayerInfo[liFoundIndex]);
+                &mpGuiCache->GetLobbyPlayerList()->maPlayerLobbyInfo[liFoundIndex];
 
             if (lpLobbyPlayerInfo->mPlayerID == liSelectedPlayerID)
             {
@@ -1580,8 +1579,7 @@ namespace BrnGui
         // The id comes from the LOBBY mirror row (cache +0xB640 + 56*index, mPlayerID at
         // row+16), not from the in-game record.
         const LobbyPlayerStatusData* lpLobbyPlayerInfo =
-            reinterpret_cast<const LobbyPlayerStatusData*>(
-                mpGuiCache->maLobbyPlayerInfo[liHighlightedIndex]);
+            &mpGuiCache->GetLobbyPlayerList()->maPlayerLobbyInfo[liHighlightedIndex];
 
         GuiEventPlayerHighlightedWire lPlayerHighlighted(lpLobbyPlayerInfo->mPlayerID);
         mpStateInterface->OutputGuiEvent(lPlayerHighlighted);   // X360 record size 16
@@ -1598,7 +1596,7 @@ namespace BrnGui
                                     0,
                                     0,
                                     liHighlightedIndex,
-                                    mpGuiCache->mbOnlineRanked,
+                                    mpGuiCache->GetOnlineGameModeOptions()->mbRanked,
                                     mpGuiCache);
 
         u64 lau64OptionIds[KI_MAX_PLAYER_OPTIONS];
@@ -1860,10 +1858,10 @@ namespace BrnGui
 //   this+87512 -> mSelectedPlayerID          this+87516 -> mpGuiCache
 //   this+87536 -> mbShownFromPause
 // and on the cache side:
-//   cache+0xA800 -> maOnlineGameModeOptionsStorage (the GuiEventNetworkGameParams
+//   cache+0xA800 -> mGameOptions (the GuiEventNetworkGameParams
 //                   payload mirror; the X360 forms it as `cache + 0x10000 - 0x5800`)
 //   cache+0xA9D0 -> miOnlineNumRounds        cache+0xAC74 -> muNumActivePlayers
-//   cache+0xB650 -> maLobbyPlayerInfo[i].mPlayerID (row stride 56 == the committed
+//   cache+0xB650 -> mLobbyPlayerInfoList.maPlayerLobbyInfo[i].mPlayerID (row stride 56 == the committed
 //                   pointer-free sizeof(LobbyPlayerStatusData), so the host stride is
 //                   the console stride; the row is reached by NAMED array index, the
 //                   same way GuiCache::GetOnlinePlayerInfo reaches maPlayerInfo).
@@ -2015,8 +2013,7 @@ namespace BrnGui
 
                     mRouteInfoDisplay.SetInfo(
                         miCurrentRoundDisplayed,
-                        reinterpret_cast<const GuiEventNetworkGameParams*>(
-                            mpGuiCache->maOnlineGameModeOptionsStorage));
+                        mpGuiCache->GetOnlineGameModeOptions());
                 }
                 break;
 
@@ -2025,9 +2022,9 @@ namespace BrnGui
                 if (!mPlayerStatsDisplay.IsVisible())
                 {
                     ++miCurrentRoundDisplayed;
-                    if (miCurrentRoundDisplayed >= mpGuiCache->miOnlineNumRounds - 1)
+                    if (miCurrentRoundDisplayed >= mpGuiCache->GetOnlineGameModeOptions()->miNumRounds - 1)
                     {
-                        miCurrentRoundDisplayed = mpGuiCache->miOnlineNumRounds - 1;
+                        miCurrentRoundDisplayed = mpGuiCache->GetOnlineGameModeOptions()->miNumRounds - 1;
                     }
                     if (miCurrentRoundDisplayed <= 0)
                     {
@@ -2036,8 +2033,7 @@ namespace BrnGui
 
                     mRouteInfoDisplay.SetInfo(
                         miCurrentRoundDisplayed,
-                        reinterpret_cast<const GuiEventNetworkGameParams*>(
-                            mpGuiCache->maOnlineGameModeOptionsStorage));
+                        mpGuiCache->GetOnlineGameModeOptions());
                 }
                 break;
 
@@ -2046,8 +2042,7 @@ namespace BrnGui
                 if (static_cast<s32>(mpGuiCache->muNumActivePlayers) > 0)
                 {
                     const BrnNetwork::BrnNetworkModuleIO::LobbyPlayerStatusData* lpLobbyPlayer =
-                        reinterpret_cast<const BrnNetwork::BrnNetworkModuleIO::LobbyPlayerStatusData*>(
-                            mpGuiCache->maLobbyPlayerInfo[mPlayerNameComponent.miHighlightedIndex]);
+                        (&mpGuiCache->GetLobbyPlayerList()->maPlayerLobbyInfo[mPlayerNameComponent.miHighlightedIndex]);
 
                     mSelectedPlayerID = lpLobbyPlayer->mPlayerID;
 
@@ -2950,28 +2945,26 @@ namespace BrnGui
             if (miCurrentRoundDisplayed > 0)
             {
                 const s32 liStep =
-                    (mpGuiCache->meOnlineGameMode
+                    (mpGuiCache->GetOnlineGameModeOptions()->meGameMode
                          == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_ROAD_RAGE) ? 2 : 1;
                 miCurrentRoundDisplayed -= liStep;
                 mRouteInfoDisplay.SetInfo(
                     miCurrentRoundDisplayed,
-                    reinterpret_cast<const GuiEventNetworkGameParams*>(
-                        mpGuiCache->maOnlineGameModeOptionsStorage));
+                    mpGuiCache->GetOnlineGameModeOptions());
             }
             break;
 
         case KI_ACTION_ROUND_NEXT:
         {
             const s32 liStep =
-                (mpGuiCache->meOnlineGameMode
+                (mpGuiCache->GetOnlineGameModeOptions()->meGameMode
                      == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_ROAD_RAGE) ? 2 : 1;
-            if (miCurrentRoundDisplayed < mpGuiCache->miOnlineNumRounds - liStep)
+            if (miCurrentRoundDisplayed < mpGuiCache->GetOnlineGameModeOptions()->miNumRounds - liStep)
             {
                 miCurrentRoundDisplayed += liStep;
                 mRouteInfoDisplay.SetInfo(
                     miCurrentRoundDisplayed,
-                    reinterpret_cast<const GuiEventNetworkGameParams*>(
-                        mpGuiCache->maOnlineGameModeOptionsStorage));
+                    mpGuiCache->GetOnlineGameModeOptions());
             }
             break;
         }
@@ -3026,8 +3019,8 @@ namespace BrnGui
     void OnlineGameRoomPlayerInfo::ShowViewEventOptions()
     {
         // Two separate stores, as the X360 emits them (upper clamp, then lower clamp).
-        if (miCurrentRoundDisplayed >= mpGuiCache->miOnlineNumRounds - 1)
-            miCurrentRoundDisplayed = mpGuiCache->miOnlineNumRounds - 1;
+        if (miCurrentRoundDisplayed >= mpGuiCache->GetOnlineGameModeOptions()->miNumRounds - 1)
+            miCurrentRoundDisplayed = mpGuiCache->GetOnlineGameModeOptions()->miNumRounds - 1;
         if (miCurrentRoundDisplayed <= 0)
             miCurrentRoundDisplayed = 0;
 
@@ -3039,8 +3032,7 @@ namespace BrnGui
         mRouteInfoDisplay.SetState(GuiNetworkRouteInfo::E_STATE_VISIBLE);
         mRouteInfoDisplay.SetInfo(
             miCurrentRoundDisplayed,
-            reinterpret_cast<const GuiEventNetworkGameParams*>(
-                mpGuiCache->maOnlineGameModeOptionsStorage));
+            mpGuiCache->GetOnlineGameModeOptions());
 
         if (mpGuiCache->mbIsOnlineHost)
         {
@@ -3074,35 +3066,32 @@ namespace BrnGui
         // X360 assert string, verbatim (it names HandleCreateMatchEventEvent -- the
         // handler this one was copy-pasted from), BrnOnlineGameRoomPlayerInfo.cpp:2682.
         CGS_ASSERT(lpEvent != 0,
-                   "Invalid event sent to OnlineGameRoomPlayerInfo::HandleCreateMatchEventEvent");
+                   CGS_ASSERT_STREAM_MESSAGE_AT(
+                       "Invalid event sent to OnlineGameRoomPlayerInfo::HandleCreateMatchEventEvent",
+                       CGS_ARTIST_FILE, 2682));
 
         if (mpGuiCache != 0)
         {
-            // The whole 480-byte payload lands on the cache's params mirror (its
-            // maOnlineGameModeOptionsStorage round table plus the named scalar tail
-            // that follows it -- X360 cache+0xA800..+0xA9DF). The record is
-            // pointer-free, so the host block is the same 480 bytes; the console's
-            // literal 0x1E0 is written as the sizeof it came from.
-            std::memcpy(mpGuiCache->maOnlineGameModeOptionsStorage, lpEvent,
+            // ARTIST 0x824A53B4 copies the whole 480-byte payload into cache+0xA800.
+            std::memcpy(mpGuiCache->GetOnlineGameModeOptions(), lpEvent,
                         sizeof(GuiEventNetworkGameParams));
 
             if (mRouteInfoDisplay.IsComponentLoaded())
             {
-                // Same two-store clamp as ShowViewEventOptions.
-                if (miCurrentRoundDisplayed >= mpGuiCache->miOnlineNumRounds - 1)
-                    miCurrentRoundDisplayed = mpGuiCache->miOnlineNumRounds - 1;
-                if (miCurrentRoundDisplayed <= 0)
-                    miCurrentRoundDisplayed = 0;
+                const GuiEventNetworkGameParams* lpOptions = mpGuiCache->GetOnlineGameModeOptions();
+                const s32 liLastRound = lpOptions->miNumRounds - 1;
+                miCurrentRoundDisplayed = miCurrentRoundDisplayed < liLastRound
+                    ? miCurrentRoundDisplayed : liLastRound;
+                miCurrentRoundDisplayed = miCurrentRoundDisplayed > 0 ? miCurrentRoundDisplayed : 0;
 
                 mRouteInfoDisplay.SetInfo(
                     miCurrentRoundDisplayed,
-                    reinterpret_cast<const GuiEventNetworkGameParams*>(
-                        mpGuiCache->maOnlineGameModeOptionsStorage));
+                    lpOptions);
 
                 // X360: the ==15 / ==16 pair, i.e. the inlined IsOnlineFreeBurnLobby.
                 if (BrnGameState::GameStateModuleIO::IsOnlineFreeBurnLobby(
                         static_cast<BrnGameState::GameStateModuleIO::EGameModeType>(
-                            mpGuiCache->meOnlineGameMode))
+                            mpGuiCache->GetOnlineGameModeOptions()->meGameMode))
                     && meSubState == E_SUBSTATE_VIEW_EVENT)
                 {
                     if (mbShownFromPause)
@@ -3254,7 +3243,7 @@ namespace BrnGui
             E_PAUSE_OPTIONS_COUNT                 = 14,
         };
 
-        // The lobby's security setting (GuiCache::meOnlineSecurity, X360 cache +0xA9C0 --
+        // The lobby's security setting (GuiCache::mGameOptions.meSecurity, X360 cache +0xA9C0 --
         // BrnNetwork::EBrnGameSecurity per its home header's annotation: 0 public /
         // 1 private / 2 closed). The three values are the unsigned compare set the X360
         // switch emits (`cmplwi 1` / `cmplwi 3`) at 0x8248C324.
@@ -3283,7 +3272,7 @@ namespace BrnGui
             // Inlined by the X360 into compares against 15/16 (0x8248C024).
             if (BrnGameState::GameStateModuleIO::IsOnlineFreeBurnLobby(
                     static_cast<BrnGameState::GameStateModuleIO::EGameModeType>(
-                        mpGuiCache->meOnlineGameMode)))
+                        mpGuiCache->GetOnlineGameModeOptions()->meGameMode)))
             {
                 lau64OptionIds[0] = E_PAUSE_OPTIONS_CREATE_EVENT;
                 liOptionIndex     = 1;
@@ -3297,13 +3286,13 @@ namespace BrnGui
         }
         else if (!BrnGameState::GameStateModuleIO::IsOnlineFreeBurnLobby(
                      static_cast<BrnGameState::GameStateModuleIO::EGameModeType>(
-                         mpGuiCache->meOnlineGameMode)))
+                         mpGuiCache->GetOnlineGameModeOptions()->meGameMode)))
         {
             lau64OptionIds[0] = E_PAUSE_OPTIONS_VIEW_EVENT;
             liOptionIndex     = 1;
         }
 
-        if (mpGuiCache->meOnlineGameMode
+        if (mpGuiCache->GetOnlineGameModeOptions()->meGameMode
                 == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_ROAD_RAGE)
         {
             lau64OptionIds[liOptionIndex] = E_PAUSE_OPTIONS_CHANGE_TEAMS;
@@ -3313,7 +3302,7 @@ namespace BrnGui
         if (mpGuiCache->mbIsOnlineHost
             && !BrnGameState::GameStateModuleIO::IsOnlineFreeBurnLobby(
                    static_cast<BrnGameState::GameStateModuleIO::EGameModeType>(
-                       mpGuiCache->meOnlineGameMode)))
+                       mpGuiCache->GetOnlineGameModeOptions()->meGameMode)))
         {
             lau64OptionIds[liOptionIndex] = E_PAUSE_OPTIONS_CANCEL_EVENT;
             ++liOptionIndex;
@@ -3329,7 +3318,7 @@ namespace BrnGui
             ++liOptionIndex;
         }
 
-        if (mpGuiCache->mbIsOnlineHost && !mpGuiCache->mbOnlineRanked)
+        if (mpGuiCache->mbIsOnlineHost && !mpGuiCache->GetOnlineGameModeOptions()->mbRanked)
         {
             lau64OptionIds[liOptionIndex] = E_PAUSE_OPTIONS_CHANGE_SECURITY;
             ++liOptionIndex;
@@ -3375,7 +3364,7 @@ namespace BrnGui
         u64 lau64OptionIds[KI_MAX_PAUSE_OPTIONS];
         s32 liOptionIndex = 0;
 
-        switch (mpGuiCache->meOnlineSecurity)
+        switch (mpGuiCache->GetOnlineGameModeOptions()->meSecurity)
         {
         case KI_SECURITY_PUBLIC:
             lau64OptionIds[0] = E_PAUSE_OPTIONS_SECURITY_FRIENDS_ONLY;
@@ -3396,7 +3385,7 @@ namespace BrnGui
             break;
 
         default:
-            // cpp:3167. The X360 streams "Unknown security value of " << meOnlineSecurity
+            // cpp:3167. The X360 streams "Unknown security value of " << meSecurity
             // << "\n" into CgsDev::Assert::gpcMessageBuffer before FireAssert; modelled
             // through CGS_ASSERT per this tree's assert-machinery convention (the live
             // value is not re-streamed). No ids are written on this path.
@@ -3637,7 +3626,7 @@ namespace BrnGui
             // cpp:3987. Inlined by the X360 into the 15/16 compare pair at 0x824A5FF4.
             CGS_ASSERT(!BrnGameState::GameStateModuleIO::IsOnlineFreeBurnLobby(
                            static_cast<BrnGameState::GameStateModuleIO::EGameModeType>(
-                               mpGuiCache->meOnlineGameMode)),
+                               mpGuiCache->GetOnlineGameModeOptions()->meGameMode)),
                        "!GsmIO::IsOnlineFreeBurnLobby(mpGuiCache->GetOnlineGameModeOptions()->meGameMode)");
 
             PostCommand16<KI_EVENT_LAUNCH_ONLINE_GAME>(mpStateInterface);
@@ -3649,7 +3638,7 @@ namespace BrnGui
             break;
 
         case KI_PAUSE_OPTION_CHANGE_TEAMS:
-            if (mpGuiCache->meOnlineGameMode == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_ROAD_RAGE)
+            if (mpGuiCache->GetOnlineGameModeOptions()->meGameMode == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_ROAD_RAGE)
             {
                 PostCommand16<KI_EVENT_CHANGE_TEAMS>(mpStateInterface);
             }
@@ -3681,8 +3670,7 @@ namespace BrnGui
                 // lobby -- i.e. cancel the pending event and return the room to the lobby.
                 GuiEventNetworkGameParams lParams;
                 memcpy(&lParams,
-                       reinterpret_cast<const GuiEventNetworkGameParams*>(
-                           &mpGuiCache->maOnlineGameModeOptionsStorage[0]),
+                       mpGuiCache->GetOnlineGameModeOptions(),
                        sizeof(lParams));   // X360 size 0x1E0 == the whole cache mirror
 
                 lParams.meGameMode = BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY;
@@ -3705,8 +3693,7 @@ namespace BrnGui
             {
                 GuiEventNetworkGameParams lParams;
                 memcpy(&lParams,
-                       reinterpret_cast<const GuiEventNetworkGameParams*>(
-                           &mpGuiCache->maOnlineGameModeOptionsStorage[0]),
+                       mpGuiCache->GetOnlineGameModeOptions(),
                        sizeof(lParams));
 
                 lParams.meSecurity = KI_GAME_SECURITY_ALLCOMERS;
@@ -3718,8 +3705,7 @@ namespace BrnGui
             {
                 GuiEventNetworkGameParams lParams;
                 memcpy(&lParams,
-                       reinterpret_cast<const GuiEventNetworkGameParams*>(
-                           &mpGuiCache->maOnlineGameModeOptionsStorage[0]),
+                       mpGuiCache->GetOnlineGameModeOptions(),
                        sizeof(lParams));
 
                 lParams.meSecurity = KI_GAME_SECURITY_FRIENDS_ONLY;
@@ -3731,8 +3717,7 @@ namespace BrnGui
             {
                 GuiEventNetworkGameParams lParams;
                 memcpy(&lParams,
-                       reinterpret_cast<const GuiEventNetworkGameParams*>(
-                           &mpGuiCache->maOnlineGameModeOptionsStorage[0]),
+                       mpGuiCache->GetOnlineGameModeOptions(),
                        sizeof(lParams));
 
                 lParams.meSecurity = KI_GAME_SECURITY_INVITE_ONLY;
@@ -4392,10 +4377,10 @@ namespace BrnGui
 //   this+75684 -> mPlayerStatsDisplay.meState (GuiNetworkPlayerStats +0x11E4)
 //   this+84312 -> mRouteInfoDisplay.meState   (GuiNetworkRouteInfo   +0x21A8)
 // and on the cache side:
-//   cache+0xB650 -> maLobbyPlayerInfo[i].mPlayerID (row stride 56 == the committed
+//   cache+0xB650 -> mLobbyPlayerInfoList.maPlayerLobbyInfo[i].mPlayerID (row stride 56 == the committed
 //                   pointer-free sizeof(LobbyPlayerStatusData), so the console stride
 //                   IS the host stride; the row is still reached by NAMED array index)
-//   cache+0xA9DF -> mbOnlineRanked
+//   cache+0xA9DF -> mGameOptions.mbRanked
 //
 // OUT-QUEUE RECORDS. The X360 reaches the overlay wires two ways -- by inlining
 // CgsGui::StateInterface::OutputGuiEvent<T> (the construct-then-memcpy pairs at
@@ -4456,15 +4441,6 @@ namespace BrnGui
             s32 miResult;        // +0x00  (0 == launched OK)
         };
 
-        // Event 320 ("player stats"): a whole cached stats record followed by the player
-        // it belongs to and the stat value to display. The X360 reads +0x84 / +0x88,
-        // which is exactly this member order past the 132-byte pointer-free record.
-        struct GuiEventPlayerStatsPayload : public CgsModule::Event
-        {
-            BrnNetwork::NetworkPlayerStats mStats;      // +0x00  (132 bytes)
-            s32                            miPlayerId;  // +0x84
-            s32                            miValue;     // +0x88
-        };
 
         // ---- out-queue wire records ------------------------------------------------
 
@@ -4632,31 +4608,33 @@ namespace BrnGui
     // only while it still belongs to the player the list is highlighting.
     void OnlineGameRoomPlayerInfo::HandlePlayerStatsEvent(const CgsModule::Event* lpPlayerStatsEvent)
     {
-        // cpp:2648 -- streamed into the assert buffer by the X360.
         CGS_ASSERT(lpPlayerStatsEvent != 0,
-                   "Invalid event sent to OnlineGameRoomPlayerInfo::HandlePlayerStatsEvent");
+                   CGS_ASSERT_STREAM_MESSAGE_AT(
+                       "Invalid event sent to OnlineGameRoomPlayerInfo::HandlePlayerStatsEvent",
+                       CGS_ARTIST_FILE, 2648));
 
-        const GuiEventPlayerStatsPayload* lpPayload =
-            reinterpret_cast<const GuiEventPlayerStatsPayload*>(lpPlayerStatsEvent);
+        const GuiEventNetworkPlayerStats* lpPayload =
+            reinterpret_cast<const GuiEventNetworkPlayerStats*>(lpPlayerStatsEvent);
 
-        if (mpGuiCache != 0 &&
-            lpPayload->miPlayerId ==
-                reinterpret_cast<const BrnNetwork::BrnNetworkModuleIO::LobbyPlayerStatusData*>(
-                    mpGuiCache->maLobbyPlayerInfo[mPlayerNameComponent.miHighlightedIndex])->mPlayerID)
+        GuiCache* lpGuiCache = mpGuiCache;
+        if (lpGuiCache != 0 &&
+            lpPayload->mPlayerID ==
+                lpGuiCache->GetLobbyPlayerList()->maPlayerLobbyInfo[mPlayerNameComponent.GetHighlightedIndex()].mPlayerID)
         {
-            const s32 liHighlightedIndex = mPlayerNameComponent.miHighlightedIndex;
+            const s32 liHighlightedIndex = mPlayerNameComponent.GetHighlightedIndex();
 
+            const GuiEventNetworkGameParams* lpOptions = lpGuiCache->GetOnlineGameModeOptions();
             const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayerInfo =
-                mpGuiCache->GetOnlinePlayerInfoByIndex(liHighlightedIndex);
+                lpGuiCache->GetOnlinePlayerInfoByIndex(liHighlightedIndex);
 
             // Name from the in-game record (+256), the event's value and its stats block,
             // the highlighted row as the player image index, and the world-rank column
             // gated on the cached game params' "ranked" flag.
             mPlayerStatsDisplay.SetInfo(lpPlayerInfo->mPlayerName.macName,
-                                        lpPayload->miValue,
-                                        &lpPayload->mStats,
+                                        lpPayload->miWorldRank,
+                                        lpPayload,
                                         liHighlightedIndex,
-                                        mpGuiCache->mbOnlineRanked,
+                                        lpOptions->mbRanked,
                                         mpGuiCache);
         }
     }
@@ -5863,8 +5841,7 @@ namespace BrnGui
                         BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY)
                     {
                         GuiEventNetworkGameParams lGameOptions =
-                            *reinterpret_cast<const GuiEventNetworkGameParams*>(
-                                mpGuiCache->maOnlineGameModeOptionsStorage);
+                            *mpGuiCache->GetOnlineGameModeOptions();
                         lGameOptions.meGameMode =
                             BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY;
                         OutputGuiEventRecord(mpStateInterface, lGameOptions);

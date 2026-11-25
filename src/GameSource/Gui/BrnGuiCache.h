@@ -26,6 +26,7 @@
 // them (transitively) includes BrnGuiCache.h.
 #include "GameSource/Gui/Flow/HUD/Components/BrnInGameMessagesComponent.h" // BrnGui::InGameMessagesQueue (by value)
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"   // CgsNumeric::Random (by value: mRandom)
+#include "GameSource/Gui/Events/BrnGuiEventNetworkGameParams.h"
 #include "GameSource/Gui/Events/BrnGuiEventOnlinePostEvent.h" // BrnGui::GuiEventOnlinePostEvent (by value: mOnlinePostEventData)
 
 // [friends wave] forward declaration for the +0xB868 branch-mirror friendship
@@ -476,7 +477,7 @@ namespace BrnGui
         // car-selection path on it (X360 lwzx r,this,0xA9C8, compared == 1). Exposed by name as the
         // raw state word carved into the layout below. FLAG: consumer-named (no standalone DWARF
         // symbol for this member). Body links from the GuiCache TU.
-        s32 GetOnlineHostGameState() const { return miOnlineHostGameState; }   // X360 far member @0xA9C8
+        s32 GetOnlineHostGameState() const { return mGameOptions.meVehicleChoice; }   // X360 far member @0xA9C8
 
         // ADDITIVE GROW (BrnOnlinePreEventMessages TU): the cache holds the active game-mode
         // type the GUI reads to pick mode-specific apt key-frames (the X360 reads it as a far
@@ -1067,7 +1068,10 @@ namespace BrnGui
         // `*(mpGuiCache + 43008 + 440)`, i.e. the meGameMode slot of the +0xA800 mirror, and
         // refuses to paint in modes 12 and 17). Header-inline, matching the raw far-member
         // load the X360 emits.
-        s32 GetOnlineGameMode() const { return meOnlineGameMode; }
+        const GuiEventNetworkLobbyPlayerList* GetLobbyPlayerList() const { return &mLobbyPlayerInfoList; }
+        s32 GetOnlineGameMode() const { return mGameOptions.meGameMode; }
+        GuiEventNetworkGameParams* GetOnlineGameModeOptions() { return &mGameOptions; }
+        const GuiEventNetworkGameParams* GetOnlineGameModeOptions() const { return &mGameOptions; }
 
         // IsLocalPlayerHost / GetOnlineGameName: header-inline reads of the two members
         // RecEvent's id-245 arm writes (the far-member `lbzx +0xB864` idiom at every reader).
@@ -1239,7 +1243,7 @@ namespace BrnGui
         BrnGameState::LandmarkIndex
             GetEventFinishLandmark() const;         // X360 @0x824EC610 (maCheckpointLandmarks[count-1]; see the array's note)
         BrnGameState::LandmarkIndex
-            GetOnlineLandmarkIndex(u32 luCheckpointIndex) const; // X360 @0x8240FB50 (miOnlineRoundIndex @0xA7FC + maOnlineGameModeOptions @0xA800)
+            GetOnlineLandmarkIndex(s32 liCheckpointIndex) const; // X360 @0x8240FB50 (miOnlineRoundIndex @0xA7FC + maOnlineGameModeOptions @0xA800)
 
         // --- race-car info block (ARCI-indexed, mRaceCarInfo SoA @0xA020..) ---
         const Vector4& GetRaceCarPosition(EActiveRaceCarIndex leActiveRaceCarIndex) const; // X360 @0x82443750 (maRaceCarPositions @0xA020)
@@ -2094,31 +2098,9 @@ namespace BrnGui
         CgsLanguage::ELanguage mLanguage;               // ARTIST +0xA7F8, DecFIGS h:1794
         // ---- online game-mode-options (round-indexed) ----
         s32 miOnlineRoundIndex;                          // +0xA7FC (43004) GetOnlineRoundIndex (GetOnlineLandmarkIndex @0x8240FB50), < KU_MAX_ONLINE_ROUNDS_IN_MODE
-        // The +0xA800 span is the cached GuiEventNetworkGameParams PAYLOAD MIRROR:
-        // OnlineGameRoomPlayerInfo::HandleGameParamsChangedEvent @0x824A52F8 memcpy's
-        // the whole 480-byte params payload to cache+0xA800, so +0xA800..+0xA9DF has
-        // exactly the GuiEventNetworkGameParams field layout (maEvents[10] stride 44,
-        // then the scalar tail -- see GameSource/Gui/Events/BrnGuiEventNetworkGameParams.h).
-        u8  maOnlineGameModeOptionsStorage[10 * 44];     // +0xA800 (43008) GetOnlineGameModeOptions[] (stride 44, 10 rounds; GetOnlineLandmarkIndex indexes 44*round+43008)
-        // ADDITIVE CARVE (OnlineGameRoomPlayerInfo keystone, wave H): the params-mirror
-        // scalar tail, named per the GuiEventNetworkGameParams DWARF field row.
-        s32 meOnlineGameMode;                            // +0xA9B8 (43448) GsmIO::EGameModeType (params.meGameMode; 15/16 == IsOnlineFreeBurnLobby)
-        s32 meOnlinePreviousGameMode;                    // +0xA9BC (43452) params.mePreviousGameMode
-        s32 meOnlineSecurity;                            // +0xA9C0 (43456) BrnNetwork::EBrnGameSecurity (params.meSecurity; 0 public / 1 private / 2 closed)
-        s32 meOnlineBoostType;                           // +0xA9C4 (43460) params.meBoostType
-        // ADDITIVE GROW (BrnCarSelectOnlineEnd TU): the online-host-game state word (== 1 when the
-        // local client is the online host). FLAG: consumer-named -- structurally this word is the
-        // params mirror's meVehicleChoice slot (see the carve above); MERGE RECONCILE PENDING with
-        // that TU when it is next touched (same discipline as the +0x4B4F dual claim).
-        s32 miOnlineHostGameState;                       // +0xA9C8 (43464) (params.meVehicleChoice slot)
-        s32 miOnlineTimeLimit;                           // +0xA9CC (43468) params.miTimeLimit
-        s32 miOnlineNumRounds;                           // +0xA9D0 (43472) params.miNumRounds (the game-room route/round scroll bound)
-        s32 miOnlineVehicleClass;                        // +0xA9D4 (43476) params.miVehicleClass
-        s32 miOnlineNumRunnerCrashes;                    // +0xA9D8 (43480) params.miNumRunnerCrashes
-        bool mbOnlineInfiniteBoost;                      // +0xA9DC (43484) params.mbInfiniteBoost
-        bool mbOnlineTrafficOn;                          // +0xA9DD (43485) params.mbTrafficOn
-        bool mbOnlineTrafficCheckingOn;                  // +0xA9DE (43486) params.mbTrafficCheckingOn
-        bool mbOnlineRanked;                             // +0xA9DF (43487) params.mbRanked (lbzx @0x8248C184; gates the security pause option + world-rank display)
+        // ARTIST +0xA800 stores the ten-round payload through +0xA9DF.
+        // DecFIGS BrnGuiCache.h:1802 declares the cached owner.
+        GuiEventNetworkGameParams mGameOptions;
         // ADDITIVE CARVE (OnlineGameOptions wave I): the byte right after the params
         // mirror. OnlineGameOptions::HandleGuiCacheEvent (@0x824A85E8, lbzx cache+0xA9E0)
         // tests it (OR meOnlineGameMode == 15) to publish the id-409 refresh record on
@@ -2186,13 +2168,8 @@ namespace BrnGui
         // Row fields the game-room screen reads: mPlayerID @row+16, meReadyStatus
         // @row+20, mePlayerTeam @row+24, meGameConnectionType @row+28,
         // meVoipConnectionType @row+32, mbLocalPlayer @row+48.
-        u8  maLobbyPlayerInfo[8][56];                    // +0xB640 (46656) LobbyPlayerStatusData maLobbyPlayerInfo[8] (stride 56)
-        // The rest of the 456-byte GuiEventNetworkLobbyPlayerList record that RecEvent's id-244
-        // arm copies over +0xB640 in one memcpy: the record's player count (the bridge writes it
-        // at record +0x1C0) and its 4-byte tail. FLAG: named after that producer. The live
-        // count the game-room screen loops with is still muNumActivePlayers (+0xAC74).
-        s32 miLobbyNumPlayers;                           // +0xB800 (47104) RecEvent 244
-        u8  mPad_B804[4];                                // +0xB804..+0xB807 (RecEvent 244 record tail)
+        // DecFIGS BrnGuiCache.h:1837. ARTIST event 244 copies this payload at +0xB640.
+        GuiEventNetworkLobbyPlayerList mLobbyPlayerInfoList;
         s32 maCurrentPlayerTeam[8];                      // +0xB808 (47112) GetCurrentOnlinePlayerTeam @0x8240F910 (4*(idx+11778)+this; GsmIO::EPlayerTeam)
         // macOnlineGameName[36] (after maeCurrentPlayerTeam in the reference). RecEvent's id-245 arm
         // copies the status record's game name here (the inlined StrCpy: "String too long: "

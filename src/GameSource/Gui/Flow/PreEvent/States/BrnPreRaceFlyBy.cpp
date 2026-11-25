@@ -1959,9 +1959,9 @@ void PreRaceFlyByState::SetBurningRouteDescription()
     // The route's target time is rendered as a clock by the language manager. PPC float
     // ABI: the time travels in f1 and SKIPS its GPR slot, so the console's r6 (128) is the
     // buffer size, not a fourth argument -- matching the committed
-    // LanguageManager::FormatMinutesSecondsStringMediumText(char*, f32, s32) const.
+    // LanguageManager::FormatMinutesSecondsStringMediumText(CgsUnicode::CgsUtf8*, f32, s32) const.
     mpStateInterface->GetLanguageManager()->FormatMinutesSecondsStringMediumText(
-        lacBuffer, mpGuiCache->GetTargetTimeInEvent(),
+        reinterpret_cast<CgsUnicode::CgsUtf8*>(lacBuffer), mpGuiCache->GetTargetTimeInEvent(),
         static_cast<s32>(KU_DESCRIPTION_BUFFER_LEN));
     maEventDescriptionText[2].SetLocalisedText("PRE_BURNINGROUTE_PART3", LM::E_FORMAT_ID_LOOKUP, 1,
                                                lacBuffer, LM::E_FORMAT_TEXT);
@@ -2274,7 +2274,7 @@ namespace
 //  * FormatMinutesSecondsStringMediumText's PPC argument slots are r3 (this), r4 (the
 //    buffer), f1 (the time) and r6 (128): the float travels in an FPR and SKIPS r5, so
 //    r6 is the buffer size, not a fourth argument. That matches the committed
-//    LanguageManager::FormatMinutesSecondsStringMediumText(char*, f32, s32) const.
+//    LanguageManager::FormatMinutesSecondsStringMediumText(CgsUnicode::CgsUtf8*, f32, s32) const.
 //  * PART2's PARAMETER format is 0 == E_FORMAT_TEXT (`li r8, 0` at 0x824C7330) -- the
 //    string is already formatted -- while the source id itself still resolves under 9.
 //    That single immediate is the only shape difference from line 1.
@@ -2309,7 +2309,7 @@ void PreRaceFlyByState::SetFreestyleDescription()
         CgsLanguage::LanguageManager::E_FORMAT_INTEGER);
 
     mpStateInterface->GetLanguageManager()->FormatMinutesSecondsStringMediumText(
-        lacParameterText, mpGuiCache->GetTargetTimeInEvent(),
+        reinterpret_cast<CgsUnicode::CgsUtf8*>(lacParameterText), mpGuiCache->GetTargetTimeInEvent(),
         static_cast<s32>(sizeof(lacParameterText)));
 
     maEventDescriptionText[1].SetLocalisedText(

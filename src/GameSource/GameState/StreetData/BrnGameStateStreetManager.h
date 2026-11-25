@@ -49,6 +49,7 @@
 
 // ---- pointer-only / declaration-only dependencies -------------------------
 namespace BrnProgression { class ProgressionManager; }
+namespace BrnNetwork { class RoadRulesMessageData; }
 namespace BrnAI
 {
     struct AISectionsData;   // SharedClasses/AI/AISectionsResourceType.h (full def for the ResourcePtr<T> template param; fwd ok -- only named, never sized here)
@@ -467,16 +468,12 @@ namespace BrnGameState
         // CheckForSpecialCarUnlocks). DWARF :705.
         void UpdateTrophyUnlockOnRoadRuleWin( BrnStreetData::ScoreType leScoreType );
 
-        // Committed static factories (X360 COMDAT names; see the committed .cpp).
-        static BrnStreetData::ChallengeHighScoreEntry* CreateHighScoreEntryFromDown(
-            BrnStreetData::ChallengeHighScoreEntry* lpEntry,
-            int                                     liUnused,
-            const CgsNetwork::PlayerName*           lpPlayerNames,
-            const int32_t*                          lpScores );
-        static BrnStreetData::ChallengePlayerScoreEntry* CreateUserChallengeScoreFr(
-            BrnStreetData::ChallengePlayerScoreEntry* lpEntry,
-            int                                       liUnused,
-            const int32_t*                            lpScores );
+        // Native record-returning factories (ARTIST 0x82324A28 and 0x82324AC0).
+        BrnStreetData::ChallengeHighScoreEntry CreateHighScoreEntryFromDownloadData(
+            const CgsNetwork::PlayerName* lpPlayerNames,
+            const BrnNetwork::RoadRulesMessageData* lpRoadRulesData );
+        BrnStreetData::ChallengePlayerScoreEntry CreateUserChallengeScoreFromRoadRulesData(
+            const BrnNetwork::RoadRulesMessageData* lpRoadRulesData );
 
     private:
         // ---- upcoming-streets pipeline (this wave) ------------------------------

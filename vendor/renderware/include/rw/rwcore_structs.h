@@ -255,7 +255,8 @@ struct LinearResourceAllocator : IResourceAllocator {  // ARTIST object size 0x9
     // ARTIST 0x82BBCD90 / 0x82BBCE30 reserve the aligned allocator object in lane
     // zero, then placement-construct it with the adjusted heap bases and original
     // capacity. Both routines reserve 0x94 bytes before applying alignment.
-    static ResourceDescriptor* GetResourceDescriptor(ResourceDescriptor* lpOut, const ResourceDescriptor* lpIn);
+    // The returned descriptor carries the backing size including the object reserve.
+    static ResourceDescriptor GetResourceDescriptor(const ResourceDescriptor& lrCapacity);
     static LinearResourceAllocator* Initialize(const Resource& lrResource, const ResourceDescriptor& lrCapacity);
     const Resource& GetLinearHeapBase() const;
     ResourceDescriptor GetCapacity() const;

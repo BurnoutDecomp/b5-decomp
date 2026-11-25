@@ -207,10 +207,6 @@ namespace Deformation
     // 8-byte width is corroboration, not assumption: it is the SAME `stdx` pairing that settled
     // both handles' widths on the PhysicsModule side.
     // -----------------------------------------------------------------------------------
-    void DeformationManager::SetWorldBodyId(CgsPhysics::RigidBodyId lWorldRigidBodyId)
-    {
-        mWorldRigidBodyId = lWorldRigidBodyId;
-    }
 
     // -----------------------------------------------------------------------------------
     // Prepare  @0x82630230

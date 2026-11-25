@@ -307,7 +307,7 @@ namespace BrnResource
         mGlobalGraphicsMemoryDescriptor.m_baseResourceDescriptors[2].m_size = 0x1D00000;
         mGlobalGraphicsMemoryDescriptor.m_baseResourceDescriptors[2].m_alignment = 4096;
         rw::ResourceDescriptor lDescriptor;
-        rw::LinearResourceAllocator::GetResourceDescriptor(&lDescriptor, &mGlobalGraphicsMemoryDescriptor);
+        lDescriptor = rw::LinearResourceAllocator::GetResourceDescriptor(mGlobalGraphicsMemoryDescriptor);
         mGlobalGraphicsMemory.m_baseResources[0] = XPhysicalAlloc(
             lDescriptor.m_baseResourceDescriptors[0].m_size, 0xFFFFFFFFUL, 4096, 0x20000004UL);
         mGlobalGraphicsMemory.m_baseResources[2] = XPhysicalAlloc(
@@ -428,7 +428,8 @@ namespace BrnResource
         mGlobalSystemMemoryDescriptor.m_baseResourceDescriptors[0].m_alignment = 0x10000;
         mGlobalSystemMemoryDescriptor.m_baseResourceDescriptors[2].m_size = 0;
         mGlobalSystemMemoryDescriptor.m_baseResourceDescriptors[2].m_alignment = 0x10000;
-        rw::ResourceDescriptor lDescriptor =
+        rw::ResourceDescriptor lDescriptor;
+        lDescriptor =
             rw::core::GeneralResourceAllocator::GetResourceDescriptor(mGlobalSystemMemoryDescriptor);
         mGlobalSystemMemory.m_baseResources[0] = XPhysicalAlloc(
             lDescriptor.m_baseResourceDescriptors[0].m_size, MAXULONG_PTR, 0x10000, 0x20000004);
@@ -444,7 +445,8 @@ namespace BrnResource
         mGlobalDebugMemoryDescriptor.m_baseResourceDescriptors[0].m_alignment = 0x10000;
         mGlobalDebugMemoryDescriptor.m_baseResourceDescriptors[2].m_size = 0x100000;
         mGlobalDebugMemoryDescriptor.m_baseResourceDescriptors[2].m_alignment = 0x10000;
-        rw::ResourceDescriptor lDescriptor =
+        rw::ResourceDescriptor lDescriptor;
+        lDescriptor =
             rw::core::GeneralResourceAllocator::GetResourceDescriptor(mGlobalDebugMemoryDescriptor);
         mGlobalDebugMemory.m_baseResources[0] = XPhysicalAlloc(
             lDescriptor.m_baseResourceDescriptors[0].m_size, MAXULONG_PTR, 0x10000, 0x20000004);
@@ -460,12 +462,14 @@ namespace BrnResource
     // allocations use128KiB alignment while the descriptors retain64KiB.
     void Allocators::ConstructGlobalResourceMemory(const CgsMemory::MemoryBank::Params* lpRootBankParams)
     {
-        mGlobalResourceMemoryDescriptor.m_baseResourceDescriptors[0].m_size = lpRootBankParams->mauBankSize[0] + 0xFC0000;
+        const u32 luPhysicalSize = lpRootBankParams->mauBankSize[2] + 0x200000;
+        const u32 luSystemSize = lpRootBankParams->mauBankSize[0] + 0xFC0000;
+        mGlobalResourceMemoryDescriptor.m_baseResourceDescriptors[0].m_size = luSystemSize;
         mGlobalResourceMemoryDescriptor.m_baseResourceDescriptors[0].m_alignment = 0x10000;
-        mGlobalResourceMemoryDescriptor.m_baseResourceDescriptors[2].m_size = lpRootBankParams->mauBankSize[2] + 0x200000;
         mGlobalResourceMemoryDescriptor.m_baseResourceDescriptors[2].m_alignment = 0x10000;
+        mGlobalResourceMemoryDescriptor.m_baseResourceDescriptors[2].m_size = luPhysicalSize;
         rw::ResourceDescriptor lDescriptor;
-        rw::LinearResourceAllocator::GetResourceDescriptor(&lDescriptor, &mGlobalResourceMemoryDescriptor);
+        lDescriptor = rw::LinearResourceAllocator::GetResourceDescriptor(mGlobalResourceMemoryDescriptor);
         mGlobalResourceMemory.m_baseResources[0] = XPhysicalAlloc(
             lDescriptor.m_baseResourceDescriptors[0].m_size, MAXULONG_PTR, 0x20000, 0x20000004);
         mGlobalResourceMemory.m_baseResources[2] = XPhysicalAlloc(
@@ -502,12 +506,13 @@ namespace BrnResource
         lTextureCapacity.m_baseResourceDescriptors[0].m_alignment = 0x10000;
         lTextureCapacity.m_baseResourceDescriptors[2].m_size = 0x300000;
         lTextureCapacity.m_baseResourceDescriptors[2].m_alignment = 0x10000;
-        rw::LinearResourceAllocator::GetResourceDescriptor(&lDescriptor, &lTextureCapacity);
+        rw::ResourceDescriptor lTextureDescriptor;
+        lTextureDescriptor = rw::LinearResourceAllocator::GetResourceDescriptor(lTextureCapacity);
         rw::Resource lTextureMemory;
         lTextureMemory.m_baseResources[0] = XPhysicalAlloc(
-            lDescriptor.m_baseResourceDescriptors[0].m_size, MAXULONG_PTR, 0x10000, 0x20000004);
+            lTextureDescriptor.m_baseResourceDescriptors[0].m_size, MAXULONG_PTR, 0x10000, 0x20000004);
         lTextureMemory.m_baseResources[2] = XPhysicalAlloc(
-            lDescriptor.m_baseResourceDescriptors[2].m_size, MAXULONG_PTR, 0x10000, 0x20000004);
+            lTextureDescriptor.m_baseResourceDescriptors[2].m_size, MAXULONG_PTR, 0x10000, 0x20000004);
         mEmbeddedTextureAllocator.Construct(rw::LinearResourceAllocator::Initialize(
             lTextureMemory, lTextureCapacity), 0);
     }

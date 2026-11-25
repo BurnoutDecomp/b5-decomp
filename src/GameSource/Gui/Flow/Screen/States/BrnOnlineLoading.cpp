@@ -122,11 +122,7 @@ namespace BrnGui
         };
 
         // Event 244: the eight lobby rows then the player count (+0x1C0).
-        struct LobbyPlayerListPayload
-        {
-            BrnNetwork::BrnNetworkModuleIO::LobbyPlayerStatusData maPlayerLobbyInfo[8];   // +0x000
-            s32 miNumberOfPlayers;                                                       // +0x1C0
-        };
+
 
         // ---- out-queue wire records ------------------------------------------------------
         // { 1, N, 12, <one byte> }, channel 40, 16 bytes: the one-byte command records. The
@@ -180,7 +176,6 @@ namespace BrnGui
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiAudioTriggerEvent>) == 112), "audio trigger record is 112 bytes");
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiOverlayRequest>) == 304), "overlay request record is 304 bytes");
         CGS_STATIC_ASSERT((sizeof(GuiEventNetworkLobbyPlayerList) == 0x1C8), "the roster is 456 bytes");
-        CGS_STATIC_ASSERT((sizeof(LobbyPlayerListPayload) <= 0x1C8), "the roster view fits the roster");
 
         // Publish one payload through OutputGuiEvent (channel 40), which takes the event by
         // non-const reference: the boxed copy is the record ARTIST builds inline.
@@ -443,7 +438,7 @@ namespace BrnGui
     void OnlineLoading::SetupGameModeInfo()
     {
         const GuiEventNetworkGameParams* lpParams =
-            reinterpret_cast<const GuiEventNetworkGameParams*>(mpGuiCache->maOnlineGameModeOptionsStorage);
+            mpGuiCache->GetOnlineGameModeOptions();
         CGS_ASSERT(lpParams != 0, CGS_ASSERT_MESSAGE_AT("lpParams", CGS_ARTIST_FILE, 680 /* ARTIST 0x82485634 */));
 
         const char* lpacChevronsState = 0;
@@ -503,8 +498,6 @@ namespace BrnGui
     {
         CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
 
-        const LobbyPlayerListPayload* lpLobbyList =
-            reinterpret_cast<const LobbyPlayerListPayload*>(&mLobbyPlayerInfoList);
 
         for (s32 liPlayerInfoIndex = 0; liPlayerInfoIndex < KI_MAX_PLAYERS; ++liPlayerInfoIndex)
         {
@@ -518,7 +511,7 @@ namespace BrnGui
             }
 
             CGS_ASSERT(lpPlayerInfo->mNetworkPlayerID ==
-                           lpLobbyList->maPlayerLobbyInfo[liPlayerInfoIndex].mPlayerID,
+                           mLobbyPlayerInfoList.maPlayerLobbyInfo[liPlayerInfoIndex].mPlayerID,
                        "lpPlayerInfo->mNetworkPlayerID == mLobbyPlayerInfoList.maPlayerLobbyInfo"
                        "[ liPlayerInfoIndex ].mPlayerID");
             CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
@@ -529,7 +522,7 @@ namespace BrnGui
                 BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FREE_BURN)
             {
                 leTeam = static_cast<BrnGameState::GameStateModuleIO::EPlayerTeam>(
-                    lpLobbyList->maPlayerLobbyInfo[liPlayerInfoIndex].mePlayerTeam);
+                    mLobbyPlayerInfoList.maPlayerLobbyInfo[liPlayerInfoIndex].mePlayerTeam);
             }
 
             OnlineLoadingPlayer& lrPlayer = maPlayer[liPlayerInfoIndex];
@@ -598,12 +591,10 @@ namespace BrnGui
 
         std::memcpy(&mLobbyPlayerInfoList, lpEvent, sizeof(mLobbyPlayerInfoList));
 
-        const LobbyPlayerListPayload* lpLobbyList =
-            reinterpret_cast<const LobbyPlayerListPayload*>(&mLobbyPlayerInfoList);
         if (meSubState != E_SUBSTATE_LOADING_SCREEN
             && meSubState != E_SUBSTATE_LOADING_COMPONENTS
             && meSubState != E_SUBSTATE_LOADING_ROUTE_INFO
-            && lpLobbyList->miNumberOfPlayers > 0)
+            && mLobbyPlayerInfoList.miNumberOfPlayers > 0)
         {
             UpdatePlayerList();
         }

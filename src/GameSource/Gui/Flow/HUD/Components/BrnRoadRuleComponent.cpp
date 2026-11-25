@@ -438,7 +438,7 @@ void RoadRuleComponent::Update(f32 lfTimeStep)
             const s32 liScore = static_cast<s32>(mfCurrentCrashScore);   // fctiwz
             char lacCurrency[64];
             CgsLanguage::LanguageManager* lpLanguageManager = mpStateInterface->GetLanguageManager();
-            lpLanguageManager->FormatCurrencyString(lacCurrency, liScore, 32);
+            lpLanguageManager->FormatCurrencyString(reinterpret_cast<CgsUnicode::CgsUtf8*>(lacCurrency), liScore, 32);
 
             char lacText[32];
             if (miCrashMultiplier > 1)

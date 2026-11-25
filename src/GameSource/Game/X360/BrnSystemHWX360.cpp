@@ -4,7 +4,8 @@
 #include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h" // AllocatorList
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"     // CgsMemory::HeapMalloc
 #define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\X360/BrnSystemHWX360.cpp"
-#include <cstring>   // strrchr, strlen
+#define CGS_ARTIST_SYSTEMHW_HEADER "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\game\\..\\X360\\BrnSystemHWX360.h"
+#include <cstring>   // strcpy, strlen, strrchr
 
 // Reconstructed store-for-store from BURNOUT_X360_ARTIST.XEX:
 //   BrnHW::operator++(System360HW::EPrepareStage&, int)  @ 0x823A8A18
@@ -31,9 +32,6 @@ static const unsigned int KU_CONTROLFP_MASK_B     = 0x03000000u;
 // XGetLaunchData fills the typed mLaunchData subobject (dwBufferSize literal).
 static const unsigned int KU_LAUNCHDATA_SIZE = 0x98u;
 
-// CgsStringUtils.h:65 caps the launched command line at 64 bytes (the `>= 0x40` test).
-static const int KI_COMMANDLINE_BUFFER_SIZE = 64;
-
 // The Massive heap allocator carved from the game-data bank registry. In the X360 it is
 // a single .data global (spHeapMalloc) shared between this prepare path and the Massive
 // custom heap hooks (System360HWMassive::BurnoutMassiveMalloc/Free); it is therefore
@@ -44,53 +42,28 @@ static const s32 KI_MASSIVE_HEAP_BANK_ID = 0x3F;
 
 namespace BrnHW
 {
-    // ---- postfix increment for the single-step prepare/release state machine -------
-    // It advances the stage by one and asserts the result has not run past the final
-    // stage, then returns the pre-increment value (postfix semantics).
-    System360HW::EPrepareStage operator++(System360HW::EPrepareStage& reStage, int)
-    {
-        System360HW::EPrepareStage lePrevious = reStage;
-        reStage = static_cast<System360HW::EPrepareStage>(reStage + 1);
-        CGS_ASSERT(reStage <= System360HW::E_PREPARESTAGE_DONE,
-            CGS_ASSERT_MESSAGE_AT(
-                "leEnumIndex <= System360HW::E_PREPARESTAGE_DONE",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\game\\..\\X360\\BrnSystemHWX360.h", 132 /* ARTIST 0x823A8A44 */));
-        return lePrevious;
-    }
-
     // ---- BrnHW::System360HW::Prepare @ 0x823AAE10 ----------------------------------
     // First call (stage START): set the FPU control word, snapshot the launch command
     // line into the object, load the launch data, advance the prepare stage and reset
     // the release stage. Second call (stage DONE): no-op. Any other stage: assert.
     bool System360HW::Prepare()
     {
-        if (mePrepareStage == E_PREPARESTAGE_START)
+        switch (mePrepareStage)
+        {
+        case E_PREPARESTAGE_START:
         {
             _controlfp(KU_CONTROLFP_NEWVALUE_A, KU_CONTROLFP_MASK_A);
             _controlfp(KU_CONTROLFP_NEWVALUE_B, KU_CONTROLFP_MASK_B);
 
             const char* lpcCommandLine = GetCommandLineA() + 1;
+            // ARTIST 0x823AAE80..0x823AAFF8 inlines the string copy and its length assertion.
+            CGS_ASSERT_STREAM_AT(strlen(lpcCommandLine) < sizeof(macCommandLine),
+                "String " << lpcCommandLine << " is too long. Buffer size = "
+                    << sizeof(macCommandLine) << ", string length = " << strlen(lpcCommandLine) << "\n",
+                "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 65);
 
-            // CgsStringUtils SafeStrcpy: the source must fit the 64-byte buffer.
-            CGS_ASSERT(static_cast<int>(strlen(lpcCommandLine)) < KI_COMMANDLINE_BUFFER_SIZE,
-                       "String is too long for the command-line buffer");
-
-            // Copy the command line (including the terminator) into the +0xAD buffer.
-            char* lpcDest = macCommandLine;
-            const char* lpcSrc = lpcCommandLine;
-            char lcChar;
-            do
-            {
-                lcChar = *lpcSrc++;
-                *lpcDest++ = lcChar;
-            }
-            while (lcChar != 0);
-
-            // Truncate at the first trailing double-quote (strip a quoted exe path tail).
-            char* lpcQuote = strrchr(macCommandLine, '"');
-            if (lpcQuote != 0)
-                *lpcQuote = 0;
-
+            strcpy(macCommandLine, lpcCommandLine);
+            *strrchr(macCommandLine, '"') = 0;
             if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
             {
                 *CgsDev::Log::gpDebugPrint
@@ -101,35 +74,60 @@ namespace BrnHW
 
             XGetLaunchData(&mLaunchData, KU_LAUNCHDATA_SIZE);
             mePrepareStage++;
-            meReleaseStage = E_PREPARESTAGE_START;
+        }
+        case E_PREPARESTAGE_DONE:
+            meReleaseStage = E_RELEASESTAGE_START;
+            return true;
+        default:
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("false", CGS_ARTIST_FILE, 119));
             return true;
         }
+    }
 
-        if (mePrepareStage == E_PREPARESTAGE_DONE)
-        {
-            meReleaseStage = E_PREPARESTAGE_START;
-            return true;
-        }
-
-        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("false", CGS_ARTIST_FILE, 119));
-        return true;
+    // ---- postfix increment for the single-step prepare state machine ---------------
+    // It advances the stage by one and asserts the result has not run past the final
+    // stage, then returns the pre-increment value (postfix semantics).
+    System360HW::EPrepareStage operator++(System360HW::EPrepareStage& reStage, int)
+    {
+        System360HW::EPrepareStage lePrevious = reStage;
+        reStage = static_cast<System360HW::EPrepareStage>(reStage + 1);
+        CGS_ASSERT(reStage <= System360HW::E_PREPARESTAGE_DONE,
+            CGS_ASSERT_MESSAGE_AT(
+                "leEnumIndex <= System360HW::E_PREPARESTAGE_DONE",
+                CGS_ARTIST_SYSTEMHW_HEADER, 132 /* ARTIST 0x823A8A44 */));
+        return lePrevious;
     }
 
     // ---- BrnHW::System360HW::Release @ 0x823C6C70 ----------------------------------
     // Stage START: release the Massive sub-system and advance the release stage.
     // Stage DONE: no-op. Any other stage: assert.
-    int System360HW::Release()
+    bool System360HW::Release()
     {
-        if (meReleaseStage == E_PREPARESTAGE_START)
+        switch (meReleaseStage)
         {
+        case E_RELEASESTAGE_START:
             mMassive.Release();
             meReleaseStage++;
-        }
-        else if (meReleaseStage != E_PREPARESTAGE_DONE)
-        {
+            break;
+        case E_RELEASESTAGE_DONE:
+            break;
+        default:
             CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("false", CGS_ARTIST_FILE, 160));
+            break;
         }
-        return 1;
+        return true;
+    }
+
+    // ARTIST 0x823A8A78 is the postfix increment for the separate release stage.
+    System360HW::EReleaseStage operator++(System360HW::EReleaseStage& reStage, int)
+    {
+        System360HW::EReleaseStage lePrevious = reStage;
+        reStage = static_cast<System360HW::EReleaseStage>(reStage + 1);
+        CGS_ASSERT(reStage <= System360HW::E_RELEASESTAGE_DONE,
+            CGS_ASSERT_MESSAGE_AT(
+                "leEnumIndex <= System360HW::E_RELEASESTAGE_DONE",
+                CGS_ARTIST_SYSTEMHW_HEADER, 133));
+        return lePrevious;
     }
 
     // ---- BrnHW::System360HW::PrepareMassiveMemory @ 0x823C1290 ----------------------

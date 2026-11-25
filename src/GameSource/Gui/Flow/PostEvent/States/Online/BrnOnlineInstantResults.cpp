@@ -531,7 +531,7 @@ namespace BrnGui
         {
             mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
             ReorderResultsTable();
-            if (meCurrentGameMode == 12 && mpGuiCache->miOnlineRoundIndex < mpGuiCache->miOnlineNumRounds - 1)
+            if (meCurrentGameMode == 12 && mpGuiCache->miOnlineRoundIndex < mpGuiCache->GetOnlineGameModeOptions()->miNumRounds - 1)
                 SetResultColumnHeading();
             else
                 mResultColumnHeading.SetText("");
@@ -582,7 +582,7 @@ namespace BrnGui
         }
         else
         {
-            const bool lbFinal = mpGuiCache->miOnlineRoundIndex == mpGuiCache->miOnlineNumRounds - 1;
+            const bool lbFinal = mpGuiCache->miOnlineRoundIndex == mpGuiCache->GetOnlineGameModeOptions()->miNumRounds - 1;
             const s32 liState = lbStuntRun ? (lbFinal ? 5 : 4) : (lbFinal ? 2 : 1);
             mAnimationComponent.AddOutputAptViewState("apt_Transition", KAPC_ANIMATION_STATES[liState], false);
         }
@@ -870,7 +870,7 @@ namespace BrnGui
         {
             if (meCurrentGameMode == 17)
             {
-                if (mpGuiCache->miOnlineRoundIndex == mpGuiCache->miOnlineNumRounds - 1)
+                if (mpGuiCache->miOnlineRoundIndex == mpGuiCache->GetOnlineGameModeOptions()->miNumRounds - 1)
                     mfUpdateTimer = 16.0f; // ARTIST82004000, deliberately passes the 15-second leg below.
                 mButtonAnimationComponent.AddOutputAptViewState("apt_Transition", KAPC_BUTTON_ANIMATION_STATES[2], false);
                 mbPlayerCanLeave = true;
@@ -906,11 +906,11 @@ namespace BrnGui
         }
         if (mpGuiCache)
         {
-            for (s32 liPlayer = 0; liPlayer < mpGuiCache->miLobbyNumPlayers; ++liPlayer)
+            for (s32 liPlayer = 0; liPlayer < mpGuiCache->GetLobbyPlayerList()->miNumberOfPlayers; ++liPlayer)
             {
                 // A typed copy from the existing pointer-free cache mirror; no console offsets.
                 BrnNetwork::BrnNetworkModuleIO::LobbyPlayerStatusData lLobbyPlayer;
-                std::memcpy(&lLobbyPlayer, mpGuiCache->maLobbyPlayerInfo[liPlayer], sizeof(lLobbyPlayer));
+                lLobbyPlayer = mpGuiCache->GetLobbyPlayerList()->maPlayerLobbyInfo[liPlayer];
                 if (lLobbyPlayer.meReadyStatus == BrnNetwork::BrnNetworkModuleIO::LobbyPlayerStatusData::E_READY_STATUS_HOST)
                 {
                     mbLeaveNextUpdate = true;
@@ -1137,7 +1137,7 @@ namespace BrnGui
             mTable.Update();
             if (mOnlinePostEvent.miNumPlayersInEvent > 0)
             {
-                if (mpGuiCache->miOnlineRoundIndex == mpGuiCache->miOnlineNumRounds - 1)
+                if (mpGuiCache->miOnlineRoundIndex == mpGuiCache->GetOnlineGameModeOptions()->miNumRounds - 1)
                 {
                     mTitleTextfield.SetText("$ONLINE_RESULTS_FINAL_STANDINGS_TITLE");
                     if (!IsStuntRunResultsMode(meCurrentGameMode))

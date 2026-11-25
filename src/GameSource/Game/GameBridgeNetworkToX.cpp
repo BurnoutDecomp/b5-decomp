@@ -1311,8 +1311,6 @@ namespace BrnGame
         // Record: LobbyPlayerStatusData[8] then the player count (+0x1C0).
         {
             BrnGui::GuiEventNetworkLobbyPlayerList lLobbyEvent;
-            unsigned char* lpLobby = RecordBytes(lLobbyEvent);
-            LobbyPlayerStatusData* laLobbyData = reinterpret_cast<LobbyPlayerStatusData*>(lpLobby);
 
             s32 i = 0;
             for (; i < liNumPlayers; ++i)
@@ -1320,12 +1318,12 @@ namespace BrnGame
                 // The interface accessor runs once per player.
                 const OnlineLobbyPlayerStatusInterface* lpLobbyInterface =
                     lpNetworkOutput->GetOnlineLobbyPlayerStatusInterface();
-                std::memcpy(&laLobbyData[i], lpLobbyInterface->GetPlayerLobbyData(i),
+                std::memcpy(&lLobbyEvent.maPlayerLobbyInfo[i], lpLobbyInterface->GetPlayerLobbyData(i),
                             sizeof(LobbyPlayerStatusData));
             }
             for (; i < 8; ++i)
             {
-                LobbyPlayerStatusData& lrSlot = laLobbyData[i];
+                LobbyPlayerStatusData& lrSlot = lLobbyEvent.maPlayerLobbyInfo[i];
                 lrSlot.mPlayerID             = -1;
                 lrSlot.mbLocalPlayer         = false;
                 lrSlot.mbIsHost              = false;
@@ -1337,7 +1335,7 @@ namespace BrnGame
                 lrSlot.meVoipConnectionType  = 0;
                 lrSlot.miPlayerColourIndex   = -1;
             }
-            *reinterpret_cast<s32*>(lpLobby + 8 * sizeof(LobbyPlayerStatusData)) = liNumPlayers;
+            lLobbyEvent.miNumberOfPlayers = liNumPlayers;
 
             PushGuiEvent(lLobbyEvent, lpGuiInput);
         }

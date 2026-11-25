@@ -14,6 +14,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Containers/CgsFastBitArray.h" // image-gallery occupancy response (522)
+#include "GameSource/Network/SharedIO/BrnNetworkModuleOnlineLobbyPlayerStatusInterface.h"
 #include "GameSource/Network/SharedIO/BrnBuddyInformation.h"
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"   // CgsGui::GuiEvent<N> (12-byte event header)
 #include "GameShared/GameClasses/Gui/CgsImageFileInfo.h" // native-width image-load payload records
@@ -278,7 +279,17 @@ namespace BrnGui
     class GuiEventMiniMapSwitch { public: u8 maData[1]; s32 GetEventType() const { return 205; } };  // id 205 size 1 (raw; size not GuiEvent-shaped)
     class GuiEventMustFixCarFirst { public: u8 maData[1]; s32 GetEventType() const { return 552; } };  // id 552 size 1 (raw; size not GuiEvent-shaped)
     class GuiEventNetworkLeftGame { public: u8 maData[8]; s32 GetEventType() const { return 273; } };  // id 273 size 8 (raw; size not GuiEvent-shaped)
-    class GuiEventNetworkLobbyPlayerList : public CgsGui::GuiEvent<244> { public: u8 maPayload[456]; };  // id 244 size 456 (opaque payload)
+    // ARTIST 0x823CF4C8 queues the eight rows and live player count as one 456-byte payload.
+    class GuiEventNetworkLobbyPlayerList : public CgsGui::GuiEvent<244>
+    {
+    public:
+        BrnNetwork::BrnNetworkModuleIO::LobbyPlayerStatusData maPlayerLobbyInfo[8];
+        s32 miNumberOfPlayers;
+    };
+    CGS_STATIC_ASSERT(offsetof(GuiEventNetworkLobbyPlayerList, miNumberOfPlayers) == 0x1C0,
+                      "ARTIST lobby player count offset");
+    CGS_STATIC_ASSERT(sizeof(GuiEventNetworkLobbyPlayerList) == 0x1C8,
+                      "ARTIST lobby player list size");
     // ⭐ 2026-08-29 (map-world wave): TYPED, and the fork retired. This used to be an opaque
     // `u8 maData[8]` here AND a second, incompatible namespace-scope definition in
     // BrnNetworkPlayerImageRenderer.h:75 -- the pre-existing ODR fork three TUs record

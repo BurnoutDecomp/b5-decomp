@@ -16,7 +16,7 @@
 #include "GameSource/Gui/Events/BrnGuiChallengeEvents.h" // Gui challenge event payloads
 #include "SharedClasses/DataLists/ChallengeList.h"      // BrnResource::ChallengeList
 
-#include <cstring>                                      // std::memcpy (X360 XMemCpy)
+#include <xtl.h>                                        // XMemCpy and XMemSet
 
 #define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/BrnGuiFreeburnChallengeManager.cpp"
 
@@ -52,7 +52,7 @@ static const f32 KF_PAGE_ROTATE_SECONDS = 5.0f;
 //
 void FreeburnChallengeManager::Construct( GuiCache* lpCache )
 {
-    CGS_ASSERT( lpCache, "lpCache" );   // BrnGuiFreeburnChallengeManager.cpp:46
+    CGS_ASSERT_AT( lpCache, "lpCache", CGS_ARTIST_FILE, 46 );
 
     mpGuiCache           = lpCache;
     mfTimeToNextChange   = 0.0f;
@@ -63,14 +63,8 @@ void FreeburnChallengeManager::Construct( GuiCache* lpCache )
     miTargetsCount       = 0;
     mbIsLocalHost        = false;
     miCurrentAction      = 0;
+    XMemSet( maeChallengeTargetTypes, 0, sizeof( maeChallengeTargetTypes ) );
     mCompletedData.Construct();
-
-    // the X360 XMemSet(a1 + 32, 0, 8) -- the two target-type words
-    for ( s32 liTarget = 0; liTarget < KI_MAX_TARGETS; ++liTarget )
-    {
-        maeChallengeTargetTypes[ liTarget ] =
-            static_cast<BrnResource::ChallengeListEntryAction::EChallengeDataType>( 0 );
-    }
 }
 
 // @ 0x824F3F10 — Update. The AUTO_ROTATE page timer: while a challenge is live and the page
@@ -83,18 +77,15 @@ void FreeburnChallengeManager::Construct( GuiCache* lpCache )
 // does not even read the clock.
 void FreeburnChallengeManager::Update()
 {
-    CGS_ASSERT( mpGuiCache, "mpGuiCache" );   // BrnGuiFreeburnChallengeManager.cpp:75
+    CGS_ASSERT_AT( mpGuiCache, "mpGuiCache", CGS_ARTIST_FILE, 75 );
 
     if ( meInternalState != E_INTERNAL_STATE_OFF &&
          mePageState == E_PAGE_STATE_AUTO_ROTATE &&
          mpGuiCache->GetTime() >= mfTimeToNextChange )
     {
-        const s32 liTargetsCount = miTargetsCount;
-        const s32 liNextTarget   = miCurrentTargetIndex + 1;
-
-        mfTimeToNextChange   = mpGuiCache->GetTime() + KF_PAGE_ROTATE_SECONDS;
-        miCurrentTargetIndex = liNextTarget;
-        if ( liNextTarget >= liTargetsCount )
+        mfTimeToNextChange = mpGuiCache->GetTime() + KF_PAGE_ROTATE_SECONDS;
+        ++miCurrentTargetIndex;
+        if ( miCurrentTargetIndex >= miTargetsCount )
             miCurrentTargetIndex = 0;
     }
 }
@@ -131,12 +122,16 @@ const BrnResource::ChallengeListEntryAction* FreeburnChallengeManager::GetCurren
 FreeburnChallengeManager::EFreeburnChallengeSuccess
 FreeburnChallengeManager::GetCurrentSuccessForARCI( EActiveRaceCarIndex leARCI ) const
 {
-    CGS_ASSERT( meInternalState != E_INTERNAL_STATE_OFF, "meInternalState != E_INTERNAL_STATE_OFF" );
-    CGS_ASSERT( miCurrentTargetIndex < miTargetsCount, "miCurrentTargetIndex < miTargetsCount" );
-    CGS_ASSERT( miCurrentTargetIndex < BrnResource::ChallengeListEntry::KI_MAX_ACTIONS_PER_CHALLENGE,
-                "miCurrentTargetIndex < BrnResource::ChallengeListEntry::KI_MAX_ACTIONS_PER_CHALLENGE" );
-    CGS_ASSERT( leARCI >= E_ACTIVE_RACE_CAR_INDEX_0, "leARCI >= E_ACTIVE_RACE_CAR_INDEX_0" );
-    CGS_ASSERT( leARCI < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leARCI < E_ACTIVE_RACE_CAR_INDEX_COUNT" );
+    CGS_ASSERT_AT( meInternalState != E_INTERNAL_STATE_OFF,
+        "meInternalState != E_INTERNAL_STATE_OFF", KAC_ARTIST_ASSERT_FILE, 270 );
+    CGS_ASSERT_AT( miCurrentTargetIndex < miTargetsCount,
+        "miCurrentTargetIndex < miTargetsCount", KAC_ARTIST_ASSERT_FILE, 271 );
+    CGS_ASSERT_AT( miCurrentTargetIndex < BrnResource::ChallengeListEntry::KI_MAX_ACTIONS_PER_CHALLENGE,
+        "miCurrentTargetIndex < BrnResource::ChallengeListEntry::KI_MAX_ACTIONS_PER_CHALLENGE", KAC_ARTIST_ASSERT_FILE, 272 );
+    CGS_ASSERT_AT( leARCI >= E_ACTIVE_RACE_CAR_INDEX_0,
+        "leARCI >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 273 );
+    CGS_ASSERT_AT( leARCI < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+        "leARCI < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 274 );
     return maaeComplete[ miCurrentTargetIndex ][ leARCI ];
 }
 
@@ -172,10 +167,12 @@ f32 FreeburnChallengeManager::GetCurrentContributionForARCI( EActiveRaceCarIndex
 BrnResource::ChallengeListEntryAction::EChallengeDataType
 FreeburnChallengeManager::GetCurrentTargetType() const
 {
-    CGS_ASSERT( meInternalState != E_INTERNAL_STATE_OFF, "meInternalState != E_INTERNAL_STATE_OFF" );
-    CGS_ASSERT( miCurrentTargetIndex < miTargetsCount, "miCurrentTargetIndex < miTargetsCount" );
-    CGS_ASSERT( miCurrentTargetIndex < BrnResource::ChallengeListEntry::KI_MAX_ACTIONS_PER_CHALLENGE,
-                "miCurrentTargetIndex < BrnResource::ChallengeListEntry::KI_MAX_ACTIONS_PER_CHALLENGE" );
+    CGS_ASSERT_AT( meInternalState != E_INTERNAL_STATE_OFF,
+        "meInternalState != E_INTERNAL_STATE_OFF", KAC_ARTIST_ASSERT_FILE, 341 );
+    CGS_ASSERT_AT( miCurrentTargetIndex < miTargetsCount,
+        "miCurrentTargetIndex < miTargetsCount", KAC_ARTIST_ASSERT_FILE, 342 );
+    CGS_ASSERT_AT( miCurrentTargetIndex < BrnResource::ChallengeListEntry::KI_MAX_ACTIONS_PER_CHALLENGE,
+        "miCurrentTargetIndex < BrnResource::ChallengeListEntry::KI_MAX_ACTIONS_PER_CHALLENGE", KAC_ARTIST_ASSERT_FILE, 343 );
     return maeChallengeTargetTypes[ miCurrentTargetIndex ];
 }
 
@@ -356,28 +353,28 @@ void FreeburnChallengeManager::TriggerChallenge( const GuiChallengeTriggerRespon
 // miTargetsCount), at the event source offsets recovered from the asm.
 void FreeburnChallengeManager::HandleNewData( const GuiChallengeUpdateEvent* lpEvent )
 {
-    CGS_ASSERT( meInternalState == E_INTERNAL_STATE_RUNNING ||
-                meInternalState == E_INTERNAL_STATE_RESULTS,
-                "IsStarted()" ); // X360 inlines IsStarted()
-    CGS_ASSERT( lpEvent->miNumTargetsUsed == miTargetsCount,
-                "lpEvent->miNumTargetsUsed == miTargetsCount" );
+    const bool lbStarted = IsStarted();
+    CGS_ASSERT_AT( lbStarted, "IsStarted()", CGS_ARTIST_FILE, 319 );
+    CGS_ASSERT_AT( lpEvent->miNumTargetsUsed == miTargetsCount,
+                   "lpEvent->miNumTargetsUsed == miTargetsCount", CGS_ARTIST_FILE, 320 );
 
-    miCurrentAction = lpEvent->miCurrentAction;
+    const s32 liCurrentAction = lpEvent->miCurrentAction;
+    miCurrentAction = liCurrentAction;
     if ( mePageState == E_PAGE_STATE_COUNT ) // value 3: the meet-up single-target page
     {
-        miCurrentTargetIndex = lpEvent->miCurrentAction;
+        miCurrentTargetIndex = liCurrentAction;
     }
 
     // Order and byte counts match the X360 store sequence: remaining (count << 2 == 4
     // bytes/target), then contributions (count << 5 == 32 bytes/target == 8 f32), then
     // completion (count << 5 == 32 bytes/target == 8 enums).
-    std::memcpy( maiOverallTargetRemaining,
+    XMemCpy( maiOverallTargetRemaining,
                  lpEvent->maiOverallTargetRemaining,
                  static_cast<unsigned int>( miTargetsCount ) * sizeof( s32 ) );
-    std::memcpy( maafIndividualTargetContributions,
+    XMemCpy( maafIndividualTargetContributions,
                  lpEvent->maafIndividualTargetContributions,
                  static_cast<unsigned int>( miTargetsCount ) * KI_MAX_ARCI * sizeof( f32 ) );
-    std::memcpy( maaeComplete,
+    XMemCpy( maaeComplete,
                  lpEvent->maaeComplete,
                  static_cast<unsigned int>( miTargetsCount ) * KI_MAX_ARCI * sizeof( EFreeburnChallengeSuccess ) );
 }
@@ -393,9 +390,14 @@ void FreeburnChallengeManager::StartNotActiveChallenge( const GuiChallengeNotAct
 
     const BrnResource::ChallengeList* lpList = mpGuiCache->GetFreeburnChallengeList();
     const s32 liChallengeIndex = lpList->GetChallengeIndex( lChallengeID );
-    mpCurrentChallenge = ( liChallengeIndex < 0 )
-                       ? 0
-                       : lpList->GetChallengeData( liChallengeIndex );
+    if ( liChallengeIndex >= 0 )
+    {
+        mpCurrentChallenge = lpList->GetChallengeData( liChallengeIndex );
+    }
+    else
+    {
+        mpCurrentChallenge = 0;
+    }
 }
 
 // FinishChallenge (GUI 579): the challenge is over; the tracker goes back to OFF. The assert

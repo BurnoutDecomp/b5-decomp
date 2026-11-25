@@ -952,7 +952,7 @@ namespace BrnGui
             CgsSystem::DateAndTime lLicenceIssuedDate = lpProfile->GetLicenceIssuedDate();
             CgsLanguage::LanguageManager* lpLanguageManager = mpStateInterface->GetLanguageManager();
             char lacBuffer[64];
-            lpLanguageManager->FormatDateString(lacBuffer, lLicenceIssuedDate.GetDay(),
+            lpLanguageManager->FormatDateString(reinterpret_cast<CgsUnicode::CgsUtf8*>(lacBuffer), lLicenceIssuedDate.GetDay(),
                 lLicenceIssuedDate.GetMonth(), lLicenceIssuedDate.GetYear(), sizeof(lacBuffer));
             mDateIssuedTextField.SetText(lacBuffer);
         }

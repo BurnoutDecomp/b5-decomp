@@ -1268,12 +1268,12 @@ void InGameMessageRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEve
             {
                 case BrnGameState::E_ACTIVE_ROAD_RULE_OFFLINE_TIME:
                 case BrnGameState::E_ACTIVE_ROAD_RULE_ONLINE_TIME:
-                    mpLanguageManager->FormatMinutesAndSecondsAndHundredsString(lacScore, lfScore * 0.001f, 16);
+                    mpLanguageManager->FormatMinutesAndSecondsAndHundredsString(reinterpret_cast<CgsUnicode::CgsUtf8*>(lacScore), lfScore * 0.001f, 16);
                     lacScore[15] = 0;
                     break;
                 case BrnGameState::E_ACTIVE_ROAD_RULE_OFFLINE_CRASH:
                 case BrnGameState::E_ACTIVE_ROAD_RULE_ONLINE_CRASH:
-                    mpLanguageManager->FormatCurrencyString(lacScore, static_cast<s32>(lfScore), 16);
+                    mpLanguageManager->FormatCurrencyString(reinterpret_cast<CgsUnicode::CgsUtf8*>(lacScore), static_cast<s32>(lfScore), 16);
                     lacScore[15] = 0;
                     break;
                 default:

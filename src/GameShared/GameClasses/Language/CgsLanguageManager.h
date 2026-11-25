@@ -309,20 +309,20 @@ namespace CgsLanguage
         // The DWARF types the buffer as CgsUnicode::CgsUtf8* (== u8); modelled here as char*
         // since callers (e.g. the debug HUD) pass a plain byte buffer straight to the text renderer.
         // Bodies link from the CgsLanguageManager TU.
-        void FormatIntegerString(char* lpcTarget, s32 liValue, s32 liTargetSize) const;
+        void FormatIntegerString(CgsUnicode::CgsUtf8* lpcTarget, s32 liValue, s32 liTargetSize) const;
         // X360 0x82861248 -- the no-thousands-separator integer variant (FormatText's
         // E_FORMAT_INTEGER_NOSEPERATOR case).
-        void FormatIntegerNoSeperatorString(char* lpcTarget, s32 liValue, s32 liTargetSize) const;
-        void FormatXoverYString(char* lpcTarget, s32 liX, s32 liY, s32 liTargetSize) const;
-        void FormatPercentageString(char* lpcTarget, s32 liValue, s32 liTargetSize) const;
-        void FormatCurrencyString(char* lpcTarget, s32 liCurrencyValue, s32 liTargetSize) const;
-        void FormatDateString(char* lpcTarget, s32 liDays, s32 liMonths, s32 liYears, s32 liTargetSize) const;
+        void FormatIntegerNoSeperatorString(CgsUnicode::CgsUtf8* lpcTarget, s32 liValue, s32 liTargetSize) const;
+        void FormatXoverYString(CgsUnicode::CgsUtf8* lpcTarget, s32 liX, s32 liY, s32 liTargetSize) const;
+        void FormatPercentageString(CgsUnicode::CgsUtf8* lpcTarget, s32 liValue, s32 liTargetSize) const;
+        void FormatCurrencyString(CgsUnicode::CgsUtf8* lpcTarget, s32 liCurrencyValue, s32 liTargetSize) const;
+        void FormatDateString(CgsUnicode::CgsUtf8* lpcTarget, s32 liDays, s32 liMonths, s32 liYears, s32 liTargetSize) const;
 
-        void FormatHoursMinutesAndSecondsString(char* lpcTarget, f32 lfTimeInSeconds, s32 liTargetSize) const;
-        void FormatMinutesAndSecondsString(char* lpcTarget, f32 lfTimeInSeconds, s32 liTargetSize) const;
-        void FormatMinutesAndSecondsAndHundredsString(char* lpcTarget, f32 lfTimeInSeconds, s32 liTargetSize) const;
-        void FormatSecondsAndHundredsString(char* lpcTarget, f32 lfTimeInSeconds, s32 liTargetSize) const;
-        void FormatSecondsString(char* lpcTarget, f32 lfTimeInSeconds, s32 liTargetSize) const;
+        void FormatHoursMinutesAndSecondsString(CgsUnicode::CgsUtf8* lpcTarget, f32 lfTimeInSeconds, s32 liTargetSize) const;
+        void FormatMinutesAndSecondsString(CgsUnicode::CgsUtf8* lpcTarget, f32 lfTimeInSeconds, s32 liTargetSize) const;
+        void FormatMinutesAndSecondsAndHundredsString(CgsUnicode::CgsUtf8* lpcTarget, f32 lfTimeInSeconds, s32 liTargetSize) const;
+        void FormatSecondsAndHundredsString(CgsUnicode::CgsUtf8* lpcTarget, f32 lfTimeInSeconds, s32 liTargetSize) const;
+        void FormatSecondsString(CgsUnicode::CgsUtf8* lpcTarget, f32 lfTimeInSeconds, s32 liTargetSize) const;
 
         void FormatSmallDistanceString(char* lpcTarget, f32 lfMetres, s32 liTargetSize) const;
         void FormatLargeDistanceString(char* lpcTarget, f32 lfMetres, s32 liTargetSize) const;
@@ -330,9 +330,9 @@ namespace CgsLanguage
         // The remaining leaves the float dispatcher @0x828641F0 switches onto (X360
         // symbol names; the *Long / MediumText / Auto variants + the u8*-buffered
         // hours-minutes-seconds form the DWARF spells at BBAACC).
-        void FormatSecondsAndHundredsStringLong(char* lpcTarget, f32 lfTimeInSeconds, s32 liTargetSize) const;
-        void FormatSecondsStringLong(char* lpcTarget, f32 lfTimeInSeconds, s32 liTargetSize) const;
-        void FormatMinutesSecondsStringMediumText(char* lpcTarget, f32 lfTimeInSeconds, s32 liTargetSize) const;
+        void FormatSecondsAndHundredsStringLong(CgsUnicode::CgsUtf8* lpcTarget, f32 lfTimeInSeconds, s32 liTargetSize) const;
+        void FormatSecondsStringLong(CgsUnicode::CgsUtf8* lpcTarget, f32 lfTimeInSeconds, s32 liTargetSize) const;
+        void FormatMinutesSecondsStringMediumText(CgsUnicode::CgsUtf8* lpcTarget, f32 lfTimeInSeconds, s32 liTargetSize) const;
         void FormatAutoDistanceString(char* lpcTarget, f32 lfMetres, s32 liTargetSize) const;
         void FormatAutoDistanceStringLong(char* lpcTarget, f32 lfMetres, s32 liTargetSize) const;
         void FormatSmallDistanceStringLong(char* lpcTarget, f32 lfMetres, s32 liTargetSize) const;
@@ -345,7 +345,7 @@ namespace CgsLanguage
         // (`FormatHoursAndMinutesAndSecondsString(this, target, hours, minutes, seconds, size)`),
         // and the body's three IntToString calls each take min-digits 2. The float form was
         // also the wrong target for the dispatcher's format-1 case -- see FormatText(f32).
-        void FormatHoursAndMinutesAndSecondsString(char* lpcTarget, s32 liHours, s32 liMinutes,
+        void FormatHoursAndMinutesAndSecondsString(CgsUnicode::CgsUtf8* lpcTarget, s32 liHours, s32 liMinutes,
                                                    s32 liSeconds, s32 liTargetSize) const;
 
         // The metres -> display-unit scale the HUD multiplies a distance by to decide whether the

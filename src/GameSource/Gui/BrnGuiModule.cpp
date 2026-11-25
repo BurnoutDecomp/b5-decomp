@@ -1410,9 +1410,9 @@ void GuiModule::Destruct()
                 lDateTime.Update();
                 char lacDate[32];
                 char lacTime[32];
-                mViewModule.GetLanguageManager()->FormatDateString(lacDate,
+                mViewModule.GetLanguageManager()->FormatDateString(reinterpret_cast<CgsUnicode::CgsUtf8*>(lacDate),
                     lDateTime.GetDay(), lDateTime.GetMonth(), lDateTime.GetYear(), 32);
-                mViewModule.GetLanguageManager()->FormatHoursAndMinutesAndSecondsString(lacTime,
+                mViewModule.GetLanguageManager()->FormatHoursAndMinutesAndSecondsString(reinterpret_cast<CgsUnicode::CgsUtf8*>(lacTime),
                     lDateTime.GetHour(), lDateTime.GetMinute(), lDateTime.GetSecond(), 32);
                 CGS_ASSERT(CgsUnicode::IsSingleByteOnlyUtf8String(reinterpret_cast<const CgsUnicode::CgsUtf8*>(lacDate)),
                     "CgsUnicode::IsSingleByteOnlyUtf8String( lacDate )");

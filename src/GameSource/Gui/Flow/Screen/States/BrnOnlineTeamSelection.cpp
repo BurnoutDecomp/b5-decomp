@@ -259,7 +259,7 @@ void OnlineTeamSelection::ShowPlayerList(s32 liSelectedPlayerID)
         for (; liFoundIndex < liNumPlayers; ++liFoundIndex)
         {
             const LobbyPlayerStatusData* lpLobbyPlayer =
-                reinterpret_cast<const LobbyPlayerStatusData*>(mpGuiCache->maLobbyPlayerInfo[liFoundIndex]);
+                &mpGuiCache->GetLobbyPlayerList()->maPlayerLobbyInfo[liFoundIndex];
             if (lpLobbyPlayer->mPlayerID == liSelectedPlayerID)
             {
                 mPlayerNameComponent.HighlightIndex(liFoundIndex);

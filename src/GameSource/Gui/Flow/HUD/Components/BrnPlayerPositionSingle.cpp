@@ -238,7 +238,7 @@ void PlayerPositionSingleComponent::RenderValue()
             case 4: case 17:
             {
                 char lacTime[128];
-                mpLanguageManager->FormatSecondsAndHundredsString(lacTime, mfValue, 64);
+                mpLanguageManager->FormatSecondsAndHundredsString(reinterpret_cast<CgsUnicode::CgsUtf8*>(lacTime), mfValue, 64);
                 mValue.SetLocalisedText("STAT_SECONDS", KI_STRINGID_TYPE, 1, lacTime, 0);
                 break;
             }
@@ -266,7 +266,7 @@ void PlayerPositionSingleComponent::RenderValue()
         case 0:
         {
             char lacTime[128];
-            mpLanguageManager->FormatSecondsAndHundredsString(lacTime, mfValue, 64);
+            mpLanguageManager->FormatSecondsAndHundredsString(reinterpret_cast<CgsUnicode::CgsUtf8*>(lacTime), mfValue, 64);
             mValue.SetLocalisedText("STAT_SECONDS", KI_STRINGID_TYPE, 1, lacTime, 0);
             break;
         }

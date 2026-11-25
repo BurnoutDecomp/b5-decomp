@@ -8,6 +8,9 @@
 // not revive the spontaneous-cone or dump-log declarations.
 // ============================================================================
 
+#define CGS_RESOURCE_PTR_MATCH_RELATIVE_ASSERTS
+#include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
+#undef CGS_RESOURCE_PTR_MATCH_RELATIVE_ASSERTS
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficDebugComponent.h"
 #include "SharedClasses/Traffic/BrnTrafficSection.h"       // Section, LaneRung, Neighbour
 #include "SharedClasses/Traffic/BrnTrafficHull.h"          // Hull, Junction and rung arrays
@@ -340,21 +343,6 @@ namespace BrnTraffic
         RegisterVariable(&unk_82F30020, "Checking", "After check flipout flip min ram strength");
         RegisterVariable(&unk_82F30024, "Checking", "After check flipout flip max ram strength");
         RegisterVariable(&unk_82F30028, "Checking", "Racecar kick strength");
-        SetStep(&kfSideRamStrength, 0.01f);
-        SetStep(&kfSideRamProportion, 0.05f);
-        SetStep(&unk_8300D018, 0.05f);
-        SetStep(&unk_82F2FFFC, 0.05f);
-        SetStep(&unk_82F30000, 0.05f);
-        SetStep(&unk_82F30004, 0.05f);
-        SetStep(&unk_82F30008, 0.05f);
-        SetStep(&unk_82F3000C, 0.05f);
-        SetStep(&unk_82F30010, 0.1f);
-        SetStep(&unk_82F30014, 0.1f);
-        SetStep(&unk_82F30018, 0.01f);
-        SetStep(&unk_82F3001C, 0.01f);
-        SetStep(&unk_82F30020, 0.01f);
-        SetStep(&unk_82F30024, 0.01f);
-
         RegisterVariable(&unk_82F30030, "Traffic Jams", "Slow driving speed");
         SetStep(&unk_82F30030, 0.5f);
         RegisterVariable(&unk_82F30034, "Traffic Jams", "Max slow driving time");
@@ -369,6 +357,21 @@ namespace BrnTraffic
         SetReadOnly(&mpModule->mfTimeSincePlayerHullChange, true);
         RegisterVariable(&mpModule->mbDEBUGEnablePressureSystem,
                          "Traffic Jams", "Enable pressure system");
+
+        SetStep(&kfSideRamStrength, 0.01f);
+        SetStep(&kfSideRamProportion, 0.05f);
+        SetStep(&unk_8300D018, 0.05f);
+        SetStep(&unk_82F2FFFC, 0.05f);
+        SetStep(&unk_82F30000, 0.05f);
+        SetStep(&unk_82F30004, 0.05f);
+        SetStep(&unk_82F30008, 0.05f);
+        SetStep(&unk_82F3000C, 0.05f);
+        SetStep(&unk_82F30010, 0.1f);
+        SetStep(&unk_82F30014, 0.1f);
+        SetStep(&unk_82F30018, 0.01f);
+        SetStep(&unk_82F3001C, 0.01f);
+        SetStep(&unk_82F30020, 0.01f);
+        SetStep(&unk_82F30024, 0.01f);
 
         RegisterVariable(&mfRenderCullDistance, "DRAWING", "Cull distance");
         SetStep(&mfRenderCullDistance, 20.0f);
@@ -544,7 +547,8 @@ namespace BrnTraffic
     void DebugComponent::FireKillZone(void* lpUserData)
     {
         DebugComponent* const lpComponent = static_cast<DebugComponent*>(lpUserData);
-        CGS_ASSERT(lpComponent != 0, "lpComponent");
+        CGS_ASSERT(lpComponent != 0, CGS_ASSERT_MESSAGE_AT(
+            "lpComponent", KPC_ARTIST_ASSERT_FILE, 2700 /* ARTIST 0x8275BB64 */));
         const u64 luKillZoneId = lpComponent->mpModule->mpData->mpaKillZoneIds[
             lpComponent->muKillZoneToFire];
         lpComponent->mpModule->FireKillZone(luKillZoneId);
@@ -2233,6 +2237,9 @@ void DebugComponent::DrawTextWithOffsets(CgsDev::DebugRender& lrDisplay,
 // BrnTrafficDebugComponent_wS34_00.cpp -- BrnTraffic::DebugComponent::Destruct, the teardown
 // TrafficEntityModule::Destruct runs on its debug component.
 
+#define CGS_RESOURCE_PTR_MATCH_RELATIVE_ASSERTS
+#include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
+#undef CGS_RESOURCE_PTR_MATCH_RELATIVE_ASSERTS
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficDebugComponent.h"
 
 namespace BrnTraffic

@@ -72,6 +72,10 @@
 // wave is here to remove.
 // ============================================================================
 
+#define CGS_RESOURCE_PTR_MATCH_RELATIVE_ASSERTS
+#include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
+#undef CGS_RESOURCE_PTR_MATCH_RELATIVE_ASSERTS
+
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficVehicle.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficTypeInterface.h"

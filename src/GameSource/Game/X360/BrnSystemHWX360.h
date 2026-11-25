@@ -130,10 +130,16 @@ namespace BrnHW
             E_PREPARESTAGE_DONE  = 1
         };
 
+        enum EReleaseStage
+        {
+            E_RELEASESTAGE_START = 0,
+            E_RELEASESTAGE_DONE = 1
+        };
+
         LaunchData mLaunchData;     // +0x00; XGetLaunchData writes exactly this subobject
 
         EPrepareStage mePrepareStage;   // +0x98
-        EPrepareStage meReleaseStage;   // +0x9C
+        EReleaseStage meReleaseStage;   // +0x9C
 
         BrnMassive::System360HWMassive mMassive;  // +0xA0
 
@@ -144,7 +150,7 @@ namespace BrnHW
         char macCommandLine[64];        // +0xAD
 
         bool Prepare();
-        int  Release();
+        bool Release();
         // ARTIST823C1290 receives the genuine hardware receiver in r3 and the
         // allocator list in r4. The receiver is unused by this member body.
         int PrepareMassiveMemory(const BrnResource::GameDataIO::AllocatorList* lpAllocatorList);
@@ -154,6 +160,7 @@ namespace BrnHW
     CGS_STATIC_ASSERT(offsetof(System360HW, mLaunchData) == 0x00, "ARTIST launch-data base");
     CGS_STATIC_ASSERT(sizeof(BrnMassive::System360HWMassive) == 0xC, "ARTIST Massive state");
     CGS_STATIC_ASSERT(offsetof(System360HW, mePrepareStage) == 0x98, "ARTIST hardware prepare stage");
+    CGS_STATIC_ASSERT(offsetof(System360HW, meReleaseStage) == 0x9C, "ARTIST hardware release stage");
     CGS_STATIC_ASSERT(offsetof(System360HW, mMassive) == 0xA0, "ARTIST Massive member");
     CGS_STATIC_ASSERT(offsetof(System360HW, mbEngineModulesLoaded) == 0xAC, "ARTIST late-load flag");
     CGS_STATIC_ASSERT(offsetof(System360HW, macCommandLine) == 0xAD, "ARTIST command line");
@@ -161,4 +168,5 @@ namespace BrnHW
 
     // Postfix increment for the prepare/release state machine (BrnSystemHWX360.cpp).
     System360HW::EPrepareStage operator++(System360HW::EPrepareStage& reStage, int);
+    System360HW::EReleaseStage operator++(System360HW::EReleaseStage& reStage, int);
 }

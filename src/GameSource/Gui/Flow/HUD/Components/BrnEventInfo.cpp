@@ -1691,7 +1691,7 @@ void EventInfoComponent::UpdateFreeBurnLobby(GuiCache* lpCache)
     }
 
     const GuiEventNetworkGameParams* lpParams =
-        reinterpret_cast<const GuiEventNetworkGameParams*>(lpCache->maOnlineGameModeOptionsStorage);
+        lpCache->GetOnlineGameModeOptions();
     CGS_ASSERT(lpParams != 0, "lpParams");
 
     if (lpParams->meGameMode == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY)
@@ -1724,9 +1724,9 @@ void EventInfoComponent::UpdateFreeBurnLobbyChallenge(GuiCache* lpCache)
         MoveAnimation("transin");
         ShowFreeburnWithTitleText(lpCache);
     }
-    else if (lpCache->meOnlineSecurity != meSecurity)
+    else if (lpCache->GetOnlineGameModeOptions()->meSecurity != meSecurity)
     {
-        meSecurity = lpCache->meOnlineSecurity;
+        meSecurity = lpCache->GetOnlineGameModeOptions()->meSecurity;
         ShowFreeburnWithTitleText(lpCache);
     }
 }
@@ -1777,9 +1777,9 @@ void EventInfoComponent::UpdateFreeBurnLobbyBasic(GuiCache* lpCache)
         mbFreeBurnBasicInfoShowing = true;
         MoveAnimation("transin");
     }
-    else if (lpCache->meOnlineSecurity != meSecurity)
+    else if (lpCache->GetOnlineGameModeOptions()->meSecurity != meSecurity)
     {
-        meSecurity = lpCache->meOnlineSecurity;
+        meSecurity = lpCache->GetOnlineGameModeOptions()->meSecurity;
     }
     else
     {
@@ -1811,7 +1811,7 @@ void EventInfoComponent::ShowFreeburnWithTitleText(GuiCache* lpCache)
     lacHostName[127] = 0;
     maTextField[0].SetLocalisedText("HUD_INFO_ONLINE_HOST_TITLE", KI_FORMAT_STRING_ID, 2,
                                     lacHostName, KI_FORMAT_STRING,
-                                    KAPC_ONLINE_GAME_SECURITY_STRINGS[lpCache->meOnlineSecurity],
+                                    KAPC_ONLINE_GAME_SECURITY_STRINGS[lpCache->GetOnlineGameModeOptions()->meSecurity],
                                     KI_FORMAT_STRING_ID);
 }
 
@@ -1829,7 +1829,7 @@ void EventInfoComponent::UpdateDestinationText(GuiCache* lpCache)
             maTextField[0].ClearText();
             return;
         }
-        landmark = lpCache->GetOnlineLandmarkIndex(static_cast<u32>(trackedIndex));
+        landmark = lpCache->GetOnlineLandmarkIndex(trackedIndex);
     }
     else
         landmark = lpCache->GetEventDestinationLandmarkIndex();

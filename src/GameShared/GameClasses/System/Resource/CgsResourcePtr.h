@@ -525,13 +525,13 @@ namespace CgsResource
 
 
 
-
-
-
-
-
-
-
+    // ARTIST used two source spellings for this header. A translation unit
+    // opts into the relative spelling when its original bodies establish it.
+#if defined(CGS_RESOURCE_PTR_MATCH_RELATIVE_ASSERTS)
+#define CGS_RESOURCE_PTR_ASSERT_FILE "..\\..\\..\\GameShared\\GameClasses\\System/Resource/CgsResourcePtr.h"
+#else
+#define CGS_RESOURCE_PTR_ASSERT_FILE __FILE__
+#endif
 
     template <class Type>
     inline Type*
@@ -541,11 +541,11 @@ namespace CgsResource
 
 
 
-        CGS_ASSERT_STREAM(mResourceMemory.m_baseResources[0], "Can not instance resource pointer - it has no main memory resource\n");
+        CGS_ASSERT_STREAM_AT(mResourceMemory.m_baseResources[0],
+            "Can not instance resource pointer - it has no main memory resource\n",
+            CGS_RESOURCE_PTR_ASSERT_FILE, 544);
         return static_cast<Type*>(mResourceMemory.m_baseResources[0]);
     }
-
-
 
 
 
@@ -560,11 +560,11 @@ namespace CgsResource
 
 
 
-        CGS_ASSERT_STREAM(mResourceMemory.m_baseResources[0], "Can not instance resource pointer - it has no main memory resource\n");
+        CGS_ASSERT_STREAM_AT(mResourceMemory.m_baseResources[0],
+            "Can not instance resource pointer - it has no main memory resource\n",
+            CGS_RESOURCE_PTR_ASSERT_FILE, 563);
         return static_cast<const Type*>(mResourceMemory.m_baseResources[0]);
     }
-
-
 
 
 
@@ -578,11 +578,11 @@ namespace CgsResource
 
 
 
-        CGS_ASSERT_STREAM(mResourceMemory.m_baseResources[0], "Can not instance resource pointer - it has no main memory resource\n");
+        CGS_ASSERT_STREAM_AT(mResourceMemory.m_baseResources[0],
+            "Can not instance resource pointer - it has no main memory resource\n",
+            CGS_RESOURCE_PTR_ASSERT_FILE, 581);
         return static_cast<Type*>(mResourceMemory.m_baseResources[0]);
     }
-
-
 
 
 
@@ -596,16 +596,16 @@ namespace CgsResource
 
 
 
-        CGS_ASSERT_STREAM(mResourceMemory.m_baseResources[0], "Can not instance resource pointer - it has no main memory resource\n");
+        CGS_ASSERT_STREAM_AT(mResourceMemory.m_baseResources[0],
+            "Can not instance resource pointer - it has no main memory resource\n",
+            CGS_RESOURCE_PTR_ASSERT_FILE, 599);
         return static_cast<const Type*>(mResourceMemory.m_baseResources[0]);
     }
 
 
 
 
-
-
-
+#undef CGS_RESOURCE_PTR_ASSERT_FILE
 
     template <class Type>
     inline Type&

@@ -840,7 +840,7 @@ namespace BrnGui
             const s32 liMonth = lpInfo->mCaptureDate.GetMonth();
             const s32 liDay   = lpInfo->mCaptureDate.GetDay();
             char lacDate[64];
-            mpStateInterface->GetLanguageManager()->FormatDateString(lacDate, liDay, liMonth, liYear,
+            mpStateInterface->GetLanguageManager()->FormatDateString(reinterpret_cast<CgsUnicode::CgsUtf8*>(lacDate), liDay, liMonth, liYear,
                                                                     sizeof(lacDate));
             lacDate[sizeof(lacDate) - 1] = 0;
             mWhenText.SetLocalisedText(lacDate, LanguageManager::E_FORMAT_TEXT);

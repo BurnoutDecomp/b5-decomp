@@ -8,6 +8,7 @@
 // includes folded in from the BrnGameStateStreetManager_w*.cpp partfiles (2026-09-15)
 #include "GameSource/GameState/StreetData/BrnStreetManagerDebugComponent.h"
 #include "GameSource/GameState/BrnGameEvents.h"
+#include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"
 #include "GameSource/GameState/BrnGameActions.h"
 #include "GameSource/GameState/Progression/BrnProgressionManager.h"
 #include "GameSource/GameState/BrnGameStateModule.h"
@@ -56,54 +57,50 @@ namespace BrnGameState
 // when the ChallengeData score family lands. Do NOT re-add the body: two definitions is LNK2005.
 
 // @ 0x82324A28
-BrnStreetData::ChallengeHighScoreEntry*
-StreetManager::CreateHighScoreEntryFromDown(
-    BrnStreetData::ChallengeHighScoreEntry* lpEntry,
-    int                                     liUnused,
-    const CgsNetwork::PlayerName*           lpPlayerNames,
-    const int32_t*                          lpScores )
+BrnStreetData::ChallengeHighScoreEntry StreetManager::CreateHighScoreEntryFromDownloadData(
+    const CgsNetwork::PlayerName* lpPlayerNames,
+    const BrnNetwork::RoadRulesMessageData* lpRoadRulesData )
 {
-    (void)liUnused;   // reserved by the ABI, unreferenced by the X360 body
+    BrnStreetData::ChallengeHighScoreEntry lEntry;
+    lEntry.Construct();
 
-    lpEntry->Construct();
-
-    // BrnStreetData::operator++ (out-of-line here) carries the inlined
-    // "leEnumIndex <= E_SCORE_TYPE_COUNT" bounds assert the X360 fired each pass.
     for ( BrnStreetData::ScoreType leScoreType = BrnStreetData::E_SCORE_TYPE_START;
           leScoreType < BrnStreetData::E_SCORE_TYPE_COUNT;
           leScoreType++ )
     {
-        if ( lpPlayerNames[leScoreType].macName[0] != '\0' && lpScores[leScoreType] != 0 )
+        const CgsNetwork::PlayerName& lrPlayerName = lpPlayerNames[leScoreType];
+        if ( lrPlayerName.macName[0] != '\0' )
         {
-            lpEntry->SetScore( leScoreType, lpScores[leScoreType], &lpPlayerNames[leScoreType] );
+            const s32 liScore = lpRoadRulesData->maScores[leScoreType];
+            if ( liScore != 0 )
+            {
+                lEntry.SetScore( leScoreType, liScore, &lrPlayerName );
+            }
         }
     }
 
-    return lpEntry;
+    return lEntry;
 }
 
 // @ 0x82324AC0
-BrnStreetData::ChallengePlayerScoreEntry*
-StreetManager::CreateUserChallengeScoreFr(
-    BrnStreetData::ChallengePlayerScoreEntry* lpEntry,
-    int                                       liUnused,
-    const int32_t*                            lpScores )
+BrnStreetData::ChallengePlayerScoreEntry StreetManager::CreateUserChallengeScoreFromRoadRulesData(
+    const BrnNetwork::RoadRulesMessageData* lpRoadRulesData )
 {
-    (void)liUnused;   // reserved by the ABI, unreferenced by the X360 body
-
-    lpEntry->Construct();
+    BrnStreetData::ChallengePlayerScoreEntry lEntry;
+    lEntry.Construct();
 
     for ( BrnStreetData::ScoreType leScoreType = BrnStreetData::E_SCORE_TYPE_START;
           leScoreType < BrnStreetData::E_SCORE_TYPE_COUNT;
           leScoreType++ )
     {
-        if ( lpScores[leScoreType] != 0 )
+        const s32 liScore = lpRoadRulesData->maScores[leScoreType];
+        if ( liScore != 0 )
         {
-            lpEntry->SetScore( leScoreType, lpScores[leScoreType] );
+            lEntry.SetScore( leScoreType, liScore );
         }
     }
 
-    return lpEntry;
+    return lEntry;
 }
 
 } // namespace BrnGameState
@@ -1027,6 +1024,12 @@ void StreetManager::GetChallengeFriendHighScore( BrnStreetData::ChallengeIndex l
 
 namespace BrnGameState
 {
+    // ARTIST's constructor, recursive walk and junction reset drop the visited-section count.
+    inline void StreetManager::ClearSectionWalkingData()
+    {
+        miNextFreeSectionSlot = 0;
+    }
+
     // -----------------------------------------------------------------------
     // @ 0x82335978. Wire the three owner pointers, zero the score tables and the
     // whole walk / upcoming-roads state, construct the embedded debug component,
@@ -1036,9 +1039,6 @@ namespace BrnGameState
                                    BrnProgression::ProgressionManager* lpProgression,
                                    RoadRulesManager* lpRoadRulesManager )
     {
-        // Embedded debug component: base Construct, miNumberOfRoadRulesToWin = 0,
-        // mpStreetManager = this (the COMDAT-folded BaseCollisionGenerator::Destruct
-        // at this+0x1DF0 is the DebugComponent base Construct).
         mStreetManagerDebugComponent.Construct( this );
 
         CGS_ASSERT( lpProgression, CGS_ASSERT_MESSAGE_AT("lpProgression", CGS_ARTIST_FILE, 151) );
@@ -1069,6 +1069,7 @@ namespace BrnGameState
               leEnumIndex < BrnStreetData::E_SCORE_TYPE_COUNT;
               leEnumIndex++ )
         {
+            maRoadRulesChangedBitArrays[leEnumIndex].Construct();
             maRoadRulesChangedBitArrays[leEnumIndex].UnSetAll();
         }
 
@@ -1079,7 +1080,7 @@ namespace BrnGameState
         mFirstJunctionPosition.SetZero();
         miNewestForwardPlayerRoadIndex = BrnStreetData::KI_INVALID_ROAD_INDEX;
         miNewestLeftPlayerRoadIndex    = BrnStreetData::KI_INVALID_ROAD_INDEX;
-        miNextFreeSectionSlot          = 0;
+        ClearSectionWalkingData();
         miNewestRightPlayerRoadIndex   = BrnStreetData::KI_INVALID_ROAD_INDEX;
         mLeftRoadIndex                 = BrnStreetData::KI_INVALID_ROAD_INDEX;
         mRightRoadIndex                = BrnStreetData::KI_INVALID_ROAD_INDEX;
@@ -1091,6 +1092,7 @@ namespace BrnGameState
         mfTotalTimeGoinTheWrongWay     = 0.0f;
         mbNeedToUpdateUpcomingRoads    = true;
         mbWrongWay                     = false;
+        miOriginalInterStateRoadIndex  = BrnStreetData::KI_INVALID_ROAD_INDEX;
         miHopefulForwardPlayerRoadIndex = BrnStreetData::KI_INVALID_ROAD_INDEX;
         miHopefulLeftPlayerRoadIndex   = BrnStreetData::KI_INVALID_ROAD_INDEX;
         miHopefulRightPlayerRoadIndex  = BrnStreetData::KI_INVALID_ROAD_INDEX;
@@ -1110,19 +1112,19 @@ namespace BrnGameState
         // the r6 GPR slot, so only r4/r5/f1/r7 are set at each call site).
         miSetRoadRuleChallengeDataPM =
             CgsDev::PerfMonCpu::AddMonitor( "SetRoadRuleChallengeData",
-                                            static_cast<CgsDev::PerfMonCpuPage>( 5 ), false, 1.0f, true );
+                                            CgsDev::E_PMP_5, false, 1.0f, true );
         miSetRoadRuleNetworkHighScoresPM =
             CgsDev::PerfMonCpu::AddMonitor( "SetRoadRuleNetworkHighScores",
-                                            static_cast<CgsDev::PerfMonCpuPage>( 5 ), false, 1.0f, true );
+                                            CgsDev::E_PMP_5, false, 1.0f, true );
         miUpcomingRoadsPM =
             CgsDev::PerfMonCpu::AddMonitor( "UpcomingRoads",
-                                            static_cast<CgsDev::PerfMonCpuPage>( 5 ), false, 1.0f, true );
+                                            CgsDev::E_PMP_5, false, 1.0f, true );
         miUpcomingRoadsSentMessagePM =
             CgsDev::PerfMonCpu::AddMonitor( "UpcomingRoadsSendMessage",
-                                            static_cast<CgsDev::PerfMonCpuPage>( 5 ), false, 1.0f, true );
+                                            CgsDev::E_PMP_5, false, 1.0f, true );
         miUpcomingRoadsQSortPM =
             CgsDev::PerfMonCpu::AddMonitor( "UpcomingRoadsQSort",
-                                            static_cast<CgsDev::PerfMonCpuPage>( 5 ), false, 1.0f, true );
+                                            CgsDev::E_PMP_5, false, 1.0f, true );
 
         CGS_ASSERT( miSetRoadRuleChallengeDataPM >= 0,     CGS_ASSERT_MESSAGE_AT("miSetRoadRuleChallengeDataPM >= 0", CGS_ARTIST_FILE, 224) );
         CGS_ASSERT( miSetRoadRuleNetworkHighScoresPM >= 0, CGS_ASSERT_MESSAGE_AT("miSetRoadRuleNetworkHighScoresPM >= 0", CGS_ARTIST_FILE, 225) );
@@ -1564,7 +1566,7 @@ namespace BrnGameState
 
         miNewestForwardPlayerRoadIndex = -1;
         miNewestLeftPlayerRoadIndex = -1;
-        miNextFreeSectionSlot = 0;
+        ClearSectionWalkingData();
         miNewestRightPlayerRoadIndex = -1;
 
         PushSectionIndex( luSectionIndex );
@@ -1906,7 +1908,7 @@ namespace BrnGameState
 
                 miNewestForwardPlayerRoadIndex = BrnStreetData::KI_INVALID_ROAD_INDEX;
                 miNewestLeftPlayerRoadIndex    = BrnStreetData::KI_INVALID_ROAD_INDEX;
-                miNextFreeSectionSlot          = 0;
+                ClearSectionWalkingData();
                 miNewestRightPlayerRoadIndex   = BrnStreetData::KI_INVALID_ROAD_INDEX;
                 mLeftRoadIndex                 = BrnStreetData::KI_INVALID_ROAD_INDEX;
                 mRightRoadIndex                = BrnStreetData::KI_INVALID_ROAD_INDEX;
@@ -3516,11 +3518,9 @@ namespace BrnGameState
 
             if ( lbRoadHasSaveSlot )
             {
-                BrnStreetData::ChallengeHighScoreEntry lDownloadedEntry;
-                CreateHighScoreEntryFromDown(
-                    &lDownloadedEntry, 0,
-                    reinterpret_cast<const CgsNetwork::PlayerName*>( lDownloadRecord.maPlayerNames ),
-                    lDownloadRecord.mRoadRulesData.maScores );
+                BrnStreetData::ChallengeHighScoreEntry lDownloadedEntry =
+                    CreateHighScoreEntryFromDownloadData( lDownloadRecord.maPlayerNames,
+                                                          &lDownloadRecord.mRoadRulesData );
 
                 // X360 re-materializes the road count AFTER building the downloaded entry
                 // (0x82348E18-0x82348E28) and early-outs the whole merge, the (280,104)
@@ -4312,12 +4312,8 @@ namespace BrnGameState
                     continue;
                 }
 
-                // The factory builds the server-side entry from the record's raw
-                // score pair. (The X360 passes `this` in the unused slot; the
-                // committed factory ignores that parameter.)
-                BrnStreetData::ChallengePlayerScoreEntry lFactoryOut;
                 BrnStreetData::ChallengePlayerScoreEntry lServerEntry =
-                    *CreateUserChallengeScoreFr( &lFactoryOut, 0, lRecord.maScores );
+                    CreateUserChallengeScoreFromRoadRulesData( &lRecord );
 
                 BrnStreetData::ChallengePlayerScoreEntry lLocalEntry;
                 lLocalEntry.Construct();

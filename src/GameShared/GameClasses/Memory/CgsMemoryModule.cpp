@@ -313,7 +313,7 @@ namespace CgsMemory
         const MemoryIO::CreateLinearAllocatorRequest* lpReq = static_cast<const MemoryIO::CreateLinearAllocatorRequest*>(lpRequest);
         const rw::ResourceDescriptor lCapacity = *lpReq->GetDescriptor();
         rw::ResourceDescriptor lBackingDescriptor;
-        rw::LinearResourceAllocator::GetResourceDescriptor(&lBackingDescriptor, &lCapacity);
+        lBackingDescriptor = rw::LinearResourceAllocator::GetResourceDescriptor(lCapacity);
         rw::Resource lBacking;
         MemoryBank::Params lParams = {};
         std::strncpy(lParams.macName, lpReq->GetBankName(), sizeof(lParams.macName));

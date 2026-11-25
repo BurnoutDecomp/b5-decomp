@@ -185,24 +185,6 @@ namespace BrnStreetData
         *lpRivalId = mRivals[ leScoreType ];
     }
 
-    // X360 BrnStreetData::operator++ @ 0x8230EBB8 -- post-increment on the ScoreType enum
-    // iterator (DWARF BrnChallengeData.h:56, `extern BrnStreetData::ScoreType
-    // operator++(BrnStreetData::ScoreType&, int)`). Reads the old value (lwz r31,0(r3)),
-    // advances the referenced enum by one (addi r11,r31,1 / stw r11,0(r3)), asserts the NEW
-    // index has not run past E_SCORE_TYPE_COUNT (cmpwi r11,2 / ble skips unless v2>2 -- the
-    // loop's one-past-the-end terminator == COUNT is legal, > COUNT is the error), and returns
-    // the OLD value (mr r3,r31). Assert message VERBATIM from rodata aLeenumindexESc; the baked
-    // file/line (BrnChallengeData.h:56) is dropped per project convention; no trailing newline.
-    ScoreType operator++( ScoreType& leEnumIndex, int )
-    {
-        ScoreType leOld = leEnumIndex;
-        leEnumIndex = static_cast<ScoreType>( leEnumIndex + 1 );
-        CGS_ASSERT( leEnumIndex <= E_SCORE_TYPE_COUNT,
-            CGS_ASSERT_MESSAGE_AT(
-                "leEnumIndex <= E_SCORE_TYPE_COUNT",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\streetdata\\BrnChallengeData.h", 56 /* ARTIST 0x8230EBE4 */));
-        return leOld;
-    }
 
     // ========================================================================
     // ACCESSOR CLOSURE (2026-08-26). The two ChallengeData score accessors the whole

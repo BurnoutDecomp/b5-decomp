@@ -443,8 +443,7 @@ namespace BrnGui
 
         mRouteInfoDisplay.SetState(GuiNetworkRouteInfo::E_STATE_VISIBLE);
         mRouteInfoDisplay.SetInfo(miCurrentRound,
-                                  reinterpret_cast<const GuiEventNetworkGameParams*>(
-                                      mpGuiCache->maOnlineGameModeOptionsStorage));
+                                  mpGuiCache->GetOnlineGameModeOptions());
 
         ShowHideMainMap(mpStateInterface, true);
 
@@ -573,7 +572,7 @@ namespace BrnGui
                             || leGameMode == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_SHOWTIME;
 
         const GuiEventNetworkGameParams* lpParams =
-            reinterpret_cast<const GuiEventNetworkGameParams*>(mpGuiCache->maOnlineGameModeOptionsStorage);
+            mpGuiCache->GetOnlineGameModeOptions();
 
         if (!lbInLobby)
         {
@@ -690,7 +689,7 @@ namespace BrnGui
         {
             mpGuiCache->GetMenuOptionsData()->SetCreatedOnlineGameOptions(
                 mMenuOptions.GetHighlightedIndex(), mpGuiCache,
-                reinterpret_cast<const GuiEventNetworkGameParams*>(mpGuiCache->maOnlineGameModeOptionsStorage));
+                mpGuiCache->GetOnlineGameModeOptions());
             GuiAutosaveRequestEvent lAutosaveRequest;   // OutputGuiEvent<GuiAutosaveRequestEvent> 0x824937E0
             lAutosaveRequest.maData[0] = 0;
             mpStateInterface->OutputGuiEvent(lAutosaveRequest);
@@ -725,7 +724,7 @@ namespace BrnGui
                    "Invalid event sent to OnlineGameOptionsSummary::HandleControllerInputCreateGame");
 
         const GuiEventNetworkGameParams* lpParams =
-            reinterpret_cast<const GuiEventNetworkGameParams*>(mpGuiCache->maOnlineGameModeOptionsStorage);
+            mpGuiCache->GetOnlineGameModeOptions();
 
         const ControllerButtonPayload* lpInput = static_cast<const ControllerButtonPayload*>(lpEvent);
         switch (lpInput->miButtonId)
@@ -820,7 +819,7 @@ namespace BrnGui
             {
                 lpProfile->SetCreatedOnlineGameOptions(
                     liHighlightedSlot, mpGuiCache,
-                    reinterpret_cast<const GuiEventNetworkGameParams*>(mpGuiCache->maOnlineGameModeOptionsStorage));
+                    mpGuiCache->GetOnlineGameModeOptions());
                 GuiAutosaveRequestEvent lAutosaveRequest;   // OutputGuiEvent<GuiAutosaveRequestEvent> 0x824937E0
                 lAutosaveRequest.maData[0] = 0;
                 mpStateInterface->OutputGuiEvent(lAutosaveRequest);

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "BrnCommonTypes.h"                                  // ::CgsID (u64) for ChallengePlayerScoreEntry::maCarIDs
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"   // CgsContainers::BitArray<2u> (canonical generic)
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT (ContainsData bounds guard)
@@ -192,6 +193,15 @@ namespace BrnStreetData
 
     // BrnChallengeData.h:56 (DWARF). Post-increment ScoreType iterator: advances the referenced
     // enum, asserts it has not exceeded E_SCORE_TYPE_COUNT, returns the prior value by value.
-    // X360 0x8230EBB8. Body in BrnChallengeData.cpp.
-    ScoreType operator++( ScoreType& leEnumIndex, int );
+    // ARTIST 0x8230EBB8 and the inlined loop in StreetManager::Construct.
+    inline ScoreType operator++( ScoreType& leEnumIndex, int )
+    {
+        ScoreType leOld = leEnumIndex;
+        leEnumIndex = static_cast<ScoreType>( leEnumIndex + 1 );
+        CGS_ASSERT( leEnumIndex <= E_SCORE_TYPE_COUNT,
+            CGS_ASSERT_MESSAGE_AT(
+                "leEnumIndex <= E_SCORE_TYPE_COUNT",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\streetdata\\BrnChallengeData.h", 56 /* ARTIST 0x8230EBE4 */));
+        return leOld;
+    }
 }

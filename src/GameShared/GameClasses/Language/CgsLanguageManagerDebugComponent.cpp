@@ -110,43 +110,43 @@ namespace CgsLanguage
 
         // The X360 force-terminates the last buffer byte after every format call (defensive against an
         // unterminated formatter); kept here per line.
-        mpLanguageManager->FormatIntegerString( acValue, mnNumber1, sizeof( acValue ) );
+        mpLanguageManager->FormatIntegerString( reinterpret_cast<CgsUnicode::CgsUtf8*>(acValue), mnNumber1, sizeof( acValue ) );
         acValue[31] = '\0';
         DrawText( lpRender, "Integer= ", acValue, mrPosX, lfY );
 
-        mpLanguageManager->FormatXoverYString( acValue, mnNumber1, mnNumber2, sizeof( acValue ) );
+        mpLanguageManager->FormatXoverYString( reinterpret_cast<CgsUnicode::CgsUtf8*>(acValue), mnNumber1, mnNumber2, sizeof( acValue ) );
         acValue[31] = '\0';
         DrawText( lpRender, "X / Y = ", acValue, mrPosX, lfY );
 
-        mpLanguageManager->FormatPercentageString( acValue, mnNumber1, sizeof( acValue ) );
+        mpLanguageManager->FormatPercentageString( reinterpret_cast<CgsUnicode::CgsUtf8*>(acValue), mnNumber1, sizeof( acValue ) );
         acValue[31] = '\0';
         DrawText( lpRender, "Percentage = ", acValue, mrPosX, lfY );
 
-        mpLanguageManager->FormatCurrencyString( acValue, mnCurrency, sizeof( acValue ) );
+        mpLanguageManager->FormatCurrencyString( reinterpret_cast<CgsUnicode::CgsUtf8*>(acValue), mnCurrency, sizeof( acValue ) );
         acValue[31] = '\0';
         DrawText( lpRender, "Currency = ", acValue, mrPosX, lfY );
 
-        mpLanguageManager->FormatDateString( acValue, mnDays, mnMonths, mnYears, sizeof( acValue ) );
+        mpLanguageManager->FormatDateString( reinterpret_cast<CgsUnicode::CgsUtf8*>(acValue), mnDays, mnMonths, mnYears, sizeof( acValue ) );
         acValue[31] = '\0';
         DrawText( lpRender, "Date = ", acValue, mrPosX, lfY );
 
-        mpLanguageManager->FormatHoursMinutesAndSecondsString( acValue, mrSeconds, sizeof( acValue ) );
+        mpLanguageManager->FormatHoursMinutesAndSecondsString( reinterpret_cast<CgsUnicode::CgsUtf8*>(acValue), mrSeconds, sizeof( acValue ) );
         acValue[31] = '\0';
         DrawText( lpRender, "Time Hours and Minutes and Seconds = ", acValue, mrPosX, lfY );
 
-        mpLanguageManager->FormatMinutesAndSecondsString( acValue, mrSeconds, sizeof( acValue ) );
+        mpLanguageManager->FormatMinutesAndSecondsString( reinterpret_cast<CgsUnicode::CgsUtf8*>(acValue), mrSeconds, sizeof( acValue ) );
         acValue[31] = '\0';
         DrawText( lpRender, "Time Minutes And Seconds = ", acValue, mrPosX, lfY );
 
-        mpLanguageManager->FormatMinutesAndSecondsAndHundredsString( acValue, mrSeconds, sizeof( acValue ) );
+        mpLanguageManager->FormatMinutesAndSecondsAndHundredsString( reinterpret_cast<CgsUnicode::CgsUtf8*>(acValue), mrSeconds, sizeof( acValue ) );
         acValue[31] = '\0';
         DrawText( lpRender, "Time Minutes and Seconds and Hundredths = ", acValue, mrPosX, lfY );
 
-        mpLanguageManager->FormatSecondsAndHundredsString( acValue, mrSeconds, sizeof( acValue ) );
+        mpLanguageManager->FormatSecondsAndHundredsString( reinterpret_cast<CgsUnicode::CgsUtf8*>(acValue), mrSeconds, sizeof( acValue ) );
         acValue[31] = '\0';
         DrawText( lpRender, "Time Seconds and Hundredths = ", acValue, mrPosX, lfY );
 
-        mpLanguageManager->FormatSecondsString( acValue, mrSeconds, sizeof( acValue ) );
+        mpLanguageManager->FormatSecondsString( reinterpret_cast<CgsUnicode::CgsUtf8*>(acValue), mrSeconds, sizeof( acValue ) );
         acValue[31] = '\0';
         DrawText( lpRender, "Time Seconds = ", acValue, mrPosX, lfY );
 

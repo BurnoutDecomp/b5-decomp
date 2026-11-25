@@ -329,14 +329,14 @@ void FriendsListComponent::BuildShortcutOptions()
         {
             if (!(lbRunning || lbResults))
                 maeAvailableShortcutOptions[miTotalOptions++] = 1;    // @0x82414480
-            if (!(mpGuiCache->meOnlineGameMode == 15 ||
-                  mpGuiCache->meOnlineGameMode == 16))
+            if (!(mpGuiCache->GetOnlineGameModeOptions()->meGameMode == 15 ||
+                  mpGuiCache->GetOnlineGameModeOptions()->meGameMode == 16))
                 maeAvailableShortcutOptions[miTotalOptions++] = 16;   // @0x824144CC..D0
         }
         else                                                        // host arm @0x82414304
         {
-            const bool lbInLobby = (mpGuiCache->meOnlineGameMode == 15 ||
-                                    mpGuiCache->meOnlineGameMode == 16);
+            const bool lbInLobby = (mpGuiCache->GetOnlineGameModeOptions()->meGameMode == 15 ||
+                                    mpGuiCache->GetOnlineGameModeOptions()->meGameMode == 16);
             if (!lbInLobby)                                         // @0x82414304..54
             {
                 maeAvailableShortcutOptions[miTotalOptions++] = 9;
@@ -354,9 +354,9 @@ void FriendsListComponent::BuildShortcutOptions()
             if (lbInLobby)
                 maeAvailableShortcutOptions[miTotalOptions++] = 10;   // @0x82414414
         }
-        if (mpGuiCache->mbIsOnlineHost && !mpGuiCache->mbOnlineRanked) // +0xA9DF @0x82414438
+        if (mpGuiCache->mbIsOnlineHost && !mpGuiCache->GetOnlineGameModeOptions()->mbRanked) // +0xA9DF @0x82414438
             maeAvailableShortcutOptions[miTotalOptions++] = 19;       // @0x824144D0
-        if (mpGuiCache->meOnlineGameMode == 11)                     // @0x824144EC..F8
+        if (mpGuiCache->GetOnlineGameModeOptions()->meGameMode == 11)                     // @0x824144EC..F8
             maeAvailableShortcutOptions[miTotalOptions++] = 11;
         maeAvailableShortcutOptions[miTotalOptions++] = 12;           // always @0x8241451C..
         maeAvailableShortcutOptions[miTotalOptions++] = 18;           // ..58 block
@@ -1389,10 +1389,10 @@ void FriendsListComponent::ShowShortcutsBranch()
     case 5: first = 6; break;
     case 6: first = 9; break;
     case 19:
-        CGS_ASSERT(mpGuiCache->meOnlineSecurity >= 0 && mpGuiCache->meOnlineSecurity < 3, "Unknown security value");
+        CGS_ASSERT(mpGuiCache->GetOnlineGameModeOptions()->meSecurity >= 0 && mpGuiCache->GetOnlineGameModeOptions()->meSecurity < 3, "Unknown security value");
         count = 2;
-        maeAvailableShortcutBranchOptions[0] = mpGuiCache->meOnlineSecurity == 0 ? 13 : 12;
-        maeAvailableShortcutBranchOptions[1] = mpGuiCache->meOnlineSecurity == 2 ? 13 : 14;
+        maeAvailableShortcutBranchOptions[0] = mpGuiCache->GetOnlineGameModeOptions()->meSecurity == 0 ? 13 : 12;
+        maeAvailableShortcutBranchOptions[1] = mpGuiCache->GetOnlineGameModeOptions()->meSecurity == 2 ? 13 : 14;
         break;
     default: CGS_ASSERT(false, "Shortcut option doesn't have branches"); break;
     }
@@ -1574,7 +1574,7 @@ void FriendsListComponent::SortFullList()
         else
         {
             const s32 mode = mpGuiCache->GetGameMode();
-            const bool canInvite = mode == -1 || ((mode == 15 || mode == 16) && !mpGuiCache->mbOnlineRanked);
+            const bool canInvite = mode == -1 || ((mode == 15 || mode == 16) && !mpGuiCache->GetOnlineGameModeOptions()->mbRanked);
             status = canInvite ? (record.mbIsJoinable ? 6 : 7) : (record.mbIsJoinable ? 12 : 11);
         }
         maeFullBuddyEntryState[i] = status;
@@ -1727,26 +1727,18 @@ void FriendsListComponent::UpdateAllChallengesEntryData()
 // ARTIST 0x82438760.
 void FriendsListComponent::HandleDPadRightChallenges()
 {
-    const CgsID id = maChallengesAvailable[miCurrentlyHighlightedOption];
-    FriendsChallenge(mpStateInterface, mpGuiCache, id, 0);
-    FriendsChallenge(mpStateInterface, mpGuiCache, id, 3);
-    if (mpGuiCache->meOnlineGameMode != 15)
+    GuiChallengeSelectedEvent lSelected;
+    lSelected.mChallengeID = maChallengesAvailable[miCurrentlyHighlightedOption];
+    lSelected.miSelectorAction = 0;
+    lSelected.miChall = mpGuiCache->GetFreeburnChallengeList()
+        ->GetChallengeData(lSelected.mChallengeID)->GetChallengeStyle();
+    mpStateInterface->OutputGuiEvent(lSelected);
+    lSelected.miSelectorAction = 3;
+    mpStateInterface->OutputGuiEvent(lSelected);
+    if (mpGuiCache->GetOnlineGameModeOptions()->meGameMode != 15)
     {
-        GuiEventNetworkGameParams event;
-        memcpy(event.maEvents, mpGuiCache->maOnlineGameModeOptionsStorage, sizeof(event.maEvents));
+        GuiEventNetworkGameParams event = *mpGuiCache->GetOnlineGameModeOptions();
         event.meGameMode = 15;
-        event.mePreviousGameMode = mpGuiCache->meOnlinePreviousGameMode;
-        event.meSecurity = mpGuiCache->meOnlineSecurity;
-        event.meBoostType = mpGuiCache->meOnlineBoostType;
-        event.meVehicleChoice = mpGuiCache->miOnlineHostGameState;
-        event.miTimeLimit = mpGuiCache->miOnlineTimeLimit;
-        event.miNumRounds = mpGuiCache->miOnlineNumRounds;
-        event.miVehicleClass = mpGuiCache->miOnlineVehicleClass;
-        event.miNumRunnerCrashes = mpGuiCache->miOnlineNumRunnerCrashes;
-        event.mbInfiniteBoost = mpGuiCache->mbOnlineInfiniteBoost;
-        event.mbTrafficOn = mpGuiCache->mbOnlineTrafficOn;
-        event.mbTrafficCheckingOn = mpGuiCache->mbOnlineTrafficCheckingOn;
-        event.mbRanked = mpGuiCache->mbOnlineRanked;
         FriendsOutput(mpStateInterface, event);
     }
     meCurrentState = 5;

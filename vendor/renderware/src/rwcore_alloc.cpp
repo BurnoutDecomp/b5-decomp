@@ -189,17 +189,17 @@ namespace rw
 
     // ARTIST 0x82BBCD90 reserves the 0x94-byte placement object in lane zero.
     // Alignment zero/one preserves that size; other alignments round it upward.
-    ResourceDescriptor* LinearResourceAllocator::GetResourceDescriptor(ResourceDescriptor* lpOut, const ResourceDescriptor* lpIn)
+    ResourceDescriptor LinearResourceAllocator::GetResourceDescriptor(const ResourceDescriptor& lrCapacity)
     {
-        *lpOut = *lpIn;
-        ResourceDescriptor lStorage;
-        const uint32_t luAlignment = lpIn->m_baseResourceDescriptors[0].m_alignment;
-        lStorage.m_baseResourceDescriptors[0].m_size = luAlignment > 1
-            ? (sizeof(LinearResourceAllocator) + luAlignment - 1u) & ~(luAlignment - 1u)
+        ResourceDescriptor lRequired(lrCapacity);
+        const uint32_t luAlignment = lrCapacity.m_baseResourceDescriptors[0].m_alignment;
+        const uint32_t luAlignmentMask = luAlignment - 1u;
+        const uint32_t luReserve = luAlignment > 1u
+            ? (sizeof(LinearResourceAllocator) + luAlignmentMask) & ~luAlignmentMask
             : sizeof(LinearResourceAllocator);
-        lStorage.m_baseResourceDescriptors[0].m_alignment = luAlignment;
-        *lpOut += lStorage;
-        return lpOut;
+        const ResourceDescriptor lStorage(luReserve, luAlignment);
+        lRequired += lStorage;
+        return lRequired;
     }
 
     // ARTIST 0x82BBCE30 adjusts only lane zero; r5 retains the original capacity.

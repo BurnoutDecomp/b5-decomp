@@ -80,7 +80,8 @@ namespace BrnResource
 
             // Validate the bank id + its registered allocator type, returning the slot index into the
             // matching pointer array (X360: each Get* asserts id<=0x42, map[id]>=0, type[id]==expected).
-            s32 GetAllocatorSlot(s32 liBankId, CgsMemory::MemoryMap::EAllocatorType leExpectedType) const;
+            s32 GetAllocatorSlot(s32 liBankId, CgsMemory::MemoryMap::EAllocatorType leExpectedType,
+            const char* lpcTypeMessage, int liFirstAssertLine) const;
 
             // Members in DWARF order; sizes verified against the X360 accessor offsets.
             s32                                  maiAllocatorMap[KI_NUM_BANKS];    // bank id -> slot index (-1 = none)

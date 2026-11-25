@@ -345,7 +345,7 @@ namespace BrnGame
         meGameReleaseStage = E_GAMERELEASESTAGE_DONE;
         meGameUpdateStage = E_GAMEUPDATESTAGE_PREPARE;
         mHardware.mePrepareStage = BrnHW::System360HW::E_PREPARESTAGE_START;
-        mHardware.meReleaseStage = BrnHW::System360HW::E_PREPARESTAGE_DONE;
+        mHardware.meReleaseStage = BrnHW::System360HW::E_RELEASESTAGE_DONE;
         mHardware.mbEngineModulesLoaded = false;
         CgsDev::DebugManagerConstructParameters lParams = CgsDev::DebugManagerConstructParameters::DEFAULT;
         lParams.miPerfMonCpuCount = 768;

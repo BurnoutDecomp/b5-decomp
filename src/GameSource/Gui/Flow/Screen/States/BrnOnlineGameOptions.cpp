@@ -2295,8 +2295,7 @@ namespace BrnGui
             StoreCreateGameOptions();
 
             // Publish the edited options back into the cache's mirror and move on.
-            memcpy(reinterpret_cast<GuiEventNetworkGameParams*>(
-                       &mpGuiCache->maOnlineGameModeOptionsStorage[0]),
+            memcpy(mpGuiCache->GetOnlineGameModeOptions(),
                    &mGameOptions,
                    sizeof(mGameOptions));   // size 0x1E0 == the whole cache mirror
 
@@ -2587,8 +2586,7 @@ namespace BrnGui
 
         // ---- take a working copy of the cache's params mirror -------------------------
         memcpy(&mGameOptions,
-               reinterpret_cast<const GuiEventNetworkGameParams*>(
-                   &mpGuiCache->maOnlineGameModeOptionsStorage[0]),
+               mpGuiCache->GetOnlineGameModeOptions(),
                sizeof(mGameOptions));   // size 0x1E0 == the whole cache mirror
 
         // ---- ask for a fresh publish when the options went stale ----------------------

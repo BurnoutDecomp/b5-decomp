@@ -1997,18 +1997,17 @@ namespace BrnGui
             break;
         }
 
-        // GUI 244 GuiEventNetworkLobbyPlayerList: the lobby roster, adopted whole (one 456-byte
-        // memcpy over maLobbyPlayerInfo and the record's count and tail).
+        // GUI 244 publishes the whole cached lobby roster.
         case 244:
         {
-            CGS_ASSERT(lpEvent != 0, "lpNetworkPlayerList");
-            CGS_STATIC_ASSERT((offsetof(GuiCache, miLobbyNumPlayers) ==
-                              offsetof(GuiCache, maLobbyPlayerInfo) + sizeof(maLobbyPlayerInfo)),
-                          "the id-244 count follows the eight lobby rows");
-            CGS_STATIC_ASSERT((sizeof(maLobbyPlayerInfo) + sizeof(miLobbyNumPlayers) + sizeof(mPad_B804) ==
-                              KI_NETWORK_LOBBY_PLAYER_LIST_SIZE),
-                          "the id-244 record is 456 bytes");
-            std::memcpy(maLobbyPlayerInfo, lpEvent, KI_NETWORK_LOBBY_PLAYER_LIST_SIZE);
+            CGS_STATIC_ASSERT(offsetof(GuiCache, mLobbyPlayerInfoList) == 0xB640,
+                              "ARTIST lobby roster offset");
+            CGS_STATIC_ASSERT(offsetof(GuiCache, maCurrentPlayerTeam) == 0xB808,
+                              "ARTIST lobby roster tail");
+            const GuiEventNetworkLobbyPlayerList* lpNetworkPlayerList =
+                reinterpret_cast<const GuiEventNetworkLobbyPlayerList*>(lpEvent);
+            CGS_ASSERT_AT(lpNetworkPlayerList != 0, "lpNetworkPlayerList", KAC_ARTIST_ASSERT_SOURCE, 1943);
+            std::memcpy(&mLobbyPlayerInfoList, lpNetworkPlayerList, sizeof(mLobbyPlayerInfoList));
             break;
         }
 
@@ -2075,19 +2074,18 @@ namespace BrnGui
             break;
         }
 
-        // GUI 257 GuiEventNetworkGameParams: the whole 480-byte params record lands on the
-        // +0xA800 mirror (the round events, then meOnlineGameMode .. mbOnlineRanked).
+        // GUI 257 copies the whole 480-byte payload into its cached game-options owner.
         case 257:
-            CGS_STATIC_ASSERT((offsetof(GuiCache, mbOnlineRanked) + sizeof(mbOnlineRanked) -
-                              offsetof(GuiCache, maOnlineGameModeOptionsStorage) ==
-                              sizeof(GuiEventNetworkGameParams)),
-                          "the +0xA800 params mirror is one 480-byte GuiEventNetworkGameParams");
-            std::memcpy(maOnlineGameModeOptionsStorage, lpEvent, sizeof(GuiEventNetworkGameParams));
+            CGS_STATIC_ASSERT(offsetof(GuiCache, mGameOptions) == 0xA800,
+                              "ARTIST online game options offset");
+            CGS_STATIC_ASSERT(offsetof(GuiCache, mbOnlineGameOptionsChanged) == 0xA9E0,
+                              "ARTIST online game options tail");
+            std::memcpy(&mGameOptions, lpEvent, sizeof(mGameOptions));
             break;
 
         // GUI 273 GuiEventNetworkLeftGame: the mirror's game security back to public (0).
         case 273:
-            meOnlineSecurity = 0;                                          // stwx 0, +0xA9C0
+            mGameOptions.meSecurity = 0;                                          // stwx 0, +0xA9C0
             break;
 
         // GUI 44 GuiEventNetworkDisconnected: the local player is marked disconnected, the
@@ -2103,7 +2101,7 @@ namespace BrnGui
                 maOnlinePlayerDisconnected[mGuiPlayerInfo.mePlayerActiveRaceCarIndex] = true;   // stbx 1, +0xB84C + idx
             }
             mbRoadRuleFriendScoresAvailable = false;                       // stb 0,  +0x4B50
-            meOnlineSecurity                = 0;                           // stwx 0, +0xA9C0
+            mGameOptions.meSecurity         = 0;                           // stwx 0, +0xA9C0
             muFriendsPanelBranchMirror      = 0;                           // stwx 0, +0xB868
             break;
 
@@ -2578,7 +2576,7 @@ namespace BrnGui
                 typedef BrnGameState::GameStateModuleIO::SpecificGameModeEventInterface::Event
                     OnlineModeEvent;
                 const OnlineModeEvent* lpOnlineGameModeOptions =
-                    reinterpret_cast<const OnlineModeEvent*>(maOnlineGameModeOptionsStorage);
+                    mGameOptions.maEvents;
                 UpdateTrackerInfoFromOnlineEvent(&lpOnlineGameModeOptions[miOnlineRoundIndex]);
 
                 // Remaining pre-existing online destination/lobby-reset recovery:
@@ -3277,11 +3275,10 @@ namespace BrnGui
         if (IsOnlinePlayerEliminated(leActiveRaceCarIndex))
             return 10;
 
-        for (s32 liRow = 0; liRow < miLobbyNumPlayers; ++liRow)
+        for (s32 liRow = 0; liRow < mLobbyPlayerInfoList.miNumberOfPlayers; ++liRow)
         {
             const BrnNetwork::BrnNetworkModuleIO::LobbyPlayerStatusData* lpLobbyRow =
-                reinterpret_cast<const BrnNetwork::BrnNetworkModuleIO::LobbyPlayerStatusData*>(
-                    maLobbyPlayerInfo[liRow]);
+                &mLobbyPlayerInfoList.maPlayerLobbyInfo[liRow];
             if (GetActiveRaceCarFromNetworkId(lpLobbyRow->mPlayerID) != leActiveRaceCarIndex)
                 continue;
 
@@ -3447,22 +3444,18 @@ namespace BrnGui
     // round index (@0xA7FC) against KU_MAX_ONLINE_ROUNDS_IN_MODE and forwards to the round's
     // Event::GetLandmark (base + 44*miOnlineRoundIndex; sizeof(Event) == 44).
     BrnGameState::LandmarkIndex
-        GuiCache::GetOnlineLandmarkIndex(u32 luCheckpointIndex) const
+        GuiCache::GetOnlineLandmarkIndex(s32 liCheckpointIndex) const
     {
-        typedef BrnGameState::GameStateModuleIO::SpecificGameModeEventInterface::Event OnlineModeEvent;
-
-        CGS_ASSERT(luCheckpointIndex < static_cast<u32>(BrnGameState::GameStateModuleIO::KI_MAX_LANDMARKS_IN_MODE),
-                   "( liCheckpointIndex >= 0 ) && ( liCheckpointIndex < KI_MAX_LANDMARKS_IN_MODE )");
-
-        const OnlineModeEvent* lpOnlineGameModeOptions =
-            reinterpret_cast<const OnlineModeEvent*>(maOnlineGameModeOptionsStorage);
-        CGS_ASSERT(lpOnlineGameModeOptions != 0, "GetOnlineGameModeOptions()");
-
-        CGS_ASSERT(static_cast<u32>(miOnlineRoundIndex) < 10u,
-                   "( GetOnlineRoundIndex() >= 0 ) && ( static_cast<uint32_t>( GetOnlineRoundIndex() ) < "
-                   "BrnGameState::GameStateModuleIO::KU_MAX_ONLINE_ROUNDS_IN_MODE )");
-
-        return lpOnlineGameModeOptions[miOnlineRoundIndex].GetLandmark(static_cast<s32>(luCheckpointIndex));
+        using namespace BrnGameState::GameStateModuleIO;
+        CGS_ASSERT_AT(liCheckpointIndex >= 0 && liCheckpointIndex < KI_MAX_LANDMARKS_IN_MODE,
+                      "( liCheckpointIndex >= 0 ) && ( liCheckpointIndex < KI_MAX_LANDMARKS_IN_MODE )",
+                      KAC_ARTIST_ASSERT_FILE, 4138);
+        CGS_ASSERT_AT(GetOnlineGameModeOptions() != 0, "GetOnlineGameModeOptions()", KAC_ARTIST_ASSERT_FILE, 4139);
+        CGS_ASSERT_AT(miOnlineRoundIndex >= 0 && static_cast<u32>(miOnlineRoundIndex) < KU_MAX_ONLINE_ROUNDS_IN_MODE,
+                      "( GetOnlineRoundIndex() >= 0 ) && ( static_cast<uint32_t>( GetOnlineRoundIndex() ) < "
+                      "BrnGameState::GameStateModuleIO::KU_MAX_ONLINE_ROUNDS_IN_MODE )",
+                      KAC_ARTIST_ASSERT_FILE, 4140);
+        return GetOnlineGameModeOptions()->maEvents[miOnlineRoundIndex].GetLandmark(liCheckpointIndex);
     }
 
     // @ 0x824436D0 -- is the given race car still in car-select. Bounds-checks the ARCI
@@ -4386,7 +4379,7 @@ namespace BrnGui
             typedef BrnGameState::GameStateModuleIO::SpecificGameModeEventInterface::Event
                 OnlineModeEvent;
             const OnlineModeEvent* lpOnlineGameModeOptions =
-                reinterpret_cast<const OnlineModeEvent*>(maOnlineGameModeOptionsStorage);
+                mGameOptions.maEvents;
             UpdateTrackerInfoFromOnlineEvent(&lpOnlineGameModeOptions[miOnlineRoundIndex]);
         }
         else

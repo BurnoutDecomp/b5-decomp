@@ -12,6 +12,10 @@
 // flt_82001CC0 is unattested) is declaration-only and FLAGged in the header.
 // ============================================================================
 
+#define CGS_RESOURCE_PTR_MATCH_RELATIVE_ASSERTS
+#include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
+#undef CGS_RESOURCE_PTR_MATCH_RELATIVE_ASSERTS
+
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficDebugComponent.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"        // CGS_ASSERT

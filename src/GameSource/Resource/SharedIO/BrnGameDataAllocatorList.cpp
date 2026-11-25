@@ -1,19 +1,21 @@
 #include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "ppmalloc/EAGeneralAllocator.h"             // EA::Allocator::GeneralAllocator::BlockInfo
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint / Message::gxMessageFilterFlags
 
 // BrnResource::GameDataIO::AllocatorList -- see the header. The per-type accessors are faithful
 // reconstructions of the X360 ARTIST bodies (each: assert the bank id is in range, has an allocator
 // slot, and is the requested type; then return the slot's entry from the matching pointer array).
-// The X360 emits the bank id into the assert text via a StrStream; the static messages here are the
-// PC-side equivalent. (returning a pointer to a still-forward-declared allocator type is fine -- no
-// dereference happens here.)
+// ARTIST streams the bank id and the requested allocator type into its diagnostics.
 
 namespace BrnResource
 {
     namespace GameDataIO
     {
+        static const char* const KPC_ALLOCATOR_LIST_ASSERT_FILE =
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\resource\\SharedIO/BrnGameDataAllocatorList.h";
+
         // ARTIST82671D30..82671D58: the inlined owner initialization clears
         // only the 67 bank-map words and the audio-stream pointer. Allocator
         // types and pointer tables retain their incoming state until creation.
@@ -35,42 +37,54 @@ namespace BrnResource
             mpAudioStreamAllocator = 0;
         }
 
-        s32 AllocatorList::GetAllocatorSlot(s32 liBankId, CgsMemory::MemoryMap::EAllocatorType leExpectedType) const
+        __forceinline s32 AllocatorList::GetAllocatorSlot(s32 liBankId,
+            CgsMemory::MemoryMap::EAllocatorType leExpectedType, const char* lpcTypeMessage, int liFirstAssertLine) const
         {
-            CGS_ASSERT(liBankId >= 0 && liBankId <= KI_MAX_BANK_ID, "Bank id is out of range");
-            CGS_ASSERT(maiAllocatorMap[liBankId] >= 0, "Bank is not an allocator");
-            CGS_ASSERT(maeAllocatorType[liBankId] == leExpectedType, "Bank is not the requested allocator type");
+            CGS_ASSERT_STREAM_AT(liBankId >= 0 && liBankId < KI_NUM_BANKS, "Bank id is out of range\n",
+                KPC_ALLOCATOR_LIST_ASSERT_FILE, liFirstAssertLine);
+            CGS_ASSERT_STREAM_AT(maiAllocatorMap[liBankId] >= 0,
+                "Bank " << static_cast<u32>(liBankId) << " is not an allocator\n",
+                KPC_ALLOCATOR_LIST_ASSERT_FILE, liFirstAssertLine + 1);
+            CGS_ASSERT_STREAM_AT(maeAllocatorType[liBankId] == leExpectedType,
+                "Bank " << static_cast<u32>(liBankId) << lpcTypeMessage,
+                KPC_ALLOCATOR_LIST_ASSERT_FILE, liFirstAssertLine + 2);
             return maiAllocatorMap[liBankId];
         }
 
         rw::Resource* AllocatorList::GetRawResource(s32 liBankId) const
         {
-            return mapRawResources[GetAllocatorSlot(liBankId, CgsMemory::MemoryMap::E_ALLOCATORTYPE_RAW)];
+            return mapRawResources[GetAllocatorSlot(liBankId, CgsMemory::MemoryMap::E_ALLOCATORTYPE_RAW,
+                " is not a raw resource\n", 114)];
         }
 
         rw::ResourceDescriptor* AllocatorList::GetRawResourceDescriptor(s32 liBankId) const
         {
-            return mapRawResourceDescriptors[GetAllocatorSlot(liBankId, CgsMemory::MemoryMap::E_ALLOCATORTYPE_RAW)];
+            return mapRawResourceDescriptors[GetAllocatorSlot(liBankId, CgsMemory::MemoryMap::E_ALLOCATORTYPE_RAW,
+                " is not a raw resource\n", 123)];
         }
 
         CgsMemory::LinearMalloc* AllocatorList::GetLinearAllocator(s32 liBankId) const
         {
-            return mapLinearAllocators[GetAllocatorSlot(liBankId, CgsMemory::MemoryMap::E_ALLOCATORTYPE_LINEAR)];
+            return mapLinearAllocators[GetAllocatorSlot(liBankId, CgsMemory::MemoryMap::E_ALLOCATORTYPE_LINEAR,
+                " is not a linear allocator\n", 132)];
         }
 
         CgsMemory::HeapMalloc* AllocatorList::GetHeapAllocator(s32 liBankId) const
         {
-            return mapHeapAllocators[GetAllocatorSlot(liBankId, CgsMemory::MemoryMap::E_ALLOCATORTYPE_HEAP)];
+            return mapHeapAllocators[GetAllocatorSlot(liBankId, CgsMemory::MemoryMap::E_ALLOCATORTYPE_HEAP,
+                " is not a heap allocator\n", 141)];
         }
 
         rw::LinearResourceAllocator* AllocatorList::GetRWLinearResourceAllocator(s32 liBankId) const
         {
-            return mapRWLinearAllocators[GetAllocatorSlot(liBankId, CgsMemory::MemoryMap::E_ALLOCATORTYPE_RWLINEAR)];
+            return mapRWLinearAllocators[GetAllocatorSlot(liBankId, CgsMemory::MemoryMap::E_ALLOCATORTYPE_RWLINEAR,
+                " is not a rw linear resource allocator\n", 150)];
         }
 
         rw::core::GeneralResourceAllocator* AllocatorList::GetRWGeneralResourceAllocator(s32 liBankId) const
         {
-            return mapRWGeneralAllocators[GetAllocatorSlot(liBankId, CgsMemory::MemoryMap::E_ALLOCATORTYPE_RWHEAP)];
+            return mapRWGeneralAllocators[GetAllocatorSlot(liBankId, CgsMemory::MemoryMap::E_ALLOCATORTYPE_RWHEAP,
+                " is not a rw general resource allocator\n", 159)];
         }
 
         // @ 0x82662E90 -- PPMalloc invokes this once per block while DebugDumpStats walks an rw general

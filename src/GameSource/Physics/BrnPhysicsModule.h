@@ -208,10 +208,10 @@ namespace Vehicle         { struct VehicleManagerOutputBuffer; } // home BrnVehi
 
         // ---- ADDITIVE (attested by WorldModule::Prepare @0x827D53B0 stage 4) ----
         // Body in BrnPhysicsModule.cpp.
-        bool Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
+        virtual bool Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
                       CgsModule::IOBufferStack* lpOutputBufferStack,
                       CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer,
-                      BrnResource::GameDataIO::AllocatorList* lpAllocatorList );
+                      const BrnResource::GameDataIO::AllocatorList* lpAllocatorList );
 
         // ---- DWARF BrnPhysicsModule.h:207 (body BrnPhysicsModule.cpp:472) ----
         // X360 @0x825A9750 (165 insns). Creates the WORLD's static rigid body -- the body every

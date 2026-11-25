@@ -73,6 +73,28 @@ namespace fpu
         return Min(lMax, Max(lMin, lValue));
     }
 
+    // Legacy rwmath scalar.h:25-90. ARTIST 0x82863440 uses the same RenderWare
+    // floor sequence: sign-select the double mantissa bound, then correct
+    // a rounded-up result using the XDK floating-point select intrinsic.
+    template <typename T> inline T Floor(T lValue)
+    {
+        const double ldMantissaBound = 4503599627370496.0;
+        const double ldValue = static_cast<double>(lValue);
+        const double ldBias = __fsel(ldValue, -ldMantissaBound, ldMantissaBound);
+        const double ldRounded = (ldValue - ldBias) + ldBias;
+        return static_cast<T>(ldRounded - __fsel(ldValue - ldRounded, 0.0, 1.0));
+    }
+
+    template <typename T> inline int IntFloor(T lValue)
+    {
+        return static_cast<int>(Floor(lValue));
+    }
+
+    template <typename T> inline int IntRound(T lValue)
+    {
+        return IntFloor(lValue + 0.5f);
+    }
+
     // Scalar magnitude (fabs).
     inline float Abs(float lfValue) { return std::fabs(lfValue); }
 

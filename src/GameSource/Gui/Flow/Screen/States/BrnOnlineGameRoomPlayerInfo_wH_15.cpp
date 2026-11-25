@@ -52,17 +52,7 @@ namespace BrnGui
         // The apt movie level the screens mount/unmount on (X360 `li r11, 3`).
         const s32 KI_APT_MOVIE_LEVEL = 3;
 
-        // ---- in-queue payload view (event 244, GuiEventNetworkLobbyPlayerList) -------
-        // The queue delivers the HEADER-STRIPPED payload: the 8 lobby rows first, then
-        // the live player count (X360 payload +0x1C0 == 8 * sizeof(LobbyPlayerStatusData)).
-        // Row fields come from the record's real home,
-        // BrnNetworkModuleOnlineLobbyPlayerStatusInterface.h -- no forked layout here.
-        struct GuiEventNetworkLobbyPlayerListPayload
-        {
-            BrnNetwork::BrnNetworkModuleIO::LobbyPlayerStatusData
-                maPlayers[OnlineGameRoomPlayerInfo::KI_MAX_PLAYERS];   // +0x000
-            s32 miNumPlayers;                                          // +0x1C0
-        };
+
     }
 
     // -------------------------------------------- HandlePlayerLobbyListEvent @ 0x824AD560
@@ -80,18 +70,18 @@ namespace BrnGui
     // page with no selection. If they are still there the popup stays as it is.
     void OnlineGameRoomPlayerInfo::HandlePlayerLobbyListEvent(const CgsModule::Event* lpEvent)
     {
-        const GuiEventNetworkLobbyPlayerListPayload* lpPlayerList =
-            reinterpret_cast<const GuiEventNetworkLobbyPlayerListPayload*>(lpEvent);
+        const GuiEventNetworkLobbyPlayerList* lpPlayerList =
+            reinterpret_cast<const GuiEventNetworkLobbyPlayerList*>(lpEvent);
 
         s32 liCurrentPlayerID = -1;
-        if (lpPlayerList->miNumPlayers > 0)
+        if (lpPlayerList->miNumberOfPlayers > 0)
         {
             // mPlayerNameComponent.miHighlightedIndex is the SelectableGroup's signed
             // highlighted-row byte (-1 == nothing highlighted); the X360 sign-extends it
             // before the compare.
             const s32 liHighlightedIndex = mPlayerNameComponent.miHighlightedIndex;
             if (liHighlightedIndex > -1)
-                liCurrentPlayerID = lpPlayerList->maPlayers[liHighlightedIndex].mPlayerID;
+                liCurrentPlayerID = lpPlayerList->maPlayerLobbyInfo[liHighlightedIndex].mPlayerID;
         }
 
         if (meSubState != E_SUBSTATE_LOADING_SCREEN
@@ -106,13 +96,13 @@ namespace BrnGui
             if (meSubState == E_SUBSTATE_PLAYER_OPTIONS)
             {
                 s32 liPlayerIndex = 0;
-                for (; liPlayerIndex < lpPlayerList->miNumPlayers; ++liPlayerIndex)
+                for (; liPlayerIndex < lpPlayerList->miNumberOfPlayers; ++liPlayerIndex)
                 {
-                    if (lpPlayerList->maPlayers[liPlayerIndex].mPlayerID == mSelectedPlayerID)
+                    if (lpPlayerList->maPlayerLobbyInfo[liPlayerIndex].mPlayerID == mSelectedPlayerID)
                         break;
                 }
 
-                if (liPlayerIndex == lpPlayerList->miNumPlayers)
+                if (liPlayerIndex == lpPlayerList->miNumberOfPlayers)
                 {
                     ShowPlayerList(mSelectedPlayerID);
                     mOptionsAnimation.AddOutputAptViewState("apt_Transition",

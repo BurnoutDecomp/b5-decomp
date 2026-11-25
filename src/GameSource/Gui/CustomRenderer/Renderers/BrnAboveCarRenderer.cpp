@@ -687,7 +687,7 @@ void AboveCarRenderer::RenderBankingScores(CgsGui::ImRendererSet* lpImRenderers)
                 char lacAmount[32];
                 char lacCombo[32];
                 mpLanguageManager->FormatCurrencyString(
-                    lacAmount, lrScore.miBaseScore + lrScore.miComboBonus, 32);
+                    reinterpret_cast<CgsUnicode::CgsUtf8*>(lacAmount), lrScore.miBaseScore + lrScore.miComboBonus, 32);
                 CgsCore::SnPrintf(lacCombo, 32, "%d", lrScore.miComboBonus / 1000); //82F257E8
                 lacCombo[31] = 0;
                 const CgsResource::CgsUtf8* lpFormat = mpLanguageManager->FindString("SHOWTIME_COMBO"); //82F257F0
@@ -712,7 +712,7 @@ void AboveCarRenderer::RenderBankingScores(CgsGui::ImRendererSet* lpImRenderers)
             else
             {
                 mpLanguageManager->FormatCurrencyString(
-                    reinterpret_cast<char*>(lauText), lrScore.miBaseScore, 32);
+                    lauText, lrScore.miBaseScore, 32);
             }
 
             const f32 lfDeltaX = lfTargetX - lrScore.mv2ScreenSpacePosition.mV.x;

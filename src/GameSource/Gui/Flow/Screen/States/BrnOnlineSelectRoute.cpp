@@ -419,8 +419,7 @@ namespace
             mHelpBar.SetupComponent();
 
             const GuiEventNetworkGameParams* lpParams =
-                reinterpret_cast<const GuiEventNetworkGameParams*>(
-                    mpGuiCache->maOnlineGameModeOptionsStorage);
+                mpGuiCache->GetOnlineGameModeOptions();
             mSelectRoutes.Setup(lpParams, mpGuiCache);
             ShowMainMenu();
 
@@ -428,12 +427,12 @@ namespace
             if (mpGuiCache->GetOnlineGameMode() ==
                 BrnGameState::GameStateModuleIO::E_MODE_ONLINE_ROAD_RAGE)
             {
-                mMenuOptions.HighlightId(liRound >= mpGuiCache->miOnlineNumRounds - 2
+                mMenuOptions.HighlightId(liRound >= mpGuiCache->GetOnlineGameModeOptions()->miNumRounds - 2
                     ? E_MAIN_MENU_OPTION_FINISHED : E_MAIN_MENU_OPTION_NEXT);
             }
             else
             {
-                mMenuOptions.HighlightId(liRound >= mpGuiCache->miOnlineNumRounds - 1
+                mMenuOptions.HighlightId(liRound >= mpGuiCache->GetOnlineGameModeOptions()->miNumRounds - 1
                     ? E_MAIN_MENU_OPTION_FINISHED : E_MAIN_MENU_OPTION_NEXT);
             }
         }
@@ -512,8 +511,8 @@ namespace
         CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
 
         GuiEventNetworkGameParams* lpParams =
-            reinterpret_cast<GuiEventNetworkGameParams*>(mpGuiCache->maOnlineGameModeOptionsStorage);
-        for (s32 liRound = 0; liRound < mpGuiCache->miOnlineNumRounds; ++liRound)
+            mpGuiCache->GetOnlineGameModeOptions();
+        for (s32 liRound = 0; liRound < mpGuiCache->GetOnlineGameModeOptions()->miNumRounds; ++liRound)
         {
             const u32 luStartPresetEventIndex = mSelectRoutes.GetStartPointEventIndex(liRound);
             const PresetEvent* lpStartPresetEvent =
@@ -600,7 +599,7 @@ namespace
                     DisplayTooShortRouteMessage();
                 }
                 else if (leOption == E_MAIN_MENU_OPTION_NEXT &&
-                         mSelectRoutes.GetCurrentRound() < mpGuiCache->miOnlineNumRounds - 1)
+                         mSelectRoutes.GetCurrentRound() < mpGuiCache->GetOnlineGameModeOptions()->miNumRounds - 1)
                 {
                     SelectRound(E_SELECT_ROUND_FORWARDS);
                 }
@@ -774,9 +773,9 @@ namespace
             liMode == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_MODE_END;
         const bool lbLastRound =
             (liMode == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_ROAD_RAGE &&
-             liRound >= mpGuiCache->miOnlineNumRounds - 2) ||
+             liRound >= mpGuiCache->GetOnlineGameModeOptions()->miNumRounds - 2) ||
             (liMode != BrnGameState::GameStateModuleIO::E_MODE_ONLINE_ROAD_RAGE &&
-             liRound >= mpGuiCache->miOnlineNumRounds - 1);
+             liRound >= mpGuiCache->GetOnlineGameModeOptions()->miNumRounds - 1);
 
         const MenuOption* lpMenuOptions = 0;
         s32 liMenuOptionCount = 0;
@@ -997,9 +996,9 @@ namespace
         const s32 liMode = mpGuiCache->GetOnlineGameMode();
         const bool lbLastRound =
             (liMode == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_ROAD_RAGE &&
-             liNextRound >= mpGuiCache->miOnlineNumRounds - 2) ||
+             liNextRound >= mpGuiCache->GetOnlineGameModeOptions()->miNumRounds - 2) ||
             (liMode != BrnGameState::GameStateModuleIO::E_MODE_ONLINE_ROAD_RAGE &&
-             liNextRound >= mpGuiCache->miOnlineNumRounds - 1);
+             liNextRound >= mpGuiCache->GetOnlineGameModeOptions()->miNumRounds - 1);
         mMenuOptions.HighlightId(lbLastRound ? E_MAIN_MENU_OPTION_FINISHED
                                               : E_MAIN_MENU_OPTION_NEXT);
     }
@@ -1120,7 +1119,7 @@ namespace
         {
             CgsCore::SPrintf(lacCurrentRound, sizeof(lacCurrentRound), "%d", liRound + 1);
             CgsCore::SPrintf(lacCurrentRoundEnd, sizeof(lacCurrentRoundEnd), "%d", liRound + 2);
-            CgsCore::SPrintf(lacTotalRounds, sizeof(lacTotalRounds), "%d", mpGuiCache->miOnlineNumRounds);
+            CgsCore::SPrintf(lacTotalRounds, sizeof(lacTotalRounds), "%d", mpGuiCache->GetOnlineGameModeOptions()->miNumRounds);
             mpStateInterface->GetLanguageManager()->FormatAndAddText(
                 "ONLINE_CURRENT_ROUND", "ONLINE_ROUTE_NUM_ROUNDS_RR",
                 CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP, 3,
@@ -1131,7 +1130,7 @@ namespace
         else
         {
             CgsCore::SPrintf(lacCurrentRound, sizeof(lacCurrentRound), "%d", liRound + 1);
-            CgsCore::SPrintf(lacTotalRounds, sizeof(lacTotalRounds), "%d", mpGuiCache->miOnlineNumRounds);
+            CgsCore::SPrintf(lacTotalRounds, sizeof(lacTotalRounds), "%d", mpGuiCache->GetOnlineGameModeOptions()->miNumRounds);
             mpStateInterface->GetLanguageManager()->FormatAndAddText(
                 "ONLINE_CURRENT_ROUND", "ONLINE_ROUTE_NUM_ROUNDS",
                 CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP, 2,

@@ -401,7 +401,10 @@ namespace Deformation
         // :156. Set the world (static environment) rigid-body id used for vehicle-vs-world contacts.
         // ⚠️ QUALIFIED DELIBERATELY -- unqualified, this bound to the 4-byte BrnCommonTypes.h
         // stand-in and truncated the caller's handle. See the header note at the top.
-        void SetWorldBodyId(CgsPhysics::RigidBodyId lWorldRigidBodyId);
+        void SetWorldBodyId(CgsPhysics::RigidBodyId lWorldRigidBodyId)
+        {
+            mWorldRigidBodyId = lWorldRigidBodyId;
+        }
 
         // :164 (X360 @0x825DD628). Build a detached-PART contact event from a spy + potential
         // contact. Arg types fully qualified 2026-08-06 -- see the fork-retirement note above.

@@ -1020,32 +1020,33 @@ void CrashNavDriverDetails::HandleStatData(const GuiEventStatsResponse* lpStatsE
                                          LM::E_FORMAT_AUTO_DISTANCE_LONG);
 
     // --- the "x of y" fields ------------------------------------------------------
-    lpLanguageManager->FormatXoverYString(lacBuffer, lpStatsEvent->miCarsCollected,            // 0x24
+    CgsUnicode::CgsUtf8* const lpFormattedText = reinterpret_cast<CgsUnicode::CgsUtf8*>(lacBuffer);
+    lpLanguageManager->FormatXoverYString(lpFormattedText, lpStatsEvent->miCarsCollected,            // 0x24
                                           lpStatsEvent->miCarsTotal, 64);                      // 0x28
     maStatTextfields[3].SetLocalisedText(lacBuffer, LM::E_FORMAT_TEXT);
 
     maStatTextfields[4].SetLocalisedText(lpStatsEvent->miCarsToShutdown,                       // 0xC0
                                          LM::E_FORMAT_INTEGER);
 
-    lpLanguageManager->FormatXoverYString(lacBuffer, lpStatsEvent->mRoadsRuledComplete,        // 0xB4
+    lpLanguageManager->FormatXoverYString(lpFormattedText, lpStatsEvent->mRoadsRuledComplete,        // 0xB4
                                           lpStatsEvent->mNumberOfRoads, 64);                   // 0xB8
     maStatTextfields[5].SetLocalisedText(lacBuffer, LM::E_FORMAT_TEXT);
-    lpLanguageManager->FormatXoverYString(lacBuffer, lpStatsEvent->mRoadsRuledTime,            // 0xAC
+    lpLanguageManager->FormatXoverYString(lpFormattedText, lpStatsEvent->mRoadsRuledTime,            // 0xAC
                                           lpStatsEvent->mNumberOfRoads, 64);                   // 0xB8
     maStatTextfields[6].SetLocalisedText(lacBuffer, LM::E_FORMAT_TEXT);
-    lpLanguageManager->FormatXoverYString(lacBuffer, lpStatsEvent->mRoadsRuledCrash,           // 0xB0
+    lpLanguageManager->FormatXoverYString(lpFormattedText, lpStatsEvent->mRoadsRuledCrash,           // 0xB0
                                           lpStatsEvent->mNumberOfRoads, 64);                   // 0xB8
     maStatTextfields[7].SetLocalisedText(lacBuffer, LM::E_FORMAT_TEXT);
-    lpLanguageManager->FormatXoverYString(lacBuffer, lpStatsEvent->miEventsFound,              // 0x104
+    lpLanguageManager->FormatXoverYString(lpFormattedText, lpStatsEvent->miEventsFound,              // 0x104
                                           lpStatsEvent->miTotalEvents, 64);                    // 0x108
     maStatTextfields[8].SetLocalisedText(lacBuffer, LM::E_FORMAT_TEXT);
-    lpLanguageManager->FormatXoverYString(lacBuffer, lpStatsEvent->miSmashes,                  // 0x70
+    lpLanguageManager->FormatXoverYString(lpFormattedText, lpStatsEvent->miSmashes,                  // 0x70
                                           lpStatsEvent->miSmashTot, 64);                       // 0x74
     maStatTextfields[10].SetLocalisedText(lacBuffer, LM::E_FORMAT_TEXT);
-    lpLanguageManager->FormatXoverYString(lacBuffer, lpStatsEvent->miStunts,                   // 0x78
+    lpLanguageManager->FormatXoverYString(lpFormattedText, lpStatsEvent->miStunts,                   // 0x78
                                           lpStatsEvent->miStuntTot, 64);                       // 0x7C
     maStatTextfields[11].SetLocalisedText(lacBuffer, LM::E_FORMAT_TEXT);
-    lpLanguageManager->FormatXoverYString(lacBuffer, lpStatsEvent->miJumps,                    // 0x68
+    lpLanguageManager->FormatXoverYString(lpFormattedText, lpStatsEvent->miJumps,                    // 0x68
                                           lpStatsEvent->miJumpTot, 64);                        // 0x6C
     maStatTextfields[12].SetLocalisedText(lacBuffer, LM::E_FORMAT_TEXT);
 
@@ -1097,34 +1098,34 @@ void CrashNavDriverDetails::HandleStatData(const GuiEventStatsResponse* lpStatsE
     // each of the six named district arrays.
     for (s32 liDistrict = 0; liDistrict < KI_NUM_DISTRICTS; ++liDistrict)
     {
-        lpLanguageManager->FormatXoverYString(lacBuffer, lpStatsEvent->mBillboardStunts[liDistrict],
+        lpLanguageManager->FormatXoverYString(lpFormattedText, lpStatsEvent->mBillboardStunts[liDistrict],
                                               lpStatsEvent->mMaxBillboardStunts[liDistrict], 64);
         maDistrictBillboardsTextfields[liDistrict].SetLocalisedText(lacBuffer, LM::E_FORMAT_TEXT);
 
-        lpLanguageManager->FormatXoverYString(lacBuffer, lpStatsEvent->mJumpStunts[liDistrict],
+        lpLanguageManager->FormatXoverYString(lpFormattedText, lpStatsEvent->mJumpStunts[liDistrict],
                                               lpStatsEvent->mMaxJumpStunts[liDistrict], 64);
         maDistrictJumpsTextfields[liDistrict].SetLocalisedText(lacBuffer, LM::E_FORMAT_TEXT);
 
-        lpLanguageManager->FormatXoverYString(lacBuffer, lpStatsEvent->mSmashStunts[liDistrict],
+        lpLanguageManager->FormatXoverYString(lpFormattedText, lpStatsEvent->mSmashStunts[liDistrict],
                                               lpStatsEvent->mMaxSmashStunts[liDistrict], 64);
         maDistrictSmashesTextfields[liDistrict].SetLocalisedText(lacBuffer, LM::E_FORMAT_TEXT);
     }
 
     // --- the four "found" tallies the console formats after the district loop ------
-    lpLanguageManager->FormatXoverYString(lacBuffer, lpStatsEvent->miTotalDriveThrusFound,     // 0x130
+    lpLanguageManager->FormatXoverYString(lpFormattedText, lpStatsEvent->miTotalDriveThrusFound,     // 0x130
                                           lpStatsEvent->miTotalDriveThrus, 64);                // 0x12C
     maStatTextfields[9].SetLocalisedText(lacBuffer, LM::E_FORMAT_TEXT);
-    lpLanguageManager->FormatXoverYString(lacBuffer, lpStatsEvent->miGasStationsFound,         // 0x110
+    lpLanguageManager->FormatXoverYString(lpFormattedText, lpStatsEvent->miGasStationsFound,         // 0x110
                                           lpStatsEvent->miGasStationsTotal, 64);               // 0x120
     maStatTextfields[30].SetLocalisedText(lacBuffer, LM::E_FORMAT_TEXT);
-    lpLanguageManager->FormatXoverYString(lacBuffer, lpStatsEvent->miPaintShopsFound,          // 0x114
+    lpLanguageManager->FormatXoverYString(lpFormattedText, lpStatsEvent->miPaintShopsFound,          // 0x114
                                           lpStatsEvent->miPaintShopsTotal, 64);                // 0x124
     maStatTextfields[31].SetLocalisedText(lacBuffer, LM::E_FORMAT_TEXT);
-    lpLanguageManager->FormatXoverYString(lacBuffer, lpStatsEvent->miBodyShopsFound,           // 0x10C
+    lpLanguageManager->FormatXoverYString(lpFormattedText, lpStatsEvent->miBodyShopsFound,           // 0x10C
                                           lpStatsEvent->miBodyShopsTotal, 64);                 // 0x11C
     maStatTextfields[29].SetLocalisedText(lacBuffer, LM::E_FORMAT_TEXT);
     // "carParksFound_cpt" is fed the JUNK-YARD pair -- the console's own choice.
-    lpLanguageManager->FormatXoverYString(lacBuffer, lpStatsEvent->miJunkYardsFound,           // 0x118
+    lpLanguageManager->FormatXoverYString(lpFormattedText, lpStatsEvent->miJunkYardsFound,           // 0x118
                                           lpStatsEvent->miJunkYardsTotal, 64);                 // 0x128
     maStatTextfields[32].SetLocalisedText(lacBuffer, LM::E_FORMAT_TEXT);
 }
