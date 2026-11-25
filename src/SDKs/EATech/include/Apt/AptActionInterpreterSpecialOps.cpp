@@ -281,7 +281,7 @@ void AptActionInterpreter::_FunctionAptActionNextFrame(AptActionInterpreter* /*p
         static_cast<AptCharacterSpriteInstBase*>(pNode->GetCharacterInst());
 
     pNode->jumpToFrame(pSprite->mnGotoFrame + 1);          // real member (play-head seek)
-    pSprite->mbIsPlaying = 0;
+    pNode->SetIsPlaying(false);
 }
 
 // ---------------------------------------------------------------------------
@@ -297,7 +297,7 @@ void AptActionInterpreter::_FunctionAptActionPrevFrame(AptActionInterpreter* /*p
         static_cast<AptCharacterSpriteInstBase*>(pNode->GetCharacterInst());
 
     pNode->jumpToFrame(pSprite->mnGotoFrame - 1);          // real member (play-head seek)
-    pSprite->mbIsPlaying = 0;
+    pNode->SetIsPlaying(false);
 }
 
 // ---------------------------------------------------------------------------

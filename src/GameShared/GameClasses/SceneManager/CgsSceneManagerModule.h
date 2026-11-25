@@ -278,7 +278,7 @@ namespace CgsSceneManager
         // manager's per-frame cache refresh.
         void StartUpdateTriangleCache( CgsModule::IOBufferStack* lpInputBufferStack,
                                        CgsModule::IOBufferStack* lpOutputBufferStack,
-                                       SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer,
+                                       const SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer,
                                        BaseCollisionGenerator* lpCollisionGenerator );
 
         // Staged prepare progression (DWARF CgsSceneManagerModule.h:180). Construct

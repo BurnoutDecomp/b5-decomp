@@ -137,33 +137,4 @@ void TriangleCollisionManager::ProcessAddPolySoupListEvents(
     }
 }
 
-// ProcessClearPolySoupListEvents -- drop the whole partition when any clear event is queued.
-//
-// ⭐ The X360 has no standalone symbol for this: the compiler INLINED it into
-// SceneManagerModule::StartUpdateTriangleCache @0x828C73D8, where it shows up as a bare
-// `if (*(interface + 0xC7DE8) > 0) { FreeAll(mgr+0x7C); Clear(mgr+0x00); *(mgr+0x78) = 0; }`.
-// Rather than reproduce that inlining (and lose the API the header declares), the body is
-// taken from the PS3 twin @0xC49108, which is the SAME THREE STATEMENTS and is a real
-// out-of-line function there:
-//     0xC49120  lwz r0, 8(queue)          ; queue.GetLength()
-//     0xC4912C  ble -> skip
-//     0xC49130  bl  LinearMalloc::FreeAll            (this + 0x7C = mSpacialAllocator)
-//     0xC4913C  bl  PolygonSoupListSpatialMap::Clear (this + 0x00 = mPolySoupListSpacialMap)
-//     0xC49148  stw r0(=0), 0x78(this)               (miNumSoupListsAdded = 0)
-// Both platforms agree store-for-store, so nothing here is inferred.
-//
-// ⚠️ Note it does NOT rebuild: it only tears down. The next add event that sets
-// mbRebuildSpacialPartitioning is what re-runs BuildSpacialPartition.
-void TriangleCollisionManager::ProcessClearPolySoupListEvents(
-    const CgsModule::EventQueue<CgsSceneManager::TriangleCollisionManagerIO::InEventClearPolySoupLists, 20>&
-        lClearPolySoupListsQueue)
-{
-    if (lClearPolySoupListsQueue.GetLength() > 0)
-    {
-        mSpacialAllocator.FreeAll();
-        mPolySoupListSpacialMap.Clear();
-        miNumSoupListsAdded = 0;
-    }
-}
-
 }

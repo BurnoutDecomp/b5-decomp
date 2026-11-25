@@ -155,7 +155,7 @@ namespace CgsFileSystem
     {
         FileHandleRecord& lRecord = *static_cast<FileHandleRecord*>(lpHandle);
 
-        DWORD ldwRead = 0;
+        DWORD ldwRead;
         if (ReadFile(lRecord.mpHandle, lpBuffer, luSize, &ldwRead, NULL))
         {
             lRecord.mu64Position += ldwRead;

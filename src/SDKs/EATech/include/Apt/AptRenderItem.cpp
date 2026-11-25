@@ -55,24 +55,28 @@ void AptRenderItem::operator delete(void* p, size_t sz)
 
 // ctor @0x7E47A0
 AptRenderItem::AptRenderItem(AptCharacter* pCharacter, int nCreatedOnTick)
+    : mpCharacter(pCharacter)
+    , mpMaskPositionMatrix(0)
+    , mDepth(-1)
+    , mClipDepth(-1)
+    , mbIsVisible(1)
+    , mbIsMask(0)
+    , mbHasMask(0)
+    , mbIsDeletionMark(0)
+    , mbCreatedDynamic(0)
+    , mbPendingHiddenByTree(0)
+    , mbIsHiddenByTree(0)
+    , mbRootNonVisibleItem(0)
+    , meCharacterType(0)
+    , mpMask(0)
+    , mCreatedOnTick(nCreatedOnTick)
+    , mRefCount(0)
+    , mpManagerNextRevision(0)
+    , mpManagerNextSibling(0)
+    , mpManagerFirstChild(0)
 {
-    mpCharacter          = pCharacter;
-    mpPositionMatrix     = 0;
-    mpColorMatrix        = 0;
-    mpMaskPositionMatrix = 0;
-    mDepth               = -1;
-    mClipDepth           = -1;
-    mpMask               = 0;
-    mCreatedOnTick       = nCreatedOnTick;
-    mRefCount            = 0;
-    mpManagerNextRevision = 0;
-    mpManagerNextSibling  = 0;
-    mpManagerFirstChild   = 0;
-
-    // Flags: set isVisible (bit31), clear the rest. (Console: (flags|0x80000000)
-    // rotated through the 19-bit field; the net effect for a fresh item.)
-    mFlags = 0x80000000u;
-
+    mpPositionMatrix = 0;
+    mpColorMatrix = 0;
     if (pCharacter)
         pCharacter->AddCharacterReference();
     ++sItemsAllocated;
@@ -381,16 +385,19 @@ AptRenderItem* AptRenderItem::GetMask() const { return mpMask; }
 const AptCharacter* AptRenderItem::GetCharacterConst() const { return mpCharacter; }
 AptCharacter*       AptRenderItem::GetCharacterWritable() const { return mpCharacter; }
 
-AptCharacter* AptRenderItem::SetCharacter(AptCharacter* pCharacter)
+// ARTIST uses the record-form zero-reference test at 0x82AE0854.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+void AptRenderItem::SetCharacter(AptCharacter* pCharacter)
 {
-    if (pCharacter)
-        pCharacter->AddCharacterReference();
-    AptCharacter* pOld = mpCharacter;
-    if (pOld)
-        pOld->ReleaseCharacterReference();
+    pCharacter->AddCharacterReference();
+    mpCharacter->ReleaseCharacterReference();
     mpCharacter = pCharacter;
-    return pOld;
 }
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 int AptRenderItem::GetCreatedOnTick() const { return mCreatedOnTick; }
 int AptRenderItem::GetRefCount() const      { return mRefCount; }

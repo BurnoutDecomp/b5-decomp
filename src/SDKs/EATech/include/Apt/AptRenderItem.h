@@ -59,7 +59,23 @@ struct AptRenderItem
     AptMatrix*     mpMaskPositionMatrix; // +0x20
     int16_t        mDepth;            // +0x28
     int16_t        mClipDepth;        // +0x2A
-    uint32_t       mFlags;            // ARTIST render type in bits 18..23
+    // ARTIST initialization at 0x82ADA820 changes the high 14 bits.
+    union
+    {
+        uint32_t mFlags;
+        struct
+        {
+            uint32_t mbIsVisible : 1;
+            uint32_t mbIsMask : 1;
+            uint32_t mbHasMask : 1;
+            uint32_t mbIsDeletionMark : 1;
+            uint32_t mbCreatedDynamic : 1;
+            uint32_t mbPendingHiddenByTree : 1;
+            uint32_t mbIsHiddenByTree : 1;
+            uint32_t mbRootNonVisibleItem : 1;
+            uint32_t meCharacterType : 6;
+        };
+    };
     AptRenderItem* mpMask;            // +0x30
     int32_t        mCreatedOnTick;    // +0x38
     volatile int32_t mRefCount;       // +0x3C
@@ -133,6 +149,7 @@ struct AptRenderItem
     bool GetIsVisible() const;      // @0x7DEE68
     bool GetIsMask() const;         // @0x7DEE20
     bool GetHasMask() const;        // @0x7DEE34
+    void SetCreatedDynamic(bool bDynamic) { mbCreatedDynamic = bDynamic ? 1u : 0u; }
     AptRenderItem* GetMask() const; // @0x7DEE2C
 
     // SetHasMask @0x82ADB388 -- set the has-mask flag (x64 bit 2) + (un)bind the mask
@@ -145,7 +162,7 @@ struct AptRenderItem
 
     const AptCharacter* GetCharacterConst() const;        // @0x7DEE04
     AptCharacter*       GetCharacterWritable() const;     // @0x7DEE90
-    AptCharacter*       SetCharacter(AptCharacter* pCharacter);  // @0x80F2DC
+    void                SetCharacter(AptCharacter* pCharacter);  // @0x82AE07D0
 
     int GetCreatedOnTick() const;   // @0x7DEE84
     int GetRefCount() const;        // @0x7DEE78

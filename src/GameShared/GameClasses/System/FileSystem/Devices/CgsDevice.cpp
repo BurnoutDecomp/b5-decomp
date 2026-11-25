@@ -15,37 +15,8 @@
 #include "GameShared/GameClasses/System/FileSystem/Devices/CgsDevice.h"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 
-// X360 EA::Thread facade (home: src/SDKs/EATech/eathread/BrnEAThreadX360.cpp).
-// The X360 ABI is ThreadSleep(const u32* pMilliseconds) @0x82B42610 — it takes a
-// POINTER to a millisecond count (0 -> yield, else SleepEx), which is what the asm
-// at 0x828D6630 calls (it stores 5 into a stack slot and passes its address). This
-// is declared locally rather than #including the divergent vendor eathread.h, whose
-// ThreadSleep(const ThreadTime&) signature does not match the X360 build.
-namespace EA
-{
-namespace Thread
-{
-    u32 ThreadSleep(const u32* lpuMilliseconds);
-}
-}
-
 namespace CgsFileSystem
 {
-    // @0x828D65F0
-    // DWARF: bool CallErrorCallback(EDeviceErrors) with a `bool lbResult` local (CgsDevice.h:150);
-    // the callback's bool result is kept as it is returned (`mr r31,r3`, no zero-extension).
-    bool Device::CallErrorCallback(int liError)
-    {
-        bool lbResult = false;
-        if (mpfErrorCallback)
-            lbResult = mpfErrorCallback(liError);
-
-        // Yield 5ms before the failing caller retries (asm stores 5 and passes &it).
-        u32 luSleepMs = 5;
-        EA::Thread::ThreadSleep(&luSleepMs);
-        return lbResult;
-    }
-
     // ---- base "Not implemented" defaults for the worker-dispatched op interface --------
     // A device that does not support an op inherits these (assert + generic -2 failure). The
     // X360 base supplied this same default-body shape (e.g. GetFileSize @0x828DDE50,

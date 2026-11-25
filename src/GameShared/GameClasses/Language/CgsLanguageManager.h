@@ -1,6 +1,9 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Containers/CgsHash.h"
+
+#include <cstring>
 #include "GameShared/GameClasses/Language/CgsSku.h"                            // CgsLanguage::ELanguage
 #include "GameShared/GameClasses/Fonts/CgsUnicode.h"                           // CgsUnicode::CgsUtf8 (== u8)
 #include "GameShared/GameClasses/Containers/CgsHashTable.h"                    // CgsContainers::HashTable/HashTableElement
@@ -123,6 +126,15 @@ namespace CgsLanguage
         // manager's loaded localised-string table and returns the stored UTF-8 string pointer
         // (or NULL when the table holds no entry for that hash). Split out so the credits /
         // HUD paths that already hold a hash skip the re-hash. Body links from this TU.
+        // DecFIGS CgsLanguageManager.h:135. The X360 inlines the SDK strlen
+        // loop before hashing the identifier bytes (ARTIST 0x82864994).
+        u32 GetHashID(const char* lpcStringId) const
+        {
+            // CalculateHash's legacy char* signature does not mutate the input.
+            return CgsContainers::CgsHash::CalculateHash(
+                const_cast<char*>(lpcStringId), static_cast<s32>(std::strlen(lpcStringId)));
+        }
+
         const u8* FindStringByHash(unsigned int luHash) const;
 
         // X360 0x828647F8 / 0x82864A08. Add a localised string under lpcStringId, evicting any

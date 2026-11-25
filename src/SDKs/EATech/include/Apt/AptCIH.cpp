@@ -279,13 +279,6 @@ bool AptCIH::IsSpriteInst() const
     return nType == 5 || nType == 16;
 }
 
-// A sprite-base inst is a movie-clip (5) or an imported animation (9). @0x82AD59E0
-bool AptCIH::IsSpriteInstBase() const
-{
-    const int nType = mpCharacterInst->GetTypeTag();
-    return nType == 5 || nType == 9;
-}
-
 // IsNone @0x82AD5AF0 -- this value is the empty placeholder (AptCIHNone, AptValue
 // vtable index 37), rather than testing a character instance.
 bool AptCIH::IsNone() const { return static_cast<uint32_t>(getVtblIndex()) == 37u; }

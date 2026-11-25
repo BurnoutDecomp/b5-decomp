@@ -24,6 +24,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/System/FileSystem/CgsDeviceOperation.h"
+#include "SDKs/EATech/eathread/BrnEAThreadX360.h"
 
 namespace CgsFileSystem
 {
@@ -67,7 +68,16 @@ namespace CgsFileSystem
         // @0x828D65F0. If an error callback is registered, invoke it with liError and remember
         // its result; then yield the calling thread 5ms (so a hammering retry loop does not
         // starve the I/O thread) and return the callback's result (0 when none is set).
-        bool CallErrorCallback(int liError);
+        bool CallErrorCallback(int liError)
+        {
+            bool lbResult = false;
+            if (mpfErrorCallback)
+                lbResult = mpfErrorCallback(liError);
+
+            u32 luSleepMs = 5;
+            EA::Thread::ThreadSleep(&luSleepMs);
+            return lbResult;
+        }
 
         // DeviceManager::AddPhysicalDevice installs the device's error callback (X360: *(dev+8)
         // = callback, *(dev+4) = 0).

@@ -127,18 +127,20 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_getDepth(AptValue* pContext, int /
 // bit write here; the PS3 external ships the shared member both this and
 // sMethod_stop tail into.)
 // ===========================================================================
+// ARTIST records the sprite predicate at 0x82AE2AF8 before the playback update.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 AptValue* AptCIHNativeFunctionHelper::sMethod_play(AptValue* pContext, int /*nArgCount*/)
 {
-    AptCIH* const pNode = static_cast<AptCIH*>(pContext);
-    const uint32_t nTypeTag = pNode->GetCharacterInst()->GetTypeTag();
-
-    if (nTypeTag == 5 || nTypeTag == 9)
-    {
-        // type tag 5/9 -> the instance is an AptCharacterSpriteInstBase.
+    AptCIH* pNode = static_cast<AptCIH*>(pContext);
+    if (pNode->IsSpriteInstBase())
         pNode->SetIsPlaying(true);
-    }
     return gpUndefinedValue;
 }
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // ===========================================================================
 // sMethod_stop (PS3 @0x7EE5D4; the X360 creator is @0x82B0E9A8 / off_8324E480 --
@@ -190,7 +192,7 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_nextFrame(AptValue* pContext, int 
     // Seek the node's play-head (the real member AptCIH::jumpToFrame, AptCIH.cpp).
     pNode->jumpToFrame(pSprite->mnGotoFrame + 1);
 
-    pSprite->mbIsPlaying = 0;
+    pNode->SetIsPlaying(false);
     return gpUndefinedValue;
 }
 

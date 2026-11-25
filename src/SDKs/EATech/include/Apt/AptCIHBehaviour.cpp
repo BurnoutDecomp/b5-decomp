@@ -452,25 +452,6 @@ bool AptCIH::GetIsPlaying() const
     return pSpriteInst->mbIsPlaying != 0;
 }
 
-// SetIsPlaying (PS3 @0x7EE474 -- the X360 build INLINES this member into each of its
-// callers, so it has no ARTIST address of its own; the PS3 external ships it as the
-// real out-of-line `AptCIH::SetIsPlaying(bool)` the source declares). Write the
-// movie-clip play-head bit (bIsPlaying, x64 bit 25; X360 reversed bit 6) and,
-// ONLY when starting playback, re-dirty the node so the next tick picks it up:
-//     (the X360 rotate idiom cleared/OR'd its reversed bit 6; x64 uses mask 0x2000000)
-//     if (b == 1) SetDirtyState(1, 1)
-// The asymmetry is deliberate and load-bearing: a STOP must not dirty the node.
-// Callers on the console: sMethod_play / sMethod_stop / _gotoAndX / GotoFrame /
-// GotoFrame2 / GotoLabel / nextFrame / prevFrame (PS3 xref set at 0x7EE474).
-void AptCIH::SetIsPlaying(bool bPlaying)
-{
-    AptCharacterSpriteInstBase* const pSpriteInst =
-        static_cast<AptCharacterSpriteInstBase*>(mpCharacterInst);
-    pSpriteInst->mbIsPlaying = bPlaying;
-    if (bPlaying)
-        SetDirtyState(true, true);
-}
-
 // SetEventHandler @0x82AD5B48 -- OR nEventMask into the per-instance property hash's
 // packed event-handler mask (inlined GetNativeHash + AptNativeHash::SetEventHandler;
 // the mask write is not null-guarded -- callers only invoke once a hash exists).

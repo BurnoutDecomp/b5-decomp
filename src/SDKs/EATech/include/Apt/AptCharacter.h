@@ -31,6 +31,7 @@
 // ===========================================================================
 
 #include <cstddef>   // offsetof (the layout static_asserts below)
+#include <xtl.h>
 #include "types.hpp"
 
 struct AptFile;   // SDKs/EATech/include/Apt/AptFile.h (mpAnimationFile is an AptFile*)
@@ -41,7 +42,11 @@ struct AptCharacter
 {
     int32_t           mnType;
     AptCharacter*     mpFixupLink;
-    volatile uint32_t mnRefAndFlags;
+    union
+    {
+        volatile uint32_t mnRefAndFlags;
+        volatile uint16_t mnRenderRefCount;  // ARTIST high halfword at +8
+    };
     AptFile*          mpAnimationFile;
 
     // Reference count = the high 16 bits of mnRefAndFlags. @0x7DEDDC
@@ -49,8 +54,25 @@ struct AptCharacter
 
     // Atomically bump / drop the character reference count (high 16 bits). When
     // ReleaseCharacterReference drops it to zero it releases the animation file.
-    void AddCharacterReference() const;        // @0x7E39D8
-    void ReleaseCharacterReference() const;    // @0x80F2B0
+    // The native constructor and setter inline the halfword check and atomic add
+    // at 0x82ADA86C and 0x82AE07EC.
+    __forceinline void AddCharacterReference() const
+    {
+        AptCharacter* pCharacter = const_cast<AptCharacter*>(this);
+        if (mnRenderRefCount >= 0xFFFFu)
+            pCharacter->mnRenderRefCount = 0xFFFFu;
+        _InterlockedExchangeAdd(reinterpret_cast<volatile long*>(&pCharacter->mnRefAndFlags), 0x10000);
+    }
+
+    void ReleaseCharacterReference() const
+    {
+        AptCharacter* pCharacter = const_cast<AptCharacter*>(this);
+        const unsigned long nPrevious = _InterlockedExchangeAdd(
+            reinterpret_cast<volatile long*>(&pCharacter->mnRefAndFlags), -0x10000);
+        const unsigned long nCurrent = nPrevious - 0x10000u;
+        if ((nCurrent & 0xFFFF0000u) == 0)
+            ReleaseAnimationFile();
+    }
 
     // Release mpAnimationFile (AptSharedPtr DecRef/Delete) and null it. @0x80F204
     void ReleaseAnimationFile() const;

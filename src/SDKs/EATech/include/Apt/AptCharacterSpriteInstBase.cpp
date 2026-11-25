@@ -176,6 +176,5 @@ AptCharacterSpriteInstBase* AptCharacterSpriteInstBase::RemoveClipAction(int32_t
 // ---------------------------------------------------------------------------
 void AptCharacterSpriteInstBase::SetCreatedDynamic(bool bDynamic)
 {
-    AptRenderItem* pItem = GetRenderItemWritable();
-    pItem->mFlags = (pItem->mFlags & ~0x08000000u) | (bDynamic ? 0x08000000u : 0u);
+    GetRenderItemWritable()->SetCreatedDynamic(bDynamic);
 }

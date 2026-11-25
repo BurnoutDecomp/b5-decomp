@@ -21,27 +21,6 @@ uint32_t AptCharacter::GetRefCount() const
     return mnRefAndFlags >> 16;
 }
 
-// AddCharacterReference @0x7E39D8 -- atomic +1 to the high-16 reference count.
-// (The console re-stores 0xFFFF before the +0x10000 when the count is already
-// saturated; that guard is a no-op -- it writes back the same value -- so the
-// faithful behaviour is simply the +0x10000 add.)
-void AptCharacter::AddCharacterReference() const
-{
-    _InterlockedExchangeAdd(
-        reinterpret_cast<volatile long*>(&const_cast<AptCharacter*>(this)->mnRefAndFlags), 0x10000);
-}
-
-// ReleaseCharacterReference @0x80F2B0 -- atomic -1 to the high-16 reference count;
-// when it reaches zero, release the owning animation file.
-void AptCharacter::ReleaseCharacterReference() const
-{
-    const long prev = _InterlockedExchangeAdd(
-        reinterpret_cast<volatile long*>(&const_cast<AptCharacter*>(this)->mnRefAndFlags), -0x10000);
-    const long now  = prev - 0x10000;
-    if ((now & 0xFFFF0000) == 0)
-        ReleaseAnimationFile();
-}
-
 // ReleaseAnimationFile @0x80F204 -- drop the AptFilePtr at mpAnimationFile.
 void AptCharacter::ReleaseAnimationFile() const
 {

@@ -157,15 +157,14 @@ namespace CgsLanguage
     // returns true (the X360 body has no failure return).
     bool LanguageManager::AddString(const char* lpcStringId, const u8* lpcString)
     {
-        CGS_ASSERT(lpcStringId != 0, "NULL string ID passed to LanguageManager::AddString");
-        CGS_ASSERT(lpcString != 0, "NULL localised string passed to LanguageManager::AddString");
-        CGS_ASSERT(CgsUnicode::IsValidUtf8String(lpcString), "CgsUnicode::IsValidUtf8String( lpcString )");
+        CGS_ASSERT_AT(lpcStringId != 0, "NULL string ID passed to LanguageManager::AddString",
+                      CGS_ARTIST_LANGUAGE_MANAGER_FILE, 312);
+        CGS_ASSERT_AT(lpcString != 0, "NULL localised string passed to LanguageManager::AddString",
+                      CGS_ARTIST_LANGUAGE_MANAGER_FILE, 313);
+        CGS_ASSERT_AT(CgsUnicode::IsValidUtf8String(lpcString), "CgsUnicode::IsValidUtf8String( lpcString )",
+                      CGS_ARTIST_LANGUAGE_MANAGER_FILE, 314);
 
-        const char* lpcScan = lpcStringId;
-        while (*lpcScan)
-            ++lpcScan;
-        int liLength = static_cast<int>(lpcScan - lpcStringId);
-        unsigned int luHash = CgsContainers::CgsHash::CalculateHash(const_cast<char*>(lpcStringId), liLength);
+        const u32 luHash = GetHashID(lpcStringId);
 
         if (FindStringByHash(luHash))
             RemoveStringByHash(luHash);
@@ -192,15 +191,14 @@ namespace CgsLanguage
     // of mDynamicStringElements (X360 sub_828622F8(this+0x30C4, &node)).
     bool LanguageManager::AddStringPointer(const char* lpcStringId, const u8* lpcString)
     {
-        CGS_ASSERT(lpcStringId != 0, "NULL string ID passed to LanguageManager::AddString");
-        CGS_ASSERT(lpcString != 0, "NULL localised string passed to LanguageManager::AddString");
-        CGS_ASSERT(CgsUnicode::IsValidUtf8String(lpcString), "CgsUnicode::IsValidUtf8String( lpcString )");
+        CGS_ASSERT_AT(lpcStringId != 0, "NULL string ID passed to LanguageManager::AddString",
+                      CGS_ARTIST_LANGUAGE_MANAGER_FILE, 438);
+        CGS_ASSERT_AT(lpcString != 0, "NULL localised string passed to LanguageManager::AddString",
+                      CGS_ARTIST_LANGUAGE_MANAGER_FILE, 439);
+        CGS_ASSERT_AT(CgsUnicode::IsValidUtf8String(lpcString), "CgsUnicode::IsValidUtf8String( lpcString )",
+                      CGS_ARTIST_LANGUAGE_MANAGER_FILE, 440);
 
-        const char* lpcScan = lpcStringId;
-        while (*lpcScan)
-            ++lpcScan;
-        int liLength = static_cast<int>(lpcScan - lpcStringId);
-        unsigned int luHash = CgsContainers::CgsHash::CalculateHash(const_cast<char*>(lpcStringId), liLength);
+        const u32 luHash = GetHashID(lpcStringId);
 
         if (FindString(lpcStringId))
             RemoveStringPointerByHash(luHash);
@@ -342,13 +340,10 @@ namespace CgsLanguage
     // RemoveStringByHash only if FindStringByHash confirms it is currently present.
     bool LanguageManager::RemoveString(const char* lpcStringId)
     {
-        CGS_ASSERT(lpcStringId != 0, "NULL string ID passed to LanguageManager::RemoveString");
+        CGS_ASSERT_AT(lpcStringId != 0, "NULL string ID passed to LanguageManager::RemoveString",
+                      CGS_ARTIST_LANGUAGE_MANAGER_FILE, 359);
 
-        const char* lpcScan = lpcStringId;
-        while (*lpcScan)
-            ++lpcScan;
-        int liLength = static_cast<int>(lpcScan - lpcStringId);
-        unsigned int luHash = CgsContainers::CgsHash::CalculateHash(const_cast<char*>(lpcStringId), liLength);
+        const u32 luHash = GetHashID(lpcStringId);
 
         if (FindStringByHash(luHash))
             return RemoveStringByHash(luHash);
@@ -392,13 +387,10 @@ namespace CgsLanguage
     // RemoveStringPointerByHash instead.
     bool LanguageManager::RemoveStringPointer(const char* lpcStringId)
     {
-        CGS_ASSERT(lpcStringId != 0, "NULL string ID passed to LanguageManager::RemoveString");
+        CGS_ASSERT_AT(lpcStringId != 0, "NULL string ID passed to LanguageManager::RemoveString",
+                      CGS_ARTIST_LANGUAGE_MANAGER_FILE, 476);
 
-        const char* lpcScan = lpcStringId;
-        while (*lpcScan)
-            ++lpcScan;
-        int liLength = static_cast<int>(lpcScan - lpcStringId);
-        unsigned int luHash = CgsContainers::CgsHash::CalculateHash(const_cast<char*>(lpcStringId), liLength);
+        const u32 luHash = GetHashID(lpcStringId);
 
         if (FindStringByHash(luHash))
             return RemoveStringPointerByHash(luHash);

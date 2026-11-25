@@ -29,6 +29,7 @@
 
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"     // AptValueGC base
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"     // mInstanceName
+#include "SDKs/EATech/include/Apt/AptCharacterSpriteInstBase.h"
 
 struct AptCharacter;
 struct AptCharacterInst;
@@ -162,7 +163,11 @@ struct AptCIH : public AptValueGC
     bool IsDynamicTextInst() const;    // @0x82AD5A50  type 2
     bool IsButtonInst() const;         // @0x82AD5A10  type 4
     bool IsSpriteInst() const;         // @0x82AD59B0  type 5 or 16
-    bool IsSpriteInstBase() const;     // @0x82AD59E0  type 5 or 9
+    bool IsSpriteInstBase() const
+    {
+        const int nType = mpCharacterInst->GetTypeTag();
+        return nType == 5 || nType == 9;
+    }
     bool IsMorphInst() const;          // @0x82AD5A90  type 8
     bool IsAnimationInst() const;      // @0x82AD5AB0  type 9
     bool IsLevelInst() const;          // @0x82AD5AD0  type 15
@@ -262,7 +267,14 @@ struct AptCIH : public AptValueGC
     AptCXForm*       GetColorMatrixWritable();          // @0x82AE6758 (lazy-alloc)
     AptRenderItem*   SetDepth(int16_t nDepth);          // @0x82AE2300
     bool             GetIsPlaying() const;              // @0x82AD5C00 (movie-clip play-head bit)
-    void             SetIsPlaying(bool bPlaying);       // PS3 @0x7EE474 (X360 inlines it)
+    void SetIsPlaying(bool bPlaying)
+    {
+        AptCharacterSpriteInstBase* const pSpriteInst =
+            static_cast<AptCharacterSpriteInstBase*>(mpCharacterInst);
+        pSpriteInst->mbIsPlaying = bPlaying;
+        if (bPlaying)
+            SetDirtyState(true, true);
+    }
     void             SetEventHandler(int nEventMask);   // @0x82AD5B48 (OR into the hash event mask)
     void             RemoveEventHandler(int32_t nMask); // @0x82AD5B70 (clear hash event bits)
     void             SetHasMask(bool bHasMask, AptRenderItem* pMask);  // @0x82AE22B8

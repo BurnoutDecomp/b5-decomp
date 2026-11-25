@@ -65,9 +65,18 @@ namespace CgsSceneManager
         // CgsTriangleCollisionManager.h:80 — @0x828B3160. Drain the add-poly-soup-list queue,
         // registering each list and rebuilding the spatial partition if any event requests it.
         void ProcessAddPolySoupListEvents(const InAddPolySoupListQueue& lAddPolySoupListQueue);
-        // CgsTriangleCollisionManager.h:85
+        // ARTIST 828C74A0..828C74C8 inlines the clear-queue check and reset.
         void ProcessClearPolySoupListEvents(
-            const CgsModule::EventQueue<CgsSceneManager::TriangleCollisionManagerIO::InEventClearPolySoupLists, 20>& lClearPolySoupListsQueue);
+            const CgsModule::EventQueue<CgsSceneManager::TriangleCollisionManagerIO::InEventClearPolySoupLists, 20>&
+                lrClearPolySoupListsQueue)
+        {
+            if (lrClearPolySoupListsQueue.GetLength() > 0)
+            {
+                mSpacialAllocator.FreeAll();
+                mPolySoupListSpacialMap.Clear();
+                miNumSoupListsAdded = 0;
+            }
+        }
         // CgsTriangleCollisionManager.h:90
         const CgsGeometric::PolygonSoupList* GetPolySoupList(s32 liIndex) const;
         // ARTIST inlines this first-member accessor, including in OnActivate at 0x828AAD20.
