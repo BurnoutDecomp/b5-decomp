@@ -129,6 +129,9 @@ static const char KAC_ARTIST_ASSERT_SOURCE[] =
 static const char KAC_ARTIST_ASSERT_HEADER[] =
     "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\SharedIO/BrnTrafficToRaceCarInterface.h";
 
+static const char KAC_ARTIST_TRAFFIC_ENTITY_MODULE_HEADER[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\BrnTrafficEntityModule.h";
+
 namespace BrnTraffic
 {
     namespace
@@ -1821,7 +1824,8 @@ bool TrafficEntityModule::IsDecisionFrame()
 // ----------------------------------------------------------------------------
 const Hull* TrafficEntityModule::GetHull(u32 luIndex) const
 {
-    CGS_ASSERT(luIndex < mpData->muNumHulls, "luIndex < (mpData->muNumHulls)");
+    CGS_ASSERT_AT(luIndex < mpData->muNumHulls, "luIndex < (mpData->muNumHulls)",
+        KAC_ARTIST_TRAFFIC_ENTITY_MODULE_HEADER, 2229);
     return mpData->mpapHulls[luIndex];
 }
 
@@ -1834,10 +1838,12 @@ const Hull* TrafficEntityModule::GetHull(u32 luIndex) const
 // ----------------------------------------------------------------------------
 HullRuntime* TrafficEntityModule::GetHullRuntime(u32 luHull)
 {
-    CGS_ASSERT(luHull < mpData->muNumHulls, "luHull < (mpData->muNumHulls)");
+    CGS_ASSERT_AT(luHull < mpData->muNumHulls, "luHull < (mpData->muNumHulls)",
+        KAC_ARTIST_TRAFFIC_ENTITY_MODULE_HEADER, 2246);
 
     const u8 luHullRuntime = mauHullRuntimeDataIndices[luHull];
-    CGS_ASSERT(luHullRuntime != KU_INVALID_HULL_RUNTIME, "luHullRuntime != KU_INVALID_HULL_RUNTIME");
+    CGS_ASSERT_AT(luHullRuntime != KU_INVALID_HULL_RUNTIME, "luHullRuntime != KU_INVALID_HULL_RUNTIME",
+        KAC_ARTIST_TRAFFIC_ENTITY_MODULE_HEADER, 2249);
 
     return &maHullRuntimeData[luHullRuntime];
 }
@@ -1848,7 +1854,8 @@ HullRuntime* TrafficEntityModule::GetHullRuntime(u32 luHull)
 // ----------------------------------------------------------------------------
 HullRuntime* TrafficEntityModule::GetHullRuntimeSafe(u32 luHull)
 {
-    CGS_ASSERT(luHull < mpData->muNumHulls, "luHull < (mpData->muNumHulls)");
+    CGS_ASSERT_AT(luHull < mpData->muNumHulls, "luHull < (mpData->muNumHulls)",
+        KAC_ARTIST_TRAFFIC_ENTITY_MODULE_HEADER, 2288);
 
     const u8 luHullRuntime = mauHullRuntimeDataIndices[luHull];
     if (luHullRuntime == KU_INVALID_HULL_RUNTIME)
@@ -1861,12 +1868,26 @@ HullRuntime* TrafficEntityModule::GetHullRuntimeSafe(u32 luHull)
 // The const overloads (DWARF :2270 / :2274). Same lookup.
 const HullRuntime* TrafficEntityModule::GetHullRuntime(u32 luHull) const
 {
-    return const_cast<TrafficEntityModule*>(this)->GetHullRuntime(luHull);
+    CGS_ASSERT_AT(luHull < mpData->muNumHulls, "luHull < (mpData->muNumHulls)",
+        KAC_ARTIST_TRAFFIC_ENTITY_MODULE_HEADER, 2267);
+
+    const u8 luHullRuntime = mauHullRuntimeDataIndices[luHull];
+    CGS_ASSERT_AT(luHullRuntime != KU_INVALID_HULL_RUNTIME, "luHullRuntime != KU_INVALID_HULL_RUNTIME",
+        KAC_ARTIST_TRAFFIC_ENTITY_MODULE_HEADER, 2270);
+
+    return &maHullRuntimeData[luHullRuntime];
 }
 
 const HullRuntime* TrafficEntityModule::GetHullRuntimeSafe(u32 luHull) const
 {
-    return const_cast<TrafficEntityModule*>(this)->GetHullRuntimeSafe(luHull);
+    CGS_ASSERT_AT(luHull < mpData->muNumHulls, "luHull < (mpData->muNumHulls)",
+        KAC_ARTIST_TRAFFIC_ENTITY_MODULE_HEADER, 2313);
+
+    const u8 luHullRuntime = mauHullRuntimeDataIndices[luHull];
+    if (luHullRuntime == KU_INVALID_HULL_RUNTIME)
+        return 0;
+
+    return &maHullRuntimeData[luHullRuntime];
 }
 
 // ----------------------------------------------------------------------------

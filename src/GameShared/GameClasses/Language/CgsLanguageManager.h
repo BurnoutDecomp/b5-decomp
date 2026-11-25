@@ -35,7 +35,6 @@ namespace CgsResource { struct LanguageResource; }
 //           the 21 per-locale format-string pointers (mpGeneral*/mpTimeFormat*/mpDistanceFormat*) --
 //           NOT touched by this ctor (populated by Construct(), a separate not-yet-reconstructed
 //           function); mrLargeDistanceConversion's offset independently matches the
-//           GetDistanceDisplayScale accessor comment below (InGameMessageRenderer usage)
 //   +0x6154 mDebugComponent                  (LanguageManagerDebugComponent, by value; the ctor manually
 //                                             stamps its vtable pointer -- the CgsDev::DebugComponent base
 //                                             ctor folded/inlined into this one)
@@ -347,11 +346,6 @@ namespace CgsLanguage
         // also the wrong target for the dispatcher's format-1 case -- see FormatText(f32).
         void FormatHoursAndMinutesAndSecondsString(CgsUnicode::CgsUtf8* lpcTarget, s32 liHours, s32 liMinutes,
                                                    s32 liSeconds, s32 liTargetSize) const;
-
-        // The metres -> display-unit scale the HUD multiplies a distance by to decide whether the
-        // small or large distance string reads better (X360 reads it as a float member at +0x60F8;
-        // exposed as a named accessor so callers don't poke the raw offset).
-        f32 GetDistanceDisplayScale() const;
 
         // X360 0x824434C0. Returns the loaded default font name (mpcDefaultFontName), asserting first
         // that Construct()/PrepareDefaultFont() has already set it (a null default font is a

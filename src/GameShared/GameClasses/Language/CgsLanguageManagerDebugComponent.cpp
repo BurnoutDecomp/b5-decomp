@@ -28,12 +28,7 @@ namespace CgsLanguage
         const u32 KU_TEXT_COLOUR       = 0xFFFFFFFFu;   // X360 -1
         const u32 KU_BACKGROUND_COLOUR = 0xFF000000u;   // X360 -16777216
 
-        // The HUD picks the small vs large distance string when (scale * distance) drops below this
-        // threshold. The X360 RenderHUD (0x82863930) inlines the literal compare `< 1.0` directly
-        // (the immediate is the natural unit boundary, not a .rdata word), so the value is verified.
-        // NOTE: the PS3 DecFIGS build (B5_FIGS) instead emits a single FormatAutoDistanceString call
-        // here; the X360 b5_main target uses this scale*distance threshold branch -- kept per target.
-        const f32 KF_SMALLEST_DISTANCE_THRESHOLD = 1.0f;
+
     }
 
     void LanguageManagerDebugComponent::Construct( const LanguageManager* lpLanguageManager )
@@ -83,8 +78,10 @@ namespace CgsLanguage
     {
         lpRender->DrawText( lpcLabel, lfX, lrY, mrTextSize, KU_TEXT_COLOUR );
 
-        const f32 lfLabelWidth = lpRender->CalcTextWidth( lpcLabel, mrTextSize );
-        lpRender->DrawText( lpcValue, lfX + lfLabelWidth, lrY, mrTextSize, KU_TEXT_COLOUR );
+        const f32 lfScale = mrTextSize;
+        const f32 lfY = lrY;
+        const f32 lfLabelWidth = lpRender->CalcTextWidth( lpcLabel, lfScale );
+        lpRender->DrawText( lpcValue, lfX + lfLabelWidth, lfY, lfScale, KU_TEXT_COLOUR );
 
         lrY += mrTextSpacing * mrTextSize;
     }
@@ -96,78 +93,67 @@ namespace CgsLanguage
             return;
         }
 
-        CGS_ASSERT( mpLanguageManager != 0, "mpLanguageManager" );
+        CGS_ASSERT_AT(mpLanguageManager != 0, "mpLanguageManager", KAC_ARTIST_FILE, 223);
 
-        // Dim full-screen backdrop so the white text reads against any scene. The top-left is the
-        // origin (X360 flt_82001CC0 == 0.0, the same .rdata float that zero-inits mrSeconds); the
-        // bottom-right is the renderer's virtual screen size.
-        Vector2 lv2Origin;
-        lv2Origin.SetZero();
-        lpRender->DrawBox( lv2Origin, lpRender->GetVirtualScreenSize(), KU_BACKGROUND_COLOUR );
+        const f32 lfX = mrPosX;
+        f32 lfY = mrPosY;
+        const Vector2 lv2Origin(0.0f, 0.0f);
+        lpRender->DrawBox(lv2Origin, lpRender->GetVirtualScreenSize(), KU_BACKGROUND_COLOUR);
 
         char acValue[32];
-        f32  lfY = mrPosY;
 
         // The X360 force-terminates the last buffer byte after every format call (defensive against an
         // unterminated formatter); kept here per line.
         mpLanguageManager->FormatIntegerString( reinterpret_cast<CgsUnicode::CgsUtf8*>(acValue), mnNumber1, sizeof( acValue ) );
         acValue[31] = '\0';
-        DrawText( lpRender, "Integer= ", acValue, mrPosX, lfY );
+        DrawText( lpRender, "Integer= ", acValue, lfX, lfY );
 
         mpLanguageManager->FormatXoverYString( reinterpret_cast<CgsUnicode::CgsUtf8*>(acValue), mnNumber1, mnNumber2, sizeof( acValue ) );
         acValue[31] = '\0';
-        DrawText( lpRender, "X / Y = ", acValue, mrPosX, lfY );
+        DrawText( lpRender, "X / Y = ", acValue, lfX, lfY );
 
         mpLanguageManager->FormatPercentageString( reinterpret_cast<CgsUnicode::CgsUtf8*>(acValue), mnNumber1, sizeof( acValue ) );
         acValue[31] = '\0';
-        DrawText( lpRender, "Percentage = ", acValue, mrPosX, lfY );
+        DrawText( lpRender, "Percentage = ", acValue, lfX, lfY );
 
         mpLanguageManager->FormatCurrencyString( reinterpret_cast<CgsUnicode::CgsUtf8*>(acValue), mnCurrency, sizeof( acValue ) );
         acValue[31] = '\0';
-        DrawText( lpRender, "Currency = ", acValue, mrPosX, lfY );
+        DrawText( lpRender, "Currency = ", acValue, lfX, lfY );
 
         mpLanguageManager->FormatDateString( reinterpret_cast<CgsUnicode::CgsUtf8*>(acValue), mnDays, mnMonths, mnYears, sizeof( acValue ) );
         acValue[31] = '\0';
-        DrawText( lpRender, "Date = ", acValue, mrPosX, lfY );
+        DrawText( lpRender, "Date = ", acValue, lfX, lfY );
 
         mpLanguageManager->FormatHoursMinutesAndSecondsString( reinterpret_cast<CgsUnicode::CgsUtf8*>(acValue), mrSeconds, sizeof( acValue ) );
         acValue[31] = '\0';
-        DrawText( lpRender, "Time Hours and Minutes and Seconds = ", acValue, mrPosX, lfY );
+        DrawText( lpRender, "Time Hours and Minutes and Seconds = ", acValue, lfX, lfY );
 
         mpLanguageManager->FormatMinutesAndSecondsString( reinterpret_cast<CgsUnicode::CgsUtf8*>(acValue), mrSeconds, sizeof( acValue ) );
         acValue[31] = '\0';
-        DrawText( lpRender, "Time Minutes And Seconds = ", acValue, mrPosX, lfY );
+        DrawText( lpRender, "Time Minutes And Seconds = ", acValue, lfX, lfY );
 
         mpLanguageManager->FormatMinutesAndSecondsAndHundredsString( reinterpret_cast<CgsUnicode::CgsUtf8*>(acValue), mrSeconds, sizeof( acValue ) );
         acValue[31] = '\0';
-        DrawText( lpRender, "Time Minutes and Seconds and Hundredths = ", acValue, mrPosX, lfY );
+        DrawText( lpRender, "Time Minutes and Seconds and Hundredths = ", acValue, lfX, lfY );
 
         mpLanguageManager->FormatSecondsAndHundredsString( reinterpret_cast<CgsUnicode::CgsUtf8*>(acValue), mrSeconds, sizeof( acValue ) );
         acValue[31] = '\0';
-        DrawText( lpRender, "Time Seconds and Hundredths = ", acValue, mrPosX, lfY );
+        DrawText( lpRender, "Time Seconds and Hundredths = ", acValue, lfX, lfY );
 
         mpLanguageManager->FormatSecondsString( reinterpret_cast<CgsUnicode::CgsUtf8*>(acValue), mrSeconds, sizeof( acValue ) );
         acValue[31] = '\0';
-        DrawText( lpRender, "Time Seconds = ", acValue, mrPosX, lfY );
+        DrawText( lpRender, "Time Seconds = ", acValue, lfX, lfY );
 
         mpLanguageManager->FormatSmallDistanceString( acValue, mrDistance, sizeof( acValue ) );
         acValue[31] = '\0';
-        DrawText( lpRender, "Small Distance = ", acValue, mrPosX, lfY );
+        DrawText( lpRender, "Small Distance = ", acValue, lfX, lfY );
 
         mpLanguageManager->FormatLargeDistanceString( acValue, mrDistance, sizeof( acValue ) );
         acValue[31] = '\0';
-        DrawText( lpRender, "Large Distance = ", acValue, mrPosX, lfY );
+        DrawText( lpRender, "Large Distance = ", acValue, lfX, lfY );
 
-        // "Smallest": pick whichever distance string reads better for this magnitude.
-        if ( mpLanguageManager->GetDistanceDisplayScale() * mrDistance < KF_SMALLEST_DISTANCE_THRESHOLD )
-        {
-            mpLanguageManager->FormatSmallDistanceString( acValue, mrDistance, sizeof( acValue ) );
-        }
-        else
-        {
-            mpLanguageManager->FormatLargeDistanceString( acValue, mrDistance, sizeof( acValue ) );
-        }
+        mpLanguageManager->FormatAutoDistanceString(acValue, mrDistance, sizeof(acValue));
         acValue[31] = '\0';
-        DrawText( lpRender, "Smallest = ", acValue, mrPosX, lfY );
+        DrawText( lpRender, "Smallest = ", acValue, lfX, lfY );
     }
 }

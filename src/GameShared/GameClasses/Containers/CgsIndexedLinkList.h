@@ -881,7 +881,7 @@ IndexedLinkedList<DataType,IndexType>::RemoveTail()
 
 
 template<class DataType, class IndexType>
-inline void
+__forceinline void
 IndexedLinkedList<DataType,IndexType>::RemoveNode( IndexedLinkedListNode<DataType,IndexType>* lpNode )
 {
     IndexType liIndex = GetNodeOffset( lpNode );
@@ -1131,10 +1131,10 @@ IndexedLinkedList<DataType,IndexType>::InternalAddTail( IndexedLinkedListNode<Da
 
 
 template<class DataType, class IndexType>
-inline IndexedLinkedListNode<DataType,IndexType>*
+__forceinline IndexedLinkedListNode<DataType,IndexType>*
 IndexedLinkedList<DataType,IndexType>::InternalRemoveLastNode( )
 {
-    CGS_ASSERT_STREAM(miCount == 1, "This should only be called to add a node to list when it is zero length\n");
+    CGS_ASSERT_STREAM_AT(miCount == 1, "This should only be called to add a node to list when it is zero length\n", "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsIndexedLinkList.h", 1137);
 
     IndexedLinkedListNode<DataType,IndexType>* lpNode = &mpBase[miFirst];
 
@@ -1155,7 +1155,7 @@ IndexedLinkedList<DataType,IndexType>::InternalRemoveLastNode( )
 
 
 template<class DataType, class IndexType>
-inline IndexedLinkedListNode<DataType,IndexType>*
+__forceinline IndexedLinkedListNode<DataType,IndexType>*
 IndexedLinkedList<DataType,IndexType>::InternalRemoveHead( )
 {
     CGS_ASSERT_STREAM(miCount > 1, "This should only be called if there is more than 1 node in the list\n");
@@ -1180,7 +1180,7 @@ IndexedLinkedList<DataType,IndexType>::InternalRemoveHead( )
 
 
 template<class DataType, class IndexType>
-inline IndexedLinkedListNode<DataType,IndexType>*
+__forceinline IndexedLinkedListNode<DataType,IndexType>*
 IndexedLinkedList<DataType,IndexType>::InternalRemoveTail( )
 {
     CGS_ASSERT_STREAM(miCount > 1, "This should only be called if there is more than 1 node in the list\n");

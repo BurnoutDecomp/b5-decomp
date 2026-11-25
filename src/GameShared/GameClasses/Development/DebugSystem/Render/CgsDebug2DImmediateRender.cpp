@@ -590,11 +590,6 @@ namespace CgsDev
         DrawText(lacSize, lv2Position, lfScale, lColour, false);
     }
 
-    Vector2 Debug2DImmediateRender::GetVirtualScreenSize() const
-    {
-        return rw::math::vpu::Vector2(mfVirtualScreenWidth, mfVirtualScreenHeight);
-    }
-
     // ARTIST 0x8282C548. This is a fixed-width line splitter (rather than word wrapping): derive
     // the maximum character count from the width of "A", honour explicit newlines, align every
     // emitted line independently inside the box, and stop before another line would cross y1.

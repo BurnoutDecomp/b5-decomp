@@ -41,16 +41,12 @@ namespace BrnTraffic
     {
         const TrafficData* lpData = static_cast<const TrafficData*>(lpResource);
 
-        CGS_ASSERT(lpData->muSizeInBytes != 0u, "Uninitialised Traffic Data resource");
+        CGS_ASSERT_AT(lpData->muSizeInBytes > 0u, "Uninitialised Traffic Data resource",
+                      "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../../SharedClasses/Traffic/BrnTrafficDataResourceType.cpp", 58);
 
+        const u32 luSize = lpData->muSizeInBytes;
         CgsResource::ResourceDescriptor lDescriptor;
-        lDescriptor.m_baseResourceDescriptors[0].m_size      = lpData->muSizeInBytes;  // entry0 size  (*(a3+4))
-        lDescriptor.m_baseResourceDescriptors[0].m_alignment = 0x10u;                  // entry0 align
-        for (u32 luBlock = 1; luBlock < 5u; ++luBlock)
-        {
-            lDescriptor.m_baseResourceDescriptors[luBlock].m_size      = 0u;   // entry1..4 {0,1}
-            lDescriptor.m_baseResourceDescriptors[luBlock].m_alignment = 1u;
-        }
+        lDescriptor.m_baseResourceDescriptors[0] = rw::BaseResourceDescriptor(luSize, 0x10u);
         return lDescriptor;
     }
 

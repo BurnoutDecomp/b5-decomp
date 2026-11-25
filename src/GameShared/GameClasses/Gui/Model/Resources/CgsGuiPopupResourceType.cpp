@@ -38,13 +38,7 @@ namespace CgsResource
         const s32 liSize = static_cast<const CgsGui::GuiPopupResource*>(lpResource)->miSizeOfPopupResource;
 
         ResourceDescriptor lDescriptor;
-        lDescriptor.m_baseResourceDescriptors[0].m_size      = static_cast<u32>(liSize);
-        lDescriptor.m_baseResourceDescriptors[0].m_alignment = 16u;
-        for (int li = 1; li < 5; ++li)
-        {
-            lDescriptor.m_baseResourceDescriptors[li].m_size      = 0u;
-            lDescriptor.m_baseResourceDescriptors[li].m_alignment = 1u;
-        }
+        lDescriptor.m_baseResourceDescriptors[0] = rw::BaseResourceDescriptor(static_cast<u32>(liSize), 16u);
         return lDescriptor;
     }
 }

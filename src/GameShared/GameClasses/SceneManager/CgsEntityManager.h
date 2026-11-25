@@ -87,6 +87,12 @@ namespace CgsContainers
 
 namespace CgsSceneManager
 {
+    // ARTIST 828C5958 hashes the packed entity key as 32 bits.
+    inline u32 KeyBits(const EntityId& lrKey)
+    {
+        return static_cast<u32>(lrKey);
+    }
+
     class CGS_ALIGN(128) EntityManager
     {
     public:

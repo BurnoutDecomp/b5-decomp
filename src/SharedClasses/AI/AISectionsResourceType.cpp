@@ -55,16 +55,8 @@ namespace BrnAI
     {
         const u32 luSizeInBytes = static_cast<const AISectionsData*>(lpResource)->GetSizeInBytes();
 
-        CGS_ASSERT(luSizeInBytes != 0u, "Uninitialised AI Sections resource");
-
         CgsResource::ResourceDescriptor lDescriptor;
-        lDescriptor.m_baseResourceDescriptors[0].m_size      = luSizeInBytes;
-        lDescriptor.m_baseResourceDescriptors[0].m_alignment = 0x10u;
-        for (int li = 1; li < 5; ++li)
-        {
-            lDescriptor.m_baseResourceDescriptors[li].m_size      = 0u;
-            lDescriptor.m_baseResourceDescriptors[li].m_alignment = 1u;
-        }
+        lDescriptor.m_baseResourceDescriptors[0] = rw::BaseResourceDescriptor(luSizeInBytes, 0x10u);
         return lDescriptor;
     }
 

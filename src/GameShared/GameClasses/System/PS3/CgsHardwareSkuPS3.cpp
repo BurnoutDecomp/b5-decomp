@@ -3,9 +3,11 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
-// The selected Windows provider TU owns the ARTIST selector on PC.
 namespace CgsSystem
 {
+static const char KAC_ARTIST_HARDWARE_SKU_SOURCE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\X360/CgsHardwareSkuX360.cpp";
+
 // ARTIST 0x828D7128: retain every SKU branch and its original language allowlist.
 const CgsLanguage::ELanguage HardwareSku::FindLanguage()
 {
@@ -53,7 +55,7 @@ const CgsLanguage::ELanguage HardwareSku::FindLanguage()
             }
 
         default:
-            CGS_ASSERT(false, "Unknown sku or no sku set");
+            CGS_ASSERT_AT(false, "Unknown sku or no sku set", KAC_ARTIST_HARDWARE_SKU_SOURCE, 208);
             return static_cast<CgsLanguage::ELanguage>(7);
     }
 }

@@ -1125,8 +1125,6 @@ namespace CgsLanguage
                           liTargetSize, lMinutes.GetBuffer(), lSeconds.GetBuffer());
     }
 
-    f32  LanguageManager::GetDistanceDisplayScale() const                                 { __debugbreak(); return 1.0f; }   // FLAG trap-stub
-
     // ========================================================================================
     // [pause-stats wave 2026-08-29] THE SEVEN LEAVES THE DRIVER-DETAILS PAUSE PANEL RIDES.
     // Every one of them was a __debugbreak() trap stub, and the first one HandleStatData reaches

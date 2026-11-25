@@ -68,6 +68,9 @@ namespace CgsSceneManager
 
 namespace
 {
+    const char KAC_VOLUME_MANAGER_ARTIST_FILE[] =
+        "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\CgsVolumeManager.cpp";
+
     // The byte image of rw::collision::AABBox over the vendor POD Vector3 this TU speaks.
     struct CGS_ALIGN(16) AABBoxRows
     {
@@ -106,36 +109,16 @@ bool VolumeManager::Prepare()
     mVolumeStore.Prepare();
     mVolumeStore.Clear();
     mVolumePool.Clear();
-    mVolumeIdToIndex.Clear(maVolumeHashElement);
+    mVolumeIdToIndex.Init(maVolumeHashElement);
     return true;
 }
 
 // ---------------------------------------------------------------------------
-// Header inline (no export). Pinned by the two bodies that inlined it -- RemoveVolume
-// @0x828CFDE4..0x828CFDFC and ReplaceDynamicVolume @0x828CFF04..0x828CFF20 -- which both
-// emit `Get(&mVolumeIdToIndex, id)` followed by a null test AND a `== -1` test on the
-// value it points at. That double test is what `liIndex = GetVolumeIndexByID(id); if
-// (liIndex == KI_INVALID_VOLUME_INDEX)` compiles to when the accessor is inlined. The
-// DWARF lists GetVolumeIndexByID in both callers' call graphs (CgsVolumeManager.cpp:220
-// and :256), immediately followed by IndexedHashTable<VolumeId,uint32_t,227u>::Get.
-//
-// ⚠️ SHARED-HEADER DIVERGENCE (reported, not edited -- CgsIndexedHashTable.h is not this
-// cluster's file): the DWARF declares IndexedHashTable::Get as returning `const TValue*`
-// (CgsIndexedHashTable.h:281/:299), which is why the console reads the index at offset 0
-// of the returned pointer (`lwz r29,0(r3)`). The committed shared header instead returns
-// the owning `const Element*`. Reading it through Element::GetValue() -- as below -- is
-// value-identical (Get returns non-null exactly when the key is present, and GetValue()
-// is the very field the console's returned pointer aims at).
-// ---------------------------------------------------------------------------
+// DecFIGS CgsVolumeManager.h:128. Both volume mutators inline this lookup.
 s32 VolumeManager::GetVolumeIndexByID(VolumeId lVolumeId) const
 {
-    const CgsContainers::IndexedHashTableElement<VolumeId, u32>* lpElement =
-        mVolumeIdToIndex.Get(lVolumeId);
-    if (lpElement == NULL)
-    {
-        return KI_INVALID_VOLUME_INDEX;
-    }
-    return static_cast<s32>(lpElement->GetValue());
+    const u32* lpuIndex = mVolumeIdToIndex.Get(lVolumeId);
+    return lpuIndex ? static_cast<s32>(*lpuIndex) : KI_INVALID_VOLUME_INDEX;
 }
 
 // ---------------------------------------------------------------------------
@@ -251,21 +234,23 @@ s32 VolumeManager::AddDynamicVolume(VolumeId lVolumeId,
 // ---------------------------------------------------------------------------
 void VolumeManager::ReplaceDynamicVolume(VolumeId lVolumeId, const VolRef::Volume* lpVolume)
 {
-    const s32 liIndex = GetVolumeIndexByID(lVolumeId);         // DWARF liIndex (:256)
-    if (liIndex == KI_INVALID_VOLUME_INDEX)
+    const s32 liIndex = GetVolumeIndexByID(lVolumeId);
+    if (liIndex != KI_INVALID_VOLUME_INDEX)
     {
-        CGS_ASSERT(false, "Can't find volume");
-        return;
+        VolumeManagerVolume& lrVMVolume = mVolumePool[liIndex];
+        if (!lrVMVolume.mbStaticVolume)
+        {
+            mVolumeStore.ReplaceVolume(lrVMVolume.miVolumeStoreIndex, lpVolume);
+        }
+        else
+        {
+            CGS_ASSERT_AT(false, "Can't replace volume. Volume is not dynamic", KAC_VOLUME_MANAGER_ARTIST_FILE, 266);
+        }
     }
-
-    VolumeManagerVolume& lrVMVolume = mVolumePool[liIndex];    // DWARF lpVMVolume (:259)
-    if (lrVMVolume.mbStaticVolume)
+    else
     {
-        CGS_ASSERT(false, "Can't replace volume. Volume is not dynamic");
-        return;
+        CGS_ASSERT_AT(false, "Can't find volume", KAC_VOLUME_MANAGER_ARTIST_FILE, 271);
     }
-
-    mVolumeStore.ReplaceVolume(lrVMVolume.miVolumeStoreIndex, lpVolume);
 }
 
 // ---------------------------------------------------------------------------
@@ -282,21 +267,27 @@ void VolumeManager::ReplaceDynamicVolume(VolumeId lVolumeId, const VolRef::Volum
 // ---------------------------------------------------------------------------
 void VolumeManager::RemoveVolume(VolumeId lVolumeId)
 {
-    const s32 liIndex = GetVolumeIndexByID(lVolumeId);         // DWARF liIndex (:220)
-    if (liIndex == KI_INVALID_VOLUME_INDEX)
+    const s32 liIndex = GetVolumeIndexByID(lVolumeId);
+    if (liIndex != KI_INVALID_VOLUME_INDEX)
     {
-        CGS_ASSERT(false, "Can't find volume ");
-        return;
+        VolumeManagerVolume& lrVMVolume = mVolumePool[liIndex];
+        if (!lrVMVolume.mbStaticVolume)
+        {
+            mVolumeStore.RemoveVolume(lrVMVolume.miVolumeStoreIndex);
+        }
+        mVolumePool.FreeObject(liIndex);
+        mVolumeIdToIndex.Remove(lVolumeId);
     }
-
-    VolumeManagerVolume& lrVMVolume = mVolumePool[liIndex];    // DWARF lpVMVolume (:223)
-    if (!lrVMVolume.mbStaticVolume)
+    else
     {
-        mVolumeStore.RemoveVolume(lrVMVolume.miVolumeStoreIndex);
+        CgsDev::Assert::BeginAssert();
+        CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+        lMessage << "Can't find volume ";
+        lMessage.SetPrintMode(CgsDev::E_PRINTMODE_HEX) << static_cast<u64>(lVolumeId);
+        CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+                                  CGS_ASSERT_LOCATION(KAC_VOLUME_MANAGER_ARTIST_FILE, 236));
+        CgsDev::Assert::EndAssert();
     }
-
-    mVolumePool.FreeObject(liIndex);
-    mVolumeIdToIndex.Remove(lVolumeId);
 }
 
 // ---------------------------------------------------------------------------

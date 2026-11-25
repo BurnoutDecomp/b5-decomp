@@ -91,16 +91,9 @@ namespace CgsGraphics
     {
         const InstanceList* lpList = static_cast<const InstanceList*>(lpResource);
 
+        const u32 luCount = lpList->muArraySize;
         CgsResource::ResourceDescriptor lDescriptor;
-        rw::BaseResourceDescriptor* lpEntries = lDescriptor.m_baseResourceDescriptors;
-
-        lpEntries[0].m_size      = KU_INSTANCE_STRIDE * lpList->muArraySize + 16u; // 80*n + header
-        lpEntries[0].m_alignment = 16u;
-        for (u32 luEntry = 1u; luEntry < 5u; ++luEntry)
-        {
-            lpEntries[luEntry].m_size      = 0u;
-            lpEntries[luEntry].m_alignment = 1u;
-        }
+        lDescriptor.m_baseResourceDescriptors[0] = rw::BaseResourceDescriptor(KU_INSTANCE_STRIDE * luCount + 16u, 16u);
         return lDescriptor;
     }
 

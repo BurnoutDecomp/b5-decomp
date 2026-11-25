@@ -3,29 +3,44 @@
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "types.hpp"
 
-// CgsUnicode -- UTF-8 helpers. Faithful ports of the X360 ARTIST bodies:
-//   ConvertUtf8CharToUtf16Char  0x827E6B08
-//   IncrementUtf8Pointer        0x827E6A28
-// Both index the X360 table byte_820D1710 (trailing-byte count per lead byte, 255 = invalid).
-// That table is a UTF-8-spec constant reproduced here as lUtf8TrailingBytes (the data table is
-// not in the function export, but its values are fully determined by the spec). The
-// dword_820D1810 offset table the converter subtracts is likewise the standard UTF-8 offsets.
-// Debug-only validity asserts (CgsUnicode.h:914/955/958/959/990) are documented, not called.
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
+
+#define CGS_ARTIST_UNICODE_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\fonts\\CgsUnicode.cpp"
+#define CGS_ARTIST_UNICODE_H_FILE "..\\..\\..\\GameShared\\GameClasses\\Fonts/CgsUnicode.h"
 
 namespace CgsUnicode
 {
     namespace
     {
-        // = byte_820D1710[lead]: number of trailing (continuation) bytes for a UTF-8 lead byte,
-        // or 255 if the byte is not a valid lead (a continuation byte, or a >4-byte lead).
-        u32 lUtf8TrailingBytes(u8 lu8Lead)
+        inline bool IsSingleByteUtf8(const CgsUtf8* lpUtf8Char)
         {
-            if (lu8Lead < 0x80u) return 0u;    // 0xxxxxxx  ASCII
-            if (lu8Lead < 0xC0u) return 255u;  // 10xxxxxx  continuation byte (invalid lead)
-            if (lu8Lead < 0xE0u) return 1u;    // 110xxxxx
-            if (lu8Lead < 0xF0u) return 2u;    // 1110xxxx
-            if (lu8Lead < 0xF8u) return 3u;    // 11110xxx
-            return 255u;                        // invalid
+            return (*lpUtf8Char & 0x80) == 0;
+        }
+
+        // The original lead-byte table returns the continuation count or 255.
+        const u8 KAU8_UTF8_TRAILING_BYTES[256] =
+        {
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+            1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+            1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+            2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+            3, 3, 3, 3, 3, 3, 3, 3, 255, 255, 255, 255, 255, 255, 255, 255,
+        };
+
+        inline u8 lUtf8TrailingBytes(u8 lu8Lead)
+        {
+            return KAU8_UTF8_TRAILING_BYTES[lu8Lead];
         }
     }
 
@@ -35,8 +50,6 @@ namespace CgsUnicode
     // conversion, replacement, bound or return-on-error is added. The return is the NUL.
     CgsUtf16* ConvertUtf8ToUtf16(const CgsUtf8* lpUtf8String, CgsUtf16* lpUtf16String)
     {
-        const char* const lpcFile =
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\fonts\\CgsUnicode.cpp";
         if (!IsValidUtf8String(lpUtf8String))
         {
             CgsDev::Assert::BeginAssert();
@@ -44,7 +57,7 @@ namespace CgsUnicode
                                        CgsDev::Assert::giMessageBufferSize);
             lMessage << "Invalid UTF8 Character " << static_cast<u32>(*lpUtf8String) << " at "
                      << CgsDev::E_PRINTMODE_HEX << static_cast<u64>(reinterpret_cast<uintptr_t>(lpUtf8String));
-            CgsDev::Assert::FireAssert(lMessage.GetBuffer(), CGS_ASSERT_LOCATION(lpcFile, 802));
+            CgsDev::Assert::FireAssert(lMessage.GetBuffer(), CGS_ASSERT_LOCATION(CGS_ARTIST_UNICODE_CPP_FILE, 802));
             CgsDev::Assert::EndAssert();
         }
         // ARTIST dword_820DE4C8; trailing-byte classification uses the same
@@ -61,13 +74,13 @@ namespace CgsUnicode
                                            CgsDev::Assert::giMessageBufferSize);
                 lMessage << "Character supplied is not a valid start UTF8 character ("
                          << static_cast<u32>(*lpUtf8String) << ")";
-                CgsDev::Assert::FireAssert(lMessage.GetBuffer(), CGS_ASSERT_LOCATION(lpcFile, 808));
+                CgsDev::Assert::FireAssert(lMessage.GetBuffer(), CGS_ASSERT_LOCATION(CGS_ARTIST_UNICODE_CPP_FILE, 808));
                 CgsDev::Assert::EndAssert();
             }
             if (luExtraBytes >= 4)
             {
                 CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert("luExtraBytes < 4", CGS_ASSERT_LOCATION(lpcFile, 810));
+                CgsDev::Assert::FireAssert("luExtraBytes < 4", CGS_ASSERT_LOCATION(CGS_ARTIST_UNICODE_CPP_FILE, 810));
                 CgsDev::Assert::EndAssert();
             }
             switch (luExtraBytes)
@@ -82,7 +95,7 @@ namespace CgsUnicode
             if (luChar > 0xffffu)
             {
                 CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert("lUtf32Char <= KUTF32_MAX_UTF16", CGS_ASSERT_LOCATION(lpcFile, 841));
+                CgsDev::Assert::FireAssert("lUtf32Char <= KUTF32_MAX_UTF16", CGS_ASSERT_LOCATION(CGS_ARTIST_UNICODE_CPP_FILE, 841));
                 CgsDev::Assert::EndAssert();
             }
             *lpUtf16String++ = static_cast<CgsUtf16>(luChar);
@@ -94,13 +107,10 @@ namespace CgsUnicode
     // Faithful port of X360 0x827E6A28: advance past one UTF-8 character (lead + trailing bytes).
     const u8* IncrementUtf8Pointer(const u8* lpUtf8Char)
     {
-        // (X360 asserts byte_820D1710[*p] != 255, CgsUnicode.h:914.)
-        const u32 luTrailing = lUtf8TrailingBytes(*lpUtf8Char);
-        // X360 returns p + trailing + 1; on an invalid lead (255) that would over-run by 256, so
-        // advance a single byte instead to stay in bounds.
-        if (luTrailing > 3u)
-            return lpUtf8Char + 1;
-        return lpUtf8Char + luTrailing + 1u;
+        CGS_ASSERT_STREAM_AT(lUtf8TrailingBytes(*lpUtf8Char) != 255,
+            "Character supplied is not a valid start UTF8 character (" << static_cast<s32>(*lpUtf8Char) << ")",
+            CGS_ARTIST_UNICODE_H_FILE, 914);
+        return lpUtf8Char + lUtf8TrailingBytes(*lpUtf8Char) + 1;
     }
 
     // Faithful port of X360 0x827E6B08: decode one UTF-8 character to a UTF-16 code unit.
@@ -151,23 +161,28 @@ namespace CgsUnicode
             return true;
 
         const u32 luTrailing = lUtf8TrailingBytes(lu8Lead);
-        if (luTrailing == 255u)
-            return false;                       // not a valid start byte (continuation / >4-byte)
-
-        // luTrailing <= 3 and the lead is not a 10xxxxxx continuation byte: walk the trailing
-        // bytes and require each to be a 10xxxxxx continuation. (X360: luTrailing > extra count
-        // -> too many trailing bytes -> invalid; fewer -> the loop ends early and is valid.)
-        // luSeen counts the CONTINUATION bytes seen (starts at 0): a char is invalid only when
-        // MORE than luTrailing continuations follow. (The prior luSeen=1 seed counted the lead
-        // itself and rejected EVERY valid multi-byte character -- e.g. the 2-byte (C2 A9)
-        // copyright sign failed on its first continuation byte. Off-by-one, fixed 2026-07-04.)
-        const u8* lpByte = lpUtf8Char + 1;
-        u32 luSeen = 0u;
-        while ((*lpByte & 0xC0) == 0x80)
+        if (luTrailing == 255)
         {
-            ++lpByte;
-            if (++luSeen > luTrailing)
-                return false;                   // more continuation bytes than the lead allows
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                *CgsDev::Log::gpDebugPrint << "Character supplied is not a valid start UTF8 character\n("
+                    << static_cast<s32>(lu8Lead) << ") : ("
+                    << reinterpret_cast<const char*>(lpUtf8Char) << ")\n";
+            return false;
+        }
+
+        if (luTrailing > 3 || (lu8Lead & 0xC0) == 0x80)
+            return false;
+
+        const u8* lpTrailing = lpUtf8Char + 1;
+        for (u8 lu8Index = 1; lu8Index <= luTrailing; ++lu8Index, ++lpTrailing)
+        {
+            if ((*lpTrailing & 0xC0) != 0x80)
+            {
+                if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                    *CgsDev::Log::gpDebugPrint << "Invalid UTF8 Char " << static_cast<s32>(*lpTrailing)
+                        << " . Incorrect number of trailing bytes. Most likely cause of this is the string has been copied into a buffer and truncated in the middle of a multi-byte character.";
+                return false;
+            }
         }
         return true;
     }
@@ -319,17 +334,13 @@ namespace CgsUnicode
     // character in it is a valid UTF-8 character.
     bool IsValidUtf8String(const u8* lpUtf8String)
     {
-        const u8* lpByte = lpUtf8String;
-        if (*lpByte == 0)
-            return true;
-
-        while (IsValidUtf8Character(lpByte))
+        while (*lpUtf8String != 0)
         {
-            lpByte = IncrementUtf8Pointer(lpByte);
-            if (*lpByte == 0)
-                return true;
+            if (!IsValidUtf8Character(lpUtf8String))
+                return false;
+            lpUtf8String = IncrementUtf8Pointer(lpUtf8String);
         }
-        return false;
+        return true;
     }
 
     // [gateui r5] Faithful port of X360 ARTIST 0x828357A0: the CHARACTER length of a UTF-8
@@ -338,13 +349,14 @@ namespace CgsUnicode
     // count per UTF-8 character however many bytes it occupies.
     s32 StringLength(const CgsUtf8* lpUtf8String)
     {
-        CGS_ASSERT(IsValidUtf8String(lpUtf8String), "IsValidUtf8String(lpUtf8String)");   // cpp:77
-
+        CGS_ASSERT_AT(IsValidUtf8String(lpUtf8String), "IsValidUtf8String(lpUtf8String)",
+                      CGS_ARTIST_UNICODE_CPP_FILE, 77);
         s32 liLength = 0;
-        for (const CgsUtf8* lpByte = lpUtf8String; *lpByte != 0; ++lpByte)
+        while (*lpUtf8String != 0)
         {
-            if ((*lpByte & 0xC0) != 0x80)
+            if ((*lpUtf8String & 0xC0) != 0x80)
                 ++liLength;
+            ++lpUtf8String;
         }
         return liLength;
     }
@@ -356,35 +368,18 @@ namespace CgsUnicode
     CgsUtf8* CopyN(CgsUtf8* lpUtf8TargetString, const CgsUtf8* lpUtf8SourceString,
                    s32 lnMaxTargetStringLength)
     {
-        CGS_ASSERT(lpUtf8TargetString != 0, "lpUtf8TargetString!= NULL");
-        CGS_ASSERT(lpUtf8SourceString != 0, "lpUtf8SourceString!= NULL");
-        CGS_ASSERT(lnMaxTargetStringLength > 0, "lnMaxTargetStringLength > 0");
+        CGS_ASSERT_AT(lpUtf8TargetString != 0, "lpUtf8TargetString!= NULL", CGS_ARTIST_UNICODE_CPP_FILE, 190);
+        CGS_ASSERT_AT(lpUtf8SourceString != 0, "lpUtf8SourceString!= NULL", CGS_ARTIST_UNICODE_CPP_FILE, 191);
+        CGS_ASSERT_AT(lnMaxTargetStringLength > 0, "lnMaxTargetStringLength > 0", CGS_ARTIST_UNICODE_CPP_FILE, 192);
 
-        const CgsUtf8* lpSource = lpUtf8SourceString;
-        CgsUtf8*       lpDest    = lpUtf8TargetString;
-        s32            liCopied  = 0;
-
-        // Copy bytes until the source ends or the cap is reached (X360: the loop breaks at
-        // v8 == a3 -- i.e. exactly lnMaxTargetStringLength bytes written -- or at the source NUL).
-        bool lbHitCap = false;
-        while (*lpSource != 0)
+        CgsUtf8* lpDest = lpUtf8TargetString;
+        s32 liCopied = 0;
+        while (*lpUtf8SourceString != 0 && liCopied < lnMaxTargetStringLength)
         {
-            if (liCopied >= lnMaxTargetStringLength)
-            {
-                lbHitCap = true;
-                break;
-            }
-            *lpDest++ = *lpSource++;
+            *lpDest++ = *lpUtf8SourceString++;
             ++liCopied;
         }
         if (liCopied == lnMaxTargetStringLength)
-            lbHitCap = true;
-
-        // If the cap was hit, the last byte written may be mid-character: rewind over any
-        // trailing continuation bytes so the NUL lands on a leading byte. (X360 asserts it
-        // found a leading byte before the start of the buffer; that under-run is impossible
-        // for any well-formed UTF-8 input shorter than the cap, so the guard is documentary.)
-        if (lbHitCap)
         {
             do
             {
@@ -392,10 +387,10 @@ namespace CgsUnicode
             }
             while ((*lpDest & 0xC0) == 0x80);
 
-            CGS_ASSERT(lpDest >= lpUtf8TargetString,
-                       "Could not find a leading byte in string.");
+            CGS_ASSERT_STREAM_AT(lpDest >= lpUtf8TargetString,
+                "Could not find a leading byte in string " << reinterpret_cast<const char*>(lpUtf8SourceString) << ".",
+                CGS_ARTIST_UNICODE_CPP_FILE, 215);
         }
-
         *lpDest = 0;
         return lpUtf8TargetString;
     }
@@ -408,19 +403,10 @@ namespace CgsUnicode
     // BrnNetwork::LoginManagerBase::UpdateDownloadingTOS.
     CgsUtf8* Copy(CgsUtf8* lpUtf8TargetString, const CgsUtf8* lpUtf8SourceString)
     {
-        CgsUtf8*       lpDest   = lpUtf8TargetString;
-        const CgsUtf8* lpSource = lpUtf8SourceString;
-
-        // X360: load *source; while non-zero, ++source, store the byte, ++dest, reload *source.
-        CgsUtf8 lu8Char = *lpSource;
-        while (lu8Char != 0)
-        {
-            ++lpSource;
-            *lpDest++ = lu8Char;
-            lu8Char = *lpSource;
-        }
-        *lpDest = 0;
-        return lpDest;   // X360 returns the advanced target: a pointer to the written NUL terminator
+        while (*lpUtf8SourceString != 0)
+            *lpUtf8TargetString++ = *lpUtf8SourceString++;
+        *lpUtf8TargetString = 0;
+        return lpUtf8TargetString;
     }
 
     // Faithful port of X360 ARTIST 0x828345F0: NUL-terminate lpUtf8String so it occupies at most
@@ -431,23 +417,23 @@ namespace CgsUnicode
     // Reached from BrnGui::GuiHudMessage::GetParam / AddParam.
     CgsUtf8* SafelyTerminate(CgsUtf8* lpUtf8String, s32 lnMaxTargetLength)
     {
-        CgsUtf8* lpByte = lpUtf8String + lnMaxTargetLength - 1;   // last byte within the cap
-        if (lpByte >= lpUtf8String)
+        // Compare native byte addresses before forming a pointer to dereference.
+        const uintptr_t luStart = reinterpret_cast<uintptr_t>(lpUtf8String);
+        uintptr_t luByte = luStart + lnMaxTargetLength - 1;
+        while (luByte >= luStart)
         {
-            while (*lpByte != 0)
+            CgsUtf8* lpByte = reinterpret_cast<CgsUtf8*>(luByte);
+            if (*lpByte == 0)
+                return lpUtf8String;
+            if ((*lpByte & 0xC0) != 0x80)
             {
-                if ((*lpByte & 0xC0) != 0x80)   // a leading / single byte: safe to cut here
-                {
-                    *lpByte = 0;
-                    return lpUtf8String;
-                }
-                --lpByte;                        // a continuation byte: back up one
-                if (lpByte < lpUtf8String)
-                    return lpUtf8String;
+                *lpByte = 0;
+                return lpUtf8String;
             }
+            --luByte;
         }
         return lpUtf8String;
-}
+    }
 
     // @ 0x82834638 -- uppercasing bounded copy (LanguageManager::FormatText's
     // E_FORMAT_ID_LOOKUP_UPPER branch). Byte loop, capped at lnMaxTargetStringLength-1:
@@ -458,35 +444,39 @@ namespace CgsUnicode
     CgsUtf8* ToUpperN(CgsUtf8* lpUtf8TargetString, const CgsUtf8* lpUtf8SourceString,
                       s32 lnMaxTargetStringLength)
     {
-        CGS_ASSERT(lpUtf8TargetString != 0, "lpUtf8TargetString!= NULL");
-        CGS_ASSERT(lpUtf8SourceString != 0, "lpUtf8SourceString!= NULL");
-        CGS_ASSERT(lnMaxTargetStringLength > 0, "lnMaxTargetStringLength > 0");
+        CGS_ASSERT_AT(lpUtf8TargetString != 0, "lpUtf8TargetString!= NULL", CGS_ARTIST_UNICODE_CPP_FILE, 278);
+        CGS_ASSERT_AT(lpUtf8SourceString != 0, "lpUtf8SourceString!= NULL", CGS_ARTIST_UNICODE_CPP_FILE, 279);
+        CGS_ASSERT_AT(lnMaxTargetStringLength > 0, "lnMaxTargetStringLength > 0", CGS_ARTIST_UNICODE_CPP_FILE, 280);
 
-        CgsUtf8* lpWrite = lpUtf8TargetString;
-        s32 li = 0;
-        for (CgsUtf8 luByte = *lpUtf8SourceString; luByte != 0; luByte = *lpUtf8SourceString)
+        // ARTIST adds the unsigned byte delta before storing the uppercase value.
+        const u8 lu8UppercaseDelta = static_cast<u8>('A' - 'a');
+        s32 liCopied = 0;
+        CgsUtf8 lu8Byte = *lpUtf8SourceString;
+        while (lu8Byte != 0 && liCopied < lnMaxTargetStringLength - 1)
         {
-            if (li >= lnMaxTargetStringLength - 1)
-                break;
-            *lpWrite = luByte;
-            if ((luByte & 0x80u) == 0 && luByte >= 0x61u && luByte <= 0x7Au)
-                *lpWrite = static_cast<CgsUtf8>(luByte - 32);
+            *lpUtf8TargetString = lu8Byte;
+            if (IsSingleByteUtf8(lpUtf8TargetString) && lu8Byte >= 'a' && lu8Byte <= 'z')
+                *lpUtf8TargetString = lu8Byte + lu8UppercaseDelta;
             ++lpUtf8SourceString;
-            ++lpWrite;
-            ++li;
+            ++lpUtf8TargetString;
+            ++liCopied;
+            lu8Byte = *lpUtf8SourceString;
         }
-        *lpWrite = 0;
-        return lpWrite;
+        *lpUtf8TargetString = 0;
+        return lpUtf8TargetString;
     }
 
     // Byte length of a NUL-terminated UTF-8 string (X360 CgsUnicode.cpp:108). Counts the
     // bytes preceding the terminator -- the LanguageResourceType string-table descriptor size.
     u32 ByteLength(const u8* lpUtf8String)
     {
-        const u8* lpByte = lpUtf8String;
-        while (*lpByte != 0u)
-            ++lpByte;
-        return static_cast<u32>(lpByte - lpUtf8String);
+        u32 luLength = 0;
+        while (*lpUtf8String != 0)
+        {
+            ++lpUtf8String;
+            ++luLength;
+        }
+        return luLength;
     }
 
     // Faithful port of X360 ARTIST 0x824EA850 (DWARF CgsUnicode.h:828 `bool IsSingleByteUtf8(
@@ -635,3 +625,6 @@ namespace CgsUnicode
         const CgsUtf8*, CgsUtf8*, s32,
         const CgsUtf8* const&, const CgsUtf8* const&, const CgsUtf8* const&);
 }
+
+#undef CGS_ARTIST_UNICODE_H_FILE
+#undef CGS_ARTIST_UNICODE_CPP_FILE

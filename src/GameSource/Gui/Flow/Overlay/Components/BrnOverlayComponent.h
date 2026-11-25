@@ -61,7 +61,8 @@ namespace BrnGui
         // the overlay movie to the named flash label and play it.
         void RunOverlay(const char* lpcOverlayFlashId)
         {
-            CGS_ASSERT(NULL != lpcOverlayFlashId, "NULL != lpcOverlayFlashId");
+            CGS_ASSERT_AT(NULL != lpcOverlayFlashId, "NULL != lpcOverlayFlashId",
+                          "..\\..\\..\\GameSource\\Gui/Flow/Overlay/Components/BrnOverlayComponent.h", 141);
             mAptRef.GotoAndPlayLabel(lpcOverlayFlashId);
         }
 

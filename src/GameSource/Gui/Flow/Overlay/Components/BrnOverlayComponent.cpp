@@ -1,3 +1,4 @@
+#include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"
 #include "GameSource/Gui/Flow/Overlay/Components/BrnOverlayComponent.h"
 
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
@@ -64,7 +65,10 @@ void OverlayComponent::Construct(const char* /*lacName*/,
 void OverlayComponent::Prepare(const char* lacName, const BrnFlapt::FileRef& lFile,
                                const char* /*lacParentName*/)
 {
-    BrnFlaptComponent::Prepare(lacName, lFile, 0);
+    CGS_ASSERT_AT(lacName != 0, "lacName != NULL",
+                  "..\\..\\..\\GameSource\\Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptComponent.h", 133);
+    mAptRef = lFile.FindComponent(lacName);
+    mAptRef.ResetTimeline();
 
     mAptRef.SetFrameTriggerCallback(reinterpret_cast<void*>(&TransitionCompleteCallback), this);
 

@@ -1,3 +1,4 @@
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "GameShared/GameClasses/SceneManager/CgsEntityManager.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/SceneManager/CgsVolumeManager.h"   // VolumeManager::GetVolumeIndexByID
@@ -86,8 +87,8 @@ bool EntityManager::Prepare()
     mEntityPool.Clear();
     mVolumeInstancePool.Clear();
 
-    mEntityIdToIndex.Clear(maEntityIdHashElements);
-    mVolumeInstanceIdToIndex.Clear(maVolumeInstanceIdHashElements);
+    mEntityIdToIndex.Init(maEntityIdHashElements);
+    mVolumeInstanceIdToIndex.Init(maVolumeInstanceIdHashElements);
 
     return true;
 }
@@ -138,15 +139,19 @@ VolumeInstanceId EntityManager::GetVolumeInstanceIdByIndex(s32 liIndex) const
 // ===========================================================================
 s32 EntityManager::GetVolumeInstanceIndexByID(VolumeInstanceId lVolumeInstanceId) const
 {
-    const CgsContainers::IndexedHashTable<VolumeInstanceId, u32, 509>::Element* lpElement =
-        mVolumeInstanceIdToIndex.Get(lVolumeInstanceId);
-    if (lpElement == NULL)
+    const u32* lpuIndex = mVolumeInstanceIdToIndex.Get(lVolumeInstanceId);
+    if (lpuIndex == NULL)
     {
-        CGS_ASSERT(false, "Volume instance not found: ");
+        CgsDev::Assert::BeginAssert();
+        CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+        lMessage << "Volume instance not found: ";
+        lMessage.SetPrintMode(CgsDev::E_PRINTMODE_HEX) << lVolumeInstanceId.muId;
+        CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+                                  CGS_ASSERT_LOCATION(KAC_ENTITY_MANAGER_ARTIST_HEADER, 324));
+        CgsDev::Assert::EndAssert();
         return KI_INVALID_VOLUME_INSTANCE_INDEX;
     }
-
-    return static_cast<s32>(lpElement->GetValue());
+    return static_cast<s32>(*lpuIndex);
 }
 
 // ===========================================================================
@@ -331,13 +336,12 @@ bool EntityManager::IsEntityIndexAllocated(u16 lu16Index) const
 // header for why this keeps the s32/-1 shape instead of the DWARF's u16/0xFFFF.
 s32 EntityManager::GetEntityIndexByID(EntityId lEntityId) const
 {
-    const CgsContainers::IndexedHashTable<EntityId, u16, 541>::Element* lpElement =
-        mEntityIdToIndex.Get(lEntityId);
-    if (lpElement == 0)
+    const u16* lpuIndex = mEntityIdToIndex.Get(lEntityId);
+    if (lpuIndex == NULL)
     {
         return -1;
     }
-    return static_cast<s32>(lpElement->GetValue());
+    return static_cast<s32>(*lpuIndex);
 }
 
 // @ 0x828BA088 -- DWARF h:132 returns void (the X360 leaves the pool pointer in r3

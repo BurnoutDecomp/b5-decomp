@@ -44,13 +44,7 @@ namespace CgsResource
         const u32 luSize = reinterpret_cast<const CgsGui::GuiHudMessageResource*>(lpResource)->miSizeOfHudMessageResource;
 
         ResourceDescriptor lDescriptor;
-        lDescriptor.m_baseResourceDescriptors[0].m_size      = luSize;
-        lDescriptor.m_baseResourceDescriptors[0].m_alignment = 16u;
-        for (int li = 1; li < 5; ++li)
-        {
-            lDescriptor.m_baseResourceDescriptors[li].m_size      = 0u;
-            lDescriptor.m_baseResourceDescriptors[li].m_alignment = 1u;
-        }
+        lDescriptor.m_baseResourceDescriptors[0] = rw::BaseResourceDescriptor(luSize, 16u);
         return lDescriptor;
     }
 

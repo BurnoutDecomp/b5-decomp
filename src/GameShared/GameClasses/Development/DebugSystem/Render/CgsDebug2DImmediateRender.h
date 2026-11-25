@@ -53,7 +53,10 @@ namespace CgsDev
         void Begin();
         void End();
 
-        Vector2 GetVirtualScreenSize() const;
+        Vector2 GetVirtualScreenSize() const
+        {
+            return Vector2(mfVirtualScreenWidth, mfVirtualScreenHeight);
+        }
 
         // True if the screen-space point lies within the virtual-screen rect
         // [0,mfVirtualScreenWidth] x [0,mfVirtualScreenHeight] (inclusive). Used by the

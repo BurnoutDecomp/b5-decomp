@@ -47,16 +47,9 @@ DictionaryResourceTypeBase::GetSerialisedResourceDescriptor(const void* lpResour
 {
     const DictionaryBase* lpDictionary = static_cast<const DictionaryBase*>(lpResource);
 
+    const u32 luSize = static_cast<u32>(lpDictionary->GetDictionarySize());
     CgsResource::ResourceDescriptor lDescriptor;
-    rw::BaseResourceDescriptor* lpEntries = lDescriptor.m_baseResourceDescriptors;
-
-    lpEntries[0].m_size      = static_cast<u32>(lpDictionary->GetDictionarySize());
-    lpEntries[0].m_alignment = 8u;
-    for (u32 luEntry = 1u; luEntry < 5u; ++luEntry)
-    {
-        lpEntries[luEntry].m_size      = 0u;
-        lpEntries[luEntry].m_alignment = 1u;
-    }
+    lDescriptor.m_baseResourceDescriptors[0] = rw::BaseResourceDescriptor(luSize, 8u);
     return lDescriptor;
 }
 

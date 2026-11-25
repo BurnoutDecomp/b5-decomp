@@ -157,11 +157,11 @@ const s32 OnlineMarkMan::miNumEventsObserved = 5;
         mTimeField.Construct("TimeCounter_mc", mpStateInterface, mTimeFieldIcon.GetName());
 
         GuiCache* lpGuiCache = mpStateInterface->GetAccessPointers()->GetGuiCache();
-        CGS_ASSERT(lpGuiCache, "lpGuiCache");
-        CGS_ASSERT(lpGuiCache->GetGameMode() != KI_GAME_MODE_NONE,
-                   "lpGuiCache->GetGameMode() != GsmIO::E_MODE_NONE");
-        CGS_ASSERT(lpGuiCache->GetGameMode() != KI_NUM_GAME_MODES,
-                   "lpGuiCache->GetGameMode() != GsmIO::E_MODE_COUNT");
+        CGS_ASSERT_AT(lpGuiCache, "lpGuiCache", CGS_ARTIST_FILE, 102);
+        CGS_ASSERT_AT(lpGuiCache->GetGameMode() != KI_GAME_MODE_NONE,
+                      "lpGuiCache->GetGameMode() != GsmIO::E_MODE_NONE", CGS_ARTIST_FILE, 103);
+        CGS_ASSERT_AT(lpGuiCache->GetGameMode() != KI_NUM_GAME_MODES,
+                      "lpGuiCache->GetGameMode() != GsmIO::E_MODE_COUNT", CGS_ARTIST_FILE, 104);
         mTimeField.SetText(KAPC_MARK_MAN_WAITING_TEXT[lpGuiCache->GetGameMode()]);
 
         meInternalState = E_INTERNALSTATE_GETCACHE;
@@ -172,7 +172,10 @@ const s32 OnlineMarkMan::miNumEventsObserved = 5;
     void OnlineMarkMan::OnLeave()
     {
         mpStateInterface->UnRegisterForEvents(maiEventToObserve, miNumEventsObserved);
-        mpStateInterface->PlayAptMovie(KPC_NO_MOVIE_NAME, KI_MOVIE_LEVEL);
+        CgsGui::GuiEventPlayAptMovie lMovie;
+        lMovie.mpacMovieName = KPC_NO_MOVIE_NAME;
+        lMovie.miLevelNum = KI_MOVIE_LEVEL;
+        mpStateInterface->OutputViewState(lMovie);
         meInternalState = E_INTERNALSTATE_LEFT;
     }
 
@@ -276,12 +279,12 @@ const s32 OnlineMarkMan::miNumEventsObserved = 5;
     // ---- UpdateWFInit ----------------------------------------------------------
     bool OnlineMarkMan::UpdateWFInit()
     {
-        if (!mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN))
+        if (mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN))
         {
-            return false;
+            ClearExpectedComponent();
+            return true;
         }
-        ClearExpectedComponent();
-        return true;
+        return false;
     }
 
     // ---- UpdateSetup -----------------------------------------------------------

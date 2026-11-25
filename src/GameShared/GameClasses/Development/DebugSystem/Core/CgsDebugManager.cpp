@@ -304,11 +304,14 @@ namespace CgsDev
         mpUI->Update(lfDeltaTime);
     }
 
+    static const char KAC_ARTIST_DEBUG_MANAGER_HEADER[] =
+        "..\\..\\..\\GameShared\\GameClasses\\Development/DebugSystem/Core/CgsDebugManager.h";
+
     // Faithful port of X360 0x821F1E50: assert the singleton exists, enter the per-manager debug
     // critical section, then hand the singleton back. (Enter is a no-op until the section is Created.)
     DebugManager* DebugManager::ThreadSafeAquire()
     {
-        CGS_ASSERT(mpInstance, "mpInstance");
+        CGS_ASSERT_AT(mpInstance, "mpInstance", KAC_ARTIST_DEBUG_MANAGER_HEADER, 343);
         gDebugManagerSection.Enter();
         return mpInstance;
     }
@@ -318,7 +321,8 @@ namespace CgsDev
     void DebugManager::ThreadSafeRelease(DebugManager* lpDebugManager)
     {
         gDebugManagerSection.Leave();
-        CGS_ASSERT(lpDebugManager == mpInstance, "lpDebugManager == mpInstance");
+        CGS_ASSERT_AT(lpDebugManager == mpInstance, "lpDebugManager == mpInstance",
+            KAC_ARTIST_DEBUG_MANAGER_HEADER, 353);
     }
 
     DebugUI::DebugUI& DebugManager::GetUI()

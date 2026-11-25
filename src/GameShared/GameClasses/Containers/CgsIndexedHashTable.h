@@ -32,10 +32,6 @@
 // Add*/Remove* (inlined on the X360; expressed here through the list's public API, which
 // is index-for-index identical to the recovered code).
 //
-// NOTE: DWARF names the bind-and-mark method Init (h:213), but the committed caller
-// CgsSceneManager::EntityManager::Prepare wires it as .Clear(Element*); this header keeps
-// Clear to stay build-coherent with that TU (both inline to the same store sequence).
-//
 // NOTE: this REPLACES the earlier stub CgsIndexedHashTable.h (its own flat
 // IndexedHashTableElement + nested Bin struct), which self-flagged its element field-split
 // as unattested. The DWARF here pins it: links are u16 (not TValue), the payload is
@@ -93,9 +89,9 @@ namespace CgsContainers
         IndexedHashTable() : mbInitialised(false) {}   // h:157
 
         // Bind every bucket to the shared element array and mark constructed (DWARF Init
-        // @h:213; wired as .Clear by EntityManager::Prepare, whose inlined bucket loop
+        // @h:213; used by EntityManager::Prepare, whose inlined bucket loop
         // pins this @0x828C6010..).
-        void Clear(Element* lpElements)
+        void Init(Element* lpElements)
         {
             Node* lpNodes = lpElements->GetListNode();
             for (u32 luBin = 0; luBin < BINS; ++luBin)
@@ -133,39 +129,38 @@ namespace CgsContainers
             }
         }
 
-        // Look a key up. Returns the stored element, or null when absent (DWARF h:296;
-        // the shape GetVolumeInstanceIndexByID @0x828CD4B8 uses on the sibling table).
-        const Element* Get(TKey lKey) const
+        // DecFIGS CgsIndexedHashTable.h:281. ARTIST returns the value inside the node.
+        __declspec(noinline) const TValue* Get(TKey lKey) const
         {
-            Bin*  lpBin  = 0;
-            Node* lpNode = const_cast<IndexedHashTable*>(this)->GetInternal(lKey, &lpBin);
-            // Element and Node are layout-identical (an Element IS its single list node).
-            return reinterpret_cast<const Element*>(lpNode);
+            CGS_ASSERT_AT(mbInitialised, "IndexedHashTable accessed when uninitialised",
+                          "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsIndexedHashTable.h", 283);
+            const Node* lpNode = const_cast<IndexedHashTable*>(this)->GetInternal(lKey, NULL);
+            if (lpNode == NULL)
+            {
+                return NULL;
+            }
+            return &lpNode->GetData()->mValue;
         }
 
-        // Remove the element with the given key from its bucket.
         void Remove(TKey lKey)
         {
-            CGS_ASSERT(mbInitialised, "IndexedHashTable accessed when uninitialised");
+            CGS_ASSERT_AT(mbInitialised, "IndexedHashTable accessed when uninitialised",
+                          "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsIndexedHashTable.h", 346);
 
-            Bin*  lpBin  = 0;
+            Bin* lpBin;
             Node* lpNode = GetInternal(lKey, &lpBin);
-            if (lpNode == 0)
+            if (lpNode == NULL)
             {
-                CGS_ASSERT(false, "Node not found");
+                CGS_ASSERT_AT(false, "Node not found",
+                              "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsIndexedHashTable.h", 352);
                 return;
             }
-
             lpBin->RemoveNode(lpNode);
         }
 
     private:
-        // Locate the node holding lKey and hand back its owning bucket (DWARF h:317).
-        // The X360 emits it out-of-line per instantiation; the body is the bucket walk
-        // Insert's ordering contract implies -- hash the key to its bin, then walk the
-        // ASCENDING chain, stopping early once a key exceeds the target (the bucket is
-        // kept sorted by Insert, so no match can follow). Defined here so Remove links.
-        Node* GetInternal(TKey lKey, Bin** lppBin)
+        // ARTIST 828C5958, 828C59F0 and 828C5B88 scan the selected bucket to its end.
+        __declspec(noinline) Node* GetInternal(TKey lKey, Bin** lppBin)
         {
             Bin& lrBin = maBins[static_cast<u32>(KeyBits(lKey) % BINS)];
             if (lppBin != 0)
@@ -173,17 +168,11 @@ namespace CgsContainers
                 *lppBin = &lrBin;
             }
 
-            const u64 lTarget = KeyBits(lKey);
             for (Node* lpWalk = lrBin.GetHead(); lpWalk != 0; lpWalk = lrBin.GetNext(lpWalk))
             {
-                const u64 lWalkKey = KeyBits(lpWalk->GetData()->mKey);
-                if (lWalkKey == lTarget)
+                if (KeyBits(lKey) == KeyBits(lpWalk->GetData()->mKey))
                 {
                     return lpWalk;
-                }
-                if (lWalkKey > lTarget)
-                {
-                    break;
                 }
             }
             return 0;
