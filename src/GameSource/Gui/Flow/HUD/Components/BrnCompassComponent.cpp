@@ -251,7 +251,7 @@ namespace BrnGui
     // branch senses (bge/ble are taken when unordered).
     void CompassComponent::ShowPositionOnCompass(Vector3 lv3Destination, f32 lfBearing)
     {
-        const Vector4& lrv4CameraPosition = mpGuiCache->GetWorldCameraPosition();
+        const Vector3& lrv4CameraPosition = mpGuiCache->GetPlayerInfo()->mv3PlayerCarPosition;
         const Vector3 lv3CameraPosition(lrv4CameraPosition.GetVector());
 
         const Vector3 lv3North         = Normalize(KV3_COMPASS_NORTH);

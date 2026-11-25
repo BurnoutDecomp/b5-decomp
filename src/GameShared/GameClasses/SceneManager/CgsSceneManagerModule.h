@@ -316,6 +316,7 @@ namespace CgsSceneManager
 
         // ---- lifecycle (CgsModule virtuals) ----
         void Construct() ;   // @ 0x828D09A0
+        bool Release();     // @ 0x828C7220
         void Destruct() ;    // @ 0x828D1640
 
         // @ 0x828D13E0 -- staged, resumable prepare of every sub-manager. The X360

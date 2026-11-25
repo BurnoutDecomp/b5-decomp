@@ -1313,7 +1313,7 @@ namespace BrnGui
             // [H2] X360 @0x82481248: `lvx128 v1, cache, 0x4AE0` -- the world-camera
             // vector (the operand Hex-Rays drops; taken from the asm) into
             // UpdateRoadSignDistances.
-            const Vector4& lv4Camera = mpGuiCache->GetWorldCameraPosition();
+            const Vector3& lv4Camera = mpGuiCache->GetPlayerInfo()->mv3PlayerCarPosition;
             Vector3 lv3Camera(lv4Camera.GetVector());
             mRoadRuleComponent.UpdateRoadSignDistances(lv3Camera);
         }

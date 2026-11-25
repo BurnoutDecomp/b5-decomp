@@ -110,7 +110,7 @@ namespace BrnGui
 
         const GuiCache& lrGuiCache = mpGuiModule->mGuiCache;
         mfCurrentZoomValue = SatNavComponent::GetViewDistance(
-            static_cast<f32>(lrGuiCache.miPlayerSpeedMph), lrGuiCache.GetSatNavZoomLevel());
+            static_cast<f32>(lrGuiCache.GetPlayerInfo()->miPlayerMPH), lrGuiCache.GetSatNavZoomLevel());
 
         CGS_ASSERT(lpInputBuffer != 0, "lpInputBuffer");
         CgsModule::LockBuffersForIO(lpInputBuffer);

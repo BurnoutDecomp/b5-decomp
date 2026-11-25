@@ -45,20 +45,7 @@ namespace BrnGui
         void TriggerStatic();   // DWARF BrnSatNavStatic.h:56 (declaration-only this slice)
     };
 
-    // The cache's player-info block the sat-nav reads (the X360 binds mpPlayerInfo =
-    // GuiCache+0x4AE0 -- the SAME block GetWorldCameraPosition exposes the head of).
-    // X360-attested interior: +0x00 the world position lane, +0x28 the car speed as a
-    // WORD (s32 mph; SetViewParamsFromPlayerCar `lwz 0x28` + fcfid), +0x34 the car
-    // orientation in radians (f32; `lfs 0x34`). FLAG: the fields between are not yet
-    // read by anything reconstructed and stay reserved.
-    struct GuiPlayerInfo
-    {
-        Vector4 mv4Position;         // +0x00 (== GuiCache::mv4WorldCameraPosition)
-        u8      mauReserved10[0x18]; // +0x10..+0x27 (unread interior)
-        s32     miSpeedMph;          // +0x28
-        u8      mauReserved2C[0x08]; // +0x2C..+0x33 (unread interior)
-        f32     mfOrientation;       // +0x34 (radians)
-    };
+    struct GuiPlayerInfo;  // GuiCache owns the record at ARTIST +0x4AE0.
 
     // DWARF BrnSatNav.h:72 -- the render payload the sat-nav custom renderer consumes
     // (PS3 GuiEvent<210>; the X360 Update posts it as the 48-byte id-212 record on the

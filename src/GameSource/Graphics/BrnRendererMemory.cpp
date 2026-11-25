@@ -367,29 +367,22 @@ void BrnRendererMemory::CreateWorkBuffer(rw::IResourceAllocator* lpAllocator)
 
 void BrnRendererMemory::CreateEnvmapBuffer(rw::IResourceAllocator* lpAllocator)
 {
-
     mapRenderTarget[E_RENDER_TARGET_ENV_MAP] = new CgsRenderTarget();
-    CgsRenderTarget* lpEnvMap = mapRenderTarget[E_RENDER_TARGET_ENV_MAP];
-
-    lpEnvMap->ClearColourTargetInUse();
-
-    lpEnvMap->SetDimensions(KU_ENV_MAP_FACE_SIZE, KU_ENV_MAP_FACE_SIZE);
-    lpEnvMap->SetNumMipMaps(1);
-    lpEnvMap->SetMultisampleFormat(KI_ENV_MAP_MULTISAMPLE_FORMAT);
-    lpEnvMap->SetUseDepthStencilAsTexture(true);
-
-    lpEnvMap->SetColourTargetInUse(0, true);
-    lpEnvMap->SetTextureType(0, renderengine::Texture::TYPE_CUBE);
-    lpEnvMap->SetColourTargetBufferFormat(0, KU_COLOUR_SURFACE_BUFFER_FORMAT);
-    lpEnvMap->SetColourTargetTextureFormat(0, KU_COLOUR_SURFACE_TEXTURE_FORMAT);
-    lpEnvMap->SetColourTargetBaseEDRAM(0, 0);
-
-    lpEnvMap->SetDepthTargetInUse(true);
-    lpEnvMap->SetDepthTargetBufferFormat(KU_ENV_MAP_DEPTH_FORMAT);
-    lpEnvMap->SetDepthTargetTextureFormat(KU_ENV_MAP_DEPTH_FORMAT);
-    lpEnvMap->SetDepthTargetBaseEDRAM(KU_ENV_MAP_DEPTH_BASE_EDRAM_TILES);
-
-    lpEnvMap->Construct(lpAllocator);
+    GetEnvMapBuffer()->ClearColourTargetInUse();
+    GetEnvMapBuffer()->SetDimensions(KU_ENV_MAP_FACE_SIZE, KU_ENV_MAP_FACE_SIZE);
+    GetEnvMapBuffer()->SetNumMipMaps(1);
+    GetEnvMapBuffer()->SetUseDepthStencilAsTexture(true);
+    GetEnvMapBuffer()->SetColourTargetInUse(0, true);
+    GetEnvMapBuffer()->SetDepthTargetInUse(true);
+    GetEnvMapBuffer()->SetTextureType(0, renderengine::Texture::TYPE_CUBE);
+    GetEnvMapBuffer()->SetMultisampleFormat(KI_ENV_MAP_MULTISAMPLE_FORMAT);
+    GetEnvMapBuffer()->SetColourTargetBufferFormat(0, KU_COLOUR_SURFACE_BUFFER_FORMAT);
+    GetEnvMapBuffer()->SetColourTargetTextureFormat(0, KU_COLOUR_SURFACE_TEXTURE_FORMAT);
+    GetEnvMapBuffer()->SetColourTargetBaseEDRAM(0, 0);
+    GetEnvMapBuffer()->SetDepthTargetBufferFormat(KU_ENV_MAP_DEPTH_FORMAT);
+    GetEnvMapBuffer()->SetDepthTargetTextureFormat(KU_ENV_MAP_DEPTH_FORMAT);
+    GetEnvMapBuffer()->SetDepthTargetBaseEDRAM(KU_ENV_MAP_DEPTH_BASE_EDRAM_TILES);
+    GetEnvMapBuffer()->Construct(lpAllocator);
 }
 
 void BrnRendererMemory::CreateBloomBuffer(rw::IResourceAllocator* lpAllocator)

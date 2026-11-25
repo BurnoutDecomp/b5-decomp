@@ -2560,7 +2560,7 @@ namespace BrnGui
             // Hazard 5: the operand is an `lvx128 v1, mpCache, 0x4AE0` that Hex-Rays drops
             // entirely -- the world-camera position. Same recipe as
             // BrnFBurnMainHudState.cpp:1290.
-            const Vector4& lv4Camera = mpCache->GetWorldCameraPosition();
+            const Vector3& lv4Camera = mpCache->GetPlayerInfo()->mv3PlayerCarPosition;
             const Vector3 lv3Camera(lv4Camera.mV);
             mRoadRuleComponent.UpdateRoadSignDistances(lv3Camera);
 

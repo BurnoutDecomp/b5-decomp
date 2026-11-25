@@ -639,7 +639,7 @@ namespace BrnGui
                     // centres the map on the local player and grows the icons.
                     if (mbFirstMapUpdate && mpGuiCache != 0 && mbIsScreenLoaded)
                     {
-                        const Vector4* lpPlayerInfo = &mpGuiCache->mv4WorldCameraPosition;
+                        const Vector3* lpPlayerInfo = &mpGuiCache->GetPlayerInfo()->mv3PlayerCarPosition;
                         CGS_ASSERT(lpPlayerInfo != 0, "lpPlayerInfo");   // cpp:813 (non-fatal)
 
                         // The X360 permutes the world position into the 2-D map point with
@@ -5181,7 +5181,7 @@ namespace BrnGui
 
         CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
 
-        const Vector4& lrv4CameraPosition = mpGuiCache->GetWorldCameraPosition();
+        const Vector3& lrv4CameraPosition = mpGuiCache->GetPlayerInfo()->mv3PlayerCarPosition;
         const Vector3 lv3InitialCursorPosWorldSpace(lrv4CameraPosition.mV);
 
         // The console streams the lane after the text; lowered to the static text.

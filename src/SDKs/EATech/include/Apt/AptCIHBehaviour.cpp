@@ -491,8 +491,7 @@ void AptCIH::RemoveEventHandler(int32_t nMask)
 // delegating to the char inst's writable render item.
 void AptCIH::SetHasMask(bool bHasMask, AptRenderItem* pMask)
 {
-    AptRenderItem* pRenderItem = GetCharacterInst()->GetRenderItemWritable();
-    pRenderItem->SetHasMask(bHasMask, pMask);
+    GetCharacterInst()->SetHasMask(bHasMask, pMask);
 }
 
 // SetIsInserted @0x82AECE40 -- when this node owns a character instance, notify the
@@ -805,12 +804,11 @@ AptCIH* AptCIH::SetGeneralizedProcessDirtyState(bool bDirty)
 // SetIsMask @0x82AECE58 -- toggle this node's mask state: forward (bIsMask,
 // pMaskMatrix) to the writable render item's SetIsMask (lazily (de)allocates + copies
 // the mask matrix + flips the isMask bit), then (un)mark the generalized-process
-// dirty state across the subtree (the X360 propagates that call's return).
-AptCIH* AptCIH::SetIsMask(bool bIsMask, const AptMatrix* pMaskMatrix)
+// dirty state across the subtree.
+void AptCIH::SetIsMask(bool bIsMask, const AptMatrix* pMaskMatrix)
 {
-    AptRenderItem* pRenderItem = GetCharacterInst()->GetRenderItemWritable();
-    pRenderItem->SetIsMask(bIsMask, pMaskMatrix);
-    return SetGeneralizedProcessDirtyState(bIsMask);
+    GetCharacterInst()->SetIsMask(bIsMask, pMaskMatrix);
+    SetGeneralizedProcessDirtyState(bIsMask);
 }
 
 // ---------------------------------------------------------------------------

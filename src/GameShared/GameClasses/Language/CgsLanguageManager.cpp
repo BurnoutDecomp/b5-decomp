@@ -9,6 +9,8 @@
 #include <cstdlib>   // std::atof / std::atoi (the FormatText value branches)
 #include <cmath>     // std::floor (the PPC fsel round-then-correct idiom in the time leaves)
 
+#define CGS_ARTIST_LANGUAGE_MANAGER_FILE "..\\..\\..\\GameShared\\GameClasses\\Language/CgsLanguageManager.cpp"
+
 namespace CgsLanguage
 {
     // X360 0x827DF9C8 CgsLanguage::LanguageManager::LanguageManager.
@@ -455,7 +457,7 @@ namespace CgsLanguage
         CGS_ASSERT(lpLanguageAllocator != 0,
             CGS_ASSERT_MESSAGE_AT(
                 "Null pointer for language allocator given",
-                "..\\..\\..\\GameShared\\GameClasses\\Language/CgsLanguageManager.cpp", 180 /* ARTIST 0x828608FC */));
+                CGS_ARTIST_LANGUAGE_MANAGER_FILE, 180 /* ARTIST 0x828608FC */));
         mpLanguageAllocator = lpLanguageAllocator;
         mDebugComponent.Register();
         return true;
@@ -1602,23 +1604,24 @@ namespace CgsLanguage
                                    mpGeneralThousandsSeparator, mpGeneralDecimalSeparator, true);
     }
 
-    // @ 0x82862188 (asserts cpp:2265/2266) -- pick the unit by MAGNITUDE: if the value in LARGE
+    // @ 0x82862188 (asserts cpp:2244/2245) -- pick the unit by MAGNITUDE: if the value in LARGE
     // units (metres * mrLargeDistanceConversion, i.e. kilometres/miles) is below 1.0, print it
     // in small units instead. The console's compare constant is flt_82001C98 == 1.0f.
     void LanguageManager::FormatAutoDistanceString(char* lpcTarget, f32 lfMetres,
                                                    s32 liTargetSize) const
     {
-        CGS_ASSERT(lpcTarget != 0, "lpTargetString != NULL");     // cpp:2265
-        CGS_ASSERT(liTargetSize > 0, "lnTargetStringSize > 0");   // cpp:2266
+        CGS_ASSERT_AT(lpcTarget != 0, "lpTargetString != NULL",
+                      CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2244);
+        CGS_ASSERT_AT(liTargetSize > 0, "lnTargetStringSize > 0",
+                      CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2245);
 
-        if (mrLargeDistanceConversion * lfMetres < 1.0f)
-        {
-            FormatSmallDistanceString(lpcTarget, lfMetres, liTargetSize);
-        }
-        else
+        // ARTIST's less-than branch selects small units. Unordered values use large units.
+        if (!(mrLargeDistanceConversion * lfMetres < 1.0f))
         {
             FormatLargeDistanceString(lpcTarget, lfMetres, liTargetSize);
+            return;
         }
+        FormatSmallDistanceString(lpcTarget, lfMetres, liTargetSize);
     }
 
     // @ 0x82862240 (asserts cpp:2275/2276) -- the long-unit-name twin of the chooser above
@@ -1627,17 +1630,18 @@ namespace CgsLanguage
     void LanguageManager::FormatAutoDistanceStringLong(char* lpcTarget, f32 lfMetres,
                                                        s32 liTargetSize) const
     {
-        CGS_ASSERT(lpcTarget != 0, "lpTargetString != NULL");     // cpp:2275
-        CGS_ASSERT(liTargetSize > 0, "lnTargetStringSize > 0");   // cpp:2276
+        CGS_ASSERT_AT(lpcTarget != 0, "lpTargetString != NULL",
+                      CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2275);
+        CGS_ASSERT_AT(liTargetSize > 0, "lnTargetStringSize > 0",
+                      CGS_ARTIST_LANGUAGE_MANAGER_FILE, 2276);
 
-        if (mrLargeDistanceConversion * lfMetres < 1.0f)
-        {
-            FormatSmallDistanceStringLong(lpcTarget, lfMetres, liTargetSize);
-        }
-        else
+        // ARTIST's less-than branch selects small units. Unordered values use large units.
+        if (!(mrLargeDistanceConversion * lfMetres < 1.0f))
         {
             FormatLargeDistanceStringLong(lpcTarget, lfMetres, liTargetSize);
+            return;
         }
+        FormatSmallDistanceStringLong(lpcTarget, lfMetres, liTargetSize);
     }
     // FLAG trap-stubs for the float-dispatch leaves 0x828641F0 references beyond the
     // block above (declared additions; decompiles land with the value-format slice).
@@ -2016,3 +2020,5 @@ namespace CgsLanguage
         return AddString(lpcStringId, lpUtf8);
     }
 }
+
+#undef CGS_ARTIST_LANGUAGE_MANAGER_FILE

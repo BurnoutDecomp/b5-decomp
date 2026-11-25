@@ -44,14 +44,14 @@ void PlayerManager::Construct(PlayerManagerConstructParams* lpConstructParams)
 {
     CGS_ASSERT(lpConstructParams->mapPlayerList, CGS_ASSERT_MESSAGE_AT(
         "lpConstructParams->mapPlayerList",
-        __FILE__, 77 /* ARTIST 0x82895444 */));
+        CGS_ARTIST_FILE, 77 /* ARTIST 0x82895444 */));
 
     // Every slot but the last carries a network player.
     for (s32 liIndex = 0; liIndex < KI_MAX_PLAYERS - 1; ++liIndex)
     {
         CGS_ASSERT(lpConstructParams->mapConstructParams[liIndex], CGS_ASSERT_MESSAGE_AT(
             "lpConstructParams->mapConstructParams[liIndex]",
-            __FILE__, 82 /* ARTIST 0x82895478 */));
+            CGS_ARTIST_FILE, 82 /* ARTIST 0x82895478 */));
         lpConstructParams->mapConstructParams[liIndex]->mpPlayerManager = this;
         lpConstructParams->mapPlayerList[liIndex]->Construct(lpConstructParams->mapConstructParams[liIndex]);
     }
@@ -481,7 +481,7 @@ void PlayerManager::SetGameID(s32 liGameID)
 // callbacks, the connection-manager callbacks, the ack / nack filters for received
 // messages and the round-robin send slot.
 
-// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameShared\\GameClasses\\Network\\Players\\CgsPlayerManager.cpp".
+// Preserve the ARTIST location for assertions recovered from this translation unit.
 
 namespace CgsNetwork
 {
@@ -561,7 +561,7 @@ void PlayerManager::RemovePlayer(NetworkPlayerID lPlayerID)
     }
     CGS_ASSERT(liPlayerIndex < miNumActivePlayers,
         CGS_ASSERT_MESSAGE_AT(
-            "liPlayerIndex < miNumActivePlayers", __FILE__, 1336 /* ARTIST 0x8288457C */));
+            "liPlayerIndex < miNumActivePlayers", CGS_ARTIST_FILE, 1336 /* ARTIST 0x8288457C */));
 
     ReleasePlayer(liPlayerIndex);
 
@@ -601,14 +601,14 @@ void PlayerManager::PlayerDisconnectedCallback(NetworkPlayerID lPlayerID, void* 
 {
     PlayerManager* lpPlayerManager = static_cast<PlayerManager*>(lpUserData);
     CGS_ASSERT(lpPlayerManager,
-        CGS_ASSERT_MESSAGE_AT("lpPlayerManager", __FILE__, 1797 /* ARTIST 0x8288460C */));
+        CGS_ASSERT_MESSAGE_AT("lpPlayerManager", CGS_ARTIST_FILE, 1797 /* ARTIST 0x8288460C */));
 
     lpPlayerManager->BroadcastEvent(E_EVENT_PLAYER_DISCONNECTED,
                                     reinterpret_cast<void*>(static_cast<intptr_t>(lPlayerID)));
 
     NetworkPlayer* lpNetworkPlayer = lpPlayerManager->GetPlayerByID(lPlayerID);
     CGS_ASSERT(lpNetworkPlayer,
-        CGS_ASSERT_MESSAGE_AT("lpNetworkPlayer", __FILE__, 1803 /* ARTIST 0x8288468C */));
+        CGS_ASSERT_MESSAGE_AT("lpNetworkPlayer", CGS_ARTIST_FILE, 1803 /* ARTIST 0x8288468C */));
     lpNetworkPlayer->SetDisconnected();
 
     if (lpPlayerManager->AreAnyPlayersConnected())
@@ -618,12 +618,12 @@ void PlayerManager::PlayerDisconnectedCallback(NetworkPlayerID lPlayerID, void* 
 
     CGS_ASSERT(lpPlayerManager->mpServerInterface,
         CGS_ASSERT_MESSAGE_AT(
-            "lpPlayerManager->mpServerInterface", __FILE__, 1809 /* ARTIST 0x828846FC */));
+            "lpPlayerManager->mpServerInterface", CGS_ARTIST_FILE, 1809 /* ARTIST 0x828846FC */));
     ServerInterfaceConnection* lpServerInterfaceConnection = static_cast<ServerInterfaceConnection*>(
         lpPlayerManager->mpServerInterface->GetConnectionComponent());
     CGS_ASSERT(lpServerInterfaceConnection,
         CGS_ASSERT_MESSAGE_AT(
-            "lpServerInterfaceConnection", __FILE__, 1811 /* ARTIST 0x82884728 */));
+            "lpServerInterfaceConnection", CGS_ARTIST_FILE, 1811 /* ARTIST 0x82884728 */));
 
     if (NetConnStatus(KI_NETCONN_STATUS_PLUG, 0, 0, 0) == 0)
     {
@@ -876,7 +876,7 @@ bool PlayerManager::AmIHost()
     GetNextLocalPlayerID(&lLocalPlayerID);
     CGS_ASSERT((lLocalPlayerID != K_INVALID_PLAYER_ID) || (0 == miNumActivePlayers), CGS_ASSERT_MESSAGE_AT(
         "(lLocalPlayerID != K_INVALID_PLAYER_ID) || (0 == miNumActivePlayers)",
-        __FILE__, 1648 /* ARTIST 0x82873F04 */));
+        CGS_ARTIST_FILE, 1648 /* ARTIST 0x82873F04 */));
     return mHostPlayerID == lLocalPlayerID;
 }
 
@@ -885,10 +885,10 @@ bool PlayerManager::AmIHost()
 bool PlayerManager::AckNeedsSending(NetworkPlayerID lPlayerID, s32 liIndex) const
 {
     CGS_ASSERT(liIndex >= 0,
-        CGS_ASSERT_MESSAGE_AT("liIndex >= 0", __FILE__, 1576 /* ARTIST 0x82873D80 */));
+        CGS_ASSERT_MESSAGE_AT("liIndex >= 0", CGS_ARTIST_FILE, 1576 /* ARTIST 0x82873D80 */));
     CGS_ASSERT(liIndex < KI_MAX_ACKS_TO_BUFFER,
         CGS_ASSERT_MESSAGE_AT(
-            "liIndex < KI_MAX_ACKS_TO_BUFFER", __FILE__, 1577 /* ARTIST 0x82873DA4 */));
+            "liIndex < KI_MAX_ACKS_TO_BUFFER", CGS_ARTIST_FILE, 1577 /* ARTIST 0x82873DA4 */));
 
     if (!maAckMessage[liIndex].IsMessageValid())
     {
@@ -900,10 +900,10 @@ bool PlayerManager::AckNeedsSending(NetworkPlayerID lPlayerID, s32 liIndex) cons
 bool PlayerManager::NackNeedsSending(NetworkPlayerID lPlayerID, s32 liIndex) const
 {
     CGS_ASSERT(liIndex >= 0,
-        CGS_ASSERT_MESSAGE_AT("liIndex >= 0", __FILE__, 1611 /* ARTIST 0x82873E30 */));
+        CGS_ASSERT_MESSAGE_AT("liIndex >= 0", CGS_ARTIST_FILE, 1611 /* ARTIST 0x82873E30 */));
     CGS_ASSERT(liIndex < KI_MAX_NACKS_TO_BUFFER,
         CGS_ASSERT_MESSAGE_AT(
-            "liIndex < KI_MAX_NACKS_TO_BUFFER", __FILE__, 1612 /* ARTIST 0x82873E54 */));
+            "liIndex < KI_MAX_NACKS_TO_BUFFER", CGS_ARTIST_FILE, 1612 /* ARTIST 0x82873E54 */));
 
     if (!maNackMessage[liIndex].IsMessageValid())
     {
@@ -1011,7 +1011,7 @@ bool PlayerManager::IsPlayerTurnToSendRoundRobinMessage(NetworkPlayerID lPlayerI
 
     CGS_ASSERT(GetNumberNetworkPlayers(E_CONSIDER_PLAYERS_WHO_HAVE_FINALISED) > 0, CGS_ASSERT_MESSAGE_AT(
         "GetNumberNetworkPlayers() > 0",
-        __FILE__, 1946 /* ARTIST 0x8288FFD4 */));
+        CGS_ARTIST_FILE, 1946 /* ARTIST 0x8288FFD4 */));
 
     const s32 liConnectionIndex   = GetMenuDataByID(lPlayerID)->miConnectionIndex;
     s32       liAmountToDecrement = 0;
@@ -1023,7 +1023,7 @@ bool PlayerManager::IsPlayerTurnToSendRoundRobinMessage(NetworkPlayerID lPlayerI
     {
         CGS_ASSERT(GetMenuDataByID(lLocalPlayerID), CGS_ASSERT_MESSAGE_AT(
             "No menu data for the local player!",
-            __FILE__, 1959 /* ARTIST 0x82890090 */));
+            CGS_ARTIST_FILE, 1959 /* ARTIST 0x82890090 */));
         if (GetMenuDataByID(lLocalPlayerID)->miConnectionIndex < liConnectionIndex)
         {
             ++liAmountToDecrement;
@@ -1044,7 +1044,7 @@ bool PlayerManager::IsPlayerTurnToSendRoundRobinMessage(NetworkPlayerID lPlayerI
 
     CGS_ASSERT(mpTimeManager, CGS_ASSERT_MESSAGE_AT(
         "mpTimeManager",
-        __FILE__, 1984 /* ARTIST 0x82890140 */));
+        CGS_ARTIST_FILE, 1984 /* ARTIST 0x82890140 */));
     const s32 liSeriesNum = static_cast<s32>(
         mpTimeManager->GetFrameCount() %
         static_cast<u32>(liFrameGapBetweenMessages * (KI_MAX_PLAYERS - 1)));
@@ -1130,7 +1130,7 @@ void PlayerManager::ThrowAwayMessage(Message* lpMessage)
     const NetworkPlayerID lRecvPlayerID = lpMessageWithIDs->mRecvingPlayerID;
     CGS_ASSERT(lSendPlayerID != -1, CGS_ASSERT_MESSAGE_AT(
         "lSendPlayerID != -1",
-        __FILE__, 1036 /* ARTIST 0x828736C4 */));
+        CGS_ARTIST_FILE, 1036 /* ARTIST 0x828736C4 */));
 
     lpNackMsg->PrepareNack(lpMessage, lSendPlayerID, lRecvPlayerID);
 
@@ -1349,7 +1349,7 @@ u32 PlayerManager::GetTotalBytesSent()
         const NetworkPlayer* lpNetworkPlayer = GetPlayerByID(lPlayerID);
         CGS_ASSERT(lpNetworkPlayer, CGS_ASSERT_MESSAGE_AT(
             "lpNetworkPlayer",
-            __FILE__, 2134 /* ARTIST 0x828741B8 */));
+            CGS_ARTIST_FILE, 2134 /* ARTIST 0x828741B8 */));
 
         u32 luRate = 0;
         if (lpNetworkPlayer->GetConnectionData().IsValid())
@@ -1376,7 +1376,7 @@ u32 PlayerManager::GetTotalBytesSentToDirtySock()
         const NetworkPlayer* lpNetworkPlayer = GetPlayerByID(lPlayerID);
         CGS_ASSERT(lpNetworkPlayer, CGS_ASSERT_MESSAGE_AT(
             "lpNetworkPlayer",
-            __FILE__, 2162 /* ARTIST 0x828742E0 */));
+            CGS_ARTIST_FILE, 2162 /* ARTIST 0x828742E0 */));
 
         u32 luRate = 0;
         if (lpNetworkPlayer->GetConnectionData().IsValid())
@@ -1403,7 +1403,7 @@ u32 PlayerManager::GetTotalBytesSentWithOverhead()
         const NetworkPlayer* lpNetworkPlayer = GetPlayerByID(lPlayerID);
         CGS_ASSERT(lpNetworkPlayer, CGS_ASSERT_MESSAGE_AT(
             "lpNetworkPlayer",
-            __FILE__, 2191 /* ARTIST 0x82874408 */));
+            CGS_ARTIST_FILE, 2191 /* ARTIST 0x82874408 */));
 
         u32 luRate = 0;
         if (lpNetworkPlayer->GetConnectionData().IsValid())

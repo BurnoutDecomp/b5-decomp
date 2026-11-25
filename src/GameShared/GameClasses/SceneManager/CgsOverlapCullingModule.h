@@ -101,10 +101,9 @@ namespace CgsSceneManager
         bool Release() ;                                         // @ 0x828AB448
         void Destruct() ;                                        // @ 0x828C... (trivial)
 
-        // Typed prepare/update. These are the module's own typed entry points (not the
-        // no-arg base virtuals); SceneManagerModule calls them directly.
-        bool Prepare(EntityManager* lpEntityManager, VolumeManager* lpVolumeManager);  // @ 0x828B52B8
-        void Update(OverlapCullingIO::InputBuffer* lpInputBuffer,
+        // DecFIGS CgsOverlapCullingModule.h:124 and :133.
+        virtual bool Prepare(EntityManager* lpEntityManager, VolumeManager* lpVolumeManager);  // @ 0x828B52B8
+        virtual void Update(OverlapCullingIO::InputBuffer* lpInputBuffer,
                     OverlapCullingIO::OutputBuffer* lpOutputBuffer);                    // @ 0x828C... (vtable Update)
 
         // SceneManagerModule-facing entry (CgsSceneManagerModule.cpp UpdateContactGeneration):

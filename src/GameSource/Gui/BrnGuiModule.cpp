@@ -1312,7 +1312,7 @@ void GuiModule::Destruct()
             case 363:
             {
                 const GuiTakedownEvent* lpTakedown = reinterpret_cast<const GuiTakedownEvent*>(lpEvent);
-                const EActiveRaceCarIndex leLocal = static_cast<EActiveRaceCarIndex>(mGuiCache.mePlayerActiveRaceCarIndex);
+                const EActiveRaceCarIndex leLocal = mGuiCache.GetPlayerInfo()->mePlayerActiveRaceCarIndex;
                 if (leLocal == lpTakedown->meAggressorIndex)
                 {
                     if (lpTakedown->mbMarkedManTakeDown)

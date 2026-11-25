@@ -309,7 +309,7 @@ namespace BrnGui
 
                 // `_R30 = *a2 + 19168` then `lvx v0, r0, r30` / `stvx v0, this, 0xC20`:
                 // 19168 == 0x4AE0 == GuiCache::mv4WorldCameraPosition, the very member
-                // GuiCache::GetWorldCameraPosition() exposes. The console's second assert
+                // GuiCache::GetPlayerInfo()->mv3PlayerCarPosition exposes. The console's second assert
                 // ("lpPlayerInfo") is the null test on that same interior address, which is
                 // why it renders as the nonsense `*a2 == -19168` in the export.
                 mPlayersTrackerInfo.meIconType =
@@ -318,8 +318,8 @@ namespace BrnGui
                 // The console moves the WHOLE 16-byte register (lvx/stvx), w lane and all,
                 // so the copy is byte-exact rather than a three-component assignment --
                 // Vector4 and Vector3 are both the 16-byte VPU type here.
-                const Vector4& lrv4Camera =
-                    lpCacheEvent->mpCachePointer->GetWorldCameraPosition();
+                const Vector3& lrv4Camera =
+                    lpCacheEvent->mpCachePointer->GetPlayerInfo()->mv3PlayerCarPosition;
                 std::memcpy(&mPlayersTrackerInfo.mv3Position, &lrv4Camera, 0x10);
 
                 if (mpGuiCache == 0)

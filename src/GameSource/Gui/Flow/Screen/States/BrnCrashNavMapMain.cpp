@@ -364,12 +364,8 @@ namespace BrnGui
         {
             if (mpGuiCache != 0)
             {
-                // The console takes the address of the cache's player-info block at
-                // +0x4AE0 and asserts it -- an address-of, so the test is structurally
-                // always true; reproduced because the console reproduces it. The block's
-                // head is the world camera/player position lane, which is what
-                // GuiCache::GetWorldCameraPosition() exposes.
-                const Vector4* lpPlayerInfo = &mpGuiCache->GetWorldCameraPosition();
+                // The ARTIST path uses the player position at the head of the cache record.
+                const GuiPlayerInfo* lpPlayerInfo = mpGuiCache->GetPlayerInfo();
                 CGS_ASSERT(lpPlayerInfo != 0, "lpPlayerInfo");             // cpp:205
 
                 // The `lvx128` + `vperm` against unk_82CDA450
@@ -377,10 +373,10 @@ namespace BrnGui
                 // to the 2-D map point (X,Z,X,X). Whole-quadword, so all four lanes are
                 // committed -- same expansion as OnlineGameRoomPlayerInfo_wH_00.cpp:476.
                 Vector2 lv2MapLocation;
-                lv2MapLocation.mV.x = lpPlayerInfo->mV.x;
-                lv2MapLocation.mV.y = lpPlayerInfo->mV.z;
-                lv2MapLocation.mV.z = lpPlayerInfo->mV.x;
-                lv2MapLocation.mV.w = lpPlayerInfo->mV.x;
+                lv2MapLocation.mV.x = lpPlayerInfo->mv3PlayerCarPosition.mV.x;
+                lv2MapLocation.mV.y = lpPlayerInfo->mv3PlayerCarPosition.mV.z;
+                lv2MapLocation.mV.z = lpPlayerInfo->mv3PlayerCarPosition.mV.x;
+                lv2MapLocation.mV.w = lpPlayerInfo->mv3PlayerCarPosition.mV.x;
                 mMainMapComponent.SnapToLocation(lv2MapLocation);
 
                 if (CrashNavMap::PlaceCursorOnPlayer())

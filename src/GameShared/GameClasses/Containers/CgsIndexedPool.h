@@ -2,7 +2,10 @@
 #define GAMESHARED_GAMECLASSES_CONTAINERS_CGSINDEXEDPOOL_H
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
+
+#define CGS_INDEXED_POOL_ARTIST_HEADER "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsIndexedPool.h"
 
 // ============================================================================
 // GameShared/GameClasses/Containers/CgsIndexedPool.h
@@ -213,7 +216,8 @@ public:
     {
         const IndexType lsIndex = static_cast<IndexType>(lpObject - maElements);
 
-        CGS_ASSERT(lsIndex >= 0 && lsIndex < msCapacity, "Object not in pool\n");
+        CGS_ASSERT_STREAM_AT(lsIndex >= 0 && lsIndex < msCapacity, "Object not in pool\n",
+            CGS_INDEXED_POOL_ARTIST_HEADER, 222);
 
         return lsIndex;
     }
@@ -228,7 +232,8 @@ public:
     // "return result" is the receiver pointer (register artifact); modeled void.
     void PushIndex(IndexType lsIndex)
     {
-        CGS_ASSERT(lsIndex < msCapacity, "Object not in pool\n");
+        CGS_ASSERT_STREAM_AT(lsIndex < msCapacity, "Object not in pool\n",
+            CGS_INDEXED_POOL_ARTIST_HEADER, 301);
 
         IndexType       lsScanned = 0;
         const IndexType lsNumFree = msNumFree;
@@ -243,7 +248,8 @@ public:
                 lsScanned = static_cast<IndexType>(lsFree + 1);
             }
         }
-        CGS_ASSERT(lsScanned == lsNumFree, "Object is already free\n");
+        CGS_ASSERT_STREAM_AT(lsScanned == lsNumFree, "Object is already free\n",
+            CGS_INDEXED_POOL_ARTIST_HEADER, 310);
 
         mpFreeIndices[msNumFree] = lsIndex;
         --msNumAllocated;
@@ -292,5 +298,7 @@ template<typename T, s32 N>
 struct IndexedPool8 : public FixedIndexedPool<T, N, s8> {};
 
 } // namespace CgsContainers
+
+#undef CGS_INDEXED_POOL_ARTIST_HEADER
 
 #endif // GAMESHARED_GAMECLASSES_CONTAINERS_CGSINDEXEDPOOL_H

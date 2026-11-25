@@ -324,9 +324,6 @@ namespace CgsNetwork
         bool            mbPlayerListIsValid;                                  // +0x2410
         s32             miPLAYERManagerSendMessagesPM;                        // +0x2414
         PlayerManagerDebugComponent mDebugComponent;                          // +0x2418
-        // The committed PlayerManagerDebugComponent ends 4 console bytes short of its 0x24
-        // span (its trailing mCompressionUtils member is not modelled yet).
-        u8              maDebugComponentReserve[4];                           // +0x2438
         s32             miBytesUsedForAcks;                                   // +0x243C
         s32             miBytesUsedForUnreliableMessages;                     // +0x2440
         s32             miBytesUsedForReliableMessages;                       // +0x2444

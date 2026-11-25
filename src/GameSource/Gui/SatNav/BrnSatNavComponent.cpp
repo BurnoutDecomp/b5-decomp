@@ -227,8 +227,7 @@ void SatNavComponent::RecvEvent(const CgsModule::Event* lpEvent, s32 liEventId)
         CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // :489 (non-gating)
         // Bind the cache's player-info block (the X360 takes cache+0x4AE0 -- the
         // world-camera lane heads it; see the header's GuiPlayerInfo note).
-        mpPlayerInfo = reinterpret_cast<const GuiPlayerInfo*>(
-            &mpGuiCache->GetWorldCameraPosition());
+        mpPlayerInfo = mpGuiCache->GetPlayerInfo();
         CGS_ASSERT(mpPlayerInfo != 0, "mpPlayerInfo");   // :494 (non-gating)
         SetViewParamsFromPlayerCar(mpPlayerInfo);
         if (mpIconManager != 0)
@@ -268,7 +267,7 @@ void SatNavComponent::UpdateFreeRoaming()
     case E_ROAMING_STATE_PENDING_DATA:
         // Follow the player until roam data lands.
         mRenderSatNavEvent.mv3CarPosition =
-            *reinterpret_cast<const Vector3*>(&mpPlayerInfo->mv4Position);
+            mpPlayerInfo->mv3PlayerCarPosition;
         break;
 
     case E_ROAMING_STATE_READY:
@@ -408,8 +407,7 @@ void SatNavComponent::Update()
         mpIconManager->meIconSizeMode          = MapIconManager::E_ICONSIZE_SMALL;
     }
 
-    mpPlayerInfo = reinterpret_cast<const GuiPlayerInfo*>(
-        &mpGuiCache->GetWorldCameraPosition());   // cache +0x4AE0
+    mpPlayerInfo = mpGuiCache->GetPlayerInfo();   // cache +0x4AE0
     if (!mpPlayerInfo)
     {
         CgsDev::Assert::BeginAssert();
@@ -426,15 +424,15 @@ void SatNavComponent::Update()
     if (mbUseNorthIndicator)
     {
         mNorthIndicatorComponent.Update(
-            mbRotateMap ? mpPlayerInfo->mfOrientation : 3.1415927f);
+            mbRotateMap ? mpPlayerInfo->mfRotation : 3.1415927f);
     }
 
     if (meMode == E_SAT_NAV_MODE_TRACK_PLAYER)
     {
         mRenderSatNavEvent.mv3CarPosition =
-            *reinterpret_cast<const Vector3*>(&mpPlayerInfo->mv4Position);
-        mRenderSatNavEvent.mfCarOrientation = mpPlayerInfo->mfOrientation;
-        mRenderSatNavEvent.mfCarSpeedMph    = static_cast<f32>(mpPlayerInfo->miSpeedMph);
+            mpPlayerInfo->mv3PlayerCarPosition;
+        mRenderSatNavEvent.mfCarOrientation = mpPlayerInfo->mfRotation;
+        mRenderSatNavEvent.mfCarSpeedMph    = static_cast<f32>(mpPlayerInfo->miPlayerMPH);
         mRenderSatNavEvent.mbRotateMap      = mbRotateMap;
         mRenderSatNavEvent.mbUseTrajectory  = mbUseTrajectory;
         mRenderSatNavEvent.miZoomLevel      = mpGuiCache->GetSatNavZoomLevel();
@@ -558,12 +556,12 @@ void SatNavComponent::SetViewParamsFromPlayerCar(const GuiPlayerInfo* lpPlayerIn
     CGS_ASSERT(lpPlayerInfo != 0, "lpPlayerCar");   // BrnSatNav.cpp:188 (non-gating)
 
     Vector3 lv3Position;
-    lv3Position.SetVector(lpPlayerInfo->mv4Position.mV);
+    lv3Position.SetVector(lpPlayerInfo->mv3PlayerCarPosition.mV);
 
     Vector3 lav3Corners[4];
     GetZoomedCarWorldRect(lav3Corners, lv3Position,
-                          static_cast<f32>(lpPlayerInfo->miSpeedMph),
-                          lpPlayerInfo->mfOrientation,
+                          static_cast<f32>(lpPlayerInfo->miPlayerMPH),
+                          lpPlayerInfo->mfRotation,
                           mbRotateMap, mbUseTrajectory,
                           mpGuiCache->GetSatNavZoomLevel());
 

@@ -349,8 +349,8 @@ struct AptCIH : public AptValueGC
 
     // SetIsMask @0x82AECE58 -- set/clear this node's render-item mask flag (with an
     // optional mask position matrix) via the writable render item, then propagate the
-    // generalized-process dirty state. Returns SetGeneralizedProcessDirtyState's result.
-    AptCIH* SetIsMask(bool bIsMask, const AptMatrix* pMaskMatrix);   // @0x82AECE58
+    // generalized-process dirty state.
+    void SetIsMask(bool bIsMask, const AptMatrix* pMaskMatrix);   // @0x82AECE58
 
     // GetBoundingRect @0x82AE2B30 -- accumulate this node's world-space bounds into
     // pAccumulator under pParentTransform: concat this node's position matrix, then

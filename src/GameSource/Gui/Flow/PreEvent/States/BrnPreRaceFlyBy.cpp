@@ -1640,7 +1640,7 @@ namespace
 //  * The two asserts are cpp:1601 (`li r5, 0x641`) and cpp:1604 (`li r5, 0x644`); the
 //    second fires when the game mode is none of {0, 5, 8} -- the three the assert string
 //    names (OFFLINE_RACE / BURNING_ROUTE / MARKED_MAN).
-//  * `lvx128 v127, r4, 0x4AE0` is the committed GuiCache::GetWorldCameraPosition() far
+//  * `lvx128 v127, r4, 0x4AE0` is the committed GuiCache::GetPlayerInfo()->mv3PlayerCarPosition far
 //    member. The console offset 0x4AE0 is NOT reproduced -- the accessor is called by
 //    name so the host's own layout applies.
 //  * `lhz r4, var_A0(r1)` after the sret call reads the FIRST halfword of the returned
@@ -1670,7 +1670,7 @@ namespace
                    "(mpGuiCache->GetGameMode() == GsmIO::E_MODE_BURNING_ROUTE) || "
                    "(mpGuiCache->GetGameMode() == GsmIO::E_MODE_MARKED_MAN)");   // cpp:1604
 
-        const Vector4& lv4CameraPosition = mpGuiCache->GetWorldCameraPosition();
+        const Vector3& lv4CameraPosition = mpGuiCache->GetPlayerInfo()->mv3PlayerCarPosition;
 
         const Vector3 lv3Reference(KF_SECTOR_REFERENCE_X,
                                     KF_SECTOR_REFERENCE_Y,

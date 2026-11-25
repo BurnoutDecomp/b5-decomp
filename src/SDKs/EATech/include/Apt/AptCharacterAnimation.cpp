@@ -213,15 +213,23 @@ namespace
     { if (p) p = reinterpret_cast<T*>(reinterpret_cast<intptr_t>(p) + base); }
 }
 
+// ARTIST writes the nullable offset before Fixup at 0x82AFF608 and again at 0x82AFF630.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 void AptCharacterAnimation::Resolve(void* pBase, AptConstFile* pConstFile, void* pBlock)
 {
-    if (pConstFile->mnSecondaryOffset)
-        pConstFile->mnSecondaryOffset += reinterpret_cast<uintptr_t>(pConstFile);
+    const uintptr_t uBase = reinterpret_cast<uintptr_t>(pConstFile);
+    pConstFile->mnSecondaryOffset = pConstFile->mnSecondaryOffset
+        ? pConstFile->mnSecondaryOffset + uBase : 0;
     mnParsedValueCount = 0;
     Fixup(pBase, pConstFile, pBlock);
-    if (pConstFile->mnSecondaryOffset)
-        pConstFile->mnSecondaryOffset -= reinterpret_cast<uintptr_t>(pConstFile);
+    pConstFile->mnSecondaryOffset = pConstFile->mnSecondaryOffset
+        ? pConstFile->mnSecondaryOffset - uBase : 0;
 }
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // ARTIST 0x82AFF268: relocate native 32-bit character and import records.
 void AptCharacterAnimation::Fixup(void* pBase, AptConstFile* pConstFile, void* pBlock)

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Network/Packeting/CgsCompressionAndEncryptionUtils.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"  // CgsDev::DebugComponent base (complete type; needed for inheritance)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
@@ -124,5 +125,9 @@ namespace CgsNetwork
         bool           mbDrawBandwidthUsage;             // +0x18
         bool           mbShowUsedRegisteredMessages;     // +0x19
         s32            miAverageType;                    // +0x1C
+        CompressionAndEncryptionUtils mCompressionUtils; // +0x20, DecFIGS header line 120
     };
+
+    CGS_STATIC_ASSERT((sizeof(PlayerManagerDebugComponent) == 0x24),
+                      "PlayerManagerDebugComponent occupies 0x24 native bytes");
 }

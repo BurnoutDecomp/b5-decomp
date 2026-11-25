@@ -489,24 +489,6 @@ void AptCharacterInst::MoveRenderDataFrom(AptCharacterInst* pSource)
 }
 
 // ---------------------------------------------------------------------------
-// SetHasMask @0x82AE1D50
-//   return AptRenderItem::SetHasMask(GetRenderItemWritable(a1), a2, a3);
-// ---------------------------------------------------------------------------
-void AptCharacterInst::SetHasMask(bool bHasMask, AptRenderItem* pMask)
-{
-    GetRenderItemWritable()->SetHasMask(bHasMask, pMask);
-}
-
-// ---------------------------------------------------------------------------
-// SetIsMask @0x82AECDC0
-//   return AptRenderItem::SetIsMask(GetRenderItemWritable(a1), a2, a3);
-// ---------------------------------------------------------------------------
-void AptCharacterInst::SetIsMask(bool bIsMask, const AptMatrix* pMaskMatrix)
-{
-    GetRenderItemWritable()->SetIsMask(bIsMask, pMaskMatrix);
-}
-
-// ---------------------------------------------------------------------------
 // SetMaskedItem @0x82AE1C50
 //   return AptRenderTreeManager::Update_ItemSetMaskState(gpCurrentTargetSim[11],
 //              a1, dword_8324E520, a2);

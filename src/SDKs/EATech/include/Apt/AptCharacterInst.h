@@ -147,8 +147,14 @@ struct AptCharacterInst
 
     // SetHasMask @0x82AE1D50 / SetIsMask @0x82AECDC0 -- delegate to the writable
     // render item's mask flags (a3 is the mask item / mask matrix respectively).
-    void SetHasMask(bool bHasMask, AptRenderItem* pMask);
-    void SetIsMask(bool bIsMask, const AptMatrix* pMaskMatrix);
+    void SetHasMask(bool bHasMask, AptRenderItem* pMask)
+    {
+        GetRenderItemWritable()->SetHasMask(bHasMask, pMask);
+    }
+    void SetIsMask(bool bIsMask, const AptMatrix* pMaskMatrix)
+    {
+        GetRenderItemWritable()->SetIsMask(bIsMask, pMaskMatrix);
+    }
 
     // ---- const reads (straight through the render item) -------------------
     const AptCharacter* GetCharacterConst() const;       // @0x7E8784

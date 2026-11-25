@@ -400,10 +400,10 @@ namespace BrnGui
             // asserts THAT against zero -- an address-of-member that can never be null, so
             // the assert is decorative on both platforms. Reproduced because the console
             // has it. +0x4AE0 is the head of the block SatNavComponent views as GuiPlayerInfo
-            // and GuiCache exposes as GetWorldCameraPosition(); the two other lanes this body
+            // and GuiCache exposes as GetPlayerInfo()->mv3PlayerCarPosition; the two other lanes this body
             // reads are the local car id (+0x4AF0) and the active-race-car index (+0x4B00),
             // both of which have their own committed accessors.
-            const Vector4& lrv4PlayerWorldPos = mpGuiCache->GetWorldCameraPosition();
+            const Vector3& lrv4PlayerWorldPos = mpGuiCache->GetPlayerInfo()->mv3PlayerCarPosition;
             CGS_ASSERT(&lrv4PlayerWorldPos != 0, "lpPlayerInfo");   // cpp:2183 (non-fatal)
 
             // -----------------------------------------------------------------
@@ -479,7 +479,7 @@ namespace BrnGui
             // next frame (`lvx128 v0, r0, r28` twice, into +0x6100 and +0x6130).
             mLockedIconInfo.SetIconType(
                 GuiEventUpdateSatNav::SatNavIconInfo::E_SATNAVICON_PLAYER_CAR);
-            mLockedIconInfo.SetPositionLane(lrv4PlayerWorldPos);
+            mLockedIconInfo.SetPositionLane(Vector4(lrv4PlayerWorldPos.mV));
             {
                 const Vector3 lAggregateValue(lrv4PlayerWorldPos.mV);
                 mSoundData.mPrevCurPos = lAggregateValue;
@@ -3489,7 +3489,7 @@ namespace BrnGui
                         // last, so the final index is the player.
                         mLockedIconInfo.SetIconType(
                             GuiEventUpdateSatNav::SatNavIconInfo::E_SATNAVICON_PLAYER_CAR);
-                        mLockedIconInfo.SetPositionLane(mpGuiCache->GetWorldCameraPosition());
+                        mLockedIconInfo.SetPositionLane(Vector4(mpGuiCache->GetPlayerInfo()->mv3PlayerCarPosition.mV));
                         mbLocalPlayerSelected = true;
                         muHoveredEventID      = 0;
                         mHoveredDriveThruID   = 0;

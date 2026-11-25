@@ -403,8 +403,8 @@ const GuiEventUpdateSatNav::SatNavIconInfo* MapIconManager::GetRivalIconAtIndex(
 // unlike the icon-drawing passes, because these are snap targets.
 void MapIconManager::GetSatNavIconPositions(Vector2* lpav2Positions, s32* lpiNumIcons)
 {
-    CGS_ASSERT(lpiNumIcons != 0, CGS_ASSERT_MESSAGE_AT("lpiNumIcons != NULL", __FILE__, 2484 /* ARTIST 0x8250A744 */));   // :2484 (non-gating)
-    CGS_ASSERT(mpGuiCache != 0, CGS_ASSERT_MESSAGE_AT("mpGuiCache", __FILE__, 2485 /* ARTIST 0x8250A774 */));             // :2485 (non-gating)
+    CGS_ASSERT(lpiNumIcons != 0, CGS_ASSERT_MESSAGE_AT("lpiNumIcons != NULL", "..\\..\\..\\GameSource\\Gui/SatNav/BrnMapIconManager.cpp", 2484 /* ARTIST 0x8250A744 */));   // :2484 (non-gating)
+    CGS_ASSERT(mpGuiCache != 0, CGS_ASSERT_MESSAGE_AT("mpGuiCache", "..\\..\\..\\GameSource\\Gui/SatNav/BrnMapIconManager.cpp", 2485 /* ARTIST 0x8250A774 */));             // :2485 (non-gating)
 
     *lpiNumIcons = 0;
 
@@ -416,11 +416,11 @@ void MapIconManager::GetSatNavIconPositions(Vector2* lpav2Positions, s32* lpiNum
         for (s32 liIcon = 0; liIcon < miNumUsedIcons; ++liIcon)
         {
             const SatNavIconInfo& lrIcon = mSatNavIconInfo[liIcon];
-            const s8 li8IconType = lrIcon.GetIconTypeByte();
-
-            if (li8IconType == SatNavIconInfo::E_SATNAVICON_NETWORKRIVAL ||
-                li8IconType == SatNavIconInfo::E_SATNAVICON_MARKED_MAN ||
-                li8IconType == SatNavIconInfo::E_SATNAVICON_RIVAL)
+            const bool lbIsRival =
+                lrIcon.GetIconType() == SatNavIconInfo::E_SATNAVICON_NETWORKRIVAL ||
+                lrIcon.GetIconType() == SatNavIconInfo::E_SATNAVICON_MARKED_MAN ||
+                lrIcon.GetIconType() == SatNavIconInfo::E_SATNAVICON_RIVAL;
+            if (lbIsRival)
             {
                 const Vector4& lv4Pos = lrIcon.GetPositionLane();
                 const Vector3 lv3World(lv4Pos.mV);
@@ -477,8 +477,7 @@ void MapIconManager::GetSatNavIconPositions(Vector2* lpav2Positions, s32* lpiNum
     // ---- the local player, last (the cache's world camera lane @+0x4AE0) ----
     if (mbAllowPlayerSelection)   // +0xA1B1
     {
-        const Vector4& lv4Player = mpGuiCache->GetWorldCameraPosition();
-        const Vector3 lv3World(lv4Player.mV);
+        const Vector3& lv3World = mpGuiCache->GetPlayerInfo()->mv3PlayerCarPosition;
 
         lpav2Positions[*lpiNumIcons] = MapTransform::WorldToDevice(lv3World, false);
         ++(*lpiNumIcons);
@@ -1433,7 +1432,7 @@ void MapIconManager::UpdateSatNavIcons()
 
     // v124: the camera lane the alpha fade measures against (perm {x,z} @0x82CDA450 --
     // CalculateAlpha takes the raw lane and picks x/z itself here).
-    const Vector4& lv4Camera = mpGuiCache->GetWorldCameraPosition();   // cache +0x4AE0
+    const Vector3& lv4Camera = mpGuiCache->GetPlayerInfo()->mv3PlayerCarPosition;   // cache +0x4AE0
     Vector2 lv2CameraPosition;
     lv2CameraPosition.mV = __vpermwi(lv4Camera.mV, VPERMWI_CONST(0, 2, 0, 0));
 
@@ -1510,10 +1509,9 @@ void MapIconManager::UpdateSatNavIcons()
             liState = MapIconBrnBase::E_ICONSTATE_RIVAL;   // 14
             if (mbRotateSatNav)
             {
-                const GuiPlayerInfo* lpPlayerInfo = reinterpret_cast<const GuiPlayerInfo*>(
-                    &mpGuiCache->GetWorldCameraPosition());
+                const GuiPlayerInfo* lpPlayerInfo = mpGuiCache->GetPlayerInfo();
                 CGS_ASSERT(lpPlayerInfo != 0, "lpPlayerInfo");   // :1776 (non-gating)
-                lrIcon.SetRotation(lpPlayerInfo->mfOrientation - lrRecord.GetRotation());
+                lrIcon.SetRotation(lpPlayerInfo->mfRotation - lrRecord.GetRotation());
             }
             else
             {
@@ -1548,11 +1546,10 @@ void MapIconManager::UpdateSatNavIcons()
                 }
                 else if (mbRotateSatNav)
                 {
-                    const GuiPlayerInfo* lpPlayerInfo = reinterpret_cast<const GuiPlayerInfo*>(
-                        &mpGuiCache->GetWorldCameraPosition());
+                    const GuiPlayerInfo* lpPlayerInfo = mpGuiCache->GetPlayerInfo();
                     CGS_ASSERT(lpPlayerInfo != 0, "lpPlayerInfo");   // :1739 (non-gating)
                     liState = GetSatNavIconStateForRival(&lrRecord);
-                    lrIcon.SetRotation(lpPlayerInfo->mfOrientation - lrRecord.GetRotation());
+                    lrIcon.SetRotation(lpPlayerInfo->mfRotation - lrRecord.GetRotation());
                 }
                 else
                 {
@@ -1825,7 +1822,7 @@ void MapIconManager::UpdateCrashNavIcons()
 
     // v124: the camera lane the alpha fade measures against (the @0x82CDA450 vperm picks
     // {x, z}; CalculateAlpha takes the raw lane and picks the pair itself).
-    const Vector4& lv4Camera = mpGuiCache->GetWorldCameraPosition();   // cache +0x4AE0
+    const Vector3& lv4Camera = mpGuiCache->GetPlayerInfo()->mv3PlayerCarPosition;   // cache +0x4AE0
     Vector2 lv2CameraPosition;
     lv2CameraPosition.mV = __vpermwi(lv4Camera.mV, VPERMWI_CONST(0, 2, 0, 0));
 
@@ -1906,10 +1903,9 @@ void MapIconManager::UpdateCrashNavIcons()
             liState = MapIconBrnBase::E_ICONSTATE_RIVAL;   // 14
             if (mbRotateSatNav)
             {
-                const GuiPlayerInfo* lpPlayerInfo = reinterpret_cast<const GuiPlayerInfo*>(
-                    &mpGuiCache->GetWorldCameraPosition());
+                const GuiPlayerInfo* lpPlayerInfo = mpGuiCache->GetPlayerInfo();
                 CGS_ASSERT(lpPlayerInfo != 0, "lpPlayerInfo");   // :1114 (non-gating)
-                lrIcon.SetRotation(lpPlayerInfo->mfOrientation - lrRecord.GetRotation());
+                lrIcon.SetRotation(lpPlayerInfo->mfRotation - lrRecord.GetRotation());
             }
             else
             {
@@ -1939,11 +1935,10 @@ void MapIconManager::UpdateCrashNavIcons()
             }
             else if (mbRotateSatNav)
             {
-                const GuiPlayerInfo* lpPlayerInfo = reinterpret_cast<const GuiPlayerInfo*>(
-                    &mpGuiCache->GetWorldCameraPosition());
+                const GuiPlayerInfo* lpPlayerInfo = mpGuiCache->GetPlayerInfo();
                 CGS_ASSERT(lpPlayerInfo != 0, "lpPlayerInfo");   // :1077 (non-gating)
                 liState = GetSatNavIconStateForRival(&lrRecord);
-                lrIcon.SetRotation(lpPlayerInfo->mfOrientation - lrRecord.GetRotation());
+                lrIcon.SetRotation(lpPlayerInfo->mfRotation - lrRecord.GetRotation());
             }
             else
             {

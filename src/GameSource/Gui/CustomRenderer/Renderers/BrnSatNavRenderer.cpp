@@ -769,7 +769,7 @@ void SatNavRenderer::RenderIconsForSatNav(
 
     // The world-camera position is latched ONCE here (X360 @0x8245FA48 lvx128 v124, mpGuiCache,
     // 0x4AE0). The per-icon off-screen distance below measures against it.
-    const Vector4& lv4CameraPos = mpGuiCache->GetWorldCameraPosition();
+    const Vector3& lv4CameraPos = mpGuiCache->GetPlayerInfo()->mv3PlayerCarPosition;
 
     // 1 / mfZoomLevel (X360 @0x8245FA4C fdivs f31, 1.0, mfZoomLevel). Every per-icon half-extent
     // is this-scaled.

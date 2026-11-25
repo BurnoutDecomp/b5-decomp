@@ -366,90 +366,134 @@ void SceneManagerModule::Destruct()
     ModuleSingleBuffered::Destruct();
 }
 
-// ===========================================================================
-// SceneManagerModule::Prepare @ 0x828D13E0
-//
-// Resumable staged prepare: each call advances the prepare progression by one stage,
-// preparing the next sub-manager; a sub-manager that returns false leaves the stage
-// where it is so the next call retries it. The stage variable (mePrepareStage) is the
-// switch selector; sub_828AA4C0 is the stage post-increment + bound assert. When the
-// final stage completes the module returns true and resets meReleaseStage to START.
-// ===========================================================================
-bool SceneManagerModule::Prepare(SpatialPartitionConstructParams* lpConstructParams,
-                                 rw::IResourceAllocator*          lpSceneAllocator,
-                                 rw::IResourceAllocator*          lpCacheAllocator,
-                                 CgsMemory::LinearMalloc*         lpLinearAllocator)
+namespace
 {
-    // The X360 falls through the switch from the current stage to DONE, advancing the
-    // stage after each successful sub-step; an unrecognised stage asserts. De-gotoed
-    // into a fall-through switch (each successful case advances mePrepareStage).
+const char KAC_SCENE_STAGE_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\CgsSceneManagerModule.h";
+}
+
+// ARTIST 828AA4C0 and 828AA520 share the staged lifecycle call convention.
+__declspec(noinline) SceneManagerModule::ESceneManagerPrepareStage
+operator++(SceneManagerModule::ESceneManagerPrepareStage& leEnumIndex, int)
+{
+    const SceneManagerModule::ESceneManagerPrepareStage leOld = leEnumIndex;
+    leEnumIndex = static_cast<SceneManagerModule::ESceneManagerPrepareStage>(leEnumIndex + 1);
+    CGS_ASSERT_AT(leEnumIndex <= SceneManagerModule::E_SCENEMANAGER_PREPARE_DONE,
+                  "leEnumIndex <= SceneManagerModule::E_SCENEMANAGER_PREPARE_DONE",
+                  KAC_SCENE_STAGE_ASSERT_FILE, 686);
+    return leOld;
+}
+
+__declspec(noinline) SceneManagerModule::ESceneManagerReleaseStage
+operator++(SceneManagerModule::ESceneManagerReleaseStage& leEnumIndex, int)
+{
+    const SceneManagerModule::ESceneManagerReleaseStage leOld = leEnumIndex;
+    leEnumIndex = static_cast<SceneManagerModule::ESceneManagerReleaseStage>(leEnumIndex + 1);
+    CGS_ASSERT_AT(leEnumIndex <= SceneManagerModule::E_SCENEMANAGER_RELEASE_DONE,
+                  "leEnumIndex <= SceneManagerModule::E_SCENEMANAGER_RELEASE_DONE",
+                  KAC_SCENE_STAGE_ASSERT_FILE, 687);
+    return leOld;
+}
+
+// ARTIST 828D13E0. The failed sub-manager keeps its stage for the next call.
+bool SceneManagerModule::Prepare(SpatialPartitionConstructParams* lpConstructParams,
+                                 rw::IResourceAllocator* lpSceneAllocator,
+                                 rw::IResourceAllocator* lpCacheAllocator,
+                                 CgsMemory::LinearMalloc* lpLinearAllocator)
+{
     switch (mePrepareStage)
     {
-        case E_SCENEMANAGER_PREPARE_DONE:
-            mePrepareStage = E_SCENEMANAGER_PREPARE_START;
-            // fall through
-        case E_SCENEMANAGER_PREPARE_START:
-            mePrepareStage = E_SCENEMANAGER_PREPARE_MANAGER;
-            // fall through
-        case E_SCENEMANAGER_PREPARE_MANAGER:
-            if (!ModuleSingleBuffered::Prepare())
-                return false;
-            mePrepareStage = E_SCENEMANAGER_PREPARE_ENTITY_MANAGER;
-            // fall through
-        case E_SCENEMANAGER_PREPARE_ENTITY_MANAGER:
-            if (!mEntityManager.Prepare())
-                return false;
-            mePrepareStage = E_SCENEMANAGER_PREPARE_VOLUME_MANAGER;
-            // fall through
-        case E_SCENEMANAGER_PREPARE_VOLUME_MANAGER:
-            if (!mVolumeManager.Prepare())
-                return false;
-            mePrepareStage = E_SCENEMANAGER_PREPARE_CACHE_MANAGER;
-            // fall through
-        case E_SCENEMANAGER_PREPARE_CACHE_MANAGER:
-            if (!mTriangleCacheManager.Prepare(reinterpret_cast<rw::IResourceAllocator*>(lpCacheAllocator)))
-                return false;
-            mePrepareStage = E_SCENEMANAGER_PREPARE_TRI_COLLISION_MANAGER;
-            // fall through
-        case E_SCENEMANAGER_PREPARE_TRI_COLLISION_MANAGER:
-            if (!mTriangleCollisionManager.Prepare(lpLinearAllocator, 512))
-                return false;
-            mePrepareStage = E_SCENEMANAGER_PREPARE_SCENE_GRAPH_MODULE;
-            // fall through
-        case E_SCENEMANAGER_PREPARE_SCENE_GRAPH_MODULE:
-            if (!mSpatialPartitionManager.Prepare(lpConstructParams, lpSceneAllocator))
-                return false;
-            mePrepareStage = E_SCENEMANAGER_PREPARE_OVERLAP_GENERATION_MODULE;
-            // fall through
-        case E_SCENEMANAGER_PREPARE_OVERLAP_GENERATION_MODULE:
-            CreateCullingTable(lpSceneAllocator);
-            // ⭐ CALL SITE REPAIRED 2026-08-19 (wave Q5 / E1a), taking up the request cluster
-            // E2 left in ContactGen/CgsOverlapGenerationModule.h:96-103: Prepare's first
-            // parameter is `u8*` (the DWARF's, pinned by the SceneSweeper::Prepare it forwards
-            // to unchanged @0x828CB734), and what the console passes is the culling-group
-            // manager's PER-INSTANCE GROUP ARRAY -- which is that manager's first member, so
-            // `&mCullingGroupManager` and the accessor below are address-identical and the old
-            // spelling was right by accident, wrong by type.
-            if (!mOverlapGenerator.Prepare(mCullingGroupManager.GetVolumeInstanceCullingGroup(),
-                                           mCullingGroupManager.GetCullingTable()))
-                return false;
-            mePrepareStage = E_SCENEMANAGER_PREPARE_OVERLAP_CULLING_MODULE;
-            // fall through
-        case E_SCENEMANAGER_PREPARE_OVERLAP_CULLING_MODULE:
-            if (!mOverlapCuller.Prepare(&mEntityManager, &mVolumeManager))
-                return false;
-            mePrepareStage = E_SCENEMANAGER_PREPARE_FINE_INTERSECTION_TEST_MODULE;
-            // fall through
-        case E_SCENEMANAGER_PREPARE_FINE_INTERSECTION_TEST_MODULE:
-            if (!mFineIntersectionTestModule.Prepare(&mEntityManager, &mVolumeManager))
-                return false;
-            mePrepareStage = E_SCENEMANAGER_PREPARE_DONE;
-            meReleaseStage = E_SCENEMANAGER_RELEASE_START;
-            return true;
-
-        default:
-            CGS_ASSERT(false, "Unrecognised release state");
+    case E_SCENEMANAGER_PREPARE_DONE:
+        mePrepareStage = E_SCENEMANAGER_PREPARE_START;
+    case E_SCENEMANAGER_PREPARE_START:
+        mePrepareStage++;
+    case E_SCENEMANAGER_PREPARE_MANAGER:
+        if (!ModuleSingleBuffered::Prepare())
             return false;
+        mePrepareStage++;
+    case E_SCENEMANAGER_PREPARE_ENTITY_MANAGER:
+        if (!mEntityManager.Prepare())
+            return false;
+        mePrepareStage++;
+    case E_SCENEMANAGER_PREPARE_VOLUME_MANAGER:
+        if (!mVolumeManager.Prepare())
+            return false;
+        mePrepareStage++;
+    case E_SCENEMANAGER_PREPARE_CACHE_MANAGER:
+        if (!mTriangleCacheManager.Prepare(lpCacheAllocator))
+            return false;
+        mePrepareStage++;
+    case E_SCENEMANAGER_PREPARE_TRI_COLLISION_MANAGER:
+        if (!mTriangleCollisionManager.Prepare(lpLinearAllocator, 512))
+            return false;
+        mePrepareStage++;
+    case E_SCENEMANAGER_PREPARE_SCENE_GRAPH_MODULE:
+        if (!mSpatialPartitionManager.Prepare(lpConstructParams, lpSceneAllocator))
+            return false;
+        mePrepareStage++;
+    case E_SCENEMANAGER_PREPARE_OVERLAP_GENERATION_MODULE:
+        CreateCullingTable(lpSceneAllocator);
+        if (!mOverlapGenerator.Prepare(mCullingGroupManager.GetVolumeInstanceCullingGroup(),
+                                       mCullingGroupManager.GetCullingTable()))
+            return false;
+        mePrepareStage++;
+    case E_SCENEMANAGER_PREPARE_OVERLAP_CULLING_MODULE:
+        if (!mOverlapCuller.Prepare(&mEntityManager, &mVolumeManager))
+            return false;
+        mePrepareStage++;
+    case E_SCENEMANAGER_PREPARE_FINE_INTERSECTION_TEST_MODULE:
+        if (!mFineIntersectionTestModule.Prepare(&mEntityManager, &mVolumeManager))
+            return false;
+        mePrepareStage++;
+        meReleaseStage = E_SCENEMANAGER_RELEASE_START;
+        return true;
+    default:
+        CGS_ASSERT_AT(false, "Unrecognised release state", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 302);
+        return false;
+    }
+}
+
+// ARTIST 828C7220. Cases five through eight only advance the release stage.
+bool SceneManagerModule::Release()
+{
+    switch (meReleaseStage)
+    {
+    case E_SCENEMANAGER_RELEASE_START:
+        meReleaseStage++;
+    case E_SCENEMANAGER_RELEASE_FINE_INTERSECTION_TEST_MODULE:
+        if (!mFineIntersectionTestModule.Release())
+            return false;
+        meReleaseStage++;
+    case E_SCENEMANAGER_RELEASE_OVERLAP_CULLING_MODULE:
+        if (!mOverlapCuller.Release())
+            return false;
+        meReleaseStage++;
+    case E_SCENEMANAGER_RELEASE_OVERLAP_GENERATION_MODULE:
+        if (!mOverlapGenerator.Release())
+            return false;
+        meReleaseStage++;
+    case E_SCENEMANAGER_RELEASE_SCENE_GRAPH_MODULE:
+        if (!mSpatialPartitionManager.Release())
+            return false;
+        meReleaseStage++;
+    case E_SCENEMANAGER_RELEASE_VOLUME_MANAGER:
+        meReleaseStage++;
+    case E_SCENEMANAGER_RELEASE_ENTITY_MANAGER:
+        meReleaseStage++;
+    case E_SCENEMANAGER_RELEASE_TRI_COLLISION_MANAGER:
+        meReleaseStage++;
+    case E_SCENEMANAGER_RELEASE_CACHE_MANAGER:
+        meReleaseStage++;
+    case E_SCENEMANAGER_RELEASE_MANAGER:
+        if (!ModuleSingleBuffered::Release())
+            return false;
+        meReleaseStage++;
+    case E_SCENEMANAGER_RELEASE_DONE:
+        mePrepareStage = E_SCENEMANAGER_PREPARE_START;
+        return true;
+    default:
+        CGS_ASSERT_AT(false, "Unrecognised release state", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 427);
+        return false;
     }
 }
 

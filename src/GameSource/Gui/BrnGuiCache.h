@@ -76,6 +76,26 @@ namespace BrnResource { struct HudMessageController; struct PopupController; }
 
 namespace BrnGui
 {
+    // DecFIGS BrnGuiCache.h:82. ARTIST lays out the 16-byte position first.
+    struct GuiPlayerInfo
+    {
+        Vector3                            mv3PlayerCarPosition;  // +0x00
+        CgsID                              mSelectedCarId;  // +0x10
+        CgsID                              mOriginalCarId;  // +0x18
+        EActiveRaceCarIndex                mePlayerActiveRaceCarIndex;  // +0x20
+        EGlobalRaceCarIndex                mePlayerGlobalRaceCarIndex;  // +0x24
+        s32                                miPlayerMPH;  // +0x28
+        s32                                miPlayerRPM;  // +0x2C
+        s32                                miPlayerGear;  // +0x30
+        f32                                mfRotation;  // +0x34
+        BrnWorld::ECounty                  meCurrentCounty;  // +0x38
+        BrnWorld::EDistrict                meCurrentDistrict;  // +0x3C
+        GuiPlayerEngineEvent::EEngineState meCurrentEngineState;  // +0x40
+        u8                                 muPlayerRacePosition;  // +0x44
+        bool                               mbPlayerRacePositionchanged;  // +0x45
+        bool                               mbShowNearestBodyShop;  // +0x46
+    };
+
     // Pointer-only members of the GuiCache layout (forward-declared; the cache never
     // dereferences their full type in this TU -- it stores/returns the pointer).
     struct FreeburnChallengeManager;
@@ -535,14 +555,8 @@ namespace BrnGui
         // resource through it.
         void SetWorldDataController(WorldDataController* lpController);
 
-        // ADDITIVE GROW (BrnSatNavRenderer TU). The world-space camera position the sat-nav
-        // renderer measures off-screen icons against. RenderIconsForSatNav loads it ONCE before
-        // the per-icon loop (X360 @0x8245FA48: lvx128 v124, mpGuiCache, 0x4AE0 -- the far member
-        // GuiCache+0x4AE0, a 16-byte VMX lane) and then computes the per-icon squared distance
-        // |iconPos - cameraPos|^2 (vsubfp128 + vmsum3fp128 over the first three lanes) to pick the
-        // closest off-screen icon. Exposed by name as the leading 16-byte lane (xyz = camera
-        // world position); body links from the GuiCache TU. X360-attested @0x4AE0.
-        const Vector4& GetWorldCameraPosition() const { return mv4WorldCameraPosition; }   // X360 far member @0x4AE0
+        // DecFIGS h:829. ARTIST 0x82469500 and 0x8250A944 use the contained record.
+        const GuiPlayerInfo* GetPlayerInfo() const { return &mGuiPlayerInfo; }
 
         // DecFIGS h:1149; ARTIST8250CA44 reads this actual contained owner.
         const GuiPFXHookEnumeration* GetPFXHookEnumeration() const
@@ -768,7 +782,7 @@ namespace BrnGui
         // mfPlayerOrientation at +0x4B14 and turns it into the compass heading): the
         // player's world heading in RADIANS. Same header-inline precedent as
         // GetGuiTracker / GetGameMode above; no standalone console symbol.
-        f32 GetPlayerOrientation() const                         { return mfPlayerOrientation; }
+        f32 GetPlayerOrientation() const                         { return mGuiPlayerInfo.mfRotation; }
 
         // ADDITIVE (results-screen wave 2026-08-29). The offline event-result record at
         // +0x9E68. InstantResultsState::HandleIncomingEvents @0x824DBAD8 case 64 takes a
@@ -842,10 +856,10 @@ namespace BrnGui
         // RaceMainHudState::UpdateRunning @0x8247FEE4 `lbz r4, 0x4B24(r11)` -> the value is
         // passed in r4 and range-checked `0 < r4 <= 8` @0x8247FF10/18; 0 hides the indicator.
         bool IsInShortcut() const { return mbInShortcut; } // ARTIST0x8242FD10
-        u8   GetPlayerRacePosition() const    { return mu8PlayerRacePosition; }     // +0x4B24
+        u8   GetPlayerRacePosition() const    { return mGuiPlayerInfo.muPlayerRacePosition; }     // +0x4B24
         // The override that skips that range/enable check (@0x8247FEF8 `lbz r11, 0x4B25(r11)`
         // -> branch straight to SetPosition). FLAG: consumer-named, producer unrecovered.
-        bool IsPlayerRacePositionOverridden() const { return mbPlayerRacePositionOverride; } // +0x4B25
+        bool IsPlayerRacePositionOverridden() const { return mGuiPlayerInfo.mbPlayerRacePositionchanged; } // +0x4B25
 
         // The friends-list pair. RaceMainHudState::OnLeave @0x824797FC
         // (`ori r10,r10,0xB86C ; lbzx` -> FriendsListComponent::Close) and ::UpdateWFInit
@@ -919,7 +933,7 @@ namespace BrnGui
         s32 GetDoDisconnectPopupError() const { return meLastDisconnectedError; }
         // SetResetOnlineGameOptions: the byte after the params mirror (+0xA9E0).
         void SetResetOnlineGameOptions(bool lbReset) { mbOnlineGameOptionsChanged = lbReset; }
-        s32 GetPlayerActiveRaceCarIndex() const                  { return mePlayerActiveRaceCarIndex; }  // DWARF h:924
+        s32 GetPlayerActiveRaceCarIndex() const                  { return mGuiPlayerInfo.mePlayerActiveRaceCarIndex; }  // DWARF h:924
 
         // [hud reveal gate 2026-08-25] The console spells this accessor out by name in its own
         // assert text -- "( GuiPlayerEngineEvent::E_ENGINE_OFF == mpCache->GetPlayerEngineState( ))
@@ -928,13 +942,13 @@ namespace BrnGui
         // standalone X360 symbol: both HUD-state call sites inline the load
         // (`lwz r11,0x4B20(r11)`), exactly like the two index accessors above, so this is a
         // header inline too.
-        s32 GetPlayerEngineState() const                         { return mePlayerEngineState; }
+        s32 GetPlayerEngineState() const                         { return mGuiPlayerInfo.meCurrentEngineState; }
 
         // [gateui r3] ADDITIVE GROW -- the twin of the accessor above over the GLOBAL index
         // carved at +0x4B04 (see the member for the Construct/RecEvent pairing that pins it).
         // Consumer: HudMessageAnalyzer::HandleRaceCheckpointReached @0x8251B350. No standalone
         // X360 symbol (the console inlines the load), so this is a header inline like its twin.
-        s32 GetPlayerGlobalRaceCarIndex() const                  { return mePlayerGlobalRaceCarIndex; }
+        s32 GetPlayerGlobalRaceCarIndex() const                  { return mGuiPlayerInfo.mePlayerGlobalRaceCarIndex; }
 
         // [gateui r3] ADDITIVE GROW -- the active-landmark count carved at +0x5286. Returns u8:
         // the console STORES it with `stb` behind a `<= 512` assert, so the truncation is the
@@ -1304,7 +1318,7 @@ namespace BrnGui
         // (+0x4B26; see the member's carve note). Console-inlined reads; named faces per
         // the cluster precedent above.
         bool IsCarUnlockPending() const       { return mbCarUnlockPending; }      // +0x4B75
-        bool GetShowNearestBodyShop() const   { return mbShowNearestBodyShop; }   // +0x4B26
+        bool GetShowNearestBodyShop() const   { return mGuiPlayerInfo.mbShowNearestBodyShop; }   // +0x4B26
 
         // ====================================================================
         //  ADDITIVE GROW (wave J: PreRaceFlyByState + CrashNavMap). The pre-race
@@ -1416,11 +1430,11 @@ namespace BrnGui
         // cursor snaps onto the local-player icon. FLAG: consumer-named -- only the WIDTH
         // (8 bytes), the OFFSET (+0x4AF0) and that one use are measured; no DWARF member row
         // can be pinned to this X360 offset.
-        CgsID GetLocalPlayerCarId() const                        { return mLocalPlayerCarId; }
+        CgsID GetLocalPlayerCarId() const                        { return mGuiPlayerInfo.mSelectedCarId; }
 
         // The ORIGINAL car id twin (see the +0x4AF8 carve note; FBurnMainHudState case 311's
         // `ld r5, 0x4AF8(cache)` is the attested whole-CgsID read this accessor names).
-        CgsID GetLocalPlayerOriginalCarId() const                { return mLocalPlayerOriginalCarId; }
+        CgsID GetLocalPlayerOriginalCarId() const                { return mGuiPlayerInfo.mOriginalCarId; }
 
         // ARTIST 0x825062C0; DecFIGS BrnGuiCache.h:623.
         CgsID GetOriginalCarId(CgsID lCarId);
@@ -1617,83 +1631,7 @@ namespace BrnGui
         // follows the canonical record; later fields are still reached by name.
         GuiPFXHookEnumeration mPFXHookEnumeration;
         u8 mPad_4ADC[4];                                // original trailing gap
-        Vector4 mv4WorldCameraPosition;                  // +0x4AE0 (19168) GetWorldCameraPosition (SatNavRenderer @0x8245FA48 lvx128 mpGuiCache,0x4AE0)
-        // ADDITIVE CARVE (BrnCrashNavMap wave J): the leading 8 bytes of the former
-        // mPad_4AF0[16] -- the local player's car id. X360-attested as an `ld` (8-byte load)
-        // at +0x4AF0 in CrashNavMap::UpdateIconManager @0x824CBCB0, `std`'d straight into
-        // the screen's mHoveringRivalId slot. No member is shifted (8 + 8 == 16).
-        // FLAG: consumer-named -- no DWARF member row can be pinned to this X360 offset.
-        CgsID mLocalPlayerCarId;                         // +0x4AF0 (19184)
-        // ADDITIVE CARVE (HUD H1 wave, 2026-08-25): the trailing 8 bytes of the same former
-        // 16-byte pad -- the local player's ORIGINAL car id (the pre-conversion id
-        // GetOriginalCarId maps the live id back to). X360-attested as a PAIR at both ends:
-        // GuiCache::RecEvent @0x8250DDF0 case 415 writes both back to back
-        // (`*(+19184) = event CgsID; *(+19192) = GetOriginalCarId(it)`), and
-        // FBurnMainHudState::UpdateRunning case 311 @0x8247C270 reads it WHOLE
-        // (`ld r5, 0x4AF8(cache)`) as JunctionInfoComponent::HandleJunctionChange's
-        // lCurrentCarId (the burning-route "is this the player's route car" compare).
-        // Producer: RecEvent(415) resolves the GUI vehicle list through GetOriginalCarId.
-        // No member is shifted (8 + 8 == 16).
-        CgsID mLocalPlayerOriginalCarId;                 // +0x4AF8 (19192)
-        s32 mePlayerActiveRaceCarIndex;                  // +0x4B00 (19200) EActiveRaceCarIndex (DWARF h; HudMessageAnalyzer::HandleLiveRevengeUpdate @0x8251E2xx)
-        // [gateui r3] ADDITIVE CARVE from the head of the former mPad_4B04[0x2C] -- the local
-        // player's GLOBAL race-car index, the twin of the ACTIVE index at +0x4B00. Pinned as a
-        // PAIR at both ends: GuiCache::Construct @0x82505860 seeds `*(a1+19200) = -1;
-        // *(a1+19204) = -1;` back to back, and GuiCache::RecEvent @0x8250DDF0 writes them from
-        // one event record (`*(+19200) = *rec; *(+19204) = *(rec+4)`). Consumer:
-        // HudMessageAnalyzer::HandleRaceCheckpointReached @0x8251B350 (`lwz 4(event)` compared
-        // against `lwz 0x4B04(cache)`) -- which is why the event carries BOTH indices.
-        // No member is shifted (4 + 0x28 == 0x2C). FLAG: consumer-named.
-        s32  mePlayerGlobalRaceCarIndex;                  // +0x4B04 (19204) EGlobalRaceCarIndex
-        // [hud H3b tracking slice 2026-08-25] the GuiPlayerInfo tail carved from the
-        // head of the former mPad_4B08[0x28]. Producers: GuiCache::RecEvent case 147
-        // (`{+19208,+19212,+19216} = the {speed,rpm,gear} words`) and case 199's
-        // player-icon arm (`+19220 = icon mfRotation; +19224/+19228 = county/district`).
-        // Consumers: SatNavComponent's GuiPlayerInfo view over +0x4AE0 (miSpeedMph
-        // @+0x28 == +0x4B08, mfOrientation @+0x34 == +0x4B14). No member is shifted
-        // (0x18 + 0x10 == 0x28).
-        s32  miPlayerSpeedMph;                            // +0x4B08 (19208) case 147 word 0
-        s32  miPlayerRPM;                                 // +0x4B0C (19212) case 147 word 1
-        s32  miPlayerGear;                                // +0x4B10 (19216) case 147 word 2
-        f32  mfPlayerOrientation;                         // +0x4B14 (19220) case 199 (icon mfRotation)
-        s32  mePlayerCounty;                              // +0x4B18 (19224) case 199 GetCounty
-        s32  mePlayerDistrict;                            // +0x4B1C (19228) case 199 GetDistrict
-        // [hud reveal gate 2026-08-25] THE PLAYER ENGINE STATE. Carved out of the head of
-        // the former mPad_4B20[6]. TRIPLE-WITNESSED IN THE IMAGE at +0x4B20 (19232):
-        //   producer  GuiCache::RecEvent @0x8250DDF0 -- the ONLY store to this word in the
-        //             whole ~180-case switch: `stw r11, 0x4B20(r31)` @0x8251017C
-        //             (pseudocode `else if (a3 == 379) *(a1 + 19232) = *a2;`)
-        //   consumer  FBurnMainHudState::UpdateWFInit  @0x8247C7EC/@0x8247C820
-        //             `lwz r11,0x140(r31) ; lwz r11,0x4B20(r11)`  (r31+0x140 == mpGuiCache)
-        //   consumer  FBurnMainHudState::UpdateRunning @0x8247BD14 (the case-215 boost arm)
-        // ⚠️ OFFSET CORRECTION, DO NOT REVERT: every source comment in this tree that called
-        // this word "X360 cache word +19220" was reading Hex-Rays' `mpGuiCache->gapC[19220]`
-        // as an object-relative index. It is gapC-RELATIVE -- IDA's gapC starts at +12, and
-        // 12 + 19220 == 19232 == the 0x4B20 the asm actually encodes. +0x4B14 (19220) is
-        // mfPlayerOrientation, declared six lines above and already named by the H3b wave.
-        // Values are BrnGui::GuiPlayerEngineEvent's own pair: 0 == E_ENGINE_OFF,
-        // 1 == E_ENGINE_ON (UpdateWFInit asserts `< 2` on it, BrnFBurnMainHudState.cpp:1536).
-        // Construct @0x82505860 seeds it 0 -- so the HUD composes on its INVISIBLE frame and
-        // stays there until the world posts the ignition. That is the console's reveal gate.
-        s32  mePlayerEngineState;                         // +0x4B20 (19232) case 379
-        // ADDITIVE CARVE ([stuntrace wS2] wave, 2026-08-27) out of the whole former
-        // mPad_4B24[2] -- the two bytes RaceMainHudState::UpdateRunning @0x8247E898 drives
-        // the race-position indicator from. Both are BYTE loads, back to back:
-        //     0x8247FEE4  lbz r4,  0x4B24(r11)   ; the position VALUE (goes straight into r4,
-        //                                        ;   SetPosition's argument; 0 -> SetVisible(0))
-        //     0x8247FF18  cmplwi cr6, r4, 8      ; and it is range-checked 1..8
-        //     0x8247FEF8  lbz r11, 0x4B25(r11)   ; the override that skips that range/enable check
-        // No member is shifted (1 + 1 == 2). FLAG: consumer-named -- neither producer is
-        // recovered on this build (both read 0, i.e. no position indicator).
-        u8   mu8PlayerRacePosition;                       // +0x4B24 (19236) 1..8; 0 == none
-        bool mbPlayerRacePositionOverride;                // +0x4B25 (19237)
-        // ADDITIVE CARVE (H3c MapIconManager::UpdateWorldIcons @0x82511C88): the byte gating
-        // the "show the nearest body shop on the sat-nav" pass (`lbz mpGuiCache+0x4B26`; the
-        // pass runs when this byte is set AND the mode is freeburn (-1/15), or unconditionally
-        // in road-rage / marked-man). FLAG: consumer-named -- the producer side is unrecovered
-        // (reads 0 on this build: no nearest-body-shop icon is volunteered outside road rage).
-        bool mbShowNearestBodyShop;                       // +0x4B26 (19238)
-        u8   mPad_4B27[9];                                // +0x4B27..+0x4B2F
+        GuiPlayerInfo mGuiPlayerInfo;                   // +0x4AE0..+0x4B2F
         // ADDITIVE CARVE (HudMessageAnalyzer keystone): the game-flow state word the
         // analyzer's Update gates its trigger passes on (lwz mpGuiCache+0x4B30; fire
         // only when it holds 1 or 3, treat -1 as invalid). FLAG: consumer-named -- the
@@ -2439,14 +2377,29 @@ namespace BrnGui
         static void _AssertLayout();
     };
 
-    // The former inline GuiCache::_AssertLayout absolute/relative X360 byte-offset pin
-    // block is RETIRED at the l2 merge: the merged layout embeds the widening
-    // StateLoadingHelper (+0x8) and the 0x8000-byte options-profile reservation, so the
-    // "single pointer cluster + X360-sized pads" premise those pins depended on no
-    // longer holds. Per the x64 gate rule the layout contract is semantic parity by
-    // NAMED members; the documented X360 offsets in the member comments above remain
-    // the offset authority.
-    inline void GuiCache::_AssertLayout() {}
+    inline void GuiCache::_AssertLayout()
+    {
+#if defined(_XBOX)
+        CGS_STATIC_ASSERT((sizeof(GuiPlayerInfo) == 0x50), "ARTIST player-info extent");
+        CGS_STATIC_ASSERT((offsetof(GuiCache, mGuiPlayerInfo) == 0x4AE0), "ARTIST player-info address");
+        CGS_STATIC_ASSERT((offsetof(GuiCache, miGameFlowState) == 0x4B30), "ARTIST player-info end");
+        CGS_STATIC_ASSERT((offsetof(GuiPlayerInfo, mv3PlayerCarPosition) == 0x00), "ARTIST mv3PlayerCarPosition");
+        CGS_STATIC_ASSERT((offsetof(GuiPlayerInfo, mSelectedCarId) == 0x10), "ARTIST mSelectedCarId");
+        CGS_STATIC_ASSERT((offsetof(GuiPlayerInfo, mOriginalCarId) == 0x18), "ARTIST mOriginalCarId");
+        CGS_STATIC_ASSERT((offsetof(GuiPlayerInfo, mePlayerActiveRaceCarIndex) == 0x20), "ARTIST mePlayerActiveRaceCarIndex");
+        CGS_STATIC_ASSERT((offsetof(GuiPlayerInfo, mePlayerGlobalRaceCarIndex) == 0x24), "ARTIST mePlayerGlobalRaceCarIndex");
+        CGS_STATIC_ASSERT((offsetof(GuiPlayerInfo, miPlayerMPH) == 0x28), "ARTIST miPlayerMPH");
+        CGS_STATIC_ASSERT((offsetof(GuiPlayerInfo, miPlayerRPM) == 0x2C), "ARTIST miPlayerRPM");
+        CGS_STATIC_ASSERT((offsetof(GuiPlayerInfo, miPlayerGear) == 0x30), "ARTIST miPlayerGear");
+        CGS_STATIC_ASSERT((offsetof(GuiPlayerInfo, mfRotation) == 0x34), "ARTIST mfRotation");
+        CGS_STATIC_ASSERT((offsetof(GuiPlayerInfo, meCurrentCounty) == 0x38), "ARTIST meCurrentCounty");
+        CGS_STATIC_ASSERT((offsetof(GuiPlayerInfo, meCurrentDistrict) == 0x3C), "ARTIST meCurrentDistrict");
+        CGS_STATIC_ASSERT((offsetof(GuiPlayerInfo, meCurrentEngineState) == 0x40), "ARTIST meCurrentEngineState");
+        CGS_STATIC_ASSERT((offsetof(GuiPlayerInfo, muPlayerRacePosition) == 0x44), "ARTIST muPlayerRacePosition");
+        CGS_STATIC_ASSERT((offsetof(GuiPlayerInfo, mbPlayerRacePositionchanged) == 0x45), "ARTIST mbPlayerRacePositionchanged");
+        CGS_STATIC_ASSERT((offsetof(GuiPlayerInfo, mbShowNearestBodyShop) == 0x46), "ARTIST mbShowNearestBodyShop");
+#endif
+    }
 
 
     // Minimal slice of the preset/online event record the cache hands back from GetPresetEvent.

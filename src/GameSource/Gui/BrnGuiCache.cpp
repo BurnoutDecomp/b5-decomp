@@ -463,8 +463,8 @@ namespace BrnGui
         mfShowTimeDistanceTravelled = -1.0f;   // stfsx f0   +0xA00C  (flt_820037C8)
 
         // ARTIST 0x82505F08/44: no player race car until the ID event arrives.
-        mePlayerActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
-        mePlayerGlobalRaceCarIndex = E_GLOBAL_RACE_CAR_INDEX_INVALID;
+        mGuiPlayerInfo.mePlayerActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+        mGuiPlayerInfo.mePlayerGlobalRaceCarIndex = E_GLOBAL_RACE_CAR_INDEX_INVALID;
 
         // ⚠️ THE CONSOLE'S OWN SECOND STORE TO mpSystemUserProfile, reproduced rather than
         // dropped. `stw r30, 0x4058(r31)` @0x82506058, with r30 == 0 for the whole body
@@ -1367,8 +1367,8 @@ namespace BrnGui
         {
             const CgsID lCarId = *reinterpret_cast<const CgsID*>(lpEvent);
             CGS_ASSERT(lCarId != 0, "lpChangeCarEvent->mCarId != kCGSID_NULL");
-            mLocalPlayerCarId = lCarId;
-            mLocalPlayerOriginalCarId = GetOriginalCarId(lCarId);
+            mGuiPlayerInfo.mSelectedCarId = lCarId;
+            mGuiPlayerInfo.mOriginalCarId = GetOriginalCarId(lCarId);
             break;
         }
         // ARTIST8250F154..F16C: copy all1744 bytes, then enter event colouring.
@@ -1487,9 +1487,9 @@ namespace BrnGui
             {
                 const BrnGui::GuiEventUpdateHud* lpHudEvent =
                     reinterpret_cast<const BrnGui::GuiEventUpdateHud*>(lpEvent);
-                miPlayerSpeedMph = lpHudEvent->miPlayerMPH;   // +19208
-                miPlayerRPM      = lpHudEvent->miPlayerRPM;   // +19212
-                miPlayerGear     = lpHudEvent->miPlayerGear;  // +19216, full signed word
+                mGuiPlayerInfo.miPlayerMPH = lpHudEvent->miPlayerMPH;   // +19208
+                mGuiPlayerInfo.miPlayerRPM      = lpHudEvent->miPlayerRPM;   // +19212
+                mGuiPlayerInfo.miPlayerGear     = lpHudEvent->miPlayerGear;  // +19216, full signed word
             }
             break;
 
@@ -1510,11 +1510,11 @@ namespace BrnGui
             meCarSelectType = BrnGameState::GameStateModuleIO::E_CAR_SELECT_TYPE_NONE;
             if (mpProfile)
             {
-                CGS_ASSERT(mLocalPlayerOriginalCarId != 0, "mGuiPlayerInfo.mOriginalCarId != kCGSID_NULL");
-                if (mpProfile->FindCar(mLocalPlayerOriginalCarId))
-                    mbShowNearestBodyShop = mpProfile->FindCar(mLocalPlayerOriginalCarId)->GetUnlockDeformationAmount() > 0.0f;
+                CGS_ASSERT(mGuiPlayerInfo.mOriginalCarId != 0, "mGuiPlayerInfo.mOriginalCarId != kCGSID_NULL");
+                if (mpProfile->FindCar(mGuiPlayerInfo.mOriginalCarId))
+                    mGuiPlayerInfo.mbShowNearestBodyShop = mpProfile->FindCar(mGuiPlayerInfo.mOriginalCarId)->GetUnlockDeformationAmount() > 0.0f;
                 else
-                    mbShowNearestBodyShop = true;
+                    mGuiPlayerInfo.mbShowNearestBodyShop = true;
             }
             mbGameplayHudReadyC = true;
             break;
@@ -1573,17 +1573,17 @@ namespace BrnGui
                                 sbGateLogged = true;
                                 *CgsDev::Log::gpDebugPrint
                                     << "[satnav-diag] cache 199 gate: activeIdx="
-                                    << mePlayerActiveRaceCarIndex << " used="
+                                    << mGuiPlayerInfo.mePlayerActiveRaceCarIndex << " used="
                                     << static_cast<s32>(
-                                           mePlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID
+                                           mGuiPlayerInfo.mePlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID
                                                ? (IsActiveRaceCarIndexUsed(static_cast<EActiveRaceCarIndex>(
-                                                     mePlayerActiveRaceCarIndex)) ? 1 : 0)
+                                                     mGuiPlayerInfo.mePlayerActiveRaceCarIndex)) ? 1 : 0)
                                                : -1) << "\n";
                             }
                         }
-                        if (mePlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID &&
+                        if (mGuiPlayerInfo.mePlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID &&
                             IsActiveRaceCarIndexUsed(static_cast<EActiveRaceCarIndex>(
-                                mePlayerActiveRaceCarIndex)))
+                                mGuiPlayerInfo.mePlayerActiveRaceCarIndex)))
                         {
                             // [DIAG] NOT IN THE X360 BINARY -- [satnav-diag] first store.
                             {
@@ -1598,10 +1598,10 @@ namespace BrnGui
                                         << lrIcon.GetRotation() << "\n";
                                 }
                             }
-                            mv4WorldCameraPosition = lrIcon.GetPositionLane();   // stvx +19168
-                            mfPlayerOrientation    = lrIcon.GetRotation();       // +19220 (lfs icon+24)
-                            mePlayerCounty         = static_cast<s32>(lrIcon.GetCounty());   // +19224
-                            mePlayerDistrict       = static_cast<s32>(lrIcon.GetDistrict()); // +19228
+                            mGuiPlayerInfo.mv3PlayerCarPosition = Vector3(lrIcon.GetPositionLane().mV);   // stvx +19168
+                            mGuiPlayerInfo.mfRotation    = lrIcon.GetRotation();       // +19220 (lfs icon+24)
+                            mGuiPlayerInfo.meCurrentCounty = lrIcon.GetCounty();   // +19224
+                            mGuiPlayerInfo.meCurrentDistrict = lrIcon.GetDistrict(); // +19228
                         }
                         break;
                     case BrnGui::GuiEventUpdateSatNav::SatNavIconInfo::E_SATNAVICON_JUNKYARD:     // 7
@@ -1903,8 +1903,10 @@ namespace BrnGui
                            "lpRaceCarIdEvent->mePlayerGlobalRaceCarIndex > E_GLOBAL_RACE_CAR_INDEX_INVALID"); // :1906
                 CGS_ASSERT(lpRaceCarIdEvent->mePlayerGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT,
                            "lpRaceCarIdEvent->mePlayerGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT");   // :1907
-                mePlayerActiveRaceCarIndex = lpRaceCarIdEvent->mePlayerActiveRaceCarIndex; // +19200
-                mePlayerGlobalRaceCarIndex = lpRaceCarIdEvent->mePlayerGlobalRaceCarIndex; // +19204
+                mGuiPlayerInfo.mePlayerActiveRaceCarIndex =
+                    static_cast<EActiveRaceCarIndex>(lpRaceCarIdEvent->mePlayerActiveRaceCarIndex); // +19200
+                mGuiPlayerInfo.mePlayerGlobalRaceCarIndex =
+                    static_cast<EGlobalRaceCarIndex>(lpRaceCarIdEvent->mePlayerGlobalRaceCarIndex); // +19204
             }
             break;
 
@@ -1922,20 +1924,20 @@ namespace BrnGui
             std::memcpy(maEventPositionOfRaceCar, positions->maiPositions, sizeof(maEventPositionOfRaceCar));
             std::memcpy(maRaceCarFinished, positions->mabFinished, sizeof(maRaceCarFinished));
             std::memcpy(maEventPositionValid, positions->mabValid, sizeof(maEventPositionValid));
-            if (mePlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)
+            if (mGuiPlayerInfo.mePlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)
             {
-                CGS_ASSERT(mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                CGS_ASSERT(mGuiPlayerInfo.mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
                            "lePlayerActiveRaceCar < E_ACTIVE_RACE_CAR_INDEX_COUNT");
-                if (maEventPositionValid[mePlayerActiveRaceCarIndex])
+                if (maEventPositionValid[mGuiPlayerInfo.mePlayerActiveRaceCarIndex])
                 {
-                    const u8 position = static_cast<u8>(maEventPositionOfRaceCar[mePlayerActiveRaceCarIndex]);
-                    mbPlayerRacePositionOverride = mu8PlayerRacePosition != position;
-                    mu8PlayerRacePosition = position;
+                    const u8 position = static_cast<u8>(maEventPositionOfRaceCar[mGuiPlayerInfo.mePlayerActiveRaceCarIndex]);
+                    mGuiPlayerInfo.mbPlayerRacePositionchanged = mGuiPlayerInfo.muPlayerRacePosition != position;
+                    mGuiPlayerInfo.muPlayerRacePosition = position;
                 }
                 else
                 {
-                    mbPlayerRacePositionOverride = false;
-                    mu8PlayerRacePosition = 0;
+                    mGuiPlayerInfo.mbPlayerRacePositionchanged = false;
+                    mGuiPlayerInfo.muPlayerRacePosition = 0;
                 }
             }
             break;
@@ -2095,10 +2097,10 @@ namespace BrnGui
             // [PC GUARD] -- not in the console image: the console indexes the table with the
             // player's active race-car index unchecked; with no race car (-1) its store lands on
             // the byte before the table. Skipped here.
-            if (mePlayerActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0 &&
-                mePlayerActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT)
+            if (mGuiPlayerInfo.mePlayerActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0 &&
+                mGuiPlayerInfo.mePlayerActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT)
             {
-                maOnlinePlayerDisconnected[mePlayerActiveRaceCarIndex] = true;   // stbx 1, +0xB84C + idx
+                maOnlinePlayerDisconnected[mGuiPlayerInfo.mePlayerActiveRaceCarIndex] = true;   // stbx 1, +0xB84C + idx
             }
             mbRoadRuleFriendScoresAvailable = false;                       // stb 0,  +0x4B50
             meOnlineSecurity                = 0;                           // stwx 0, +0xA9C0
@@ -2185,7 +2187,8 @@ namespace BrnGui
             // Note the console does NOT range-assert here -- it asserts at the CONSUMER
             // (UpdateWFInit's `< 2`, BrnFBurnMainHudState.cpp:1536). Reproduced as-is: adding
             // a producer-side assert would be an invented arm.
-            mePlayerEngineState = *reinterpret_cast<const s32*>(lpEvent);              // +19232
+            mGuiPlayerInfo.meCurrentEngineState =
+                static_cast<GuiPlayerEngineEvent::EEngineState>(*reinterpret_cast<const s32*>(lpEvent));              // +19232
             break;
 
         case 350:
@@ -2695,7 +2698,7 @@ namespace BrnGui
             mRivalInfo = *lpRival;
             for (s32 liCar = 0; liCar < 8; ++liCar)
             {
-                if (mePlayerActiveRaceCarIndex != liCar)
+                if (mGuiPlayerInfo.mePlayerActiveRaceCarIndex != liCar)
                 {
                     for (s32 liRival = 0; liRival < lpRival->miRivalsReturned; ++liRival)
                     {
