@@ -103,7 +103,15 @@ namespace OverlapCullingIO
         // the sibling CgsOverlapCullingModuleIO.cpp -- the console's own file (DWARF
         // CgsOverlapCullingModuleIO.cpp:46 / :72).
         void Construct();   // DWARF :80
-        void Destruct();    // DWARF :84
+        // ARTIST 828C4F70 clears the overlap and volume queues before IOBuffer::Destruct.
+        void Destruct()
+        {
+            mOverlappingPairQueue.Clear();
+            mRemoveInternalVolumeQueue.Clear();
+            mAddInternalVolumeQueue.Clear();
+
+            CgsModule::IOBuffer::Destruct();
+        }
 
         // @ 0x828B0698 -- read-lock tripwire (bit 4, "Not locked for reading\n"), `this+4`,
         // baked CgsOverlapCullingModuleIO.h:87. Its ONE caller is
@@ -174,8 +182,21 @@ namespace OverlapCullingIO
         // (CreateIOBuffer @0x828CC698 / DestroyIOBuffer @0x828C5148); the DWARF still
         // declares them as members (CgsOverlapCullingModuleIO.cpp:98 / :119), which is where
         // the bodies live in this tree.
-        void Construct();   // DWARF :121
-        void Destruct();    // DWARF :125
+        // ARTIST 828CC698 initializes the buffer and its contact queue inline.
+        void Construct()
+        {
+            CgsModule::IOBuffer::Construct();   // *(this) = 1
+
+            mContactQueue.Construct();          // console +16
+            mContactQueue.Clear();              // console +24 (miLength)
+        }
+        // ARTIST 828C5148 clears the inline contact queue before IOBuffer::Destruct.
+        void Destruct()
+        {
+            mContactQueue.Clear();
+
+            CgsModule::IOBuffer::Destruct();
+        }
 
         // :128. No emitted body in the ARTIST image (nothing reads the culler's contacts
         // through a const handle -- SceneManagerModule::BridgeOverlapCullerToOutputBuffer

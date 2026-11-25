@@ -216,7 +216,16 @@ namespace OverlapGenerationIO
     struct InputBuffer : public CgsModule::IOBuffer
     {
         void Construct();   // :185  @0x828CB918 (out of line in the X360 build)
-        void Destruct();    // :189  (inlined into DestroyIOBuffer<InputBuffer> @0x828C53F0)
+        // ARTIST 828C53F0 clears all four queue lengths before IOBuffer::Destruct.
+        void Destruct()
+        {
+            mAddBodyQueue.Clear();
+            mForceNoPaddingQueue.Clear();
+            mRemoveBodyQueue.Clear();
+            mUpdateBodyQueue.Clear();
+
+            CgsModule::IOBuffer::Destruct();
+        }
 
         // ---- producers (all four inlined into their SceneManagerModule callers except
         //      UpdateBody, which the X360 emits out of line at 0x828BA430) -------------
@@ -283,8 +292,21 @@ namespace OverlapGenerationIO
     // drained by SceneManagerModule::BridgeOverlapGenerationToOverlapCulling @0x828BA538.
     struct OutputBuffer : public CgsModule::IOBuffer
     {
-        void Construct();  // :258 (inlined into CreateIOBuffer<OutputBuffer>  @0x828CC780)
-        void Destruct();   // :262 (inlined into DestroyIOBuffer<OutputBuffer> @0x828C5068)
+        // ARTIST 828CC780 initializes the buffer and its overlapping-pair queue inline.
+        void Construct()
+        {
+            CgsModule::IOBuffer::Construct();
+
+            mOverlappingPairQueue.Construct();
+            mOverlappingPairQueue.Clear();
+        }
+        // ARTIST 828C5068 clears the inline pair queue before IOBuffer::Destruct.
+        void Destruct()
+        {
+            mOverlappingPairQueue.Clear();
+
+            CgsModule::IOBuffer::Destruct();
+        }
 
         const OutOverlappingPairQueue* GetOverlappingPairQueue() const;  // :266 @0x828B0428 -> this+4
         OutOverlappingPairQueue*       GetOverlappingPairQueue();        // :267 @0x828B04D0 -> this+4

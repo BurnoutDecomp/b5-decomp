@@ -36,7 +36,7 @@ namespace CgsContainers
 // STILL DIFFERENT from ARTIST (recorded, not yet restored):
 // - The DWARF signatures differ where explicit instantiations in other directories depend on
 //   ours: AppendArray is a member template on the other array's capacity
-//   (??$AppendArray@$0CA@@...), InsertBefore takes a T&, QSort returns void.
+//   (??$AppendArray@$0CA@@...) and InsertBefore takes a T&.
 // - h:201 Construct(uint32_t) is declared by the DWARF; no ARTIST copy attests its body, so it
 //   is not reconstructed.
 //
@@ -105,7 +105,7 @@ public:
     inline T* End();
 
     // QSort (h:626): in-place sort through the C library qsort.
-    inline T* QSort(int (*lpfComparator)(const void* lpA, const void* lpB));
+    inline void QSort(int (*lpfComparator)(const void* lpA, const void* lpB));
 
     // ===== Members the tree's callers use that the DWARF does not declare =====
     // Each is a raw count access that ARTIST shows inline without an assert, or a forwarding
@@ -620,14 +620,12 @@ Array<T, N>::End()
 }
 
 template <typename T, u32 N>
-inline T*
+inline void
 Array<T, N>::QSort(int (*lpfComparator)(const void* lpA, const void* lpB))
 {
     // In-place sort of the live elements through the C library qsort (ARTIST
     // Array<ChainableMultiplierInfo,8>::QSort @0x82317950); its constructed assert streams
-    // the message, unlike the others. The console returns void; the buffer base returned
-    // here is what the explicit instantiation in Array_ChainableMultiplierInfo_8.cpp
-    // declares.
+    // the message on its original line.
     //
     //
     //
@@ -637,7 +635,6 @@ Array<T, N>::QSort(int (*lpfComparator)(const void* lpA, const void* lpB))
     {
         std::qsort(maElements, luCount, sizeof(T), lpfComparator);
     }
-    return maElements;
 }
 
 } // namespace CgsContainers

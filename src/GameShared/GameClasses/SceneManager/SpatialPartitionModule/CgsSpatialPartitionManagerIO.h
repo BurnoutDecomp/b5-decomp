@@ -107,8 +107,20 @@ namespace SpatialPartitionIO
         typedef CgsModule::VariableEventQueue<135168, 16> InSpatialPartitionUpdateQueue;
 
         // Lifecycle (DWARF-attested) -- DECLARE-ONLY (defined in their own TUs).
-        void Construct();
-        void Destruct();
+        // ARTIST 828C5228 constructs the typed queue and clears its read/write cursors.
+        void Construct()
+        {
+            CgsModule::IOBuffer::Construct();
+            mSpatialPartitionUpdateQueue.Construct();
+            mSpatialPartitionUpdateQueue.Clear();
+        }
+        // ARTIST 828C54F0 clears and destructs the typed queue before releasing the buffer.
+        void Destruct()
+        {
+            mSpatialPartitionUpdateQueue.Clear();
+            mSpatialPartitionUpdateQueue.Destruct();
+            CgsModule::IOBuffer::Destruct();
+        }
         void AddEntity(u16 lu16Id, u32 luFlags, Vector3 lPosition, f32 lfRadius);
         void RemoveEntity(u16 lu16Id);
         void SetEntityPosition(u16 lu16Id, Vector3 lPosition);

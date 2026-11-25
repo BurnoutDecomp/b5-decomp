@@ -51,7 +51,6 @@ namespace shadow
         static renderengine::VertexProgramState* GetVertexProgramState(
             const renderengine::ProgramBufferData* lpVertexProgram,
             const renderengine::VertexDescriptorData* lpVertexDescriptor);
-        static void SetVertexProgramInternal();
         static void SetMeshBuffers(const RenderableMesh* lpMesh);
         static void DrawInstancedIndexedPrimitive_Custom(renderengine::DrawIndexedParameters& lrParameters,
             s32 luInstanceCount, s32 luInstanceMax);
@@ -65,7 +64,15 @@ namespace shadow
 
         // Bind a vertex program through the shadow cache (X360 0x82276BA0). Returns true when the
         // binding actually changed (the shadow differed and a flush was requested).
-        static bool SetVertexProgram(const renderengine::ProgramBufferData* lpVertexProgram);
+        static bool SetVertexProgram(const renderengine::ProgramBufferData* lpVertexProgram)
+        {
+            if (m_Shadow.m_pVertexProgramBuffer == lpVertexProgram)
+                return false;
+
+            SetVertexProgramInternal(lpVertexProgram);
+            m_Shadow.m_pVertexProgramBuffer = lpVertexProgram;
+            return true;
+        }
 
         // Bind a pixel program through the shadow cache (X360 0x82276C00). Returns true when the
         // binding actually changed and a D3D pixel shader was bound.
@@ -230,6 +237,8 @@ namespace shadow
         }
 
     private:
+        static void SetVertexProgramInternal(const renderengine::ProgramBufferData* lpVertexProgram);
+
         // DecFIGS shadowingdevice.h:657–672/771. ARTIST ResetShadowing
         // at 0x82276970 accesses the one thirteen-member block at 0x83010950.
         struct StateBlockShadow

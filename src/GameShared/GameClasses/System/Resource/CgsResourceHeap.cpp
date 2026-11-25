@@ -2,6 +2,7 @@
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"   // overhead allocator
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"           // CGS_ASSERT
 
+#include <string.h>
 #include "types.hpp"   // uintptr_t (heap-memory alignment check)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the node-exhaustion boot gate
 
@@ -205,17 +206,18 @@ namespace CgsResource
 
 
     // 0x828F4568 - recycle a node struct from the free-node pool (mUnusedNodes) and fill its
-    // HeapEntry. The X360 inlines the list pull + a debug-name-length assert; here the pull is
-    // the decompiled IndexedLinkedList::RemoveHead and the (debug-only) name assert is omitted.
+    // HeapEntry. The debug name limit is checked after the unused node is removed.
     Heap::HeapEntryNode* Heap::GetNewNode(void* lpAddress, s32 liSize, bool lbAllocated, const char* lpcDebugName, void* lpOwner)
     {
 
 
-        CGS_ASSERT(!mUnusedNodes.IsEmpty(), "!mUnusedNodes.IsEmpty()");
-        (void)lpcDebugName;
+        CGS_ASSERT_AT(!mUnusedNodes.IsEmpty(), "!mUnusedNodes.IsEmpty()", CGS_ARTIST_RESOURCE_HEAP_FILE, 211);
 
-        HeapEntryNode* lpNode  = mUnusedNodes.RemoveHead();
-        HeapEntry*     lpEntry = lpNode->GetData();
+        HeapEntryNode* lpNode = mUnusedNodes.RemoveHead();
+        CGS_ASSERT_AT(!lpcDebugName || strlen(lpcDebugName) < 31,
+                      "!lpcDebugName || (strlen(lpcDebugName) < 31)", CGS_ARTIST_RESOURCE_HEAP_FILE, 215);
+
+        HeapEntry* lpEntry = lpNode->GetData();
         lpEntry->SetAddress(static_cast<char*>(lpAddress));
         lpEntry->SetSize(static_cast<u32>(liSize));
         lpEntry->SetAllocated(lbAllocated);
@@ -1427,26 +1429,36 @@ namespace CgsResource
         s32* lpAllocatedNodes, s32* lpFreeNodes, s32* lpAllocatedBytes,
         s32* lpFreeBytes, s32* lpLargestFree)
     {
-        *lpUsedNodes = *lpAllocatedNodes = *lpFreeNodes = 0;
-        *lpAllocatedBytes = *lpFreeBytes = *lpLargestFree = 0;
+        s32 liNumUsed = 0;
+        s32 liNumAllocated = 0;
+        s32 liNumFree = 0;
+        s32 liTotalAllocated = 0;
+        s32 liTotalFree = 0;
         *lpUnusedNodes = mUnusedNodes.CountElements();
+        s32 liLargest = 0;
         for (HeapEntryNode* lpNode = mUsedNodes.GetHead(); lpNode; lpNode = mUsedNodes.GetNext(lpNode))
         {
-            ++*lpUsedNodes;
+            ++liNumUsed;
             const HeapEntry* lpEntry = lpNode->GetData();
-            const s32 liSize = static_cast<s32>(lpEntry->GetSize());
             if (lpEntry->IsAllocated())
             {
-                ++*lpAllocatedNodes;
-                *lpAllocatedBytes += liSize;
+                ++liNumAllocated;
+                liTotalAllocated += static_cast<s32>(lpEntry->GetSize());
             }
             else
             {
-                ++*lpFreeNodes;
-                *lpFreeBytes += liSize;
-                if (*lpLargestFree <= liSize) *lpLargestFree = liSize;
+                ++liNumFree;
+                liTotalFree += static_cast<s32>(lpEntry->GetSize());
+                const s32 liSize = static_cast<s32>(lpEntry->GetSize());
+                liLargest = liLargest > liSize ? liLargest : liSize;
             }
         }
+        *lpUsedNodes = liNumUsed;
+        *lpAllocatedNodes = liNumAllocated;
+        *lpFreeNodes = liNumFree;
+        *lpAllocatedBytes = liTotalAllocated;
+        *lpFreeBytes = liTotalFree;
+        *lpLargestFree = liLargest;
     }
 
 
@@ -1506,7 +1518,7 @@ namespace CgsResource
         for (HeapEntryNode* lpNode = lpStartNode; lpNode != 0; lpNode = mUsedNodes.GetNext(lpNode))
             if (lpNode->GetData()->IsFree() && lpNode->GetData()->GetSize() >= luSize)
                 return lpNode;
-        for (HeapEntryNode* lpNode = mUsedNodes.GetHead(); lpNode != 0 && lpNode != lpStartNode; lpNode = mUsedNodes.GetNext(lpNode))
+        for (HeapEntryNode* lpNode = mUsedNodes.GetHead(); lpNode != lpStartNode && lpNode != 0; lpNode = mUsedNodes.GetNext(lpNode))
             if (lpNode->GetData()->IsFree() && lpNode->GetData()->GetSize() >= luSize)
                 return lpNode;
         return 0;
@@ -1520,7 +1532,7 @@ namespace CgsResource
         for (HeapEntryNode* lpNode = lpStartNode; lpNode != 0; lpNode = mUsedNodes.GetPrev(lpNode))
             if (lpNode->GetData()->IsFree() && lpNode->GetData()->GetSize() >= luSize)
                 return lpNode;
-        for (HeapEntryNode* lpNode = mUsedNodes.GetTail(); lpNode != 0 && lpNode != lpStartNode; lpNode = mUsedNodes.GetPrev(lpNode))
+        for (HeapEntryNode* lpNode = mUsedNodes.GetTail(); lpNode != lpStartNode && lpNode != 0; lpNode = mUsedNodes.GetPrev(lpNode))
             if (lpNode->GetData()->IsFree() && lpNode->GetData()->GetSize() >= luSize)
                 return lpNode;
         return 0;
@@ -1539,7 +1551,7 @@ namespace CgsResource
                 (lpBest == 0 || (lpBest->GetData()->GetSize() - luSize) > (lpEntry->GetSize() - luSize)))
                 lpBest = lpNode;
         }
-        for (HeapEntryNode* lpNode = mUsedNodes.GetHead(); lpNode != 0 && lpNode != lpStartNode; lpNode = mUsedNodes.GetNext(lpNode))
+        for (HeapEntryNode* lpNode = mUsedNodes.GetHead(); lpNode != lpStartNode && lpNode != 0; lpNode = mUsedNodes.GetNext(lpNode))
         {
             HeapEntry* lpEntry = lpNode->GetData();
             if (lpEntry->IsFree() && lpEntry->GetSize() >= luSize &&
@@ -1610,8 +1622,9 @@ namespace CgsResource
     void Heap::Free(void* lpPtr)
     {
         mbUpdated = true;
-        CGS_ASSERT(reinterpret_cast<uintptr_t>(lpPtr) % muHeapAlignment == 0,
-                   "((int)lpcAddress % muHeapAlignment) == 0");
+        CGS_ASSERT_AT(reinterpret_cast<uintptr_t>(lpPtr) % muHeapAlignment == 0,
+                      "((int)lpcAddress % muHeapAlignment) == 0",
+                      CGS_ARTIST_RESOURCE_HEAP_FILE, 497);
         for (HeapEntryNode* lpNode = mUsedNodes.GetHead(); lpNode; lpNode = mUsedNodes.GetNext(lpNode))
         {
             if (lpNode->GetData()->GetAddress() == lpPtr)

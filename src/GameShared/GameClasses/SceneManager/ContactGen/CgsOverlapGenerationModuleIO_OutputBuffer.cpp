@@ -40,13 +40,6 @@ namespace OverlapGenerationIO
 //   on the x64 host the queue seats at +8 and the total grows by 8. Nothing here depends
 //   on either number -- Alloc/Free size the type with sizeof.
 // ---------------------------------------------------------------------------------
-void OutputBuffer::Construct()
-{
-    CgsModule::IOBuffer::Construct();
-
-    mOverlappingPairQueue.Construct();
-    mOverlappingPairQueue.Clear();
-}
 
 // ---------------------------------------------------------------------------------
 // OutputBuffer::Destruct   (CgsOverlapGenerationModuleIO.h:262,
@@ -60,12 +53,6 @@ void OutputBuffer::Construct()
 //   IOBuffer::Destruct; a fixed-capacity queue's Destruct owns no storage and leaves no
 //   code, so the surviving instruction is the length store.
 // ---------------------------------------------------------------------------------
-void OutputBuffer::Destruct()
-{
-    mOverlappingPairQueue.Clear();
-
-    CgsModule::IOBuffer::Destruct();
-}
 
 // ---------------------------------------------------------------------------------
 // The two accessors. Each is `return &mOverlappingPairQueue` behind the matching lock

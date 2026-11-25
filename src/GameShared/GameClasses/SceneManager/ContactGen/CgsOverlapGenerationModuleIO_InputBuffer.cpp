@@ -74,15 +74,6 @@ void InputBuffer::Construct()
 //   empty for a fixed-capacity queue and leave no code), so they are written here in
 //   member order. Nothing is freed: the queues own inline storage.
 // ---------------------------------------------------------------------------------
-void InputBuffer::Destruct()
-{
-    mAddBodyQueue.Clear();
-    mUpdateBodyQueue.Clear();
-    mRemoveBodyQueue.Clear();
-    mForceNoPaddingQueue.Clear();
-
-    CgsModule::IOBuffer::Destruct();
-}
 
 // ---------------------------------------------------------------------------------
 // InputBuffer::UpdateBody @ 0x828BA430   (CgsOverlapGenerationModuleIO.h:212)

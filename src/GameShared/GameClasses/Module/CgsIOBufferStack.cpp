@@ -1,13 +1,16 @@
 #include "GameShared/GameClasses/Module/CgsIOBufferStack.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint (overflow diagnostic)
-#include <stdlib.h>                                          // getenv (BRN_IOBUF_ZERO, host only)
 
 // CgsModule::IOBufferStack - a LIFO bump allocator over a caller-supplied block. Modules push
 // their per-frame IO buffers with CreateIOBuffer<T> and pop them (reverse order) with
 // DestroyIOBuffer<T>. Recovered from the DecFIGS DWARF (Module/CgsIOBufferStack.cpp).
 namespace CgsModule
 {
+    namespace
+    {
+        const char KAC_ARTIST_IO_BUFFER_STACK_FILE[] = "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsIOBufferStack.cpp";
+    }
 
     void IOBufferStack::Construct(const char*)
     {
@@ -21,11 +24,10 @@ namespace CgsModule
     bool IOBufferStack::Prepare(void* lpMemory, u32 luSize, u32 luAlignment)
     {
         // ARTIST 0x8286E120 validates the requested alignment and the buffer address.
-        const char* const lpcArtistFile =
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsIOBufferStack.cpp";
-        CGS_ASSERT(luAlignment >= 16, CGS_ASSERT_MESSAGE_AT("luAlignment >= 16", lpcArtistFile, 83));
+
+        CGS_ASSERT(luAlignment >= 16, CGS_ASSERT_MESSAGE_AT("luAlignment >= 16", KAC_ARTIST_IO_BUFFER_STACK_FILE, 83));
         CGS_ASSERT((reinterpret_cast<intptr_t>(lpMemory) & 0xf) == 0, CGS_ASSERT_MESSAGE_AT(
-            "0 == (reinterpret_cast<intptr_t>(lpData) & 0xf )", lpcArtistFile, 84));
+            "0 == (reinterpret_cast<intptr_t>(lpData) & 0xf )", KAC_ARTIST_IO_BUFFER_STACK_FILE, 84));
 
         mpData = static_cast<u8*>(lpMemory);
         muSize = luSize;
@@ -51,32 +53,30 @@ namespace CgsModule
         muNumAllocated = 0;
     }
 
-    void* IOBufferStack::Alloc(u32 luSize, const char* lpcDebugName)
+    void* IOBufferStack::Alloc(u32 luSize, const char*)
     {
-        u32 luAligned = (muAllocated + (muAlignment - 1)) & ~(muAlignment - 1);
-        if (!mpData || luAligned + luSize > muSize)
+        const u32 luAlignedSize = (luSize + muAlignment - 1) & ~(muAlignment - 1);
+        const u32 luNewAllocated = muAllocated + luAlignedSize;
+        if (luNewAllocated > muSize)
         {
-            // A silent null here surfaces much later as "mxStatusFlags.IsBitSet(
-            // eStatusConstructed)" inside the first Lock on the buffer that never got
-            // allocated, so name the overflow at the point it happens. One-shot.
-            static bool s_bLoggedOverflow = false;
-            if (!s_bLoggedOverflow)
-            {
-                s_bLoggedOverflow = true;
-                if (CgsDev::Message::gxMessageFilterFlags & 1)
-                    *CgsDev::Log::gpDebugPrint << "[IOBufferStack] OVERFLOW allocating '"
-                        << (lpcDebugName ? lpcDebugName : "?") << "' size " << static_cast<s32>(luSize)
-                        << " (used " << static_cast<s32>(muAllocated)
-                        << " of " << static_cast<s32>(muSize) << ")\n";
-            }
-            return 0;
+            CGS_ASSERT_STREAM_AT(false, "Error allocating " << luAlignedSize << " bytes\n",
+                                 KAC_ARTIST_IO_BUFFER_STACK_FILE, 171);
+            return NULL;
         }
-        void* lpResult = mpData + luAligned;
-        muAllocated = luAligned + luSize;
-        if (muAllocated > muMaxAllocated)
-            muMaxAllocated = muAllocated;
+
+        void* lpReturnVal = mpData + muAllocated;
+        muAllocated = luNewAllocated;
         ++muNumAllocated;
-        return lpResult;
+        if (muAllocated >= muMaxAllocated)
+        {
+            muMaxAllocated = muAllocated;
+            static bool _lbPrintOut = false;
+            if (_lbPrintOut)
+            {
+                DebugPrintStack();
+            }
+        }
+        return lpReturnVal;
     }
 
     void IOBufferStack::DebugPrintStack()
@@ -97,14 +97,20 @@ namespace CgsModule
             *CgsDev::Log::gpDebugPrint << KAC_RULE;
     }
 
-    bool IOBufferStack::Free(void* lpMemory, u32 luSize)
+    bool IOBufferStack::Free(void* lpData, u32 luSize)
     {
-        // LIFO pop: the active top buffer is freed first. Rewind the bump pointer to the
-        // freed block's start (callers free in reverse allocation order).
-        if (lpMemory && mpData)
-            muAllocated = static_cast<u32>(static_cast<u8*>(lpMemory) - mpData);
-        if (muNumAllocated)
-            --muNumAllocated;
+        luSize = (luSize + muAlignment - 1) & ~(muAlignment - 1);
+        const uintptr_t luDataOffset = reinterpret_cast<uintptr_t>(lpData) - reinterpret_cast<uintptr_t>(mpData);
+        if (luDataOffset + luSize != muAllocated)
+        {
+            DebugPrintStack();
+            CGS_ASSERT_STREAM_AT(false, "Attempt to free data that is not on or at top of stack\n",
+                                 KAC_ARTIST_IO_BUFFER_STACK_FILE, 255);
+            return false;
+        }
+
+        muAllocated -= luSize;
+        --muNumAllocated;
         return true;
     }
 }

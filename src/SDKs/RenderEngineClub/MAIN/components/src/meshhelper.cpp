@@ -61,10 +61,6 @@ void MeshHelper::Release()
 {
 }
 
-const VertexBuffer* MeshHelper::GetVertexBuffer(u32 index) const
-{
-    return static_cast<const VertexBuffer*>(m_buffers[m_numIndexBuffers + index]);
-}
 VertexBuffer* MeshHelper::GetVertexBuffer(u32 index)
 {
     return static_cast<VertexBuffer*>(m_buffers[m_numIndexBuffers + index]);

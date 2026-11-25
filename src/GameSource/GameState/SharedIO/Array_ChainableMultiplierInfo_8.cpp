@@ -4,7 +4,7 @@
 
 // Explicit instantiation(s) of the generic Array<T,N> container methods (inline in CgsArray.h)
 // for the ChainableMultiplierInfo leaf instantiation -- the committed Array_/EventQueue_ explicit-instantiation pattern.
-template BrnGameState::GameStateModuleIO::ChainableMultiplierInfo* CgsContainers::Array<BrnGameState::GameStateModuleIO::ChainableMultiplierInfo, 8>::QSort(int (*)(const void*, const void*));
+template void CgsContainers::Array<BrnGameState::GameStateModuleIO::ChainableMultiplierInfo, 8>::QSort(int (*)(const void*, const void*));
 
 // ============================================================================
 // X360 BrnGameState::GameStateModuleIO::ChainableMultiplierInfo,8>::Ge @ 0x823178F8

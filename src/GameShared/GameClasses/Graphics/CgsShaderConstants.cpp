@@ -1,3 +1,4 @@
+#include <cstring>
 #include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 static const char KAC_ARTIST_ASSERT_HEADER[] =
@@ -53,16 +54,11 @@ u32 ShaderConstantsExternal::FixUp(u8* lpBaseData)
         reinterpret_cast<uintptr_t>(mpaProgramStateHandles) + luBase);
     mppacNames = reinterpret_cast<const char**>(reinterpret_cast<uintptr_t>(mppacNames) + luBase);
 
-    if (muNumConstantsInstances != 0)
+    for (u32 luIndex = 0; luIndex < muNumConstantsInstances; ++luIndex)
     {
-        for (u32 luIndex = 0; luIndex < muNumConstantsInstances; ++luIndex)
-        {
-            if (mppacNames[luIndex] != 0)
-            {
-                mppacNames[luIndex] = reinterpret_cast<const char*>(
-                    reinterpret_cast<uintptr_t>(mppacNames[luIndex]) + luBase);
-            }
-        }
+        const char*& lrpName = mppacNames[luIndex];
+        if (lrpName != 0)
+            lrpName = reinterpret_cast<const char*>(reinterpret_cast<uintptr_t>(lrpName) + luBase);
     }
 
     return 0;
@@ -276,40 +272,25 @@ u32 ShaderConstantsExternal::FixUp(const renderengine::ProgramBuffer* lpVertexPr
 // true, otherwise advance to the next name until muNumConstantsInstances is exhausted.
 bool ShaderConstantsExternal::HasShaderConstant(const char* lpName) const
 {
-    if (muNumConstantsInstances == 0)
-    {
-        return false;
-    }
-
+    const u32 luCount = muNumConstantsInstances;
+    bool lbHasShaderConstant = false;
     u32 luIndex = 0;
-    for (const char* const* lppName = mppacNames; ; ++lppName)
+    if (luCount != 0)
     {
-        const char* lpCandidate = *lppName;
-        const char* lpQuery = lpName;
-
-        int liDiff;
+        const char* const* lppName = mppacNames;
         do
         {
-            liDiff = static_cast<u8>(*lpQuery) - static_cast<u8>(*lpCandidate);
-            if (*lpQuery == 0)
+            if (std::strcmp(lpName, *lppName) == 0)
             {
+                lbHasShaderConstant = true;
                 break;
             }
-            ++lpQuery;
-            ++lpCandidate;
+            ++luIndex;
+            ++lppName;
         }
-        while (liDiff == 0);
-
-        if (liDiff == 0)
-        {
-            return true;
-        }
-
-        if (++luIndex >= muNumConstantsInstances)
-        {
-            return false;
-        }
+        while (luIndex < luCount);
     }
+    return lbHasShaderConstant;
 }
 
 // CgsShaderConstants.cpp:1125
@@ -320,24 +301,17 @@ bool ShaderConstantsExternal::HasShaderConstant(const char* lpName) const
 u32 ShaderConstantsInternal::FixUp(u8* lpBaseData)
 {
     const uintptr_t luBase = reinterpret_cast<uintptr_t>(lpBaseData);
-
+    mpauConstantsInstanceSize = reinterpret_cast<u32*>(reinterpret_cast<uintptr_t>(mpauConstantsInstanceSize) + luBase);
     mpaProgramStateHandles = reinterpret_cast<renderengine::ProgramVariableHandle*>(
         reinterpret_cast<uintptr_t>(mpaProgramStateHandles) + luBase);
-    mppaConstantsInstanceData = reinterpret_cast<u32**>(
-        reinterpret_cast<uintptr_t>(mppaConstantsInstanceData) + luBase);
     mpauNamesHash = reinterpret_cast<u32*>(reinterpret_cast<uintptr_t>(mpauNamesHash) + luBase);
-    mpauConstantsInstanceSize = reinterpret_cast<u32*>(
-        reinterpret_cast<uintptr_t>(mpauConstantsInstanceSize) + luBase);
+    mppaConstantsInstanceData = reinterpret_cast<u32**>(reinterpret_cast<uintptr_t>(mppaConstantsInstanceData) + luBase);
 
-    if (muNumConstantsInstances != 0)
+    for (u32 luIndex = 0; luIndex < muNumConstantsInstances; ++luIndex)
     {
-        for (u32 luIndex = 0; luIndex < muNumConstantsInstances; ++luIndex)
-        {
-            mppaConstantsInstanceData[luIndex] = reinterpret_cast<u32*>(
-                reinterpret_cast<uintptr_t>(mppaConstantsInstanceData[luIndex]) + luBase);
-        }
+        u32*& lrpInstance = mppaConstantsInstanceData[luIndex];
+        lrpInstance = reinterpret_cast<u32*>(reinterpret_cast<uintptr_t>(lrpInstance) + luBase);
     }
-
     return 0;
 }
 

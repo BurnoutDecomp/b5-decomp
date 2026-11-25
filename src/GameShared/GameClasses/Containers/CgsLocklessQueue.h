@@ -5,6 +5,7 @@
 #include "eathread/eathread.h"                       // EA::Thread::ThreadSleep
 #include "eathread/eathread_atomic.h"                // EA::Thread::AtomicInt
 #include <xtl.h>                                     // MemoryBarrier (__lwsync)
+#define CGS_ARTIST_LOCKLESS_QUEUE_FILE "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsLocklessQueue.h"
 
 // CgsContainers::LocklessQueue<T> -- a bounded multi-producer / multi-consumer ring of T whose
 // whole state lives in one 64-bit status word, changed only by compare-and-swap:
@@ -114,14 +115,15 @@ void LocklessQueue<T>::Unlock()
     {
         u16 lu16ReadIndex, lu16WriteIndex, lu16NumItems, lu16Lock;
         GetStatus(&lu16ReadIndex, &lu16WriteIndex, &lu16NumItems, &lu16Lock);
-        CGS_ASSERT(lu16Lock == 1, "Not locked\n");
+        CGS_ASSERT_AT(lu16Lock == 1, "Not locked\n", CGS_ARTIST_LOCKLESS_QUEUE_FILE, 275);
 
         if (SetStatusConditional(lu16ReadIndex, lu16WriteIndex, lu16NumItems, 0,
                                  lu16ReadIndex, lu16WriteIndex, lu16NumItems, lu16Lock))
         {
             return;
         }
-        CGS_ASSERT(false, "Another thread changed the status while locked by this thread\n");
+        CGS_ASSERT_AT(false, "Another thread changed the status while locked by this thread\n",
+                      CGS_ARTIST_LOCKLESS_QUEUE_FILE, 284);
     }
 }
 
@@ -157,7 +159,8 @@ bool LocklessQueue<T>::Post(const T* lpItem, bool lbWaitIfFull, s32 liSleepTime)
         {
             break;
         }
-        CGS_ASSERT(false, "Another thread changed the status while locked by this thread\n");
+        CGS_ASSERT_AT(false, "Another thread changed the status while locked by this thread\n",
+                      CGS_ARTIST_LOCKLESS_QUEUE_FILE, 349);
     }
     Unlock();
     return true;
@@ -195,9 +198,12 @@ bool LocklessQueue<T>::Pop(T* lpItem, bool lbWaitIfEmpty, s32 liSleepTime)
         {
             break;
         }
-        CGS_ASSERT(false, "Another thread changed the status while locked by this thread\n");
+        CGS_ASSERT_AT(false, "Another thread changed the status while locked by this thread\n",
+                      CGS_ARTIST_LOCKLESS_QUEUE_FILE, 421);
     }
     Unlock();
     return true;
 }
 }
+
+#undef CGS_ARTIST_LOCKLESS_QUEUE_FILE

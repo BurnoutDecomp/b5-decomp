@@ -40,11 +40,6 @@ namespace
         return lState;
     }
 
-    inline u32 MakeStreamSourceFlag(u32 luStream)
-    {
-        const u32 luShift = ((21846u * (95u - luStream)) >> 16) + 32u;
-        return static_cast<u32>((1ull << 63) >> luShift);
-    }
 
 
 }
@@ -59,6 +54,8 @@ namespace shadow
         char maData[renderengine::VertexProgramState::X360NoBindStorageSize];
     };
     static const char KAC_ARTIST_SHADOW_HEADER[] = "..\\..\\..\\GameShared\\GameClasses\\Graphics/Dispatch/shadowingdevice.h";
+    static const char KAC_ARTIST_SHADOW_SOURCE[] =
+        "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\Dispatch/shadowingdevice.cpp";
 
     static VertexProgramStateData sVertexProgramStateData;
     static rw::Resource sVertexProgramStateResource;
@@ -139,7 +136,7 @@ namespace shadow
         return lpVertexProgramState;
     }
 
-    void Device::SetVertexProgramInternal()
+    void Device::SetVertexProgramInternal(const renderengine::ProgramBufferData*)
     {
         m_Shadow.mbVertexProgramStateDirty = true;
     }
@@ -182,12 +179,10 @@ namespace shadow
         if (luInstanceCount == 0)
             return;
 
-        static const char lacArtistSource[] =
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\Dispatch/shadowingdevice.cpp";
         CGS_ASSERT(luInstanceCount >= 1,
-            CGS_ASSERT_MESSAGE_AT("luInstanceCount >= 1", lacArtistSource, 574));
+            CGS_ASSERT_MESSAGE_AT("luInstanceCount >= 1", KAC_ARTIST_SHADOW_SOURCE, 574));
         CGS_ASSERT(luInstanceCount <= luInstanceMax,
-            CGS_ASSERT_MESSAGE_AT("luInstanceCount <= luInstanceMax", lacArtistSource, 575));
+            CGS_ASSERT_MESSAGE_AT("luInstanceCount <= luInstanceMax", KAC_ARTIST_SHADOW_SOURCE, 575));
 
         FlushVertexProgramState();
         const u32 luOriginalIndexCount = lrParameters.GetIndexCount();
@@ -227,18 +222,6 @@ namespace shadow
         m_Shadow.mbVertexProgramStateDirty = true;
     }
 
-    // @0x82276BA0: bind a vertex program through the shadow.
-    bool Device::SetVertexProgram(const renderengine::ProgramBufferData* lpVertexProgram)
-    {
-        if (m_Shadow.m_pVertexProgramBuffer == lpVertexProgram)
-        {
-            return false;
-        }
-        SetVertexProgramInternal();
-        m_Shadow.m_pVertexProgramBuffer = lpVertexProgram;
-        return true;
-    }
-
     // @0x82276C00: bind a pixel program through the shadow. The X360 build keeps the compiled
     // D3D pixel-shader header embedded in the program buffer at +0x14 (immediately after the
     // ProgramBufferData fields); the binder passes &that, or null when no program is bound.
@@ -268,7 +251,7 @@ namespace shadow
             return false;
         }
         m_Shadow.m_pVertexDescriptor = lpVertexDescriptor;
-        SetVertexProgramInternal();
+        m_Shadow.mbVertexProgramStateDirty = true;
         return true;
     }
 
@@ -364,75 +347,75 @@ namespace shadow
     // @0x827E7A10: rebind the dirty vertex-program state + the active stream sources to D3D.
     void Device::FlushVertexProgramState()
     {
-
         if (m_Shadow.mbVertexProgramStateDirty)
         {
             renderengine::VertexProgramState* lpState =
                 GetVertexProgramState(m_Shadow.m_pVertexProgramBuffer, m_Shadow.m_pVertexDescriptor);
-            CGS_ASSERT(lpState != 0, "lVertexProgramState != NULL");
+            CGS_ASSERT(lpState != 0,
+                CGS_ASSERT_MESSAGE_AT("lVertexProgramState != NULL", KAC_ARTIST_SHADOW_SOURCE, 493));
 
-            D3DDevice_SetVertexShader(gpD3DDevice, lpState->GetD3DVertexShader());
+            D3DVertexShader* lpShader = lpState->GetD3DVertexShader();
+            D3DDevice_SetVertexShader(gpD3DDevice, lpShader);
             renderengine::gpCurrentVertexProgramState = lpState;
             D3DDevice_SetVertexDeclaration(gpD3DDevice, m_Shadow.m_pVertexDescriptor->mpDeclaration);
             m_Shadow.mbVertexProgramStateDirty = false;
         }
 
-        // Build a per-stream stride scratch table from the active vertex descriptor: each element
-        // maps its descriptor stream-stride into the slot of its (asserted < 8) D3D stream.
-        u32 lauStreamStride[8];
-
         if (m_Shadow.m_pMesh != 0)
         {
-            for (u32 i = 0; i < 8; ++i)
-            {
-                lauStreamStride[i] = 0;
-            }
-
-            const u32 luElementCount = m_Shadow.m_pVertexDescriptor->muElementCount;
-            for (u32 luElement = 0; luElement < luElementCount; ++luElement)
-            {
-                const u16 luStream = m_Shadow.m_pVertexDescriptor->maElements[luElement].muStream;
-                CGS_ASSERT(luStream < 8, "lpElement->stream < 8");
-                lauStreamStride[luStream] = m_Shadow.m_pVertexDescriptor->GetElementStrides()[luElement];
-            }
-
-            const RenderableMesh* lpStreams = m_Shadow.m_pMesh;
-            const u32 luStreamCount = lpStreams->mu8NumVertexBuffers;
+            const renderengine::VertexDescriptorData* const lpVertexDescriptor = m_Shadow.m_pVertexDescriptor;
             u32 luOffsetInBytes = 0;
-            for (u32 luStream = 0; luStream < luStreamCount; ++luStream)
+            u32 lauStreamStride[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+            u32 luElement = 0;
+            const u8* const lpStrides = lpVertexDescriptor->GetElementStrides();
+            if (lpVertexDescriptor->muElementCount != 0)
+            {
+                const renderengine::VertexElement* lpElement = lpVertexDescriptor->maElements;
+                do
+                {
+                    CGS_ASSERT(lpElement->muStream < 8,
+                        CGS_ASSERT_MESSAGE_AT("lpElement->stream < 8", KAC_ARTIST_SHADOW_SOURCE, 515));
+                    const u8 luStride = lpStrides[luElement];
+                    lauStreamStride[lpElement->muStream] = luStride;
+                    ++luElement;
+                    ++lpElement;
+                } while (luElement < lpVertexDescriptor->muElementCount);
+            }
+
+            for (u32 luStream = 0; luStream < m_Shadow.m_pMesh->GetNumVertexBuffers(); ++luStream)
             {
                 const u32 luStride = lauStreamStride[luStream];
-                void* lpStreamData = lpStreams->maBuffers[luStream + 1];
-                D3DDevice_SetStreamSource(gpD3DDevice, luStream, static_cast<D3DVertexBuffer*>(lpStreamData), luOffsetInBytes,
-                                          luStride, MakeStreamSourceFlag(luStream));
+                renderengine::VertexBuffer* lpBuffer = m_Shadow.m_pMesh->GetVertexBuffer(luStream);
+                D3DDevice_SetStreamSource_Inline(gpD3DDevice, luStream, lpBuffer, luOffsetInBytes, luStride);
                 luOffsetInBytes += luStride;
             }
         }
         else if (m_Shadow.m_pMeshState != 0)
         {
-            for (u32 i = 0; i < 8; ++i)
-            {
-                lauStreamStride[i] = 0;
-            }
-
-            const u32 luElementCount = m_Shadow.m_pVertexDescriptor->muElementCount;
-            for (u32 luElement = 0; luElement < luElementCount; ++luElement)
-            {
-                const u16 luStream = m_Shadow.m_pVertexDescriptor->maElements[luElement].muStream;
-                CGS_ASSERT(luStream < 8, "lpElement->stream < 8");
-                lauStreamStride[luStream] = m_Shadow.m_pVertexDescriptor->GetElementStrides()[luElement];
-            }
-
-            const renderengine::MeshHelper* lpStreams =
-                m_Shadow.m_pMeshState;
-            const u32 luStreamCount = lpStreams->GetNumVertexBuffers();
+            const renderengine::VertexDescriptorData* const lpVertexDescriptor = m_Shadow.m_pVertexDescriptor;
             u32 luOffsetInBytes = 0;
-            for (u32 luStream = 0; luStream < luStreamCount; ++luStream)
+            u32 lauStreamStride[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+            u32 luElement = 0;
+            const u8* const lpStrides = lpVertexDescriptor->GetElementStrides();
+            if (lpVertexDescriptor->muElementCount != 0)
+            {
+                const renderengine::VertexElement* lpElement = lpVertexDescriptor->maElements;
+                do
+                {
+                    CGS_ASSERT(lpElement->muStream < 8,
+                        CGS_ASSERT_MESSAGE_AT("lpElement->stream < 8", KAC_ARTIST_SHADOW_SOURCE, 543));
+                    const u8 luStride = lpStrides[luElement];
+                    lauStreamStride[lpElement->muStream] = luStride;
+                    ++luElement;
+                    ++lpElement;
+                } while (luElement < lpVertexDescriptor->muElementCount);
+            }
+
+            for (u32 luStream = 0; luStream < m_Shadow.m_pMeshState->GetNumVertexBuffers(); ++luStream)
             {
                 const u32 luStride = lauStreamStride[luStream];
-                const renderengine::VertexBuffer* lpStreamData = lpStreams->GetVertexBuffer(luStream);
-                D3DDevice_SetStreamSource(gpD3DDevice, luStream, const_cast<renderengine::VertexBuffer*>(lpStreamData), luOffsetInBytes,
-                                          luStride, MakeStreamSourceFlag(luStream));
+                renderengine::VertexBuffer* lpBuffer = const_cast<renderengine::VertexBuffer*>(m_Shadow.m_pMeshState->GetVertexBuffer(luStream));
+                D3DDevice_SetStreamSource_Inline(gpD3DDevice, luStream, lpBuffer, luOffsetInBytes, luStride);
                 luOffsetInBytes += luStride;
             }
         }

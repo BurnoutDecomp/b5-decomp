@@ -34,7 +34,10 @@ public:
     void Release();
     u32 GetNumIndexBuffers() const { return m_numIndexBuffers; }
     u32 GetNumVertexBuffers() const { return m_numVertexBuffers; }
-    const VertexBuffer* GetVertexBuffer(u32 index) const;
+    const VertexBuffer* GetVertexBuffer(u32 index) const
+    {
+        return static_cast<const VertexBuffer*>(m_buffers[m_numIndexBuffers + index]);
+    }
     VertexBuffer* GetVertexBuffer(u32 index);
     const IndexBuffer* GetIndexBuffer(u32 index) const;
     IndexBuffer* GetIndexBuffer(u32 index);

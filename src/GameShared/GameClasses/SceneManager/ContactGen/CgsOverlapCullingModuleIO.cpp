@@ -68,14 +68,6 @@ void InputBuffer::Construct()
 // The three queues have no storage of their own to release (their events are inline
 // arrays), so the console's BaseEventQueue<T>::Destruct is exactly the miLength store.
 // -----------------------------------------------------------------------------
-void InputBuffer::Destruct()
-{
-    mOverlappingPairQueue.Clear();
-    mRemoveInternalVolumeQueue.Clear();
-    mAddInternalVolumeQueue.Clear();
-
-    CgsModule::IOBuffer::Destruct();
-}
 
 // -----------------------------------------------------------------------------
 // OutputBuffer::Construct -- the console folds it into
@@ -89,13 +81,6 @@ void InputBuffer::Destruct()
 // (The +16 seat, rather than the +12 the other queues get, is Contact's 16-byte alignment
 // padding the 12-byte BaseEventQueue header out -- Contact carries vec4 lanes.)
 // -----------------------------------------------------------------------------
-void OutputBuffer::Construct()
-{
-    CgsModule::IOBuffer::Construct();   // *(this) = 1
-
-    mContactQueue.Construct();          // console +16
-    mContactQueue.Clear();              // console +24 (miLength)
-}
 
 // -----------------------------------------------------------------------------
 // OutputBuffer::Destruct -- folded into DestroyIOBuffer<OutputBuffer> @0x828C5148:
@@ -105,12 +90,6 @@ void OutputBuffer::Construct()
 //   bl   CgsModule::IOBuffer::Destruct
 //   bl   IOBufferStack::Free(stack, buffer, 0x100020)
 // -----------------------------------------------------------------------------
-void OutputBuffer::Destruct()
-{
-    mContactQueue.Clear();
-
-    CgsModule::IOBuffer::Destruct();
-}
 
 }
 }

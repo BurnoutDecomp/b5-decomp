@@ -704,7 +704,7 @@ IndexedLinkedList<DataType,IndexType>::AddHead( IndexedLinkedListNode<DataType,I
 
 
 template<class DataType, class IndexType>
-inline void
+__forceinline void
 IndexedLinkedList<DataType,IndexType>::AddTail( IndexedLinkedListNode<DataType,IndexType>* lpNewNode )
 {
     if(miCount == 0)
@@ -826,7 +826,7 @@ IndexedLinkedList<DataType,IndexType>::AddBefore( IndexedLinkedListNode<DataType
 
 
 template<class DataType, class IndexType>
-inline IndexedLinkedListNode<DataType,IndexType>*
+__forceinline IndexedLinkedListNode<DataType,IndexType>*
 IndexedLinkedList<DataType,IndexType>::RemoveHead()
 {
     if(miCount > 1)
@@ -1047,7 +1047,7 @@ IndexedLinkedList<DataType,IndexType>::GetNodeOffset( IndexedLinkedListNode<Data
 
 
 template<class DataType, class IndexType>
-inline void
+__forceinline void
 IndexedLinkedList<DataType,IndexType>::InternalAddFirstNode( IndexedLinkedListNode<DataType,IndexType>* lpNewNode )
 {
     CGS_ASSERT_STREAM(miCount == 0, "This should only be called to add a node to list when it is zero length\n");
@@ -1103,10 +1103,10 @@ IndexedLinkedList<DataType,IndexType>::InternalAddHead( IndexedLinkedListNode<Da
 
 
 template<class DataType, class IndexType>
-inline void
+__forceinline void
 IndexedLinkedList<DataType,IndexType>::InternalAddTail( IndexedLinkedListNode<DataType,IndexType>* lpNewNode )
 {
-    CGS_ASSERT_STREAM(miCount > 0, "To add node to a zero length list call InternalAddFirstNode\n");
+    CGS_ASSERT_STREAM_AT(miCount > 0, "To add node to a zero length list call InternalAddFirstNode\n", "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsIndexedLinkList.h", 1109);
 
     IndexType liIndex = GetNodeOffset( lpNewNode );
 
