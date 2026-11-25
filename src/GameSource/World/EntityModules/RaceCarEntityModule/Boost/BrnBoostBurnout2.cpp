@@ -117,18 +117,26 @@ namespace BrnWorld
 bool
 BoostBurnout2::AreWeAllowedToBoost()
 {
-    if (mbInChainMode)
+    if (!mbInChainMode)
     {
-        return mfBoostAmount > 0.0f;
+        if (mbBoosting == true)
+        {
+            if (mfBoostAmount > 0.0f)
+            {
+                return true;
+            }
+        }
+        else if (mfBoostAmount > mfMinBoostAllowedAmount)
+        {
+            return true;
+        }
     }
-    else if (mbBoosting)
+    else if (mfBoostAmount > 0.0f)
     {
-        return mfBoostAmount > 0.0f;
+        return true;
     }
-    else
-    {
-        return mfBoostAmount > mfMinBoostAllowedAmount;
-    }
+
+    return false;
 }
 
 // ---------------------------------------------------------------------------

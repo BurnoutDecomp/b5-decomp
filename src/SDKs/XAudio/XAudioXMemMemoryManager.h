@@ -19,24 +19,12 @@
 //     -> ::XMemAlloc(size /*a2*/, attributes /*a3*/)
 // XMemFree  @ 0x82964D88 (asm): mr r3,r4 ; mr r4,r5 ; b XMemFree
 //     -> ::XMemFree(pAddress /*a2*/, attributes /*a3*/)
-//
-// PLATFORM EXTERNS (flagged): XMemAlloc / XMemFree are the Xbox-360 XDK heap
-// APIs (XMemAlloc(SIZE_T,DWORD) -> LPVOID ; XMemFree(LPVOID,DWORD) -> void).
-// They are not part of the host build, so they are declared here as the X360
-// platform boundary and supplied by the platform layer; this TU only routes
-// to them.
 // ===========================================================================
 
 #include "types.hpp"
 
 namespace XAUDIO
 {
-
-// The Xbox-360 XDK XMem heap APIs (platform boundary). Declared with the
-// argument/return shapes the X360 call sites use (size/attributes for alloc,
-// pointer/attributes for free). Supplied by the platform layer.
-void* XMemAllocPlatform(u32 uSize, u32 uAttributes);
-void  XMemFreePlatform(void* pAddress, u32 uAttributes);
 
 class CXMemMemoryManager
 {

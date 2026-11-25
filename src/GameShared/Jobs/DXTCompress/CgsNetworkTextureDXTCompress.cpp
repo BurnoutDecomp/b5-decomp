@@ -12,7 +12,7 @@
 #include "SDKs/EATech/eajobs/entry_point.h"
 #include "ppmalloc/EAGeneralAllocator.h"
 
-#include <cstring>   // memcpy
+#include <xtl.h>
 
 static const char KAC_ARTIST_ASSERT_FILE[] =
     "..\\..\\..\\GameShared\\Jobs\\DXTCompress/CgsNetworkTextureDXTCompress.cpp";
@@ -168,19 +168,23 @@ void NetworkTextureDXTCompress::SetNewTextureToCompress(
     s32              liSrcPitch,
     s32              liCmpPitch,
     s32              liQuality,
-    s32              leSourceFormat,
-    s8               lbInputIsUncompressedYUYV,
+    renderengine::PixelFormat leSourceFormat,
+    bool             lbInputIsUncompressedYUYV,
     CompressionCompleteCallback lCompressionCompleteCallback,
     void*            lpCompressionCompleteData)
 {
-    CGS_ASSERT(lpNewSourcePixels, "lpNewSourcePixels");
-    CGS_ASSERT(miWriteToSource < KI_NUM_IMAGE_BUFFERS, "miWriteToSource < KI_NUM_IMAGE_BUFFERS");
-    CGS_ASSERT(miWriteToSource >= 0, "miWriteToSource >= 0");
-    CGS_ASSERT(mCompressionCompleteCallback == 0, "mCompressionCompleteCallback == NULL");
-    CGS_ASSERT(miUncompressedBufferSize >= liNewSourcePixelsSize,
-               "miUncompressedBufferSize >= liNewSourcePixelsSize");
+    CGS_ASSERT_AT(lpNewSourcePixels,
+                  "lpNewSourcePixels", KAC_ARTIST_ASSERT_FILE, 338);
+    CGS_ASSERT_AT(miWriteToSource < KI_NUM_IMAGE_BUFFERS,
+                  "miWriteToSource < KI_NUM_IMAGE_BUFFERS", KAC_ARTIST_ASSERT_FILE, 339);
+    CGS_ASSERT_AT(miWriteToSource >= 0,
+                  "miWriteToSource >= 0", KAC_ARTIST_ASSERT_FILE, 340);
+    CGS_ASSERT_AT(mCompressionCompleteCallback == 0,
+                  "mCompressionCompleteCallback == NULL", KAC_ARTIST_ASSERT_FILE, 349);
+    CGS_ASSERT_AT(miUncompressedBufferSize >= liNewSourcePixelsSize,
+                  "miUncompressedBufferSize >= liNewSourcePixelsSize", KAC_ARTIST_ASSERT_FILE, 353);
 
-    memcpy(mapUncompressedBuffers[miWriteToSource], lpNewSourcePixels,
+    XMemCpy(mapUncompressedBuffers[miWriteToSource], lpNewSourcePixels,
            static_cast<size_t>(liNewSourcePixelsSize));
 
     mDXTCompressData.miSrcWidth                = liTextureWidth;
@@ -188,8 +192,8 @@ void NetworkTextureDXTCompress::SetNewTextureToCompress(
     mDXTCompressData.miSrcPitch                = liSrcPitch;
     mDXTCompressData.miDstPitch                = liCmpPitch;
     mDXTCompressData.miQuality                 = liQuality;
-    mDXTCompressData.mePixelFormat             = static_cast<renderengine::PixelFormat>(leSourceFormat);
-    mDXTCompressData.mbInputIsUncompressedYUYV = lbInputIsUncompressedYUYV != 0;
+    mDXTCompressData.mePixelFormat             = leSourceFormat;
+    mDXTCompressData.mbInputIsUncompressedYUYV = lbInputIsUncompressedYUYV;
 
     mCompressionCompleteCallback = lCompressionCompleteCallback;
     mpCompressionCompleteData    = lpCompressionCompleteData;
@@ -207,23 +211,23 @@ void NetworkTextureDXTCompress::SetNewTextureToDecompress(
     CompressionCompleteCallback lDecodeCompleteCallback,
     void*            lpDecodeCompleteData)
 {
-    CGS_ASSERT(lpCompressedPixels, "lpCompressedPixels");
-    CGS_ASSERT(miWriteToSource < KI_NUM_IMAGE_BUFFERS, "miWriteToSource < KI_NUM_IMAGE_BUFFERS");
-    CGS_ASSERT(miWriteToSource >= 0, "miWriteToSource >= 0");
-    CGS_ASSERT(mDecodeCompleteCallback == 0, "mDecodeCompleteCallback == NULL");
-    CGS_ASSERT(miCompressedBufferSize >= liCompressedPixelSize,
-               "miCompressedBufferSize >= liCompressedPixelSize");
+    CGS_ASSERT_AT(lpCompressedPixels,
+                  "lpCompressedPixels", KAC_ARTIST_ASSERT_FILE, 423);
+    CGS_ASSERT_AT(miWriteToSource < KI_NUM_IMAGE_BUFFERS,
+                  "miWriteToSource < KI_NUM_IMAGE_BUFFERS", KAC_ARTIST_ASSERT_FILE, 424);
+    CGS_ASSERT_AT(miWriteToSource >= 0,
+                  "miWriteToSource >= 0", KAC_ARTIST_ASSERT_FILE, 425);
+    CGS_ASSERT_AT(mDecodeCompleteCallback == 0,
+                  "mDecodeCompleteCallback == NULL", KAC_ARTIST_ASSERT_FILE, 434);
+    CGS_ASSERT_AT(miCompressedBufferSize >= liCompressedPixelSize,
+                  "miCompressedBufferSize >= liCompressedPixelSize", KAC_ARTIST_ASSERT_FILE, 438);
 
     const s32 liDecodedSize = liCompressedPixelSize << 3;
-    if (!(miUncompressedBufferSize >= liDecodedSize))
-    {
-        char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-        CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-        lStrStream << "Uncompressed buffer is not large enough. DXT1 textures are 8 times smaller than their 32-bit ARGB equivalent\n";
-        CGS_ASSERT(miUncompressedBufferSize >= liDecodedSize, lStrStream.GetBuffer());
-    }
+    CGS_ASSERT_STREAM_AT(miUncompressedBufferSize >= liDecodedSize,
+        "Uncompressed buffer is not large enough. DXT1 textures are 8 times smaller than their 32-bit ARGB equivalent\n",
+        KAC_ARTIST_ASSERT_FILE, 441);
 
-    memcpy(mapCompressedBuffers[miWriteToSource], lpCompressedPixels,
+    XMemCpy(mapCompressedBuffers[miWriteToSource], lpCompressedPixels,
            static_cast<size_t>(liCompressedPixelSize));
 
     mDXTDecodeData.miCompressedSize = liCompressedPixelSize;

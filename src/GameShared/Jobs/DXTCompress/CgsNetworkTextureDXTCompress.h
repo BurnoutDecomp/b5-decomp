@@ -56,8 +56,8 @@ public:
                                   s32             liSrcPitch,
                                   s32             liCmpPitch,
                                   s32             liQuality,
-                                  s32             leSourceFormat,
-                                  s8              lbInputIsUncompressedYUYV,
+                                  renderengine::PixelFormat leSourceFormat,
+                                  bool            lbInputIsUncompressedYUYV,
                                   CompressionCompleteCallback lCompressionCompleteCallback,
                                   void*            lpCompressionCompleteData);
 

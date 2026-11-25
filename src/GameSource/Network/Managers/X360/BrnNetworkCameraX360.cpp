@@ -11,6 +11,7 @@
 
 #include "GameSource/Resource/BrnResourceAllocator.h"                              // PrintConsoleMemory
 #include <cstring>
+#include <xtl.h>
 #include <xcam.h>
 
 namespace BrnNetwork
@@ -485,8 +486,10 @@ namespace BrnNetwork
     // ARTIST 0x82586AF8.
     void CameraX360::OpenSocket()
     {
-        sockaddr_in lAddress = {};
+        sockaddr_in lAddress;
+        XMemSet(&lAddress, 0, sizeof(lAddress));
         lAddress.sin_family = AF_INET;
+        lAddress.sin_addr.s_addr = INADDR_ANY;
         lAddress.sin_port = 1001; // Xenon stores the port in network byte order.
         mVDPSocket = static_cast<s32>(socket(AF_INET, SOCK_DGRAM, IPPROTO_VDP));
         if (mVDPSocket == KI_INVALID_SOCKET)
@@ -495,16 +498,9 @@ namespace BrnNetwork
             CgsDev::Assert::FireAssert("socket failed\n", CGS_ASSERT_LOCATION(KAC_CAMERA_FILE, 1021));
             CgsDev::Assert::EndAssert();
         }
-        if (bind(static_cast<SOCKET>(mVDPSocket), reinterpret_cast<const sockaddr*>(&lAddress),
-                 sizeof(lAddress)) != 0)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
-            lMessage << "sendsock bind failed, error ";
-            lMessage << WSAGetLastError() << "\n";
-            CgsDev::Assert::FireAssert(lMessage.GetBuffer(), CGS_ASSERT_LOCATION(KAC_CAMERA_FILE, 1028));
-            CgsDev::Assert::EndAssert();
-        }
+        const int liBindResult = bind(static_cast<SOCKET>(mVDPSocket), reinterpret_cast<const sockaddr*>(&lAddress), sizeof(lAddress));
+        CGS_ASSERT_STREAM_AT(liBindResult == 0,
+            "sendsock bind failed, error " << WSAGetLastError() << "\n", KAC_CAMERA_FILE, 1028);
         u_long luNonBlocking = 1;
         ioctlsocket(static_cast<SOCKET>(mVDPSocket), FIONBIO, &luNonBlocking);
     }

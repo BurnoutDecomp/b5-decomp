@@ -353,7 +353,7 @@ namespace BrnNetwork
 
         const s32 liWidth  = lpSource->GetWidth();
         const s32 liHeight = lpSource->GetHeight();
-        const s32 liSourceFormat = static_cast<s32>(lpSource->GetFormat());
+        const renderengine::PixelFormat leSourceFormat = lpSource->GetFormat();
         const s32 liSourceSize =
             (lpSource->GetBitsPerPixel() * liWidth * liHeight + 7) / 8;
 
@@ -368,8 +368,8 @@ namespace BrnNetwork
             liSrcPitch,
             liCmpPitch,
             0,                  // liQuality (X360 `li r10, 0`)
-            liSourceFormat,
-            0,                  // lbInputIsUncompressedYUYV (X360 `stb 0`)
+            leSourceFormat,
+            false,              // lbInputIsUncompressedYUYV (X360 `stb 0`)
             lCompleteCallback,
             lpCompleteData);
         return 0;

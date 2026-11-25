@@ -143,16 +143,21 @@ BoostBurnout5::AreWeAllowedToBoost()
 {
     if (meBoostMode == E_BOOSTMODE_B3_RED)
     {
-        if (mbBoosting)
+        if (mbBoosting == true)
         {
-            return mfBoostAmount > 0.0f;
+            if (mfBoostAmount > 0.0f)
+            {
+                return true;
+            }
         }
-
-        return mfBoostAmount > mfMinBoostAllowedAmount;
+        else if (mfBoostAmount > mfMinBoostAllowedAmount)
+        {
+            return true;
+        }
     }
-    else if (meBoostMode == E_BOOSTMODE_B2_BLUE)
+    else if (meBoostMode == E_BOOSTMODE_B2_BLUE && mfBoostAmount > 0.0f)
     {
-        return mfBoostAmount > 0.0f;
+        return true;
     }
 
     return false;
@@ -1568,38 +1573,30 @@ BoostBurnout5::Prepare()
         return false;
     }
 
-    // ---- BoostBurnout5's own state, plus the two base fields this owns ------
-    // (asm 0x822C1DB0-0x822C1E14; the stores are independent, so they are
-    //  grouped by member here rather than kept in the compiler's interleaving.)
-    mfBoostAmount = 0.0f;                       // +0x0A0 (base), stfs @0x822C1DB0
-    mbChainNotifyPending = false;               // +0x0CB (base), stb  @0x822C1DEC
-
-    meBoostMode = E_BOOSTMODE_B3_RED;           // +0x130 stw @0x822C1DC0
-    mbLeaveBlueDueToCrash = false;              // +0x134 stb @0x822C1DC8
-    mbLeaveBlueDueToInsufficientHidden = false; // +0x135 stb @0x822C1DD8
-    mbSwicthBlueToRed = false;                  // +0x136 stb @0x822C1DF4
-    mbAddRemoveChunkMode = false;               // +0x137 stb @0x822C1DFC
-    mbAllowBoostEarning = false;                // +0x138 stb @0x822C1E04
-    mfHiddenBoost = 0.0f;                       // +0x13C stfs @0x822C1DB8
-    mbBoostInterrupted = false;                 // +0x140 stb @0x822C1DE0
-    miChainSize = 0;                            // +0x144 stw @0x822C1DE8
-
-    // The literal flt_820138DC (see the RETAIL vs LEGACYSRC note above).
-    mfBlueCrashDecrease = 50.0f;                // +0x148 stfs @0x822C1DD4
-
-    // The four stvx128 stores of a `vspltisw v0,0` register: whole-vector zero.
-    mStuntRollInProgress.SetZero();             // +0x150 stvx128 r11=0x150 @0x822C1DF8
-    mvPositionLastFrame.SetZero();              // +0x160 stvx128 r10=0x160 @0x822C1DF0
-    mvTakeOffAtVec.SetZero();                   // +0x170 stvx128 r9 =0x170 @0x822C1E00
-    mvLandAtVec.SetZero();                      // +0x180 stvx128 r8 =0x180 @0x822C1E08
-
-    mfBearingLastFrame = 0.0f;                  // +0x190 stfs @0x822C1DBC
-    mfAngleSoFar = 0.0f;                        // +0x194 stfs @0x822C1DC4
-    mfTimeElapsed = 0.0f;                       // +0x198 stfs @0x822C1DDC
-    mfTimeBoosting = 0.0f;                      // +0x19C stfs @0x822C1DE4
-    mbHandbreakTurnAttempting = false;          // +0x1A0 stb @0x822C1E0C
-    mbWasJustInTheAir = false;                  // +0x1A1 stb @0x822C1E10
-    mbTestForCleanLanding = false;              // +0x1A2 stb @0x822C1E14
+    // Initialize boost and stunt state before UpdateMaxBoost (ARTIST 0x822C1DB0..0x822C1E14).
+    mfBoostAmount = 0.0f;
+    mfHiddenBoost = 0.0f;
+    mfBearingLastFrame = 0.0f;
+    meBoostMode = E_BOOSTMODE_B3_RED;
+    mfAngleSoFar = 0.0f;
+    mbLeaveBlueDueToCrash = false;
+    mfBlueCrashDecrease = 50.0f;
+    mbLeaveBlueDueToInsufficientHidden = false;
+    mfTimeElapsed = 0.0f;
+    mbBoostInterrupted = false;
+    mfTimeBoosting = 0.0f;
+    miChainSize = 0;
+    mbChainNotifyPending = false;
+    mStuntRollInProgress.SetZero();
+    mbSwicthBlueToRed = false;
+    mvPositionLastFrame.SetZero();
+    mbAddRemoveChunkMode = false;
+    mvTakeOffAtVec.SetZero();
+    mbAllowBoostEarning = false;
+    mvLandAtVec.SetZero();
+    mbHandbreakTurnAttempting = false;
+    mbWasJustInTheAir = false;
+    mbTestForCleanLanding = false;
 
     UpdateMaxBoost(false);
 
@@ -1611,7 +1608,8 @@ BoostBurnout5::Prepare()
     char lacBoostKey[512];
     rw::core::stdc::ConvertI64ToA(KI_BURNOUT5_BOOST_PARAMS_GUID, lacBoostKey, 10);
 
-    Attrib::Gen::boostparamsasset lBoostParams(Attrib::StringToKey(lacBoostKey));
+    const u64 luCollectionKey = Attrib::StringToKey(lacBoostKey);
+    Attrib::Gen::boostparamsasset lBoostParams(luCollectionKey);
 
     // ---- the 34 tuning params, in member order (= asm store order) ----------
     mfNearMissBoostEarning    = lBoostParams.NearMissBoostEarning();     // +0x10 <- rec+0x3C @0x822C1E50
