@@ -41,7 +41,13 @@ namespace CgsDev
         StrStreamBase& operator<<(u32 luValue);
         StrStreamBase& operator<<(u64 luValue);
         StrStreamBase& operator<<(f32 lfValue);
-        StrStreamBase& operator<<(void* lpValue);
+        StrStreamBase& operator<<(void* lpValue)
+        {
+            const PrintMode lePreviousMode = mePrintMode;
+            SetPrintMode(E_PRINTMODE_HEX);
+            (*this << reinterpret_cast<u32>(lpValue)).SetPrintMode(lePreviousMode);
+            return *this;
+        }
         StrStreamBase& operator<<(PrintMode leMode);
         StrStreamBase& operator<<(bool lbValue);   // streams "true" / "false" through the sink
 

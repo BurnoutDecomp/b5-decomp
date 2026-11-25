@@ -329,29 +329,34 @@ void AptActionInterpreter::_FunctionAptActionEnumerate2(AptActionInterpreter* pI
 // operands to the object (an in-place downcast); otherwise (or when fewer than two
 // operands are present) collapse to `undefined`.
 // ---------------------------------------------------------------------------
-void AptActionInterpreter::_FunctionAptActionCastOp(AptActionInterpreter* pInterp,
-                                                    LocalContextT* /*pContext*/)
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
+void AptActionInterpreter::_FunctionAptActionCastOp(AptActionInterpreter* pInterp, LocalContextT*)
 {
     if (pInterp->mOperandStack.mnTop < 2)
     {
-        pInterp->stackPopAndPush(pInterp->mOperandStack.mnTop, gpUndefinedValue);
+        pInterp->mOperandStack.PopAndPush(pInterp->mOperandStack.mnTop, gpUndefinedValue);
         return;
     }
 
-    AptValue* pObject = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];   // TOS = the object to cast
-    AptValue* pClass  = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 2];   // under-top = the class
-
-    if (static_cast<unsigned char>(isObjectOfType(pObject, pClass)) != 0)
+    AptValue* pObject = pInterp->stackAt(0);
+    AptValue* pClass = pInterp->stackAt(1);
+    if (isObjectOfType(pObject, pClass))
     {
-        pInterp->stackPopAndPush(2, pObject);   // the cast succeeds -> keep the object
-        return;
+        pInterp->mOperandStack.PopAndPush(2, pObject);
     }
-
-    pInterp->stackPop(2);
-    // The no-match push stores the `undefined` singleton WITHOUT an AddRef
-    // (faithful to the console: no refcount bump on this collapse path).
-    pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = gpUndefinedValue;   // inlined stackPush
+    else
+    {
+        pInterp->stackPop(2);
+        pInterp->stackPushNoInc(gpUndefinedValue);
+    }
 }
+
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // ARTIST 82AEA788 (0x54). Unlike CastOp, the class is on top.
 void AptActionInterpreter::_FunctionAptActionInstanceOf(AptActionInterpreter* pInterp, LocalContextT*)
@@ -365,7 +370,7 @@ void AptActionInterpreter::_FunctionAptActionInstanceOf(AptActionInterpreter* pI
 
     AptValue* pObject = pInterp->mOperandStack.mppItems[nStackTop - 2];
     AptValue* pClass = pInterp->mOperandStack.mppItems[nStackTop - 1];
-    const bool bMatches = static_cast<unsigned char>(isObjectOfType(pObject, pClass)) == 1;
+    const bool bMatches = isObjectOfType(pObject, pClass) == true;
     pInterp->stackPopAndPush(2, AptBoolean::Create(bMatches));
 }
 

@@ -46,6 +46,8 @@ namespace CgsResource
         switch (mePrepareStage)
         {
         case E_PREPARE_START:
+            mePrepareStage = E_PREPARE_START;
+            // fall through
         case E_PREPARE_BASE:
             mePrepareStage = E_PREPARE_BASE;
             if (!CgsModule::ModuleSingleBuffered::Prepare())
@@ -77,7 +79,7 @@ namespace CgsResource
             mePrepareStage = E_PREPARE_DONE;
             return true;
         default:
-            CGS_ASSERT(false, "Invalid stage");
+            CGS_ASSERT_AT(false, "Invalid stage\n", CGS_ARTIST_FILE, 272);
             return false;
         }
     }
@@ -89,6 +91,7 @@ namespace CgsResource
         switch (meReleaseStage)
         {
         case E_RELEASE_START:
+            meReleaseStage = E_RELEASE_START;
             // fall through
         case E_RELEASE_POOL:
             meReleaseStage = E_RELEASE_POOL;
@@ -120,7 +123,7 @@ namespace CgsResource
             meReleaseStage = E_RELEASE_DONE;
             return true;
         default:
-            CGS_ASSERT(false, "Invalid stage");
+            CGS_ASSERT_AT(false, "Invalid stage\n", CGS_ARTIST_FILE, 363);
             return false;
         }
     }
@@ -773,7 +776,20 @@ namespace CgsResource
             if (lrResponse.mpUser)
                 lrResponse.mpUser->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lrResponse), 3, sizeof(lrResponse));
         }
-        ProcessPoolOutputResponses(lpPoolOut);
+        static const s32 kaiReceiverTags[15] = {26, 0, 26, 1, 26, 26, 4, 5, 26, 6, 24, 7, 8, 7, 8};
+        const PoolIO::OutputBuffer::PoolOutputQueue* lpPoolQueue =
+            static_cast<const PoolIO::OutputBuffer&>(*lpPoolOut).GetPoolOutputQueue();
+        const CgsModule::Event* lpPoolEvent;
+        s32 liPoolEventSize;
+        s32 liPoolEventId = lpPoolQueue->GetFirstEvent(&lpPoolEvent, &liPoolEventSize);
+        while (liPoolEventSize > 0)
+        {
+            CgsModule::BaseEventReceiverQueue* lpUser =
+                reinterpret_cast<const Events::PoolEvent*>(lpPoolEvent)->mpUser;
+            if (lpUser && liPoolEventId < 15)
+                lpUser->AddEvent(lpPoolEvent, kaiReceiverTags[liPoolEventId], liPoolEventSize);
+            liPoolEventId = lpPoolQueue->GetNextEvent(lpPoolEvent, &lpPoolEvent, &liPoolEventSize);
+        }
         if (mbPatchRequestPending && !mFileSystem.GetPatchManager()->IsPatching())
         {
             const s32 liEventId = mAddPatchRequest.miEventId;
@@ -987,42 +1003,6 @@ namespace CgsResource
 
             const s8 liIndex = mPendingFileResponses.GetObjectIndex(lpPending);
             mPendingFileResponses.PushIndex(liIndex);
-        }
-    }
-
-    // Drain the pool module's output queue (DoAcquireResourceRequest etc. responses) and forward each to
-    // its requester's receiver queue (response->mpUser). The pool-response slice of ProcessResourceResponses
-    // (X360 0x828EC788): the console translates each pool-output tag through the static table
-    // dword_820F7194[tag] before posting to mpUser -- the ACQUIRE response (pool tag 6) reaches the
-    // requester as receiver id 4, which is the id GameDataModule's internal drain (and every X360
-    // receiver-side consumer) switches on. Only the tags the PC pool module emits are mapped; unmapped
-    // tags pass through unchanged (their producers land with their own passes).
-    void ResourceModule::ProcessPoolOutputResponses(PoolIO::OutputBuffer* lpPoolOut)
-    {
-        const PoolIO::OutputBuffer::PoolOutputQueue* lpQ =
-            static_cast<const PoolIO::OutputBuffer&>(*lpPoolOut).GetPoolOutputQueue();
-
-        const CgsModule::Event* lpEvent = 0;
-        s32 liSize = 0;
-        s32 liId = lpQ->GetFirstEvent(&lpEvent, &liSize);
-        while (liId != -1 && lpEvent != 0)
-        {
-            CgsModule::BaseEventReceiverQueue* lpUser =
-                reinterpret_cast<const Events::PoolEvent*>(lpEvent)->mpUser;
-            if (lpUser != 0 && liId >= 0 && liId < 15)
-            {
-                // dword_820F7194[tag]: [6] == 4 (acquire), [7] == 5 (acquire-list). Both values are
-                // read straight out of the ARTIST image's translation table, so the acquire mapping
-                // that was already committed here doubles as the calibration for the new one.
-                // ARTIST820F7194, calibrated by acquire6->4/acquire-list7->5.
-                static const s32 kaiReceiverTags[15] =
-                    {26,0,26,1,26,26,4,5,26,6,24,7,8,7,8};
-                const s32 liUserId = kaiReceiverTags[liId];
-                lpUser->AddEvent(lpEvent, liUserId, liSize);
-            }
-            const CgsModule::Event* lpNext = 0;
-            liId = lpQ->GetNextEvent(lpEvent, &lpNext, &liSize);
-            lpEvent = lpNext;
         }
     }
 

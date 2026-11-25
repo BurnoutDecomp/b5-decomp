@@ -25,6 +25,8 @@
 // AptValueInitialize (AptInit.cpp) -- null only before that bring-up runs.
 extern AptValue* gpObjRegistrationFunc;
 
+struct AptArray;
+
 struct AptObject : public AptValueWithHash
 {
 protected:
@@ -95,11 +97,11 @@ public:
     // AptArray of the implemented prototype/object values.
 
     // SetImplementedObjects @0x82AF5868 -- store pImplementedArray under the
-    // "__INTERFACES__" key and record nCount in the first byte of mClassFlags.
-    void SetImplementedObjects(AptValue* pImplementedArray, char nCount);  // @0x82AF5868
+    // "__INTERFACEs__" key and record nCount in the first byte of mClassFlags.
+    void SetImplementedObjects(AptArray* pImplementedArray, int nCount);  // @0x82AF5868
     // GetImplementedObjects @0x82AE68F0 -- hand back the implemented count (via
     // *pnCountOut) and the "__INTERFACES__" AptArray (return), or null/0 when none.
-    AptValue* GetImplementedObjects(int* pnCountOut) const;                // @0x82AE68F0
+    AptArray* GetImplementedObjects(int* pnCountOut) const;                // @0x82AE68F0
     // DoesImplementObject @0x82AE6960 -- true if pTarget is reachable through this
     // object's __proto__ chain OR is one of its implemented-interface entries.
     bool DoesImplementObject(AptValue* pTarget) const;                     // @0x82AE6960

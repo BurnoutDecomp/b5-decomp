@@ -84,27 +84,25 @@ namespace CgsNetwork
     {
         CgsDev::PerfMonCpu::StartMonitor(miConvertPM);
 
-        const renderengine::PixelFormat leSrcFormat = lpSrcTexture->GetFormat();
-        const renderengine::PixelFormat leDstFormat = lpDstTexture->GetFormat();
-
-        if (leSrcFormat == leDstFormat)
+        if (lpSrcTexture->GetFormat() == lpDstTexture->GetFormat())
         {
             Copy(lpSrcTexture, lpDstTexture);
         }
-        else if ((leSrcFormat == renderengine::PIXELFORMAT_A8R8G8B8
-                  && leDstFormat == renderengine::PIXELFORMAT_A1R5G5B5)
-              || (leSrcFormat == renderengine::PIXELFORMAT_X8R8G8B8
-                  && leDstFormat == renderengine::PIXELFORMAT_A1R5G5B5))
+        else if ((lpSrcTexture->GetFormat() == renderengine::PIXELFORMAT_A8R8G8B8 &&
+                  lpDstTexture->GetFormat() == renderengine::PIXELFORMAT_A1R5G5B5) ||
+                 (lpSrcTexture->GetFormat() == renderengine::PIXELFORMAT_X8R8G8B8 &&
+                  lpDstTexture->GetFormat() == renderengine::PIXELFORMAT_A1R5G5B5))
         {
             ConvertX8R8G8B8ToA1R5G5B5(lpSrcTexture, lpDstTexture);
         }
         else
         {
-            char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "Cannot convert these formats!";
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), __FILE__, __LINE__);
+            CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer,
+                                         CgsDev::Assert::giMessageBufferSize);
+            lStrStream << "Cannot convert these formats!";
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+                                       CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 123));
             CgsDev::Assert::EndAssert();
         }
 

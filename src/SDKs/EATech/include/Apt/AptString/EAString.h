@@ -17,6 +17,8 @@
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
 
+#include <cstring>
+
 #include "types.hpp"
 #include <cstdarg>   // va_list
 #include <cstddef>   // native record offsets
@@ -125,7 +127,10 @@ public:
     void       Format(const char* const pStrFormat, ...);
     void       vsFormat(const char* const pStrFormat, va_list Args);
 
-    bool    Equal(const char* const pStrText) const;
+    bool Equal(const char* const pStrText) const
+    {
+        return strcmp(GetBuffer(), pStrText) == 0;
+    }
     bool    Equal(const EAStringC& strText) const;
     bool    EqualNoCase(const char* const pStrText) const;
     bool    EqualNoCase(const EAStringC& strText) const;

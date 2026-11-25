@@ -15,30 +15,32 @@ u32 Xbox2SetTextureHeader(renderengine::Texture* texture, u32 width, u32 height,
     UINT baseSize;
     UINT size;
     const D3DFORMAT d3dFormat = static_cast<D3DFORMAT>(format);
-    switch (type)
+    if (type == renderengine::Texture::TYPE_CUBE)
     {
-    case renderengine::Texture::TYPE_CUBE:
         size = XGSetCubeTextureHeader(width, levels, 0, d3dFormat, D3DPOOL_DEFAULT,
             0, XGHEADER_CONTIGUOUS_MIP_OFFSET, reinterpret_cast<D3DCubeTexture*>(texture), &baseSize, 0);
-        break;
-    case renderengine::Texture::TYPE_3D:
+    }
+    else if (type == renderengine::Texture::TYPE_3D)
+    {
         size = XGSetVolumeTextureHeader(width, height, depth, levels, 0, d3dFormat,
             D3DPOOL_DEFAULT, 0, XGHEADER_CONTIGUOUS_MIP_OFFSET,
             reinterpret_cast<D3DVolumeTexture*>(texture), &baseSize, 0);
-        break;
-    case renderengine::Texture::TYPE_ARRAY:
+    }
+    else if (type == renderengine::Texture::TYPE_ARRAY)
+    {
         size = XGSetArrayTextureHeader(width, height, depth, levels, 0, d3dFormat,
             D3DPOOL_DEFAULT, 0, XGHEADER_CONTIGUOUS_MIP_OFFSET, 0,
             reinterpret_cast<D3DArrayTexture*>(texture), &baseSize, 0);
-        break;
-    case renderengine::Texture::TYPE_1D:
+    }
+    else if (type == renderengine::Texture::TYPE_1D)
+    {
         size = XGSetLineTextureHeader(width, levels, 0, d3dFormat, D3DPOOL_DEFAULT,
             0, XGHEADER_CONTIGUOUS_MIP_OFFSET, reinterpret_cast<D3DLineTexture*>(texture), &baseSize, 0);
-        break;
-    default:
+    }
+    else
+    {
         size = XGSetTextureHeader(width, height, levels, 0, d3dFormat, D3DPOOL_DEFAULT,
             0, XGHEADER_CONTIGUOUS_MIP_OFFSET, 0, reinterpret_cast<D3DTexture*>(texture), &baseSize, 0);
-        break;
     }
     if (texture)
     {
@@ -47,7 +49,13 @@ u32 Xbox2SetTextureHeader(renderengine::Texture* texture, u32 width, u32 height,
         texture->Format.MipAddress = 0;
     }
     if (totalSize) *totalSize = size;
-    if (mipOffset) *mipOffset = size == baseSize ? 0 : baseSize;
+    if (mipOffset)
+    {
+        if (size != baseSize)
+            *mipOffset = baseSize;
+        else
+            *mipOffset = 0;
+    }
     return size;
 }
 }
@@ -85,14 +93,16 @@ Texture* Texture::Initialize(const rw::Resource& resourceRef, const Parameters& 
         for (u32 h = height >> 1; h; h >>= 1) ++bits;
         height = 1u << bits;
     }
+    // ARTIST passes both the total size and the mip offset to the header builder.
+    u32 totalSize;
     u32 mipOffset;
     Xbox2SetTextureHeader(texture, width, height, parameters->muDepth, levels,
-        parameters->meFormat, parameters->meType, 0, &mipOffset);
+        parameters->meFormat, parameters->meType, &totalSize, &mipOffset);
     if (!(parameters->muFlags & FLAG_DONTALLOCATE))
     {
         const u32 address = reinterpret_cast<u32>(resource->m_baseResources[2]);
-        texture->Format.BaseAddress = address >> 12;
-        texture->Format.MipAddress = levels > 1 ? (address + mipOffset) >> 12 : 0;
+        texture->Format.BaseAddress = address >> GPU_TEXTURE_ADDRESS_SHIFT;
+        texture->Format.MipAddress = levels > 1 ? (address + mipOffset) >> GPU_TEXTURE_ADDRESS_SHIFT : 0;
         texture->Xbox2CheckPhysicalMemoryFlags();
     }
     return texture;
@@ -101,7 +111,7 @@ Texture* Texture::Initialize(const rw::Resource& resourceRef, const Parameters& 
 void Texture::Xbox2CheckPhysicalMemoryFlags()
 {
     Texture* texture = this;
-    const u32 address = texture->Format.BaseAddress << 12;
+    const u32 address = texture->Format.BaseAddress << GPU_TEXTURE_ADDRESS_SHIFT;
     if (address)
     {
         const DWORD flags = XQueryMemoryProtect(reinterpret_cast<void*>(address));
@@ -114,14 +124,17 @@ void Texture::Xbox2CheckPhysicalMemoryFlags()
 
 Texture::Type Texture::GetType() const
 {
-    const Texture* texture = this;
-    switch (texture->Format.Dimension)
-    {
-    case GPUDIMENSION_1D: return TYPE_1D;
-    case GPUDIMENSION_2D: return texture->Format.Stacked ? TYPE_ARRAY : TYPE_2D;
-    case GPUDIMENSION_CUBEMAP: return TYPE_CUBE;
-    default: return TYPE_3D;
-    }
+    Type type = TYPE_NA;
+    const u32 dimension = Format.Dimension;
+    if (dimension == GPUDIMENSION_1D)
+        type = TYPE_1D;
+    else if (dimension == GPUDIMENSION_2D)
+        type = Format.Stacked ? TYPE_ARRAY : TYPE_2D;
+    else if (dimension == GPUDIMENSION_CUBEMAP)
+        type = TYPE_CUBE;
+    else if (dimension == GPUDIMENSION_3D)
+        type = TYPE_3D;
+    return type;
 }
 
 u32 Texture::GetWidth() const
@@ -168,26 +181,44 @@ PixelFormat Texture::GetFormat() const
         f.SwizzleX, f.SwizzleY, f.SwizzleZ, f.SwizzleW));
 }
 
-void Texture::GetParameters(Parameters& parametersRef) const
+void Texture::GetParameters(Parameters& parameters) const
 {
-    const Texture* texture = this;
-    Parameters* parameters = &parametersRef;
     XGTEXTURE_DESC desc;
-    XGGetTextureDesc(const_cast<Texture*>(texture), 0, &desc);
-    switch (desc.ResourceType)
+    XGGetTextureDesc(const_cast<Texture*>(this), 0, &desc);
+    if (desc.ResourceType == D3DRTYPE_TEXTURE)
     {
-    case D3DRTYPE_TEXTURE: parameters->meType = TYPE_2D; parameters->muDepth = 1; break;
-    case D3DRTYPE_VOLUMETEXTURE: parameters->meType = TYPE_3D; parameters->muDepth = desc.Depth; break;
-    case D3DRTYPE_CUBETEXTURE: parameters->meType = TYPE_CUBE; parameters->muDepth = 1; break;
-    case D3DRTYPE_ARRAYTEXTURE: parameters->meType = TYPE_ARRAY; parameters->muDepth = desc.Depth; break;
-    case D3DRTYPE_LINETEXTURE: parameters->meType = TYPE_1D; parameters->muDepth = 1; break;
-    default: parameters->meType = TYPE_NA; break;
+        parameters.muDepth = 1;
+        parameters.meType = TYPE_2D;
     }
-    parameters->muFlags = 0;
-    parameters->muWidth = desc.Width;
-    parameters->muHeight = desc.Height;
-    parameters->meFormat = static_cast<PixelFormat>(desc.Format);
-    parameters->muNumLevels = texture->Format.MaxMipLevel + 1;
+    else if (desc.ResourceType == D3DRTYPE_VOLUMETEXTURE)
+    {
+        parameters.muDepth = desc.Depth;
+        parameters.meType = TYPE_3D;
+    }
+    else if (desc.ResourceType == D3DRTYPE_CUBETEXTURE)
+    {
+        parameters.muDepth = 1;
+        parameters.meType = TYPE_CUBE;
+    }
+    else if (desc.ResourceType == D3DRTYPE_ARRAYTEXTURE)
+    {
+        parameters.muDepth = desc.Depth;
+        parameters.meType = TYPE_ARRAY;
+    }
+    else if (desc.ResourceType == D3DRTYPE_LINETEXTURE)
+    {
+        parameters.meType = TYPE_1D;
+        parameters.muDepth = 1;
+    }
+    else
+    {
+        parameters.meType = TYPE_NA;
+    }
+    parameters.muFlags = 0;
+    parameters.muWidth = desc.Width;
+    parameters.muHeight = desc.Height;
+    parameters.meFormat = static_cast<PixelFormat>(desc.Format);
+    parameters.muNumLevels = Format.MaxMipLevel + 1;
 }
 
 u32 Texture::GetPixelDataSize(Type type, u32 width, u32 height, u32 depth, PixelFormat format, u32 levels)
@@ -197,35 +228,13 @@ u32 Texture::GetPixelDataSize(Type type, u32 width, u32 height, u32 depth, Pixel
     return size;
 }
 
-rw::ResourceDescriptor Texture::GetResourceDescriptor(const Parameters& parametersRef)
-{
-    rw::ResourceDescriptor descriptorRef;
-    rw::ResourceDescriptor* descriptor = &descriptorRef;
-    const Parameters* parameters = &parametersRef;
-    for (u32 i = 0; i != 5; ++i)
-    {
-        descriptor->m_baseResourceDescriptors[i].m_size = 0;
-        descriptor->m_baseResourceDescriptors[i].m_alignment = 1;
-    }
-    descriptor->m_baseResourceDescriptors[0].m_size = sizeof(Texture);
-    descriptor->m_baseResourceDescriptors[0].m_alignment = 4;
-    if (!(parameters->muFlags & FLAG_DONTALLOCATE))
-    {
-        descriptor->m_baseResourceDescriptors[2].m_size = GetPixelDataSize(parameters->meType,
-            parameters->muWidth, parameters->muHeight, parameters->muDepth,
-            parameters->meFormat, parameters->muNumLevels);
-        descriptor->m_baseResourceDescriptors[2].m_alignment = D3DTEXTURE_ALIGNMENT;
-    }
-    return descriptorRef;
-}
-
 bool Texture::Lock(u32 flags, u32 level, u32 index, Locked& lockedRef)
 {
     Texture* texture = this;
     Locked* locked = &lockedRef;
     Device::UnSetResource(texture);
     DWORD lockFlags = 0;
-    if (!(flags & LOCK_WRITE) && XMemGetPageSize(reinterpret_cast<void*>(texture->Format.BaseAddress << 12)) <= 4096)
+    if (!(flags & LOCK_WRITE) && XMemGetPageSize(reinterpret_cast<void*>(texture->Format.BaseAddress << GPU_TEXTURE_ADDRESS_SHIFT)) <= 4096)
         lockFlags = D3DLOCK_READONLY;
     const Type type = texture->GetType();
     if (type == TYPE_3D)
@@ -293,7 +302,7 @@ void Texture::Destruct(Texture* texture)
         u32 size = 0;
         Xbox2SetTextureHeader(0, parameters.muWidth, parameters.muHeight,
             parameters.muDepth, parameters.muNumLevels, parameters.meFormat, parameters.meType, &size, 0);
-        D3DDevice_InvalidateGpuCache(device, reinterpret_cast<void*>(texture->Format.BaseAddress << 12), size, 0);
+        D3DDevice_InvalidateGpuCache(device, reinterpret_cast<void*>(texture->Format.BaseAddress << GPU_TEXTURE_ADDRESS_SHIFT), size, 0);
     }
 }
 
@@ -303,9 +312,12 @@ void Texture::Release()
     if (texture->Common)
     {
         Destruct(texture);
-        if (texture->Common & D3DCOMMON_D3DCREATED) D3DResource_Release(texture);
+        if (texture->Common & D3DCOMMON_D3DCREATED)
+            D3DResource_Release(texture);
+        // ARTIST clears the base address and preserves the low fetch-format bits.
+        const u32 format = texture->Format.dword[1] & (D3DTEXTURE_ALIGNMENT - 1);
         texture->Common = 0;
-        texture->Format.BaseAddress = 0;
+        texture->Format.dword[1] = format;
     }
 }
 }

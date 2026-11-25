@@ -15,24 +15,6 @@ namespace CgsDev
     const char* gpcHexFormat = "0x%X";   // ARTIST 0x82F31944
     const char* gpcSignedFormat = "%d"; // ARTIST 0x82F3193C
 
-    namespace
-    {
-        const char* KAC_UNSIGNED   = "%u";
-        const char* KAC_PADDED_HEX = "0x%08X";
-        const char* KAC_FLOAT      = "%f";
-        const s32   KI_FORMAT_BUFFER_SIZE = 64;
-
-        // XDK exposes the formatter used by AppendFormat as vsnprintf.
-        int Format(char* lpBuffer, size_t luSize, const char* lpcFormat, ...)
-        {
-            va_list lArgs;
-            va_start(lArgs, lpcFormat);
-            const int liResult = vsnprintf(lpBuffer, luSize, lpcFormat, lArgs);
-            va_end(lArgs);
-            return liResult;
-        }
-    }
-
     // The StrStreamBase vtable at 0x82000D00 points to 0x82815E58.
     void StrStreamBase::Reset()
     {
@@ -86,13 +68,6 @@ namespace CgsDev
             if (mePrintMode == E_PRINTMODE_HEXONCE) mePrintMode = E_PRINTMODE_DECIMAL;
         }
         return *this;
-    }
-
-    StrStreamBase& StrStreamBase::operator<<(void* lpValue)
-    {
-        char lacBuffer[KI_FORMAT_BUFFER_SIZE];
-        Format(lacBuffer, sizeof(lacBuffer), KAC_PADDED_HEX, (unsigned)(size_t)lpValue);
-        return *this << lacBuffer;
     }
 
     StrStreamBase& StrStreamBase::operator<<(PrintMode leMode)

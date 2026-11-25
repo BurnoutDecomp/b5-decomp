@@ -4,28 +4,6 @@
 
 namespace renderengine
 {
-// ARTIST 823C4CB8: descriptor lane 0 is the native header; lane 2 is
-// separately allocated GPU-visible storage. Other lanes retain {0,1}.
-Texture2D::ResourceDescriptor Texture2D::GetResourceDescriptor(const Parameters& parameters)
-{
-    ResourceDescriptor descriptor;
-    ResourceDescriptor* lpDescriptor = &descriptor;
-    const Parameters* lpParameters = &parameters;
-    for (u32 i = 0; i != 5; ++i)
-    {
-        lpDescriptor->m_baseResourceDescriptors[i].m_size = 0;
-        lpDescriptor->m_baseResourceDescriptors[i].m_alignment = 1;
-    }
-    lpDescriptor->m_baseResourceDescriptors[0].m_size = sizeof(Texture2D);
-    lpDescriptor->m_baseResourceDescriptors[0].m_alignment = 4;
-    if (!(lpParameters->muFlags & FLAG_DONTALLOCATE))
-    {
-        lpDescriptor->m_baseResourceDescriptors[2].m_size = Xbox2GetPhysicalMemorySize(parameters);
-        lpDescriptor->m_baseResourceDescriptors[2].m_alignment = D3DTEXTURE_ALIGNMENT;
-    }
-    return descriptor;
-}
-
 // ARTIST 82B610D8 passes the remaining four SDK parameters on the stack.
 u32 Texture2D::Xbox2GetPhysicalMemorySize(const Parameters& parameters)
 {

@@ -20,6 +20,8 @@
 #include "GameShared/GameClasses/Development/CgsStrStream.h" // CgsDev::StrStreamBase
 #include "rw/rwcore_structs.h"                         // rw::IResourceAllocator / Resource / ResourceDescriptor
 
+#define CGS_ARTIST_MOVIE_PLAYER_FILE "..\\..\\..\\GameShared\\GameClasses\\Graphics/MoviePlayer/CgsMoviePlayer.h"
+
 namespace CgsGraphics
 {
     // GetChunkDef @ 0x827E9F48. Bounds-checks luIndex against muCurrentChunk (a1[18],
@@ -50,12 +52,6 @@ namespace CgsGraphics
         return mpcBuffer + mauChunkOffsets[luIndex] + sizeof(EacChunkDef);
     }
 
-    void MoviePlayerCoreAllocator::Construct(rw::IResourceAllocator* lpAllocator)
-    {
-        mpAllocator = lpAllocator;
-        miAllocations = 0;
-    }
-
     // MoviePlayerCoreAllocator::'vector deleting destructor' @ 0x827DBAC0. The X360
     // emits the MSVC deleting-destructor thunk: re-install this allocator's vtable
     // (off_8200F5B4), run the destructor, and -- when the low bit of the flag arg is set
@@ -75,13 +71,10 @@ namespace CgsGraphics
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
             *CgsDev::Log::gpDebugPrint << "Allocate " << static_cast<u32>(nSize) << " bytes\n";
 
-        CGS_ASSERT(mpAllocator != 0, "mpAllocator");
+        CGS_ASSERT_AT(mpAllocator != 0, "mpAllocator", CGS_ARTIST_MOVIE_PLAYER_FILE, 127);
 
-        rw::ResourceDescriptor lDescriptor;
-        lDescriptor.m_baseResourceDescriptors[0].m_size      = static_cast<u32>(nSize);
-        lDescriptor.m_baseResourceDescriptors[0].m_alignment = 16;
-        void* lpAlloc = mpAllocator->DoAllocate(lDescriptor, 0).m_baseResources[0];
-        CGS_ASSERT(lpAlloc != 0, "lpAlloc");
+        void* lpAlloc = mpAllocator->AllocateMemoryResource(nSize, 16, 0);
+        CGS_ASSERT_AT(lpAlloc != 0, "lpAlloc", CGS_ARTIST_MOVIE_PLAYER_FILE, 129);
 
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
             *CgsDev::Log::gpDebugPrint << "    " << lpAlloc << "\n";
@@ -95,7 +88,7 @@ namespace CgsGraphics
     void* MoviePlayerCoreAllocator::Alloc(size_t /*nSize*/, const char* /*pName*/, unsigned int /*nFlags*/,
                                           unsigned int /*nAlignment*/, unsigned int /*nAlignmentOffset*/)
     {
-        CGS_ASSERT(false, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid allocation\n", "..\\..\\..\\GameShared\\GameClasses\\Graphics/MoviePlayer/CgsMoviePlayer.h", 137));
+        CGS_ASSERT(false, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid allocation\n", CGS_ARTIST_MOVIE_PLAYER_FILE, 137));
         return 0;
     }
 
@@ -106,8 +99,8 @@ namespace CgsGraphics
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
             *CgsDev::Log::gpDebugPrint << "Free " << pBlock << "\n";
 
-        rw::Resource lResource;
-        lResource.m_baseResources[0] = pBlock;
-        mpAllocator->DoFree(lResource);
+        mpAllocator->FreeMemoryResource(pBlock);
     }
 }
+
+#undef CGS_ARTIST_MOVIE_PLAYER_FILE

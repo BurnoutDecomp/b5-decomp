@@ -27,7 +27,10 @@ namespace CgsGraphics
 
         MovieVideoRenderer();
         ~MovieVideoRenderer() ;
-        static rw::ResourceDescriptor GetResourceDescriptor();
+        static rw::ResourceDescriptor GetResourceDescriptor()
+        {
+            return rw::ResourceDescriptor(sizeof(MovieVideoRenderer), __alignof(MovieVideoRenderer));
+        }
         static MovieVideoRenderer* Initialize(rw::Resource& lrResource);
         void SetParentMoviePlayer(MoviePlayer* lpParent) { mpParentMoviePlayer = lpParent; }
         void Init(EA::Allocator::ICoreAllocator*, unsigned int, unsigned int) ;

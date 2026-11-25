@@ -60,15 +60,23 @@ void AptObject::SetHasClass(int bHasClass)
     mClassFlags.mbHasClass = bHasClass != 0;
 }
 
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 AptValue* AptObject::objectMemberLookup(AptValue* const /*pThis*/,
                                         const AptNativeString* const pName) const
 {
     // The only native member the base object exposes is "registerClass"; all
     // other members are resolved through the property hash by the caller.
-    if (strcmp(pName->c_str(), "registerClass") == 0)
+    if (pName->Equal("registerClass"))
         return gpObjRegistrationFunc;
     return 0;
 }
+
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // ~AptObject @0x82AF00D0 -- the GC teardown for a property-bearing object: if the
 // hash has allocated a bucket table (mHash.mpTable != null, i.e. !IsEmpty()),
@@ -84,7 +92,7 @@ AptObject::~AptObject()
 // SetImplementedObjects @0x82AF5868 -- record the implements-set: store the
 // AptArray of implemented objects under the (verbatim, lowercase-'s') key the
 // X360 build uses, then store the count in the first byte of the class word.
-void AptObject::SetImplementedObjects(AptValue* pImplementedArray, char nCount)
+void AptObject::SetImplementedObjects(AptArray* pImplementedArray, int nCount)
 {
     // EAStringC key("__INTERFACEs__") = InitFromBuffer; ~EAStringC =
     // DecreaseInternalRefCount (the ctor/dtor pair the asm inlines around Set).
@@ -93,19 +101,27 @@ void AptObject::SetImplementedObjects(AptValue* pImplementedArray, char nCount)
     mClassFlags.mnImplementedCount = static_cast<unsigned char>(nCount);
 }
 
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 // GetImplementedObjects @0x82AE68F0 -- return the implemented count via
 // *pnCountOut and the "__INTERFACES__" AptArray as the result;
 // null/0 when this object implements nothing.
-AptValue* AptObject::GetImplementedObjects(int* pnCountOut) const
+AptArray* AptObject::GetImplementedObjects(int* pnCountOut) const
 {
-    const uint8_t nCount = mClassFlags.mnImplementedCount;
-    *pnCountOut = nCount;
-    if (nCount == 0)
-        return 0;
-
-    EAStringC key("__INTERFACES__");
-    return mHash.Lookup(key);
+    *pnCountOut = mClassFlags.mnImplementedCount;
+    if (mClassFlags.mnImplementedCount > 0)
+    {
+        EAStringC key("__INTERFACES__");
+        return static_cast<AptArray*>(mHash.Lookup(key));
+    }
+    return 0;
 }
+
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // DoesImplementObject @0x82AE6960 -- is pTarget implemented by this object? First
 // walk the __proto__ chain (each link's GetNativeHashVirtual()->mp__Proto__),

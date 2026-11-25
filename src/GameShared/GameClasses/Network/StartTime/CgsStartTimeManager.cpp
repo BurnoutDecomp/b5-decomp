@@ -82,9 +82,7 @@ bool StartTimeManager::Prepare()
 
     PrepareStartTime();
 
-    CGS_ASSERT(mpTimeManager->Prepare(), CGS_ASSERT_MESSAGE_AT(
-        "mpTimeManager->Prepare()",
-        __FILE__, 136 /* ARTIST 0x8289C86C */));
+    CGS_ASSERT_AT(mpTimeManager->Prepare(), "mpTimeManager->Prepare()", CGS_ARTIST_FILE, 136);
     return true;
 }
 
@@ -290,9 +288,7 @@ void StartTimeManager::OnHostMigration(const CgsSystem::TimerStatus* lpTimerStat
 // player other than ourselves.
 void StartTimeManager::AddPlayer(NetworkPlayerID lPlayerID)
 {
-    CGS_ASSERT(mpTimeManager, CGS_ASSERT_MESSAGE_AT(
-        "mpTimeManager",
-        __FILE__, 839 /* ARTIST 0x82898DF8 */));
+    CGS_ASSERT_AT(mpTimeManager, "mpTimeManager", CGS_ARTIST_FILE, 839);
 
     NetworkPlayerID lLocalPlayerID;
     bool lbIAmHost = false;
@@ -312,14 +308,15 @@ void StartTimeManager::AddPlayer(NetworkPlayerID lPlayerID)
 // A player left: tell the clock, and drop the player's handshake messages.
 void StartTimeManager::RemovePlayer(NetworkPlayerID lPlayerID)
 {
-    CGS_ASSERT(mpTimeManager, CGS_ASSERT_MESSAGE_AT(
-        "mpTimeManager",
-        CGS_ARTIST_FILE, 877 /* ARTIST 0x82898E90 */));
+    CGS_ASSERT_AT(mpTimeManager, "mpTimeManager", CGS_ARTIST_FILE, 877);
 
     mpTimeManager->RemovePlayer(lPlayerID);
 
     NetworkPlayerID lLocalPlayerID;
-    mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID);
+    if (!mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID))
+    {
+        lLocalPlayerID = K_INVALID_PLAYER_ID;
+    }
     if (lPlayerID != lLocalPlayerID)
     {
         UnregisterMessages(lPlayerID);
@@ -341,12 +338,7 @@ void StartTimeManager::Disconnected()
 // Syncing matters to clients until the start time has passed; the host is the reference.
 bool StartTimeManager::AreWeSyncingTime()
 {
-    if (mpPlayerManager->AmIHost())
-    {
-        return false;
-    }
-
-    return meStatus != E_STARTED;
+    return !mpPlayerManager->AmIHost() && meStatus != E_STARTED;
 }
 
 // Start now: the current host and the timer's current time become the start time.
@@ -617,7 +609,12 @@ bool StartTimeManager::UpdateClientWaitStartTimeArrive(const CgsSystem::TimerSta
     {
         StartTime lStartTime;
         lStartTime.mStartTime = mpTimeManager->GetNetworkTime() + K_TIME_GAP_TO_LEAVE_BEFORE_START_TIME;
-        mpPlayerManager->GetNextLocalPlayerID(&lStartTime.mHostID);
+        NetworkPlayerID lLocalPlayerID;
+        if (!mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID))
+        {
+            lLocalPlayerID = K_INVALID_PLAYER_ID;
+        }
+        lStartTime.mHostID = lLocalPlayerID;
 
         SetStartTime(&lStartTime);
         return true;
@@ -629,7 +626,7 @@ bool StartTimeManager::UpdateClientWaitStartTimeArrive(const CgsSystem::TimerSta
 // Done once the network clock reaches the start time.
 bool StartTimeManager::UpdateWaitForStartTime(const CgsSystem::TimerStatus*)
 {
-    return mpTimeManager->GetNetworkTime() >= mStartTime.mStartTime;
+    return (mpTimeManager->GetNetworkTime() >= mStartTime.mStartTime) != 0;
 }
 
 // After the start the host keeps sending the start time to players that became ready but
@@ -728,9 +725,7 @@ void StartTimeManager::ReadyMessageArrivedCallback(ReliableMessage*,
                                                    void* lpUserData)
 {
     StartTimeManager* lpStartTimeMgr = static_cast<StartTimeManager*>(lpUserData);
-    CGS_ASSERT(lpStartTimeMgr, CGS_ASSERT_MESSAGE_AT(
-        "lpStartTimeMgr",
-        __FILE__, 1075 /* ARTIST 0x8287CF58 */));
+    CGS_ASSERT_AT(lpStartTimeMgr, "lpStartTimeMgr", CGS_ARTIST_FILE, 1075);
 
     s32 liPlayerIndex;
     for (liPlayerIndex = 0; liPlayerIndex < KI_MAX_MESSAGE_DATA; ++liPlayerIndex)
@@ -738,7 +733,7 @@ void StartTimeManager::ReadyMessageArrivedCallback(ReliableMessage*,
         MessageData& lMessageData = lpStartTimeMgr->maMsgData[liPlayerIndex];
         if (lMessageData.mPlayerID != -1 && lMessageData.mPlayerID == lSendingPlayerID)
         {
-            lMessageData.mbPlayerReady = true;
+            lpStartTimeMgr->maMsgData[liPlayerIndex].mbPlayerReady = true;
             if (lpStartTimeMgr->mpfClientReadyCallback)
             {
                 lpStartTimeMgr->mpfClientReadyCallback(lSendingPlayerID, lpStartTimeMgr->mpClientReadyData);
@@ -747,9 +742,8 @@ void StartTimeManager::ReadyMessageArrivedCallback(ReliableMessage*,
         }
     }
 
-    CGS_ASSERT(liPlayerIndex < KI_MAX_MESSAGE_DATA, CGS_ASSERT_MESSAGE_AT(
-        "liPlayerIndex < KI_MAX_NETWORK_PLAYERS",
-        __FILE__, 1099 /* ARTIST 0x8287CFD8 */));
+    CGS_ASSERT_AT(liPlayerIndex < KI_MAX_MESSAGE_DATA,
+                  "liPlayerIndex < KI_MAX_NETWORK_PLAYERS", CGS_ARTIST_FILE, 1099);
 }
 
 // Delivery notifications are not used.

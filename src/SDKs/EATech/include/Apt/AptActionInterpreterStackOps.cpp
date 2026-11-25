@@ -1500,9 +1500,9 @@ AptValue* AptActionInterpreter::_createObject(AptValue* pScope, AptValue* pTarge
     if (bCopyImpls)
     {
         int nImpls = 0;                                        // console v54[0]
-        AptValue* pImpls = static_cast<AptObject*>(pClass)->GetImplementedObjects(&nImpls);
+        AptArray* pImpls = static_cast<AptObject*>(pClass)->GetImplementedObjects(&nImpls);
         if (nImpls > 0)
-            pNew->SetImplementedObjects(pImpls, static_cast<char>(nImpls));
+            pNew->SetImplementedObjects(pImpls, nImpls);
     }
 
     if (bConstruct)

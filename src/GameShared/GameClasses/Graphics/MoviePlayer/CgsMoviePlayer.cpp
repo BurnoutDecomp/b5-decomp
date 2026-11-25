@@ -19,6 +19,8 @@ namespace CgsFileSystem
     extern PatchManager* gpPatchManager;
 }
 
+#define CGS_ARTIST_MOVIE_PLAYER_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\MoviePlayer/CgsMoviePlayer.cpp"
+
 namespace CgsGraphics
 {
     namespace
@@ -68,15 +70,16 @@ namespace CgsGraphics
     // ARTIST 0x827FAE08
     void MoviePlayer::PrepareResources(const char*)
     {
-        CGS_ASSERT(mePlayerState == E_RW_MOVIE_PLAYER_NULL,
-                   "mePlayerState == E_RW_MOVIE_PLAYER_NULL");
+        CGS_ASSERT_AT(mePlayerState == E_RW_MOVIE_PLAYER_NULL,
+                      "mePlayerState == E_RW_MOVIE_PLAYER_NULL", CGS_ARTIST_MOVIE_PLAYER_CPP_FILE, 703);
 
         mAllocator.Construct(mpRwAllocator);
         vp6::SetAllocator(&mAllocator);
 
         const rw::ResourceDescriptor lRendererDescriptor = MovieVideoRenderer::GetResourceDescriptor();
-        mRwVideoRendererResource =
-            mpRwAllocator->DoAllocate(lRendererDescriptor, "CgsGraphics::MovieVideoDecoder object");
+        const rw::Resource lRendererResource =
+            mpRwAllocator->Allocate(lRendererDescriptor, "CgsGraphics::MovieVideoDecoder object");
+        mRwVideoRendererResource = lRendererResource;
         void* lpRendererMemory = mRwVideoRendererResource.m_baseResources[0];
         mpRwVideoRenderer = lpRendererMemory ? new (lpRendererMemory) MovieVideoRenderer() : 0;
         mpRwVideoRenderer->SetParentMoviePlayer(this);
@@ -86,8 +89,7 @@ namespace CgsGraphics
         mpMoviePlayerBuffer = mpRwAllocator->AllocateMemoryResource(KU_MOVIE_BUFFER_SIZE, 128, 0);
         char* lpChunkMemory = static_cast<char*>(
             mpRwAllocator->AllocateMemoryResource(KU_MOVIE_BUFFER_SIZE, 128, 0));
-        mChunkBuffer.miBufferSize = KU_MOVIE_BUFFER_SIZE;
-        mChunkBuffer.mpcBuffer = lpChunkMemory;
+        mChunkBuffer.Construct(KU_MOVIE_BUFFER_SIZE, lpChunkMemory);
         VP6_VPInitLibrary();
     }
 
@@ -561,3 +563,5 @@ namespace CgsGraphics
         mbDecodingFrame = false;
     }
 }
+
+#undef CGS_ARTIST_MOVIE_PLAYER_CPP_FILE

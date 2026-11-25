@@ -2,7 +2,7 @@
 // EATech Apt -- the ActionScript class opcodes Extends and ImplementsOp.
 //   DECOMPILED from the X360 ARTIST:
 //     Extends      @0x82AF41B8 (0x69) -- `class B extends A`: chain B.prototype to A
-//     ImplementsOp @0x82AF40A0... (0x2C) -- `implements I0..In`: record the
+//     ImplementsOp @0x82AF7630... (0x2C) -- `implements I0..In`: record the
 //                                           implemented interfaces' prototypes
 //
 // Extends ensures both the sub- and super-class hashes have an AptPrototype, sets
@@ -46,73 +46,76 @@
 // with its literal contents ("Object") in AptGlobals.cpp.
 extern const EAStringC& gAptObjectClassName;   // &dword_8324E650
 
-namespace
-{
-    // A defined class value: a script function (the unnamed type tags 34..36) or a
-    // native function (AptVFT_NativeFunction = 9).
-    inline bool IsScriptClass(const AptValue* p)
-    {
-        const int e = static_cast<int>(p->getVtblIndex());
-        return e >= 34 && e <= 36 && p->getIsDefined();
-    }
-}
+// ARTIST 0x82AF41B8. Link the subclass prototype to its superclass.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 
-// ---------------------------------------------------------------------------
-// Extends @0x82AF41B8 (0x69) -- link the subclass prototype to the superclass.
-// Stack: [subclass, superclass] (superclass on top).
-// ---------------------------------------------------------------------------
-void AptActionInterpreter::_FunctionAptActionExtends(AptActionInterpreter* pInterp,
-                                                     LocalContextT* /*pContext*/)
+void AptActionInterpreter::_FunctionAptActionExtends(AptActionInterpreter* pInterp, LocalContextT*)
 {
-    AptValue* pSuper = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
-    AptValue* pSub   = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 2];
-
-    if (pSuper->ContainsNativeHashVirtual() && IsScriptClass(pSub))
+    AptValue* pSuper = pInterp->stackAt(0);
+    AptValue* pSub = pInterp->stackAt(1);
+    if (pSuper->ContainsNativeHashVirtual() && pSub->isScriptFunction())
     {
         AptNativeHash* pSuperHash = pSuper->GetNativeHashVirtual();
-        AptNativeHash* pSubHash   = pSub->GetNativeHashVirtual();
-        AptValue* pSuperProto = pSuperHash->GetPrototype();
-        AptValue* pSubProto   = pSubHash->GetPrototype();
-        if (!pSuperProto) { pSuperProto = new AptPrototype(); pSuperHash->SetPrototype(pSuperProto); }
-        if (!pSubProto)   { pSubProto   = new AptPrototype(); pSubHash->SetPrototype(pSubProto); }
-
+        AptNativeHash* pSubHash = pSub->GetNativeHashVirtual();
+        AptValue* pSuperProto = pSuperHash->mpPrototype;
+        AptValue* pSubProto = pSubHash->mpPrototype;
+        if (!pSuperProto)
+        {
+            pSuperProto = new AptPrototype();
+            pSuperHash->SetPrototype(pSuperProto);
+        }
+        if (!pSubProto)
+        {
+            pSubProto = new AptPrototype();
+            pSubHash->SetPrototype(pSubProto);
+        }
         static_cast<AptPrototype*>(pSubProto)->SetSuperConstructor(pSuper);
         pSuper->SetHasClass(1);
         pSub->SetHasClass(1);
-        pSubProto->GetNativeHashVirtual()->Set__Proto__(pSuperProto);   // the inheritance link
+        pSubProto->GetNativeHashVirtual()->Set__Proto__(pSuperProto);
     }
-
     pInterp->stackPop(2);
 }
 
-// ---------------------------------------------------------------------------
-// ImplementsOp @0x82AF40A0 (0x2C) -- record the interfaces a class implements.
-// Stack: [iface_{n-1}..iface_0, count, class] (class on top).
-// ---------------------------------------------------------------------------
-void AptActionInterpreter::_FunctionAptActionImplementsOp(AptActionInterpreter* pInterp,
-                                                          LocalContextT* /*pContext*/)
+// ARTIST 0x82AF7630. Record the ordered interface prototypes on the class.
+void AptActionInterpreter::_FunctionAptActionImplementsOp(AptActionInterpreter* pInterp, LocalContextT*)
 {
-    AptValue* pClass = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
-    const int nCount = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 2]->toInteger();
-
-    if (IsScriptClass(pClass)
-        || (pClass->getVtblIndex() == AptVFT_NativeFunction && pClass->getIsDefined()))
+    AptValue* pClass = 0;
+    int nCount;
+    AptValue* pTemp;
+    EAStringC lScratch;
+    pClass = pInterp->stackAt(0);
+    pTemp = pInterp->stackAt(1);
+    nCount = pTemp->toInteger();
+    if (!pClass->isScriptFunction() && !pClass->isNativeFunction())
     {
-        AptArray* pInterfaces = new AptArray();
-        for (int i = 0; i < nCount; ++i)
-        {
-            AptValue* pIface = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - i - 3];
-            AptNativeHash* pIfaceHash = pIface->GetNativeHashVirtual();
-            AptValue* pProto = pIfaceHash->GetPrototype();
-            if (!pProto) { pProto = new AptPrototype(); pIfaceHash->SetPrototype(pProto); }
-            pInterfaces->set(i, pProto);
-        }
-        if (pClass->GetNativeHashVirtual())
-            static_cast<AptObject*>(pClass)->SetImplementedObjects(pInterfaces, nCount);  // real member
+        pInterp->stackPop(nCount + 2);
+        return;
     }
 
+    AptArray* pInterfaces = new AptArray();
+    for (int i = 0; i < nCount; ++i)
+    {
+        AptValue* pIface = pInterp->stackAt(i + 2);
+        AptNativeHash* pIfaceHash = pIface->GetNativeHashVirtual();
+        AptValue* pProto = pIfaceHash->mpPrototype;
+        if (!pProto)
+        {
+            pProto = new AptPrototype();
+            pIfaceHash->SetPrototype(pProto);
+        }
+        pInterfaces->set(i, pProto);
+    }
+    if (pClass->GetNativeHashVirtual())
+        static_cast<AptObject*>(pClass)->SetImplementedObjects(pInterfaces, nCount);
     pInterp->stackPop(nCount + 2);
 }
+
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // ---------------------------------------------------------------------------
 // NewObject @0x82B08DE0 (0x40) -- AS `new ClassName(args...)`: coerce the class

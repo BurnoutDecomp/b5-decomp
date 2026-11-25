@@ -311,7 +311,7 @@ public:
     // isObjectOfType @0x82AEA5B8 -- AS `instanceof`: walk pObject's prototype /
     // interface chain looking for pClass's prototype; type-aware fallback for the
     // non-object cases. Returns 1 on a match.
-    static int isObjectOfType(AptValue* pObject, AptValue* pClass);
+    static bool isObjectOfType(AptValue* pObject, AptValue* pClass);
 
     // GetNodeFrameContextHash -- setVariable @0x82B03374's node branch: a node's frame-
     // context is its DISPLAY PARENT's char-inst property hash (an AS timeline variable

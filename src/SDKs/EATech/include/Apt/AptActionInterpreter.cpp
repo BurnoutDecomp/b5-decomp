@@ -274,47 +274,60 @@ AptValue* AptActionInterpreter::getObject(AptValue* pScope, AptValue* pTarget, c
 // ---------------------------------------------------------------------------
 // ARTIST 82AEA5B8. Values carrying native hashes use the class's prototype.
 // The other values use a raw type comparison, with two defined-type exclusions.
-int AptActionInterpreter::isObjectOfType(AptValue* pObject, AptValue* pClass)
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
+bool AptActionInterpreter::isObjectOfType(AptValue* pObject, AptValue* pClass)
 {
-    if (!pObject->ContainsNativeHashVirtual() || !pClass->ContainsNativeHashVirtual())
+    bool bIsOfType = false;
+    if (pObject->ContainsNativeHashVirtual() && pClass->ContainsNativeHashVirtual())
     {
-        const AptVirtualFunctionTable_Indices eType = pObject->getVtblIndex();
-        if (pObject->isScriptFunction() || (eType == AptVFT_Object && pObject->getIsDefined()))
-            return 0;
-        return eType == pClass->getVtblIndex();
-    }
-
-    AptValue* const pPrototype = pClass->GetNativeHashVirtual()->mpPrototype;
-
-    const AptVirtualFunctionTable_Indices eType = pObject->getVtblIndex();
-    if ((eType == AptVFT_CharacterInstHandle && pObject->getIsDefined())
-        || eType == AptVFT_CIHNone)
-    {
-        // CIH values keep walking even after a match.
-        int nResult = 0;
-        for (AptValue* pLink = pObject->GetNativeHashVirtual()->mp__Proto__; pLink;
-             pLink = pLink->GetNativeHashVirtual()->mp__Proto__)
+        AptValue* pPrototype = pClass->GetNativeHashVirtual()->mpPrototype;
+        if (pObject->isCIH())
         {
-            if (pLink == pPrototype)
-                nResult = 1;
+            AptValue* pLink = pObject->GetNativeHashVirtual()->mp__Proto__;
+            while (pLink)
+            {
+                if (pLink == pPrototype)
+                    bIsOfType = true;
+                pLink = pLink->GetNativeHashVirtual()->mp__Proto__;
+            }
         }
-        return nResult;
+        else if (pObject->isObject())
+        {
+            if (static_cast<AptObject*>(pObject)->DoesImplementObject(pPrototype))
+                bIsOfType = true;
+        }
+        else
+        {
+            AptValue* pLink = pObject->GetNativeHashVirtual()->mp__Proto__;
+            while (pLink)
+            {
+                if (pLink == pPrototype)
+                {
+                    bIsOfType = true;
+                    return bIsOfType;
+                }
+                if (pLink->ContainsNativeHashVirtual())
+                    pLink = pLink->GetNativeHashVirtual()->mp__Proto__;
+                else
+                    break;
+            }
+            bIsOfType = false;
+        }
     }
-
-    if (eType == AptVFT_Object && pObject->getIsDefined())
-        return static_cast<AptObject*>(pObject)->DoesImplementObject(pPrototype);
-
-    // Compare the current link before checking whether it can supply the next.
-    for (AptValue* pLink = pObject->GetNativeHashVirtual()->mp__Proto__; pLink;
-         pLink = pLink->GetNativeHashVirtual()->mp__Proto__)
+    else if (!pObject->isScriptFunction() && !pObject->isObject()
+          && pObject->getVtblIndex() == pClass->getVtblIndex())
     {
-        if (pLink == pPrototype)
-            return 1;
-        if (!pLink->ContainsNativeHashVirtual())
-            break;
+        bIsOfType = true;
     }
-    return 0;
+    return bIsOfType;
 }
+
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // ---------------------------------------------------------------------------
 // urlDecode @0x82AEE208 -- parse one "key=value" pair out of pStream (terminated by

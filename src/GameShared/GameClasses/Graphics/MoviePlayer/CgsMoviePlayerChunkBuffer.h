@@ -42,6 +42,12 @@ namespace CgsGraphics
         u32   muCurrentChunkRead;                    // +0x4C bytes read into the current chunk
         u32   muChunkBufferPos;                      // +0x50 write cursor
 
+        void Construct(s32 liBufferSize, char* lpcBuffer)
+        {
+            miBufferSize = liBufferSize;
+            mpcBuffer = lpcBuffer;
+        }
+
         // GetChunkDef @ 0x827E9F48: pointer to chunk luIndex's EacChunkDef header.
         EacChunkDef* GetChunkDef(u32 luIndex);
         // GetChunkData @ 0x827EA0A0: pointer to chunk luIndex's payload (past the 8-byte header).
@@ -59,7 +65,11 @@ namespace CgsGraphics
         MoviePlayerCoreAllocator() {}
         ~MoviePlayerCoreAllocator() ;
 
-        void Construct(rw::IResourceAllocator* lpAllocator);
+        void Construct(rw::IResourceAllocator* lpAllocator)
+        {
+            mpAllocator = lpAllocator;
+            miAllocations = 0;
+        }
         void Destruct();
 
         void* Alloc(size_t nSize, const char* pName, unsigned int nFlags) ;

@@ -256,15 +256,13 @@ namespace BrnResource
     // ARTIST 0x82661CF8: this initial global allocator is monotonic and cannot free a block.
     void DefaultLinearAllocator::DoFree(const rw::Resource& /*lrResource*/)
     {
-        FireDefaultLinearAllocatorAssert(
-            "Should never be freeing memory from the global allocator\n", 984);
+        CGS_ASSERT_STREAM_AT(false, "Should never be freeing memory from the global allocator\n", CGS_ARTIST_FILE, 984);
     }
 
     // ARTIST 0x82661D88: disposable allocation/free is not supported on this allocator.
     void DefaultLinearAllocator::DoFreeDisposable(rw::Resource& /*lrResource*/)
     {
-        FireDefaultLinearAllocatorAssert(
-            "Should never be allocating or freeing disposable memory!!!\n", 999);
+        CGS_ASSERT_STREAM_AT(false, "Should never be allocating or freeing disposable memory!!!\n", CGS_ARTIST_FILE, 999);
     }
 
     // Out-of-line defaulted destructor: anchors the DefaultLinearAllocator vtable in this TU so
@@ -416,9 +414,10 @@ namespace BrnResource
 
     void HeapResourceAllocator::DoFreeDisposable(rw::Resource& /*lrResource*/)
     {
-        CheckResourceAllocator(mpGeneralAllocator != 0, "General allocator not set\n", 1209);
-        CheckResourceAllocator(false,
-            "Should never be allocating or freeing disposable memory!!!\n", 1210);
+        CGS_ASSERT_STREAM_AT(mpGeneralAllocator != 0,
+            "General allocator not set\n", CGS_ARTIST_FILE, 1209);
+        CGS_ASSERT_STREAM_AT(false,
+            "Should never be allocating or freeing disposable memory!!!\n", CGS_ARTIST_FILE, 1210);
     }
 
     // ARTIST82666990/82666A80: independently backed native heaps.
@@ -614,17 +613,9 @@ namespace BrnResource
 
     void LinearResourceAllocator::DoFreeDisposable(rw::Resource& /*lrResource*/)
     {
-        if (!mpLinearAllocator)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("General allocator not set\n",
-                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 1414));
-            CgsDev::Assert::EndAssert();
-        }
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("Should never be allocating or freeing disposable memory!!!\n",
-            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 1415));
-        CgsDev::Assert::EndAssert();
+        CGS_ASSERT_STREAM_AT(mpLinearAllocator != 0, "General allocator not set\n", CGS_ARTIST_FILE, 1414);
+        CGS_ASSERT_STREAM_AT(false, "Should never be allocating or freeing disposable memory!!!\n",
+            CGS_ARTIST_FILE, 1415);
     }
 }
 

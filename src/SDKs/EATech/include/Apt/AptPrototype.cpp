@@ -105,7 +105,7 @@ void AptPrototype::SetSuperConstructor(AptValue* pSuperConstructor)
 AptValue* AptPrototype::objectMemberLookup(AptValue* const /*pThis*/,
                                            const AptNativeString* const pName) const
 {
-    if (strcmp(pName->c_str(), "__constructor__") == 0)
+    if (pName->Equal("__constructor__"))
         return mpSuperConstructor;
     return 0;
 }
@@ -122,10 +122,12 @@ bool AptPrototype::objectMemberSet(AptValue* const /*pThis*/,
                                    const AptNativeString* const pName,
                                    AptValue* const pValue)
 {
-    if (strcmp(pName->c_str(), "__constructor__") != 0)
-        return false;
-    SetSuperConstructor(pValue);
-    return true;
+    if (pName->Equal("__constructor__"))
+    {
+        SetSuperConstructor(pValue);
+        return true;
+    }
+    return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -135,17 +137,10 @@ bool AptPrototype::objectMemberSet(AptValue* const /*pThis*/,
 // reference with the GC collector (one held AptValue ref: cb(owner, &slot,
 // debugName, 0)). The debug name is "SuperConstructor".
 //
-// The X360 calls the registration callback (dword_8324E4E8 == sReferenceRegistrationCb)
-// unconditionally once mpSuperConstructor is non-null -- RegisterReferences only
-// runs while the GC is up, so the callback is always installed there. The extra
-// `&& sReferenceRegistrationCb` guard mirrors the committed AptArray GC sibling
-// and is a behavioural no-op when the collector is active (it only keeps the PC
-// build, where the callback is null until AptInit, from dereferencing null).
-// ---------------------------------------------------------------------------
 void AptPrototype::RegisterReferences()
 {
     mHash.RegisterReferences(this);
-    if (mpSuperConstructor && AptValue::sReferenceRegistrationCb)
+    if (mpSuperConstructor)
         AptValue::sReferenceRegistrationCb(this, &mpSuperConstructor, "SuperConstructor", 0);
 }
 

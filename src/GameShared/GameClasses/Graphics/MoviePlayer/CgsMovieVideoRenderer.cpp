@@ -49,15 +49,6 @@ namespace CgsGraphics
         }
     }
 
-    rw::ResourceDescriptor MovieVideoRenderer::GetResourceDescriptor()
-    {
-        rw::ResourceDescriptor lDescriptor;
-        // ARTIST 827FAE60..8C requests 0x500 bytes aligned to 128.
-        lDescriptor.m_baseResourceDescriptors[0].m_size = sizeof(MovieVideoRenderer);
-        lDescriptor.m_baseResourceDescriptors[0].m_alignment = __alignof(MovieVideoRenderer);
-        return lDescriptor;
-    }
-
     MovieVideoRenderer* MovieVideoRenderer::Initialize(rw::Resource& lrResource)
     {
         CGS_ASSERT(lrResource.m_baseResources[0] != 0, "lResource.GetMemoryResource()");

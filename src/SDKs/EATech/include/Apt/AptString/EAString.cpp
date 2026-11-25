@@ -388,7 +388,6 @@ uint32_t EAStringC::operator[](const int32_t index) const
     return static_cast<uint32_t>(static_cast<int32_t>(GetInternalBuffer()[index]));
 }
 
-bool EAStringC::Equal(const char* const pStrText) const { return strcmp(GetInternalBuffer(), pStrText) == 0; }
 bool EAStringC::Equal(const EAStringC& strText)   const { return *this == strText; }
 
 int32_t EAStringC::Compare(const char* const pStrText) const { return strcmp(GetInternalBuffer(), pStrText); }
