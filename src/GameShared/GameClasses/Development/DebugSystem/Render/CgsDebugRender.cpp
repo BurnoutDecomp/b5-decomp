@@ -73,53 +73,6 @@ namespace CgsDev
             return lTransform;
         }
 
-        template <typename LineEvent>
-        void FillLineEvent(LineEvent& lrEvent, Vector3 lFrom, Vector3 lTo, RGBA lColour)
-        {
-            lrEvent.mfX1 = lFrom.mV.x;
-            lrEvent.mfY1 = lFrom.mV.y;
-            lrEvent.mfZ1 = lFrom.mV.z;
-            lrEvent.mfX2 = lTo.mV.x;
-            lrEvent.mfY2 = lTo.mV.y;
-            lrEvent.mfZ2 = lTo.mV.z;
-            lrEvent.mColour = lColour;
-        }
-
-        template <typename SphereEvent>
-        void FillSphereEvent(SphereEvent& lrEvent, Vector3 lCentre, f32 lfRadius, RGBA lColour)
-        {
-            lrEvent.mfX = lCentre.mV.x;
-            lrEvent.mfY = lCentre.mV.y;
-            lrEvent.mfZ = lCentre.mV.z;
-            lrEvent.mfRadius = lfRadius;
-            lrEvent.mColour = lColour;
-        }
-
-        template <typename BoxEvent>
-        void FillOrientedBoxEvent(BoxEvent& lrEvent, Vector3 lMin, Vector3 lMax,
-                                  const Matrix44Affine& lrTransform, RGBA lColour)
-        {
-            lrEvent.mfPosX = lrTransform.wAxis.mV.x;
-            lrEvent.mfPosY = lrTransform.wAxis.mV.y;
-            lrEvent.mfPosZ = lrTransform.wAxis.mV.z;
-            lrEvent.mfAtX = lrTransform.zAxis.mV.x;
-            lrEvent.mfAtY = lrTransform.zAxis.mV.y;
-            lrEvent.mfAtZ = lrTransform.zAxis.mV.z;
-            lrEvent.mfUpX = lrTransform.yAxis.mV.x;
-            lrEvent.mfUpY = lrTransform.yAxis.mV.y;
-            lrEvent.mfUpZ = lrTransform.yAxis.mV.z;
-            lrEvent.mfRtX = lrTransform.xAxis.mV.x;
-            lrEvent.mfRtY = lrTransform.xAxis.mV.y;
-            lrEvent.mfRtZ = lrTransform.xAxis.mV.z;
-            lrEvent.mfInfX = lMin.mV.x;
-            lrEvent.mfInfY = lMin.mV.y;
-            lrEvent.mfInfZ = lMin.mV.z;
-            lrEvent.mfSupX = lMax.mV.x;
-            lrEvent.mfSupY = lMax.mV.y;
-            lrEvent.mfSupZ = lMax.mV.z;
-            lrEvent.mColour = lColour;
-        }
-
         template <typename BoxEvent>
         void FillAxisAlignedBoxEvent(BoxEvent& lrEvent, Vector3 lMin, Vector3 lMax, RGBA lColour)
         {
@@ -170,7 +123,13 @@ namespace CgsDev
     void DebugRender::DrawLine(Vector3 lFrom, Vector3 lTo, RGBA lColour)
     {
         Internal::CInEventDrawLine lEvent;
-        FillLineEvent(lEvent, lFrom, lTo, lColour);
+        lEvent.mfX1 = lFrom.X();
+        lEvent.mfY1 = lFrom.Y();
+        lEvent.mfZ1 = lFrom.Z();
+        lEvent.mfX2 = lTo.X();
+        lEvent.mfY2 = lTo.Y();
+        lEvent.mfZ2 = lTo.Z();
+        lEvent.mColour = lColour;
         m3DQueue.AddEventSafe(lEvent, Internal::E_INEVENT_3D_LINE);
     }
 
@@ -243,21 +202,33 @@ namespace CgsDev
     void DebugRender::DrawSphere(Vector3 lCentre, f32 lfRadius, RGBA lColour)
     {
         Internal::CInEventDrawSphere lEvent;
-        FillSphereEvent(lEvent, lCentre, lfRadius, lColour);
+        lEvent.mfX = lCentre.X();
+        lEvent.mfY = lCentre.Y();
+        lEvent.mfZ = lCentre.Z();
+        lEvent.mfRadius = lfRadius;
+        lEvent.mColour = lColour;
         m3DQueue.AddEventSafe(lEvent, Internal::E_INEVENT_3D_SPHERE);
     }
 
     void DebugRender::DrawSolidSphere(Vector3 lCentre, f32 lfRadius, RGBA lColour)
     {
         Internal::CInEventDrawSolidSphere lEvent;
-        FillSphereEvent(lEvent, lCentre, lfRadius, lColour);
+        lEvent.mfX = lCentre.X();
+        lEvent.mfY = lCentre.Y();
+        lEvent.mfZ = lCentre.Z();
+        lEvent.mfRadius = lfRadius;
+        lEvent.mColour = lColour;
         m3DQueue.AddEventSafe(lEvent, Internal::E_INEVENT_3D_SOLID_SPHERE);
     }
 
     void DebugRender::DrawHollowSphere(Vector3 lCentre, f32 lfRadius, RGBA lColour)
     {
         Internal::CInEventDrawHollowSphere lEvent;
-        FillSphereEvent(lEvent, lCentre, lfRadius, lColour);
+        lEvent.mfX = lCentre.X();
+        lEvent.mfY = lCentre.Y();
+        lEvent.mfZ = lCentre.Z();
+        lEvent.mfRadius = lfRadius;
+        lEvent.mColour = lColour;
         m3DQueue.AddEventSafe(lEvent, Internal::E_INEVENT_3D_HOLLOW_SPHERE);
     }
 
@@ -282,10 +253,28 @@ namespace CgsDev
         m3DQueue.AddEventSafe(lEvent, Internal::E_INEVENT_3D_CIRCLE);
     }
 
-    void DebugRender::DrawBox(Vector3 lMin, Vector3 lMax, Matrix44Affine lTransform, RGBA lColour)
+    void DebugRender::DrawBox(Vector3 lMin, Vector3 lMax, const Matrix44Affine& lTransform, RGBA lColour)
     {
         Internal::CInEventDrawBox lEvent;
-        FillOrientedBoxEvent(lEvent, lMin, lMax, lTransform, lColour);
+        lEvent.mfPosX = lTransform.Pos().X();
+        lEvent.mfPosY = lTransform.Pos().Y();
+        lEvent.mfPosZ = lTransform.Pos().Z();
+        lEvent.mfAtX = lTransform.At().X();
+        lEvent.mfAtY = lTransform.At().Y();
+        lEvent.mfAtZ = lTransform.At().Z();
+        lEvent.mfUpX = lTransform.Up().X();
+        lEvent.mfUpY = lTransform.Up().Y();
+        lEvent.mfUpZ = lTransform.Up().Z();
+        lEvent.mfRtX = lTransform.Right().X();
+        lEvent.mfRtY = lTransform.Right().Y();
+        lEvent.mfRtZ = lTransform.Right().Z();
+        lEvent.mfInfX = lMin.X();
+        lEvent.mfInfY = lMin.Y();
+        lEvent.mfInfZ = lMin.Z();
+        lEvent.mfSupX = lMax.X();
+        lEvent.mfSupY = lMax.Y();
+        lEvent.mfSupZ = lMax.Z();
+        lEvent.mColour = lColour;
         m3DQueue.AddEventSafe(lEvent, Internal::E_INEVENT_3D_BOX);
     }
 
@@ -297,10 +286,28 @@ namespace CgsDev
     }
 
     void DebugRender::DrawSolidBox(Vector3 lMin, Vector3 lMax,
-                                   Matrix44Affine lTransform, RGBA lColour)
+                                   const Matrix44Affine& lTransform, RGBA lColour)
     {
         Internal::CInEventDrawSolidBox lEvent;
-        FillOrientedBoxEvent(lEvent, lMin, lMax, lTransform, lColour);
+        lEvent.mfPosX = lTransform.Pos().X();
+        lEvent.mfPosY = lTransform.Pos().Y();
+        lEvent.mfPosZ = lTransform.Pos().Z();
+        lEvent.mfAtX = lTransform.At().X();
+        lEvent.mfAtY = lTransform.At().Y();
+        lEvent.mfAtZ = lTransform.At().Z();
+        lEvent.mfUpX = lTransform.Up().X();
+        lEvent.mfUpY = lTransform.Up().Y();
+        lEvent.mfUpZ = lTransform.Up().Z();
+        lEvent.mfRtX = lTransform.Right().X();
+        lEvent.mfRtY = lTransform.Right().Y();
+        lEvent.mfRtZ = lTransform.Right().Z();
+        lEvent.mfInfX = lMin.X();
+        lEvent.mfInfY = lMin.Y();
+        lEvent.mfInfZ = lMin.Z();
+        lEvent.mfSupX = lMax.X();
+        lEvent.mfSupY = lMax.Y();
+        lEvent.mfSupZ = lMax.Z();
+        lEvent.mColour = lColour;
         m3DQueue.AddEventSafe(lEvent, Internal::E_INEVENT_3D_SOLID_BOX);
     }
 
@@ -314,21 +321,39 @@ namespace CgsDev
     void DebugRender::DrawArrow(Vector3 lFrom, Vector3 lTo, RGBA lColour)
     {
         Internal::CInEventDrawArrow lEvent;
-        FillLineEvent(lEvent, lFrom, lTo, lColour);
+        lEvent.mfX1 = lFrom.X();
+        lEvent.mfY1 = lFrom.Y();
+        lEvent.mfZ1 = lFrom.Z();
+        lEvent.mfX2 = lTo.X();
+        lEvent.mfY2 = lTo.Y();
+        lEvent.mfZ2 = lTo.Z();
+        lEvent.mColour = lColour;
         m3DQueue.AddEventSafe(lEvent, Internal::E_INEVENT_3D_ARROW);
     }
 
     void DebugRender::DrawSolidArrow(Vector3 lFrom, Vector3 lTo, RGBA lColour)
     {
         Internal::CInEventDrawSolidArrow lEvent;
-        FillLineEvent(lEvent, lFrom, lTo, lColour);
+        lEvent.mfX1 = lFrom.X();
+        lEvent.mfY1 = lFrom.Y();
+        lEvent.mfZ1 = lFrom.Z();
+        lEvent.mfX2 = lTo.X();
+        lEvent.mfY2 = lTo.Y();
+        lEvent.mfZ2 = lTo.Z();
+        lEvent.mColour = lColour;
         m3DQueue.AddEventSafe(lEvent, Internal::E_INEVENT_3D_SOLID_ARROW);
     }
 
     void DebugRender::DrawCapsule(Vector3 lStart, Vector3 lEnd, f32 lfRadius, RGBA lColour)
     {
         Internal::CInEventDrawCapsule lEvent;
-        FillLineEvent(lEvent, lStart, lEnd, lColour);
+        lEvent.mfX1 = lStart.X();
+        lEvent.mfY1 = lStart.Y();
+        lEvent.mfZ1 = lStart.Z();
+        lEvent.mfX2 = lEnd.X();
+        lEvent.mfY2 = lEnd.Y();
+        lEvent.mfZ2 = lEnd.Z();
+        lEvent.mColour = lColour;
         lEvent.mfRadius = lfRadius;
         m3DQueue.AddEventSafe(lEvent, Internal::E_INEVENT_3D_CAPSULE);
     }
@@ -336,7 +361,13 @@ namespace CgsDev
     void DebugRender::DrawCylinder(Vector3 lStart, Vector3 lEnd, f32 lfRadius, RGBA lColour)
     {
         Internal::CInEventDrawCylinder lEvent;
-        FillLineEvent(lEvent, lStart, lEnd, lColour);
+        lEvent.mfX1 = lStart.X();
+        lEvent.mfY1 = lStart.Y();
+        lEvent.mfZ1 = lStart.Z();
+        lEvent.mfX2 = lEnd.X();
+        lEvent.mfY2 = lEnd.Y();
+        lEvent.mfZ2 = lEnd.Z();
+        lEvent.mColour = lColour;
         lEvent.mfRadius = lfRadius;
         m3DQueue.AddEventSafe(lEvent, Internal::E_INEVENT_3D_CYLINDER);
     }

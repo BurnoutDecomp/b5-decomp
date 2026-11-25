@@ -88,6 +88,9 @@ struct CollisionState : public BrnSound::Logic::BrnState
     f32 GetTimeWeAttached() const { return mfTimeWeAttached; }
     f32 GetCurrentTime() const { return mfCurTime; }
 
+protected:
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State> sTypeInfo;
+
 private:
     CgsSound::Utils::DataPoint<ELifetime> meLifetime;
     OutputCollision mOutputCollision;

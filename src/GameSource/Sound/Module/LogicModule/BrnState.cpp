@@ -39,9 +39,5 @@ CgsSound::Logic::State* BrnState::CreateObject(u32 luFlavour)
     return new (sTypeInfo.typeName, luFlavour != 0) BrnState(); // ARTIST 0x826C8390
 }
 
-// ARTIST 0x82C61B48 registers descriptor 0x82F2E7DC.
-static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* const gpBrnStateReg =
-    CgsSound::Logic::State::AddToClassTypeInfoArray(BrnState::GetStaticTypeInfo());
-
 } // namespace Logic
 } // namespace BrnSound

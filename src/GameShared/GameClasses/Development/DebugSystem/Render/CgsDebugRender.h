@@ -129,9 +129,9 @@ namespace CgsDev
         void DrawHollowSphere(Vector3 lv3Centre, f32 lfRadius, RGBA lColour);
         void DrawCircle(Matrix44Affine lTransform, f32 lfRadius, RGBA lColour);
         void DrawCircle(Vector3 lv3Centre, Vector3 lv3Normal, f32 lfRadius, RGBA lColour);
-        void DrawBox(Vector3 lv3Min, Vector3 lv3Max, Matrix44Affine lTransform, RGBA lColour);
+        void DrawBox(Vector3 lv3Min, Vector3 lv3Max, const Matrix44Affine& lTransform, RGBA lColour);
         void DrawBox(Vector3 lv3Min, Vector3 lv3Max, RGBA lColour);
-        void DrawSolidBox(Vector3 lv3Min, Vector3 lv3Max, Matrix44Affine lTransform, RGBA lColour);
+        void DrawSolidBox(Vector3 lv3Min, Vector3 lv3Max, const Matrix44Affine& lTransform, RGBA lColour);
         void DrawSolidBox(Vector3 lv3Min, Vector3 lv3Max, RGBA lColour);
         void DrawArrow(Vector3 lv3From, Vector3 lv3To, RGBA lColour);
         void DrawSolidArrow(Vector3 lv3From, Vector3 lv3To, RGBA lColour);

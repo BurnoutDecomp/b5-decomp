@@ -74,8 +74,22 @@ namespace CgsMemory
 
     private:
         // Declared-only status (un)pack helpers (CgsDataStreamResultReader.h:119/127).
-        u64  EncodeStatus(u8 lucNumUsers, u32 luNumResults, u32 luBufferUsed);
-        void DecodeStatus(const u64& lruEncoded, u8* lpucNumUsers, u32* lpuNumResults, u32* lpuBufferUsed);
+        // Decode yields the full u8 user field. Encode writes the native four-bit count.
+        static u64 EncodeStatus(u8 lucNumUsers, u32 luNumResults, u32 luBufferUsed)
+        {
+            const u64 luUsers = static_cast<u64>(lucNumUsers) << (KU_NUM_USERS_BIT - KU_DATA_BUFFER_USED_BIT);
+            const u64 luUsersAndBuffer = (luUsers & (KU_NUM_USERS_MASK >> KU_DATA_BUFFER_USED_BIT)) |
+                                         (luBufferUsed & KU_DATA_BUFFER_USED_MAX);
+            return (luUsersAndBuffer << KU_DATA_BUFFER_USED_BIT) |
+                   (luNumResults & KU_NUM_RESULTS_MASK);
+        }
+
+        static void DecodeStatus(const u64& lruEncoded, u8* lpucNumUsers, u32* lpuNumResults, u32* lpuBufferUsed)
+        {
+            *lpucNumUsers = static_cast<u8>(lruEncoded >> KU_NUM_USERS_BIT);
+            *lpuNumResults = static_cast<u32>(lruEncoded & KU_NUM_RESULTS_MASK);
+            *lpuBufferUsed = static_cast<u32>((lruEncoded >> KU_DATA_BUFFER_USED_BIT) & KU_DATA_BUFFER_USED_MAX);
+        }
 
         // --- members (CgsDataStreamResultReader.h:99-112) --------------------
         Futex::AtomicUint64 mEncodedStatus;     // +0  packed (numUsers|bufferUsed|numResults)

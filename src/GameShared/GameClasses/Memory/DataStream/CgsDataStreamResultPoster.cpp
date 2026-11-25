@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Memory/DataStream/CgsDataStreamResultPoster.h"
 
-#include <cstring>  // std::memcpy (models the Xbox XMemCpy block-copy intrinsic)
+#include <cstring>  // std::memcpy
 
 namespace CgsMemory
 {
@@ -18,25 +18,18 @@ namespace CgsMemory
     {
         mpReader = lpReader;
 
-        for (;;)
+        bool lbSet;
+        do
         {
-            const u64 luCurrEncoded = lpReader->mEncodedStatus.GetValue();
-
-            const u32 luNumUsers = static_cast<u32>(
-                (luCurrEncoded >> DataStreamResultReader::KU_NUM_USERS_BIT) &
-                DataStreamResultReader::KU_NUM_USERS_MAX);
-
-            const u64 luNewEncoded =
-                (luCurrEncoded & ~DataStreamResultReader::KU_NUM_USERS_MASK) |
-                (((static_cast<u64>(luNumUsers) + 1) &
-                  DataStreamResultReader::KU_NUM_USERS_MAX) <<
-                 DataStreamResultReader::KU_NUM_USERS_BIT);
-
-            if (lpReader->mEncodedStatus.SetValueConditional(luNewEncoded, luCurrEncoded))
-            {
-                break;
-            }
-        }
+            const u64 luCurrent = mpReader->mEncodedStatus.GetValue();
+            u8 lucNumUsers;
+            u32 luCount;
+            u32 luBufferUsed;
+            DataStreamResultReader::DecodeStatus(luCurrent, &lucNumUsers, &luCount, &luBufferUsed);
+            const u64 luNext = DataStreamResultReader::EncodeStatus(static_cast<u8>(lucNumUsers + 1),
+                                                                  luCount, luBufferUsed);
+            lbSet = mpReader->mEncodedStatus.SetValueConditional(luNext, luCurrent);
+        } while (!lbSet);
     }
 
     // X360 0x82868070.
@@ -45,27 +38,18 @@ namespace CgsMemory
     // swap retry loop as Construct, preserving numResults and dataBufferUsed.
     void DataStreamResultPoster::Destruct()
     {
-        DataStreamResultReader* lpReader = mpReader;
-
-        for (;;)
+        bool lbSet;
+        do
         {
-            const u64 luCurrEncoded = lpReader->mEncodedStatus.GetValue();
-
-            const u32 luNumUsers = static_cast<u32>(
-                (luCurrEncoded >> DataStreamResultReader::KU_NUM_USERS_BIT) &
-                DataStreamResultReader::KU_NUM_USERS_MAX);
-
-            const u64 luNewEncoded =
-                (luCurrEncoded & ~DataStreamResultReader::KU_NUM_USERS_MASK) |
-                (((static_cast<u64>(luNumUsers) - 1) &
-                  DataStreamResultReader::KU_NUM_USERS_MAX) <<
-                 DataStreamResultReader::KU_NUM_USERS_BIT);
-
-            if (lpReader->mEncodedStatus.SetValueConditional(luNewEncoded, luCurrEncoded))
-            {
-                break;
-            }
-        }
+            const u64 luCurrent = mpReader->mEncodedStatus.GetValue();
+            u8 lucNumUsers;
+            u32 luCount;
+            u32 luBufferUsed;
+            DataStreamResultReader::DecodeStatus(luCurrent, &lucNumUsers, &luCount, &luBufferUsed);
+            const u64 luNext = DataStreamResultReader::EncodeStatus(static_cast<u8>(lucNumUsers - 1),
+                                                                  luCount, luBufferUsed);
+            lbSet = mpReader->mEncodedStatus.SetValueConditional(luNext, luCurrent);
+        } while (!lbSet);
     }
 
     // X360 0x828680F0.

@@ -140,9 +140,6 @@ const char* StreamingState::GetTypeName() const
     return sTypeInfo.typeName;
 }
 
-static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* const gpStreamingStateReg =
-    CgsSound::Logic::State::AddToClassTypeInfoArray(StreamingState::GetStaticTypeInfo());
-
 } // namespace Streaming
 } // namespace Logic
 } // namespace BrnSound

@@ -46,7 +46,30 @@ struct ClassTypeInfo
     const char*       typeName;     // :317
     ClassTypeInfo<T>* baseTypeInfo; // :318
     T* (*createObject)(u32);        // :319
+
+private:
+    void AddToClassTypeInfoArray();
 };
+
+struct State;
+
+template<>
+void ClassTypeInfo<State>::AddToClassTypeInfoArray();
+
+// DecFIGS CgsEffectBase.h:326/351. ARTIST folds the field writes into
+// static data and calls AddToClassTypeInfoArray from each startup thunk.
+template<>
+inline ClassTypeInfo<State>::ClassTypeInfo(s32 aiObjectID,
+                                          const char* apcTypeName,
+                                          ClassTypeInfo<State>* apBaseTypeInfo,
+                                          State* (*apfnCreateObject)(u32))
+    : ObjectID(aiObjectID)
+    , typeName(apcTypeName)
+    , baseTypeInfo(apBaseTypeInfo)
+    , createObject(apfnCreateObject)
+{
+    AddToClassTypeInfoArray();
+}
 
 } // namespace Logic
 } // namespace CgsSound

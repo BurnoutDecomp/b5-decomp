@@ -20,25 +20,16 @@ namespace CgsMemory
         mpPoster = lpPoster;
         miLastCommandIndex = -1;
 
-        for (;;)
+        bool lbSet;
+        do
         {
-            const u64 luCurrEncoded = lpPoster->mEncodedStatus.GetValue();
-
-            const u32 luNumUsers = static_cast<u32>(
-                (luCurrEncoded >> DataStreamCommandPoster::KU_NUM_USERS_BIT) &
-                DataStreamCommandPoster::KU_NUM_USERS_MAX);
-
-            const u64 luNewEncoded =
-                (luCurrEncoded & ~DataStreamCommandPoster::KU_NUM_USERS_MASK) |
-                (((static_cast<u64>(luNumUsers) + 1) &
-                  DataStreamCommandPoster::KU_NUM_USERS_MAX) <<
-                 DataStreamCommandPoster::KU_NUM_USERS_BIT);
-
-            if (lpPoster->mEncodedStatus.SetValueConditional(luNewEncoded, luCurrEncoded))
-            {
-                break;
-            }
-        }
+            const u64 luCurrent = mpPoster->mEncodedStatus.GetValue();
+            u8 lucNumUsers;
+            u32 luIndex;
+            DataStreamCommandPoster::DecodeStatus(luCurrent, &lucNumUsers, &luIndex);
+            const u64 luNext = DataStreamCommandPoster::EncodeStatus(static_cast<u8>(lucNumUsers + 1), luIndex);
+            lbSet = mpPoster->mEncodedStatus.SetValueConditional(luNext, luCurrent);
+        } while (!lbSet);
     }
 
     // X360 0x828678B0.
@@ -47,27 +38,16 @@ namespace CgsMemory
     // swap retry loop as Construct, preserving the nextCommand field.
     void DataStreamCommandReader::Destruct()
     {
-        DataStreamCommandPoster* lpPoster = mpPoster;
-
-        for (;;)
+        bool lbSet;
+        do
         {
-            const u64 luCurrEncoded = lpPoster->mEncodedStatus.GetValue();
-
-            const u32 luNumUsers = static_cast<u32>(
-                (luCurrEncoded >> DataStreamCommandPoster::KU_NUM_USERS_BIT) &
-                DataStreamCommandPoster::KU_NUM_USERS_MAX);
-
-            const u64 luNewEncoded =
-                (luCurrEncoded & ~DataStreamCommandPoster::KU_NUM_USERS_MASK) |
-                (((static_cast<u64>(luNumUsers) - 1) &
-                  DataStreamCommandPoster::KU_NUM_USERS_MAX) <<
-                 DataStreamCommandPoster::KU_NUM_USERS_BIT);
-
-            if (lpPoster->mEncodedStatus.SetValueConditional(luNewEncoded, luCurrEncoded))
-            {
-                break;
-            }
-        }
+            const u64 luCurrent = mpPoster->mEncodedStatus.GetValue();
+            u8 lucNumUsers;
+            u32 luIndex;
+            DataStreamCommandPoster::DecodeStatus(luCurrent, &lucNumUsers, &luIndex);
+            const u64 luNext = DataStreamCommandPoster::EncodeStatus(static_cast<u8>(lucNumUsers - 1), luIndex);
+            lbSet = mpPoster->mEncodedStatus.SetValueConditional(luNext, luCurrent);
+        } while (!lbSet);
     }
 
     // X360 0x82867920.
@@ -91,46 +71,24 @@ namespace CgsMemory
     //         count = miCommandSize).
     s32 DataStreamCommandReader::ReadCom(void* lpDest, u32* lpuOutIndex)
     {
-        DataStreamCommandPoster* lpPoster = mpPoster;
-
         u32 luIndex;
-        for (;;)
+        u64 luCurrent;
+        u64 luNext;
+        do
         {
-            const u64 luCurrEncoded = lpPoster->mEncodedStatus.GetValue();
-
-            luIndex = static_cast<u32>(luCurrEncoded &
-                                       DataStreamCommandPoster::KU_NEXT_COMMAND_MASK);
-
-            if (luIndex >= static_cast<u32>(lpPoster->miNumCommands))
-            {
+            luCurrent = mpPoster->mEncodedStatus.GetValue();
+            u8 lucNumUsers;
+            DataStreamCommandPoster::DecodeStatus(luCurrent, &lucNumUsers, &luIndex);
+            if (luIndex >= static_cast<u32>(mpPoster->miNumCommands))
                 return 1;
-            }
 
-            // Advance only the nextCommand field; keep the numUsers bits. The
-            // X360 build of the new value (rlwinm 0,4,7) keeps just bits 24-27 of
-            // the low word, so the upper 32 bits are cleared -- mirrored here by
-            // masking the current value with KU_NUM_USERS_MASK (0x0F000000).
-            const u64 luNewEncoded =
-                (luCurrEncoded & DataStreamCommandPoster::KU_NUM_USERS_MASK) |
-                (static_cast<u64>(luIndex + 1) &
-                 DataStreamCommandPoster::KU_NEXT_COMMAND_MASK);
+            luNext = DataStreamCommandPoster::EncodeStatus(lucNumUsers, luIndex + 1);
+        } while (!mpPoster->mEncodedStatus.SetValueConditional(luNext, luCurrent));
 
-            if (lpPoster->mEncodedStatus.SetValueConditional(luNewEncoded, luCurrEncoded))
-            {
-                break;
-            }
-        }
-
-        const s32 liCommandSize = lpPoster->miCommandSize;
-        std::memcpy(lpDest,
-                    lpPoster->mpcCommandBuffer + liCommandSize * luIndex,
-                    static_cast<usize>(liCommandSize));
-
+        const s32 liCommandSize = mpPoster->miCommandSize;
+        XMemCpy(lpDest, mpPoster->mpcCommandBuffer + liCommandSize * luIndex, liCommandSize);
         if (lpuOutIndex)
-        {
             *lpuOutIndex = luIndex;
-        }
-
         return 0;
     }
     // ARTIST 0x82867A00: reserve one contiguous batch before copying records.

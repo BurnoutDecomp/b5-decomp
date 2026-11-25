@@ -38,10 +38,12 @@ AIVehicleState::~AIVehicleState()
 // sibling PlayerVehicleState (BrnState has no in-tree descriptor); the base chain
 // only breaks ties between two descriptors with the same low 16 bits AND the same
 // state byte, which never happens for state 2.
+// ARTIST descriptor 0x82F2E89C.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State> AIVehicleState::sTypeInfo(
+    0x20000, "AIVehicleState", &BrnState::sTypeInfo, &AIVehicleState::CreateObject);
+
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* AIVehicleState::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State> sTypeInfo(
-        0x20000, "AIVehicleState", 0, &AIVehicleState::CreateObject );
     return &sTypeInfo;
 }
 
@@ -49,24 +51,19 @@ CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* AIVehicleState::GetStati
 // VehicleState::VehicleState ; vtable 0x820B3A3C.
 CgsSound::Logic::State* AIVehicleState::CreateObject(u32 luType)
 {
-    return new ("AIVehicleState", luType != 0) AIVehicleState();
+    return new (sTypeInfo.typeName, luType != 0) AIVehicleState();
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* AIVehicleState::GetTypeInfo() const
 {
-    return GetStaticTypeInfo();
+    return &sTypeInfo;
 }
 
 // @ 0x826840C8: returns off_82F2E8A0 == the descriptor's name.
 const char* AIVehicleState::GetTypeName() const
 {
-    return "AIVehicleState";
+    return sTypeInfo.typeName;
 }
-
-// CRT init bank @0x82C61DA8: `addi r3, r11, 82F2E89C ; b State::AddToClassTypeInfoArray`.
-static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* const
-    gpAIVehicleStateReg = CgsSound::Logic::State::AddToClassTypeInfoArray(
-        AIVehicleState::GetStaticTypeInfo() );
 
 // ---------------------------------------------------------------------------
 // AIVehicleState::Attach(void*)  @ 0x826CA998  (DWARF cpp:47)

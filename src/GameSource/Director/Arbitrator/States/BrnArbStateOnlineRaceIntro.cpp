@@ -124,7 +124,7 @@ namespace BrnDirector
     {
         (void)lrSharedInfo;   // the entry latch does not consult the shared info
 
-        if (meState <= E_STATE_PREPARING)
+        if (meState == E_STATE_INACTIVE || meState == E_STATE_PREPARING)
         {
             meState        = E_STATE_PREPARING;   // +0x220 = 1 (stw r10)
             muCurrentRival = 0;                   // +0x218 = 0 (stw r9) -- asm zeroes the rival cursor, not +0x21C

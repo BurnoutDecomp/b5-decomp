@@ -45,6 +45,9 @@ struct AIVehicleState : public BrnSound::Vehicles::VehicleState
     virtual void Attach( void* apvAttachment );      // @ 0x826CA998 (DWARF cpp:47)
     virtual void UpdateParams( f32 af32DeltaTime );  // @ 0x826EFD18 (DWARF cpp:106)
     virtual bool Detach();                           // @ 0x826CACB8 (DWARF cpp:137)
+protected:
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State> sTypeInfo;
+
 };
 
 } // namespace Vehicles

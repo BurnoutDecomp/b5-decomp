@@ -40,33 +40,30 @@ PlayerVehicleState::~PlayerVehicleState()
     DestroyEffects();
 }
 
-CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>*
-PlayerVehicleState::GetStaticTypeInfo()
+// ARTIST descriptor 0x82F2E86C.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State> PlayerVehicleState::sTypeInfo(
+    0x10000, "PlayerVehicleState", &BrnState::sTypeInfo, &PlayerVehicleState::CreateObject);
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* PlayerVehicleState::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State> sTypeInfo(
-        0x10000, "PlayerVehicleState", 0, &PlayerVehicleState::CreateObject);
     return &sTypeInfo;
 }
 
 CgsSound::Logic::State* PlayerVehicleState::CreateObject(u32 luType)
 {
-    return new ("PlayerVehicleState", luType != 0) PlayerVehicleState();
+    return new (sTypeInfo.typeName, luType != 0) PlayerVehicleState();
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>*
 PlayerVehicleState::GetTypeInfo() const
 {
-    return GetStaticTypeInfo();
+    return &sTypeInfo;
 }
 
 const char* PlayerVehicleState::GetTypeName() const
 {
-    return "PlayerVehicleState";
+    return sTypeInfo.typeName;
 }
-
-static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* const
-    gpPlayerVehicleStateReg = CgsSound::Logic::State::AddToClassTypeInfoArray(
-        PlayerVehicleState::GetStaticTypeInfo());
 
 void PlayerVehicleState::Attach(void* apvAttachment)
 {

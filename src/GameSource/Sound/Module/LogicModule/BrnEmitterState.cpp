@@ -91,10 +91,6 @@ EmitterState::GetTypeInfo() const
     return &sTypeInfo;
 }
 
-static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* const
-    gpEmitterStateReg =
-        CgsSound::Logic::State::AddToClassTypeInfoArray(EmitterState::GetStaticTypeInfo());
-
 // ---------------------------------------------------------------------------
 // Attach  @ 0x826D2010
 //

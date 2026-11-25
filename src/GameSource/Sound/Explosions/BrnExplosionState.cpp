@@ -45,31 +45,29 @@ CGS_STATIC_ASSERT((sizeof(ExplosionState) == 0x54), "ExplosionState allocation s
 #endif
 
 // ARTIST descriptor 0x82F2F9AC.
+// ARTIST descriptor 0x82F2F9AC.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State> ExplosionState::sTypeInfo(
+    0x80000, "ExplosionState", &BrnState::sTypeInfo, &ExplosionState::CreateObject);
+
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* ExplosionState::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State> sTypeInfo(
-        0x80000, "ExplosionState", BrnState::GetStaticTypeInfo(), &ExplosionState::CreateObject);
     return &sTypeInfo;
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* ExplosionState::GetTypeInfo() const
 {
-    return GetStaticTypeInfo(); // ARTIST 0x82689198
+    return &sTypeInfo; // ARTIST 0x82689198
 }
 
 const char* ExplosionState::GetTypeName() const
 {
-    return GetStaticTypeInfo()->typeName; // ARTIST 0x826891A8
+    return sTypeInfo.typeName; // ARTIST 0x826891A8
 }
 
 CgsSound::Logic::State* ExplosionState::CreateObject(u32 luFlavour)
 {
-    return new (GetStaticTypeInfo()->typeName, luFlavour != 0) ExplosionState(); // ARTIST 0x826D55F8
+    return new (sTypeInfo.typeName, luFlavour != 0) ExplosionState(); // ARTIST 0x826D55F8
 }
-
-// ARTIST 0x82C633D0 registers descriptor 0x82F2F9AC.
-static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* const gpExplosionStateReg =
-    CgsSound::Logic::State::AddToClassTypeInfoArray(ExplosionState::GetStaticTypeInfo());
 
 } // namespace Explosion
 } // namespace Logic

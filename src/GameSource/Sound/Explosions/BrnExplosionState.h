@@ -30,6 +30,9 @@ struct ExplosionState : public BrnSound::Logic::BrnState
     // @ 0x826891B8 — null-asserts the attachment pointer ("lpvAttachment"). Bodied
     // in this TU's .cpp. DWARF: virtual void Attach(void*) (BrnExplosionState.cpp:66).
     virtual void Attach(void* lpvAttachment);
+protected:
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State> sTypeInfo;
+
 };
 
 } // namespace Explosion

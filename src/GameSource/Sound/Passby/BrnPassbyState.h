@@ -113,6 +113,9 @@ struct PassbyState : public BrnSound::Logic::BrnState
     const PassbyStateManager::Passby& GetPassbyData() const { return mPassbyData; }
     f32 GetTimeOutTimer() const { return mfTimeOutTimer; }
 
+protected:
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State> sTypeInfo;
+
 private:
     // DWARF BrnPassbyState.h:73 `PassbyStateManager::Passby mPassbyData`. The
     // passby record this state is servicing. Console offset +96 (16-aligned); the

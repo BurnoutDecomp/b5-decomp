@@ -48,6 +48,9 @@ struct PlayerVehicleState : public BrnSound::Vehicles::VehicleState
     virtual void Attach(void* apvAttachment);
     virtual void UpdateParams(f32 af32DeltaTime);
     virtual bool Detach();
+protected:
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State> sTypeInfo;
+
 };
 
 } // namespace Vehicles

@@ -31,38 +31,27 @@ namespace Logic
 
 static ClassTypeInfo<State>* gapStateTypeInfo[State::KU_SIZEOF_CLASS_ARRAY] = { 0 };
 
-// ---------------------------------------------------------------------------
-// State::AddToClassTypeInfoArray  @ 0x8268DF08  (static array dword_82FFBC18)
-//
-// Identical RTTI-registration routine to the EffectBase family
-// (CgsEffectBase.cpp), here templated on CgsSound::Logic::State. The X360 scans
-// the per-class static array for the first NULL slot, capped at the class-array
-// size (loop bound 0x10 == KU_SIZEOF_CLASS_ARRAY for State); on finding a NULL
-// slot it stores the descriptor there. If no slot is free within the cap it falls
-// through WITHOUT storing -- the "Too Many Class registations" assert
-// (CgsState.h:363) only fires once the (16-bit) slot counter reaches 4*KU (0x40),
-// which the 0x10-bounded loop never reaches. Reproduced generically by array NAME;
-// no raw-offset cast.
-// ---------------------------------------------------------------------------
-ClassTypeInfo<State>* State::AddToClassTypeInfoArray(ClassTypeInfo<State>* apTypeInfo)
+// ARTIST 0x8268DF08 registers the descriptor passed as this. The original
+// scans 16 slots with a u16 index and diagnoses against the array's byte size.
+template<>
+void ClassTypeInfo<State>::AddToClassTypeInfoArray()
 {
-    // Scan for the first empty slot, capped at the class-array size (0x10).
-    u32 lu32Index = 0;
-    for (lu32Index = 0; lu32Index < KU_SIZEOF_CLASS_ARRAY; ++lu32Index)
+    u16 luIndex = 0;
+    do
     {
-        if (gapStateTypeInfo[lu32Index] == 0)
+        if (!gapStateTypeInfo[luIndex])
         {
-            gapStateTypeInfo[lu32Index] = apTypeInfo;
-            return apTypeInfo;
+            gapStateTypeInfo[luIndex] = this;
+            return;
         }
+        ++luIndex;
     }
+    while (luIndex < State::KU_SIZEOF_CLASS_ARRAY);
 
-    // No empty slot within the cap. The X360 only asserts once the (16-bit) counter
-    // reaches 4*KU (0x40); the 0x10-bounded loop above stops at KU, so the counter is
-    // < 0x40 here and the assert does not fire. Modelled with the same predicate.
-    CGS_ASSERT(lu32Index < (4u * KU_SIZEOF_CLASS_ARRAY),
-               "Too Many Class registations. Increase KU_SIZEOF_CLASS_ARRAY");
-    return apTypeInfo;
+    CGS_ASSERT_STREAM_AT(luIndex < sizeof(gapStateTypeInfo),
+        "Too Many Class registations. Increase KU_SIZEOF_CLASS_ARRAY",
+        "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/CgsEffectBase.h",
+        363 /* ARTIST 0x8268DFB8 */);
 }
 
 ClassTypeInfo<State>* State::GetRegisteredTypeInfo(u32 auIndex)

@@ -1,8 +1,11 @@
 #include "GameSource/Director/Arbitrator/BrnDirectorArbitratorStateContainer.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [diag] gpDebugPrint
 #include <cstdlib>                                          // [diag] getenv
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "types.hpp"
+
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Director/Arbitrator/BrnDirectorArbitratorStateContainer.cpp"
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnDirector::ArbitratorStateContainer::ConstructAll @ 0x8224F020
 //   BrnDirector::ArbitratorStateContainer::UpdateAll    @ 0x821F5DC0
@@ -12,8 +15,6 @@
 // pointer table with the address of each embedded state, sanity-checks the table
 // (no nulls, no duplicates), runs every state's Construct, and clears the current
 // state. UpdateAll/ReleaseAll walk the table calling Update / Release on each state.
-// (The original streamed the assert messages through CgsDev::StrStream; our CGS_ASSERT
-// forwards the plain message string -- behaviourally identical for a non-firing assert.)
 
 namespace BrnDirector
 {
@@ -87,7 +88,6 @@ namespace BrnDirector
             mArrayOfStatePointers[luLoop] = 0;
         }
 
-        mArrayOfStatePointers[E_STATE_DRIVETHRU]         = &mArbStateDriveThru;
         mArrayOfStatePointers[E_STATE_ROAMING]           = &mArbStateRoaming;
         mArrayOfStatePointers[E_STATE_CRASHING]          = &mArbStateCrashing;
         mArrayOfStatePointers[E_STATE_TAKEDOWN]          = &mArbStateTakedown;
@@ -95,6 +95,7 @@ namespace BrnDirector
         mArrayOfStatePointers[E_STATE_POST_EVENT]        = &mArbStatePostEvent;
         mArrayOfStatePointers[E_STATE_RACE_INTRO]        = &mArbStateRaceIntro;
         mArrayOfStatePointers[E_STATE_ONLINE_RACE_INTRO] = &mArbStateOnlineRaceIntro;
+        mArrayOfStatePointers[E_STATE_DRIVETHRU]         = &mArbStateDriveThru;
         mArrayOfStatePointers[E_STATE_CAR_SELECT]        = &mArbStateCarSelect;
         mArrayOfStatePointers[E_STATE_RANK_UP]           = &mArbStateRankUp;
         mArrayOfStatePointers[E_STATE_ONLINE_CAR_SELECT] = &mArbStateOnlineCarSelect;
@@ -102,7 +103,7 @@ namespace BrnDirector
         // Every slot must be set; construct each state in EState order.
         for (u32 luLoop = 0; luLoop < E_NUM_STATES; ++luLoop)
         {
-            CGS_ASSERT(mArrayOfStatePointers[luLoop] != 0, "Uninitialised state pointer");
+            CGS_ASSERT_STREAM_AT(mArrayOfStatePointers[luLoop] != 0, "Uninitialised state pointer", CGS_ARTIST_FILE, 55);
             mArrayOfStatePointers[luLoop]->Construct();
         }
 
@@ -111,8 +112,8 @@ namespace BrnDirector
         {
             for (u32 luLoopStates = luLoop + 1; luLoopStates < E_NUM_STATES; ++luLoopStates)
             {
-                CGS_ASSERT(mArrayOfStatePointers[luLoop] != mArrayOfStatePointers[luLoopStates],
-                           "Duplicate state pointer");
+                CGS_ASSERT_STREAM_AT(mArrayOfStatePointers[luLoop] != mArrayOfStatePointers[luLoopStates],
+                                      "Duplicate state pointer", CGS_ARTIST_FILE, 66);
             }
         }
 
@@ -123,7 +124,7 @@ namespace BrnDirector
     {
         for (u32 luLoop = 0; luLoop < E_NUM_STATES; ++luLoop)
         {
-            CGS_ASSERT(mArrayOfStatePointers[luLoop] != 0, "Uninitialised state pointer");
+            CGS_ASSERT_STREAM_AT(mArrayOfStatePointers[luLoop] != 0, "Uninitialised state pointer", CGS_ARTIST_FILE, 83);
             mArrayOfStatePointers[luLoop]->Update(lrSharedInfo);
             mArrayOfStatePointers[luLoop]->ClearCycleCameraThisFrame();
         }
@@ -133,9 +134,11 @@ namespace BrnDirector
     {
         for (u32 luLoop = 0; luLoop < E_NUM_STATES; ++luLoop)
         {
-            CGS_ASSERT(mArrayOfStatePointers[luLoop] != 0, "Uninitialised state pointer");
+            CGS_ASSERT_STREAM_AT(mArrayOfStatePointers[luLoop] != 0, "Uninitialised state pointer", CGS_ARTIST_FILE, 98);
             bool lbReleased = mArrayOfStatePointers[luLoop]->Release(lrSharedInfo);
-            CGS_ASSERT(lbReleased, CGS_ASSERT_MESSAGE_AT("mArrayOfStatePointers[luLoop]->Release(lSharedInfo)", "..\\..\\..\\GameSource\\Director/Arbitrator/BrnDirectorArbitratorStateContainer.cpp", 99));
+            CGS_ASSERT(lbReleased, CGS_ASSERT_MESSAGE_AT("mArrayOfStatePointers[luLoop]->Release(lSharedInfo)", CGS_ARTIST_FILE, 99));
         }
     }
 }
+
+#undef CGS_ARTIST_FILE

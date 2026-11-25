@@ -76,8 +76,18 @@ namespace CgsMemory
 
     private:
         // Declared-only status (un)pack helpers (CgsDataStreamCommandPoster.h:132/138).
-        u64  EncodeStatus(u8 lucNumUsers, u32 luNextCommand);
-        void DecodeStatus(const u64& lruEncoded, u8* lpucNumUsers, u32* lpuNextCommand);
+        // Decode yields the full u8 user field. Encode writes the native four-bit count.
+        static u64 EncodeStatus(u8 lucNumUsers, u32 luNextCommand)
+        {
+            const u64 luUsers = static_cast<u64>(lucNumUsers) << KU_NUM_USERS_BIT;
+            return (luUsers & KU_NUM_USERS_MASK) | (luNextCommand & KU_NEXT_COMMAND_MASK);
+        }
+
+        static void DecodeStatus(const u64& lruEncoded, u8* lpucNumUsers, u32* lpuNextCommand)
+        {
+            *lpucNumUsers = static_cast<u8>(lruEncoded >> KU_NUM_USERS_BIT);
+            *lpuNextCommand = static_cast<u32>(lruEncoded & KU_NEXT_COMMAND_MASK);
+        }
         u64  GetEncodedStatus() const;
         void SetEncodedStatusConditional(u64 luNewValue, u64 luCurrValue);
 

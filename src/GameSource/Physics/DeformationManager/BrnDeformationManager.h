@@ -278,8 +278,8 @@ namespace Deformation
     // SolvePenetration / UpdatePostPhysics scratch stack. ALIASED to the real homed CgsModule type
     // (was a bare local forward-decl) so CreateIOBuffer<>/DestroyIOBuffer<> resolve. FLAG: additive.
     typedef CgsModule::IOBufferStack IOBufferStack;
-    // UpdateTriangleCache arg (DWARF InputBuffer_Update*). ALIASED to the real homed CgsSceneManager
-    // type so GetSceneUpdateInterface() resolves. FLAG: additive.
+    // The original UpdateTriangleCache parameter is the scene update input buffer.
+    // Its write-lock accessor is used by both detached-object cache updates.
     typedef CgsSceneManager::SceneManagerIO::InputBuffer_Update InputBuffer_Update;
     // ⭐⭐ 2026-08-27 (detach-3 wave): was `struct VehicleInTriangleCacheInterface;` -- a declare-only
     // fork with NO definition anywhere in the tree, so DoBodyPartWorldContactGeneration /

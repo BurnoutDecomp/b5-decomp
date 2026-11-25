@@ -118,11 +118,6 @@ struct State : public CgsSound::MemBase
     // @0x826BADA0 via its inlined GetSoundEntity()/IsAttached() assert).
     bool IsAttached() const { return mbIsAttached; }
 
-    // CgsState.h:363 (DWARF) @ 0x8268DF08. Register a per-class RTTI descriptor into
-    // State's static ClassTypeInfo<State> array. Scans for the first empty slot
-    // (cap KU_SIZEOF_CLASS_ARRAY == 16); only asserts "Too Many Class registations"
-    // once the 16-bit slot counter reaches 4*KU. Returns the registered descriptor.
-    static ClassTypeInfo<State>* AddToClassTypeInfoArray(ClassTypeInfo<State>* apTypeInfo);
     static ClassTypeInfo<State>* GetRegisteredTypeInfo(u32 auIndex);
 
     s32 GetInstanceID() const { return miInstNum; }

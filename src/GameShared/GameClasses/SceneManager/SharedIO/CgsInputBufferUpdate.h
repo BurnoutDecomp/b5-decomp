@@ -18,10 +18,9 @@
 // BrnPhysicsModule.h embedding the deformation manager by value is what finally made them meet,
 // as a hard C2011.
 //
-// The canonical (asm-attested) home wins. The DWARF-named typedef + GetSceneUpdateInterface()
-// accessor pair this file carried moved there VERBATIM, so the two call sites in
-// BrnDeformationManager_Contacts.cpp are unchanged. Folding the fork also retires the wrong
-// interface offset the deformation path had been compiled against.
+// DeformationManager_Contacts.cpp uses the existing write-lock accessor.
+// ARTIST calls it twice, at 0x82623130 and 0x82623148. The corrected native
+// layout puts the scene update member at +16.
 //
 // Kept as a forwarder rather than deleted so the include in BrnDeformationManager.h (and any
 // future one) keeps resolving to the one true home.

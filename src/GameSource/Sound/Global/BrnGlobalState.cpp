@@ -40,8 +40,5 @@ CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* GlobalState::GetTypeInfo
     return &sTypeInfo;
 }
 
-static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* const gpGlobalStateReg =
-    CgsSound::Logic::State::AddToClassTypeInfoArray(GlobalState::GetStaticTypeInfo());
-
 } // namespace Logic
 } // namespace BrnSound

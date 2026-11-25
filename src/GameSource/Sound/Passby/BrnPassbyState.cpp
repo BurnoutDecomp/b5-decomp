@@ -48,37 +48,12 @@ PassbyState::PassbyState()
     mPassbyData.mbSuppressBoostBys          = false;        // stb 0, +128
 }
 
-// ---------------------------------------------------------------------------
-// GetStaticTypeInfo  @ 0x82688FC8
-//
-//   lis   r11, unk_82F2F95C@ha
-//   addi  r3,  r11, unk_82F2F95C@l   ; r3 = &sTypeInfo
-//   blr
-//
-// Returns the address of PassbyState's per-class static RTTI descriptor. The
-// X360 builds this descriptor in rodata (at 0x82F2F95C). Here it is a
-// function-local static, seeded with the canonical type name "PassbyState" and
-// the real registration id recovered from the PS3 DecFIGS build:
-//   ObjectID        = 0x40000  (PS3 __static_initialization_and_destruction_0
-//                               @ 0x85FA1C: PassbyState::sTypeInfo.ObjectID = 0x40000)
-//   mpcTypeName     = "PassbyState"
-//   mpBaseTypeInfo  = nullptr  (FLAG: BrnState's descriptor chain is DEFERRED;
-//                               PS3 sets baseTypeInfo = &BrnState::sTypeInfo, but
-//                               BrnState's descriptor is not homed in this TU)
-//   mpfnCreateObject= nullptr  (CreateObject @ 0x826D4978 is its own DEFERRED slice)
-// This mirrors the committed CgsEffectBase.cpp GetStaticTypeInfo precedent: the
-// observable return — a stable &sTypeInfo whose typeName is the recovered class
-// name — matches, without fabricating the descriptor's id/base wiring.
-//
-// ClassTypeInfo uses its recovered constructor.
-// ---------------------------------------------------------------------------
+// ARTIST descriptor 0x82F2F95C.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State> PassbyState::sTypeInfo(
+    0x40000, "PassbyState", &BrnState::sTypeInfo, &PassbyState::CreateObject);
+
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* PassbyState::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State> sTypeInfo(
-        0x40000,       // ObjectID        (PS3 0x85FA1C: PassbyState id = 0x40000)
-        "PassbyState", // mpcTypeName
-        0,       // mpBaseTypeInfo  (DEFERRED -- BrnState descriptor chain)
-        &PassbyState::CreateObject);  // mpfnCreateObject @ 0x826D4978
     return &sTypeInfo;
 }
 
@@ -95,12 +70,12 @@ CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* PassbyState::GetStaticTy
 // ---------------------------------------------------------------------------
 CgsSound::Logic::State* PassbyState::CreateObject(u32 luType)
 {
-    return new ("PassbyState", luType != 0) PassbyState();
+    return new (sTypeInfo.typeName, luType != 0) PassbyState();
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* PassbyState::GetTypeInfo() const
 {
-    return GetStaticTypeInfo();
+    return &sTypeInfo;
 }
 
 // BrnPassbyState.cpp:23 (DWARF `const float32_t KF_TIMEOUT_TIMER`): flt_820ABCD8, 5.0f.
@@ -149,21 +124,8 @@ void PassbyState::UpdateParams(f32 afDeltaTime)
 
 const char* PassbyState::GetTypeName() const
 {
-    return "PassbyState";
+    return sTypeInfo.typeName;
 }
-
-// ---------------------------------------------------------------------------
-// File-scope registration. WITHOUT THIS the descriptor exists but is invisible:
-// CgsSound::Logic::StateManager::CreateState @0x826A595C walks the registry
-// (State::GetRegisteredTypeInfo) and stops at the first null slot, so an
-// unregistered PassbyState makes PrepareStates fire "Failed to find State Object"
-// (CgsStateManager.cpp:283) once per requested instance and create NOTHING --
-// measured 8+8 asserts on the first run that reached this code. Same shape and
-// same call as the committed StreamingState / CollisionState / EmitterState
-// registrations.
-// ---------------------------------------------------------------------------
-static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* const gpPassbyStateReg =
-    CgsSound::Logic::State::AddToClassTypeInfoArray(PassbyState::GetStaticTypeInfo());
 
 } // namespace Passby
 } // namespace Logic

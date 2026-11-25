@@ -227,15 +227,12 @@ namespace Deformation
     // ==========================================================================================
     void DeformationManager::UpdateTriangleCache(InputBuffer_Update* lpSimInputUpdate)
     {
-        CGS_ASSERT(lpSimInputUpdate != 0, "lpSceneInputBuffer_Update != NULL");
+        CGS_ASSERT(lpSimInputUpdate != NULL,
+                   CGS_ASSERT_MESSAGE_AT("lpSceneInputBuffer_Update != NULL",
+                                         "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/DeformationManager/BrnDeformationManager.cpp", 2077));
 
-        // FLAG (cross-TU type-namespace mismatch to reconcile at consolidation): the frozen header
-        // types this arg as the local placeholder BrnPhysics::Deformation::InputBuffer_Update*,
-        // whereas the DWARF type is CgsSceneManager::SceneManagerIO::InputBuffer_Update, whose
-        // GetSceneUpdateInterface() returns the InSceneUpdateInterface the detached managers'
-        // UpdateTriangleCache take. The placeholder must be unified with that type.
-        mDetachedPartManager.UpdateTriangleCache(lpSimInputUpdate->GetSceneUpdateInterface());
-        mDetachedWheelManager.UpdateTriangleCache(lpSimInputUpdate->GetSceneUpdateInterface());
+        mDetachedPartManager.UpdateTriangleCache(lpSimInputUpdate->GetInSceneUpdateInterface());
+        mDetachedWheelManager.UpdateTriangleCache(lpSimInputUpdate->GetInSceneUpdateInterface());
     }
 
     // ==========================================================================================

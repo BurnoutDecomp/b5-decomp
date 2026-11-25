@@ -51,6 +51,9 @@ struct TrafficState : public BrnSound::Logic::BrnState
         return mpTrafficEntity;
     }
 
+protected:
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State> sTypeInfo;
+
 private:
     const BrnTraffic::BrnTrafficIO::TrafficSoundEntity* mpTrafficEntity;
 };

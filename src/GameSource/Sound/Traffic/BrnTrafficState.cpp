@@ -23,34 +23,30 @@ TrafficState::~TrafficState()
 // MemBase::operator new(0x58, "TrafficState", flavour) with the constructor inlined.
 CgsSound::Logic::State* TrafficState::CreateObject(u32 luType)
 {
-    return new ("TrafficState", luType != 0) TrafficState();
+    return new (sTypeInfo.typeName, luType != 0) TrafficState();
 }
 
 // Descriptor {0x30000, "TrafficState", BrnState::sTypeInfo, &CreateObject}.
 // FLAG: BrnState's own descriptor is not homed, so the base link is null (the
 // PassbyState precedent); CreateState only walks the base chain to break a tie between
 // two descriptors of the same state and type, and 0x30000 has no rival.
+// ARTIST descriptor 0x82F2E8F0.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State> TrafficState::sTypeInfo(
+    0x30000, "TrafficState", &BrnState::sTypeInfo, &TrafficState::CreateObject);
+
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* TrafficState::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State> sTypeInfo(
-        0x30000,
-        "TrafficState",
-        0,
-        &TrafficState::CreateObject );
     return &sTypeInfo;
 }
 
-static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* const gpTrafficStateReg =
-    CgsSound::Logic::State::AddToClassTypeInfoArray( TrafficState::GetStaticTypeInfo() );
-
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* TrafficState::GetTypeInfo() const
 {
-    return GetStaticTypeInfo();
+    return &sTypeInfo;
 }
 
 const char* TrafficState::GetTypeName() const
 {
-    return "TrafficState";
+    return sTypeInfo.typeName;
 }
 
 // Asserts the attachment, keeps it as the traffic entity (+0x54), then chains to the

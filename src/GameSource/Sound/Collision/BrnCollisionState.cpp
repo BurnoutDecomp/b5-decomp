@@ -82,31 +82,28 @@ bool CollisionState::Detach()
 // registers it in State::ClassTypeInfoArray.
 CgsSound::Logic::State* CollisionState::CreateObject(u32 luType)
 {
-    return new ("CollisionState", luType != 0) CollisionState();
+    return new (sTypeInfo.typeName, luType != 0) CollisionState();
 }
 
-CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>*
-CollisionState::GetStaticTypeInfo()
+// ARTIST descriptor 0x82F2F8FC.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State> CollisionState::sTypeInfo(
+    0x50000, "CollisionState", &BrnState::sTypeInfo, &CollisionState::CreateObject);
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* CollisionState::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State> sTypeInfo(
-        0x50000, "CollisionState", 0, &CollisionState::CreateObject);
     return &sTypeInfo;
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>*
 CollisionState::GetTypeInfo() const
 {
-    return GetStaticTypeInfo();
+    return &sTypeInfo;
 }
 
 const char* CollisionState::GetTypeName() const
 {
-    return "CollisionState";
+    return sTypeInfo.typeName;
 }
-
-static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* const
-    gpCollisionStateReg = CgsSound::Logic::State::AddToClassTypeInfoArray(
-        CollisionState::GetStaticTypeInfo());
 
 } // namespace Collision
 } // namespace Logic
