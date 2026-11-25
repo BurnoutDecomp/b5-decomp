@@ -77,11 +77,8 @@ bool DrawRenderable::sbPreZAlpha = false;
 CGS_STATIC_ASSERT((__alignof(rw::math::vpu::VecFloat) == 16), "ARTIST Pre-Z vector alignment");
 rw::math::vpu::VecFloat DrawRenderable::sPreZNearThreshold(__vspltisw(0));
 
-// The per-walk technique/material cache (X360 dword_83010FA4 / dword_83010FA8):
-// DispatchAll* reset these to -1, and the mesh walk re-binds programs/states/
-// constants only when the technique actually changes.
-static const MaterialTechniqueView* spLastTechnique = reinterpret_cast<const MaterialTechniqueView*>(~uintptr_t(0));
-static uintptr_t                    suLastTechniqueAux = ~uintptr_t(0);   // dword_83010FA8 (companion cache word)
+u32 DrawRenderableMesh::su32MaterialShadowingAddress = ~0u;
+u32 DrawRenderableMeshZOnly::su32MaterialShadowingAddress = ~0u;
 
 namespace
 {
@@ -276,9 +273,11 @@ Vector4* ShaderConstantsExternal::AddToDispatchBinFromStatePointers(
         CgsGraphics::DispatchObjectContext* lpContext, Vector4* lpDest,
         Vector4**& lrpStatePointers) const
 {
-    const u32* const sourceIndices = reinterpret_cast<const u32*>(mppaConstantsInstanceData);
-    for (u32 i = 0; i < muNumConstantsInstances; ++i)
-        lrpStatePointers[i] = const_cast<Vector4*>(lpContext->mapConstantData[sourceIndices[i]]);
+    for (u32 luIndex = 0; luIndex < muNumConstantsInstances; ++luIndex)
+    {
+        const u32 luConstantIndex = mppaConstantsInstanceData[luIndex];
+        lrpStatePointers[luIndex] = const_cast<Vector4*>(lpContext->mapConstantData[luConstantIndex]);
+    }
     lrpStatePointers += muNumConstantsInstances;
     return lpDest;
 }
@@ -827,9 +826,9 @@ s32 DispatchList::DispatchAllMeshes(const DispatchPacketInterpreter* lpInterpret
 {
     const u32 luFirst = static_cast<u32>(liFirst);
     // Per-walk cache reset (X360 dword_83010FA4/FA8 + the program shadows).
-    spLastTechnique    = reinterpret_cast<const MaterialTechniqueView*>(~uintptr_t(0));
-    suLastTechniqueAux = ~uintptr_t(0);
-    shadow::Device::ResetProgramShadows();
+    DrawRenderableMesh::SetMaterialShadowingAddress(~0u);
+    DrawRenderableMeshZOnly::SetMaterialShadowingAddress(~0u);
+    shadow::Device::ResetShadowingForShaders();
 
     u32 luEnd = muCount;
     if (liCount >= 0)
@@ -872,9 +871,9 @@ s32 DispatchList::DispatchAllMeshes(const DispatchPacketInterpreter* lpInterpret
             reinterpret_cast<Vector4**>(lpPacket[3]);
 
         // Technique-change path: states + programs + technique constants.
-        if (lpTechnique != spLastTechnique)
+        if (reinterpret_cast<u32>(lpTechnique) != DrawRenderableMesh::su32MaterialShadowingAddress)
         {
-            spLastTechnique = lpTechnique;
+            DrawRenderableMesh::SetMaterialShadowingAddress(reinterpret_cast<u32>(lpTechnique));
         }
 
         // Per-mesh: the technique's OBJECT-scope external constant blocks (the X360 runs
@@ -901,6 +900,24 @@ s32 DispatchList::DispatchAllMeshes(const DispatchPacketInterpreter* lpInterpret
     return luEnd != muCount ? static_cast<s32>(luEnd) : -1;
 }
 
+inline void DispatchPacketInterpreter::InterpretMeshZOnly(DispatchPacket* pPacket, void* lpContext) const
+{
+    CGS_ASSERT(pPacket != 0, CGS_ASSERT_MESSAGE_AT("pPacket", kDispatcherSource, 2854));
+    CGS_ASSERT(pPacket->GetCommandID() == DispatchCommand::E_DRAWRENDERABLEMESHZONLY,
+        CGS_ASSERT_MESSAGE_AT("pCommand->GetCommandID() == DRAWRENDERABLEMESHZONLY",
+            kDispatcherSource, 2858));
+    DrawRenderableMeshZOnly::Interpret(pPacket, 0, lpContext, mfTime);
+}
+
+inline void DispatchPacketInterpreter::InterpretMeshOcclusionQuery(DispatchPacket* pPacket) const
+{
+    CGS_ASSERT(pPacket != 0, CGS_ASSERT_MESSAGE_AT("pPacket", kDispatcherSource, 2867));
+    CGS_ASSERT(pPacket->GetCommandID() == DispatchCommand::E_DRAWRENDERABLEMESH,
+        CGS_ASSERT_MESSAGE_AT("pCommand->GetCommandID() == DRAWRENDERABLEMESH",
+            kDispatcherSource, 2871));
+    DrawRenderableMesh::InterpretOcclusionQuery(pPacket, mfTime);
+}
+
 // =============================================================================
 // CgsGraphics::DispatchList::DispatchAllMeshOcclusionQueries @ 0x827EE9D8
 //
@@ -913,32 +930,23 @@ s32 DispatchList::DispatchAllMeshOcclusionQueries(
 {
     // The X360 resets the shared technique/material and program shadows at the
     // start of this walk, just as it does for DispatchAllMeshes.
-    spLastTechnique    = reinterpret_cast<const MaterialTechniqueView*>(~uintptr_t(0));
-    suLastTechniqueAux = ~uintptr_t(0);
-    shadow::Device::ResetProgramShadows();
+    DrawRenderableMesh::SetMaterialShadowingAddress(~0u);
+    DrawRenderableMeshZOnly::SetMaterialShadowingAddress(~0u);
+    shadow::Device::ResetShadowingForShaders();
 
-    const u32 luFirst = static_cast<u32>(liFirst);
-    u32 luEnd = muCount;
+    s32 liEnd = static_cast<s32>(muCount);
     if (liCount >= 0)
     {
-        const u32 luRequestedEnd = luFirst + static_cast<u32>(liCount);
-        if (luRequestedEnd < luEnd)
-            luEnd = luRequestedEnd;
+        const s32 liRequestedEnd = liFirst + liCount;
+        liEnd = liRequestedEnd < liEnd ? liRequestedEnd : liEnd;
     }
 
-    for (u32 luIndex = luFirst; luIndex < luEnd; ++luIndex)
+    for (u32 luCurrent = liFirst; luCurrent < static_cast<u32>(liEnd); ++luCurrent)
     {
-        CGS_ASSERT(luIndex < muCount, "luIndex < muTotalKeyCount");
-        u32* lpPacket = PacketFromRecord(m_pBinBase, mpSortedKeys[luIndex]);
-        CGS_ASSERT(lpPacket != 0, "pPacket");
-        CGS_ASSERT(CommandIdOf(lpPacket[0]) == DispatchCommand::E_DRAWRENDERABLEMESH,
-                   "pCommand->GetCommandID() == DRAWRENDERABLEMESH");
-
-        DrawRenderableMesh::InterpretOcclusionQuery(
-            reinterpret_cast<DispatchCommand*>(lpPacket), lpInterpreter->GetTime());
+        lpInterpreter->InterpretMeshOcclusionQuery(GetCommandFromIndex_Sorted(luCurrent));
     }
 
-    return luEnd != muCount ? static_cast<s32>(luEnd) : -1;
+    return liEnd != static_cast<s32>(muCount) ? liEnd : -1;
 }
 
 // =============================================================================
@@ -951,22 +959,13 @@ s32 DispatchList::DispatchAllMeshOcclusionQueries(
 void DispatchList::DispatchAllMeshesZOnly(const DispatchPacketInterpreter* lpInterpreter,
                                           void* lpContext)
 {
-    spLastTechnique    = reinterpret_cast<const MaterialTechniqueView*>(~uintptr_t(0));
-    suLastTechniqueAux = ~uintptr_t(0);
-    shadow::Device::ResetProgramShadows();
+    DrawRenderableMesh::SetMaterialShadowingAddress(~0u);
+    DrawRenderableMeshZOnly::SetMaterialShadowingAddress(~0u);
+    shadow::Device::ResetShadowingForShaders();
 
-    if (muCount == 0)
-        return;
-
-    for (u32 luIndex = 0; luIndex < muCount; ++luIndex)
+    for (u32 luCurrent = 0; luCurrent < muCount; ++luCurrent)
     {
-        CGS_ASSERT(luIndex < muCount, "luIndex < muTotalKeyCount");
-        u32* lpPacket = PacketFromRecord(m_pBinBase, mpSortedKeys[luIndex]);
-        CGS_ASSERT(lpPacket != 0, "pPacket");
-        CGS_ASSERT(CommandIdOf(lpPacket[0]) == DispatchCommand::E_DRAWRENDERABLEMESHZONLY,
-                   "pCommand->GetCommandID() == DRAWRENDERABLEMESHZONLY");
-        DrawRenderableMeshZOnly::Interpret(reinterpret_cast<DispatchCommand*>(lpPacket),
-                                           0, lpContext, lpInterpreter->GetTime());
+        lpInterpreter->InterpretMeshZOnly(GetCommandFromIndex_Sorted(luCurrent), lpContext);
     }
 }
 
@@ -1024,9 +1023,9 @@ void DrawRenderableMeshZOnly::Interpret(DispatchCommand* lpCommand, DispatchFram
     Vector4** lppConstScratch =
         reinterpret_cast<Vector4**>(lpPacket[3]);
 
-    if (reinterpret_cast<uintptr_t>(lpTechnique) != suLastTechniqueAux)
+    if (reinterpret_cast<uintptr_t>(lpTechnique) != su32MaterialShadowingAddress)
     {
-        suLastTechniqueAux = reinterpret_cast<uintptr_t>(lpTechnique);
+        su32MaterialShadowingAddress = reinterpret_cast<uintptr_t>(lpTechnique);
     }
 
     // ARTIST 827F68EC..6920: the same animation time/UV offset in depth passes.

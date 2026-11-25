@@ -7,11 +7,9 @@
 
 // renderablemesh.h -- the global ::RenderableMesh dispatch primitive.
 //
-// Reconstructed from the DecFIGS DWARF (.../Dispatch/renderablemesh.h). Only the leading
-// data layout (through mpMaterialAssembly) is load-bearing for the consumers reconstructed
-// so far -- Renderable::UsesTexture reads mesh->mpMaterialAssembly. The mesh's own accessor
-// methods (GetVertexBuffer / GetIndexBuffer / vertex-descriptor helpers / Initialize /
-// Release) are left to renderablemesh.cpp's own TU and intentionally not declared here.
+// DecFIGS renderablemesh.h:78–151 defines the serialized mesh and its accessors.
+// ARTIST SetMeshBuffers at 827E68A0 reads the index buffer in the first slot of
+// maBuffers followed by the native vertex buffers.
 //
 // X360 member layout confirmed against the Renderable::UsesTexture asm (members accessed BY
 // NAME; the PC host pointer width differs from the 32-bit X360 target):
@@ -20,6 +18,7 @@
 //   +0x20 mpMaterialAssembly      CgsGraphics::MaterialAssembly*   (lwz 0x20(mesh))
 
 namespace CgsGraphics { struct MaterialAssembly; }
+namespace renderengine { class IndexBuffer; class VertexBuffer; }
 
 // Existing global spelling names the single genuine native SDK type.
 typedef renderengine::DrawIndexedParameters DrawIndexedParameters;
@@ -34,6 +33,16 @@ struct RenderableMesh
     u8                             mu8NumVertexBuffers;
     u8                             mu8Flags;
     void*                          maBuffers[1];            // trailing variable-length buffer table
+
+    u32 GetNumVertexBuffers() const { return mu8NumVertexBuffers; }
+    renderengine::IndexBuffer* GetIndexBuffer() const
+    {
+        return static_cast<renderengine::IndexBuffer*>(maBuffers[0]);
+    }
+    renderengine::VertexBuffer* GetVertexBuffer(u32 luIndex) const
+    {
+        return static_cast<renderengine::VertexBuffer*>(maBuffers[luIndex + 1]);
+    }
 
     // DWARF renderablemesh.h:83 -- per-mesh serialised vertex-descriptor block sizer, used by
     // CgsResource::RwRenderableResourceType::GetSerialisedResourceDescriptor (@0x828A9AB0).

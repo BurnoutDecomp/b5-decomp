@@ -221,9 +221,33 @@ namespace OverlapGenerationIO
         // ---- producers (all four inlined into their SceneManagerModule callers except
         //      UpdateBody, which the X360 emits out of line at 0x828BA430) -------------
         void AddBody(u32 luIndex, const rw::collision::AABBox* lpAabb,
-                     InAddBody::CullingGroup lCullGroup, rw::physics::BodyState leBodyState,
-                     VolumeInstanceId lVolumeInstanceID);                       // :200
-        void RemoveBody(u32 luIndex, VolumeInstanceId lVolumeInstanceID);       // :205
+                                  InAddBody::CullingGroup lCullGroup, rw::physics::BodyState leBodyState,
+                                  VolumeInstanceId lVolumeInstanceID)
+        {
+            InAddBody lEvent;
+
+            // The four ld/std qword pairs: the caller's box copied whole. rw::collision::AABBox is
+            // only forward-declared here (the rw::math::vpu::Vector3 fork -- see the header banner),
+            // so the copy goes through its pinned two-corner-row image; same reader idiom as the
+            // three committed precedents (CgsSceneSweeper_wQ5_01.cpp:137, CgsVolumeManager.cpp,
+            // PropManager_wQ4_03.cpp).
+            lEvent.mAabb             = *reinterpret_cast<const AABBoxRows*>(lpAabb);
+            lEvent.muIndex           = luIndex;
+            lEvent.mCullGroup        = lCullGroup;
+            lEvent.meBodyState       = leBodyState;
+            lEvent.mVolumeInstanceID = lVolumeInstanceID;
+
+            GetAddBodyQueue()->AddEvent(lEvent);
+        }
+        void RemoveBody(u32 luIndex, VolumeInstanceId lVolumeInstanceID)
+        {
+            InRemoveBody lEvent;
+
+            lEvent.mVolumeInstanceID = lVolumeInstanceID;
+            lEvent.muIndex           = luIndex;
+
+            GetRemoveBodyQueue()->AddEvent(lEvent);
+        }
         void UpdateBody(u32 luIndex, const rw::collision::AABBox* lpAabb,
                         Vector3 lvPadding, VolumeInstanceId lVolumeInstanceID); // :212 @0x828BA430
         void ForceNoPadding(u32 luVolInstIndex)

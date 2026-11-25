@@ -218,7 +218,7 @@ struct ShaderConstantTable
 
     // CgsShaderConstants.h:632 / 635 / 638
     void ClearDispatchThreadPointers();
-    void ClearDirtyConstants();
+    void ClearDirtyConstants() { mu8NumDirtyConstants = 0; }
     void SetAllConstantsDirty()
     {
         for (u32 luIndex = 0; luIndex < mu8NumUsedConstants; ++luIndex)

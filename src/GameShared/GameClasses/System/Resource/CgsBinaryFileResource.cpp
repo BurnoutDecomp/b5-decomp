@@ -16,7 +16,6 @@
 namespace CgsResource
 {
     uint32_t BinaryFileResource::GetSize() const { return mu32DataSize; }
-    uint32_t BinaryFileResource::GetDataSize() const { return mu32DataSize; }
     uint32_t BinaryFileResource::GetHeaderSize() const { return mu32DataOffset; }
 
     // A plain binary-file resource has no pointers to relocate, so the ctor leaves the Type defaults

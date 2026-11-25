@@ -947,7 +947,10 @@ namespace CgsLanguage
         lSeconds.Construct();
 
         lMinutes.SetDecimalPlaces(0);
-        lMinutes.SetMinimumDigits(1 + (meLanguage == E_LANGUAGE_ITALIAN));
+        if (meLanguage == E_LANGUAGE_ITALIAN)
+            lMinutes.SetMinimumDigits(2);
+        else
+            lMinutes.SetMinimumDigits(1);
         lMinutes.Convert(liMinutes);
         lSeconds.SetDecimalPlaces(0);
         lSeconds.SetMinimumDigits(2);

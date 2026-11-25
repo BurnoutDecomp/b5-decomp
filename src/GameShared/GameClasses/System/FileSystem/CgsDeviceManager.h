@@ -67,9 +67,6 @@ namespace CgsFileSystem
         static DeviceManager* GetIfInitialized() { return mpDeviceManager; }
 
         // ---- device registry ----
-        // Return the physical/virtual device registered under lpcPrefix, or null.
-        Device* FindDevice(const char* lpcPrefix);
-
         // Register a physical device under lpcPrefix and spawn its worker thread (step 2).
         void AddPhysicalDevice(Device* lpDevice, const char* lpcPrefix, ErrorCallback lpfErrorCallback); // 0x828F9320
 
@@ -110,6 +107,9 @@ namespace CgsFileSystem
         char               macDefaultPath[KI_MAX_DEFAULT_PATH_LENGTH + 1];
 
     private:
+        // Lookup requires a device prefix from registration or the open path.
+        Device* FindDevice(const char* lpcPrefix);
+
         static void AssertNativeLayout()
         {
             CGS_STATIC_ASSERT(sizeof(PhysicalDeviceSlot) == 0x4e90, "ARTIST physical slot stride");

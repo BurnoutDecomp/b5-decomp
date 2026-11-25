@@ -40,6 +40,7 @@
 
 #include <cstdlib>   // abort (the _purecall pure-virtual terminator @0x82C08F60)
 
+#include "SDKs/EATech/include/Apt/AptActionInterpreter.h"
 #include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h"
 #include "SDKs/EATech/include/Apt/AptFrameStack.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
@@ -379,19 +380,14 @@ void AptScriptFunctionBase::SetInLocalScope(const EAStringC& key, AptValue* pVal
 
 // InitializeStaticData @0x82AE26C0 -- allocate the flat register array (nRegisterCount
 // slots) from the operand-stack pool and fill it with `undefined`.
-void AptScriptFunctionBase::InitializeStaticData(int32_t nRegisterCount)
+void AptScriptFunctionBase::InitializeStaticData(const AptInitParmsT& rParms)
 {
-    // X360 @0x82AE26C0: cap = *(parms+0x30); block = Allocate(4*cap); anchor
-    // (dword_8324E3CC) AND the moving window base (off_8324E3D0) both start at the
-    // block; every slot is seeded with the `undefined` singleton (off_8324D814);
-    // count = 0. x64: 8-byte AptValue* slots (the console allocates 4*cap bytes).
-    snRegisterBlockSize = nRegisterCount;
-    AptValue** lpBlock = reinterpret_cast<AptValue**>(
-        gpAptOperandStackPool->Allocate(sizeof(AptValue*) * nRegisterCount));
-    spRegBlockBase             = lpBlock;
-    spRegBlockCurrentFrameBase = lpBlock;
-    for (int32_t i = 0; i < nRegisterCount; ++i)
-        lpBlock[i] = gpUndefinedValue;
+    snRegisterBlockSize = rParms.iRegisterCount;
+    spRegBlockBase = static_cast<AptValue**>(
+        gpAptOperandStackPool->Allocate(sizeof(AptValue*) * snRegisterBlockSize));
+    spRegBlockCurrentFrameBase = spRegBlockBase;
+    for (int32_t i = 0; i < snRegisterBlockSize; ++i)
+        spRegBlockBase[i] = gpUndefinedValue;
     snRegBlockCurrentFrameCount = 0;
 }
 

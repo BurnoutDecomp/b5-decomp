@@ -1,5 +1,6 @@
 #include "GameShared/GameClasses/System/FileSystem/CgsDeviceOperationPool.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 
 #include <cstring>   // memcpy
 
@@ -48,6 +49,9 @@ namespace CgsFileSystem
     // wait-forever (INFINITE) sentinel the Semaphore::Wait contract documents as -1.
     static const u32 KU_WAIT_FOREVER = 0xFFFFFFFFu;
 
+#define CGS_ARTIST_OPERATION_POOL_FILE \
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsDeviceOperationPool.cpp"
+
     // @ 0x828E9828
     bool OperationPool::AddOperation(const Operation* lpOperation)
     {
@@ -94,58 +98,58 @@ namespace CgsFileSystem
 
         RtlEnterCriticalSection(&mFutex.mCriticalSection);
 
-        // Pick the used slot with the highest priority; break ties by the lowest
-        // operation number (FIFO within a priority band).
-        s32 liBestIndex     = -1;
-        s32 liBestPriority  = 0;
-        u64 luBestNumber    = 0;
+        s32 liBestIndex = -1;
+        s32 liBestPriority = 0;
+        u64 luBestNumber = 0;
 
         for (s32 liIndex = 0; liIndex < KI_MAX_OPERATIONS; ++liIndex)
         {
-            if (!mabUsedOperations[liIndex])
+            if (mabUsedOperations[liIndex])
             {
-                continue;
-            }
-
-            const s32 liPriority = maOperations[liIndex].GetPriority();
-            const u64 luNumber   = mauOperationNumbers[liIndex];
-
-            if (liBestIndex < 0)
-            {
-                liBestPriority = liPriority;
-                luBestNumber   = luNumber;
-                liBestIndex    = liIndex;
-            }
-            else if (liPriority > liBestPriority)
-            {
-                luBestNumber   = luNumber;
-                liBestPriority = liPriority;
-                liBestIndex    = liIndex;
-            }
-            else if (liPriority == liBestPriority)
-            {
-                if (luNumber < luBestNumber)
+                if (liBestIndex < 0)
                 {
-                    luBestNumber   = luNumber;
-                    liBestPriority = liPriority;
-                    liBestIndex    = liIndex;
+                    liBestPriority = maOperations[liIndex].GetPriority();
+                    luBestNumber = mauOperationNumbers[liIndex];
+                    liBestIndex = liIndex;
+                }
+                else
+                {
+                    const s32 liPriority = maOperations[liIndex].GetPriority();
+                    if (liPriority > liBestPriority)
+                    {
+                        luBestNumber = mauOperationNumbers[liIndex];
+                        liBestPriority = liPriority;
+                        liBestIndex = liIndex;
+                    }
+                    else if (liPriority == liBestPriority)
+                    {
+                        const u64 luNumber = mauOperationNumbers[liIndex];
+                        if (luNumber < luBestNumber)
+                        {
+                            luBestNumber = luNumber;
+                            liBestPriority = liPriority;
+                            liBestIndex = liIndex;
+                        }
+                    }
                 }
             }
         }
 
-        if (liBestIndex < 0)
+        if (liBestIndex >= 0)
         {
-            // Asserted can't-happen: the semaphore guarantees an operation exists.
-            CGS_ASSERT(false,
-                       "A lockable operation queue should never fail to find an operation - something dodgy is going on\n");
-            muNextOperationNumber = 0;
+            memcpy(lpOutOperation, &maOperations[liBestIndex], sizeof(Operation));
+            mabUsedOperations[liBestIndex] = false;
             RtlLeaveCriticalSection(&mFutex.mCriticalSection);
-            return false;
+            return true;
         }
 
-        memcpy(lpOutOperation, &maOperations[liBestIndex], sizeof(Operation));
-        mabUsedOperations[liBestIndex] = false;
+        CGS_ASSERT_STREAM_AT(false,
+            "A lockable operation queue should never fail to find an operation - something dodgy is going on\n",
+            CGS_ARTIST_OPERATION_POOL_FILE, 210);
+        muNextOperationNumber = 0;
         RtlLeaveCriticalSection(&mFutex.mCriticalSection);
-        return true;
+        return false;
     }
 }
+
+#undef CGS_ARTIST_OPERATION_POOL_FILE

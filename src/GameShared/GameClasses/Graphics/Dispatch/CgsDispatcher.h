@@ -2,6 +2,7 @@
 
 #include <cstddef>   // offsetof
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // =============================================================================
 // CgsDispatcher.h  (GameShared/GameClasses/Graphics/Dispatch)
@@ -175,6 +176,14 @@ public:
     // WorldEntityModule::RenderInstance @0x822D5AB0 reads the submitted-packet count
     // (muCount @0x0C) for its every-128th "send all shader constants" cadence.
     u32 GetCount() const { return muCount; }
+    DispatchCommand* GetCommandFromIndex_Sorted(u32 luIndex) const
+    {
+        CGS_ASSERT(luIndex < muCount,
+            CGS_ASSERT_MESSAGE_AT("luIndex < muTotalKeyCount",
+                "..\\..\\..\\GameShared\\GameClasses\\Graphics\\Dispatch\\CgsDispatcher.h", 622));
+        return m_pBinBase + (static_cast<u32>(mpSortedKeys[luIndex]) & SortKey::KU_MASK_OFFSET);
+    }
+
     KeyBlock* GetFirstKeyBlock() const { return mpBlockListHead; }
     void SetSingleKeyBlock(KeyBlock* lpBlock)
     {

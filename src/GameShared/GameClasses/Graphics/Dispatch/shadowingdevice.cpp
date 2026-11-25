@@ -23,6 +23,7 @@
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/vertexprogramstate.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/meshhelper.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/vertexbuffer.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/indexbuffer.h"
 
 namespace shadow
 {
@@ -151,6 +152,54 @@ namespace shadow
                                       lrParameters.muBaseVertexIndex,
                                       lrParameters.muMinVertexIndex,
                                       lrParameters.muNumVertices);
+    }
+
+    // ARTIST 827E68A0. The SDK sets the buffer addresses first; the
+    // active descriptor supplies the stream strides during vertex-state flush.
+    void Device::SetMeshBuffers(const RenderableMesh* lpMesh)
+    {
+        if (m_Shadow.m_pMesh == lpMesh)
+            return;
+
+        D3DDevice_SetIndices(gpD3DDevice, lpMesh->GetIndexBuffer());
+        const u32 luNumVertexBuffers = lpMesh->GetNumVertexBuffers();
+        CGS_ASSERT(luNumVertexBuffers > 0,
+            CGS_ASSERT_MESSAGE_AT("luNumVertexBuffers > 0", KAC_ARTIST_SHADOW_HEADER, 846));
+        CGS_ASSERT(luNumVertexBuffers <= 2,
+            CGS_ASSERT_MESSAGE_AT("luNumVertexBuffers <= 2", KAC_ARTIST_SHADOW_HEADER, 847));
+        D3DDevice_SetStreamSource(gpD3DDevice, 0, lpMesh->GetVertexBuffer(0), 0, 0, 1);
+        if (luNumVertexBuffers == 2)
+            D3DDevice_SetStreamSource(gpD3DDevice, 1, lpMesh->GetVertexBuffer(1), 0, 0, 1);
+        m_Shadow.m_pMesh = lpMesh;
+        m_Shadow.m_pMeshState = 0;
+    }
+
+    // ARTIST 827ED808. Restore the mesh's stored index count after submitting
+    // the active portion of its instanced index buffer.
+    void Device::DrawInstancedIndexedPrimitive_Custom(renderengine::DrawIndexedParameters& lrParameters,
+        s32 luInstanceCount, s32 luInstanceMax)
+    {
+        if (luInstanceCount == 0)
+            return;
+
+        static const char lacArtistSource[] =
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\Dispatch/shadowingdevice.cpp";
+        CGS_ASSERT(luInstanceCount >= 1,
+            CGS_ASSERT_MESSAGE_AT("luInstanceCount >= 1", lacArtistSource, 574));
+        CGS_ASSERT(luInstanceCount <= luInstanceMax,
+            CGS_ASSERT_MESSAGE_AT("luInstanceCount <= luInstanceMax", lacArtistSource, 575));
+
+        FlushVertexProgramState();
+        const u32 luOriginalIndexCount = lrParameters.GetIndexCount();
+        u32 luNewIndexCount = ((luOriginalIndexCount + 1) * luInstanceCount) / luInstanceMax;
+        if (luInstanceCount == luInstanceMax)
+            luNewIndexCount = luOriginalIndexCount;
+        lrParameters.SetIndexCount(luNewIndexCount);
+        FlushVertexProgramState();
+        D3DDevice_DrawIndexedVertices(gpD3DDevice,
+            static_cast<D3DPRIMITIVETYPE>(lrParameters.GetPrimitiveType()), lrParameters.GetBaseVertexIndex(),
+            lrParameters.GetStartIndex(), lrParameters.GetIndexCount());
+        lrParameters.SetIndexCount(luOriginalIndexCount);
     }
 
     // @0x82276970: clear the whole shadow cache.
@@ -783,27 +832,6 @@ namespace shadow
     // ============================================================================
     // The mesh-dispatch flush seam (DispatchList::DispatchAllMeshes).
     // ============================================================================
-
-    // X360 walk prologue, and on the console it is EXACTLY two stores: dword_8301095C = 0 (vertex
-    // program shadow) @0x827F2758 and dword_83010960 = -1 (pixel program shadow) @0x827F2764, in
-    // DispatchAllMeshes @0x827F2718.
-    //
-    // The old note here said the three bound-state slots "live on the per-dispatch context". They do
-    // not, and that clause is deleted: DispatchAllMeshes reaches them as 0xD8 / 0x14 / 0xDC off r27,
-    // and r27 is off_83010950 (`addi r11, r11, off_83010950@l` @0x827F2754 -> `stw r11, var_140(r1)`
-    // @0x827F2760 -> `lwz r27, var_140(r1)` @0x827F2EE0) -- the file-scope shadow block. Across all
-    // 3307 instructions of that function the ONLY accesses to dword_83010964 / dword_83010A28 /
-    // dword_83010A2C are the technique bind's own compare/store pairs (`lwz r11, 0xD8(r27)`
-    // @0x827F2EF0 / `stw r31, 0xD8(r27)` @0x827F2F10, and the 0x14 / 0xDC twins at 0x827F2F24 /
-    // 0x827F2F44 and 0x827F2F58 / 0x827F2F78). The console caches the triple ACROSS walk boundaries.
-    //
-    void Device::ResetProgramShadows()
-    {
-        m_Shadow.m_pVertexProgramBuffer = 0;
-        m_Shadow.m_pPixelProgramBuffer  = reinterpret_cast<const renderengine::ProgramBufferData*>(
-            static_cast<uintptr_t>(~0u));
-        m_Shadow.m_pRasterizerState   = 0;
-    }
 
     // =====================================================================================
     // The technique bind, as the X360 inlines it into DispatchList::DispatchAllMeshes

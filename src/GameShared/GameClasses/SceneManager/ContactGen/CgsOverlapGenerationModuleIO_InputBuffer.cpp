@@ -85,63 +85,6 @@ void InputBuffer::Destruct()
 }
 
 // ---------------------------------------------------------------------------------
-// InputBuffer::AddBody   (CgsOverlapGenerationModuleIO.h:200)
-//   Queue "start colliding this volume instance". No out-of-line symbol: the X360
-//   inlines it into its only caller, SceneManagerModule::AddBody @0x828BA498, whose
-//   arguments are this producer's arguments one-for-one
-//   (r5 = luIndex, r6 = lpAabb, r7 = lCullGroup, r8 = leBodyState, r9 = lVolumeInstanceID):
-//       ld/std x4 off r6      -> the 32-byte world box into mAabb   (+0x00..+0x1F)
-//       stw r7                -> mCullGroup                          (+0x20)
-//       stw r5                -> muIndex                             (+0x24)
-//       stw r8                -> meBodyState                         (+0x28)
-//       std r9                -> mVolumeInstanceID                   (+0x30)
-//       bl sub_828B0188 (== the non-const GetAddBodyQueue, this+16, write-lock assert)
-//       bl BaseEventQueue<InAddBody>::AddEvent
-//   The caller's trailing culling-group bookkeeping (the assert + the
-//   mCullingGroupManager byte store) is NOT part of this producer -- it stays in
-//   SceneManagerModule::AddBody.
-// ---------------------------------------------------------------------------------
-void InputBuffer::AddBody(u32 luIndex, const rw::collision::AABBox* lpAabb,
-                          InAddBody::CullingGroup lCullGroup, rw::physics::BodyState leBodyState,
-                          VolumeInstanceId lVolumeInstanceID)
-{
-    InAddBody lEvent;
-
-    // The four ld/std qword pairs: the caller's box copied whole. rw::collision::AABBox is
-    // only forward-declared here (the rw::math::vpu::Vector3 fork -- see the header banner),
-    // so the copy goes through its pinned two-corner-row image; same reader idiom as the
-    // three committed precedents (CgsSceneSweeper_wQ5_01.cpp:137, CgsVolumeManager.cpp,
-    // PropManager_wQ4_03.cpp).
-    lEvent.mAabb             = *reinterpret_cast<const AABBoxRows*>(lpAabb);
-    lEvent.mCullGroup        = lCullGroup;
-    lEvent.muIndex           = luIndex;
-    lEvent.meBodyState       = leBodyState;
-    lEvent.mVolumeInstanceID = lVolumeInstanceID;
-
-    GetAddBodyQueue()->AddEvent(lEvent);
-}
-
-// ---------------------------------------------------------------------------------
-// InputBuffer::RemoveBody   (CgsOverlapGenerationModuleIO.h:205)
-//   Queue "stop colliding this volume instance". No out-of-line symbol: the X360
-//   inlines it into SceneManagerModule::ProcessRemoveForCollisionEvent @0x828CF828
-//   (and into RemoveAllEntityVolumeInstances), which stacks
-//       v10 = *(u64*)lpEvent   -> mVolumeInstanceID  (+0x00)
-//       v11 = luIndex          -> muIndex            (+0x08)
-//   then `sub_828B02D8(inputBuffer)` (== the non-const GetRemoveBodyQueue, this+2097200,
-//   write-lock assert) and BaseEventQueue<InRemoveBody>::AddEvent.
-// ---------------------------------------------------------------------------------
-void InputBuffer::RemoveBody(u32 luIndex, VolumeInstanceId lVolumeInstanceID)
-{
-    InRemoveBody lEvent;
-
-    lEvent.mVolumeInstanceID = lVolumeInstanceID;
-    lEvent.muIndex           = luIndex;
-
-    GetRemoveBodyQueue()->AddEvent(lEvent);
-}
-
-// ---------------------------------------------------------------------------------
 // InputBuffer::UpdateBody @ 0x828BA430   (CgsOverlapGenerationModuleIO.h:212)
 //   Push a per-frame body-position update request. THE ONE PRODUCER THE X360 EMITS OUT
 //   OF LINE. It assembles the 64-byte InUpdateBody record on the stack --

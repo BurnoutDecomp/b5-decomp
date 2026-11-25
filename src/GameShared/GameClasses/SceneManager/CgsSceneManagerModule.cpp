@@ -557,24 +557,22 @@ void SceneManagerModule::ProcessSetVolumeInstanceCullingGroupEvent(
     const SceneManagerIO::InEventSetVolumeInstanceCullingGroup& lrEvent,
     OverlapGenerationIO::InputBuffer* lpOverlapGenerationInput)
 {
-    CGS_ASSERT(lpOverlapGenerationInput != NULL, "lpOverlapGenerationInputBuffer != NULL");
+    CGS_ASSERT_AT(lpOverlapGenerationInput != NULL, "lpOverlapGenerationInputBuffer != NULL",
+                  KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 1080);
 
-    const VolumeInstanceId lInstanceId    = lrEvent.mVolumeInstanceId;
-    const u8               lu8CullingGroup = static_cast<u8>(lrEvent.mCullingGroup);
-
-    const s32 liVolumeInstIndex = mEntityManager.GetVolumeInstanceIndexByID(lInstanceId);
-    if (liVolumeInstIndex == -1)
+    const s32 liVolumeInstIndex = mEntityManager.GetVolumeInstanceIndexByID(lrEvent.mVolumeInstanceId);
+    if (liVolumeInstIndex != KI_INVALID_VOLUME_INSTANCE_INDEX)
     {
-        CGS_ASSERT(false, "Volume instance not found");
-        return;
+        CGS_ASSERT_AT(liVolumeInstIndex < KI_MAX_NUM_VOLUME_INSTANCES,
+                      "liVolumeInstIndex < KI_MAX_NUM_VOLUME_INSTANCES",
+                      KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 1087);
+        mCullingGroupManager.GetVolumeInstanceCullingGroup()[liVolumeInstIndex] =
+            static_cast<u8>(lrEvent.mCullingGroup);
     }
-
-    CGS_ASSERT(liVolumeInstIndex < KI_MAX_NUM_VOLUME_INSTANCES,
-               "liVolumeInstIndex < KI_MAX_NUM_VOLUME_INSTANCES");
-
-    // Store the new culling group on that instance (X360 stores a byte into the
-    // culling-group manager's per-instance array at the resolved index).
-    mCullingGroupManager.GetVolumeInstanceCullingGroup()[liVolumeInstIndex] = lu8CullingGroup;
+    else
+    {
+        CGS_ASSERT_AT(false, "Volume instance not found", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 1094);
+    }
 }
 
 // ===========================================================================
@@ -1197,123 +1195,54 @@ void SceneManagerModule::BridgeInputSceneUpdateInterfaceToSubModules(
     }
 }
 
-// ===========================================================================
-// SceneManagerModule::UpdateScene @ 0x828D4C28  (X360 vtbl+64)
-//
-//   1. StartMonitor(the UpdateScene CPU monitor);
-//   2. four null tripwires;
-//   3. CreateIOBuffer<SpatialPartitionIO::InputBuffer_Update>("SpatialPartition") and
-//      <OverlapGenerationIO::InputBuffer>("OverlapGeneration") on the INPUT stack,
-//      <SpatialPartitionIO::OutputBuffer> + <OverlapGenerationIO::OutputBuffer> on the
-//      OUTPUT stack;
-//   4. read-lock the scene input, write-lock both sub-module inputs, and fan the scene
-//      input's update interface out through BridgeInputSceneUpdateInterfaceToSubModules,
-//      then unlock in reverse;
-//   5. SpatialPartitionManager::UpdateScene(spIn) -- drain the queue into the octree and
-//      run its per-frame bounds update;
-//   6. the overlap generator's own update;
-//   7. write-lock the scene output and publish &mTriangleCacheManager on it;
-//   8. destroy the four buffers; StopMonitor.
-//
-// ⭐ STEP 3's OVERLAP-GENERATION HALF IS LIVE AS OF 2026-08-19 (wave Q5 / E1a). The note
-// that stood here said the generator's input buffer "would only be filled by the volume
-// legs the bridge does not reconstruct" -- those legs now exist, so the buffer is created
-// on the input stack, write-locked, threaded into the bridge and destroyed, exactly as the
-// console does (0x828D4D3C CreateIOBuffer<OverlapGenerationIO::InputBuffer>("OverlapGeneration"),
-// 0x828D4D7C LockForWrite, 0x828D4D94 the bridge call with it in r4, 0x828D4D98
-// UnlockForWrite, 0x828D4E2C DestroyIOBuffer). Without it every AddForCollision event this
-// frame would have had nowhere to go.
-//
-// FLAG, STILL TRIMMED -- step 3's SPATIAL-PARTITION half. The bridge applies the entity legs
-// DIRECTLY to the partition (as the X360's own add leg does) rather than restaging them
-// through a SpatialPartitionIO::InputBuffer_Update, so that buffer -- a 135 KB VEQ pushed on
-// the input stack every frame -- is still not created, and neither are the two OUTPUT-side
-// buffers this function's console form pushes (SpatialPartitionIO::OutputBuffer +
-// OverlapGenerationIO::OutputBuffer): nothing in this tree reads either from here.
-// UpdateContactGeneration creates its own generator OUTPUT buffer.
-//
-// ⭐ STEP 6 -- `mOverlapGenerator.Update(ogIn)` (the module vtable slot +0x44, called with
-// the generator input buffer; body in ContactGen/CgsOverlapGenerationModule.cpp). It is the
-// pass that REPLAYS the queues step 4 fills -- ProcessAddBodyQueue / ProcessUpdateBodyQueue /
-// ProcessRemoveBodyQueue / ProcessForceNoPaddingQueue -> SceneSweeper::Add/Update/RemoveObject
-// -- so without it the events the drain queues would be destroyed unread at the end of this
-// function and the broad phase would see nothing.
-//
-// ⭐ STEP 7's consumers are WorldModule::BridgeSceneQueryResultsToPhysics and
-// BridgeSceneModuleToOutput; both read this seat.
-// ===========================================================================
-bool SceneManagerModule::UpdateScene(CgsModule::IOBufferStack* lpInputBufferStack,
-                                     CgsModule::IOBufferStack* lpOutputBufferStack,
-                                     SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer,
-                                     SceneManagerIO::OutputBuffer* lpSceneOutputBuffer,
-                                     bool lbPrepare)
+// ARTIST 828D4C28. Each stack destroys its typed scene buffers in reverse order.
+void SceneManagerModule::UpdateScene(CgsModule::IOBufferStack* lpInputBufferStack,
+                                    CgsModule::IOBufferStack* lpOutputBufferStack,
+                                    const SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer,
+                                    SceneManagerIO::OutputBuffer* lpSceneOutputBuffer,
+                                    bool lbPrepare)
 {
     ScopedPerfMon lUpdateScene(siUpdateScenePerfMon);
 
-    CGS_ASSERT(lpInputBufferStack != NULL,  "lpInputBufferStack != NULL");
-    CGS_ASSERT(lpOutputBufferStack != NULL, "lpOutputBufferStack != NULL");
-    CGS_ASSERT(lpSceneInputBuffer != NULL,  "lpSceneInputBuffer != NULL");
-    CGS_ASSERT(lpSceneOutputBuffer != NULL, "lpSceneOutputBuffer != NULL");
+    CGS_ASSERT_AT(lpInputBufferStack != NULL, "lpInputBufferStack != NULL",
+                  KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 728);
+    CGS_ASSERT_AT(lpOutputBufferStack != NULL, "lpOutputBufferStack != NULL",
+                  KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 729);
+    CGS_ASSERT_AT(lpSceneInputBuffer != NULL, "lpSceneInputBuffer != NULL",
+                  KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 730);
+    CGS_ASSERT_AT(lpSceneOutputBuffer != NULL, "lpSceneOutputBuffer != NULL",
+                  KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 731);
 
-    if (lpSceneInputBuffer == NULL)
-    {
-        return true;
-    }
+    SpatialPartitionIO::InputBuffer_Update* lpPartitionInput = NULL;
+    OverlapGenerationIO::InputBuffer* lpOverlapGenerationInput = NULL;
+    SpatialPartitionIO::OutputBuffer* lpPartitionOutput = NULL;
+    OverlapGenerationIO::OutputBuffer* lpOverlapGenerationOutput = NULL;
 
-    // Step 3 (generator half): push this frame's overlap-generation INPUT buffer. Failure is
-    // possible on the host (the buffer is ~2.4 MB of event queues and the stack is finite);
-    // CreateIOBuffer nulls the pointer and returns false, and the bridge's own guard then
-    // skips the legs that need it rather than firing one assert per queued event.
-    OverlapGenerationIO::InputBuffer* lpOverlapGenerationInput = 0;
+    lpInputBufferStack->CreateIOBuffer(&lpPartitionInput, "SpatialPartition");
     lpInputBufferStack->CreateIOBuffer(&lpOverlapGenerationInput, "OverlapGeneration");
+    lpOutputBufferStack->CreateIOBuffer(&lpPartitionOutput, "SpatialPartition");
+    lpOutputBufferStack->CreateIOBuffer(&lpOverlapGenerationOutput, "OverlapGeneration");
 
-    // ARTIST 828D4D64 locks the input for the const bridge to consume.
     lpSceneInputBuffer->LockForRead();
-    if (lpOverlapGenerationInput != 0)
-    {
-        lpOverlapGenerationInput->LockForWrite();
-    }
-
-    BridgeInputSceneUpdateInterfaceToSubModules(lpOverlapGenerationInput, NULL,
-                                                lpSceneInputBuffer, lbPrepare);
-
-    if (lpOverlapGenerationInput != 0)
-    {
-        lpOverlapGenerationInput->UnlockForWrite();
-    }
+    lpPartitionInput->LockForWrite();
+    lpOverlapGenerationInput->LockForWrite();
+    BridgeInputSceneUpdateInterfaceToSubModules(lpOverlapGenerationInput, lpPartitionInput,
+                                              lpSceneInputBuffer, lbPrepare);
+    lpOverlapGenerationInput->UnlockForWrite();
+    lpPartitionInput->UnlockForWrite();
     lpSceneInputBuffer->UnlockForRead();
 
-    // The partition's own per-frame pass (re-derive the loose bounds of every branch the
-    // adds/removes flagged). The X360 reaches it through SpatialPartitionManager::
-    // UpdateScene, which read-locks the (unused here) spatial-partition input first.
-    SpatialPartition* lpPartition = mSpatialPartitionManager.GetSpatialPartition();
-    if (lpPartition != NULL)
-    {
-        lpPartition->Update();
-    }
+    mSpatialPartitionManager.UpdateScene(lpPartitionInput);
+    mOverlapGenerator.Update(lpOverlapGenerationInput);
 
-    // Step 6: replay this frame's add/update/remove/force-no-padding queues into the
-    // sweep-and-prune broad phase (see the STEP 6 note in the banner).
-    if (lpOverlapGenerationInput != 0)
-    {
-        mOverlapGenerator.Update(lpOverlapGenerationInput);
-    }
-
-    // Step 7 (X360 0x828D4D8C..0x828D4DC4, byte-identical to ProcessSceneQueries' tail):
-    // write-lock the scene output and publish &mTriangleCacheManager on it, so every scene
-    // output buffer this module fills carries the cache handle -- not just the query one.
     lpSceneOutputBuffer->LockForWrite();
     lpSceneOutputBuffer->GetTriangleCacheInterface()->SetTriangleCacheManager(&mTriangleCacheManager);
     lpSceneOutputBuffer->UnlockForWrite();
 
-    // Step 8 (the half this function pushes): pop the generator input buffer. The console
-    // destroys it first of the four (0x828D4E2C).
-    if (lpOverlapGenerationInput != 0)
-    {
-        lpInputBufferStack->DestroyIOBuffer(&lpOverlapGenerationInput);
-    }
-
-    return true;
+    lpInputBufferStack->DestroyIOBuffer(&lpOverlapGenerationInput);
+    lpInputBufferStack->DestroyIOBuffer(&lpPartitionInput);
+    lpOutputBufferStack->DestroyIOBuffer(&lpOverlapGenerationOutput);
+    lpOutputBufferStack->DestroyIOBuffer(&lpPartitionOutput);
 }
 
 // ===========================================================================
@@ -1632,7 +1561,9 @@ void SceneManagerModule::AddBody(OverlapGenerationIO::InputBuffer* lpOverlapGene
 
     // Record the object's culling group (non-gating index tripwire, then the store
     // runs unconditionally -- X360 stbx sits past the assert's branch).
-    CGS_ASSERT(luObjectIndex < 0x13BBu, "luObjectIndex < (uint32_t)SceneSweeper::KU_MAX_NUM_OBJECTS");
+    CGS_ASSERT_AT(luObjectIndex < static_cast<u32>(SceneSweeper::KU_MAX_NUM_OBJECTS),
+                  "luObjectIndex < (uint32_t)SceneSweeper::KU_MAX_NUM_OBJECTS",
+                  KAC_SCENE_STAGE_ASSERT_FILE, 758);
     mCullingGroupManager.GetVolumeInstanceCullingGroup()[luObjectIndex] =
         static_cast<u8>(lCullingGroup);
 }
@@ -1836,22 +1767,20 @@ void SceneManagerModule::ProcessRemoveForCollisionEvent(
     const SceneManagerIO::InEventRemoveForCollision& lrEvent,
     OverlapGenerationIO::InputBuffer* lpOverlapGenerationInput)
 {
-    CGS_ASSERT(lpOverlapGenerationInput != NULL, "lpOverlapGenerationInputBuffer != NULL");  // :1047
+    CGS_ASSERT_AT(lpOverlapGenerationInput != NULL, "lpOverlapGenerationInputBuffer != NULL",
+                  KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 1047);
 
-    const VolumeInstanceId lVolumeInstanceId = lrEvent.mVolumeInstanceId;
-
-    const s32 liVolumeInstanceIndex =
-        mEntityManager.GetVolumeInstanceIndexByID(lVolumeInstanceId);
-    if (liVolumeInstanceIndex == KI_INVALID_VOLUME_INSTANCE_INDEX)
+    const s32 liVolumeInstanceIndex = mEntityManager.GetVolumeInstanceIndexByID(lrEvent.mVolumeInstanceId);
+    if (liVolumeInstanceIndex != KI_INVALID_VOLUME_INSTANCE_INDEX)
     {
-        CGS_ASSERT(false, "Volume instance not found");                                     // :1060
-        return;
+        mEntityManager.SetVolumeForCollision(lrEvent.mVolumeInstanceId, false);
+        lpOverlapGenerationInput->RemoveBody(static_cast<u32>(liVolumeInstanceIndex),
+                                             lrEvent.mVolumeInstanceId);
     }
-
-    mEntityManager.SetVolumeForCollision(lVolumeInstanceId, false);
-
-    lpOverlapGenerationInput->RemoveBody(static_cast<u32>(liVolumeInstanceIndex),
-                                         lVolumeInstanceId);
+    else
+    {
+        CGS_ASSERT_AT(false, "Volume instance not found", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 1060);
+    }
 }
 
 // ===========================================================================
@@ -1896,27 +1825,28 @@ void SceneManagerModule::ProcessRemoveForCollisionEvent(
 void SceneManagerModule::RemoveAllEntityVolumeInstances(
     u16 lu16EntityIndex, OverlapGenerationIO::InputBuffer* lpOverlapGenerationInput)
 {
-    s32 liVolumeInstanceIndex = KI_INVALID_VOLUME_INSTANCE_INDEX;
+    const EntityManager& lrEntityManager = mEntityManager;
+    s32 liFirstVolumeInstanceIndex;
     const VolumeInstance* lpVolumeInstance =
-        mEntityManager.GetFirstEntityVolumeInstance(lu16EntityIndex, &liVolumeInstanceIndex);
+        lrEntityManager.GetFirstEntityVolumeInstance(lu16EntityIndex, &liFirstVolumeInstanceIndex);
 
-    while (lpVolumeInstance != NULL)
+    if (lpVolumeInstance != NULL)
     {
-        // The id has to be taken off the record before RemoveVolumeInstanceByIndex runs
-        // (the console re-loads it at 0x828CDA28 for the same reason).
-        const VolumeInstanceId lVolumeInstanceId = lpVolumeInstance->mUserID;
-
-        if (lpVolumeInstance->IsCollidable())                                 // 0x828CD9E4
+        s32 liVolumeInstanceIndex = liFirstVolumeInstanceIndex;
+        do
         {
-            mEntityManager.SetVolumeForCollisionByIndex(liVolumeInstanceIndex, false);  // 0x828CDA00
+            if (lpVolumeInstance->IsCollidable())
+            {
+                mEntityManager.SetVolumeForCollisionByIndex(liVolumeInstanceIndex, false);
+                lpOverlapGenerationInput->RemoveBody(static_cast<u32>(liVolumeInstanceIndex),
+                                                     lpVolumeInstance->mUserID);
+            }
 
+            mEntityManager.RemoveVolumeInstanceByIndex(lpVolumeInstance->mUserID, liVolumeInstanceIndex);
+            liVolumeInstanceIndex = lpVolumeInstance->miNextEntityVolumeInstance;
+            lpVolumeInstance = lrEntityManager.GetVolumeInstance(liVolumeInstanceIndex);
         }
-
-        mEntityManager.RemoveVolumeInstanceByIndex(lVolumeInstanceId,
-                                                   liVolumeInstanceIndex);    // 0x828CDA30..0x828CDA48
-
-        liVolumeInstanceIndex = lpVolumeInstance->miNextEntityVolumeInstance;  // 0x828CDA4C
-        lpVolumeInstance = mEntityManager.GetVolumeInstance(liVolumeInstanceIndex);  // 0x828CDA58
+        while (lpVolumeInstance != NULL);
     }
 }
 

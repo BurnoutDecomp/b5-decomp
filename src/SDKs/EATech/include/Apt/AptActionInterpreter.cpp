@@ -85,7 +85,7 @@ void AptActionInterpreter::stackPopAndPush(int nCount, AptValue* pValue)
 // ---------------------------------------------------------------------------
 // stackPushIndirect @0x7ECE34 -- push pValue, first resolving an indirection.
 // A Lookup value (tag 8, defined) reads the interpreter's string-constant dictionary
-// mpConstantPool[index]; a Register value (tag 4, defined) reads the AS function
+// mConstantPool.mppEntries[index]; a Register value (tag 4, defined) reads the AS function
 // register file via AptScriptFunctionBase::GetRegisterValue(index). The push is
 // the console's inlined stackPush (store/advance/AddRef), reproduced via stackPush.
 // ---------------------------------------------------------------------------
@@ -94,7 +94,7 @@ void AptActionInterpreter::stackPushIndirect(AptValue* pValue)
     int nRegIndex = -1;
 
     if (pValue->isLookup())            // AptVFT_Lookup (tag 8) && defined
-        pValue = mpConstantPool[static_cast<AptLookup*>(pValue)->GetIndex()];
+        pValue = mConstantPool.mppEntries[static_cast<AptLookup*>(pValue)->GetIndex()];
     else if (pValue->isRegister())     // AptVFT_Register (tag 4) && defined
     {
         nRegIndex = static_cast<int>(static_cast<AptRegister*>(pValue)->GetIndex());
@@ -460,7 +460,7 @@ void AptActionInterpreter::_doEnumerate(AptValue* pScope, AptValue* pTarget)
 // The faithful body drives AptScriptFunctionBase::SetupBeforeExecution /
 // CleanupAfterExecution + runStream over the captured scope, saving/restoring the
 // interpreter's current function (mpCurrentFunction) + string-constant-dictionary pair
-// (mnConstantPoolCount / mpConstantPool, which GetConstantPool installs per-function):
+// (mnConstantPoolCount / mConstantPool.mppEntries, which GetConstantPool installs per-function):
 // CallFunctionDispatch / ExecuteScriptFunction, both homed + LIVE in
 // AptActionInterpreterInterpHelpers.cpp (including the post-call abort collapse --
 // Burnout_X360_Artist_01e3_0, the pop-N primitive).

@@ -186,6 +186,12 @@ struct DrawRenderableMesh : public DispatchCommand
 
     // X360 0x827EE550 -- issue a hardware occlusion query for this mesh.
     static void InterpretOcclusionQuery(DispatchCommand* lpCommand, f32 lfTime);
+
+    static void SetMaterialShadowingAddress(u32 luAddress) { su32MaterialShadowingAddress = luAddress; }
+
+private:
+    friend class DispatchList;
+    static u32 su32MaterialShadowingAddress;
 };
 
 // -----------------------------------------------------------------------------
@@ -202,6 +208,12 @@ struct DrawRenderableMeshZOnly : public DispatchCommand
     // X360 0x827F5AC8 -- the static command-stream interpreter (slot 3).
     static void Interpret(DispatchCommand* lpCommand, DispatchFrame* lpFrame,
                           void* lpUserData, f32 lfTime);
+
+    static void SetMaterialShadowingAddress(u32 luAddress) { su32MaterialShadowingAddress = luAddress; }
+
+private:
+    friend class DispatchList;
+    static u32 su32MaterialShadowingAddress;
 };
 
 // -----------------------------------------------------------------------------
@@ -217,6 +229,9 @@ struct DispatchPacketInterpreter
 
     // X360 0x827E9360.
     DispatchPacketInterpreter(InterpretFn* lpaInterpreters, u32 luNumInterpreters);
+
+    void InterpretMeshZOnly(DispatchPacket* pPacket, void* lpContext) const;
+    void InterpretMeshOcclusionQuery(DispatchPacket* pPacket) const;
 
     // PS3-only methods (Interpret/InterpretObjectToMesh/PrefetchMesh/...) are
     // folded inline / absent from the X360 ledger -> not declared (X360 gate).

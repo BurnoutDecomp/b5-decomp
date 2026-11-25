@@ -146,8 +146,18 @@ namespace CgsSceneManager
         // The trio's last two calls touch mVolumeInstanceIdToIndex / mVolumeInstancePool, which
         // are private -- that privacy is the ONLY reason drain leg 3 and the two RemoveAll*
         // walkers were parked in round 3 (scratchpad/waveQ5/e1a.owner.md section 3, P1/P2).
-        void RemoveVolumeInstance(VolumeInstanceId lVolumeInstanceId);
-        void RemoveVolumeInstanceByIndex(VolumeInstanceId lVolumeInstanceId, s32 liIndex);
+        void RemoveVolumeInstance(VolumeInstanceId lVolumeInstanceId)
+        {
+            const s32 liIndex = GetVolumeInstanceIndexByID(lVolumeInstanceId);
+
+            RemoveVolumeInstanceByIndex(lVolumeInstanceId, liIndex);
+        }
+        void RemoveVolumeInstanceByIndex(VolumeInstanceId lVolumeInstanceId, s32 liIndex)
+        {
+            RemoveVolumeInstanceFromEntity(liIndex);          // 0x828D21D4 / 0x828CDA30
+            mVolumeInstanceIdToIndex.Remove(lVolumeInstanceId); // 0x828D21E0 / 0x828CDA3C
+            mVolumeInstancePool.FreeObject(liIndex);          // 0x828D21EC / 0x828CDA48
+        }
 
         // The index -> public-id lookup SceneManagerModule::ProcessFrustumTestJobResults
         // @0x828C7838 uses to turn a coarse-query result index back into an EntityId

@@ -652,9 +652,9 @@ AptValue* AptActionInterpreter::_doCloneSprite(AptCIH* pScope, AptValue* pTarget
 // args, run the function body (runStream over GetByteCodeBase/Size against the
 // resolved animation context), CleanupAfterExecution, and leave the result on the
 // call-context stack -- restoring the saved mpCurrentFunction / mnConstantPoolCount /
-// mpConstantPool. The console's raw vtable offsets (+0x44..+0x5C) are called BY NAME
+// mConstantPool.mppEntries. The console's raw vtable offsets (+0x44..+0x5C) are called BY NAME
 // through the AptScriptFunctionBase interface, and the per-call window members are
-// the named mnConstantPoolCount / mpConstantPool / mpCIHStack members.
+// the named mnConstantPoolCount / mConstantPool.mppEntries / mpCIHStack members.
 // Returns the call result value (already on the appropriate stack), or `undefined`.
 // AptActionInterpreter::ExecuteScriptFunction is a member (declared in the header);
 // definition below.
@@ -681,7 +681,7 @@ AptValue* AptActionInterpreter::CallFunctionDispatch(AptValue* pScope, AptValue*
     if (pFunction && pFunction->isNativeFunction())   // tag 9, defined
     {
         // console: v15 = *(a1+64) (mnConstantPoolCount, saved across the native call).
-        const uint32_t nSavedField40 = pInterp->mnConstantPoolCount;
+        const uint32_t nSavedField40 = pInterp->mConstantPool.mnCount;
         // The console natives read their AS arguments straight off the LIVE interpreter
         // object (dword_8324E760 == mnStackTop / off_8324E768 == mpStack). The repo's
         // gnAptNativeArgCount / gppAptNativeArgStack globals mirror those two members
@@ -701,7 +701,7 @@ AptValue* AptActionInterpreter::CallFunctionDispatch(AptValue* pScope, AptValue*
         gppAptNativeArgStack = pSavedArgStack;
         // console: AptValue_::PopAndPush(a1, a4, v16) -- collapse the args, push result.
         pInterp->stackPopAndPush(nArgs, pRet);
-        pInterp->mnConstantPoolCount = nSavedField40;   // console *(a1+64) = v15
+        pInterp->mConstantPool.mnCount = nSavedField40;   // console *(a1+64) = v15
         pResult = pRet;
     }
     else if (pFunction && pFunction->isScriptFunction())   // tags 34/35/36, defined
@@ -772,12 +772,12 @@ AptValue* AptActionInterpreter::ExecuteScriptFunction(AptValue* pScope, AptValue
 
         // Install the function + its constant pool as current, saving the prior (0x82AE3CB8):
         AptScriptFunctionBase* const pSavedFunc      = pInterp->mpCurrentFunction;       // r24
-        const uint32_t               nSavedPoolCount = pInterp->mnConstantPoolCount;     // r23 (ld 0x40)
-        AptValue** const             pSavedPool      = pInterp->mpConstantPool;
+        const uint32_t               nSavedPoolCount = pInterp->mConstantPool.mnCount;     // r23 (ld 0x40)
+        AptValue** const             pSavedPool      = pInterp->mConstantPool.mppEntries;
         pInterp->mpCurrentFunction = pFunc;                                              // [0x3C]
         const AptConstantPool pool = pFunc->GetConstantPool();                           // vtbl 0x50
-        pInterp->mnConstantPoolCount = static_cast<uint32_t>(pool.mnCount);              // [0x40] = count
-        pInterp->mpConstantPool =
+        pInterp->mConstantPool.mnCount = pool.mnCount;              // [0x40] = count
+        pInterp->mConstantPool.mppEntries =
             pool.mppEntries;           // [0x44] = base
 
         // Scope guard (0x82AE3CF4): a function bound to an undefined -- or a dead/zombie CIH --
@@ -882,8 +882,8 @@ AptValue* AptActionInterpreter::ExecuteScriptFunction(AptValue* pScope, AptValue
 
         // Restore the interpreter's current function + constant-pool pair (0x82AE3FEC).
         pInterp->mpCurrentFunction   = pSavedFunc;
-        pInterp->mnConstantPoolCount = nSavedPoolCount;
-        pInterp->mpConstantPool      = pSavedPool;
+        pInterp->mConstantPool.mnCount = nSavedPoolCount;
+        pInterp->mConstantPool.mppEntries      = pSavedPool;
         return pResult;
     }
 

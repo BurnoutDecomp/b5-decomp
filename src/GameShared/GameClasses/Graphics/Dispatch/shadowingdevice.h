@@ -52,6 +52,9 @@ namespace shadow
             const renderengine::ProgramBufferData* lpVertexProgram,
             const renderengine::VertexDescriptorData* lpVertexDescriptor);
         static void SetVertexProgramInternal();
+        static void SetMeshBuffers(const RenderableMesh* lpMesh);
+        static void DrawInstancedIndexedPrimitive_Custom(renderengine::DrawIndexedParameters& lrParameters,
+            s32 luInstanceCount, s32 luInstanceMax);
         static void DrawIndexedMultipleStreams_Custom(
             const DrawIndexedParameters& lrParameters);
 
@@ -219,7 +222,12 @@ namespace shadow
         // ---- The mesh-dispatch flush seam (DispatchList::DispatchAllMeshes) ----
         // The X360 walk resets the program shadows inline at each walk start
         // (dword_8301095C = 0 / dword_83010960 = -1); reproduced as this named reset.
-        static void ResetProgramShadows();
+        // ARTIST 827EEA04, 827F2754 and 827F7690 reset the program pair.
+        static void ResetShadowingForShaders()
+        {
+            m_Shadow.m_pVertexProgramBuffer = 0;
+            m_Shadow.m_pPixelProgramBuffer = reinterpret_cast<const renderengine::ProgramBufferData*>(~uintptr_t(0));
+        }
 
     private:
         // DecFIGS shadowingdevice.h:657–672/771. ARTIST ResetShadowing

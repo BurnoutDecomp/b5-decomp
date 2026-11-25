@@ -266,9 +266,9 @@ namespace CgsSceneManager
         // symbol literally named SceneManagerModule::Update @0x827E1F28 is the
         // "Don't use this function. Use UpdateScene(), UpdateSceneQueries() and
         // UpdateContactGeneration() instead" assert (CgsSceneManagerModule.h:276).
-        bool UpdateScene( CgsModule::IOBufferStack* lpInputBufferStack,
+        virtual void UpdateScene( CgsModule::IOBufferStack* lpInputBufferStack,
                           CgsModule::IOBufferStack* lpOutputBufferStack,
-                          SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer,
+                          const SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer,
                           SceneManagerIO::OutputBuffer* lpSceneOutputBuffer,
                           bool lbPrepare );
 
@@ -318,6 +318,11 @@ namespace CgsSceneManager
         void Construct() ;   // @ 0x828D09A0
         bool Release();     // @ 0x828C7220
         void Destruct() ;    // @ 0x828D1640
+        void Update()
+        {
+            CGS_ASSERT_AT(false, "Don't use this function. Use UpdateScene(), UpdateSceneQueries() and UpdateContactGeneration() instead",
+                          "..\\..\\..\\GameShared\\GameClasses\\SceneManager/CgsSceneManagerModule.h", 276);
+        }
 
         // @ 0x828D13E0 -- staged, resumable prepare of every sub-manager. The X360
         // threads four resources: the coarse construct params, the scene resource

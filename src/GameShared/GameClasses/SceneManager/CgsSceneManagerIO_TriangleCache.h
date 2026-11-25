@@ -75,8 +75,8 @@ namespace SceneManagerIO
         // member's constness is a separate, tree-wide change).
         void SetTriangleCacheManager(TriangleCacheManager* lpTriangleCacheManager)
         {
-            CGS_ASSERT(lpTriangleCacheManager != 0,
-                       CGS_ASSERT_MESSAGE_AT("lpTriangleCacheManager != NULL", CGS_SCENEMANAGERMODULEIO_H_ASSERT_FILE, 1268));
+            CGS_ASSERT_AT(lpTriangleCacheManager != 0, "lpTriangleCacheManager != NULL",
+                          "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\CgsSceneManagerModuleIO.h", 1268);
             mpTriangleCacheManager = lpTriangleCacheManager;
         }
 

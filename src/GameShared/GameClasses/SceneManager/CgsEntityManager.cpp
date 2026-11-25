@@ -563,54 +563,7 @@ void EntityManager::RemoveVolumeInstanceFromEntity(s32 liVolumeInstanceIndex)
 }
 
 // ===========================================================================
-// EntityManager::RemoveVolumeInstance        (DWARF h:120)
-// EntityManager::RemoveVolumeInstanceByIndex (DWARF h:126)
-//
-// ⭐ WAVE Q5 / CLUSTER RMLEG (2026-08-19). The removal mirror of AddVolumeInstance, and
-// the missing half of the scene's volume registry: until this landed, NOTHING in the
-// tree ever took a VolumeInstanceId back out of mVolumeInstanceIdToIndex, so a re-created
-// owner (the player car on a colour change / HIDE_ONLINE remove+create, prop-cell churn)
-// re-inserted the SAME key and IndexedHashTable<VolumeInstanceId,u32,509>::Insert fired
-// "2 elements with the same key inserted" on the next AddVolumeInstance.
-//
-// NO OUT-OF-LINE X360 SYMBOL: neither method has a row in progress/identity.json, because
-// the console inlined both at every use. The shape below is the common factor of the three
-// verbatim expansions, which agree instruction for instruction:
-//
-//   drain leg 3, BridgeInputSceneUpdateInterfaceToSubModules:
-//     0x828D21C4  bl EntityManager::GetVolumeInstanceIndexByID   (r4 = the queued id)
-//     0x828D21D4  bl EntityManager::RemoveVolumeInstanceFromEntity(r4 = that index)
-//     0x828D21E0  bl IndexedHashTable<VolumeInstanceId,u32,509>::Remove
-//                    (r3 = this + 0x123B20 == &mVolumeInstanceIdToIndex, r4 = the id)
-//     0x828D21EC  bl ObjectPool<VolumeInstance,5048,int>::FreeObject
-//                    (r3 = this + 0x27600 == &mVolumeInstancePool,     r4 = that index)
-//   SceneManagerModule::RemoveAllEntityVolumeInstances tail:
-//     0x828CDA30 / 0x828CDA3C / 0x828CDA48 -- the same last three, with the index already
-//     in hand and the id re-loaded off the record (`ld r28, 0x50(r31)` @0x828CDA28).
-//   SceneManagerModule::RemoveAllOwnerVolumeInstances reaches the same tail through it.
-//
-// So the id form is exactly `ByIndex(id, GetVolumeInstanceIndexByID(id))`, and the ByIndex
-// form is the three-call trio. The two X360 offsets above are DOCUMENTATION: this build
-// reaches both members by name.
-//
-// ⚠️ ORDER IS LOAD-BEARING. RemoveVolumeInstanceFromEntity reads mu16EntityIndex off the
-// record it is unlinking, so it must run BEFORE the slot is freed; and the hash Remove
-// takes the ID, which the pool slot still holds. Reordering silently corrupts the owner's
-// chain.
-// ===========================================================================
-void EntityManager::RemoveVolumeInstance(VolumeInstanceId lVolumeInstanceId)
-{
-    const s32 liIndex = GetVolumeInstanceIndexByID(lVolumeInstanceId);
 
-    RemoveVolumeInstanceByIndex(lVolumeInstanceId, liIndex);
-}
-
-void EntityManager::RemoveVolumeInstanceByIndex(VolumeInstanceId lVolumeInstanceId, s32 liIndex)
-{
-    RemoveVolumeInstanceFromEntity(liIndex);          // 0x828D21D4 / 0x828CDA30
-    mVolumeInstanceIdToIndex.Remove(lVolumeInstanceId); // 0x828D21E0 / 0x828CDA3C
-    mVolumeInstancePool.FreeObject(liIndex);          // 0x828D21EC / 0x828CDA48
-}
 
 // ===========================================================================
 // EntityManager::GetFirstEntityIndex / GetNextEntityIndex   (DWARF h:216 / h:220)

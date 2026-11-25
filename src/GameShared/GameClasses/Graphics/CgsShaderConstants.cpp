@@ -375,29 +375,18 @@ void ShaderConstantTable::EndFrame()
 // member access mapLatestCopyInDispatchBin[index].
 void ShaderConstantTable::AddDirtyConstantsToDispatchBin(Vector4* lpBinHeaderSpace)
 {
+    const u16 lu16NumBytesForIndexArray = static_cast<u16>(mu8NumDirtyConstants + 4) & 0xFFFC;
     u8* lpau8CountAndIndexArray = reinterpret_cast<u8*>(lpBinHeaderSpace);
-
-    // Pointer array starts after the count byte + index bytes, aligned down to 4 bytes.
-    const u16 lu16NumBytesForIndexArray = static_cast<u16>(mu8NumDirtyConstants + 4);
-    const rw::math::vpu::Vector4** lpapPointerArray =
-        reinterpret_cast<const rw::math::vpu::Vector4**>(lpau8CountAndIndexArray + (lu16NumBytesForIndexArray & 0xFFFC));
-
+    u32* lpau32PointerArray = reinterpret_cast<u32*>(lpau8CountAndIndexArray + lu16NumBytesForIndexArray);
     lpau8CountAndIndexArray[0] = mu8NumDirtyConstants;
-
-    if (mu8NumDirtyConstants != 0)
+    u8* lpau8IndexArray = lpau8CountAndIndexArray + 1;
+    for (u32 luIndex = 0; luIndex < mu8NumDirtyConstants; ++luIndex)
     {
-        u32 luIndex = 0;
-        do
-        {
-            const u8 lu8DirtyConstantIndex = mau8DirtyConstants[luIndex];
-            lpau8CountAndIndexArray[luIndex + 1] = lu8DirtyConstantIndex;
-            ++luIndex;
-            *lpapPointerArray++ = mapLatestCopyInDispatchBin[lu8DirtyConstantIndex];
-        }
-        while (luIndex < mu8NumDirtyConstants);
+        const u8 lu8DirtyConstantIndex = mau8DirtyConstants[luIndex];
+        lpau8IndexArray[luIndex] = lu8DirtyConstantIndex;
+        *lpau32PointerArray++ = reinterpret_cast<u32>(mapLatestCopyInDispatchBin[lu8DirtyConstantIndex]);
     }
-
-    mu8NumDirtyConstants = 0;
+    ClearDirtyConstants();
 }
 
 // CgsShaderConstants.cpp:141 (decl) / X360 @ 0x823F4170

@@ -537,9 +537,13 @@ GeneralAllocator::CoreBlock* GeneralAllocator::FindCoreBlockForAddress(const voi
 }
 bool GeneralAllocator::GetChunkIsFenceChunk(const Chunk* pChunk) const // 82B4E1E8
 {
-    if ((pChunk->mnSize & 0x7ffffff8) >= 16) return false;
-    const CoreBlock* pBlock = FindCoreBlockForAddress(pChunk);
-    return pBlock && reinterpret_cast<size_t>(pChunk) >= reinterpret_cast<size_t>(pBlock) + pBlock->mnSize - 16;
+    if ((pChunk->mnSize & 0x7ffffff8) < 16)
+    {
+        const CoreBlock* pBlock = FindCoreBlockForAddress(pChunk);
+        if (pBlock && reinterpret_cast<size_t>(pChunk) >= reinterpret_cast<size_t>(pBlock) + pBlock->mnSize - 16)
+            return true;
+    }
+    return false;
 }
 GeneralAllocator::Chunk* GeneralAllocator::FindAndSetNewTopChunk() // 82B4D878
 {
@@ -1241,9 +1245,21 @@ void* GeneralAllocator::CallocInternal(size_t nElementCount, size_t nElementSize
     {
         const unsigned int nClearSize = GetChunkSize(GetChunkPtrFromDataPtr(pData)) - 4;
         if (nClearSize > 32) memset(pData, 0, nClearSize);
-        else if ((nClearSize >> 2) - 1 <= 7)
-            for (unsigned int i = 0; i != (nClearSize >> 2); ++i)
-                static_cast<unsigned int*>(pData)[i] = 0;
+        else
+        {
+            unsigned int* pWord = static_cast<unsigned int*>(pData);
+            switch (nClearSize >> 2)
+            {
+            case 8: *pWord++ = 0; // fall through
+            case 7: *pWord++ = 0; // fall through
+            case 6: *pWord++ = 0; // fall through
+            case 5: *pWord++ = 0; // fall through
+            case 4: *pWord++ = 0; // fall through
+            case 3: *pWord++ = 0; // fall through
+            case 2: *pWord++ = 0; // fall through
+            case 1: *pWord = 0;
+            }
+        }
     }
     return pData;
 }

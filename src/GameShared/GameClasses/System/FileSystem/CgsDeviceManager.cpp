@@ -8,6 +8,7 @@
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"
 #include "rw/rwcore_structs.h"
+#include "rw/core/stdc/stdc.h"
 
 #include <cstring>   // strcmp / strncpy / strlen
 
@@ -33,9 +34,7 @@ namespace CgsFileSystem
     // Native allocation uses the resource allocator installed before new is called.
     void* DeviceManager::operator new(size_t luSize)
     {
-        rw::ResourceDescriptor lDescriptor;
-        lDescriptor.m_baseResourceDescriptors[0].m_size = luSize;
-        lDescriptor.m_baseResourceDescriptors[0].m_alignment = 16;
+        const rw::ResourceDescriptor lDescriptor(luSize, 16u);
         return static_cast<rw::IResourceAllocator*>(mpAllocator)->DoAllocate(lDescriptor, 0).m_baseResources[0];
     }
     void DeviceManager::operator delete(void* lpBlock)
@@ -71,8 +70,8 @@ namespace CgsFileSystem
         for (s32 liIndex = 0; liIndex < KI_MAX_VIRTUAL_DEVICES; ++liIndex)
             maVirtualDevices[liIndex].mpDevice = 0;
 
+        macDefaultPath[0] = 0;
         mbInitialized = true;
-        mbReleasing   = false;
 
         mDeviceListFutex.Unlock();
     }
@@ -92,21 +91,18 @@ namespace CgsFileSystem
         return mpDeviceManager != 0;
     }
 
-    // FindDevice — return the device registered under lpcPrefix (physical first, then virtual),
-    // or null. Used by AddPhysicalDevice (duplicate-name guard) and the open path.
+    // ARTIST 0x828DE230 searches the physical and virtual device registries in order.
+    // Registration and open supply a concrete prefix; comparisons ignore case.
     Device* DeviceManager::FindDevice(const char* lpcPrefix)
     {
-        if (!lpcPrefix)
-            return 0;
-
         for (s32 liIndex = 0; liIndex < KI_MAX_PHYSICAL_DEVICES; ++liIndex)
             if (maPhysicalDevices[liIndex].mpDevice &&
-                strcmp(maPhysicalDevices[liIndex].macPrefix, lpcPrefix) == 0)
+                rw::core::stdc::StringNoCaseCompare(lpcPrefix, maPhysicalDevices[liIndex].macPrefix) == 0)
                 return maPhysicalDevices[liIndex].mpDevice;
 
         for (s32 liIndex = 0; liIndex < KI_MAX_VIRTUAL_DEVICES; ++liIndex)
             if (maVirtualDevices[liIndex].mpDevice &&
-                strcmp(maVirtualDevices[liIndex].macPrefix, lpcPrefix) == 0)
+                rw::core::stdc::StringNoCaseCompare(lpcPrefix, maVirtualDevices[liIndex].macPrefix) == 0)
                 return maVirtualDevices[liIndex].mpDevice;
 
         return 0;

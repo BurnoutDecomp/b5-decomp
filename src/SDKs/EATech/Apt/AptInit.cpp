@@ -959,10 +959,10 @@ int AptUpdateInitialize(unsigned int* a1, char a2)
     AptActionInterpreter::InitDispatchTable();
 
     // AptActionInterpreter::initialize(&dword_8324E760, params). The homed initialize
-    // takes a const AptInitParmsT* and reads the config block at +0x20/+0x24/+0x30/
+    // takes the AptInitParmsT record and reads +0x20/+0x24/+0x30/
     // +0x40 -- the SAME layout as the AptUpdateParams (iStackSize == word[8],
     // iCallStackDepth == word[9], iRegisterCount == word[12], skip-trace == byte[64]).
-    gAptActionInterpreter.initialize(reinterpret_cast<const AptInitParmsT*>(lpParams));
+    gAptActionInterpreter.initialize(*reinterpret_cast<const AptInitParmsT*>(lpParams));
 
     // dword_8324D810 -- construct the saved-input checkpoint list EMPTY. The console
     // pool-allocates 28 bytes: the AptFileSavedInputStateVector {size, cap, begin}

@@ -11,7 +11,7 @@ namespace CgsResource
     // GetHeaderSize). GetData() is header-inline in the original: the X360 folds it into its
     // callers as `base + *(u32*)(base + 4)` (attested by BrnGameState::StreetManager::
     // SetupParRivals @0x8233F560, which resolves the "Districts" district-map blob through it
-    // before CgsWorld::WorldMap2D::Construct). The remaining three accessors are other-TU
+    // before CgsWorld::WorldMap2D::Construct). GetSize and GetHeaderSize are other-TU
     // surface and are declared-only. ADDITIVE GROW (StreetManager wave-C keystone): new type
     // in this owning header; no change to the existing BinaryFileResourceType handler.
     struct BinaryFileResource
@@ -23,9 +23,9 @@ namespace CgsResource
             return reinterpret_cast<const char*>(this) + mu32DataOffset;
         }
 
-        // DWARF :54/:57/:60 -- declared-only here (bodies land with their own TU).
+        // DWARF :54/:57/:60. ContentLoader's native update reads GetDataSize inline.
         uint32_t GetSize() const;
-        uint32_t GetDataSize() const;
+        uint32_t GetDataSize() const { return mu32DataSize; }
         uint32_t GetHeaderSize() const;
 
     private:

@@ -80,6 +80,8 @@ struct AptConstantPool
     AptValue** mppEntries;   // ARTIST second return word
 };
 
+struct AptInitParmsT;
+
 struct AptScriptFunctionBase : public AptObject
 {
 public:
@@ -158,7 +160,7 @@ public:
     // ---- static execution-state lifetime ---------------------------------------
     // Allocate (nRegisterCount) the flat register window from the operand-stack pool
     // (the console reads the count from the AptInitParmsT it is passed).
-    static void InitializeStaticData(int32_t nRegisterCount);   // @0x82AE26C0
+    static void InitializeStaticData(const AptInitParmsT& rParms);   // @0x82AE26C0
     static void ShutdownStaticData();         // @0x82AE2758
 
     // PopStaticData (PS3 @0x7E0AB8) -- pop the current register-block frame back to

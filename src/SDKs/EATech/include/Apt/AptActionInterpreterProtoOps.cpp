@@ -219,8 +219,8 @@ void AptActionInterpreter::_FunctionAptActionDefineFunction(AptActionInterpreter
         pByteCode->maByteCode + pByteCode->mnByteCodeSize;
 
     // ARTIST stores the count then the table pointer in the native record.
-    pByteCode->mnConstantPoolCount = static_cast<int32_t>(pInterp->mnConstantPoolCount);
-    pByteCode->mppConstantPool = pInterp->mpConstantPool;
+    pByteCode->mnConstantPoolCount = static_cast<int32_t>(pInterp->mConstantPool.mnCount);
+    pByteCode->mppConstantPool = pInterp->mConstantPool.mppEntries;
 
     EAStringC name(pByteCode->mpName);   // console InitFromBuffer(&v10, mpName)
 
@@ -268,8 +268,8 @@ void AptActionInterpreter::_FunctionAptActionDefineFunction2(AptActionInterprete
         pByteCode->maByteCode + pByteCode->mnBodyLength;
 
     // ARTIST stores the count then the table pointer.
-    pByteCode->mnConstantPoolCount = static_cast<int32_t>(pInterp->mnConstantPoolCount);
-    pByteCode->mppConstantPool = pInterp->mpConstantPool;
+    pByteCode->mnConstantPoolCount = static_cast<int32_t>(pInterp->mConstantPool.mnCount);
+    pByteCode->mppConstantPool = pInterp->mConstantPool.mppEntries;
 
     // x64 FIX (2026-07-05): sizeof, not the console's 52 -- see the v1 handler note.
     void* pMem = AptScriptFunction2::operator new(sizeof(AptScriptFunction2));
@@ -295,27 +295,13 @@ void AptActionInterpreter::_FunctionAptActionDefineFunction2(AptActionInterprete
 }
 
 // ---------------------------------------------------------------------------
-// DefineDictionary @0x82AD9278 (0x88) -- install the movie's ActionScript string
-// dictionary (constant pool) for the current run: read the (count, base) pair inline
-// from the bytecode (PC, 4-byte aligned), advance the PC past it, and stash the pair
-// in the interpreter's two constant-pool registers (mnConstantPoolCount = count, mpConstantPool =
-// the string-table base) that the Push*StringDict* ops index off.
+// DefineDictionary @0x82AD9278 reads and installs the native constant-pool pair.
 // ---------------------------------------------------------------------------
 void AptActionInterpreter::_FunctionAptActionDefineDictionary(AptActionInterpreter* pInterp,
                                                               LocalContextT* pContext)
 {
-    // The GUIAPT64 (count, base) pair is at the 8-aligned PC: {i64 count @0,
-    // AptValue** table @+8}; advance the PC by 16 (the form _parseStream produces --
-    // the table entries are live AptValue*s post-parse).
-    const uintptr_t* pPair = reinterpret_cast<const uintptr_t*>(
-        (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 3) & ~static_cast<uintptr_t>(3));
-    pContext->mpProgramCounter = reinterpret_cast<const unsigned char*>(pPair + 2);
-
-    // mnConstantPoolCount (console +0x40) <- the entry count; mpConstantPool (console +0x44) <- the
-    // string-table base pointer the dictionary-push ops index. The pair is read from
-    // the x64 _parseStream transcode of the serialized .apt stream, where the base is
-    // a native 8-byte pointer -- held in the pointer-typed mpConstantPool slot
-    // (phase-0 native-8 regime; access is by member name).
-    pInterp->mnConstantPoolCount    = static_cast<uint32_t>(pPair[0]);
-    pInterp->mpConstantPool = reinterpret_cast<AptValue**>(pPair[1]);
+    const AptConstantPool* pPool = reinterpret_cast<const AptConstantPool*>(
+        (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 3u) & ~static_cast<uintptr_t>(3u));
+    pContext->mpProgramCounter = reinterpret_cast<const unsigned char*>(pPool + 1);
+    pInterp->mConstantPool = *pPool;
 }

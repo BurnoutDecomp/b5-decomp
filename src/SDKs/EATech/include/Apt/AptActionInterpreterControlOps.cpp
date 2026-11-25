@@ -107,14 +107,14 @@ namespace
     // Push the string-constant-dictionary value addressed by the next program-counter
     // dictionary byte onto the operand stack (the shared prologue of the three
     // Dict* fused ops). Console: r10 = byte<<2 (a 4-byte-pointer index into
-    // mpConstantPool @ +0x44); the value is stored at the top, the top advanced, and
-    // vtbl[0] (AddRef) invoked -- i.e. stackPush of mpConstantPool[dictByte].
+    // mConstantPool.mppEntries @ +0x44); the value is stored at the top, the top advanced, and
+    // vtbl[0] (AddRef) invoked -- i.e. stackPush of mConstantPool.mppEntries[dictByte].
     inline void PushDictRegister(AptActionInterpreter* pInterp,
                                  AptActionInterpreter::LocalContextT* pContext)
     {
         const uint8_t nDictByte = *pContext->mpProgramCounter;
         ++pContext->mpProgramCounter;                       // advance past the byte
-        AptValue* pValue = pInterp->mpConstantPool[nDictByte];
+        AptValue* pValue = pInterp->mConstantPool.mppEntries[nDictByte];
         pInterp->mpStack[pInterp->mnStackTop++] = pValue;   // inlined stackPush
         pValue->AddRef();
     }

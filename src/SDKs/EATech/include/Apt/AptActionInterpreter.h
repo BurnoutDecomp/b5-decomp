@@ -193,7 +193,7 @@ public:
 
     // stackPushIndirect @0x7ECE34 -- push a value, first resolving an indirection:
     // an AptVFT_Lookup value (tag 8) indexes the interpreter's string-constant
-    // dictionary (mpConstantPool); an AptVFT_Register value (tag 4) indexes the AS
+    // dictionary (mConstantPool); an AptVFT_Register value (tag 4) indexes the AS
     // function register file (AptScriptFunctionBase::GetRegisterValue). Anything else pushes
     // as-is. The push itself is the inlined stackPush (store/advance/AddRef).
     void       stackPushIndirect(AptValue* pValue);
@@ -204,7 +204,7 @@ public:
     // stacks by iCallStackDepth), reset the per-run bookkeeping, and bring up the AS
     // register window / frame machinery (InitializeStaticData). Body in
     // AptActionInterpreterStackOps.cpp.
-    void initialize(const AptInitParmsT* pParms);
+    void initialize(const AptInitParmsT& rParms);
 
     // shutdown @0x82AE15A0 -- the interpreter teardown AptUpdateShutdown calls. The X360
     // linker COMDAT-folded it into AptValueVector::shutdown (byte-identical body): the
@@ -673,15 +673,9 @@ public:
 
     AptScriptFunctionBase* mpCurrentFunction;  // [c:0x3C] the script function currently executing
                                   // (callFunction sets it; DefineLocal + the scope chain read it)
-    // The AS string-constant DICTIONARY (constant pool) for the current run -- NOT a
-    // register window (verified 2026-07-04: DefineDictionary @0x82AD9278 sets these;
-    // the Push*Dict* ops + stackPushIndirect's Lookup path index mpConstantPool[i];
-    // DefineByteCode copies them into AptScriptFunctionByteCodeBlock's mppConstantPool/
-    // mnConstantPoolCount; callFunction's GetConstantPool sets them per-function). The
-    // genuine AS function register file is separate (AptScriptFunctionBase::GetRegister-
-    // Value / spRegBlock*). (Renamed from field_40/mpRegisters "register window".)
-    uint32_t   mnConstantPoolCount; // [c:0x40] dictionary/constant-pool entry count
-    AptValue** mpConstantPool;      // [c:0x44] dictionary/constant-pool base (AptValue* table)
+    // Active ActionScript string dictionary. DefineDictionary installs the pair
+    // at 0x82AD9294 and per-function execution saves and restores it.
+    AptConstantPool mConstantPool;  // ARTIST +0x40 count, +0x44 entries
     // The [c:0x48..0x5C] region decoded per the B4Extern PDB (apt 0.19.02 names
     // 'input' / 'apRegisters[4]' / 'nThisCount'), the ONLY decomposition that lands
     // mpAbortValue on the x64-proven +0x98 (getThrownValue @0x14084E5D0 reads

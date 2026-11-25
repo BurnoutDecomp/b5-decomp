@@ -1,3 +1,4 @@
+#define CGS_RESOURCE_PTR_MATCH_RELATIVE_ASSERTS // Both typed accessors reference 0x82007258 in ARTIST.
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacContent.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsFactory.h"   // complete Factory + Environment (the by-name allocator walk)
 #include "GameShared/GameClasses/System/Resource/CgsResourceType.h"
@@ -199,11 +200,11 @@ namespace Playback
     //   E_RMLS_REQUEST(0)  -> resolve path zone 0, issue the load service's load request
     //                         (vtbl slot 0), advance to LOADING on success; else "LOAD FAILED".
     //   E_RMLS_LOADING(1)  -> once mpResource is populated (no longer the null ptr) advance to
-    //                         POST_LOAD and publish the loaded data pointer into Content+0x18.
+    //                         POST_LOAD and publish the resource payload size.
     //   E_RMLS_POST_LOAD(2)-> run the Content's post-load hook (vtbl slot +0x10); advance to
     //                         FINISHED when it reports done (falls through to FINISHED).
-    //   E_RMLS_FINISHED(3) -> set the final content state (LOADED unless the request was
-    //                         re-armed) and purge the load data.
+    //   E_RMLS_FINISHED(3) -> publish UNLOADED for a cancelled request or LOADED on success,
+    //                         then purge the load data.
     // Baked asserts CgsContentLoader.cpp:287 ("mpLoadData") / :311 ("LOAD FAILED").
     template <class ResType>
     void ContentLoader<ResType>::UpdateResourceModuleLoading(Content& arContent,
@@ -217,27 +218,18 @@ namespace Playback
         case E_RMLS_REQUEST: // 0
         {
             char lacPath[128];
-            bool lbOk = arSpec.GetPathZone(0, lacPath, sizeof(lacPath));
-            if (lbOk)
-            {
-                // X360: (*mpLoadService->vtbl[0])(mpLoadService, mi16CurrentRequest,
-                //         arSpec.mu8LoadMethod, lacPath, this) -- issue the load
-                // request. (Phase B4: mpLoadService is the REAL typed
-                // IContentLoadService, so the vtbl[0] dispatch IS this virtual
-                // call -- DoServiceContentLoadRequest, the interface's only slot.)
-                lbOk = arContent.mpLoadService->DoServiceContentLoadRequest(
+            if (arSpec.GetPathZone(0, lacPath, sizeof(lacPath)) &&
+                arContent.GetLoadService()->DoServiceContentLoadRequest(
                     static_cast<u32>(mpLoadData->mi16CurrentRequest),
                     static_cast<EContentLoadMethod>(arSpec.mu8LoadMethod),
-                    lacPath,
-                    this);
-            }
-
-            if (lbOk)
+                    lacPath, this))
             {
-                lpLoadData->meState = E_RMLS_LOADING; // 1
-                return;
+                lpLoadData->meState = E_RMLS_LOADING;
             }
-            CGS_ASSERT(lbOk, CGS_ASSERT_MESSAGE_AT("LOAD FAILED", KAC_CONTENT_LOADER_FILE, 311));
+            else
+            {
+                CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("LOAD FAILED", KAC_CONTENT_LOADER_FILE, 311));
+            }
             return;
         }
         case E_RMLS_LOADING: // 1
@@ -245,9 +237,7 @@ namespace Playback
             if (!CgsResource::NULLResourcePtr.IsEqual(&mpResource))
             {
                 lpLoadData->meState = E_RMLS_POST_LOAD; // 2
-                // Publish the loaded main-memory resource pointer into Content+0x18.
-                arContent.mu32DataSize =
-                    *reinterpret_cast<u32*>(mpResource.operator->());
+                arContent.mu32DataSize = mpResource->GetDataSize();
             }
             break;
 
@@ -262,13 +252,16 @@ namespace Playback
         // fall through
         case E_RMLS_FINISHED: // 3
         {
-            // LOADED unless the request was cancelled/re-armed mid-flight (mu8IsCancelled set),
-            // in which case restart into E_CONTENT_STATE_LOADED-then-reload (state 3 vs 1).
-            EContentState leFinalState = E_CONTENT_STATE_UNLOADED;
-            if (!mpLoadData->mu8IsCancelled)
-                leFinalState = E_CONTENT_STATE_LOADED;
-            arContent.SetContentState(leFinalState);
-            PurgeLoadData(arContent, arSpec);
+            if (mpLoadData->mu8IsCancelled)
+            {
+                arContent.SetContentState(E_CONTENT_STATE_UNLOADED);
+                PurgeLoadData(arContent, arSpec);
+            }
+            else
+            {
+                arContent.SetContentState(E_CONTENT_STATE_LOADED);
+                PurgeLoadData(arContent, arSpec);
+            }
             break;
         }
         default:
@@ -277,53 +270,39 @@ namespace Playback
     }
 
     // UpdateUnload @ 0x826C6C40. Two-step unload pump keyed off meUnloadState (loader+0x24):
-    //   E_US_PRE_UNLOAD(1)  -> wait for any in-flight load to release (mpLoadData cleared, or the
-    //                          load service's release hook (vtbl slot +0x14) reports done), then
-    //                          advance to E_US_UNLOADING.
+    //   E_US_PRE_UNLOAD(1) -> advance when load data is present or Content's pre-unload hook is ready.
     //   E_US_UNLOADING(2)   -> cancel + purge the load data, rebind mpResource to the null handle
     //                          (resource-module method only), flag the Content changed, and reset
     //                          meUnloadState to E_US_IDLE. Baked assert CgsContentLoader.cpp:193.
     template <class ResType>
     void ContentLoader<ResType>::UpdateUnload(Content& arContent, const ContentSpec& arSpec)
     {
-        if (meUnloadState == E_US_PRE_UNLOAD) // 1
+        switch (meUnloadState)
         {
-            bool lbReady = (mpLoadData != 0);
-            if (!lbReady)
+        case E_US_PRE_UNLOAD:
+            if (mpLoadData || arContent.DoOnPreUnload())
+                meUnloadState = E_US_UNLOADING;
+            break;
+
+        case E_US_UNLOADING:
+            if (arSpec.mu8LoadMethod != E_CONTENT_LOAD_RESOURCE_MODULE)
             {
-                // The X360 vtbl[+0x14] dispatch is Content vtable slot 5 ==
-                // DoOnPreUnload (DWARF CgsContent.h:274) -- by name (2026-08-25
-                // wave 3).
-                lbReady = arContent.DoOnPreUnload();
+                CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Invalid Content load method", KAC_CONTENT_LOADER_FILE, 193));
             }
-            if (lbReady)
-                meUnloadState = E_US_UNLOADING; // 2
-            return;
-        }
+            else
+            {
+                if (mpLoadData)
+                    CancelResourceModuleLoading(arContent, arSpec);
+                PurgeLoadData(arContent, arSpec);
+                mpResource = CgsResource::NULLResourcePtr;
+            }
+            arContent.SetContentState(E_CONTENT_STATE_UNLOADED);
+            meUnloadState = E_US_IDLE;
+            break;
 
-        if (meUnloadState != E_US_UNLOADING) // 2
-            return;
-
-        if (arSpec.mu8LoadMethod == 1)
-        {
-            if (mpLoadData)
-                CancelResourceModuleLoading(arContent, arSpec);
-            PurgeLoadData(arContent, arSpec);
-            mpResource = CgsResource::NULLResourcePtr;
+        default:
+            break;
         }
-        else
-        {
-            CGS_ASSERT(arSpec.mu8LoadMethod == 1, "Invalid Content load method");
-        }
-
-        if ((arContent.mu8ContentState & 0x7F) != CgsSound::Playback::E_CONTENT_STATE_UNLOADED)
-        {
-            arContent.mu8ContentState = static_cast<u8>(
-                CgsSound::Playback::E_CONTENT_STATE_UNLOADED |
-                CgsSound::Playback::E_CONTENT_STATE_CHANGED); // 0x81
-        }
-
-        meUnloadState = E_US_IDLE; // 0
     }
 
     // Explicit instantiations: emit the ContentLoader symbols for both resource-element types the

@@ -62,7 +62,7 @@
 extern AptValue* gpUndefinedValue;   // off_8324D814 (AptGlobals.cpp; wired at AptInit)
 
 // stackPushIndirect is a real member (in AptActionInterpreter.cpp): it resolves
-// AptVFT_Lookup (via the string-constant dictionary mpConstantPool) / AptVFT_Register
+// AptVFT_Lookup (via the string-constant dictionary mConstantPool.mppEntries) / AptVFT_Register
 // (via AptScriptFunctionBase::GetRegisterValue) values before pushing. _Push calls the
 // member directly.
 
@@ -252,12 +252,12 @@ void AptActionInterpreter::_FunctionAptActionPushFloat(AptActionInterpreter* pIn
 //
 // The "StringDictByte"/"Push*String*" families take a single inline byte that
 // indexes the string-constant dictionary the console keeps at interpreter offset
-// +0x44 (the same slot the header names mpConstantPool; the dict opcodes reuse it as
+// +0x44 (the same slot the header names mConstantPool.mppEntries; the dict opcodes reuse it as
 // the AptValue* string-pool array). Each pushes the dictionary entry onto the
 // operand stack -- the inlined store/advance/AddRef sequence the asm emits is
 // exactly stackPush(), reproduced here -- and the fused forms then delegate to the
 // matching variable/member opcode handler. The console indexes the array with byte
-// math (4 * byteIndex); on x64 it is typed element indexing (mpConstantPool[byte]),
+// math (4 * byteIndex); on x64 it is typed element indexing (mConstantPool.mppEntries[byte]),
 // the same entry where the pointers are 8 bytes.
 //
 // The "Push*String*Get/SetVar" forms also pass the entry's embedded EAStringC name
@@ -274,15 +274,12 @@ void AptActionInterpreter::_FunctionAptActionPushFloat(AptActionInterpreter* pIn
 // ---------------------------------------------------------------------------
 void AptActionInterpreter::_FunctionAptActionPush(AptActionInterpreter* pInterp, LocalContextT* pCtx)
 {
-    // ARTIST 82ADE498: a four-aligned pair of 32-bit count and array pointer.
-    const unsigned char* pAligned = reinterpret_cast<const unsigned char*>(
+    const AptConstantPool* pPool = reinterpret_cast<const AptConstantPool*>(
         (reinterpret_cast<uintptr_t>(pCtx->mpProgramCounter) + 3u) & ~static_cast<uintptr_t>(3u));
-    const int32_t* pCount = reinterpret_cast<const int32_t*>(pAligned);
-    AptValue* const* const* ppArray = reinterpret_cast<AptValue* const* const*>(pAligned + 4);
-    pCtx->mpProgramCounter = pAligned + 8;
+    pCtx->mpProgramCounter = reinterpret_cast<const unsigned char*>(pPool + 1);
 
-    for (int32_t i = 0; i < *pCount; ++i)
-        pInterp->stackPushIndirect((*ppArray)[i]);   // resolves Lookup/Register
+    for (int32_t i = 0; i < pPool->mnCount; ++i)
+        pInterp->stackPushIndirect(pPool->mppEntries[i]);
 }
 
 // ---------------------------------------------------------------------------
@@ -294,7 +291,7 @@ void AptActionInterpreter::_FunctionAptActionPushStringDictByte(AptActionInterpr
                                                                 LocalContextT* pCtx)
 {
     const uint8_t nIndex = *pCtx->mpProgramCounter++;
-    AptValue* pEntry = pInterp->mpConstantPool[nIndex];
+    AptValue* pEntry = pInterp->mConstantPool.mppEntries[nIndex];
     pInterp->stackPush(pEntry);
 }
 
@@ -319,7 +316,7 @@ void AptActionInterpreter::_FunctionAptActionPushStringDictWord(AptActionInterpr
     operand.bytes.c0 = *pRead++;
     operand.bytes.c1 = *pRead++;
     pCtx->mpProgramCounter = pRead;
-    pInterp->stackPush(pInterp->mpConstantPool[operand.index]);
+    pInterp->stackPush(pInterp->mConstantPool.mppEntries[operand.index]);
 }
 
 // The string opcodes at 0x82AF4128, 0x82B056E8, 0x82B05788 and 0x82B05828
@@ -451,7 +448,7 @@ void AptActionInterpreter::_FunctionAptActionStringDictByteGetMember(AptActionIn
                                                                      LocalContextT* pCtx)
 {
     const uint8_t nIndex = *pCtx->mpProgramCounter++;
-    AptValue* pEntry = pInterp->mpConstantPool[nIndex];
+    AptValue* pEntry = pInterp->mConstantPool.mppEntries[nIndex];
     pInterp->stackPush(pEntry);
     _FunctionAptActionGetMember(pInterp, pCtx);
 }
@@ -467,7 +464,7 @@ void AptActionInterpreter::_FunctionAptActionStringDictByteGetVar(AptActionInter
                                                                   LocalContextT* pCtx)
 {
     const uint8_t nIndex = *pCtx->mpProgramCounter++;
-    AptValue* pEntry = pInterp->mpConstantPool[nIndex];
+    AptValue* pEntry = pInterp->mConstantPool.mppEntries[nIndex];
     // The dictionary holds a primitive string or a boxed string (ARTIST 0x82B058F8–0x82B05908).
     if (pEntry->getVtblIndex() != AptVFT_StringValue)
         pEntry = static_cast<AptStringObject*>(pEntry)->GetBoxedString();
@@ -562,35 +559,33 @@ extern const EAStringC& gAptStringClassName;  // &dword_8324E6B4 (AptGlobals.cpp
 // frame machinery is brought up (InitializeStaticData). The console allocates
 // `4 * capacity` bytes; x64-native that is `sizeof(AptValue*) * capacity`.
 // ---------------------------------------------------------------------------
-void AptActionInterpreter::initialize(const AptInitParmsT* pParms)
+void AptActionInterpreter::initialize(const AptInitParmsT& rParms)
 {
-    mnStackCapacity = pParms->iStackSize;
-    mpStack = static_cast<AptValue**>(
-        gpAptOperandStackPool->Allocate(sizeof(AptValue*) * pParms->iStackSize));
+    // ARTIST uses each loaded capacity for both the slot count and its allocation.
+    const int32_t nStackSize = rParms.iStackSize;
+    mnStackCapacity = nStackSize;
+    mpStack = static_cast<AptValue**>(gpAptOperandStackPool->Allocate(sizeof(AptValue*) * nStackSize));
 
-    mnCallStackB_Capacity = pParms->iCallStackDepth;
-    mpCallStackB = static_cast<void**>(
-        gpAptOperandStackPool->Allocate(sizeof(AptValue*) * pParms->iCallStackDepth));
+    const int32_t nCallStackBSize = rParms.iCallStackDepth;
+    mnCallStackB_Capacity = nCallStackBSize;
+    mpCallStackB = static_cast<void**>(gpAptOperandStackPool->Allocate(sizeof(void*) * nCallStackBSize));
 
-    mnCallStackC_Capacity = pParms->iCallStackDepth;
-    mpCallStackC = static_cast<void**>(
-        gpAptOperandStackPool->Allocate(sizeof(AptValue*) * pParms->iCallStackDepth));
+    const int32_t nCallStackCSize = rParms.iCallStackDepth;
+    mnCallStackC_Capacity = nCallStackCSize;
+    mpCallStackC = static_cast<void**>(gpAptOperandStackPool->Allocate(sizeof(void*) * nCallStackCSize));
 
-    mnCIHStackCapacity = pParms->iCallStackDepth;
-    mpCIHStack = static_cast<AptCIH**>(
-        gpAptOperandStackPool->Allocate(sizeof(AptValue*) * pParms->iCallStackDepth));
+    const int32_t nCIHStackSize = rParms.iCallStackDepth;
+    mnCIHStackCapacity = nCIHStackSize;
+    mpCIHStack = static_cast<AptCIH**>(gpAptOperandStackPool->Allocate(sizeof(AptCIH*) * nCIHStackSize));
 
-    mnCallStackE_Capacity = pParms->iCallStackDepth;
-    mpCallStackE = static_cast<void**>(
-        gpAptOperandStackPool->Allocate(sizeof(AptValue*) * pParms->iCallStackDepth));
+    const int32_t nCallStackESize = rParms.iCallStackDepth;
+    mnCallStackE_Capacity = nCallStackESize;
+    mpCallStackE = static_cast<void**>(gpAptOperandStackPool->Allocate(sizeof(void*) * nCallStackESize));
 
-    field_69 = 0;                                   // console *(a1+105) = 0
-    mnStackBase = 0;                                // console *(a1+100) = 0
-    mbSkipTraceBytecodes = pParms->mbSkipTraceBytecodes;  // console *(a1+104) = *(a2+64)
-
-    // X360 InitializeStaticData(parms) reads the register count at parms+0x30
-    // (@0x82AE26C0); the member takes the resolved count.
-    AptScriptFunctionBase::InitializeStaticData(pParms->iRegisterCount);
+    field_69 = 0;
+    mnStackBase = 0;
+    mbSkipTraceBytecodes = rParms.mbSkipTraceBytecodes;
+    AptScriptFunctionBase::InitializeStaticData(rParms);
 }
 
 // ---------------------------------------------------------------------------
