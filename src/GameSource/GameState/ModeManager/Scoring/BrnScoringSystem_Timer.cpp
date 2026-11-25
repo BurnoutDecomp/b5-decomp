@@ -24,10 +24,8 @@
 // scratch slot GetModeTimeRemaining writes. CgsSystem::Time is a fully inline value type
 // (CgsTime.h), so every arithmetic body below is self-contained.
 //
-// The X360 binary checks "IsTimerActive()" via (mStartTime.miSeconds < 0) and
-// "IsTimeLimitActive()" via (mStartTime.miSeconds < 0 || mEndTime.miSeconds < 0); those
-// two predicates are themselves declare-only in this range, so they are reconstructed
-// here from the assert conditions the addressed setters fire.
+// ARTIST 0x82310A04 and 0x823445F8 inline the timer predicates from BrnScoringSystem.h.
+// A negative seconds count in mStartTime or mEndTime marks an inactive start or deadline.
 //
 // LANDED this round (prereqs unblocked them):
 //   - StopModeTimer (0x8231F590): now lands. The BaseOnlineModeScoring virtual the force/online
@@ -72,24 +70,6 @@
 
 namespace BrnGameState
 {
-
-// ----------------------------------------------------------------------------
-// timer / time-limit active predicates (reconstructed from the addressed setters'
-// assert conditions: *this+0 == mStartTime.miSeconds, *this+8 == mEndTime.miSeconds).
-// ----------------------------------------------------------------------------
-
-// A mode timer is running while its start time has a non-negative second count
-// (ClearModeTimer / StopModeTimer drive mStartTime's seconds to -1).
-bool ScoringSystem::IsTimerActive() const
-{
-    return mStartTime.GetSeconds() >= 0;
-}
-
-// A time limit is active while the timer is running AND a deadline (mEndTime) is set.
-bool ScoringSystem::IsTimeLimitActive() const
-{
-    return (mStartTime.GetSeconds() >= 0) && (mEndTime.GetSeconds() >= 0);
-}
 
 // The configured time-limit deadline.
 const CgsSystem::Time ScoringSystem::GetTimeLimit() const
@@ -164,7 +144,8 @@ void ScoringSystem::SetTimeLimitPerKm(f32 lfSecondsPerKm)
 // X360 0x823109E8. Extend an already-active time limit by lfSeconds.
 void ScoringSystem::IncreaseTimeLimit(f32 lfSeconds)
 {
-    CGS_ASSERT(IsTimeLimitActive(), CGS_ASSERT_MESSAGE_AT("IsTimeLimitActive()", CGS_ARTIST_FILE, 1532));
+    bool lbTimeLimitActive = IsTimeLimitActive();
+    CGS_ASSERT(lbTimeLimitActive, CGS_ASSERT_MESSAGE_AT("IsTimeLimitActive()", CGS_ARTIST_FILE, 1532));
 
     mEndTime += CgsSystem::Time(lfSeconds);
 }

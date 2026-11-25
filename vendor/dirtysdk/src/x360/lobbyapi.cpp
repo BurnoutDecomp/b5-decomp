@@ -471,26 +471,26 @@ static void _LobbyApiResponseLog(LobbyApiRefT* pLobbyApi, s32 iKind, s32 iCode,
 extern "C" void LobbyApiGlobalCallback(LobbyApiRefT* pLobbyApi, s32 iId, s32 iType,
                                        s32 iKind, s32 iCode, const char* pData)
 {
-    if ((u32)iType > 5)
+    if ((u32)iType <= 5)
+    {
+        LobbyApiMsgT Msg;
+        Msg.id = iId;
+        Msg.type = iType;
+        Msg.kind = iKind;
+        Msg.code = iCode;
+        Msg.pData = pData;
+        Msg.pMisc = NULL;
+        for (s32 iIndex = 0; iIndex < 32; ++iIndex)
+        {
+            if (pLobbyApi->callbacks[iIndex].eType == iType)
+            {
+                pLobbyApi->callbacks[iIndex].pCallback(pLobbyApi, &Msg, pLobbyApi->callbacks[iIndex].pUserData);
+            }
+        }
+    }
+    else
     {
         LobbyApiPrintfCode(pLobbyApi, "lobbyapi: invalid global callback type %d\n", iType);
-        return;
-    }
-
-    LobbyApiMsgT Msg;
-    Msg.id = iId;
-    Msg.type = iType;
-    Msg.kind = iKind;
-    Msg.code = iCode;
-    Msg.pData = pData;
-    Msg.pMisc = NULL;
-    for (s32 iIndex = 0; iIndex < 32; ++iIndex)
-    {
-        LobbyGlobalCBRefT* pCallback = &pLobbyApi->callbacks[iIndex];
-        if (pCallback->eType == iType)
-        {
-            pCallback->pCallback(pLobbyApi, &Msg, pCallback->pUserData);
-        }
     }
 }
 
@@ -1292,67 +1292,66 @@ extern "C" LobbyApiRefT* LobbyApiCreate2(const char* pTagField, void* pDebugRef,
 
     LobbyApiRefT* pLobbyApi = (LobbyApiRefT*)DirtyMemAlloc(
         sizeof(LobbyApiRefT), 1818325097, iRefMemGroup);
-    if (pLobbyApi == NULL)
+    if (pLobbyApi != NULL)
     {
-        return NULL;
-    }
-    memset(pLobbyApi, 0, sizeof(*pLobbyApi));
-    pLobbyApi->iMemGroup = iMemGroup;
-    pLobbyApi->iRefMemGroup = iRefMemGroup;
+        memset(pLobbyApi, 0, sizeof(*pLobbyApi));
+        pLobbyApi->iMemGroup = iMemGroup;
+        pLobbyApi->iRefMemGroup = iRefMemGroup;
 
-    if (pTagField != NULL)
-    {
-        if (strchr(pTagField, '=') == NULL)
+        if (pTagField != NULL)
         {
+            if (strchr(pTagField, '=') != NULL)
+            {
+                TagFieldDupl(pLobbyApi->strVersion, sizeof(pLobbyApi->strVersion), pTagField);
+            }
+            else
+            {
+                TagFieldSetString(pLobbyApi->strVersion, sizeof(pLobbyApi->strVersion),
+                                  "VERS", pTagField);
+            }
+            char strSdkVersion[32];
+            ds_snzprintf(strSdkVersion, sizeof(strSdkVersion), "%d.%d.%d.%d", 5, 5, 3, 0);
             TagFieldSetString(pLobbyApi->strVersion, sizeof(pLobbyApi->strVersion),
-                              "VERS", pTagField);
+                              "SDKVERS", strSdkVersion);
+            TagFieldSetString(pLobbyApi->strVersion, sizeof(pLobbyApi->strVersion),
+                              "BUILDDATE", "Jan 22 2008");
         }
-        else
+
+        DirtyMemGroupEnter(iRefMemGroup);
+        pLobbyApi->pXenon = LobbyApiXenonCreate(pLobbyApi);
+        if (pLobbyApi->pXenon == NULL)
         {
-            TagFieldDupl(pLobbyApi->strVersion, sizeof(pLobbyApi->strVersion), pTagField);
+            return NULL;
         }
-        char strSdkVersion[32];
-        ds_snzprintf(strSdkVersion, sizeof(strSdkVersion), "%d.%d.%d.%d", 5, 5, 3, 0);
-        TagFieldSetString(pLobbyApi->strVersion, sizeof(pLobbyApi->strVersion),
-                          "SDKVERS", strSdkVersion);
-        TagFieldSetString(pLobbyApi->strVersion, sizeof(pLobbyApi->strVersion),
-                          "BUILDDATE", "Jan 22 2008");
-    }
 
-    DirtyMemGroupEnter(iRefMemGroup);
-    pLobbyApi->pXenon = LobbyApiXenonCreate(pLobbyApi);
-    if (pLobbyApi->pXenon == NULL)
-    {
-        return NULL;
-    }
+        pLobbyApi->net = ProtoAriesCreate(0x2000);
+        if (pLobbyApi->net == NULL)
+        {
+            LobbyApiPrintfCode(pLobbyApi, "lobbyapi: unable to create protoaries module\n");
+            DirtyMemFree(pLobbyApi, 1818325097, pLobbyApi->iMemGroup);
+            return NULL;
+        }
+        DirtyMemGroupLeave();
 
-    pLobbyApi->net = ProtoAriesCreate(0x2000);
-    if (pLobbyApi->net == NULL)
-    {
-        LobbyApiPrintfCode(pLobbyApi, "lobbyapi: unable to create protoaries module\n");
-        DirtyMemFree(pLobbyApi, 1818325097, pLobbyApi->iMemGroup);
-        return NULL;
+        pLobbyApi->pPingManager = PingManagerCreate(128);
+        if (pLobbyApi->pPingManager == NULL)
+        {
+            LobbyApiPrintfCode(pLobbyApi, "lobbyapi: unable to create pingmanager module\n");
+        }
+        pLobbyApi->debugref = pDebugRef;
+        pLobbyApi->debugptr = pDebugFnc;
+        pLobbyApi->debugflt = pDebugFilter;
+        pLobbyApi->uConnTimeout = 120000;
+        pLobbyApi->uIdleTimeout = 60000;
+        pLobbyApi->uTrnsTimeout = 30000;
+        for (s32 iIndex = 0; iIndex < 32; ++iIndex)
+        {
+            pLobbyApi->callbacks[iIndex].eType = LOBBYAPI_CBTYPE_INVALID;
+        }
+        LobbyApiListCreate(pLobbyApi);
+        _LobbyApiDisconnect(pLobbyApi, 0, NULL);
+        pLobbyApi->uServTime = TagFieldGetEpoch(NULL, 0);
     }
-    DirtyMemGroupLeave();
-
-    pLobbyApi->pPingManager = PingManagerCreate(128);
-    if (pLobbyApi->pPingManager == NULL)
-    {
-        LobbyApiPrintfCode(pLobbyApi, "lobbyapi: unable to create pingmanager module\n");
-    }
-    pLobbyApi->debugref = pDebugRef;
-    pLobbyApi->debugptr = pDebugFnc;
-    pLobbyApi->debugflt = pDebugFilter;
-    pLobbyApi->uConnTimeout = 120000;
-    pLobbyApi->uIdleTimeout = 60000;
-    pLobbyApi->uTrnsTimeout = 30000;
-    for (s32 iIndex = 0; iIndex < 32; ++iIndex)
-    {
-        pLobbyApi->callbacks[iIndex].eType = LOBBYAPI_CBTYPE_INVALID;
-    }
-    LobbyApiListCreate(pLobbyApi);
-    _LobbyApiDisconnect(pLobbyApi, 0, NULL);
-    pLobbyApi->uServTime = TagFieldGetEpoch(NULL, 0);
     return pLobbyApi;
 }
 

@@ -99,14 +99,6 @@ struct AptRenderTreeManager
         return AptRenderItem::Manager_CreateItem(pCharacter, nTick);
     }
 
-    // @0x7EC8E4 -- the writable render item for this tick. FLAG: when the item is
-    // from a prior tick the console clones a new revision (Manager_CreateNewRevision,
-    // under a spin-lock); single-buffered here -> return the live item.
-    AptRenderItem* Update_GetTickItemWritable(const AptRenderItem* pItem, int nTick)
-    {
-        return const_cast<AptRenderItem*>(pItem);   // (IsWritableForThisTick(nTick) is true in single-buffer)
-    }
-
     // @0x7E4990 -- mark an item removed.
     void Update_ItemRemoved(AptRenderItem* pItem, int /*nTick*/)
     {

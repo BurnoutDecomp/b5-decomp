@@ -95,8 +95,7 @@ namespace CgsNetwork
         u16            mu16Frame;                // +0x1C
 
         // --- reconstructed members (this TU) ---
-        // Placement-style initialiser the console build calls "Construct" (returns this).
-        Message* Construct();
+        void Construct();
         u8   GetGameID() const;
         void SetType(::EMessageType leType);
 

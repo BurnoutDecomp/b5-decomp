@@ -64,29 +64,6 @@ Environment::eAudioMode Environment::GetAudioMode() const
         ? E_AUDIO_MODE_SURROUND : E_AUDIO_MODE_STEREO;
 }
 
-// Header-inline in the X360 callers: allocate one resource block through the
-// Environment's owning rw allocator and return its primary base resource.
-void* Environment::Allocate(u32 lu32Size, u32 lu32Alignment, const char* lpcName)
-{
-    rw::ResourceDescriptor lDescriptor;
-    for (u32 lu = 0; lu < rw::KU_RESOURCE_LANE_COUNT; ++lu)
-    {
-        lDescriptor.m_baseResourceDescriptors[lu].m_size = 0;
-        lDescriptor.m_baseResourceDescriptors[lu].m_alignment = 1;
-    }
-    lDescriptor.m_baseResourceDescriptors[0].m_size = lu32Size;
-    lDescriptor.m_baseResourceDescriptors[0].m_alignment = lu32Alignment ? lu32Alignment : 1u;
-    rw::Resource lResource = GetAllocator()->DoAllocate(lDescriptor, lpcName);
-    return lResource.m_baseResources[0];
-}
-
-// Header-inline in the X360 callers: release a raw allocator block through the
-// same Environment allocator that supplied it.
-void Environment::Free(void* lpMemory)
-{
-    GetAllocator()->Free(lpMemory, 0);
-}
-
 // @ 0x826AD130. Find the first free factory slot and store apFactory into it,
 // acquiring a reference (and releasing any prior occupant). Returns false if the
 // table is empty or full.
@@ -357,14 +334,10 @@ Environment::~Environment()
 // vtable-index dispatch is retired.)
 void Environment::operator delete(void* lpMemory, rw::IResourceAllocator* lpAllocator)
 {
-    CGS_ASSERT(lpAllocator, "lpAllocator");
-
-    rw::Resource lResource;
-    lResource.m_baseResources[0] = lpMemory;
-    lResource.m_baseResources[1] = 0;
-    lResource.m_baseResources[2] = 0;
-    lResource.m_baseResources[3] = 0;
-    lpAllocator->DoFree(lResource);
+    CGS_ASSERT(lpAllocator, CGS_ASSERT_MESSAGE_AT("lpAllocator",
+        "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsEnvironment.h",
+        497 /* ARTIST 0x826BFD90 */));
+    lpAllocator->FreeMemoryResource(lpMemory);
 }
 
 // @ 0x826ACF98. Placement new from an EnvironmentSpec: size the carve (the object +

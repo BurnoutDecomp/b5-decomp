@@ -188,7 +188,7 @@ namespace BrnGameState
         ++miNumTakedownsAchieved;
         ++miNumTakedownsAchievedForNextExtention;
 
-        if (miNumTakedownsAchieved == miTargetNumTakedowns)
+        if (miTargetNumTakedowns == miNumTakedownsAchieved)
         {
             // DWARF .cpp:188 `PlayerReachedRoadRageTarget lPlayerReachedRoadRageTarget;` -- an
             // empty record, posted with size 1 (`li r6,1 / li r5,0x67`).
@@ -212,8 +212,8 @@ namespace BrnGameState
         {
             // Kept for its side effect (GetModeTimeRemaining refreshes ss.mTimeRemaining); the
             // returned value is dead on the X360 (see the register map above).
-            const CgsSystem::Time lTimeRemaining = lpScoringSystem->GetModeTimeRemaining(lCurrentTime);
-            (void)lTimeRemaining;
+            const f32 lfTimeRemaining = lpScoringSystem->GetModeTimeRemaining(lCurrentTime).GetFloatVal();
+            (void)lfTimeRemaining;
 
             lpScoringSystem->IncreaseTimeLimit(
                 static_cast<f32>(static_cast<u32>(muRoadRageExtensionTime) + KU_TAKEDOWN_COVER_TIME));

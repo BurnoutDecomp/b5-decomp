@@ -98,15 +98,7 @@ void Factory::DoDispose()
     // virtual destructor call runs the most-derived chain without freeing.
     this->~Factory();
 
-    // Hand the carve back through the environment's allocator.
-    rw::IResourceAllocator* lpAllocator = lrEnvironment.GetAllocator();
-
-    rw::Resource lResource;
-    lResource.m_baseResources[0] = this;
-    lResource.m_baseResources[1] = 0;
-    lResource.m_baseResources[2] = 0;
-    lResource.m_baseResources[3] = 0;
-    lpAllocator->DoFree(lResource);
+    lrEnvironment.Free(this);
 }
 
 // DWARF CgsFactory.h:91 (template; bodied phase B5). The voice mirror of

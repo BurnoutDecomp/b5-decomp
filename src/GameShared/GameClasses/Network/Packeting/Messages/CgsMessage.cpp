@@ -121,20 +121,13 @@ namespace CgsNetwork
         const f32 KF_TIME_DIFF_LONG_SESSION_ERROR   = 0.0700000003f;
     }
 
-    // ---- Construct @ 0x82870B90 ------------------------------------------------
-    // Field initialiser the X360 build calls "Construct": stores the invalid
-    // sentinels into the trailing scalars and returns the object. The asm writes
-    //   stb 0xFF, 0x18  -> mu8GameID = KU8_INVALID_GAME_ID (255)
-    //   stb 0x00, 0x19  -> mx8Flags  = 0
-    //   stb -1,   0x1A  -> mi8Type   = -1 (KI8_INVALID_TYPE)
-    //   sth -1,   0x1C  -> mu16Frame = 0xFFFF (KU16_INVALID_FRAME)
-    Message* Message::Construct()
+    // DecFIGS CgsMessage.cpp:355 and ARTIST 82870B90.
+    void Message::Construct()
     {
-        mu8GameID = KU8_INVALID_GAME_ID;   // 0x18 <- 0xFF
-        mx8Flags  = 0;                     // 0x19 <- 0
-        mi8Type   = static_cast<s8>(-1);   // 0x1A <- -1
-        mu16Frame = KU16_INVALID_FRAME;    // 0x1C <- 0xFFFF
-        return this;
+        mu8GameID = KU8_INVALID_GAME_ID;
+        mi8Type = static_cast<s8>(-1);
+        mx8Flags = 0;
+        mu16Frame = KU16_INVALID_FRAME;
     }
 
     // ---- GetVectorFromAngles @ 0x82870D78 --------------------------------------

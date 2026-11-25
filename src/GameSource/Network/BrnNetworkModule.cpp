@@ -485,14 +485,18 @@ namespace BrnNetwork
     // -> &mTrafficNetworkInputInterface (+800320).
     BrnTraffic::BrnTrafficIO::TrafficNetworkInputInterface* BrnNetworkModule::GetTrafficInputInterface()
     {
-        CGS_ASSERT(mbIsUpdating, "Can not use this function unless module is updating\n");
+        CGS_ASSERT(mbIsUpdating, CGS_ASSERT_STREAM_MESSAGE_AT(
+            "Can not use this function unless module is updating\n",
+            CGS_ARTIST_FILE_BRNNETWORKMODULE, 392 /* ARTIST 0x82542898 */));
         return &mTrafficNetworkInputInterface;
     }
 
     // -> &mTrafficNetworkOutputInterface (+800432).
     const BrnTraffic::BrnTrafficIO::TrafficNetworkOutputInterface* BrnNetworkModule::GetTrafficOutputInterface() const
     {
-        CGS_ASSERT(mbIsUpdating, "Can not use this function unless module is updating\n");
+        CGS_ASSERT(mbIsUpdating, CGS_ASSERT_STREAM_MESSAGE_AT(
+            "Can not use this function unless module is updating\n",
+            CGS_ARTIST_FILE_BRNNETWORKMODULE, 400 /* ARTIST 0x82542940 */));
         return &mTrafficNetworkOutputInterface;
     }
 
@@ -506,21 +510,27 @@ namespace BrnNetwork
     // -> &mCrashNetworkOutputInterface (+816080).
     const BrnWorld::CrashIO::NetworkOutputInterface* BrnNetworkModule::GetCrashOutputInterface() const
     {
-        CGS_ASSERT(mbIsUpdating, "Can not use this function unless module is updating\n");
+        CGS_ASSERT(mbIsUpdating, CGS_ASSERT_STREAM_MESSAGE_AT(
+            "Can not use this function unless module is updating\n",
+            CGS_ARTIST_FILE_BRNNETWORKMODULE, 416 /* ARTIST 0x82542A90 */));
         return &mCrashNetworkOutputInterface;
     }
 
     // -> &mGameStateToNetworkInterface (+818064).
     BrnNetworkModuleIO::GameStateToNetworkInterface* BrnNetworkModule::GetGameStateToNetworkInterface()
     {
-        CGS_ASSERT(mbIsUpdating, "Can not use this function unless module is updating\n");
+        CGS_ASSERT(mbIsUpdating, CGS_ASSERT_STREAM_MESSAGE_AT(
+            "Can not use this function unless module is updating\n",
+            CGS_ARTIST_FILE_BRNNETWORKMODULE, 495 /* ARTIST 0x82542D28 */));
         return &mGameStateToNetworkInterface;
     }
 
     // -> &mNetworkToGameStateInterface (+818608).
     BrnNetworkModuleIO::NetworkToGameStateInterface* BrnNetworkModule::GetNetworkToGameStateInterface()
     {
-        CGS_ASSERT(mbIsUpdating, "Can not use this function unless module is updating\n");
+        CGS_ASSERT(mbIsUpdating, CGS_ASSERT_STREAM_MESSAGE_AT(
+            "Can not use this function unless module is updating\n",
+            CGS_ARTIST_FILE_BRNNETWORKMODULE, 487 /* ARTIST 0x82542C80 */));
         return &mNetworkToGameStateInterface;
     }
 

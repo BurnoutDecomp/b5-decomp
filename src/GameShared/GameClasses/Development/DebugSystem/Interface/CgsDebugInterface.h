@@ -25,7 +25,7 @@ namespace CgsDev
         // X360 DebugInterface() @ 0x821F1F20 - the AUTOMATIC (stack-scoped) handle: it sets the
         // is-automatic flag, asserts the DebugManager singleton exists, ENTERS the per-manager
         // debug critical section, and grabs the singleton into mpDebugManager. The matching
-        // release (when mbIsAutomaticClass) leaves the section. Bodied in CgsDebugInterface.cpp.
+        // inline release (when mbIsAutomaticClass) leaves the section.
         DebugInterface();
 
         explicit DebugInterface(DebugManager* lpDebugManager)
@@ -34,7 +34,11 @@ namespace CgsDev
         {
         }
 
-        ~DebugInterface();
+        ~DebugInterface()
+        {
+            if (mbIsAutomaticClass)
+                DebugManager::ThreadSafeRelease(mpDebugManager);
+        }
 
         // X360 GetDebugManager @ 0x823A61B0 - assert the manager pointer is set, then return it.
         // Bodied in CgsDebugInterface.cpp (the X360 asserts mpDebugManager, CgsDebugInterface.h:163).

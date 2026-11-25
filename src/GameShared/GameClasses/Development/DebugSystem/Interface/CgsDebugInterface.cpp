@@ -31,11 +31,6 @@ namespace CgsDev
     {
     }
 
-    DebugInterface::~DebugInterface()
-    {
-        if (mbIsAutomaticClass)
-            DebugManager::ThreadSafeRelease(mpDebugManager);
-    }
 
     // Faithful port of X360 GetDebugManager @ 0x823A61B0:
     //   if (!*this) { Begin/Fire/EndAssert("mpDebugManager", CgsDebugInterface.h:163); }

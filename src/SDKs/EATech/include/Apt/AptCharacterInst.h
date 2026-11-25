@@ -52,11 +52,9 @@ struct AptCIH* AptManagedItemMoved(AptRenderTreeManager* pMgr, struct AptCIH* pN
 // the console literal gpCurrentTargetSim+0x2C offset) so the x64 layout stays
 // correct. Null until an Apt target is active.
 //   AptCurrentRenderTreeManager() -> the current target's manager, or null.
-//   AptGetTickItemWritable   -> AptRenderTreeManager::Update_GetTickItemWritable
 // (AptRTM_CreateItem removed -- unused; the manager path calls Update_CreateItem directly.)
 // ---------------------------------------------------------------------------
 AptRenderTreeManager* AptCurrentRenderTreeManager();
-AptRenderItem*        AptGetTickItemWritable(AptRenderTreeManager* pMgr, const AptRenderItem* pItem, int nTick);
 extern int            gnCurrUpdateTick;
 
 struct AptCharacterInst
@@ -117,7 +115,7 @@ struct AptCharacterInst
     // GetRenderItemDynamicTextWritable @0x82AE1BF8 -- ICF-folded thunk: identical body
     // to GetRenderItemWritable (the X360 linker folded the duplicate).
     AptRenderItem*       GetRenderItemDynamicTextWritable() { return GetRenderItemWritable(); }
-    AptRenderItem*       SetRenderItem(AptRenderItem* pItem);   // @0x7E20E8
+    void                 SetRenderItem(AptRenderItem* pItem);   // @0x82ADF518
 
     // The character type tag (x64: mTypeFlags LOW 6 bits -- every IsXxxInst does
     // `and ecx,3Fh` on [charInst+0x10]; the old >>26 was the X360 big-endian
@@ -126,7 +124,7 @@ struct AptCharacterInst
     // Drives the AptCIH::IsXxxInst predicates.
     int GetTypeTag() const { return mnType; }
 
-    AptCharacter*        SetCharacter(AptCharacter* pCharacter); // @0x80F324
+    void                 SetCharacter(AptCharacter* pCharacter); // @0x82AE1D18
 
     // DestroyGCPointers @0x82AF5490 -- mark the owned render item deleted and
     // tear down the per-instance property hash (the GC drop path).

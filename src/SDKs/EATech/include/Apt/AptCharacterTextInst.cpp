@@ -101,18 +101,14 @@ void AptCharacterTextInst::SetMouseWheelEnabled(bool bEnabled){ GetTextItemWrita
 void AptCharacterTextInst::SetMultiline(bool bMultiline)     { GetTextItemWritable()->SetMultiline(bMultiline); }            // @0x82AE2230
 void AptCharacterTextInst::SetWordWrap(bool bWrap)          { GetTextItemWritable()->SetWordWrap(bWrap); }                  // @0x82AE21F0
 
-EAStringC& AptCharacterTextInst::SetTextValue(const EAStringC& strText)   // @0x82AE66C0
+void AptCharacterTextInst::SetTextValue(const EAStringC& strText)   // @0x82AE66C0
 {
-    EAStringC& rText = *GetTextItemWritable()->GetTextValueWritable();
-    rText = strText;
-    return rText;
+    *GetTextItemWritable()->GetTextValueWritable() = strText;
 }
 
-EAStringC& AptCharacterTextInst::SetVarValue(const EAStringC& strVar)     // @0x82AE66F8
+void AptCharacterTextInst::SetVarValue(const EAStringC& strVar)     // @0x82AE66F8
 {
-    EAStringC& rVar = *GetTextItemWritable()->GetVarValueWritable();
-    rVar = strVar;
-    return rVar;
+    *GetTextItemWritable()->GetVarValueWritable() = strVar;
 }
 
 void AptCharacterTextInst::SetBounds(const AptRect& rBounds)              // @0x82AE1FD0

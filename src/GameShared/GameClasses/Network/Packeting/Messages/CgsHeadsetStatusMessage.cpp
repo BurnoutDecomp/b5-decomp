@@ -23,11 +23,10 @@ namespace CgsNetwork
     }
 
     // The message base fields and no headset. (The voice manager's Construct inlines it.)
-    Message* HeadsetStatusMessage::Construct()
+    void HeadsetStatusMessage::Construct()
     {
         Message::Construct();
         mu8HeadsetStatus = E_NETWORK_HEADSET_PLAYER_STATUS_NONE;
-        return this;
     }
 
     // Stamp the status for sending on the frame; the message is unreliable.

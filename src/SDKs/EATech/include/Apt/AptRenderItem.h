@@ -32,6 +32,7 @@
 // ===========================================================================
 
 #include <cstddef>   // offsetof (_AssertLayout)
+#include <xtl.h>
 #include "types.hpp"
 
 struct AptCharacter;
@@ -122,8 +123,8 @@ struct AptRenderItem
 
     virtual ~AptRenderItem();                                       // @0x80F860
 
-    int16_t GetDepth() const;       void SetDepth(int nDepth);          // @0x7DEE14/0x7DEEA0 (x64 ?SetDepth@...@@QEAAXH@Z: void)
-    int16_t GetClipDepth() const;   void SetClipDepth(int nClipDepth);  // @0x7DEDF8/0x7DEEA8 (x64 ?SetClipDepth@...@@QEAAXH@Z: void)
+    int16_t GetDepth() const;       void SetDepth(int nDepth) { mDepth = static_cast<int16_t>(nDepth); }          // @0x7DEE14/0x7DEEA0 (x64 ?SetDepth@...@@QEAAXH@Z: void)
+    int16_t GetClipDepth() const;   void SetClipDepth(int nClipDepth) { mClipDepth = static_cast<int16_t>(nClipDepth); }  // @0x7DEDF8/0x7DEEA8 (x64 ?SetClipDepth@...@@QEAAXH@Z: void)
 
     // SetIsVisible @0x82AE0708 -- set the is-visible flag (x64 bit 0) + recompute the
     // subtree's mask-driven visibility (PropagateTreeIsVisible) when the bit changes.
@@ -150,7 +151,10 @@ struct AptRenderItem
     int GetRefCount() const;        // @0x7DEE78
 
     // ---- reference count (atomic) ----------------------------------------
-    void AddReference() const;      // @0x7DFA7C
+    void AddReference() const
+    {
+        _InterlockedIncrement(reinterpret_cast<volatile long*>(&const_cast<AptRenderItem*>(this)->mRefCount));
+    }
     void ReleaseReference() const;  // @0x7DFA98 (deletes at zero)
 
     // ---- render-tree-manager links (getters) -----------------------------
@@ -195,7 +199,7 @@ struct AptRenderItem
 
     // True when this item is already the writable revision for nTick (its
     // creation tick matches, or it is flagged the current/highest revision). @0x7DEF54
-    bool IsWritableForThisTick(int nTick) const;
+    bool IsWritableForThisTick(int nTick) const { return nTick == mCreatedOnTick || (mFlags & 0x02000000u) == 0x02000000u; }
     bool Manager_IsDeletionMark() const;            // @0x7DEEBC (x64 mFlags bit 3)
     void Manager_SetNextRevision(AptRenderItem* pNext);   // @0x7DEF00
     void Manager_SetDeletionMark(bool bMark);             // @0x82ADB138 (full link-release form)

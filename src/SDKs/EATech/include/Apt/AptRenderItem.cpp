@@ -370,8 +370,6 @@ AptCXForm* AptRenderItem::GetColorMatrixWritable()
 // ---- depth / clip depth ---------------------------------------------------
 int16_t AptRenderItem::GetDepth() const     { return mDepth; }
 int16_t AptRenderItem::GetClipDepth() const { return mClipDepth; }
-void AptRenderItem::SetDepth(int nDepth)         { mDepth = static_cast<int16_t>(nDepth); }      // x64 QEAAXH@Z: void
-void AptRenderItem::SetClipDepth(int nClipDepth) { mClipDepth = static_cast<int16_t>(nClipDepth); }   // x64 QEAAXH@Z: void
 
 // ---- flags ----------------------------------------------------------------
 bool AptRenderItem::GetIsVisible() const { return (mFlags & 0x80000000u) != 0; }
@@ -398,10 +396,7 @@ int AptRenderItem::GetCreatedOnTick() const { return mCreatedOnTick; }
 int AptRenderItem::GetRefCount() const      { return mRefCount; }
 
 // ---- reference count (atomic) --------------------------------------------
-void AptRenderItem::AddReference() const
-{
-    _InterlockedIncrement(reinterpret_cast<volatile long*>(&const_cast<AptRenderItem*>(this)->mRefCount));
-}
+
 
 void AptRenderItem::ReleaseReference() const
 {
@@ -415,12 +410,6 @@ void AptRenderItem::ReleaseReference() const
 AptRenderItem* AptRenderItem::Manager_GetFirstChild() const   { return mpManagerFirstChild; }
 AptRenderItem* AptRenderItem::Manager_GetNextSibling() const  { return mpManagerNextSibling; }
 AptRenderItem* AptRenderItem::Manager_GetNextRevision() const { return mpManagerNextRevision; }
-
-// IsWritableForThisTick @0x7DEF54 -- already the writable revision for nTick?
-bool AptRenderItem::IsWritableForThisTick(int nTick) const
-{
-    return mCreatedOnTick == nTick || (mFlags & 0x02000000u) != 0;
-}
 
 // IsRenderableForThisTick @0x82AD4FC8 -- drawable on nTick: aged in (created on or
 // before nTick) AND the committed (non-writable, mFlags bit 25 clear) revision. The

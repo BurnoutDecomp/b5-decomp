@@ -2,7 +2,7 @@
 // EATech Apt -- AptRenderTreeManager factory + the scene-node render hooks.
 // DECOMPILED from the PS3 EXTERNAL ELF.
 //   AptRenderItem::Manager_CreateItem @0x814094 (the per-character-type factory).
-//   AptRTM_CreateItem / AptGetTickItemWritable / AptCurrentRenderTreeManager
+//   AptRTM_CreateItem / AptCurrentRenderTreeManager
 //   -- the helpers AptCharacterInst calls (homed here against the manager).
 // ===========================================================================
 
@@ -115,14 +115,7 @@ AptRenderTreeManager* AptCurrentRenderTreeManager()
 // X360 ctor), so the manager-driven path calls Update_CreateItem on the manager directly once
 // the render-tree-manager subsystem lands.
 
-AptRenderItem* AptGetTickItemWritable(AptRenderTreeManager* pMgr, const AptRenderItem* pItem, int nTick)
-{
-    // NULL-SAFE (see AptRTM_CreateItem): a null manager returns the item unchanged rather than
-    // dereferencing the null manager.
-    if (pMgr == 0)
-        return const_cast<AptRenderItem*>(pItem);
-    return pMgr->Update_GetTickItemWritable(pItem, nTick);
-}
+
 
 // ===========================================================================
 // AptRenderTreeManager::_AptRenderItemRootList -- the per-target render-root

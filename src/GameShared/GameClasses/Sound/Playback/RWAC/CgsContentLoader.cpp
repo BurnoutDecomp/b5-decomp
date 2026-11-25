@@ -104,42 +104,20 @@ namespace Playback
     {
         CGS_ASSERT(mpLoadData == 0, CGS_ASSERT_MESSAGE_AT("0 == mpLoadData", KAC_CONTENT_LOADER_FILE, 243));
 
-        // The X360 walk factory+0x0C -> +0x30 is Factory::mEnvironment ->
-        // Environment::mpAllocator -- by name (2026-08-25 wave 3; the "+0x0C load
-        // service" reading was a misnomer for the environment).
-        rw::IResourceAllocator* lpAllocator =
-            arContent.GetFactory().GetEnvironment().GetAllocator();
-
-        // X360 stack build: a FIVE-entry serialised descriptor (40B). slot0 =
-        // { sizeof(ResourceModuleLoadData)==8, 4 }, slots1..4 = { 0, 1 }.
-        CgsResource::ResourceDescriptor lDescriptor;
-        lDescriptor.m_baseResourceDescriptors[0].m_size      = 8;
-        lDescriptor.m_baseResourceDescriptors[0].m_alignment = 4;
-        for (u32 luIndex = 1; luIndex < 5; ++luIndex)
+        mpLoadData = static_cast<ResourceModuleLoadData*>(
+            arContent.GetFactory().GetEnvironment().Allocate(
+                sizeof(ResourceModuleLoadData), __alignof(ResourceModuleLoadData),
+                "ResourceModuleLoadData"));
+        if (mpLoadData)
         {
-            lDescriptor.m_baseResourceDescriptors[luIndex].m_size      = 0;
-            lDescriptor.m_baseResourceDescriptors[luIndex].m_alignment = 1;
+            mpLoadData->meState = E_RMLS_REQUEST;
+            mpLoadData->mi16CurrentRequest = 1;
+            mpLoadData->mu8IsCancelled = 0;
+            arContent.SetContentState(E_CONTENT_STATE_LOADING);
+            return true;
         }
 
-        // Bridge the X360-faithful <5> build to the PC <4> DoAllocate ABI (inert 5th entry).
-        const rw::ResourceDescriptor& lAbiDescriptor =
-            reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor);
-        rw::Resource lResource = lpAllocator->DoAllocate(lAbiDescriptor, "ResourceModuleLoadData");
-
-        mpLoadData = static_cast<ResourceModuleLoadData*>(lResource.m_baseResources[0]);
-        if (!mpLoadData)
-            return false;
-
-        mpLoadData->meState            = E_RMLS_REQUEST; // +0x00 (0)
-        mpLoadData->mi16CurrentRequest = 1;              // +0x04 (sth)
-        mpLoadData->mu8IsCancelled     = 0;              // +0x06
-
-        if ((arContent.mu8ContentState & 0x7F) != CgsSound::Playback::E_CONTENT_STATE_LOADING)
-        {
-            arContent.mu8ContentState = static_cast<u8>(
-                CgsSound::Playback::E_CONTENT_STATE_LOADING | CgsSound::Playback::E_CONTENT_STATE_CHANGED); // 0x82
-        }
-        return true;
+        return false;
     }
 
     // RestartResourceModuleLoading @ 0x82690810. Re-arm an already-allocated load request: bump
@@ -185,11 +163,7 @@ namespace Playback
 
         // Factory::mEnvironment -> Environment::mpAllocator, by name (see
         // StartResourceModuleLoading above).
-        rw::IResourceAllocator* lpAllocator =
-            arContent.GetFactory().GetEnvironment().GetAllocator();
-
-        // X360 free descriptor: slot0 = block to free (mpLoadData), rest zero.
-        lpAllocator->Free(mpLoadData);
+        arContent.GetFactory().GetEnvironment().Free(mpLoadData);
         mpLoadData = 0;
     }
 

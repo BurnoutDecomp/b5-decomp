@@ -38,7 +38,7 @@ namespace CgsNetwork
 
     struct HeadsetStatusMessage : Message
     {
-        Message*    Construct();
+        void        Construct();
         void        PrepareForSend(u16 lu16CurrentFrame, u8 lu8HeadsetStatus);
         bool        Retrieve(u8* lpu8HeadsetStatus);
         void        Destruct();

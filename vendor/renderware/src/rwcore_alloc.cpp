@@ -91,9 +91,7 @@ namespace rw
                                     uint32_t /*luFlags*/, uint32_t luAlignment,
                                     uint32_t /*luAlignmentOffset*/)
     {
-        ResourceDescriptor lDescriptor;
-        lDescriptor.m_baseResourceDescriptors[0].m_size = static_cast<uint32_t>(luSize);
-        lDescriptor.m_baseResourceDescriptors[0].m_alignment = luAlignment;
+        const ResourceDescriptor lDescriptor(static_cast<uint32_t>(luSize), luAlignment);
         return DoAllocate(lDescriptor, lpcName).m_baseResources[0];
     }
 
@@ -102,8 +100,7 @@ namespace rw
     void* IResourceAllocator::Alloc(size_t luSize, const char* lpcName,
                                     uint32_t /*luFlags*/)
     {
-        ResourceDescriptor lDescriptor;
-        lDescriptor.m_baseResourceDescriptors[0].m_size = static_cast<uint32_t>(luSize);
+        const ResourceDescriptor lDescriptor(static_cast<uint32_t>(luSize), 1u);
         return DoAllocate(lDescriptor, lpcName).m_baseResources[0];
     }
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "rw/rwcore_structs.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsObject.h"     // Playback::Object (base, with Acquire/Release)
 #include "GameShared/GameClasses/Sound/Playback/CgsHandle.h"     // Handle<T>
@@ -107,8 +108,18 @@ namespace Playback
         void* operator new(size_t luSize, const EnvironmentSpec& lrSpec);
         void operator delete(void* lpMemory, rw::IResourceAllocator* lpAllocator);   // h:495
         void operator delete(void* lpMemory, const EnvironmentSpec& lrSpec);         // h:163
-        void* Allocate(u32 lu32Size, u32 lu32Alignment, const char* lpcName);
-        void Free(void* lpMemory);
+        // CgsEnvironment.h:506/509. DecFIGS inlines this and the allocator
+    // into the same allocation sequence ARTIST uses at 0x826C69D8.
+    void* Allocate(u32 lu32Size, u32 lu32Alignment, const char* lpcName)
+    {
+        return mpAllocator->AllocateMemoryResource(lu32Size, lu32Alignment, lpcName);
+    }
+        // CgsEnvironment.h:515/517. The inlined ARTIST purge path at
+    // 0x826AAE54 passes the memory lane to the owning rw allocator.
+    void Free(void* lpMemory)
+    {
+        mpAllocator->FreeMemoryResource(lpMemory);
+    }
         static Handle<Environment> Create(const EnvironmentSpec& lrSpec);
 
         // @0x826AD130 / 1E0 / 290. Insert into the factory/voice/content handle tables.

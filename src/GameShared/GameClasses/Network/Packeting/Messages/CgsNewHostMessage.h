@@ -43,14 +43,14 @@ namespace CgsNetwork
 
         // Inlined at every call site on the console: no new host, no acknowledged
         // clients, then the base field reset.
-        Message*    Construct()
+        void        Construct()
         {
             mNewHostID = MessageWithPlayerIDs::KI_INVALID_PLAYER_ID;
             for (s32 liIndex = 0; liIndex < KI_MAX_RECEIVED_CLIENTS; ++liIndex)
             {
                 maReceivedClientsIDs[liIndex] = MessageWithPlayerIDs::KI_INVALID_PLAYER_ID;
             }
-            return Message::Construct();
+            Message::Construct();
         }
         void        PrepareForSend(u16 lu16CurrentFrame, NetworkPlayerID liNewHostID,
                                    NetworkPlayerID* lpReceivedClientsIDs);

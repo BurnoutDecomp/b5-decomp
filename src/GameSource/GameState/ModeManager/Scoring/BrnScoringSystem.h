@@ -377,13 +377,13 @@ namespace BrnGameState
         void StartOnlineGameModeScoring(GameStateModuleIO::EGameModeType leGameMode); // :412 / 0x823126C8
         void ClearModeTimer();                                                      // :417
         void ClearHighestPositions();                                               // :422 / 0x82326690
-        bool IsTimerActive() const;                                                 // :426
+        bool IsTimerActive() const { return mStartTime.GetSeconds() >= 0; }                                                 // :426
 
         void SetTimeLimitSeconds(f32 lfSeconds);                                    // :432 / 0x82310838
         void SetMedalModeTimer(f32 lfGold, f32 lfSilver, f32 lfBronze);             // :439 / 0x823108E0
         void SetTimeLimitPerKm(f32 lfSecondsPerKm);                                 // :445 / 0x82312740
         const CgsSystem::Time GetTimeLimit() const;                                 // :449
-        bool IsTimeLimitActive() const;                                             // :453
+        bool IsTimeLimitActive() const { return IsTimerActive() && mEndTime.GetSeconds() >= 0; }                                             // :453
         void IncreaseTimeLimit(f32 lfSeconds);                                      // :458 / 0x823109E8
         void ClearTimeLimit();                                                      // :462
         const CgsSystem::Time GetElapsedTime(const CgsSystem::Time& lTime) const;   // :468

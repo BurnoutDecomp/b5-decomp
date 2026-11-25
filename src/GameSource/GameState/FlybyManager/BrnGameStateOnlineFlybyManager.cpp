@@ -380,16 +380,14 @@ void OnlineFlybyManager::CalculateRivalryRating(FlybyManager::RivalRating* lpRat
         const s32 liTotalTakedowns = lpRelationship->GetTotalTakedowns();
         lpRating->mbHasValidRelationship = (liTotalTakedowns > 0);
 
-        if (liTotalTakedowns <= 0)
+        if (lpRating->mbHasValidRelationship)
         {
-            // No relationship: one inlined draw of the base random generator (the OLD 64-bit state's
-            // top word, then the LCG step) masked to 3 bits, a small jitter so equal-weighted
-            // strangers do not always sort identically.
-            lpRating->miRivalWeighting += static_cast<s32>(mRandom.RandomUInt() & 7);
+            CalculateNewOrOngoingRivalryRating(lpRating);
         }
         else
         {
-            CalculateNewOrOngoingRivalryRating(lpRating);
+            // Jitter the ordering of equally weighted strangers by one three-bit draw.
+            lpRating->miRivalWeighting += static_cast<s32>(mRandom.RandomUInt() & 7);
         }
 
         CGS_ASSERT(lpRating->miRivalWeighting >= 0, CGS_ASSERT_MESSAGE_AT("lpRating->miRivalWeighting >= 0", CGS_ARTIST_FILE, 628));

@@ -143,7 +143,9 @@ namespace BrnNetwork
         // ---- accessors (each asserts the module is updating, then hands back its member) --------
         BrnGameState::GameStateModuleIO::GameEventQueue* GetGameEventQueue()
         {
-            CGS_ASSERT(mbIsUpdating, "Can not use this function unless module is updating\n");
+            CGS_ASSERT(mbIsUpdating, CGS_ASSERT_STREAM_MESSAGE_AT(
+                "Can not use this function unless module is updating\n",
+                CGS_ARTIST_BRNNETWORKMODULE_FILE, 328));
             return &mGameEventQueue;
         }
 

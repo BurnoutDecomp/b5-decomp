@@ -93,7 +93,15 @@ struct Resource : public BaseResources<KU_RESOURCE_LANE_COUNT> {
 };
 RW_SIZE_ASSERT(rw::Resource, 40);
 
-struct ResourceDescriptor : public BaseResourceDescriptors<KU_RESOURCE_LANE_COUNT> {};
+struct ResourceDescriptor : public BaseResourceDescriptors<KU_RESOURCE_LANE_COUNT> {
+    ResourceDescriptor() {}
+
+    // DecFIGS resourcetarget.h:105 and ARTIST 0x8266ABD8 / 0x8266AC50.
+    ResourceDescriptor(uint32_t luSize, uint32_t luAlignment)
+    {
+        m_baseResourceDescriptors[0] = BaseResourceDescriptor(luSize, luAlignment);
+    }
+};
 RW_SIZE_ASSERT(rw::ResourceDescriptor, 40);
 // --------------------------------------------------------------------------
 
@@ -205,17 +213,8 @@ struct IResourceAllocator : EA::Allocator::ICoreAllocator {  // one host vptr
     void* AllocateMemoryResource(uint32_t luSize, uint32_t luAlignment,
                                  const char* lpcName)
     {
-        ResourceDescriptor lDescriptor;
-        for (uint32_t luLane = 0; luLane < KU_RESOURCE_LANE_COUNT; ++luLane)
-        {
-            lDescriptor.m_baseResourceDescriptors[luLane].m_size = 0;
-            lDescriptor.m_baseResourceDescriptors[luLane].m_alignment = 1;
-        }
-        lDescriptor.m_baseResourceDescriptors[0].m_size = luSize;
-        lDescriptor.m_baseResourceDescriptors[0].m_alignment = luAlignment;
-
-        Resource lResource = DoAllocate(lDescriptor, lpcName);
-        return lResource.m_baseResources[0];
+        const ResourceDescriptor lDescriptor(luSize, luAlignment);
+        return DoAllocate(lDescriptor, lpcName).m_baseResources[0];
     }
 
     // DecFIGS resourceallocator.h:188 declares the single-lane wrapper.

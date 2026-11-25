@@ -23,14 +23,6 @@
 // passes no `this`), so those two definitions could never have satisfied a call from any
 // other TU. Both now come from the class's own home.
 
-namespace CgsSound { namespace Playback { namespace Content
-{
-    int DoOnPostLoad(void* pContent);
-    // ⭐ CORRECTED 2026-09-02: this is the universal ICF thunk `li r3,1; blr`
-    // (0x82C296C8), not un-decompiled sound code -- see VFXPropsResourceType.cpp's note.
-    int DoOnPostLoad(void*) { return 1; }
-}}}
-
 namespace BrnParticle
 {
     static const uint32_t KU_PARTICLE_DESCRIPTION_COLLECTION_RESOURCE_TYPE_ID = 65544;
@@ -121,7 +113,7 @@ namespace BrnParticle
 
     // DeSerialise @0x82675868, in full:
     //     *(res + 4) = cLionFX::BinLoad(*(res + 4));
-    //     return CgsSound::Playback::Content::DoOnPostLoad(this);
+    //     return Type::DeSerialise(lpResource);
     // The record's second word is the saved LION blob (Serialise wrote `(u32)this + 16`
     // there); BinLoad rebases the effect graph inside it and hands back the blob itself
     // as a cLionEffectDefinition*, which is stored straight back over the word.
@@ -134,8 +126,9 @@ namespace BrnParticle
         void* lpBlobIn = lpDescription->GetDefinition();
         lpDescription->SetDefinition(cLionFX::BinLoad(lpBlobIn));
 
-        // The tail is the ICF thunk `li r3,1; blr` -- see VFXPropsResourceType.cpp's note.
-        return true;
+        // The inherited DeSerialise slot in BrnVehicle::GraphicsSpecResourceType
+        // at 0x820A1648 identifies the ICF body called at 0x8267589C.
+        return CgsResource::Type::DeSerialise(lpResource);
     }
 
     void* ParticleDescriptionResourceType::Serialise(const void* lpResource, const rw::Resource& lrDest) const

@@ -49,16 +49,5 @@ namespace renderengine
         return lDescriptor;
     }
 
-    // X360 0x82B62720: result = SamplerState::Initialize(lppState, &params); then the raster pointer
-    // at params+0x48 is stored into the state's +0x20 slot (asm: lwz r11,0x48(r4); stw r11,0x20(r3)).
-    TextureState* TextureState::Initialize(const rw::Resource& lrResource, const Parameters& lrParams)
-    {
-        // The shared sampler declaration retains its earlier member spellings;
-        // its 0x48-byte parameter representation is the same native prefix.
-        SamplerState* const lpResult = SamplerState::Initialize(
-            lrResource, lrParams);
-        TextureState* lpState = static_cast<TextureState*>(lpResult);
-        lpState->mpRaster = lrParams.mpTexture;
-        return lpState;
-    }
+
 }

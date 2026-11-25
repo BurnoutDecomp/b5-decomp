@@ -101,8 +101,8 @@ struct AptCharacterTextInst : public AptCharacterInst
     void SetMultiline(bool bMultiline);         // @0x82AE2230
     void SetWordWrap(bool bWrap);               // @0x82AE21F0
 
-    EAStringC& SetTextValue(const EAStringC& strText);   // @0x82AE66C0
-    EAStringC& SetVarValue(const EAStringC& strVar);     // @0x82AE66F8
+    void       SetTextValue(const EAStringC& strText);   // @0x82AE66C0
+    void       SetVarValue(const EAStringC& strVar);     // @0x82AE66F8
     void       SetBounds(const AptRect& rBounds);        // @0x82AE1FD0
 
     void SetStateFlags(uint32_t uFlags);        // @0x82AE20B0

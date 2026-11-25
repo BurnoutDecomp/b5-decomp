@@ -248,9 +248,10 @@ AptRenderItem* AptCharacterInst::GetRenderItem() const { return mpRenderItem; }
 
 AptRenderItem* AptCharacterInst::GetRenderItemWritable()
 {
-    AptRenderItem* pWritable =
-        AptGetTickItemWritable(AptCurrentRenderTreeManager(), mpRenderItem, gnCurrUpdateTick);
-    if (mpRenderItem != pWritable)
+    AptRenderItem* pWritable = mpRenderItem;
+    if (!pWritable->IsWritableForThisTick(gnCurrUpdateTick))
+        pWritable = pWritable->Manager_CreateNewRevision(gnCurrUpdateTick);
+    if (pWritable != mpRenderItem)
     {
         pWritable->AddReference();
         AptRenderItem* pOld = mpRenderItem;
@@ -261,9 +262,9 @@ AptRenderItem* AptCharacterInst::GetRenderItemWritable()
     return pWritable;
 }
 
-AptRenderItem* AptCharacterInst::SetRenderItem(AptRenderItem* pItem)
+void AptCharacterInst::SetRenderItem(AptRenderItem* pItem)
 {
-    if (mpRenderItem != pItem)
+    if (pItem != mpRenderItem)
     {
         pItem->AddReference();
         AptRenderItem* pOld = mpRenderItem;
@@ -271,14 +272,11 @@ AptRenderItem* AptCharacterInst::SetRenderItem(AptRenderItem* pItem)
         pOld->ReleaseReference();
         mpRenderItem = pItem;
     }
-    return pItem;
 }
 
-AptCharacter* AptCharacterInst::SetCharacter(AptCharacter* pCharacter)
+void AptCharacterInst::SetCharacter(AptCharacter* pCharacter)
 {
-    // NULL-SAFE (x64 bring-up): no writable render item when the render-tree manager is the null stub.
-    AptRenderItem* pItem = GetRenderItemWritable();
-    return pItem ? pItem->SetCharacter(pCharacter) : 0;
+    GetRenderItemWritable()->SetCharacter(pCharacter);
 }
 
 // ---- const reads (through the render item) --------------------------------
@@ -297,26 +295,17 @@ const AptMatrix* AptCharacterInst::GetPositionMatrixConst() const { return mpRen
 const AptCXForm* AptCharacterInst::GetColorMatrixConst() const    { return mpRenderItem->GetColorMatrixConst(); }
 
 // ---- writes (through the writable render item) ----------------------------
-// NULL-SAFE (x64 bring-up): GetRenderItemWritable() returns null when the render-tree manager is the
-// null stub. The console always has a writable item; here we skip the write rather than deref null.
 void AptCharacterInst::SetDepth(int nDepth)
 {
-    if (AptRenderItem* pItem = GetRenderItemWritable())
-        pItem->SetDepth(nDepth);
+    GetRenderItemWritable()->SetDepth(nDepth);
 }
 void AptCharacterInst::SetClipDepth(int nClipDepth)
 {
-    if (AptRenderItem* pItem = GetRenderItemWritable())
-        pItem->SetClipDepth(nClipDepth);
+    GetRenderItemWritable()->SetClipDepth(nClipDepth);
 }
 void AptCharacterInst::SetIsVisible(bool bVisible)
 {
-    // Route through the homed AptRenderItem::SetIsVisible (@0x82AE0708 / PS3
-    // @0x7ED720 -- sets the x64 is-visible bit 0 and recomputes the subtree's
-    // mask-driven visibility). The old direct 0x80000000 poke wrote the CONSOLE
-    // bit position, which the x64 GetIsVisible (mFlags & 1) never read.
-    if (AptRenderItem* pItem = GetRenderItemWritable())
-        pItem->SetIsVisible(bVisible);
+    GetRenderItemWritable()->SetIsVisible(bVisible);
 }
 
 // ===========================================================================

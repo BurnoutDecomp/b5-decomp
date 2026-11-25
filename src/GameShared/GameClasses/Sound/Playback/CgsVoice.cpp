@@ -612,9 +612,7 @@ void Voice::DoDispose()
     Factory& lrFactory = const_cast<Factory&>(mFactory);
     this->~Voice();
 
-    rw::Resource lResource;
-    lResource.m_baseResources[0] = this;
-    lrFactory.GetEnvironment().GetAllocator()->DoFree(lResource);
+    lrFactory.GetEnvironment().Free(this);
 }
 
 } // namespace Playback

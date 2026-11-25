@@ -101,6 +101,9 @@ struct cTime
     // signed-compares `now - bucket->mLatestBirthTime`.
     s32 GetTimeDiff(const cTime& arEarlier) const { return mTicks - arEarlier.mTicks; }
 
+    // DecFIGS cTime.h:205. ARTIST 0x82908824 compares the two signed trigger times.
+    bool operator<(const cTime& arOther) const { return mTicks < arOther.mTicks; }
+
 private:
     s32 mTicks;   // DWARF cTime.h:217
 };
