@@ -9,18 +9,12 @@
 // unchanged (RegisterMemFile 107 .. FindEnd 482); each assert sits on that line. The two
 // registration asserts are plain messages, every other one streams its message (ARTIST builds the
 // StrStream over the shared assert buffer), as in the original.
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\Drivers/CgsDeviceMemFileSystem.cpp"
+
 namespace CgsFileSystem
 {
-    DeviceMemFileSystem::DeviceMemFileSystem(const char* lpcName)
-        : rw::core::filesys::DeviceDriver(lpcName), mbConstructed(false) {}
     DeviceMemFileSystem::~DeviceMemFileSystem() {}
 
-    // Inlined ARTIST828F065C..66C: table clear precedes constructed publication.
-    void DeviceMemFileSystem::Construct()
-    {
-        memset(maMemFiles, 0, sizeof(maMemFiles));
-        mbConstructed = true;
-    }
 
 
 
@@ -104,7 +98,7 @@ namespace CgsFileSystem
     // ARTIST828DD378: first empty data slot, bounded name copy, then data and size.
     bool DeviceMemFileSystem::RegisterMemFile(const char* lpcName, void* lpData, u64 luSize)
     {
-        CGS_ASSERT(mbConstructed, "mbConstructed");
+        CGS_ASSERT_AT(mbConstructed, "mbConstructed", CGS_ARTIST_FILE, 107);
         for (u32 lu = 0; lu < KU_MAX_MEM_FILES; ++lu)
         {
             if (maMemFiles[lu].mpData) continue;
@@ -131,7 +125,7 @@ namespace CgsFileSystem
     // ARTIST828DD428. Registration names use exact-case comparison here.
     bool DeviceMemFileSystem::UnregisterMemFile(const char* lpcName)
     {
-        CGS_ASSERT(mbConstructed, "mbConstructed");
+        CGS_ASSERT_AT(mbConstructed, "mbConstructed", CGS_ARTIST_FILE, 134);
         for (u32 lu = 0; lu < KU_MAX_MEM_FILES; ++lu)
         {
             if (strcmp(maMemFiles[lu].macName, lpcName) != 0) continue;
@@ -283,7 +277,7 @@ namespace CgsFileSystem
             luRead = static_cast<u32>(lp->muSize) - static_cast<u32>(lp->muPosition);
         }
         else luRead = luBufferSize;
-        CGS_ASSERT_STREAM(lpBuffer != 0, "No buffer passed in!\n");
+        CGS_ASSERT_STREAM_AT(lpBuffer != 0, "No buffer passed in!\n", CGS_ARTIST_FILE, 286);
         memcpy(lpBuffer, static_cast<char*>(lp->mpData) + lp->muPosition, luRead);
         return luRead;
     }
@@ -300,7 +294,7 @@ namespace CgsFileSystem
     {
 
 
-        CGS_ASSERT_STREAM(false, "Mem device does not support writes\n");
+        CGS_ASSERT_STREAM_AT(false, "Mem device does not support writes\n", CGS_ARTIST_FILE, 303);
         return 0;
     }
 
@@ -385,7 +379,7 @@ namespace CgsFileSystem
 
     bool DeviceMemFileSystem::Resize(void*, u64)
     {
-        CGS_ASSERT_STREAM(false, "Mem device does not support resizes\n");
+        CGS_ASSERT_STREAM_AT(false, "Mem device does not support resizes\n", CGS_ARTIST_FILE, 388);
         return false;
     }
 
@@ -399,7 +393,7 @@ namespace CgsFileSystem
 
     bool DeviceMemFileSystem::Delete(const char*)
     {
-        CGS_ASSERT_STREAM(false, "Mem device does not support deletes\n");
+        CGS_ASSERT_STREAM_AT(false, "Mem device does not support deletes\n", CGS_ARTIST_FILE, 402);
         return false;
     }
 
@@ -413,7 +407,7 @@ namespace CgsFileSystem
 
     bool DeviceMemFileSystem::Move(const char*, const char*)
     {
-        CGS_ASSERT_STREAM(false, "Mem device does not support moves\n");
+        CGS_ASSERT_STREAM_AT(false, "Mem device does not support moves\n", CGS_ARTIST_FILE, 416);
         return false;
     }
 
@@ -427,7 +421,7 @@ namespace CgsFileSystem
 
     void* DeviceMemFileSystem::FindBegin(const char*, FindData*)
     {
-        CGS_ASSERT_STREAM(false, "Mem device does not support searches\n");
+        CGS_ASSERT_STREAM_AT(false, "Mem device does not support searches\n", CGS_ARTIST_FILE, 430);
         return 0;
     }
 
@@ -440,7 +434,7 @@ namespace CgsFileSystem
 
     bool DeviceMemFileSystem::FindNext(void*, FindData*)
     {
-        CGS_ASSERT(false, CGS_ASSERT_STREAM_MESSAGE_AT("Mem device does not support searches\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\Drivers/CgsDeviceMemFileSystem.cpp", 443));
+        CGS_ASSERT(false, CGS_ASSERT_STREAM_MESSAGE_AT("Mem device does not support searches\n", CGS_ARTIST_FILE, 443));
         return false;
     }
 
@@ -453,7 +447,7 @@ namespace CgsFileSystem
 
     bool DeviceMemFileSystem::DirectoryCreate(const char*)
     {
-        CGS_ASSERT_STREAM(false, "Mem device does not support directory creation\n");
+        CGS_ASSERT_STREAM_AT(false, "Mem device does not support directory creation\n", CGS_ARTIST_FILE, 456);
         return false;
     }
 
@@ -466,7 +460,7 @@ namespace CgsFileSystem
 
     bool DeviceMemFileSystem::DirectoryRemove(const char*)
     {
-        CGS_ASSERT_STREAM(false, "Mem device does not support directory removal\n");
+        CGS_ASSERT_STREAM_AT(false, "Mem device does not support directory removal\n", CGS_ARTIST_FILE, 469);
         return false;
     }
 
@@ -479,7 +473,7 @@ namespace CgsFileSystem
 
     bool DeviceMemFileSystem::FindEnd(void*)
     {
-        CGS_ASSERT_STREAM(false, "Mem device does not support searches\n");
+        CGS_ASSERT_STREAM_AT(false, "Mem device does not support searches\n", CGS_ARTIST_FILE, 482);
         return false;
     }
 
@@ -506,3 +500,5 @@ namespace CgsFileSystem
         CGS_STATIC_ASSERT(sizeof(DeviceMemFileSystem) == 0x2418, "ARTIST memory-file device");
     }
 }
+
+#undef CGS_ARTIST_FILE

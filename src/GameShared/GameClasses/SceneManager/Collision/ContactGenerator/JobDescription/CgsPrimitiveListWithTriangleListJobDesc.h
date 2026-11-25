@@ -1,5 +1,7 @@
 #pragma once
 
+#include <new>
+
 // CgsSceneManager::CgsCollision::PrimitiveListWithTriangleListJobDesc — collision
 // contact-generator job descriptor for a primitive-pair list vs triangle-list test
 // (job-type id 11).
@@ -25,15 +27,27 @@ namespace CgsCollision
         // Nested payload (DWARF CgsPrimitiveListWithTriangleListJobDesc.h:90), placed by
         // the X360 at the front of the object (pair list @0x00, triangle list @0x0C,
         // flag @0x14); modelled as named members.
-        PrimitivePairList mPrimitivePairList;    // +0x00
-        TriangleList      mTriangleList;         // +0x0C
-        bool              mbUseOptimizedBoxTests; // +0x14
 
         // Prepare @0x82810278 — returns true (the X360 `return 1;`).
         bool Prepare(const PrimitivePairList* lpPairList,
                      const TriangleList*      lpTriangleList,
                      CollisionResultList*     lpResultsList,
                      bool                     lbUseOptimizedBoxTests);
+
+        const PrimitivePairList& GetPrimativePairList() const { return GetData()->mPrimitivePairList; }
+        const TriangleList& GetTriangleList() const { return GetData()->mTriangleList; }
+        bool GetUseOptimizedBoxTests() const { return GetData()->mbUseOptimizedBoxTests; }
+    private:
+        struct Data
+        {
+            PrimitivePairList mPrimitivePairList;
+            TriangleList mTriangleList;
+            bool mbUseOptimizedBoxTests;
+        };
+
+        Data* GetData() { return reinterpret_cast<Data*>(maData); }
+        const Data* GetData() const { return reinterpret_cast<const Data*>(maData); }
+        CGS_STATIC_ASSERT(sizeof(Data) <= KU_MAX_DESC_DATA_SIZE, "PrimitiveListWithTriangleListJobDesc payload size");
     };
 }
 }

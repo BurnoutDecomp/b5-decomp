@@ -148,60 +148,54 @@ int Send::CreateInstance(Send* self)
 //   n = self->connector.mNumSubMixChannels(+0x40)          ; lbz
 //   if (!n) return SubMixConnector::Disconnect(&self->connector, 0)
 //   for (i=0; i<6; ++i) { srcGain[i] = &self->mDeClickValue[i] ; dstPtr[i] = &foldBack[i] }
-//   ReChannelGainWrite(dstPtr, srcGain, n(numDst), self->mInputChannels(numSrc), 1, 1.0)
+//   ReChannelGainWrite(dstPtr, srcGain, 1.0, n, self->mInputChannels, 1)
 //   result = SubMixConnector::Disconnect(&self->connector, foldBack)
 //   zero 6 dwords at self->mDeClickValue(+0x44)
 //   return result
 // (The X360 passes DisconnectImmediate a2/a3 through to ReChannelGainWrite's dead r5 slot;
 // both are unused, so the reconstruction takes only `self`.)
 //
-// FLAG (shape, vs the LegacySrc reference): plugins/send.h declares this as the non-static
-// member `void DisconnectImmediate();`. This tree models the same ABI as
-// `static SubMixConnector* DisconnectImmediate(Send* self)` -- `self` in r3 is identical
-// either way, and the SubMixConnector* return is real in the asm (it is
-// SubMixConnector::Disconnect's r3, tail-forwarded by ReleaseEvent @0x82BA3EF8) even
-// though the reference's declaration discards it. Changing the shape would mean editing the
-// shared Send.h; it is recorded here rather than silently "corrected".
+// LegacySrc send.h and the Xbox 360 SDK map give the void member and release signatures.
 // -------------------------------------------------------------------------------------
-SubMixConnector* Send::DisconnectImmediate(Send* self)
+#if defined(_XBOX) && defined(_MSC_VER)
+// The original rwAudio plug-in object emits these scalar loops in its size form.
+#pragma optimize("s", on)
+#endif
+void Send::DisconnectImmediate()
 {
-    const u32 luNumSubMixChannels = self->mSubMixConnector.mNumSubMixChannels; // lbz +0x40
-
-    if (!luNumSubMixChannels)
-        return (
-            SubMixConnector::Disconnect(&self->mSubMixConnector, 0)); // r3=self+0x30, r4=0
-
-    // Remap the send's per-input-channel gains (mDeClickValue) into a SubMix-channel
-    // foldback array. The two pointer arrays and the 24-byte output buffer mirror the
-    // X360 stack temporaries (v10 src-gain ptrs, v11 dst ptrs, v12 foldback gains).
-    f32* lpSrcGain[6]; // v10 -- &mDeClickValue[i]
-    f32* lpDstPtr[6];  // v11 -- &lFoldBack[i]
-    f32  lFoldBack[6]; // v12 -- remapped per-SubMix-channel foldback gains
-    for (int li = 0; li < 6; ++li)
+    const unsigned channels = mSubMixConnector.mNumSubMixChannels;
+    if (channels)
     {
-        lpSrcGain[li] = &self->mDeClickValue[li];
-        lpDstPtr[li] = &lFoldBack[li];
+        f32* source[6];
+        f32* destination[6];
+        f32 foldback[6];
+        for (unsigned channel = 0; channel < 6; ++channel)
+        {
+            source[channel] = &mDeClickValue[channel];
+            destination[channel] = &foldback[channel];
+        }
+
+        ReChannelGainWrite(destination, source, 1.0f, channels, mBase.mbFlag20, 1);
+        SubMixConnector::Disconnect(&mSubMixConnector, foldback);
+        for (unsigned channel = 0; channel < 6; ++channel)
+            mDeClickValue[channel] = 0.0f;
     }
-
-    // numDst = mNumSubMixChannels, numSrc = mInputChannels, numSamples = 1, gain = 1.0.
-    ReChannelGainWrite(lpDstPtr, lpSrcGain, luNumSubMixChannels,
-                       self->mBase.mbFlag20, 1, 1.0f);
-
-    SubMixConnector* lpResult =
-        SubMixConnector::Disconnect(&self->mSubMixConnector, lFoldBack); // r3=self+0x30, r4=v12
-
-    for (int li = 0; li < 6; ++li)
-        self->mDeClickValue[li] = 0.0f; // zero 6 dwords at +0x44
-
-    return lpResult;
+    else
+    {
+        SubMixConnector::Disconnect(&mSubMixConnector, 0);
+    }
 }
+
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", off)
+#endif
 
 // -------------------------------------------------------------------------------------
 // ReleaseEvent @0x82BA3EF8 -- b DisconnectImmediate (tail call; `self` passes through).
 // -------------------------------------------------------------------------------------
-SubMixConnector* Send::ReleaseEvent(Send* self)
+void Send::ReleaseEvent()
 {
-    return DisconnectImmediate(self);
+    DisconnectImmediate();
 }
 
 // -------------------------------------------------------------------------------------
@@ -211,14 +205,19 @@ SubMixConnector* Send::ReleaseEvent(Send* self)
 //   in = mInputChannels(+0x20) ; dstBase = connector.mpSubMixBuffer(+0x38) ; src = ctx->mpSrcBuffer
 //   for (c<in) srcPtr[c] = src->mpSamples + src->muStride*c
 //   for (i<n)  dstPtr[i] = dstBase + 256*i                       ; 1024-byte channel stride
-//   if (mfGain == mfCurrentGain) ReChannelGainMix    (dstPtr, srcPtr, n, in, 256, mfGain)
-//   else                         ReChannelGainMixRamp(dstPtr, srcPtr, n, in, 256, mfGain, mfCurrentGain)
+//   if (mfGain == mfCurrentGain) ReChannelGainMix    (dstPtr, srcPtr, mfGain, n, in, 256)
+//   else                         ReChannelGainMixRamp(dstPtr, srcPtr, mfGain, mfCurrentGain, n, in, 256)
 //   mfCurrentGain = mfGain
 //   for (c<in) mDeClickValue[c] = srcPtr[c][255] * mfGain       ; last-sample foldback seed
 //   return 1
 // -------------------------------------------------------------------------------------
-int Send::Process(Send* self, AudioProcessContext* ctx, char resetRamp)
+#if defined(_XBOX) && defined(_MSC_VER)
+// The original rwAudio plug-in object emits these scalar loops in its size form.
+#pragma optimize("s", on)
+#endif
+BufferStatus Send::Process(PlugIn* plugIn, Mixer* ctx, bool resetRamp)
 {
+    Send* self = reinterpret_cast<Send*>(plugIn);
     if (resetRamp || self->mbNeedReset)
     {
         self->mbNeedReset = 0;                 // stb 0, 0x60
@@ -229,32 +228,28 @@ int Send::Process(Send* self, AudioProcessContext* ctx, char resetRamp)
     if (!luNumSubMixChannels)
     {
         self->mbNeedReset = 1;                 // stb 1, 0x60
-        return 1;
+        return BUFFERSTATUS_AVAILABLE;
     }
 
     const u32 luInputChannels = self->mBase.mbFlag20;              // lbz +0x20 (input channels)
     f32* const pSubMixBuffer = static_cast<f32*>(self->mSubMixConnector.mpSubMixBuffer); // lwz +0x38
     AudioChannelBuffer* srcBuffer = ctx->mpSrcBuffer;             // *(ctx+0x3000C)
 
-    f32* lpSrcChannel[8]; // v17 (32-byte reservation)
+    f32* lpSrcChannel[6]; // v17 (32-byte reservation)
     f32* lpDstChannel[6]; // v18 (24-byte reservation)
 
-    if (luInputChannels)
-    {
-        for (u32 lc = 0; lc < luInputChannels; ++lc)
-            lpSrcChannel[lc] = srcBuffer->mpSamples + srcBuffer->muStride * lc;
-    }
+    for (u32 lc = 0; lc < luInputChannels; ++lc)
+        lpSrcChannel[lc] = srcBuffer->LockChannel(lc);
 
     for (u32 li = 0; li < luNumSubMixChannels; ++li)
         lpDstChannel[li] = pSubMixBuffer + KI_MIXER_FRAME_SIZE * li; // +1024 bytes/channel
 
-    if (self->mfGain == self->mfCurrentGain)
-        ReChannelGainMix(lpDstChannel, lpSrcChannel, luNumSubMixChannels,
-                         luInputChannels, KI_MIXER_FRAME_SIZE, self->mfGain);
+    if (self->mfGain != self->mfCurrentGain)
+        ReChannelGainMixRamp(lpDstChannel, lpSrcChannel, self->mfGain, self->mfCurrentGain,
+                             luNumSubMixChannels, luInputChannels, KI_MIXER_FRAME_SIZE);
     else
-        ReChannelGainMixRamp(lpDstChannel, lpSrcChannel, luNumSubMixChannels,
-                             luInputChannels, KI_MIXER_FRAME_SIZE, self->mfGain,
-                             self->mfCurrentGain);
+        ReChannelGainMix(lpDstChannel, lpSrcChannel, self->mfGain,
+                         luNumSubMixChannels, luInputChannels, KI_MIXER_FRAME_SIZE);
 
     self->mfCurrentGain = self->mfGain; // stfs mfGain, 0x5C
 
@@ -263,8 +258,12 @@ int Send::Process(Send* self, AudioProcessContext* ctx, char resetRamp)
         for (u32 lc = 0; lc < luInputChannels; ++lc)
             self->mDeClickValue[lc] = lpSrcChannel[lc][255] * self->mfGain; // lfs +0x3FC * mfGain
     }
-    return 1;
+    return BUFFERSTATUS_AVAILABLE;
 }
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", off)
+#endif
+
 
 // -------------------------------------------------------------------------------------
 // ConnectByPointerHandler @0x82B9FEF8 -- replay a queued pointer-connect command (cmd =
@@ -295,7 +294,7 @@ int Send::ConnectByPointerHandler(Command * cmd)
     SendConnectByPointerCommand* lpCmd = static_cast<SendConnectByPointerCommand*>(cmd);
     Send* lpSend = static_cast<Send *>(lpCmd->pObject); // send = *(cmd+4)
 
-    DisconnectImmediate(lpSend);
+    lpSend->DisconnectImmediate();
 
     SubMix* lpSubMix = lpCmd->mpSubMix; // subMix = *(cmd+8)
     if (lpSubMix)
@@ -640,7 +639,7 @@ int Send::ConnectByNameHandler(Command * cmd)
     SendConnectByNameCommand* lpCmd = static_cast<SendConnectByNameCommand*>(cmd);
     Send* lpSend = static_cast<Send *>(lpCmd->pObject); // lwz r30, 4(r31)
 
-    DisconnectImmediate(lpSend); // bl @0x82B9FFA0
+    lpSend->DisconnectImmediate(); // bl @0x82B9FFA0
 
     // Walk the global by-name SubMix registry. The X360 build inlined
     // SubMix::EnumerateSubMixReset()/EnumerateSubMix() here (both declared in LegacySrc

@@ -24,7 +24,7 @@
 // =====================================================================================
 
 #include "SDKs/EATech/rwcore/filesys/device.h"
-#include "SDKs/EATech/rwcore/filesys/xenonfiledriver.h"   // Manager / Device / Allocator / FileSystemConfig
+#include "SDKs/EATech/rwcore/filesys/xenonfiledriver.h"   // Manager / Device / Allocator / Options
 
 #include <cstring>   // memset, strchr
 #include "types.hpp"   // intptr_t
@@ -65,7 +65,7 @@ namespace rw
             // Manager::GetInstance @0x82BBD630
             //   return off_8327F078;
             // -----------------------------------------------------------------------------
-            void* Manager::GetInstance()
+            Manager* Manager::GetInstance()
             {
                 return gpFileSysManager;
             }
@@ -78,15 +78,15 @@ namespace rw
             // clear the Init-owned fields, seed the handle id to -1, and latch the search-
             // path capacity / scratch size from the config (config[0] / config[1]).
             // -----------------------------------------------------------------------------
-            Manager::Manager(const FileSystemConfig* lpConfig)
+            Manager::Manager(const Options& lrOptions)
                 // mDeviceList emptied in the body (a1[0..2] = 0).
                 // mThreadParameters default-constructed here (a1+3); priority bumped below.
                 : miMaxReadSize(-1)            // a1[9] = -1
                 , mpDefaultDevice(0)     // a1[10] = 0
                 , mpScratchBuffer(0)     // a1[11] = 0
                 , mpCurrentDir(0)        // a1[12] = 0
-                , muScratchSize(lpConfig->muScratchSize)     // a1[13] = a2[1]
-                , muMaxSearchPaths(lpConfig->muMaxSearchPaths) // a1[14] = a2[0]
+                , muScratchSize(lrOptions.mMaxSearchPathLength)     // a1[13] = a2[1]
+                , muMaxSearchPaths(lrOptions.mMaxSearchLocations) // a1[14] = a2[0]
                 , mpSearchPathTable(0)   // a1[15] = 0
                 , mbSortByPosition(0)          // a1[16] = 0
                 , mpErrorHandler(0)              // a1[17] = 0
@@ -209,16 +209,18 @@ namespace rw
             //   Manager::Init();
             //   return off_8327F078;
             // -----------------------------------------------------------------------------
-            void* Manager::CreateInstance(const FileSystemConfig* lpConfig)
+            void* Manager::operator new(size_t luSize)
             {
-                gpFileSysAllocator = lpConfig->mpAllocator;  // off_8327F07C = *(a1+8)
+                return gpFileSysAllocator->Alloc(luSize, KAC_ALLOC_TAG, 0, 4, 0);
+            }
 
-                void* lpRaw = gpFileSysAllocator->Alloc(0x48, KAC_ALLOC_TAG, 0, 4, 0);
-                Manager* lpMgr = lpRaw ? new (lpRaw) Manager(lpConfig) : 0;
-                gpFileSysManager = lpMgr;                    // off_8327F078 = v3
+            Manager* Manager::CreateInstance(const Options& lrOptions)
+            {
+                gpFileSysAllocator = lrOptions.mAllocator;  // off_8327F07C = *(a1+8)
 
-                if (gpFileSysManager)
-                    gpFileSysManager->Init();
+                gpFileSysManager = new Manager(lrOptions);
+
+                gpFileSysManager->Init();
                 return gpFileSysManager;
             }
 

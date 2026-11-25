@@ -1,6 +1,8 @@
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsSphereListWithSphereListJobDesc.h"
 #include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsCollisionResult.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include <new>
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\collision\\ContactGenerator/JobDescription/CgsSphereListWithSphereListJobDesc.cpp"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX.
 // CgsSceneManager::CgsCollision::SphereListWithSphereListJobDesc::Prepare @0x82810198.
@@ -18,6 +20,8 @@ namespace CgsCollision
                                                   CollisionResultList* lpResultsList,
                                                   f32                  lfPadding)
     {
+        new (maData) Data;
+
         // Bookkeeping (base) fields:
         //   stfs f1,0xF4(r31)  ; mfRadius   = lfPadding
         //   stw  r6,0xF0(r31)  ; mpResultsList = lpResultsList
@@ -31,20 +35,22 @@ namespace CgsCollision
         // Copy sphere list A (2 dwords @0,4) and B (2 dwords @8,0xC):
         //   lwz r11,0(r4); stw r11,0(r31)   ; lwz r11,4(r4); stw r11,4(r31)
         //   lwz r11,0(r5); stw r11,8(r31)   ; lwz r11,4(r5); stw r11,0xC(r31)
-        mSphereListA = *lpSphereListA;
-        mSphereListB = *lpSphereListB;
+        GetData()->mSphereListA = *lpSphereListA;
+        GetData()->mSphereListB = *lpSphereListB;
 
         // `if ( *a1 % 16 )` — sphere list A base pointer must be 16-byte aligned.
         const bool lbAlignedA =
-            (reinterpret_cast<uintptr_t>(mSphereListA.mpSpheres) & 0xF) == 0;
-        CGS_ASSERT(lbAlignedA, "Spheres A not aligned to 16 bytes");
+            (reinterpret_cast<intptr_t>(GetData()->mSphereListA.mpSpheres) % 16) == 0;
+        CGS_ASSERT_AT(lbAlignedA, "Spheres A not aligned to 16 bytes", CGS_ARTIST_FILE, 83);
 
         // `if ( *(a1 + 8) % 16 )` — sphere list B base pointer must be 16-byte aligned.
         const bool lbAlignedB =
-            (reinterpret_cast<uintptr_t>(mSphereListB.mpSpheres) & 0xF) == 0;
-        CGS_ASSERT(lbAlignedB, "Spheres B not aligned to 16 bytes");
+            (reinterpret_cast<intptr_t>(GetData()->mSphereListB.mpSpheres) % 16) == 0;
+        CGS_ASSERT_AT(lbAlignedB, "Spheres B not aligned to 16 bytes", CGS_ARTIST_FILE, 84);
 
         return true;
     }
 }
 }
+
+#undef CGS_ARTIST_FILE

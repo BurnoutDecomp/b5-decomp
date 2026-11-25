@@ -14,8 +14,7 @@
 //   +0x00  mpVTable     vtable pointer (off_8217F4E4)            -- CreateInstance
 //   +0x04  mpSystem     owning System* (its +0x20 ring base / +0x10B8 ring cursor are
 //                        used by EventEvent to queue Play/Stop commands)
-//   +0x24  mpCallback   PCM-fill callback `bool(*)(void* ctx, void* dst, float)`, run by
-//                        Process via bctrl; 0 == idle (CreateInstance seeds 0)
+//   +0x24  mpCallback   Planar pull callback, invoked by Process. Null while idle.
 //   +0x28  mpContext    callback context/userdata pointer (PlayHandler installs it)
 //   +0x2C  mfRate       float pull rate/pitch (PlayHandler stores it; PreProcess/Process
 //                        push it into the output node)
@@ -32,6 +31,7 @@
 // =====================================================================================
 
 #include "types.hpp" // f32, u32, s32
+#include "rw/audio/core/Mixer.h"
 #include "rw/audio/core/PlugIn.h" // rw::audio::core::System
 
 namespace rw
@@ -51,11 +51,9 @@ namespace core
 // and the fourth is the context. The ProStreet08 rwaudio PDB agrees:
 // bool(*)(int, float*, float, void*). (An earlier note here read register NUMBERS as
 // parameter POSITIONS and had the last two swapped.)
-typedef int (*RawPuller2FillFn)(u32 luFrameCount, void* lpDst, f32 lfArg, void* lpContext);
+typedef bool (*RawPuller2FillFn)(int luFrameCount, float* lpDst, f32 lfArg, void* lpContext);
 
 class RawPuller2; // fwd -- the ring records carry the RawPuller2 instance
-class Mixer;
-typedef Mixer AudioProcessContext;
 
 // The 4-word play event payload EventEvent receives and copies into the ring record
 // (event words 0..3 -> command words 2..5 on the X360). Words 0/1 are floats (PlayHandler
@@ -116,8 +114,8 @@ public:
     // Per-frame setup + render. PreProcess stows the requested frame count; Process pulls
     // the callback and copies the produced channels into the output node. X360
     // @0x82B9A5C8 / @0x82B9A5D8.
-    static int PreProcess(RawPuller2* self, int a2, int a3, int a4);
-    static int Process(RawPuller2* self, AudioProcessContext* context);
+    static int PreProcess(PlugIn* plugIn, Mixer* mixer, bool discontinuity, int outputSamples);
+    static BufferStatus Process(PlugIn* plugIn, Mixer* mixer, bool discontinuity);
 
     // FLAG (rwaudio PDB reconcile): NFS ProStreet 08 X360 PDB confirms this exact layout
     // (sizeof=56, field order matches). Member names below are the authoritative PDB names;
@@ -133,8 +131,8 @@ public:
     void*            mpContext;         // +0x28 (PDB: mpContext)
     f32              mPlaySampleRate;   // +0x2C (PDB: mPlaySampleRate)
     int              mSamplesRequested; // +0x30 (PDB: mSamplesRequested, int)
-    char             mFormatChanged;    // +0x34 (PDB: mFormatChanged)
-    char             mPlayNumChannels;  // +0x35 (PDB: mPlayNumChannels)
+    u8               mFormatChanged;    // +0x34 (PDB: mFormatChanged)
+    u8               mPlayNumChannels;  // +0x35 (PDB: mPlayNumChannels)
     char             mPad36[0x38 - 0x36]; // +0x36 .. +0x37 -- tail pad (sizeof == 0x38)
 };
 

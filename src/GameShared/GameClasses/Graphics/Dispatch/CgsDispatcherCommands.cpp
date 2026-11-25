@@ -197,19 +197,19 @@ void DispatchFrame::ConstructWithSharedBinMemory(DispatchList* lpaDispatchListAr
         uintptr_t luSharedMemoryStartAddress, u32* lpSharedMemoryBlockNextFreeAtomic,
         u32 luSharedMemoryBlockMax)
 {
-    // ARTIST827EE7E8..E800 initializes only these native bin fields. Its
-    // callback/context and cache-line padding survive shared-bin construction.
-    m_Bin.m_pBin = 0;
-    m_Bin.m_pNextWord = 0;
-    m_Bin.m_uSize = 0;
-    m_Bin.m_pPacketStart = 0;
-    m_Bin.m_pLastCommandInPacket = 0;
-    m_Bin.m_uSizeUsedLastTime = 0;
-    m_Bin.m_uUsedQwordsSnapshot = 0;
-    m_Bin.mpSharedBinStart = reinterpret_cast<DispatchCommand*>(luSharedMemoryStartAddress);
-    m_Bin.m_pSharedNextFreeAtomic = lpSharedMemoryBlockNextFreeAtomic;
-    m_Bin.m_uSharedMemoryBlockMax = luSharedMemoryBlockMax;
-    m_Bin.mpDispatchFrame = this;
+    DispatchBin& lrBin = m_Bin;
+    lrBin.mpSharedBinStart = reinterpret_cast<DispatchCommand*>(luSharedMemoryStartAddress);
+    lrBin.m_pSharedNextFreeAtomic = lpSharedMemoryBlockNextFreeAtomic;
+    lrBin.m_uSharedMemoryBlockMax = luSharedMemoryBlockMax;
+    lrBin.m_pBin = 0;
+    lrBin.m_pNextWord = 0;
+    lrBin.m_uSize = 0;
+    lrBin.m_pPacketStart = 0;
+    lrBin.m_pLastCommandInPacket = 0;
+    lrBin.m_uSizeUsedLastTime = 0;
+    lrBin.m_uUsedQwordsSnapshot = 0;
+    lrBin.mpDispatchFrame = this;
+
     mpDispatchBinMasterAddress = luDispatchBinMasterAddress;
     mpDispatchBinOutputAddress = 0;
     m_paLists = lpaDispatchListArray;
@@ -218,13 +218,48 @@ void DispatchFrame::ConstructWithSharedBinMemory(DispatchList* lpaDispatchListAr
     {
         DispatchList& lrList = m_paLists[luList];
         lrList.muCount = 0;
-        lrList.mpDispatchBin = &m_Bin;
+        lrList.mpDispatchBin = &lrBin;
         lrList.muChainBlockCount = 0;
         lrList.muWord00 = 0;
-        lrList.mpBlockListHead = lrList.mpBlockListTail = 0;
+        DispatchCommand* const lpBinBase = lrBin.GetBase();
+        lrList.mpBlockListHead = 0;
+        lrList.mpBlockListTail = 0;
         lrList.mpaSortedKeyArray = 0;
-        lrList.m_pBinBase = m_Bin.GetBase();
+        lrList.m_pBinBase = lpBinBase;
     }
+}
+
+// ARTIST 827EE868. Rebase the block chain and publish it for the shared-bin join.
+void DispatchList::RelocateForMainMemory(uintptr_t luBinBase, uintptr_t luBinOutput,
+                                        uintptr_t /*luBinMaster*/)
+{
+    const uintptr_t luDelta = luBinOutput - luBinBase;
+    if (luDelta != 0)
+    {
+        for (SortKeyBlock* lpBlock = mpBlockListHead; lpBlock != 0;)
+        {
+            SortKeyBlock* const lpNext = lpBlock->mpNextBlock;
+            if (lpBlock->mpKeyArray)
+                lpBlock->mpKeyArray = reinterpret_cast<SortKey*>(reinterpret_cast<uintptr_t>(lpBlock->mpKeyArray) + luDelta);
+            if (lpBlock->mpNextBlock)
+                lpBlock->mpNextBlock = reinterpret_cast<SortKeyBlock*>(reinterpret_cast<uintptr_t>(lpBlock->mpNextBlock) + luDelta);
+            lpBlock = lpNext;
+        }
+        if (mpBlockListHead)
+            mpBlockListHead = reinterpret_cast<SortKeyBlock*>(reinterpret_cast<uintptr_t>(mpBlockListHead) + luDelta);
+        if (mpBlockListTail)
+            mpBlockListTail = reinterpret_cast<SortKeyBlock*>(reinterpret_cast<uintptr_t>(mpBlockListTail) + luDelta);
+    }
+    if (mpBlockListHead)
+    {
+        AssertDispatcher(muChainBlockCount < KU_MAX_BLOCKS_PER_CHAIN,
+                         "muChainBlockCount < KU_MAX_BLOCKS_PER_CHAIN", 3165);
+        mapChainBlockArray[muChainBlockCount] = mpBlockListHead;
+        ++muChainBlockCount;
+    }
+    muCount = 0;
+    mpBlockListHead = 0;
+    mpBlockListTail = 0;
 }
 
 void DispatchFrame::RelocateForMainMemory(uintptr_t luBinBase, uintptr_t luBinOutput,
@@ -240,9 +275,10 @@ void DispatchFrame::FlushBlockToSharedMemory()
     {
         const uintptr_t luSource = reinterpret_cast<uintptr_t>(m_Bin.GetBase());
         RelocateForMainMemory(luSource, mpDispatchBinOutputAddress, mpDispatchBinMasterAddress);
-        if (mpDispatchBinOutputAddress != luSource)
-            std::memcpy(reinterpret_cast<void*>(mpDispatchBinOutputAddress),
-                        reinterpret_cast<void*>(luSource),
+        void* const lpDestination = reinterpret_cast<void*>(mpDispatchBinOutputAddress);
+        const DispatchCommand* const lpSource = m_Bin.GetBase();
+        if (lpDestination != lpSource)
+            std::memcpy(lpDestination, lpSource,
                         sizeof(DispatchCommand) * m_Bin.GetSizeQwords());
     }
     mpDispatchBinOutputAddress = 0;

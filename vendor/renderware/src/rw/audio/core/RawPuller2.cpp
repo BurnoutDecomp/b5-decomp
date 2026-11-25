@@ -2,8 +2,8 @@
 // rw::audio::core::RawPuller2 -- the "raw pull" source plug-in (PCM-from-callback into
 // the audio output ring) with a deferred Play/Stop command path.
 //
-// EARenderWare "rwaudio". Reconstructed from BURNOUT_X360_ARTIST.XEX (PowerPC); the asm
-// is authoritative. No reference source and no DecFIGS DWARF exist for this type.
+// The vendor rawpuller2.h supplies the planar pull callback and command field types.
+// ARTIST supplies the command widths, output-buffer swap and per-channel copy.
 //
 // The RawPuller2 instance fields are modelled by name in RawPuller2.h. The System command
 // ring (base @ +0x20, byte cursor @ +0x10B8) is reached through the committed System home
@@ -17,7 +17,7 @@
 #include "rw/audio/core/RawPuller2.h"
 #include "rw/audio/core/Iir2Filters.h" // AudioProcessContext / AudioChannelBuffer homes
 
-#include <cstring> // memcpy (the X360 XMemCpy)
+#include <xtl.h>
 
 namespace rw
 {
@@ -134,27 +134,34 @@ RawPuller2* RawPuller2::EventEvent(RawPuller2* self, int bStop, const RawPuller2
 // channel count via fctidz (round-toward-zero double->int, low byte taken). a1+0x10 /
 // a1+0x14 are the context and callback the Play event carried.
 // -------------------------------------------------------------------------------------
+#if defined(_XBOX) && defined(_MSC_VER)
+// The original rwAudio plug-in object emits these scalar loops in its size form.
+#pragma optimize("s", on)
+#endif
 int RawPuller2::PlayHandler(Command * cmd)
 {
     RawPuller2PlayCommand* lpCmd = static_cast<RawPuller2PlayCommand*>(cmd);
     RawPuller2* lpSelf = static_cast<RawPuller2 *>(lpCmd->pObject); // v1 = *(a1+4)
 
-    const f32 lfRate = lpCmd->mfSampleRate;       // *(a1+0xC)
-    const f32 lfChannelsF = lpCmd->mfNumChannels; // *(a1+8)
-    const char lbNumChannels = static_cast<char>(static_cast<long long>(lfChannelsF));
+    if (lpSelf->mPlaySampleRate != lpCmd->mfSampleRate ||
+        lpSelf->mPlayNumChannels != static_cast<u8>(lpCmd->mfNumChannels))
+    {
+        lpSelf->mFormatChanged = 1;
+    }
 
-    if (lpSelf->mPlaySampleRate != lfRate || lpSelf->mPlayNumChannels != lbNumChannels)
-        lpSelf->mFormatChanged = 1; // *(v1+0x34) = 1
-
-    lpSelf->mPlayNumChannels = lbNumChannels;       // *(v1+0x35) (stb)
-    lpSelf->mPlaySampleRate        = lfRate;              // *(v1+0x2C) (stfs)
-    lpSelf->mpContext     = lpCmd->mpContext;             // *(v1+0x28)
-    lpSelf->mpPullCallback    = lpCmd->mpCallback;        // *(v1+0x24)
+    lpSelf->mPlayNumChannels = static_cast<u8>(lpCmd->mfNumChannels);
+    lpSelf->mPlaySampleRate = lpCmd->mfSampleRate;
+    lpSelf->mpContext = lpCmd->mpContext;
+    lpSelf->mpPullCallback = lpCmd->mpCallback;
     // RECORD STRIDE (X360-literal trap): the asm's `li r3,0x18` is the console
     // sizeof(RawPuller2PlayCommand); it must stay identical to the producer's advance in
     // EventEvent above, so both sides use the HOST sizeof (40 on x64).
     return static_cast<int>(sizeof(RawPuller2PlayCommand)); // X360: li r3,0x18 @0x82B9A580
 }
+
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", off)
+#endif
 
 // -------------------------------------------------------------------------------------
 // StopHandler @0x82B9A5B0 -- replay a queued Stop command:
@@ -175,9 +182,9 @@ int RawPuller2::StopHandler(Command * cmd)
 // PreProcess @0x82B9A5C8 -- *(self+0x30) = a4 ; return 0
 //   (stows the requested per-pull frame count into muFrameCount.)
 // -------------------------------------------------------------------------------------
-int RawPuller2::PreProcess(RawPuller2* self, int /*a2*/, int /*a3*/, int a4)
+int RawPuller2::PreProcess(PlugIn* plugIn, Mixer*, bool, int outputSamples)
 {
-    self->mSamplesRequested = static_cast<u32>(a4); // *(self+0x30)
+    reinterpret_cast<RawPuller2*>(plugIn)->mSamplesRequested = outputSamples;
     return 0;
 }
 
@@ -222,61 +229,52 @@ int RawPuller2::PreProcess(RawPuller2* self, int /*a2*/, int /*a3*/, int a4)
 namespace
 {
     // The X360 unk_8327A600 staging buffer the puller fills then scatters per channel.
-    // Sized to the engine's max pull block (frames * channels * 4); a generous fixed
-    // staging window matching the asm's 4-byte-per-sample stride.
-    char skScratchBuffer[64 * 1024];
+    // The callback writes planar float samples before the per-channel scatter.
+    float skScratchBuffer[64 * 1024 / sizeof(float)];
 }
 
-int RawPuller2::Process(RawPuller2* self, AudioProcessContext* context)
+#if defined(_XBOX) && defined(_MSC_VER)
+// The original rwAudio plug-in object emits these scalar loops in its size form.
+#pragma optimize("s", on)
+#endif
+BufferStatus RawPuller2::Process(PlugIn* plugIn, Mixer* mixer, bool)
 {
-    RawPuller2* lpSelf = self;
-    if (!lpSelf->mpPullCallback)
-        return 0;
+    RawPuller2* self = reinterpret_cast<RawPuller2*>(plugIn);
+    if (!self->mpPullCallback)
+        return BUFFERSTATUS_UNAVAILABLE;
 
-    AudioProcessContext* lpCtx = context;
-    // lbz 0x35(r31) -- an UNSIGNED byte load; it is both the published channel count and the
-    // unsigned bound of the scatter loop (cmplw r30, r29).
-    const u8 lbNumChannels = static_cast<u8>(lpSelf->mPlayNumChannels); // v4 = *(self+0x35)
-
-    if (lpSelf->mFormatChanged)
+    const unsigned channels = self->mPlayNumChannels;
+    if (self->mFormatChanged)
     {
-        lpCtx->mbChannelCount = lbNumChannels;               // stbx  -> +0x3002C
-        lpCtx->mNumSamples = 0;                              // stwx  -> +0x30020
-        lpCtx->mfSampleRate = lpSelf->mPlaySampleRate;        // stfsx -> +0x30024
-        lpSelf->mFormatChanged = 0;                          // stb 0, 0x34
-        return 1;
+        mixer->mbChannelCount = static_cast<u8>(channels);
+        mixer->mNumSamples = 0;
+        mixer->mfSampleRate = self->mPlaySampleRate;
+        self->mFormatChanged = 0;
     }
-
-    const f32 lfResampleGain = lpCtx->mfResampleGain;        // lfsx  <- +0x30028 (v6 -> f1)
-    AudioChannelBuffer* lpOldDst = lpCtx->mpDstBuffer;       // v7 <- +0x30010
-    AudioChannelBuffer* lpOldSrc = lpCtx->mpSrcBuffer;       // v8 <- +0x3000C
-
-    lpCtx->mbChannelCount = lbNumChannels;                   // stbx  -> +0x3002C
-    lpCtx->mpSrcBuffer = lpOldDst;                           // ping-pong: +0x3000C <- old dst
-    lpCtx->mpDstBuffer = lpOldSrc;                           // ping-pong: +0x30010 <- old src
-    lpCtx->mNumSamples = static_cast<u32>(lpSelf->mSamplesRequested); // stwx -> +0x30020
-    lpCtx->mfSampleRate = lpSelf->mPlaySampleRate;           // stfsx -> +0x30024
-
-    // r3 = mSamplesRequested, r4 = scratch, f1 = lfResampleGain, r6 = mpContext. r5 is never
-    // loaded: the float consumes the third parameter slot in an FPR and skips its GPR.
-    if (lpSelf->mpPullCallback(static_cast<u32>(lpSelf->mSamplesRequested), skScratchBuffer,
-                               lfResampleGain, lpSelf->mpContext))
+    else
     {
-        // r28 = *r30, and r30 still addresses the +0x3000C slot -- i.e. the buffer that was
-        // just swapped IN as the source slot is the scatter destination.
-        const AudioChannelBuffer* lpOutBuffer = lpCtx->mpSrcBuffer;
-        const u32 luFrames = static_cast<u32>(lpSelf->mSamplesRequested);
-        for (u32 lu = 0; lu < lbNumChannels; ++lu)
+        const float pitch = mixer->mfResampleGain;
+        mixer->mbChannelCount = static_cast<u8>(channels);
+        mixer->SwapBuffers();
+        mixer->mNumSamples = self->mSamplesRequested;
+        mixer->mfSampleRate = self->mPlaySampleRate;
+        if (!self->mpPullCallback(self->mSamplesRequested, skScratchBuffer, pitch, self->mpContext))
+            return BUFFERSTATUS_UNAVAILABLE;
+
+        SampleBuffer* output = mixer->mpSrcBuffer;
+        for (unsigned channel = 0; channel < channels; ++channel)
         {
-            // asm: 4 * lhz(0xE) * i + lwz(4)  ==  mpSamples + muStride * i on an f32*.
-            f32* lpDst = lpOutBuffer->mpSamples + static_cast<u32>(lpOutBuffer->muStride) * lu;
-            const char* lpSrc = skScratchBuffer + 4u * luFrames * lu;
-            std::memcpy(lpDst, lpSrc, 4u * luFrames);
+            const int samples = self->mSamplesRequested;
+            XMemCpy(output->LockChannel(channel), skScratchBuffer + samples * channel,
+                        samples * sizeof(float));
         }
-        return 1;
     }
-    return 0;
+    return BUFFERSTATUS_AVAILABLE;
 }
+
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", off)
+#endif
 
 } // namespace core
 } // namespace audio

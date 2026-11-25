@@ -1,5 +1,7 @@
 #pragma once
 
+#include <new>
+
 // =================================================================================================
 // CgsSceneManager::CgsCollision::LineWithPolySoupStreamJobDesc -- the descriptor of the STREAMED
 // line-vs-static-world test (descriptor type 4, E_COLLISION_TYPE_LINE_POLYSOUP_STREAM).
@@ -35,42 +37,50 @@ namespace CgsCollision
 {
     struct LineWithPolySoupStreamJobDesc : public CollisionJobDescription
     {
-        const CgsGeometric::PolygonSoupListSpatialMap* mpSpatialMap;         // +0x00
-        CgsMemory::SimpleDataStreamProducer*           mpStream;             // +0x04
-        s32                                            miMaxResultsPerLine;  // +0x08
-        bool                                           mbTestNearest;        // +0x0C
-        bool                                           mbTestDoubleSided;    // +0x0D
 
         // The stream's records (declared with the class): one line per command; per line a 16-byte
         // header (the hit count) and the 112-byte hit records PolygonSoupTesterJob writes.
         struct StreamCommand { CgsGeometric::Line mLine; };
         struct StreamResult { u32 muNumResults; u32 muPad[3]; CgsGeometric::PolySoupLineNearestResult maResults[1]; };
 
-        const CgsGeometric::PolygonSoupListSpatialMap* GetSpatialMapPointer() const { return mpSpatialMap; }
-        CgsMemory::SimpleDataStreamProducer* GetStream() const { return mpStream; }
-        bool GetTestNearest() const { return mbTestNearest; }
-        bool GetTestDoubleSided() const { return mbTestDoubleSided; }
+        const CgsGeometric::PolygonSoupListSpatialMap* GetSpatialMapPointer() const { return GetData()->mpSpatialMap; }
+        CgsMemory::SimpleDataStreamProducer* GetStream() const { return GetData()->mpStream; }
+        bool GetTestNearest() const { return GetData()->mbTestNearest; }
+        bool GetTestDoubleSided() const { return GetData()->mbTestDoubleSided; }
 
         // Declared with the class. The console inlines it into
         // RunCollideLineAgainstPolySoupStream (the stores listed in the banner), so the
         // dispatcher writes these MEMBERS rather than the console's byte offsets.
-        void Prepare(const CgsGeometric::PolygonSoupListSpatialMap* lpSpatialMap,
+        bool Prepare(const CgsGeometric::PolygonSoupListSpatialMap* lpSpatialMap,
                      CgsMemory::SimpleDataStreamProducer*           lpStream,
                      s32                                            liMaxResultsPerLine,
                      bool                                           lbTestNearest,
                      bool                                           lbTestDoubleSided)
         {
-            mpSpatialMap        = lpSpatialMap;
-            mpStream            = lpStream;
-            miMaxResultsPerLine = liMaxResultsPerLine;
-            mbTestDoubleSided   = lbTestDoubleSided;
-            mbTestNearest       = lbTestNearest;
+            new (maData) Data;
+            GetData()->mpSpatialMap        = lpSpatialMap;
+            GetData()->mpStream            = lpStream;
+            GetData()->miMaxResultsPerLine = liMaxResultsPerLine;
+            GetData()->mbTestDoubleSided   = lbTestDoubleSided;
+            GetData()->mbTestNearest       = lbTestNearest;
 
-            mpResultsList = NULL;
-            mfRadius      = 0.0f;
-            mpDebugStream = 0;
-            muJobType     = static_cast<u8>(E_COLLISIONJOB_LINE_WITH_POLYSOUP_STREAM);
+            return CollisionJobDescription::Prepare(E_COLLISIONJOB_LINE_WITH_POLYSOUP_STREAM, 0, 0.0f,
+                                                    0);
         }
+
+    private:
+        struct Data
+        {
+            const CgsGeometric::PolygonSoupListSpatialMap* mpSpatialMap;
+            CgsMemory::SimpleDataStreamProducer* mpStream;
+            s32 miMaxResultsPerLine;
+            bool mbTestNearest;
+            bool mbTestDoubleSided;
+        };
+
+        Data* GetData() { return reinterpret_cast<Data*>(maData); }
+        const Data* GetData() const { return reinterpret_cast<const Data*>(maData); }
+        CGS_STATIC_ASSERT(sizeof(Data) <= KU_MAX_DESC_DATA_SIZE, "LineWithPolySoupStreamJobDesc payload size");
     };
 }
 }

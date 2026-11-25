@@ -19,6 +19,10 @@ namespace CgsFileSystem
         };
         explicit DeviceMemFileSystem(const char* lpcName);
         virtual ~DeviceMemFileSystem();
+        static void* operator new(size_t luSize, rw::IResourceAllocator* lpAllocator)
+        {
+            return lpAllocator->AllocateMemoryResource(luSize, 4, 0);
+        }
         void Construct();
         bool RegisterMemFile(const char* lpcName, void* lpData, u64 luSize);
         bool UnregisterMemFile(const char* lpcName);

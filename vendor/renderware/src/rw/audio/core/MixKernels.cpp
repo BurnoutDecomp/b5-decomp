@@ -519,8 +519,8 @@ void ReChannelGainWrite6x6(f32 *ppDst[], f32 *ppSrc[], f32 gain, u32 numSamples)
 // -------------------------------------------------------------------------------------
 // ReChannelGainWrite @0x82B6B268 -- the channel-remap dispatcher (see MixKernels.h).
 // -------------------------------------------------------------------------------------
-void ReChannelGainWrite(f32 **ppDst, f32 **ppSrc, u32 numDstChannels,
-                        u32 numSrcChannels, s32 numSamples, f32 gain)
+void ReChannelGainWrite(f32 *ppDst[], f32 *ppSrc[], f32 gain,
+                      u32 numDstChannels, u32 numSrcChannels, u32 numSamples)
 {
     switch (numSrcChannels) // outer cmplwi r7 chain
     {
@@ -640,8 +640,8 @@ void ReChannelGainWrite(f32 **ppDst, f32 **ppSrc, u32 numDstChannels,
 // The asm re-reads the range table's `last` byte after every call; the table is const
 // rodata so a hoisted read is value-identical.
 // -------------------------------------------------------------------------------------
-void ReChannelGainMix(f32 **ppDst, f32 **ppSrc, u32 numDstChannels,
-                      u32 numSrcChannels, s32 numSamples, f32 gain)
+void ReChannelGainMix(f32 *ppDst[], f32 *ppSrc[], f32 gain,
+                      u32 numDstChannels, u32 numSrcChannels, u32 numSamples)
 {
     // mulli r11, r7, 6 ; add r6 ; addi -7 ; slwi 1.
     const u8 *range =
@@ -662,9 +662,8 @@ void ReChannelGainMix(f32 **ppDst, f32 **ppSrc, u32 numDstChannels,
 // (targetGain - currentGain) * flt_8214B268 (0.015384615f == 1/65); each routed pair
 // runs MixWithGainRamp from scale*currentGain with scale*step.
 // -------------------------------------------------------------------------------------
-void ReChannelGainMixRamp(f32 **ppDst, f32 **ppSrc, u32 numDstChannels,
-                          u32 numSrcChannels, s32 numSamples, f32 targetGain,
-                          f32 currentGain)
+void ReChannelGainMixRamp(f32 *ppDst[], f32 *ppSrc[], f32 targetGain, f32 currentGain,
+                      u32 numDstChannels, u32 numSrcChannels, u32 numSamples)
 {
     const f32 step = (targetGain - currentGain) * 0.015384615f; // fmuls f8, f13, flt_8214B268
 

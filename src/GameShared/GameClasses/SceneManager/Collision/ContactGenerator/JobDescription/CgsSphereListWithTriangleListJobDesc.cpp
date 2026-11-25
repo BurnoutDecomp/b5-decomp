@@ -1,6 +1,8 @@
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsSphereListWithTriangleListJobDesc.h"
 #include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsCollisionResult.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include <new>
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\collision\\ContactGenerator/JobDescription/CgsSphereListWithTriangleListJobDesc.cpp"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX.
 // CgsSceneManager::CgsCollision::SphereListWithTriangleListJobDesc::Prepare @0x82810100.
@@ -18,6 +20,8 @@ namespace CgsCollision
                                                     CollisionResultList* lpResultsList,
                                                     f32                  lfPadding)
     {
+        new (maData) Data;
+
         // Bookkeeping (base) fields:
         //   li   r11,5; stb r11,0xFF(r3)  ; muJobType = 5
         //   stfs f1,0xF4(r3)              ; mfRadius  = lfPadding
@@ -32,15 +36,17 @@ namespace CgsCollision
         // `addi r9,r3,8`):
         //   lwz r11,0(r4); stw r11,0(r3)   ; lwz r11,4(r4); stw r11,4(r3)
         //   lwz r11,0(r5); stw r11,0(r9)   ; lwz r11,4(r5); stw r11,4(r9)
-        mSphereList   = *lpSphereList;
-        mTriangleList = *lpTriangleList;
+        GetData()->mSphereList   = *lpSphereList;
+        GetData()->mTriangleList = *lpTriangleList;
 
         // `if ( *a1 % 16 )` — sphere list base pointer must be 16-byte aligned.
         const bool lbAligned =
-            (reinterpret_cast<uintptr_t>(mSphereList.mpSpheres) & 0xF) == 0;
-        CGS_ASSERT(lbAligned, "Spheres not aligned to 16 bytes");
+            (reinterpret_cast<intptr_t>(GetData()->mSphereList.mpSpheres) % 16) == 0;
+        CGS_ASSERT_AT(lbAligned, "Spheres not aligned to 16 bytes", CGS_ARTIST_FILE, 84);
 
         return true;
     }
 }
 }
+
+#undef CGS_ARTIST_FILE

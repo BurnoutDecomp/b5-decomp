@@ -59,14 +59,6 @@ namespace CgsFileSystem
         mpLog = lpLog; mpFileSystem = lpSystem; miIndex = liIndex;
         mpHandle = 0; muCacheId = 0xffffffffu;
     }
-    void File::Prepare()
-    {
-        FileFutexHelper lGuard(mFutex);
-        meFileAccess = E_FILEACCESS_CLOSED;
-        mpcFileName = 0; meFileState = E_FILESTATE_CLOSED;
-        muSeekPosition = 0; muPendingOperationCount = 0;
-        mpHandle = 0; muCacheId = 0xffffffffu;
-    }
     void File::Release()
     {
         FileFutexHelper lGuard(mFutex);

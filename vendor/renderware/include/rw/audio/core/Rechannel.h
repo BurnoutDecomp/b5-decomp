@@ -53,7 +53,7 @@ public:
     static int    GetSize();                                                // @0x82B982E0
     static int    PreProcess(Rechannel *self, AudioProcessContext *ctx,
                              int a3, int outputSamples);                    // @0x82B97F98
-    static int    Process(Rechannel *self, AudioProcessContext *ctx);       // @0x82B9A728
+    static BufferStatus Process(PlugIn* plugIn, Mixer* mixer, bool discontinuity);       // @0x82B9A728
     static void  *ScalarDeletingDestructor(Rechannel *self, char flags);    // @0x82BA1C20
 
     PlugInBaseView mBase; // +0x00 .. +0x23 -- the whole instance (GetSize() == 36)

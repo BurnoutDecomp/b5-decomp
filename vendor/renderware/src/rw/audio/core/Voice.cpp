@@ -74,7 +74,7 @@ static bool ReleaseComposedStage(PlugIn *apStage, const PlugInDescRunTime *apDes
         Route::ScalarDeletingDestructor(apStage, 0);
         return true;
     case 0x53656E30u: // 'Sen0' Send
-        Send::ReleaseEvent(reinterpret_cast<Send*>(apStage));
+        reinterpret_cast<Send*>(apStage)->ReleaseEvent();
         Send::ScalarDeletingDestructor(apStage, 0);
         return true;
     case 0x524D3130u: // 'RM10' ReverbModel1

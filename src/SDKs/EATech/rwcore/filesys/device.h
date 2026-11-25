@@ -121,11 +121,11 @@ namespace rw
             //   +0x00 muMaxSearchPaths : search-path table capacity (ctor: a2[0])
             //   +0x04 muScratchSize    : working-buffer byte size   (ctor: a2[1])
             //   +0x08 mpAllocator      : the filesys allocator       (CreateInstance: a1[2])
-            struct FileSystemConfig
+            struct Options
             {
-                u32        muMaxSearchPaths;  // +0x00
-                u32        muScratchSize;     // +0x04
-                Allocator* mpAllocator;       // +0x08
+                u32 mMaxSearchLocations;
+                u32 mMaxSearchPathLength;
+                Allocator* mAllocator;
             };
 
             // A search-path table entry: { path string, resolved device }.
@@ -164,7 +164,7 @@ namespace rw
                 // @0x82BBE418 (ctor) -- zero the lists, default-construct the thread params
                 // (then bump their priority by 2), seed the handle id to -1, and latch the
                 // search-path capacity (a2[0]) / scratch size (a2[1]) from the config.
-                Manager(const FileSystemConfig* lpConfig);
+                Manager(const Options& lrOptions);
 
                 // @0x82BBF008 (dtor) -- free the search-path table and scratch buffer through
                 // the global allocator, then unregister every device and clear the list.
@@ -188,11 +188,27 @@ namespace rw
                 }
 
                 // @0x82BBD630 -- return the global Manager singleton (off_8327F078).
-                static void* GetInstance();
+                const EA::Thread::ThreadParameters& GetThreadParameters() const
+                {
+                    return mThreadParameters;
+                }
+
+                void SetThreadParameters(const EA::Thread::ThreadParameters& lrParameters)
+                {
+                    mThreadParameters = lrParameters;
+                }
+
+                void SetErrorHandler(bool (*lpErrorHandler)(s32))
+                {
+                    mpErrorHandler = lpErrorHandler;
+                }
+
+                static Manager* GetInstance();
 
                 // @0x82BBF518 -- install the allocator from the config, allocate + construct
                 // the singleton, Init it, and publish it. Returns the singleton.
-                static void* CreateInstance(const FileSystemConfig* lpConfig);
+                static Manager* CreateInstance(const Options& lrOptions);
+                static void* operator new(size_t luSize);
 
                 // @0x82BBF850 -- destroy + free the singleton and clear off_8327F078.
                 static void* DestroyInstance();

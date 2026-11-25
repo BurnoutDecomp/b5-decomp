@@ -869,10 +869,10 @@ void ContactGeneratorJob::ExecuteSphereListWithTriangleList(
     using CgsGeometric::Sphere;
     using CgsGeometric::Triangle4;
 
-    const CgsSceneManager::CgsCollision::SphereList lSpheres = lpDesc->mSphereList;
+    const CgsSceneManager::CgsCollision::SphereList lSpheres = lpDesc->GetSphereList();
 
     TriangleList lTriangles;
-    LoadPrimitives(&lpDesc->mTriangleList, &lTriangles);
+    LoadPrimitives(&lpDesc->GetTriangleList(), &lTriangles);
 
     CollisionResultList lHeader;
     LoadResultList(lpDesc->mpResultsList, &lHeader);
@@ -1071,10 +1071,10 @@ void ContactGeneratorJob::ExecuteSweptSphereListWithTriangleList(
     using CgsGeometric::SweptSphere;
     using CgsGeometric::Triangle4;
 
-    const CgsSceneManager::CgsCollision::SweptSphereList lSpheres = lpDesc->mSweptSphereList;
+    const CgsSceneManager::CgsCollision::SweptSphereList lSpheres = lpDesc->GetSweptSphereList();
 
     TriangleList lTriangles;
-    LoadPrimitives(&lpDesc->mTriangleList, &lTriangles);
+    LoadPrimitives(&lpDesc->GetTriangleList(), &lTriangles);
 
     CollisionResultList lHeader;
     LoadResultList(lpDesc->mpResultsList, &lHeader);
@@ -1370,10 +1370,10 @@ void ContactGeneratorJob::ExecutePrimitiveListWithTriangleList(
 
     // 0x82925944..0x8292595C -- the three dwords of the descriptor's pair list, copied to a
     // local. The Itterator is prepared against THIS copy, once per triangle batch.
-    const PrimitivePairList lPairList = lpDesc->mPrimitivePairList;
+    const PrimitivePairList lPairList = lpDesc->GetPrimativePairList();
 
     TriangleList lTriangles;
-    LoadPrimitives(&lpDesc->mTriangleList, &lTriangles);
+    LoadPrimitives(&lpDesc->GetTriangleList(), &lTriangles);
 
     CollisionResultList lResultsList;
     LoadResultList(lpDesc->mpResultsList, &lResultsList);
@@ -1625,7 +1625,7 @@ void ContactGeneratorJob::ExecutePrimitivePairList()
     // 0x829257B0..0x829257C4 -- the three console dwords of the descriptor's pair list, copied
     // to a local. The Itterator is prepared against THIS copy, exactly as the type-11 worker
     // does with its own.
-    const PrimitivePairList lPairList = lpDesc->mPrimitivePairList;
+    const PrimitivePairList lPairList = lpDesc->GetPrimativePairList();
 
     CollisionResultList lResultsList;
     LoadResultList(lpDesc->mpResultsList, &lResultsList);
@@ -2373,8 +2373,8 @@ void ContactGeneratorJob::ExecuteSphereListWithSphereList(
 
     // 0x829215CC / 0x829215D8 — one 8-byte load each on the console (a {base,count} pair is two
     // dwords there); reached by name here, so the host's wider pointer costs nothing.
-    const SphereList lSphereListA = lpDesc->mSphereListA;
-    const SphereList lSphereListB = lpDesc->mSphereListB;
+    const SphereList lSphereListA = lpDesc->GetSphereListA();
+    const SphereList lSphereListB = lpDesc->GetSphereListB();
 
     CollisionResultList lResultsList;
     LoadResultList(lpDesc->mpResultsList, &lResultsList);

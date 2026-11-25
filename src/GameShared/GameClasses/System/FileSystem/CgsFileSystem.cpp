@@ -144,37 +144,54 @@ namespace CgsFileSystem
 
 
 
-    // ARTIST828F04E8: allocator-backed RenderWare manager, native memory driver,
+    // File and memory-driver methods are inlined by the original system unity.
+    void File::Prepare()
+    {
+        FileFutexHelper lGuard(mFutex);
+        meFileAccess = E_FILEACCESS_CLOSED;
+        meFileState = E_FILESTATE_CLOSED;
+        mpcFileName = 0;
+        muSeekPosition = 0; muPendingOperationCount = 0;
+        mpHandle = 0; muCacheId = 0xffffffffu;
+    }
+
+    DeviceMemFileSystem::DeviceMemFileSystem(const char* lpcName)
+        : rw::core::filesys::DeviceDriver(lpcName), mbConstructed(false) {}
+
+    // Inlined ARTIST 828F0698..828F06B4: table clear precedes constructed publication.
+    void DeviceMemFileSystem::Construct()
+    {
+        memset(maMemFiles, 0, sizeof(maMemFiles));
+        mbConstructed = true;
+    }
+
+    // ARTIST 828F04E8 initializes the SDK manager and its native memory driver.
     bool FileSystem::Prepare()
     {
-        // and the original search path. Construction does not report prepared early.
-        if (mbPrepared) return true;
-        if (!mpFileSystemAllocator) return false;
-        rw::core::filesys::FileSystemConfig lOptions;
-        lOptions.muMaxSearchPaths = 2;
-        lOptions.muScratchSize = 1024;
-        lOptions.mpAllocator = mpFileSystemAllocator;
-        rw::core::filesys::Manager::CreateInstance(&lOptions);
-        rw::core::filesys::Manager* lpManager =
-            static_cast<rw::core::filesys::Manager*>(rw::core::filesys::Manager::GetInstance());
-        EA::Thread::ThreadParameters lParameters = lpManager->mThreadParameters;
-        lParameters.mnPriority = 350;
-        lParameters.mpName = "RwFileSystem";
-        lpManager->mThreadParameters = lParameters;
-        for (u32 lu = 0; lu < KU_MAXNOOFFILES; ++lu) maFiles[lu].Prepare();
-        lpManager->SetSearchPath(maFilePrefix);
-        GetDeviceManager()->SetDefaultPath(maFilePrefix);
-        rw::ResourceDescriptor lDescriptor;
-        lDescriptor.m_baseResourceDescriptors[0].m_size = sizeof(DeviceMemFileSystem);
-        lDescriptor.m_baseResourceDescriptors[0].m_alignment = 4;
-        void* lpMemory = mpFileSystemAllocator->DoAllocate(lDescriptor, 0).m_baseResources[0];
-        mpMemFileSystem = lpMemory ? ::new (lpMemory) DeviceMemFileSystem("MEM:") : 0;
-        mpMemFileSystem->Construct();
-        lpManager->RegisterDevice(mpMemFileSystem, 0);
-        lpManager->mpErrorHandler = RWDiskErrorHandler;
-        mbPrepared = true;
-        muNumUsedReadStreams = 0;
-        mReleasing.SetValue(0);
+        if (!mbPrepared)
+        {
+            if (!mpFileSystemAllocator) return false;
+            rw::core::filesys::Options lOptions;
+            lOptions.mMaxSearchLocations = 2;
+            lOptions.mMaxSearchPathLength = 1024;
+            lOptions.mAllocator = mpFileSystemAllocator;
+            rw::core::filesys::Manager::CreateInstance(lOptions);
+            EA::Thread::ThreadParameters lParameters =
+                rw::core::filesys::Manager::GetInstance()->GetThreadParameters();
+            lParameters.mnPriority = 350;
+            lParameters.mpName = "RwFileSystem";
+            rw::core::filesys::Manager::GetInstance()->SetThreadParameters(lParameters);
+            for (u32 lu = 0; lu < KU_MAXNOOFFILES; ++lu) maFiles[lu].Prepare();
+            rw::core::filesys::Manager::GetInstance()->SetSearchPath(maFilePrefix);
+            GetDeviceManager()->SetDefaultPath(maFilePrefix);
+            mpMemFileSystem = new (mpFileSystemAllocator) DeviceMemFileSystem("MEM:");
+            mpMemFileSystem->Construct();
+            rw::core::filesys::Manager::GetInstance()->RegisterDevice(mpMemFileSystem, 0);
+            rw::core::filesys::Manager::GetInstance()->SetErrorHandler(RWDiskErrorHandler);
+            mbPrepared = true;
+            muNumUsedReadStreams = 0;
+            mReleasing.SetValue(0);
+        }
         return true;
     }
 

@@ -66,17 +66,10 @@ NotFound:
 // min(muNumberToCheck, muNumEntries) slots. Ties keep the earlier slot. Empty queue -> false.
 bool BasePriorityQueue::GetNextIndexByPriority(u32* lpuIndexOut) const
 {
-    const u32 luNumEntries = muNumEntries;
-    if (luNumEntries == 0)
-    {
+    if (muNumEntries == 0)
         return false;
-    }
 
-    u32 luMaxToCheck = muNumberToCheck;
-    if (luNumEntries <= luMaxToCheck)
-    {
-        luMaxToCheck = muNumEntries;
-    }
+    const u32 luMaxToCheck = muNumEntries <= muNumberToCheck ? muNumEntries : muNumberToCheck;
 
     u32 luMaxIndex    = mpuEntryIndices[0];
     s32 liMaxPriority = mpiEntryPriorities[0];

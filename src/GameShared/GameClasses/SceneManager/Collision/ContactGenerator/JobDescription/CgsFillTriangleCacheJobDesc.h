@@ -1,5 +1,7 @@
 #pragma once
 
+#include <new>
+
 // CgsSceneManager::CgsCollision::FillTriangleCacheJobDesc — the job descriptor that
 // drives PolygonSoupTesterJob::ExecuteFillTriangleCache (@0x82915AE0): it hands the job
 // a query "cache sphere", the polygon-soup spatial map to walk, the destination triangle
@@ -35,6 +37,7 @@ namespace CgsGeometric
     // Polygon-soup spatial map the job walks; referenced only by pointer here. Full home:
     // GameShared/GameClasses/Geometric/Primitives/PolygonSoup/CgsPolygonSoupListSpatialMap.h.
     struct PolygonSoupListSpatialMap;
+    struct Triangle4;
 }
 
 namespace CgsSceneManager
@@ -44,20 +47,29 @@ namespace CgsCollision
     struct FillTriangleCacheJobDesc : public CollisionJobDescription
     {
         // --- payload (front of the object; base bookkeeping trails at +0xF0) ----------
-        CgsGeometric::Sphere               mCacheSphere;         // +0x00  query cache sphere
-        CgsGeometric::PolygonSoupListSpatialMap* mpSpatialMap;   // +0x10  soup spatial map
-        TriangleList*                      mpTriangleList;       // +0x14  destination list
-        u16                                mu16MaxNumTriangles;  // +0x18  triangle cap
 
         // GetCacheSph @0x82916EF0 — pointer to the query cache sphere (the first member,
         // so the asm returns `this` unchanged).
         const CgsGeometric::Sphere* GetCacheSphere() const;
 
         // GetTriangleLis @0x82916F18 — the destination triangle list the job fills.
-        TriangleList* GetTriangleList() const;
+        CgsGeometric::Triangle4* GetTriangleListMainMemoryDestination();
 
         // GetMaxNumTriangles @0x82916F48 — cap on triangles collected (u16, lhz).
-        u16 GetMaxNumTriangles() const;
+        s32 GetMaxNumTriangles();
+
+    private:
+        struct Data
+        {
+            CgsGeometric::Sphere mCacheSphere;
+            const CgsGeometric::PolygonSoupListSpatialMap* mpSpatialMap;
+            CgsGeometric::Triangle4* mpaTrianglesDestination;
+            u16 mu16MaxNumTriangles;
+        };
+
+        Data* GetData() { return reinterpret_cast<Data*>(maData); }
+        const Data* GetData() const { return reinterpret_cast<const Data*>(maData); }
+        CGS_STATIC_ASSERT(sizeof(Data) <= KU_MAX_DESC_DATA_SIZE, "FillTriangleCacheJobDesc payload size");
     };
 }
 }

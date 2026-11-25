@@ -155,7 +155,7 @@ namespace CgsCollision
 
         u16            GetNumTests() const   { return mu16NumTests; }
         const u8*      GetDataStream() const { return mpaDataStream; }
-        u16            GetDataSize() const   { return mu16UsedData; }
+        u16            GetDataSize() const   { return static_cast<u16>((mu16UsedData + 15u) & 0xFFF0u); }
     };
 }
 }

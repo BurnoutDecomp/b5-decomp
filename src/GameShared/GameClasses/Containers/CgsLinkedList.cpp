@@ -10,6 +10,7 @@
 //   InternalAddHead      @ 0x82814E20
 //   InternalAddTail      @ 0x82814EC8
 //   InternalRemoveHead   @ 0x82814F70
+//   InternalRemoveTail   @ 0x82815018
 //   InternalGetNodeIndex @ 0x828150C8
 //   InternalAddBefore    @ 0x82815638
 //   InternalRemoveNode   @ 0x82815708
@@ -19,12 +20,12 @@
 // is walked by a BYTE stride (liStride) because the live nodes are LinkedListNode<T>
 // subclasses larger than BaseLinkedListNode.
 
-// Asserts pass __FILE__; ARTIST's reads "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\containers\\CgsLinkedList.cpp".
-
 namespace CgsContainers
 {
     namespace
     {
+        const char KAC_LINKED_LIST_FILE[] = "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\containers\\CgsLinkedList.cpp";
+
         // Advance a node pointer by a byte stride (the live nodes are larger
         // subclasses, so InternalInit chains them by element size, not sizeof(node)).
         inline BaseLinkedListNode* StrideNode(BaseLinkedListNode* lpNode, s32 liStride)
@@ -44,38 +45,28 @@ namespace CgsContainers
     // liStride bytes), head prev / tail next nulled; with a null array start empty.
     void BaseLinkedList::InternalInit(BaseLinkedListNode* lpNodes, s32 liNodeCount, s32 liStride)
     {
-        if (lpNodes)
-        {
-            miCount = liNodeCount;
-            mpFirst = lpNodes;
-            lpNodes->mpPrev = 0;
-
-            if (liNodeCount > 1)
-            {
-                BaseLinkedListNode* lpCurrNode = lpNodes;
-                BaseLinkedListNode* lpNextPrevSlot = StrideNode(lpNodes, liStride);
-                s32 liRemaining = liNodeCount - 1;
-                do
-                {
-                    lpNextPrevSlot->mpPrev = lpCurrNode;
-                    --liRemaining;
-                    lpNextPrevSlot = StrideNode(lpNextPrevSlot, liStride);
-                    lpCurrNode->mpNext = StrideNode(lpCurrNode, liStride);
-                    lpCurrNode = StrideNode(lpCurrNode, liStride);
-                }
-                while (liRemaining);
-            }
-
-            BaseLinkedListNode* lpLast = StrideNode(lpNodes, (liNodeCount - 1) * liStride);
-            mpLast = lpLast;
-            lpLast->mpNext = 0;
-        }
-        else
+        if (!lpNodes)
         {
             miCount = 0;
             mpLast  = 0;
             mpFirst = 0;
+            return;
         }
+
+        miCount = liNodeCount;
+        mpFirst = lpNodes;
+        lpNodes->mpPrev = 0;
+
+        for (s32 liIndex = 1; liIndex < liNodeCount; ++liIndex)
+        {
+            BaseLinkedListNode* lpThisNode = StrideNode(lpNodes, liIndex * liStride);
+            BaseLinkedListNode* lpPrevNode = StrideNode(lpNodes, (liIndex - 1) * liStride);
+            lpThisNode->mpPrev = lpPrevNode;
+            lpPrevNode->mpNext = lpThisNode;
+        }
+
+        mpLast = StrideNode(lpNodes, (liNodeCount - 1) * liStride);
+        mpLast->mpNext = 0;
     }
 
     // 0x82814D60 - head of the list.
@@ -83,7 +74,7 @@ namespace CgsContainers
     {
         CGS_ASSERT(miCount != KI_UNINITIALISED,
             CGS_ASSERT_MESSAGE_AT(
-                "BaseLinkedList accessed when uninitialised", __FILE__, 84 /* ARTIST 0x82814D90 */));
+                "BaseLinkedList accessed when uninitialised", KAC_LINKED_LIST_FILE, 84 /* ARTIST 0x82814D90 */));
         return mpFirst;
     }
 
@@ -92,7 +83,7 @@ namespace CgsContainers
     {
         CGS_ASSERT(miCount != KI_UNINITIALISED,
             CGS_ASSERT_MESSAGE_AT(
-                "BaseLinkedList accessed when uninitialised", __FILE__, 92 /* ARTIST 0x82814DF0 */));
+                "BaseLinkedList accessed when uninitialised", KAC_LINKED_LIST_FILE, 92 /* ARTIST 0x82814DF0 */));
         return mpLast;
     }
 
@@ -101,7 +92,7 @@ namespace CgsContainers
     {
         CGS_ASSERT(miCount != KI_UNINITIALISED,
             CGS_ASSERT_MESSAGE_AT(
-                "BaseLinkedList accessed when uninitialised", __FILE__, 100 /* ARTIST 0x82814E58 */));
+                "BaseLinkedList accessed when uninitialised", KAC_LINKED_LIST_FILE, 100 /* ARTIST 0x82814E58 */));
 
         lpNode->mpPrev = 0;
         lpNode->mpNext = mpFirst;
@@ -122,7 +113,7 @@ namespace CgsContainers
     {
         CGS_ASSERT(miCount != KI_UNINITIALISED,
             CGS_ASSERT_MESSAGE_AT(
-                "BaseLinkedList accessed when uninitialised", __FILE__, 123 /* ARTIST 0x82814F00 */));
+                "BaseLinkedList accessed when uninitialised", KAC_LINKED_LIST_FILE, 123 /* ARTIST 0x82814F00 */));
 
         lpNode->mpNext = 0;
         lpNode->mpPrev = mpLast;
@@ -145,10 +136,10 @@ namespace CgsContainers
     {
         CGS_ASSERT(miCount != KI_UNINITIALISED,
             CGS_ASSERT_MESSAGE_AT(
-                "BaseLinkedList accessed when uninitialised", __FILE__, 167 /* ARTIST 0x82815674 */));
+                "BaseLinkedList accessed when uninitialised", KAC_LINKED_LIST_FILE, 167 /* ARTIST 0x82815674 */));
         CGS_ASSERT(InternalGetNodeIndex(lpNodeInList) >= 0,
             CGS_ASSERT_MESSAGE_AT(
-                "InternalGetNodeIndex( lpNodeInList ) >= 0", __FILE__, 168 /* ARTIST 0x828156A4 */));
+                "InternalGetNodeIndex( lpNodeInList ) >= 0", KAC_LINKED_LIST_FILE, 168 /* ARTIST 0x828156A4 */));
 
         if (lpNodeInList == mpFirst)
         {
@@ -170,7 +161,7 @@ namespace CgsContainers
     {
         CGS_ASSERT(miCount != KI_UNINITIALISED,
             CGS_ASSERT_MESSAGE_AT(
-                "BaseLinkedList accessed when uninitialised", __FILE__, 188 /* ARTIST 0x82814FA0 */));
+                "BaseLinkedList accessed when uninitialised", KAC_LINKED_LIST_FILE, 188 /* ARTIST 0x82814FA0 */));
 
         BaseLinkedListNode* lpNode = mpFirst;
         if (mpFirst)
@@ -194,29 +185,20 @@ namespace CgsContainers
         return lpNode;
     }
 
-    // InternalRemoveTail - unlink and return the tail node. The exact mirror of
-    // InternalRemoveHead (0x82814F70): walk back from mpLast instead of forward
-    // from mpFirst.
-    // The X360 build emits no standalone InternalRemoveTail body (ICF folded/inlined
-    // it; only the out-of-line call from InternalRemoveNode @ 0x828157B0 survives,
-    // with no per-function export). The PS3 DecFIGS build (same source) DOES emit it
-    // (CgsContainers::BaseLinkedList::InternalRemoveTail, CgsLinkedList.cpp:223) and
-    // confirms this body verbatim: read mpLast->mpPrev, retarget mpLast, null the new
-    // tail's mpNext, decrement miCount (zero -> null mpFirst), null the removed node's
-    // links, return it.
+    // 0x82815018 - unlink and return the tail node.
     BaseLinkedListNode* BaseLinkedList::InternalRemoveTail()
     {
-        CGS_ASSERT(miCount != KI_UNINITIALISED, "BaseLinkedList accessed when uninitialised");
+        CGS_ASSERT_AT(miCount != KI_UNINITIALISED, "BaseLinkedList accessed when uninitialised",
+            KAC_LINKED_LIST_FILE, 223);
 
         BaseLinkedListNode* lpNode = mpLast;
         if (mpLast)
         {
-            BaseLinkedListNode* lpPrev = lpNode->mpPrev;
-            mpLast = lpPrev;
-            if (lpPrev)
-            {
-                lpPrev->mpNext = 0;
-            }
+            mpLast = mpLast->mpPrev;
+        }
+        if (mpLast)
+        {
+            mpLast->mpNext = 0;
         }
         if (--miCount == 0)
         {
@@ -236,10 +218,10 @@ namespace CgsContainers
     {
         CGS_ASSERT(miCount != KI_UNINITIALISED,
             CGS_ASSERT_MESSAGE_AT(
-                "BaseLinkedList accessed when uninitialised", __FILE__, 258 /* ARTIST 0x82815740 */));
+                "BaseLinkedList accessed when uninitialised", KAC_LINKED_LIST_FILE, 258 /* ARTIST 0x82815740 */));
         CGS_ASSERT(InternalGetNodeIndex(lpNode) >= 0,
             CGS_ASSERT_MESSAGE_AT(
-                "InternalGetNodeIndex( lpNode ) >= 0", __FILE__, 259 /* ARTIST 0x82815770 */));
+                "InternalGetNodeIndex( lpNode ) >= 0", KAC_LINKED_LIST_FILE, 259 /* ARTIST 0x82815770 */));
 
         if (mpFirst == lpNode)
         {
@@ -263,7 +245,7 @@ namespace CgsContainers
     s32 BaseLinkedList::InternalGetNodeIndex(BaseLinkedListNode* lpNode)
     {
         CGS_ASSERT(miCount != KI_UNINITIALISED, CGS_ASSERT_MESSAGE_AT(
-            "BaseLinkedList accessed when uninitialised", __FILE__, 282));
+            "BaseLinkedList accessed when uninitialised", KAC_LINKED_LIST_FILE, 282));
 
         s32 liPosition = 0;
         for (BaseLinkedListNode* lpCurrNode = mpFirst; lpCurrNode != 0; lpCurrNode = lpCurrNode->mpNext)

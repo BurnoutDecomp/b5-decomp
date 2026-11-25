@@ -326,7 +326,7 @@ namespace CgsNetwork
         // (e.g. KickUnNATablePlayer / UpdateNATData call GetStatus(E_COMPONENTS_GAMES) /
         // GetStatus(E_COMPONENTS_USERSETS)). Declared-only here; the body belongs to this
         // facade's own behavioural TU.
-        EStatus GetStatus(s32 liComponent) const;
+        EStatus GetStatus(EComponents leComponent) const;
         bool IsGameComponentRegistered() const
         {
             return maComponents[E_COMPONENTS_GAMES].mpComponent != 0;
@@ -355,12 +355,7 @@ namespace CgsNetwork
                     "DirtySock\\CgsServerInterfaceDirtySock.h", 738 /* ARTIST 0x825416CC */));
             return maComponents[leComponent].mpComponent;
         }
-        const ServerInterfaceComponent* GetComponent(EComponents leComponent) const
-        {
-            CGS_ASSERT(leComponent >= E_COMPONENTS_START && leComponent < E_COMPONENTS_COUNT,
-                       "leComponent >= E_COMPONENTS_START && leComponent < E_COMPONENTS_COUNT");
-            return maComponents[leComponent].mpComponent;
-        }
+        const ServerInterfaceComponent* GetComponent(EComponents leComponent) const;
 
         // A registered component's ConnApi callback.
         ServerInterfaceComponentData::ServerInterfaceConnApiCallback GetConnApiComponentCallback(
@@ -419,6 +414,7 @@ namespace CgsNetwork
         void CreateLobbyApi();
         void CreateConnApi();
         void StartActionCore(const char* lpcAction);
+        void FinishActionSuccessfully();
         void ClearRegisteredComponents();
         void RegisterComponents(ServerInterfaceComponent* const* lapComponents);
 

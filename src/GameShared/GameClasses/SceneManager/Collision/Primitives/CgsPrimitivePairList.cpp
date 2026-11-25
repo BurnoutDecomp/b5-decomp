@@ -54,7 +54,7 @@ namespace CgsCollision
     {
         mpau8CurrentStreamPosition = lpPairList->GetDataStream();
         mu16CurrentTest = 0;
-        mu16DataSize = static_cast<u16>((lpPairList->GetDataSize() + 15u) & 0xFFF0u);
+        mu16DataSize = lpPairList->GetDataSize();
         mu16CurrentDataPosition = 0;
         mu16NumHeaders = lpPairList->GetNumTests();
 

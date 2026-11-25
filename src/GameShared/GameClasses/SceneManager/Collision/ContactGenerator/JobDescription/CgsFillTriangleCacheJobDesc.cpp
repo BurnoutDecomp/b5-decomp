@@ -17,19 +17,19 @@ namespace CgsCollision
     // address of the leading cache sphere member.
     const CgsGeometric::Sphere* FillTriangleCacheJobDesc::GetCacheSphere() const
     {
-        return &mCacheSphere;
+        return &GetData()->mCacheSphere;
     }
 
     // GetTriangleLis @0x82916F18:  bl <return this>; lwz r3,0x14(r3); blr
-    TriangleList* FillTriangleCacheJobDesc::GetTriangleList() const
+    CgsGeometric::Triangle4* FillTriangleCacheJobDesc::GetTriangleListMainMemoryDestination()
     {
-        return mpTriangleList;
+        return GetData()->mpaTrianglesDestination;
     }
 
     // GetMaxNumTriangles @0x82916F48:  bl <return this>; lhz r11,0x18(r3); mr r3,r11; blr
-    u16 FillTriangleCacheJobDesc::GetMaxNumTriangles() const
+    s32 FillTriangleCacheJobDesc::GetMaxNumTriangles()
     {
-        return mu16MaxNumTriangles;
+        return GetData()->mu16MaxNumTriangles;
     }
 }
 }

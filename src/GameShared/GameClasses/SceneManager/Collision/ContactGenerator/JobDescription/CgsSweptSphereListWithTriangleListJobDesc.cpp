@@ -1,6 +1,8 @@
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsSweptSphereListWithTriangleListJobDesc.h"
 #include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsCollisionResult.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include <new>
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\collision\\ContactGenerator/JobDescription/CgsSweptSphereListWithTriangleListJobDesc.cpp"
 
 // CgsSceneManager::CgsCollision::SweptSphereListWithTriangleListJobDesc::Prepare @0x828103E0.
 //
@@ -37,21 +39,25 @@ namespace CgsCollision
         CollisionResultList*   lpResultsList,
         f32                    lfPadding)
     {
+        new (maData) Data;
+
         muJobType     = E_COLLISIONJOB_SWEPT_SPHERE_LIST_WITH_TRIANGLE_LIST;
         mfRadius      = lfPadding;
         mpResultsList = lpResultsList;
         mpDebugStream = 0;
 
-        mSweptSphereList = *lpSweptSphereList;
-        mTriangleList    = *lpTriangleList;
+        GetData()->mSweptSphereList = *lpSweptSphereList;
+        GetData()->mTriangleList    = *lpTriangleList;
 
         // `subf. r11, r10, r11` on the FIRST word of the object, i.e. the swept-sphere base
         // pointer: it must be 16-byte aligned. Kept at the console's line number (:84).
         const bool lbAligned =
-            (reinterpret_cast<uintptr_t>(mSweptSphereList.mpaSweptSpheres) & 0xF) == 0;
-        CGS_ASSERT(lbAligned, "Spheres not aligned to 16 bytes");
+            (reinterpret_cast<intptr_t>(GetData()->mSweptSphereList.mpaSweptSpheres) % 16) == 0;
+        CGS_ASSERT_AT(lbAligned, "Spheres not aligned to 16 bytes", CGS_ARTIST_FILE, 84);
 
         return true;
     }
 }
 }
+
+#undef CGS_ARTIST_FILE

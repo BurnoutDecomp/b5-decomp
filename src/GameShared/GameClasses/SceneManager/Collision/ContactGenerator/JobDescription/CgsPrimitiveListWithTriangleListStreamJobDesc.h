@@ -1,5 +1,7 @@
 #pragma once
 
+#include <new>
+
 // =================================================================================================
 // CgsSceneManager::CgsCollision::PrimitiveListWithTriangleListStreamJobDesc -- the descriptor for
 // the PRIMITIVE-PAIR-LIST vs TRIANGLE-LIST *stream* collision job (job-type id 12), plus the
@@ -115,10 +117,9 @@ namespace CgsCollision
         };
 
         // X360 +0x00, the only member of the derived part (DWARF Data, :139-:141).
-        CgsMemory::SimpleDataStreamProducer* mpStreamProducer;
 
         // DWARF :134.
-        CgsMemory::SimpleDataStreamProducer* GetDataStreamProducer() const { return mpStreamProducer; }
+        CgsMemory::SimpleDataStreamProducer* GetDataStreamProducer() const { return GetData()->mpStreamProducer; }
 
         // DWARF :128 spells this `bool Prepare(...)`. Kept `void` to match the committed
         // structural twins LineWithTriangleListStreamJobDesc::Prepare and
@@ -126,15 +127,24 @@ namespace CgsCollision
         // into its Run* dispatcher, so no return value is observable anywhere and the tree's
         // established spelling for an inlined stream-descriptor Prepare wins. The DWARF's
         // spelling is recorded here so a later name/shape join finds either.
-        void Prepare(CgsMemory::SimpleDataStreamProducer* lpStreamProducer)
+        bool Prepare(CgsMemory::SimpleDataStreamProducer* lpStreamProducer)
         {
-            mpStreamProducer = lpStreamProducer;   // 0x82811FF8
+            new (maData) Data;
+            GetData()->mpStreamProducer = lpStreamProducer;   // 0x82811FF8
 
-            mpResultsList = NULL;                  // 0x82811FF0
-            mfRadius      = 0.0f;                  // 0x82811FE8 (flt_82001CC0 == 0.0f, measured)
-            mpDebugStream = 0;                     // 0x82811FF4 -- this family carries NO reader
-            muJobType     = static_cast<u8>(E_COLLISIONJOB_PRIMITIVE_LIST_WITH_TRIANGLE_LIST_STREAM);
+            return CollisionJobDescription::Prepare(E_COLLISIONJOB_PRIMITIVE_LIST_WITH_TRIANGLE_LIST_STREAM, 0, 0.0f,
+                                                    0);
         }
+
+    private:
+        struct Data
+        {
+            CgsMemory::SimpleDataStreamProducer* mpStreamProducer;
+        };
+
+        Data* GetData() { return reinterpret_cast<Data*>(maData); }
+        const Data* GetData() const { return reinterpret_cast<const Data*>(maData); }
+        CGS_STATIC_ASSERT(sizeof(Data) <= KU_MAX_DESC_DATA_SIZE, "PrimitiveListWithTriangleListStreamJobDesc payload size");
     };
 
     // GATES, not comments -- see the banner. The producer is constructed with

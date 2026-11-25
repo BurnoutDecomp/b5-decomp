@@ -1,5 +1,7 @@
 #pragma once
 
+#include <new>
+
 // CgsSceneManager::CgsCollision::BoxListWithTriangleListJobDesc — the collision
 // contact-generator job descriptor for a BOX-list vs triangle-list test (job-type id 9).
 //
@@ -61,17 +63,15 @@ namespace CgsCollision
         // second behind an 8-byte console BoxList, and the arm reads it as `addi r4, r30, 8`
         // (0x829218D8). On this host mpaBoxes widens 4 -> 8, so the member sits at +0x10 -- which
         // is why the arm below names the member instead of adding 8 to a pointer.
-        BoxList      mBoxList;       // DWARF h:97  (console +0x00)
-        TriangleList mTriangleList;  // DWARF h:98  (console +0x08)
 
         // DWARF h:78/82/86/90. Given INLINE bodies rather than left as bare declarations: they are
         // inlined on the console too (the arm's read of the triangle list is a bare `addi`, not a
         // `bl`), and a declared-only accessor called from the MOUNTED ContactGeneratorJob.cpp
         // would be an LNK2019 that the compile gate cannot see.
-        const BoxList&      GetBoxList()      const { return mBoxList; }       // h:78
-        const TriangleList& GetTriangleList() const { return mTriangleList; }  // h:82
-        BoxList&            GetBoxList()            { return mBoxList; }       // h:86
-        TriangleList&       GetTriangleList()       { return mTriangleList; }  // h:90
+        const BoxList&      GetBoxList()      const { return GetData()->mBoxList; }       // h:78
+        const TriangleList& GetTriangleList() const { return GetData()->mTriangleList; }  // h:82
+        BoxList&            GetBoxList()            { return GetData()->mBoxList; }       // h:86
+        TriangleList&       GetTriangleList()       { return GetData()->mTriangleList; }  // h:90
 
         // DWARF h:62/65/72/75. DECLARATIONS ONLY, deliberately: none of the four has a body
         // anywhere in the X360 image (see the type-9 note at the head of this file), nothing in
@@ -84,6 +84,17 @@ namespace CgsCollision
                      CollisionResultList*    lpResultsList,
                      f32                     lfPadding);
         void Release();                                                        // h:75
+
+    private:
+        struct Data
+        {
+            BoxList mBoxList;
+            TriangleList mTriangleList;
+        };
+
+        Data* GetData() { return reinterpret_cast<Data*>(maData); }
+        const Data* GetData() const { return reinterpret_cast<const Data*>(maData); }
+        CGS_STATIC_ASSERT(sizeof(Data) <= KU_MAX_DESC_DATA_SIZE, "BoxListWithTriangleListJobDesc payload size");
     };
 }
 }

@@ -159,18 +159,13 @@ void DispatchBin::EndAllocateMemory(u32 luActualQwords)
     m_pNextWord    = lpEnd;
 }
 
-// @ 0x822A0530  (header-TU function — DispatchFrame::GetList)
-// Return the luListId'th DispatchList in m_paLists. Stride is sizeof(DispatchList)
-// == 384 bytes; computed as a byte offset because DispatchList is forward-declared
-// here (homed by a separate TU) and never dereferenced.
+// ARTIST 822A0530: index the native dispatch list array.
+// The bounds diagnostic streams the invalid list ID.
 DispatchList* DispatchFrame::GetList(u32 luListId)
 {
-    CGS_ASSERT(m_paLists != NULL, "m_paLists != NULL");
-    // Original streams "Invalid List ID = <id>" into the assert buffer; the
-    // bounds condition is preserved here, the message rendered as a plain string.
-    CGS_ASSERT(luListId < muNumDispatchLists, "Invalid List ID");
-
-    // The recovered native list type supplies the original384-byte stride.
+    CGS_ASSERT_AT(m_paLists != NULL, "m_paLists != NULL", KAC_ARTIST_ASSERT_FILE, 412);
+    CGS_ASSERT_STREAM_AT(luListId < muNumDispatchLists, "Invalid List ID = " << luListId,
+                         KAC_ARTIST_ASSERT_FILE, 413);
     return &m_paLists[luListId];
 }
 
@@ -182,6 +177,7 @@ DispatchList* DispatchFrame::GetList(u32 luListId)
 // bytes at 128-byte alignment and takes the lane-0 pointer as the block.
 void DispatchBin::Construct(u32 luSizeBytes, rw::IResourceAllocator* lpAllocator)
 {
+    const u32 luAllocationSize = ((luSizeBytes + 127u) & ~127u) + 128u;
     m_uSize                = luSizeBytes >> 4;
     m_pBin                 = 0;
     m_pNextWord            = 0;
@@ -192,16 +188,8 @@ void DispatchBin::Construct(u32 luSizeBytes, rw::IResourceAllocator* lpAllocator
     m_uSizeUsedLastTime    = 0;
     m_uUsedQwordsSnapshot  = 0;
 
-    rw::ResourceDescriptor lDescriptor;
-    lDescriptor.m_baseResourceDescriptors[0].m_size      = ((luSizeBytes + 127u) & ~127u) + 128u;
-    lDescriptor.m_baseResourceDescriptors[0].m_alignment = 128u;
-    for (u32 luLane = 1; luLane < rw::KU_RESOURCE_LANE_COUNT; ++luLane)
-    {
-        lDescriptor.m_baseResourceDescriptors[luLane].m_size      = 0u;
-        lDescriptor.m_baseResourceDescriptors[luLane].m_alignment = 1u;
-    }
-
-    rw::Resource lResource = lpAllocator->DoAllocate(lDescriptor, 0);
+    const rw::ResourceDescriptor lDescriptor(luAllocationSize, 128);
+    const rw::Resource lResource = lpAllocator->Allocate(lDescriptor, 0);
     m_pBin      = reinterpret_cast<DispatchCommand*>(lResource.m_baseResources[0]);
     m_pNextWord = m_pBin;
 }

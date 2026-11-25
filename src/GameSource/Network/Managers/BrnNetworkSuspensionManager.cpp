@@ -97,7 +97,7 @@ namespace BrnNetwork
     void SuspensionManager::Update()
     {
         BrnServerInterface* lpServerInterface = mpNetworkManager->GetServerInterface();
-        const BrnServerInterface::EStatus leStatus = lpServerInterface->GetStatus(12);
+        const BrnServerInterface::EStatus leStatus = lpServerInterface->GetStatus(CgsNetwork::E_COMPONENTS_COUNT);
 
         switch (meSubState)
         {

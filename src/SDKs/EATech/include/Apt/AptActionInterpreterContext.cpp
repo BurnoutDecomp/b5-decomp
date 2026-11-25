@@ -22,19 +22,22 @@ bool AptActionInterpreter::getContext(AptValue* pScope, AptValue* pTarget, const
                                       AptValue** ppOutContext, EAStringC& rOutName)
 {
     const char* pBuffer = pPath->GetBuffer();
-    char bSimple = 1;
-    int c = static_cast<signed char>(*pBuffer++);
-    if (c)
+    bool bSimple = true;
+    char c = *pBuffer++;
+    while (c)
     {
-        while (c >= '0' && c != ':')
+        if (c < '0')
         {
-            c = static_cast<signed char>(*pBuffer++);
-            if (!c)
-                goto done_scan;
+            bSimple = false;
+            break;
         }
-        bSimple = 0;
+        if (c == ':')
+        {
+            bSimple = false;
+            break;
+        }
+        c = *pBuffer++;
     }
-done_scan:
     if (bSimple && !pTarget)
     {
         rOutName = *pPath;
@@ -51,20 +54,24 @@ done_scan:
 bool AptActionInterpreter::getContext(AptValue* pScope, AptValue* pTarget, const EAStringC* pPath,
                                       AptValue** ppOutContext, char* pNameBuffer)
 {
-    const char* pCurrent = pPath->GetBuffer();
+    const char* pCurrent;
     AptValue* pContext = pScope;
+    AptValue* pNewContext;
     bool bRooted = false;
+    const char* pBuffer = pPath->GetBuffer();
+
     pNameBuffer[0] = '\0';
-    if (*pCurrent == '/')
+    if (pBuffer[0] == '/')
     {
-        pContext = gpAptTarget->mpAnimationTarget->mDisplayList.mpHead->mpFirst;
-        ++pCurrent;
+        pContext = gpAptTarget->GetAnimationTarget()->GetDisplayList()->mpHead->mpFirst;
+        pCurrent = &pBuffer[1];
         *ppOutContext = pContext;
         bRooted = true;
     }
     else
     {
         *ppOutContext = pScope;
+        pCurrent = &pBuffer[0];
     }
 
     char acSegment[KU_PathBufferLength];
@@ -102,7 +109,6 @@ bool AptActionInterpreter::getContext(AptValue* pScope, AptValue* pTarget, const
         case ':':
         {
             *pSegmentEnd = '\0';
-            AptValue* pNewContext;
             {
                 EAStringC lSegment(acSegment);
                 pNewContext = pContext->findChild(&lSegment, pTarget);

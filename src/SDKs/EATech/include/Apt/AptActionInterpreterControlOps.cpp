@@ -275,34 +275,23 @@ void AptActionInterpreter::_FunctionAptActionDictCallMethodSetVar(AptActionInter
 // laid out inline after a 20-byte try record at the (4-byte-aligned) PC.
 // ===========================================================================
 
-// The inlined stack-collapse primitive (console Burnout_X360_Artist_01e3_0): pop
-// nCount operands off the operand stack, Releasing each -- the real
-// AptActionInterpreter::stackPop(int) member (@0x7FDB68; the AptApt_PopValues no-op
-// shim is retired), used here to unwind any operands the sub-streams left above the
-// entry top.
-//
-// The active AS local-variable frame stack (console off_8324E3DC /
-// AptScriptFunctionBase::spFrameStack, a protected static). The catch-variable bind
-// reads it (and lazily creates it via CreateFrameStack) to store the caught value in
-// the current activation's locals; read through the public static accessor
-// AptScriptFunctionBase::GetActiveFrameStack() (which encapsulates the protected static).
-
 namespace
 {
-    // The inline try record (console v5, at the 4-byte-aligned PC). The three code
-    // sub-streams follow the 20-byte header: try @ +20, catch @ +20+mnTryLen, finally
-    // @ +20+mnTryLen+mnCatchLen. The flags byte gates the catch / finally / register
-    // forms; the catch payload is either a register index (mFlags bit2) or a variable
-    // name pointer (console +0x10).
+    // ARTIST reads three 32-bit lengths, flags at +0x0C, the catch register
+    // at +0x0F and the optional variable name at +0x10.
     struct AptTryRecordT
     {
-        int32_t        mnTryLen;        // [+0x00] try block byte length
-        int32_t        mnCatchLen;      // [+0x04] catch block byte length
-        int32_t        mnFinallyLen;    // [+0x08] finally block byte length
-        uint32_t       mFlagsAndRegister; // [+0x0C] ARTIST reads flags byte and register byte
-        const char*    mpCatchName;     // [+0x10] catch variable name (mFlags bit2 == 0)
-                                        // [+0x14] -> the try sub-stream begins here.
+        uint32_t       mnTryLen;
+        uint32_t       mnCatchLen;
+        uint32_t       mnFinallyLen;
+        uint8_t        mnFlags;
+        uint8_t        mauAlignment[2];
+        uint8_t        mnRegister;
+        const char*    mpCatchName;
     };
+    CGS_STATIC_ASSERT(sizeof(AptTryRecordT) == 0x14, "ARTIST try record size");
+    CGS_STATIC_ASSERT(offsetof(AptTryRecordT, mnRegister) == 0x0F, "ARTIST catch register offset");
+    CGS_STATIC_ASSERT(offsetof(AptTryRecordT, mpCatchName) == 0x10, "ARTIST catch name offset");
 
     enum
     {
@@ -312,84 +301,68 @@ namespace
     };
 }
 
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 void AptActionInterpreter::_FunctionAptActionTry(AptActionInterpreter* pInterp,
                                                  LocalContextT* pContext)
 {
-    const int nEntryStackTop = pInterp->mOperandStack.mnTop;   // console v4 = *a1 (unwind target)
-
-    // ARTIST aligns to four bytes and advances past the 20-byte header and streams.
-    AptTryRecordT* const pRecord = reinterpret_cast<AptTryRecordT*>(
+    const uint32_t nEntryStackTop = pInterp->mOperandStack.mnTop;
+    pContext->mpProgramCounter = reinterpret_cast<const unsigned char*>(
         (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 3) & ~static_cast<uintptr_t>(3));
+    const AptTryRecordT* pRecord = reinterpret_cast<const AptTryRecordT*>(pContext->mpProgramCounter);
+    pContext->mpProgramCounter += sizeof(AptTryRecordT);
+    pContext->mpProgramCounter += pRecord->mnTryLen;
+    pContext->mpProgramCounter += pRecord->mnCatchLen;
+    pContext->mpProgramCounter += pRecord->mnFinallyLen;
 
-    const unsigned char* const pTryStream     = reinterpret_cast<const unsigned char*>(pRecord) + 20;
-    const unsigned char* const pCatchStream   = pTryStream + pRecord->mnTryLen;
-    const unsigned char* const pFinallyStream = pCatchStream + pRecord->mnCatchLen;
-    pContext->mpProgramCounter = pFinallyStream + pRecord->mnFinallyLen;
-
-    // Run the try block (a bounded sub-stream under the same scope / character inst).
-    pInterp->runStream(pTryStream, pContext->mpCIH, pRecord->mnTryLen, pContext->mpCharacterInst);
-
-    // --- catch: a pending throw + a catch clause binds the thrown value + runs it ---
-    AptValue* const pThrown = pInterp->mpAbortValue;   // console v9 = a1[24]
-    if (pThrown && ((pRecord->mFlagsAndRegister >> 24) & KU_TRY_HAS_CATCH))
+    pInterp->runStream(reinterpret_cast<const unsigned char*>(pRecord + 1), pContext->mpCIH,
+                       pRecord->mnTryLen, pContext->mpCharacterInst);
+    if (pInterp->doUnwindStack() && (pRecord->mnFlags & KU_TRY_HAS_CATCH))
     {
-        if ((pRecord->mFlagsAndRegister >> 24) & KU_TRY_CATCH_TO_REG)
+        AptValue* pThrown = pInterp->getThrownValue();
+        if (pRecord->mnFlags & KU_TRY_CATCH_TO_REG)
         {
-            // catch into a register slot.
-            AptScriptFunctionBase::SetRegisterValue(static_cast<uint8_t>(pRecord->mFlagsAndRegister), pThrown);
+            AptScriptFunctionBase::SetRegisterValue(pRecord->mnRegister, pThrown);
         }
         else
         {
-            // catch into a named variable: the current activation's frame-stack locals
-            // when one is live, else the run-scope variable table.
-            EAStringC catchName(pRecord->mpCatchName);   // console InitFromBuffer(v13, *(v5+16))
-            if (pInterp->mpCurrentFunction)              // console a1[15] (mpCurrentFunction) set
+            EAStringC catchName(pRecord->mpCatchName);
+            if (pInterp->mpCurrentFunction)
             {
-                AptFrameStack* pFrame = AptScriptFunctionBase::GetActiveFrameStack();  // off_8324E3DC
-                if (!pFrame)
-                {
+                if (!AptScriptFunctionBase::GetActiveFrameStack())
                     pInterp->mpCurrentFunction->CreateFrameStack();
-                    pFrame = AptScriptFunctionBase::GetActiveFrameStack();
-                }
-                pFrame->GetNativeHashVirtual()->Set(catchName, pThrown);  // console AptNativeHash::Set(frame+8, ...)
+                AptScriptFunctionBase::GetActiveFrameStack()->Set(catchName, pThrown);
             }
             else
             {
-                pInterp->setVariable(static_cast<AptValue*>(pContext->mpCIH), 0,
-                                     &catchName, pThrown, 1, 1, 0);
+                pInterp->setVariable(pContext->mpCIH, 0, &catchName, pThrown, 1, 1, 0);
             }
         }
-
-        pInterp->mpAbortValue->Release();   // console (*(*a1[24]+4))(a1[24])
-        pInterp->mpAbortValue = 0;    // clear the pending throw before the catch runs
-        pInterp->runStream(pCatchStream, pContext->mpCIH, pRecord->mnCatchLen,
-                           pContext->mpCharacterInst);
+        pInterp->clearThrownValue();
+        pInterp->runStream(reinterpret_cast<const unsigned char*>(pRecord + 1) + pRecord->mnTryLen,
+                           pContext->mpCIH, pRecord->mnCatchLen, pContext->mpCharacterInst);
     }
 
-    // --- finally: always runs; preserve + re-raise a pending throw across it ---
-    if ((pRecord->mFlagsAndRegister >> 24) & KU_TRY_HAS_FINALLY)
+    if (pRecord->mnFlags & KU_TRY_HAS_FINALLY)
     {
-        AptValue* const pPending = pInterp->mpAbortValue;   // console v12
+        AptValue* pPending = pInterp->getThrownValue();
         if (pPending)
         {
-            pPending->AddRef();                 // console (**v12)(v12)
-            pInterp->mpAbortValue->Release();   // console (*(*a1[24]+4))(a1[24])
-            pInterp->mpAbortValue = 0;
-        }
-
-        pInterp->runStream(pFinallyStream, pContext->mpCIH, pRecord->mnFinallyLen,
-                           pContext->mpCharacterInst);
-
-        // re-raise the saved throw if the finally block did not itself throw.
-        if (pPending && !pInterp->mpAbortValue)
-        {
             pPending->AddRef();
-            pInterp->mpAbortValue = pPending;
+            pInterp->clearThrownValue();
+        }
+        pInterp->runStream(reinterpret_cast<const unsigned char*>(pRecord + 1) + (pRecord->mnTryLen + pRecord->mnCatchLen),
+                           pContext->mpCIH, pRecord->mnFinallyLen, pContext->mpCharacterInst);
+        if (pPending && !pInterp->doUnwindStack())
+        {
+            pInterp->throwValue(pPending);
             pPending->Release();
         }
     }
 
-    // unwind any operands the sub-streams left above the try's entry top.
-    if (pInterp->mOperandStack.mnTop > nEntryStackTop)
-        pInterp->stackPop(pInterp->mOperandStack.mnTop - nEntryStackTop);   // stack collapse to entry level (member; retired the AptApt_PopValues no-op shim)
+    const uint32_t nExitStackTop = pInterp->mOperandStack.mnTop;
+    if (nExitStackTop > nEntryStackTop)
+        pInterp->stackPop(nExitStackTop - nEntryStackTop);
 }

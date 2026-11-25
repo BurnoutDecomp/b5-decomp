@@ -513,7 +513,7 @@ namespace BrnNetwork
         // component index 12, the count/overall slot the suspension flow also queries --
         // and logs the last error / not-logged-in through the debug stream; the asserts
         // below preserve the contract).
-        lpServerInterface->GetStatus(12);
+        lpServerInterface->GetStatus(CgsNetwork::E_COMPONENTS_COUNT);
 
         CGS_ASSERT(lpServerInterface->GetConnectionComponent() != 0, CGS_ASSERT_MESSAGE_AT(
             "lpPostRoundManager->mpNetworkManager->GetServerInterface()->GetConnectionComponent()",

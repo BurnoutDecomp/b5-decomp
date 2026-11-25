@@ -95,6 +95,11 @@ struct MixerExecuteParams
 // -------------------------------------------------------------------------------------
 struct SampleBuffer
 {
+    f32* LockChannel(unsigned channel)
+    {
+        return mpSamples + channel * muStride;
+    }
+
     System *mpSystem;        // +0x00 -- Execute seeds the owning System (was the opaque
                              //   AudioChannelBuffer header word)
     f32 *mpSamples;          // +0x04 -- Execute seeds the region base (Mixer::mBuffer[i])

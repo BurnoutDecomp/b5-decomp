@@ -107,9 +107,9 @@ int Rechannel::PreProcess(Rechannel * /*self*/, AudioProcessContext * /*ctx*/, i
 //       if (n) {
 //           src = ctx->mpSrcBuffer(+0x3000C) ; dst = ctx->mpDstBuffer(+0x30010)
 //           srcCnt = min(inCh, 6)
-//           for (c<srcCnt) srcPtr[c] = src->mpSamples + src->muStride*c   ; v20 (8 slots)
-//           for (c<outCh)  dstPtr[c] = dst->mpSamples + dst->muStride*c   ; v21 (20 slots)
-//           ReChannelGainWrite(dstPtr, srcPtr, numDst=outCh, numSrc=inCh, numSamples=n, 1.0)
+//           for (c<srcCnt) srcPtr[c] = src->LockChannel(c)
+//           for (c<outCh)  dstPtr[c] = dst->LockChannel(c)
+//           ReChannelGainWrite(dstPtr, srcPtr, 1.0, outCh, inCh, n)
 //       }
 //       swap(ctx->mpSrcBuffer, ctx->mpDstBuffer)                         ; ping-pong
 //       ctx->mbChannelCount(+0x3002C) = self->mBase.mbChannelCount(+0x21)
@@ -120,51 +120,47 @@ int Rechannel::PreProcess(Rechannel * /*self*/, AudioProcessContext * /*ctx*/, i
 // clamped bound (v9) but passes the unclamped byte (v6). The swap + channel-count write run
 // whenever the count changed, even for a silent (n == 0) frame.
 // -------------------------------------------------------------------------------------
-int Rechannel::Process(Rechannel *self, AudioProcessContext *ctx)
+#if defined(_XBOX) && defined(_MSC_VER)
+// The original rwAudio plug-in object emits these scalar loops in its size form.
+#pragma optimize("s", on)
+#endif
+BufferStatus Rechannel::Process(PlugIn* plugIn, Mixer* mixer, bool)
 {
-    const u32 luNumSamples = ctx->mNumSamples;          // lwzx +0x30020
-    const u8  luIncomingChannels = ctx->mbChannelCount; // lbz  +0x3002C
+    const unsigned numSamples = mixer->mNumSamples;
+    const unsigned inputChannels = mixer->mbChannelCount;
+    if (!numSamples)
+        plugIn->mInputChannels = static_cast<u8>(inputChannels);
 
-    // A silent frame carries no samples to remap; just track the incoming channel count.
-    if (!luNumSamples)
-        self->mBase.mbFlag20 = luIncomingChannels;      // stb +0x20
-
-    const u8 luOutputChannels = self->mBase.mbChannelCount; // lbz +0x21
-    if (luIncomingChannels != luOutputChannels)
+    const unsigned outputChannels = plugIn->mOutputChannels;
+    if (inputChannels != outputChannels)
     {
-        if (luNumSamples)
+        if (numSamples)
         {
-            AudioChannelBuffer *lpSrcBuffer = ctx->mpSrcBuffer; // *(ctx+0x3000C) = v8
-            AudioChannelBuffer *lpDstBuffer = ctx->mpDstBuffer; // *(ctx+0x30010) = v10
+            SampleBuffer* input = mixer->mpSrcBuffer;
+            SampleBuffer* output = mixer->mpDstBuffer;
+            float* src[KI_RECHANNEL_MAX_CHANNELS];
+            float* dst[KI_RECHANNEL_MAX_CHANNELS];
 
-            f32 *lpSrcChannel[8];  // v20 -- per-source-channel sample pointers
-            f32 *lpDstChannel[20]; // v21 -- per-destination-channel sample pointers
+            unsigned srcChannels = inputChannels;
+            if (srcChannels > KI_RECHANNEL_MAX_CHANNELS)
+                srcChannels = KI_RECHANNEL_MAX_CHANNELS;
 
-            // Source pointers: incoming channel count, clamped to MAX_CHANNELS (6).
-            u32 luSrcCount = luIncomingChannels;
-            if (luSrcCount > KI_RECHANNEL_MAX_CHANNELS)
-                luSrcCount = KI_RECHANNEL_MAX_CHANNELS;
-            for (u32 lc = 0; lc < luSrcCount; ++lc)
-                lpSrcChannel[lc] = lpSrcBuffer->mpSamples + lpSrcBuffer->muStride * lc;
+            for (unsigned i = 0; i < srcChannels; ++i)
+                src[i] = input->LockChannel(i);
+            for (unsigned i = 0; i < plugIn->mOutputChannels; ++i)
+                dst[i] = output->LockChannel(i);
 
-            // Destination pointers: the plug-in's output channel count.
-            for (u32 lc = 0; lc < luOutputChannels; ++lc)
-                lpDstChannel[lc] = lpDstBuffer->mpSamples + lpDstBuffer->muStride * lc;
-
-            // numDst = output channels, numSrc = incoming channels (unclamped), gain = 1.0.
-            ReChannelGainWrite(lpDstChannel, lpSrcChannel, luOutputChannels,
-                               luIncomingChannels, static_cast<s32>(luNumSamples), 1.0f);
+            ReChannelGainWrite(dst, src, 1.0f, outputChannels, inputChannels, numSamples);
         }
-
-        // Ping-pong the src/dst channel-buffer slots so the remapped buffer becomes active,
-        // then record the plug-in's output channel count as the context's new active count.
-        AudioChannelBuffer *lpSwapTmp = ctx->mpSrcBuffer;
-        ctx->mpSrcBuffer = ctx->mpDstBuffer;
-        ctx->mpDstBuffer = lpSwapTmp;
-        ctx->mbChannelCount = self->mBase.mbChannelCount; // stb self+0x21 -> ctx+0x3002C
+        mixer->SwapBuffers();
+        mixer->mbChannelCount = plugIn->mOutputChannels;
     }
-    return 1;
+    return BUFFERSTATUS_AVAILABLE;
 }
+
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", off)
+#endif
 
 // -------------------------------------------------------------------------------------
 // `scalar deleting destructor' @0x82BA1C20

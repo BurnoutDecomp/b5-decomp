@@ -1,5 +1,7 @@
 #pragma once
 
+#include <new>
+
 // =================================================================================================
 // CgsSceneManager::CgsCollision::LineWithTriangleListStreamJobDesc -- the descriptor for the
 // VEHICLE TRACTION LINE test, plus the two fixed-stride records that flow through its stream.
@@ -110,22 +112,30 @@ namespace CgsCollision
         };
 
         // X360 +0x00, the only member of the derived part.
-        CgsMemory::SimpleDataStreamProducer* mpStreamProducer;
 
-        CgsMemory::SimpleDataStreamProducer* GetStreamProducer() const { return mpStreamProducer; }
+        CgsMemory::SimpleDataStreamProducer* GetStreamProducer() const { return GetData()->mpStreamProducer; }
 
         // PS3 @0xB084E0. X360 inlines this into RunLineWithTriangleListStream (the five stores
         // quoted in the banner), so it carries no X360 symbol; it is named here so the dispatcher
         // writes MEMBERS rather than the console's byte offsets.
-        void Prepare(CgsMemory::SimpleDataStreamProducer* lpStreamProducer)
+        bool Prepare(CgsMemory::SimpleDataStreamProducer* lpStreamProducer)
         {
-            mpStreamProducer = lpStreamProducer;
+            new (maData) Data;
+            GetData()->mpStreamProducer = lpStreamProducer;
 
-            mpResultsList = NULL;   // 0x82810F4C  stw  r25, 0x4C0
-            mfRadius      = 0.0f;   // 0x82810F44  stfs f31, 0x4C4  (flt_82001CC0 == 0.0f)
-            mpDebugStream = 0;   // (was misnamed miStatus; DWARF h:119)      // 0x82810F50  stw  r25, 0x4C8
-            muJobType     = static_cast<u8>(E_COLLISIONJOB_LINE_WITH_TRIANGLE_LIST_STREAM);
+            return CollisionJobDescription::Prepare(E_COLLISIONJOB_LINE_WITH_TRIANGLE_LIST_STREAM, 0, 0.0f,
+                                                    0);
         }
+
+    private:
+        struct Data
+        {
+            CgsMemory::SimpleDataStreamProducer* mpStreamProducer;
+        };
+
+        Data* GetData() { return reinterpret_cast<Data*>(maData); }
+        const Data* GetData() const { return reinterpret_cast<const Data*>(maData); }
+        CGS_STATIC_ASSERT(sizeof(Data) <= KU_MAX_DESC_DATA_SIZE, "LineWithTriangleListStreamJobDesc payload size");
     };
 
     // The two size contracts the producer is constructed with. Both are GATES, not comments:

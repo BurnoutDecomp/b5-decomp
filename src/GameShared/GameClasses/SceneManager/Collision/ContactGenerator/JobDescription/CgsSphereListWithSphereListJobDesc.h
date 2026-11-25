@@ -1,5 +1,7 @@
 #pragma once
 
+#include <new>
+
 // CgsSceneManager::CgsCollision::SphereListWithSphereListJobDesc — collision
 // contact-generator job descriptor for a sphere-list vs sphere-list test (job-type id 7).
 //
@@ -23,8 +25,6 @@ namespace CgsCollision
     {
         // Nested payload (DWARF CgsSphereListWithSphereListJobDesc.h:88), placed by the
         // X360 at the front of the object (A @0x00, B @0x08); modelled as named members.
-        SphereList mSphereListA;  // +0x00
-        SphereList mSphereListB;  // +0x08
 
         // Prepare @0x82810198 — returns true (the X360 `return 1;`). lfPadding is the
         // radius/padding stored at +0xF4 (f1 -> stfs).
@@ -32,6 +32,19 @@ namespace CgsCollision
                      const SphereList*    lpSphereListB,
                      CollisionResultList* lpResultsList,
                      f32                  lfPadding);
+
+        const SphereList& GetSphereListA() const { return GetData()->mSphereListA; }
+        const SphereList& GetSphereListB() const { return GetData()->mSphereListB; }
+    private:
+        struct Data
+        {
+            SphereList mSphereListA;
+            SphereList mSphereListB;
+        };
+
+        Data* GetData() { return reinterpret_cast<Data*>(maData); }
+        const Data* GetData() const { return reinterpret_cast<const Data*>(maData); }
+        CGS_STATIC_ASSERT(sizeof(Data) <= KU_MAX_DESC_DATA_SIZE, "SphereListWithSphereListJobDesc payload size");
     };
 
     // =============================================================================================
@@ -65,20 +78,28 @@ namespace CgsCollision
         };
 
         // X360 +0x00, the only member of the derived part (DWARF Data h:136-138).
-        CgsMemory::SimpleDataStreamProducer* mpStreamProducer;
 
-        CgsMemory::SimpleDataStreamProducer* GetStreamProducer() const { return mpStreamProducer; }
+        CgsMemory::SimpleDataStreamProducer* GetStreamProducer() const { return GetData()->mpStreamProducer; }
 
         // DWARF h:125 `bool Prepare(SimpleDataStreamProducer*)` — no debug reader.
-        void Prepare(CgsMemory::SimpleDataStreamProducer* lpStreamProducer)
+        bool Prepare(CgsMemory::SimpleDataStreamProducer* lpStreamProducer)
         {
-            mpStreamProducer = lpStreamProducer;   // 0x82811CB8  stw r22, 0x3D0(batch)
+            new (maData) Data;
+            GetData()->mpStreamProducer = lpStreamProducer;   // 0x82811CB8  stw r22, 0x3D0(batch)
 
-            mpResultsList = 0;                     // stw r27, 0x4C0
-            mfRadius      = 0.0f;                  // stfs f31, 0x4C4 (flt_82001CC0)
-            mpDebugStream = 0;                     // stw r27, 0x4C8
-            muJobType     = static_cast<u8>(E_COLLISIONJOB_SPHERE_LIST_WITH_SPHERE_LIST_STREAM); // stb r23(8), 0x4CF
+            return CollisionJobDescription::Prepare(E_COLLISIONJOB_SPHERE_LIST_WITH_SPHERE_LIST_STREAM, 0, 0.0f,
+                                                    0);
         }
+
+    private:
+        struct Data
+        {
+            CgsMemory::SimpleDataStreamProducer* mpStreamProducer;
+        };
+
+        Data* GetData() { return reinterpret_cast<Data*>(maData); }
+        const Data* GetData() const { return reinterpret_cast<const Data*>(maData); }
+        CGS_STATIC_ASSERT(sizeof(Data) <= KU_MAX_DESC_DATA_SIZE, "SphereListWithSphereListStreamJobDesc payload size");
     };
 
     CGS_STATIC_ASSERT((sizeof(SphereListWithSphereListStreamJobDesc::StreamCommand) % 16 == 0),

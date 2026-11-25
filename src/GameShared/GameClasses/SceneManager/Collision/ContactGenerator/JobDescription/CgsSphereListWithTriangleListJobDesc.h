@@ -1,5 +1,7 @@
 #pragma once
 
+#include <new>
+
 // CgsSceneManager::CgsCollision::SphereListWithTriangleListJobDesc — collision
 // contact-generator job descriptor for a sphere-list vs triangle-list test
 // (job-type id 5).
@@ -26,8 +28,6 @@ namespace CgsCollision
     {
         // Nested payload (DWARF CgsSphereListWithTriangleListJobDesc.h:89), placed by the
         // X360 at the front of the object (sphere @0x00, triangle @0x08); named members.
-        SphereList   mSphereList;    // +0x00
-        TriangleList mTriangleList;  // +0x08
 
         // Prepare @0x82810100 — returns true (the X360 `return 1;`). lfPadding is the
         // radius/padding stored at +0xF4 (f1 -> stfs).
@@ -35,6 +35,19 @@ namespace CgsCollision
                      const TriangleList*  lpTriangleList,
                      CollisionResultList* lpResultsList,
                      f32                  lfPadding);
+
+        const SphereList& GetSphereList() const { return GetData()->mSphereList; }
+        const TriangleList& GetTriangleList() const { return GetData()->mTriangleList; }
+    private:
+        struct Data
+        {
+            SphereList mSphereList;
+            TriangleList mTriangleList;
+        };
+
+        Data* GetData() { return reinterpret_cast<Data*>(maData); }
+        const Data* GetData() const { return reinterpret_cast<const Data*>(maData); }
+        CGS_STATIC_ASSERT(sizeof(Data) <= KU_MAX_DESC_DATA_SIZE, "SphereListWithTriangleListJobDesc payload size");
     };
 
     // =============================================================================================
@@ -68,23 +81,31 @@ namespace CgsCollision
         };
 
         // X360 +0x00, the only member of the derived part (DWARF Data h:138-140).
-        CgsMemory::SimpleDataStreamProducer* mpStreamProducer;
 
-        CgsMemory::SimpleDataStreamProducer* GetStreamProducer() const { return mpStreamProducer; }
+        CgsMemory::SimpleDataStreamProducer* GetStreamProducer() const { return GetData()->mpStreamProducer; }
 
         // DWARF h:127 `bool Prepare(SimpleDataStreamProducer*, DebugRenderStreamReader*)`.
         // The X360 inlines it into the Run dispatcher; named members, same shape as the
         // committed LineWithTriangleListStreamJobDesc::Prepare.
-        void Prepare(CgsMemory::SimpleDataStreamProducer* lpStreamProducer,
+        bool Prepare(CgsMemory::SimpleDataStreamProducer* lpStreamProducer,
                      CgsDev::DebugRenderStreamReader*     lpDebugReader)
         {
-            mpStreamProducer = lpStreamProducer;   // 0x828115F8  stw r23, 0x3D0(batch)
+            new (maData) Data;
+            GetData()->mpStreamProducer = lpStreamProducer;   // 0x828115F8  stw r23, 0x3D0(batch)
 
-            mpResultsList = 0;                     // 0x828115F0  stw r25, 0x4C0
-            mfRadius      = 0.0f;                  // 0x828115E8  stfs f31, 0x4C4 (flt_82001CC0)
-            mpDebugStream = lpDebugReader;         // 0x828115F4  stw r22, 0x4C8
-            muJobType     = static_cast<u8>(E_COLLISIONJOB_SPHERE_LIST_WITH_TRIANGLE_LIST_STREAM); // 0x828115EC stb r24(6), 0x4CF
+            return CollisionJobDescription::Prepare(E_COLLISIONJOB_SPHERE_LIST_WITH_TRIANGLE_LIST_STREAM, 0, 0.0f,
+                                                    lpDebugReader);
         }
+
+    private:
+        struct Data
+        {
+            CgsMemory::SimpleDataStreamProducer* mpStreamProducer;
+        };
+
+        Data* GetData() { return reinterpret_cast<Data*>(maData); }
+        const Data* GetData() const { return reinterpret_cast<const Data*>(maData); }
+        CGS_STATIC_ASSERT(sizeof(Data) <= KU_MAX_DESC_DATA_SIZE, "SphereListWithTriangleListStreamJobDesc payload size");
     };
 
     CGS_STATIC_ASSERT((sizeof(SphereListWithTriangleListStreamJobDesc::StreamCommand) % 16 == 0),

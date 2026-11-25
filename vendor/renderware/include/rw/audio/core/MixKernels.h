@@ -118,11 +118,10 @@ void ReChannelGainWrite6x6(f32 *ppDst[], f32 *ppSrc[], f32 gain, u32 numSamples)
 // {numSrcChannels, numDstChannels} pair in {1,2,4,6}x{1,2,4,6} to its fixed kernel
 // (plus inline 1x1/1x2/2x1/2x2 forms), and falls back for other pairs to a straight
 // per-channel CopyWithGain (zero-filling any surplus destination channels).
-// (r3 dst array, r4 src array, r5 dead, r6 dst channels, r7 src channels, r8 count,
-//  f1 gain.)
+// (r3 dst array, r4 src array, f1 gain, r6 dst channels, r7 src channels, r8 count.)
 // -------------------------------------------------------------------------------------
-void ReChannelGainWrite(f32 **ppDst, f32 **ppSrc, u32 numDstChannels,
-                        u32 numSrcChannels, s32 numSamples, f32 gain);
+void ReChannelGainWrite(f32 *ppDst[], f32 *ppSrc[], f32 gain,
+                      u32 numDstChannels, u32 numSrcChannels, u32 numSamples);
 
 // -------------------------------------------------------------------------------------
 // ReChannelGainMix @0x82B6AB48 -- table-driven accumulate remap (Send::Process): for
@@ -130,21 +129,20 @@ void ReChannelGainWrite(f32 **ppDst, f32 **ppSrc, u32 numDstChannels,
 // source channel into the encoded destination channel with gain scaled by the encoded
 // gain-scale slot. Descriptor byte b: dst = b & 7, src = (b >> 3) & 7,
 // scale = gScaleTable[(b >> 6) & 3]. (r3 dst array, r4 src array, r5 dead,
-// r6 dst channels, r7 src channels, r8 count, f1 gain.)
+// r6 dst channels, r7 src channels, r8 count.)
 // -------------------------------------------------------------------------------------
-void ReChannelGainMix(f32 **ppDst, f32 **ppSrc, u32 numDstChannels,
-                      u32 numSrcChannels, s32 numSamples, f32 gain);
+void ReChannelGainMix(f32 *ppDst[], f32 *ppSrc[], f32 gain,
+                      u32 numDstChannels, u32 numSrcChannels, u32 numSamples);
 
 // -------------------------------------------------------------------------------------
 // ReChannelGainMixRamp @0x82B6ABE8 -- ramped variant of ReChannelGainMix, stepping from
 // currentGain to targetGain with step = (targetGain - currentGain) / 65
 // (flt_8214B268 == 0.015384615f == 1/(GAIN_DECLICK_FRAME_SIZE + 1)) through
-// MixWithGainRamp. (r3 dst array, r4 src array, r5/r6 dead, r7 dst channels,
-// r8 src channels, r9 count, f1 target gain, f2 current gain.)
+// MixWithGainRamp. (r3 dst array, r4 src array, f1/f2 gains, r7 dst channels,
+// r8 src channels, r9 count.)
 // -------------------------------------------------------------------------------------
-void ReChannelGainMixRamp(f32 **ppDst, f32 **ppSrc, u32 numDstChannels,
-                          u32 numSrcChannels, s32 numSamples, f32 targetGain,
-                          f32 currentGain);
+void ReChannelGainMixRamp(f32 *ppDst[], f32 *ppSrc[], f32 targetGain, f32 currentGain,
+                      u32 numDstChannels, u32 numSrcChannels, u32 numSamples);
 
 // -------------------------------------------------------------------------------------
 // GainVector* @0x82B69938 / @0x82B69AB0 / @0x82B69C30 -- fill a per-sample gain vector

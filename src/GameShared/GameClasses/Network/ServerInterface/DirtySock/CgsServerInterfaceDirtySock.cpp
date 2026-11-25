@@ -71,10 +71,7 @@ namespace CgsNetwork
 }
 
 // ---------------------------------------------------------------------------
-// The facade's lifecycle, memory hooks, suspend/resume select and the component
-// fan-out. The progress lines the facade streams to the network log channel
-// ("Finish Action: ...", "StartAction: ...") are not reproduced: that stream object
-// has no home in the tree. Streamed assert texts are reduced to their lead literal.
+// The facade's lifecycle, memory hooks, suspend and resume selects, and component dispatch.
 // ---------------------------------------------------------------------------
 
 // DirtySDK entry points this TU drives that no vendor header declares yet (platform
@@ -90,17 +87,18 @@ extern "C"
 
 namespace CgsNetwork
 {
+    // The lobby select options are retained in a pointer slot read by Construct.
+    const char* KPC_STANDARD_SELECT_OPTIONS =
+        "MYGAME=1 GAMES=0 ROOMS=0 USERS=1 MESGS=1 MESGTYPES=100728964 STATS=500 RANKS=1 USERSETS=1";
+
     namespace
     {
         // The DirtySDK memory group tag the facade allocates its message buffer under.
         const s32 KI_DIRTY_MEM_GROUP_DEFAULT = 0x64666C74;   // 'dflt'
 
-        // The default lobby 'sele' request (the standard suspend-select option set).
-        const char* const KPC_STANDARD_SELECT_OPTIONS =
-            "MYGAME=1 GAMES=0 ROOMS=0 USERS=1 MESGS=1 MESGTYPES=100728964 STATS=500 RANKS=1 USERSETS=1";
 
         // Two-letter lobby language codes indexed by the prepare-params language.
-        const u16 KAU_LOBBY_LANGUAGE_CODES[14] =
+        const u16 KAU_LOBBY_LANGUAGE_CODES[16] =
         {
             0x656E,   // "en"
             0x656E,   // "en"
@@ -115,7 +113,9 @@ namespace CgsNetwork
             0x6E6C,   // "nl"
             0x7376,   // "sv"
             0x6669,   // "fi"
-            0x6461    // "da"
+            0x6461,   // "da"
+            0x6E66,   // "nf"
+            0x6E64    // "nd"
         };
 
         // The lobby-login alert text overrides handed to LobbyLoginCreate:
@@ -558,16 +558,24 @@ namespace CgsNetwork
         return static_cast<EServerInterfaceError>(liResult);
     }
 
-    ServerInterfaceDirtySock::EStatus ServerInterfaceDirtySock::GetStatus(s32 liComponent) const
+    // The const status queries both call this range-checked entry at 0x8286F378.
+    __declspec(noinline) const ServerInterfaceComponent* ServerInterfaceDirtySock::GetComponent(EComponents leComponent) const
     {
-        const EComponents leComponent = static_cast<EComponents>(liComponent);
+        CGS_ASSERT_AT(leComponent >= E_COMPONENTS_START && leComponent < E_COMPONENTS_COUNT,
+                      "leComponent >= E_COMPONENTS_START && leComponent < E_COMPONENTS_COUNT",
+                      "..\\..\\..\\GameShared\\GameClasses\\Network/ServerInterface\\DirtySock\\CgsServerInterfaceDirtySock.h", 746);
+        return maComponents[leComponent].mpComponent;
+    }
+
+    ServerInterfaceDirtySock::EStatus ServerInterfaceDirtySock::GetStatus(EComponents leComponent) const
+    {
         if (leComponent == E_COMPONENTS_COUNT)
         {
             return meStatus;
         }
         CGS_ASSERT(GetComponent(leComponent), CGS_ASSERT_MESSAGE_AT(
             "GetComponent( leComponent )",
-            __FILE__, 1044 /* ARTIST 0x82875EC8 */));
+            CGS_ARTIST_FILE, 1044 /* ARTIST 0x82875EC8 */));
         return static_cast<EStatus>(GetComponent(leComponent)->GetStatus());
     }
 
@@ -579,7 +587,7 @@ namespace CgsNetwork
         }
         CGS_ASSERT(GetComponent(leComponent), CGS_ASSERT_MESSAGE_AT(
             "GetComponent( leComponent )",
-            __FILE__, 1067 /* ARTIST 0x82885EA0 */));
+            CGS_ARTIST_FILE, 1067 /* ARTIST 0x82885EA0 */));
         return GetComponent(leComponent)->GetLastError();
     }
 
@@ -610,21 +618,20 @@ namespace CgsNetwork
         return GetComponent(leComponent)->GetAndClearLastError();
     }
 
+    // ARTIST expands this completion path in the select callbacks and disconnect dispatch.
+    __forceinline void ServerInterfaceDirtySock::FinishActionSuccessfully()
+    {
+        mNetStreamLogChannelOutput << "Finish Action: " << mpcCurrentAction << " successfully\n";
+        mpcCurrentAction = 0;
+        meStatus = E_STATUS_IDLE;
+        miLastError = 0;
+    }
+
     void ServerInterfaceDirtySock::OnEvent(EServerInterfaceEvent leEvent, void* lpData)
     {
-        if (leEvent == E_SERVER_INTERFACE_CONNECTION_EVENT_CONNECTED)
+        switch (leEvent)
         {
-            // Bring the peer and game managers online with the lobby partition and the
-            // local user's name / machine address (the 'self' user record).
-            char lacPartition[64];
-            LobbyApiUserT lSelf;
-            LobbyApiStatus(mpLobbyAPIRef, 0x70617274 /* 'part' */, lacPartition, sizeof(lacPartition));
-            LobbyApiStatus(mpLobbyAPIRef, 0x73656C66 /* 'self' */, &lSelf, sizeof(lSelf));
-            ConnApiOnline(mpConnApiRef, lacPartition, lSelf.name, &lSelf.MachineAddr);
-            GameManagerOnline(mpGameManagerRef, lSelf.name);
-        }
-        else if (leEvent == E_SERVER_INTERFACE_CONNECTION_EVENT_DISCONNECTED)
-        {
+        case E_SERVER_INTERFACE_CONNECTION_EVENT_DISCONNECTED:
             // Lost the lobby: fail every busy component's action, finish our own, and
             // rebuild the DirtySock objects on the next Update.
             for (EComponents le = E_COMPONENTS_START; le < E_COMPONENTS_COUNT; le++)
@@ -638,11 +645,25 @@ namespace CgsNetwork
 
             if (meStatus == E_STATUS_BUSY)
             {
-                mpcCurrentAction = 0;
-                miLastError      = 0;
-                meStatus         = E_STATUS_IDLE;
+                FinishActionSuccessfully();
             }
             mbRecreateDirtySock = true;
+            break;
+
+        case E_SERVER_INTERFACE_CONNECTION_EVENT_CONNECTED:
+        {
+            // Bring the peer and game managers online with the lobby partition and the
+            // local user's name / machine address (the 'self' user record).
+            char lacPartition[64];
+            LobbyApiUserT lSelf;
+            LobbyApiStatus(mpLobbyAPIRef, 0x70617274 /* 'part' */, lacPartition, sizeof(lacPartition));
+            LobbyApiStatus(mpLobbyAPIRef, 0x73656C66 /* 'self' */, &lSelf, sizeof(lSelf));
+            ConnApiOnline(mpConnApiRef, lacPartition, lSelf.name, &lSelf.MachineAddr);
+            GameManagerOnline(mpGameManagerRef, lSelf.name);
+            break;
+        }
+        default:
+            break;
         }
 
         for (EComponents le = E_COMPONENTS_START; le < E_COMPONENTS_COUNT; le++)
@@ -713,21 +734,29 @@ namespace CgsNetwork
 
     void ServerInterfaceDirtySock::CreateLobbyApi()
     {
-        CGS_ASSERT(mpcVersion, "mpcVersion");
-        CGS_ASSERT(mpcSKU, "mpcSKU");
-        CGS_ASSERT(mpcSLUS, "mpcSLUS");
+        CGS_ASSERT_AT(mpcVersion, "mpcVersion", CGS_ARTIST_FILE, 516);
+        CGS_ASSERT_AT(mpcSKU, "mpcSKU", CGS_ARTIST_FILE, 517);
+        CGS_ASSERT_AT(mpcSLUS, "mpcSLUS", CGS_ARTIST_FILE, 518);
 
         // Build the "LOC" token: the lower-cased two-letter language code, country "ZZ".
         const u16 luLanguage = KAU_LOBBY_LANGUAGE_CODES[miLanguage];
-        u32 luHigh = (luLanguage >> 8) & 0xFF;
-        if (luHigh >= 'A' && luHigh <= 'Z')
+        u32 luHigh;
+        if (static_cast<u8>(luLanguage >> 8) >= 'A' && static_cast<u8>(luLanguage >> 8) <= 'Z')
         {
-            luHigh |= 0x20;
+            luHigh = static_cast<u8>(luLanguage >> 8) | 0x20;
         }
-        u32 luLow = luLanguage & 0xFF;
-        if (luLow >= 'A' && luLow <= 'Z')
+        else
         {
-            luLow |= 0x20;
+            luHigh = (luLanguage >> 8) & 0xFF;
+        }
+        u32 luLow;
+        if (static_cast<u8>(luLanguage) >= 'A' && static_cast<u8>(luLanguage) <= 'Z')
+        {
+            luLow = static_cast<u8>(luLanguage) | 0x20;
+        }
+        else
+        {
+            luLow = luLanguage & 0xFF;
         }
         const s32 liLocality = static_cast<s32>((((luHigh << 8) + luLow) << 16) + 0x5A5A);
 
@@ -741,7 +770,7 @@ namespace CgsNetwork
 
         mpLobbyAPIRef = LobbyApiCreate(GetMessageBuffer(), 0, 0, 0);
         LobbyApiControl(mpLobbyAPIRef, 0x7274696D /* 'rtim' */, 30000);
-        CGS_ASSERT(mpLobbyAPIRef, "Lobby API reference creation failed!");
+        CGS_ASSERT_AT(mpLobbyAPIRef, "Lobby API reference creation failed!", CGS_ARTIST_FILE, 543);
     }
 
     void ServerInterfaceDirtySock::CreateConnApi()
@@ -758,7 +787,10 @@ namespace CgsNetwork
 
     void ServerInterfaceDirtySock::StartActionCore(const char* lpcAction)
     {
-        CGS_ASSERT(meStatus != E_STATUS_BUSY, "Trying to start ");
+        mNetStreamLogChannelOutput << "StartAction: " << lpcAction << "\n";
+        CGS_ASSERT_STREAM_AT(meStatus != E_STATUS_BUSY,
+                             "Trying to start " << lpcAction << " when still doing " << mpcCurrentAction << "\n",
+                             CGS_ARTIST_FILE, 986);
 
         mpcCurrentAction = lpcAction;
         meStatus         = E_STATUS_BUSY;
@@ -787,9 +819,7 @@ namespace CgsNetwork
                                                         void* lpUserData)
     {
         ServerInterfaceDirtySock* lpServerInterface = static_cast<ServerInterfaceDirtySock*>(lpUserData);
-        lpServerInterface->mpcCurrentAction = 0;
-        lpServerInterface->meStatus         = E_STATUS_IDLE;
-        lpServerInterface->miLastError      = 0;
+        lpServerInterface->FinishActionSuccessfully();
     }
 
     void ServerInterfaceDirtySock::SuspendSelectCallback(LobbyApiRefT* /*lpLobbyApi*/, LobbyApiMsgT* lpMsg,
@@ -798,12 +828,11 @@ namespace CgsNetwork
         ServerInterfaceDirtySock* lpServerInterface = static_cast<ServerInterfaceDirtySock*>(lpUserData);
         if (lpMsg->code == 0)
         {
-            lpServerInterface->mpcCurrentAction = 0;
-            lpServerInterface->meStatus         = E_STATUS_IDLE;
-            lpServerInterface->miLastError      = 0;
+            lpServerInterface->FinishActionSuccessfully();
             return;
         }
-        CGS_ASSERT(lpMsg->code == 0, "Suspending returned error code ");
+        CGS_ASSERT_STREAM_AT(false, "Suspending returned error code " << lpMsg->code << " and hence failed.\n",
+                             CGS_ARTIST_FILE, 1310);
     }
 
     void ServerInterfaceDirtySock::ConnApiCallback(DirtySock::ConnApiRefT* lpConnApi,

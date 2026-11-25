@@ -25,11 +25,8 @@
 // the sphere-sphere twin and every non-stream Prepare store null). An s32 seat would have
 // truncated the pointer on x64 the day the stream family landed — corrected WITH that family.
 //
-// SEMANTIC parity (member-by-name), not byte-match: the four bookkeeping fields sit at
-// X360 offsets 0xF0..0xFF (after the derived 240-byte Data payload). Modelled here as
-// named base members; the derived data lists are named members of each derived type.
-// (Host pointer width differs from the X360's 4-byte pointers, so we do NOT pin the
-// X360 256-byte sizeof — the recovered behaviour is the field writes, which we keep.)
+// DecFIGS CgsCollisionJobDescription.h:113–123 and ARTIST job dispatch.
+// The concrete descriptor is a typed view of the base payload.
 
 #include "types.hpp"
 
@@ -108,10 +105,26 @@ namespace CgsCollision
 
     struct CollisionJobDescription
     {
+    protected:
+        static const u32 KU_MAX_DESC_DATA_SIZE = 240;
+        CGS_ALIGN(16) u8 maData[KU_MAX_DESC_DATA_SIZE];
+
+    public:
         CollisionResultList* mpResultsList;  // X360 +0xF0  results list the job writes
         f32                  mfRadius;       // X360 +0xF4  contact radius / padding (0.0); DWARF name mfPadding
         CgsDev::DebugRenderStreamReader* mpDebugStream; // X360 +0xF8  DWARF h:119 (was misnamed `s32 miStatus` -- see banner)
+        u8                   maDataPadding[3];
         u8                   muJobType;      // X360 +0xFF  E_CollisionJobType id; DWARF name meType
+
+        bool Prepare(E_CollisionJobType leType, CollisionResultList* lpResultsList,
+                     f32 lfPadding, CgsDev::DebugRenderStreamReader* lpDebugStream)
+        {
+            mpResultsList = lpResultsList;
+            mfRadius = lfPadding;
+            mpDebugStream = lpDebugStream;
+            muJobType = static_cast<u8>(leType);
+            return true;
+        }
 
         // X360 0x82916EB0: `lwz r3, 0xF0(r3)` — return the job's results list.
         // Called by PolygonSoupTesterJob::ExecuteFillTriangleCache.
@@ -123,5 +136,11 @@ namespace CgsCollision
         // descriptor slot's identity readable back out of the batch.
         u8 GetType() const { return muJobType; }
     };
+
+    CGS_STATIC_ASSERT(sizeof(CollisionJobDescription) == 256, "ARTIST job data size");
+    CGS_STATIC_ASSERT(offsetof(CollisionJobDescription, mpResultsList) == 0xF0, "ARTIST results slot");
+    CGS_STATIC_ASSERT(offsetof(CollisionJobDescription, mfRadius) == 0xF4, "ARTIST collision padding slot");
+    CGS_STATIC_ASSERT(offsetof(CollisionJobDescription, mpDebugStream) == 0xF8, "ARTIST debug stream slot");
+    CGS_STATIC_ASSERT(offsetof(CollisionJobDescription, muJobType) == 0xFF, "ARTIST type slot");
 }
 }

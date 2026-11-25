@@ -90,24 +90,16 @@ void DispatchList::AllocateKeyBlock()
 {
     CGS_ASSERT_AT(mpDispatchBin != NULL, "mpDispatchBin != NULL", KAC_ARTIST_ASSERT_CPP, 163);
 
-    const u32 luHeaderBytes = sizeof(SortKeyBlock);
-    const u32 luCarveQwords = (luHeaderBytes + KU_KEYBLOCK_CAPACITY * sizeof(SortKey)) >> 4;
-
-    char* lpRawMemory = static_cast<char*>(mpDispatchBin->AllocateMemoryFast(luCarveQwords));
-    SortKeyBlock* lpBlock = reinterpret_cast<SortKeyBlock*>(lpRawMemory);
-    SortKeyBlock* lpPreviousListTail = mpBlockListTail;
-
-    if (mpBlockListTail != 0)
-    {
-        mpBlockListTail->mpNextBlock = lpBlock;
-    }
-    else
-    {
+    const u32 luCarveQwords = (sizeof(SortKeyBlock) + KU_KEYBLOCK_CAPACITY * sizeof(SortKey)) >> 4;
+    SortKeyBlock* const lpBlock = static_cast<SortKeyBlock*>(mpDispatchBin->AllocateMemoryFast(luCarveQwords));
+    SortKeyBlock* const lpPreviousListTail = mpBlockListTail;
+    SortKey* const lpKeys = reinterpret_cast<SortKey*>(lpBlock + 1);
+    if (lpPreviousListTail == 0)
         mpBlockListHead = lpBlock;
-    }
+    else
+        lpPreviousListTail->mpNextBlock = lpBlock;
     mpBlockListTail = lpBlock;
-
-    lpBlock->mpKeyArray     = reinterpret_cast<SortKey*>(lpRawMemory + luHeaderBytes);
+    lpBlock->mpKeyArray = lpKeys;
     lpBlock->muKeyCount    = 0;
     lpBlock->muKeyCapacity = KU_KEYBLOCK_CAPACITY;
     lpBlock->mpNextBlock     = 0;
@@ -169,43 +161,6 @@ void DispatchList::SortForDispatch()
     }
 }
 
-// ARTIST827EE868..96C, recovered directly from the image (the JSON export has a
-// hole). Save the current chain, then clear it for the next shared block. r6 is
-// unused on X360: keys already carry offsets from the master bin.
-void DispatchList::RelocateForMainMemory(uintptr_t luBinBase, uintptr_t luBinOutput,
-                                        uintptr_t /*luBinMaster*/)
-{
-    const uintptr_t luDelta = luBinOutput - luBinBase;
-    if (luDelta != 0)
-    {
-        for (SortKeyBlock* lpBlock = mpBlockListHead; lpBlock != 0;)
-        {
-            SortKeyBlock* lpNext = lpBlock->mpNextBlock;
-            if (lpBlock->mpKeyArray)
-                lpBlock->mpKeyArray = reinterpret_cast<SortKey*>(reinterpret_cast<uintptr_t>(lpBlock->mpKeyArray) + luDelta);
-            if (lpNext)
-                lpBlock->mpNextBlock = reinterpret_cast<SortKeyBlock*>(reinterpret_cast<uintptr_t>(lpNext) + luDelta);
-            lpBlock = lpNext;
-        }
-        if (mpBlockListHead)
-            mpBlockListHead = reinterpret_cast<SortKeyBlock*>(reinterpret_cast<uintptr_t>(mpBlockListHead) + luDelta);
-        if (mpBlockListTail)
-            mpBlockListTail = reinterpret_cast<SortKeyBlock*>(reinterpret_cast<uintptr_t>(mpBlockListTail) + luDelta);
-    }
-    if (mpBlockListHead)
-    {
-        if (muChainBlockCount < KU_MAX_BLOCKS_PER_CHAIN)
-        {
-            mapChainBlockArray[muChainBlockCount++] = mpBlockListHead;
-        }
-        else
-        {
-        }
-    }
-    muCount = 0;
-    mpBlockListHead = mpBlockListTail = 0;
-}
-
 // ARTIST827E9438: concatenate saved chains and recount their keys after joining
 // the conversion jobs. Each chain still contains ordinary 64-key blocks.
 void DispatchList::ReconnectChainBlocks()
@@ -243,26 +198,28 @@ void DispatchList::ReconnectChainBlocks()
 }
 
 // ARTIST827E9590..96A0: Append transfers ownership of the source chain.
-void DispatchList::Append(DispatchList* lpOther)
+void DispatchList::Append(DispatchList* lpListToAppend)
 {
-    CGS_ASSERT(lpOther != 0, "lpOther != NULL");
-    CGS_ASSERT(lpOther != this, "lpOther != this");
-    if (lpOther->mpBlockListHead)
+    CGS_ASSERT_AT(lpListToAppend != 0, "lpListToAppend != NULL", KAC_ARTIST_ASSERT_CPP, 485);
+    CGS_ASSERT_AT(lpListToAppend != this, "lpListToAppend != this", KAC_ARTIST_ASSERT_CPP, 486);
+    if (lpListToAppend->mpBlockListHead)
     {
         if (mpBlockListTail)
         {
-            CGS_ASSERT(mpBlockListTail->mpNextBlock == 0, "mpBlockListTail->mpNextBlock == NULL");
-            mpBlockListTail->mpNextBlock = lpOther->mpBlockListHead;
+            CGS_ASSERT_AT(mpBlockListTail->mpNextBlock == 0, "mpBlockListTail->mpNextBlock == NULL",
+                          KAC_ARTIST_ASSERT_CPP, 498);
+            mpBlockListTail->mpNextBlock = lpListToAppend->mpBlockListHead;
         }
         else
         {
-            CGS_ASSERT(mpBlockListHead == 0, "mpBlockListHead == NULL");
-            mpBlockListHead = lpOther->mpBlockListHead;
+            CGS_ASSERT_AT(mpBlockListHead == 0, "mpBlockListHead == NULL", KAC_ARTIST_ASSERT_CPP, 505);
+            mpBlockListHead = lpListToAppend->mpBlockListHead;
         }
-        mpBlockListTail = lpOther->mpBlockListTail;
-        muCount += lpOther->muCount;
-        lpOther->muCount = 0;
-        lpOther->mpBlockListHead = lpOther->mpBlockListTail = 0;
+        mpBlockListTail = lpListToAppend->mpBlockListTail;
+        muCount += lpListToAppend->muCount;
+        lpListToAppend->muCount = 0;
+        lpListToAppend->mpBlockListHead = 0;
+        lpListToAppend->mpBlockListTail = 0;
     }
 }
 

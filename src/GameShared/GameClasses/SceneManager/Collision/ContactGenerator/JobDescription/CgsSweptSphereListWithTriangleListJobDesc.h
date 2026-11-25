@@ -1,5 +1,7 @@
 #pragma once
 
+#include <new>
+
 // CgsSceneManager::CgsCollision::SweptSphereListWithTriangleListStreamJobDesc — the descriptor
 // for the streamed swept-sphere-vs-triangle-list collision pass (job-type id 14), the
 // CONTINUOUS-collision leg of race-car world contact generation (a fast car sweeps its
@@ -49,13 +51,24 @@ namespace CgsCollision
     // =============================================================================================
     struct SweptSphereListWithTriangleListJobDesc : public CollisionJobDescription
     {
-        SweptSphereList mSweptSphereList;   // +0x00  (console 8B {ptr,count}; host 16)
-        TriangleList    mTriangleList;      // +0x08
 
         bool Prepare(const SweptSphereList* lpSweptSphereList,
                      const TriangleList*    lpTriangleList,
                      CollisionResultList*   lpResultsList,
                      f32                    lfPadding);
+
+        const SweptSphereList& GetSweptSphereList() const { return GetData()->mSweptSphereList; }
+        const TriangleList& GetTriangleList() const { return GetData()->mTriangleList; }
+    private:
+        struct Data
+        {
+            SweptSphereList mSweptSphereList;
+            TriangleList mTriangleList;
+        };
+
+        Data* GetData() { return reinterpret_cast<Data*>(maData); }
+        const Data* GetData() const { return reinterpret_cast<const Data*>(maData); }
+        CGS_STATIC_ASSERT(sizeof(Data) <= KU_MAX_DESC_DATA_SIZE, "SweptSphereListWithTriangleListJobDesc payload size");
     };
 
     struct SweptSphereListWithTriangleListStreamJobDesc : public CollisionJobDescription
@@ -70,22 +83,30 @@ namespace CgsCollision
         };
 
         // X360 +0x00, the only member of the derived part (DWARF Data h:137-139).
-        CgsMemory::SimpleDataStreamProducer* mpStreamProducer;
 
-        CgsMemory::SimpleDataStreamProducer* GetStreamProducer() const { return mpStreamProducer; }
+        CgsMemory::SimpleDataStreamProducer* GetStreamProducer() const { return GetData()->mpStreamProducer; }
 
         // DWARF `bool Prepare(SimpleDataStreamProducer*, DebugRenderStreamReader*)`; the X360
         // inlines it into the Run dispatcher (stores quoted in the banner).
-        void Prepare(CgsMemory::SimpleDataStreamProducer* lpStreamProducer,
+        bool Prepare(CgsMemory::SimpleDataStreamProducer* lpStreamProducer,
                      CgsDev::DebugRenderStreamReader*     lpDebugReader)
         {
-            mpStreamProducer = lpStreamProducer;   // 0x82811948  stw r22, 0x3D0(batch)
+            new (maData) Data;
+            GetData()->mpStreamProducer = lpStreamProducer;   // 0x82811948  stw r22, 0x3D0(batch)
 
-            mpResultsList = 0;                     // stw r24, 0x4C0
-            mfRadius      = 0.0f;                  // stfs f31, 0x4C4 (flt_82001CC0)
-            mpDebugStream = lpDebugReader;         // stw r21, 0x4C8
-            muJobType     = static_cast<u8>(E_COLLISIONJOB_SWEPT_SPHERE_LIST_WITH_TRIANGLE_LIST_STREAM); // stb r23(14), 0x4CF
+            return CollisionJobDescription::Prepare(E_COLLISIONJOB_SWEPT_SPHERE_LIST_WITH_TRIANGLE_LIST_STREAM, 0, 0.0f,
+                                                    lpDebugReader);
         }
+
+    private:
+        struct Data
+        {
+            CgsMemory::SimpleDataStreamProducer* mpStreamProducer;
+        };
+
+        Data* GetData() { return reinterpret_cast<Data*>(maData); }
+        const Data* GetData() const { return reinterpret_cast<const Data*>(maData); }
+        CGS_STATIC_ASSERT(sizeof(Data) <= KU_MAX_DESC_DATA_SIZE, "SweptSphereListWithTriangleListStreamJobDesc payload size");
     };
 
     CGS_STATIC_ASSERT((sizeof(SweptSphereListWithTriangleListStreamJobDesc::StreamCommand) % 16 == 0),

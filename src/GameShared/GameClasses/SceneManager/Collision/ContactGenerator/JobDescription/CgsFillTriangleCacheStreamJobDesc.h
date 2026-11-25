@@ -1,5 +1,7 @@
 #pragma once
 
+#include <new>
+
 // =================================================================================================
 // CgsSceneManager::CgsCollision::FillTriangleCacheStreamJobDesc — the STREAMED form of the
 // triangle-cache fill job, plus the two fixed-stride records that flow through its stream.
@@ -109,16 +111,14 @@ namespace CgsCollision
             u32 mauUnread08[2];                // +0x08  never read by EndUpdateTriangleCaches
         };
 
-        const CgsGeometric::PolygonSoupListSpatialMap* mpSpatialMap;     // X360 +0x00
-        CgsMemory::SimpleDataStreamProducer*           mpStreamProducer; // X360 +0x04
 
         // The two accessors the tester job reads the descriptor through. Names and constness are
         // the class declaration's. On the console each is
         // the private GetData() "return this" shim followed by one load: +0x00 for the map and
         // +0x04 for the producer. Called by ExecuteFillTriangleCacheStream and, for the map,
         // again by FillTriangleCache.
-        const CgsGeometric::PolygonSoupListSpatialMap* GetSpatialMapPointer() const { return mpSpatialMap; }
-        CgsMemory::SimpleDataStreamProducer* GetDataStreamProducer() { return mpStreamProducer; }
+        const CgsGeometric::PolygonSoupListSpatialMap* GetSpatialMapPointer() const { return GetData()->mpSpatialMap; }
+        CgsMemory::SimpleDataStreamProducer* GetDataStreamProducer() { return GetData()->mpStreamProducer; }
 
         // Prepare -- PS3 DWARF
         //   _ZN15CgsSceneManager12CgsCollision30FillTriangleCacheStreamJobDesc7PrepareE
@@ -128,17 +128,27 @@ namespace CgsCollision
         // the banner), so it carries no X360 symbol of its own; it is named here because the
         // DWARF names it and because it keeps the dispatcher writing MEMBERS rather than the
         // console's byte offsets.
-        void Prepare(const CgsGeometric::PolygonSoupListSpatialMap* lpSpatialMap,
+        bool Prepare(const CgsGeometric::PolygonSoupListSpatialMap* lpSpatialMap,
                      CgsMemory::SimpleDataStreamProducer*           lpStreamProducer)
         {
-            mpSpatialMap     = lpSpatialMap;
-            mpStreamProducer = lpStreamProducer;
+            new (maData) Data;
+            GetData()->mpSpatialMap     = lpSpatialMap;
+            GetData()->mpStreamProducer = lpStreamProducer;
 
-            mpResultsList = NULL;   // 0x82810DD4  stw  r27, 0x4C0
-            mfRadius      = 0.0f;   // 0x82810DCC  stfs f31, 0x4C4  (flt_82001CC0)
-            mpDebugStream = 0;   // (was misnamed miStatus; DWARF h:119)      // 0x82810DD8  stw  r27, 0x4C8
-            muJobType     = static_cast<u8>(E_COLLISIONJOB_FILL_TRIANGLE_CACHE_STREAM); // 0x82810DD0
+            return CollisionJobDescription::Prepare(E_COLLISIONJOB_FILL_TRIANGLE_CACHE_STREAM, 0, 0.0f,
+                                                    0);
         }
+
+    private:
+        struct Data
+        {
+            const CgsGeometric::PolygonSoupListSpatialMap* mpSpatialMap;
+            CgsMemory::SimpleDataStreamProducer* mpStreamProducer;
+        };
+
+        Data* GetData() { return reinterpret_cast<Data*>(maData); }
+        const Data* GetData() const { return reinterpret_cast<const Data*>(maData); }
+        CGS_STATIC_ASSERT(sizeof(Data) <= KU_MAX_DESC_DATA_SIZE, "FillTriangleCacheStreamJobDesc payload size");
     };
 }
 }
