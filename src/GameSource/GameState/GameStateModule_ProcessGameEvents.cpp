@@ -2424,10 +2424,11 @@ void GameStateModule::ProcessGameEvents_Group5(s32                              
 
     case GameStateModuleIO::E_EVENT_FINISHED_SYNCING_PLAYERS:
     {
-        const GameStateModuleIO::StopModeSplashAction lStopModeSplashAction = {};
-        lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lStopModeSplashAction),
+        // ARTIST 0x823A18D0..0x823A18E0 passes the empty one-byte action directly.
+        GameStateModuleIO::StopModeSplashAction lStopModeSplashAction;
+        lpActionQueue->AddEvent(&lStopModeSplashAction,
                                 GameStateModuleIO::E_ACTION_STOP_MODE_SPLASH,
-                                static_cast<s32>(sizeof(lStopModeSplashAction)));
+                                sizeof(lStopModeSplashAction));
         break;
     }
 

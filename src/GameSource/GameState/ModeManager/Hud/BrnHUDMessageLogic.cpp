@@ -359,7 +359,7 @@ void HUDMessageLogic::GeneratePlayerCheckpointMessage()
         lCheckpointAction.mbIsPenultimatedLandmark = mbIsLastCheckpoint;
 
         // The typed overload: liSize == sizeof(HUDMessagePlayerReachesCheckpointAction) == 24 == `li r6, 0x18`.
-        mActionQueue.AddEvent(lCheckpointAction, GameStateModuleIO::E_ACTION_HUD_MESSAGE_PLAYER_REACHES_CHECKPOINT);
+        mActionQueue.AddEvent(&lCheckpointAction, GameStateModuleIO::E_ACTION_HUD_MESSAGE_PLAYER_REACHES_CHECKPOINT, sizeof(lCheckpointAction));
     }
 }
 
@@ -450,7 +450,7 @@ void HUDMessageLogic::GenerateLeaderMessages(
     lLeadingMessageAction.mbLocalPlayerIsLeading = lbPlayerIsLeading;
 
     // The typed overload: liSize == sizeof(HUDMessageLeadingAction) == 24 == `li r6, 0x18`.
-    mActionQueue.AddEvent(lLeadingMessageAction, GameStateModuleIO::E_ACTION_HUD_MESSAGE_LEADING);
+    mActionQueue.AddEvent(&lLeadingMessageAction, GameStateModuleIO::E_ACTION_HUD_MESSAGE_LEADING, sizeof(lLeadingMessageAction));
 }
 
 // X360 0x82394258 (DWARF BrnHUDMessageLogic.h:147 / .cpp:578). A rival that ModeManager::RaceCarFinishes
@@ -474,14 +474,14 @@ void HUDMessageLogic::GenerateFinisherMessage(
     CGS_ASSERT(meFinishedRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
                CGS_ASSERT_MESSAGE_AT("meFinishedRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 622));   // .cpp:622
 
-    if (meFinishedRaceCarIndex != lpActiveRaceCarInterface->GetPlayerActiveRaceCarIndex())
+    if (lpActiveRaceCarInterface->GetPlayerActiveRaceCarIndex() != meFinishedRaceCarIndex)
     {
         GameStateModuleIO::HUDMessageXFinishesAction lWinnerAction;
         lWinnerAction.meRivalRaceCarIndex = meFinishedRaceCarIndex;
         lWinnerAction.miFinishPosition    = miFinishPosition;
 
         // The typed overload: liSize == sizeof(HUDMessageXFinishesAction) == 8 == `li r6, 8`.
-        mActionQueue.AddEvent(lWinnerAction, GameStateModuleIO::E_ACTION_HUD_MESSAGE_X_FINISHES);
+        mActionQueue.AddEvent(&lWinnerAction, GameStateModuleIO::E_ACTION_HUD_MESSAGE_X_FINISHES, sizeof(lWinnerAction));
 
         meFinishedRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
     }
@@ -529,7 +529,7 @@ void HUDMessageLogic::GenerateRivalCheckpointMessage(
     lCheckpointAction.meRivalRaceCarIndex  = leRaceCarIndex;
 
     // The typed overload: liSize == sizeof(HUDMessageXReachesCheckpointAction) == 24 == `li r6, 0x18`.
-    mActionQueue.AddEvent(lCheckpointAction, GameStateModuleIO::E_ACTION_HUD_MESSAGE_X_REACHES_CHECKPOINT);
+    mActionQueue.AddEvent(&lCheckpointAction, GameStateModuleIO::E_ACTION_HUD_MESSAGE_X_REACHES_CHECKPOINT, sizeof(lCheckpointAction));
 }
 
 // X360 0x82395760 (DWARF BrnHUDMessageLogic.h:219 / .cpp:1317). Two debounced announcements, each on
@@ -567,7 +567,7 @@ void HUDMessageLogic::GenerateFirstOrLastMessage(
                     lTookLeadAction.meActiveRaceCarIndex = leLeadCarIndex;
 
                     // The typed overload: liSize == sizeof(HUDMessageTookLeadAction) == 16 == `li r6, 0x10`.
-                    mActionQueue.AddEvent(lTookLeadAction, GameStateModuleIO::E_ACTION_HUD_MESSAGE_TOOK_LEAD);
+                    mActionQueue.AddEvent(&lTookLeadAction, GameStateModuleIO::E_ACTION_HUD_MESSAGE_TOOK_LEAD, sizeof(lTookLeadAction));
                 }
             }
         }
@@ -590,7 +590,7 @@ void HUDMessageLogic::GenerateFirstOrLastMessage(
                 lTookLastAction.meActiveRaceCarIndex = leLastCarIndex;
 
                 // The typed overload: liSize == sizeof(HUDMessageTookLastAction) == 16 == `li r6, 0x10`.
-                mActionQueue.AddEvent(lTookLastAction, GameStateModuleIO::E_ACTION_HUD_MESSAGE_TOOK_LAST);
+                mActionQueue.AddEvent(&lTookLastAction, GameStateModuleIO::E_ACTION_HUD_MESSAGE_TOOK_LAST, sizeof(lTookLastAction));
             }
         }
     }
@@ -647,7 +647,7 @@ void HUDMessageLogic::GenerateDistanceToFinishMessage(ScoringSystem* lpScoringSy
             static_cast<s32>(lpScoringSystem->GetCarRacePosition(lePlayerRaceCarIndex));
 
         // The typed overload: liSize == sizeof(HUDMessageDistanceToFinishAction) == 8 == `li r6, 8`.
-        mActionQueue.AddEvent(lDistToFinishAction, GameStateModuleIO::E_ACTION_HUD_MESSAGE_DIST_TO_FINISH);
+        mActionQueue.AddEvent(&lDistToFinishAction, GameStateModuleIO::E_ACTION_HUD_MESSAGE_DIST_TO_FINISH, sizeof(lDistToFinishAction));
 
         mfNextDistanceToFinishMessage -= KF_DISTANCE_MESSAGE_STEP_METRES;
     }
@@ -684,7 +684,7 @@ void HUDMessageLogic::DetectCrashes(
             lCrashingEvent.meRivalRaceCarIndex = leCrashedCarIndex;
 
             // The typed overload: liSize == sizeof(HUDMessageXCrashesAction) == 16 == `li r6, 0x10`.
-            mActionQueue.AddEvent(lCrashingEvent, GameStateModuleIO::E_ACTION_HUD_MESSAGE_X_CRASHES);
+            mActionQueue.AddEvent(&lCrashingEvent, GameStateModuleIO::E_ACTION_HUD_MESSAGE_X_CRASHES, sizeof(lCrashingEvent));
 
             // [DIAG] NOT IN THE X360 BINARY -- the `[hud-xcrash]` witness (BRN_MODEMGR_DIAG, first 20
             // lines): proves the offline race arm dispatched this body and what it posted.
@@ -758,7 +758,7 @@ void HUDMessageLogic::DetectOnlineCrashes(
                 GameStateModuleIO::HUDMessageXCrashesAction lCrashingEvent;
                 lCrashingEvent.mRivalID            = mBufferedCrashingCars[liIndex].mRivalID;
                 lCrashingEvent.meRivalRaceCarIndex = mBufferedCrashingCars[liIndex].meActiveRaceCarIndex;
-                mActionQueue.AddEvent(lCrashingEvent, GameStateModuleIO::E_ACTION_HUD_MESSAGE_X_CRASHES);
+                mActionQueue.AddEvent(&lCrashingEvent, GameStateModuleIO::E_ACTION_HUD_MESSAGE_X_CRASHES, sizeof(lCrashingEvent));
             }
             mBufferedCrashingCars.FreeObject(liIndex);
         }
@@ -905,7 +905,7 @@ void HUDMessageLogic::GenerateCriticalDamageMessage(
         lDamageAction.mbPlayerCarIsDamageCritical = true;
 
         // The typed overload: liSize == sizeof(DamageCriticalMessageAction) == 1 == `li r6, 1`.
-        mActionQueue.AddEvent(lDamageAction, GameStateModuleIO::E_ACTION_DAMAGE_CRITICAL);
+        mActionQueue.AddEvent(&lDamageAction, GameStateModuleIO::E_ACTION_DAMAGE_CRITICAL, sizeof(lDamageAction));
 
         lpRoadRageScoring->ResetDamageCriticalMessageFlag();
     }
@@ -984,16 +984,16 @@ void HUDMessageLogic::GenerateOnlineStuntRunVictoryMessages(
         lMessage.miTeam = 0;
         lMessage.mbLocalPlayerOnTeam = false;
         lMessage.mbLocalPlayerIsSubject =
-            (static_cast<s32>(lpScoringSystem->GetPlayerTeam(leLocalPlayerIndex)) == liLeadingTeam);
+            (liLeadingTeam == static_cast<s32>(lpScoringSystem->GetPlayerTeam(leLocalPlayerIndex)));
         lMessage.mNetworkPlayerID = lpScoringSystem->GetFirstTeamPlayer(liLeadingTeam);
     }
     else
     {
         lMessage.miTeam = liLeadingTeam;
+        lMessage.mbLocalPlayerOnTeam =
+            (liLeadingTeam == static_cast<s32>(lpScoringSystem->GetPlayerTeam(leLocalPlayerIndex)));
         lMessage.mNetworkPlayerID = -1;
         lMessage.mbLocalPlayerIsSubject = false;
-        lMessage.mbLocalPlayerOnTeam =
-            (static_cast<s32>(lpScoringSystem->GetPlayerTeam(leLocalPlayerIndex)) == liLeadingTeam);
     }
 
     miLastVictoryTeam = liLeadingTeam;
@@ -1175,7 +1175,7 @@ void HUDMessageLogic::GenerateOnlineBlueTeamEscapingMessage(
             if (!(mfBlueTeamIsAheadTime <= KF_BLUE_TEAM_ESCAPE_SECONDS))
             {
                 GameStateModuleIO::BlueTeamIsEscapingAction lAction;
-                mActionQueue.AddEvent(lAction, GameStateModuleIO::E_ACTION_BLUE_TEAM_IS_ESCAPING);
+                mActionQueue.AddEvent(&lAction, GameStateModuleIO::E_ACTION_BLUE_TEAM_IS_ESCAPING, sizeof(lAction));
                 mfBlueTeamIsAheadTime = KF_ZERO_SECONDS;
             }
         }
@@ -1245,7 +1245,7 @@ void HUDMessageLogic::GenerateOnlineBlueTeamAreBehindYouMessage(
             if (!(mfBlueTeamIsBehindTime <= KF_BLUE_TEAM_BEHIND_SECONDS))
             {
                 GameStateModuleIO::BlueTeamIsBehindYouAction lAction;
-                mActionQueue.AddEvent(lAction, GameStateModuleIO::E_ACTION_BLUE_TEAM_IS_BEHIND_YOU);
+                mActionQueue.AddEvent(&lAction, GameStateModuleIO::E_ACTION_BLUE_TEAM_IS_BEHIND_YOU, sizeof(lAction));
                 mfBlueTeamIsBehindTime = KF_ZERO_SECONDS;
             }
         }
@@ -1324,7 +1324,7 @@ void HUDMessageLogic::GenerateOnlineLeaderMilestoneMessage(
                     lAction.mfDistanceInMetres = lfNextMileBoundaryMetres;
                     lAction.meRaceCarIndex = leLeadingTeamCarIndex;
                     lAction.mbIsBoundaryInMiles = true;
-                    mActionQueue.AddEvent(lAction, GameStateModuleIO::E_ACTION_LEADER_REACHED_BOUNDARY);
+                    mActionQueue.AddEvent(&lAction, GameStateModuleIO::E_ACTION_LEADER_REACHED_BOUNDARY, sizeof(lAction));
                 }
                 mfNextMileBoundaryForMessage -= KF_BOUNDARY_STEP;
             }
@@ -1339,7 +1339,7 @@ void HUDMessageLogic::GenerateOnlineLeaderMilestoneMessage(
                     lAction.mfDistanceInMetres = lfNextKMBoundaryMetres;
                     lAction.meRaceCarIndex = leLeadingTeamCarIndex;
                     lAction.mbIsBoundaryInMiles = false;
-                    mActionQueue.AddEvent(lAction, GameStateModuleIO::E_ACTION_LEADER_REACHED_BOUNDARY);
+                    mActionQueue.AddEvent(&lAction, GameStateModuleIO::E_ACTION_LEADER_REACHED_BOUNDARY, sizeof(lAction));
                 }
                 mfNextKMBoundaryForMessage -= KF_BOUNDARY_STEP;
             }

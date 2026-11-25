@@ -12,6 +12,7 @@
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"  // BrnNetwork::NetworkPlayerID
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameModeParams.h"  // BrnGameState::GameModeParams (PrepareForModeAction payload)
 #include "GameShared/GameClasses/Containers/CgsArray.h"      // Array<T, N> (SetUpAllDriveThrusAction::maDriveThrus)
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h" // CgsModule::Event
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"   // BitArray<64u> (RoadRulesNewRulersAction)
 #include "GameShared/GameClasses/Containers/CgsFastBitArray.h" // FastBitArray<30> (ImageGalleryDataAction)
 #include "GameShared/GameClasses/System/Timer/PS3/CgsDateAndTimePS3.h" // DateAndTime (ImageGalleryImageInfoAction)
@@ -1102,8 +1103,10 @@ enum EGameActionType
     E_ACTION_SHOW_GAMERCARD_FOR_XUID                     = 299,  // FLAG name
 };
 
+// DecFIGS BrnGameActions.h:475. The empty Event base lets the queue take
+// the action directly, as in the call at ARTIST 0x82399CE8.
 template <EGameActionType T>
-struct GameAction { };
+struct GameAction : public CgsModule::Event { };
 
 // DecFIGS BrnGameActions.h:3189. ARTIST 823A58F0..823A5900 copies the
 // empty record's one object-representation byte without assigning it a value.
