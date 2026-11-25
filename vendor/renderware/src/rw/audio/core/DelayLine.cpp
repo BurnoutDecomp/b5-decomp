@@ -23,6 +23,7 @@
 #endif
 
 #include "rw/audio/core/DelayLine.h"
+#include "rw/audio/core/PlugIn.h"
 
 #include "coreallocator/icoreallocator_interface.h" // EA::Allocator::ICoreAllocator
 
@@ -36,25 +37,10 @@ namespace core
 // Xbox platform interleaved block copy (declaration only for the per-TU compile gate).
 extern "C" void *XMemCpy(void *pDest, const void *pSrc, unsigned int uiCount);
 
+extern "C" System *off_83271928;
+
 namespace
 {
-// The shared rwaudio System singleton (off_83271928). Its full type lives in the System
-// sub-system TU; the only field DelayLine touches is the ICoreAllocator pointer at +0x14,
-// so it is reached through this minimal reconstructed view (identical to the one
-// Collection.cpp uses). FLAGGED: the object itself is defined/initialised elsewhere.
-struct AudioSystemView
-{
-    char                          mHeader[0x14]; // +0x00 .. +0x13 -- opaque header
-    EA::Allocator::ICoreAllocator *mpAllocator;  // +0x14 -- block allocator slot
-};
-
-extern "C" AudioSystemView *off_83271928; // pointer-to-System global (System TU owns it)
-
-inline EA::Allocator::ICoreAllocator *Allocator()
-{
-    return off_83271928->mpAllocator;
-}
-
 // The debug tag every DelayLine ring allocation carries (verbatim X360 rodata).
 const char KA_DELAY_BUFFER[] = "rw::audio::core::DelayLine::DelayBuffer";
 
@@ -130,9 +116,11 @@ void DelayLine::SetLocalBuffer(f32 *pLocalBuffer, s32 samples)
 // -------------------------------------------------------------------------------------
 s32 DelayLine::GetValidDelaySamples() const
 {
-    if (miAvailableSamples >= miMaxDelaySamples) // +0x20 vs +0x0C
-        return miMaxDelaySamples;
-    return miAvailableSamples;
+    s32 valid = miAvailableSamples;
+    const s32 maximum = miMaxDelaySamples;
+    if (valid >= maximum)
+        valid = maximum;
+    return valid;
 }
 
 // -------------------------------------------------------------------------------------
@@ -154,7 +142,7 @@ bool DelayLine::Init(s32 channels, s32 maxDelaySamples, s32 readLength)
     bool  ok = true;
     if (delay)
     {
-        pRing = Allocator()->Alloc(4u * capacity * static_cast<u32>(channels),
+        pRing = off_83271928->mpAllocator->Alloc(4u * capacity * static_cast<u32>(channels),
                                    KA_DELAY_BUFFER, EA::Allocator::kFlagPermMemory, 128, 0);
         ok = (pRing != 0);
     }
@@ -194,7 +182,8 @@ void DelayLine::Reset(s32 readPosition)
 // `channel` at write `offset`. The channel occupies [start, end) at a miCapacity stride;
 // the loop-end trims the guard tail; the cursor is the wrapped write position + guard.
 // -------------------------------------------------------------------------------------
-void DelayLine::CalcChannelPointers(ChannelPointers *pOut, s32 channel, s32 offset) const
+// ARTIST calls this helper out of line from both marshalling routines and Resize.
+__declspec(noinline) void DelayLine::CalcChannelPointers(ChannelPointers *pOut, s32 channel, s32 offset) const
 {
     f32 *const pStart = mpBuffer + static_cast<usize>(channel) * miCapacity; // +0x00
     pOut->mpStart = pStart;
@@ -509,7 +498,7 @@ bool DelayLine::Resize(s32 maxDelaySamples)
     if (miCapacity < newCapacity)
     {
         f32 *const pNew = static_cast<f32 *>(
-            Allocator()->Alloc(4u * static_cast<u32>(miChannelCount) * static_cast<u32>(newCapacity),
+            off_83271928->mpAllocator->Alloc(4u * static_cast<u32>(miChannelCount) * static_cast<u32>(newCapacity),
                                KA_DELAY_BUFFER, EA::Allocator::kFlagPermMemory, 128, 0));
         if (!pNew)
             return false;
@@ -542,7 +531,7 @@ bool DelayLine::Resize(s32 maxDelaySamples)
         }
 
         if (mpBuffer)
-            Allocator()->Free(mpBuffer, 0);
+            off_83271928->mpAllocator->Free(mpBuffer, 0);
 
         miWritePhase = miGuardSamples; // +0x34 <- old +0x18
         mpBuffer = pNew;               // +0x00
@@ -561,7 +550,7 @@ void DelayLine::Release()
 {
     if (mpBuffer)
     {
-        Allocator()->Free(mpBuffer, 0);
+        off_83271928->mpAllocator->Free(mpBuffer, 0);
         mpBuffer = 0;
     }
     mpLocalBuffer = 0; // +0x08

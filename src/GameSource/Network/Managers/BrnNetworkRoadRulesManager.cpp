@@ -1841,25 +1841,30 @@ namespace BrnNetwork
 
         if ( lbSuccess && lpRoadRulesManager->meState == E_ROAD_RULES_STATE_UPLOADING )
         {
+            Road::ChallengeIndex lChallengeIndex = lpRoadRulesManager->mIndexOfNextChallengeToUpload;
             const Road::ChallengeIndex lEndUploadIndex =
-                lpRoadRulesManager->mIndexOfNextChallengeToUpload + lpRoadRulesManager->miNumRoadsConsideredForUpload;
+                lpRoadRulesManager->miNumRoadsConsideredForUpload + lChallengeIndex;
 
-            for ( Road::ChallengeIndex lChallengeIndex = lpRoadRulesManager->mIndexOfNextChallengeToUpload;
-                  lChallengeIndex < lEndUploadIndex; ++lChallengeIndex )
+            // ARTIST 0x825647C0-0x82564868 walks the bounded score entries alongside the challenge index.
+            if ( lChallengeIndex < lEndUploadIndex )
             {
-                CGS_ASSERT(lChallengeIndex >= 0, CGS_ASSERT_MESSAGE_AT(
-                    "lChallengeIndex >= 0",
-                    CGS_ARTIST_FILE, 1925 /* ARTIST 0x8256480C */));
-                CGS_ASSERT(lChallengeIndex < KI_NUMBER_OF_LOCAL_CHALLENGE_SLOTS, CGS_ASSERT_MESSAGE_AT(
-                    "lChallengeIndex < BrnGameState::KI_MAX_CHALLENGES",
-                    CGS_ARTIST_FILE, 1926 /* ARTIST 0x8256482C */));
-
                 BrnStreetData::ChallengePlayerScoreEntry* lpChallengeData =
                     &lpRoadRulesManager->maLocalRoadScoresToUpload[lChallengeIndex];
-                CGS_ASSERT(lpChallengeData != 0, CGS_ASSERT_MESSAGE_AT(
-                    "lpChallengeData",
-                    CGS_ARTIST_FILE, 1929 /* ARTIST 0x8256484C */));
-                lpChallengeData->mDirty.UnSetAll();
+                do
+                {
+                    CGS_ASSERT(lChallengeIndex >= 0, CGS_ASSERT_MESSAGE_AT(
+                        "lChallengeIndex >= 0",
+                        CGS_ARTIST_FILE, 1925 /* ARTIST 0x8256480C */));
+                    CGS_ASSERT(lChallengeIndex < KI_NUMBER_OF_LOCAL_CHALLENGE_SLOTS, CGS_ASSERT_MESSAGE_AT(
+                        "lChallengeIndex < BrnGameState::KI_MAX_CHALLENGES",
+                        CGS_ARTIST_FILE, 1926 /* ARTIST 0x8256482C */));
+
+                    CGS_ASSERT(lpChallengeData != 0, CGS_ASSERT_MESSAGE_AT(
+                        "lpChallengeData",
+                        CGS_ARTIST_FILE, 1929 /* ARTIST 0x8256484C */));
+                    ++lChallengeIndex;
+                    (lpChallengeData++)->mDirty.UnSetAll();
+                } while ( lChallengeIndex < lEndUploadIndex );
             }
 
             BrnNetworkModuleIO::NetworkOutRecvRoadRulesUploadedEvent lUploadedEvent;
@@ -1872,7 +1877,9 @@ namespace BrnNetwork
             CGS_ASSERT(lpRoadRulesManager->mpNetworkModule->GetNetworkEventQueue() != 0, CGS_ASSERT_MESSAGE_AT(
                 "lpRoadRulesManager->mpNetworkModule->GetNetworkEventQueue()",
                 CGS_ARTIST_FILE, 1938 /* ARTIST 0x825648C4 */));
-            lpRoadRulesManager->mpNetworkModule->GetNetworkEventQueue()->AddEvent(
+            BrnNetworkModuleIO::NetworkEventQueue* lpNetworkEventQueue =
+                lpRoadRulesManager->mpNetworkModule->GetNetworkEventQueue();
+            lpNetworkEventQueue->AddEvent(
                 reinterpret_cast<const CgsModule::Event*>( &lUploadedEvent ),
                 lUploadedEvent.GetEventType(), sizeof( lUploadedEvent ) );
 
@@ -1880,10 +1887,11 @@ namespace BrnNetwork
                 "lpServerInterface->GetDownloadableConfigComponent()",
                 CGS_ARTIST_FILE, 1942 /* ARTIST 0x82564904 */));
 
+            const f32 lfTimeBetweenRoadRulesUploads =
+                lpServerInterface->GetDownloadableConfigComponent()->TimeBetweenRoadRulesUploads();
             lpRoadRulesManager->mIndexOfNextChallengeToUpload = lEndUploadIndex;
             lpRoadRulesManager->miNumRoadsConsideredForUpload = 0;
-            lpRoadRulesManager->mTimeUntilNextResultUpload.SetFloatVal(
-                lpServerInterface->GetDownloadableConfigComponent()->TimeBetweenRoadRulesUploads() );
+            lpRoadRulesManager->mTimeUntilNextResultUpload.SetFloatVal( lfTimeBetweenRoadRulesUploads );
 
             if ( lpRoadRulesManager->mIndexOfNextChallengeToUpload == KI_NUMBER_OF_LOCAL_CHALLENGE_SLOTS )
             {

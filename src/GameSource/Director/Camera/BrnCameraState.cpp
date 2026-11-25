@@ -34,7 +34,7 @@ CGS_STATIC_ASSERT((offsetof(CameraState, mPreviousFlags) == 0x10), "previous fla
 // The pointer entries and strings were read from the ARTIST raw image (4-byte big-endian
 // pointers); entry 0 and entry 29 were independently matched to the export and consistency
 // assert. Preserve the retail spelling and capitalization, including "Racing GameplayCamera".
-static const char* const KAAC_FLAG_NAMES[CameraState::E_FLAG_COUNT] =
+const char* CameraState::KAAC_FLAG_NAMES[CameraState::E_FLAG_COUNT] =
 {
     "Widescreen",
     "Valid",
@@ -173,11 +173,8 @@ void CameraState::Clear()
 // ----------------------------------------------------------------------------
 // BrnDirector::Camera::CameraState::Construct @0x82252348 (DRIVE wave 2026-07-26)
 //
-// Zero all three flag sets (std 0 -> +0x00/+0x08/+0x10), run the one-time
-// ValidityAccount::SetupFailFlagMask, then tail into Clear. [folded static per
-// convention] the X360 re-checks `!strcmp(KAAC_FLAG_NAMES[CONSISTENCY_TEST],
-// "CONSISTENCY TEST")` here (BrnCameraState.cpp:82) -- the same static name-table
-// tautology folded in SetupFailFlagMask.
+// Clear the three flag sets, initialize the validity mask, then check the
+// class table's consistency-test entry before clearing the per-frame state.
 // ----------------------------------------------------------------------------
 void CameraState::Construct()
 {
@@ -186,6 +183,8 @@ void CameraState::Construct()
     mHeadFlags.UnSetAll();        // *a1  = 0
 
     ValidityAccount::SetupFailFlagMask();
+    CGS_ASSERT_AT(std::strcmp(KAAC_FLAG_NAMES[CONSISTENCY_TEST], "CONSISTENCY TEST") == 0,
+                  "!strcmp(KAAC_FLAG_NAMES[CONSISTENCY_TEST], \"CONSISTENCY TEST\")", CGS_ARTIST_FILE, 82);
 
     Clear();                      // the X360 tail call
 }

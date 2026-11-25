@@ -55,7 +55,6 @@
 #include "SDKs/EATech/include/Apt/AptValue/AptStringObject.h"  // the boxed name unbox (CallMethod)
 
 #include "types.hpp"
-#include <cstring>   // memcpy (PushFloat bit reinterpret)
 #include <cmath>     // fmodf (Array integer-length detection)
 #include <string.h>  // _stricmp (the AS class-name compare)
 #include "SDKs/EATech/include/Apt/AptValue/AptGCReleaseVector.h"  // gValuesToRelease (the Pop drain)
@@ -177,34 +176,75 @@ void AptActionInterpreter::_FunctionAptActionPushByte(AptActionInterpreter* pInt
 // ---------------------------------------------------------------------------
 void AptActionInterpreter::_FunctionAptActionPushWord(AptActionInterpreter* pInterp, LocalContextT* pCtx)
 {
-    const unsigned char* p = pCtx->mpProgramCounter;
-    int16_t v = static_cast<int16_t>((static_cast<uint32_t>(p[0]) << 8) | p[1]);
-    pCtx->mpProgramCounter += 2;
-    pInterp->stackPush(AptInteger::Create(v));
+    const unsigned char* pRead = pCtx->mpProgramCounter;
+    union
+    {
+        int16_t value;
+        struct
+        {
+            unsigned char c0;
+            unsigned char c1;
+        } bytes;
+    } operand;
+
+    operand.bytes.c0 = *pRead++;
+    operand.bytes.c1 = *pRead++;
+    pCtx->mpProgramCounter = pRead;
+    pInterp->stackPush(AptInteger::Create(operand.value));
 }
 
 // ---------------------------------------------------------------------------
 // _FunctionAptActionPushDWord @0x8062FC -- read an int32 inline, push it.
-// GUIAPT64/XB1 little-endian payload (console was big-endian).
+// ARTIST at 0x82AEA538 copies the unaligned operand one byte at a time.
 // ---------------------------------------------------------------------------
 void AptActionInterpreter::_FunctionAptActionPushDWord(AptActionInterpreter* pInterp, LocalContextT* pCtx)
 {
-    int32_t v;
-    std::memcpy(&v, pCtx->mpProgramCounter, sizeof(v));   // LE-native (GUIAPT64/XB1 form)
-    pCtx->mpProgramCounter += 4;
-    pInterp->stackPush(AptInteger::Create(v));
+    const unsigned char* pRead = pCtx->mpProgramCounter;
+    volatile union
+    {
+        int32_t value;
+        struct
+        {
+            unsigned char c0;
+            unsigned char c1;
+            unsigned char c2;
+            unsigned char c3;
+        } bytes;
+    } operand;
+
+    operand.bytes.c0 = *pRead++;
+    operand.bytes.c1 = *pRead++;
+    operand.bytes.c2 = *pRead++;
+    operand.bytes.c3 = *pRead++;
+    pCtx->mpProgramCounter = pRead;
+    pInterp->stackPush(AptInteger::Create(operand.value));
 }
 
 // ---------------------------------------------------------------------------
 // _FunctionAptActionPushFloat @0x807F50 -- read a 32-bit float inline, push it.
-// GUIAPT64/XB1 little-endian payload (the console assembled big-endian bytes).
+// ARTIST at 0x82AEA3B0 copies the unaligned operand one byte at a time.
 // ---------------------------------------------------------------------------
 void AptActionInterpreter::_FunctionAptActionPushFloat(AptActionInterpreter* pInterp, LocalContextT* pCtx)
 {
-    float f;
-    std::memcpy(&f, pCtx->mpProgramCounter, sizeof(f));   // LE-native (GUIAPT64/XB1 form)
-    pCtx->mpProgramCounter += 4;
-    pInterp->stackPush(AptFloat::Create(f));
+    const unsigned char* pRead = pCtx->mpProgramCounter;
+    union
+    {
+        float value;
+        struct
+        {
+            unsigned char c0;
+            unsigned char c1;
+            unsigned char c2;
+            unsigned char c3;
+        } bytes;
+    } operand;
+
+    operand.bytes.c0 = *pRead++;
+    operand.bytes.c1 = *pRead++;
+    operand.bytes.c2 = *pRead++;
+    operand.bytes.c3 = *pRead++;
+    pCtx->mpProgramCounter = pRead;
+    pInterp->stackPush(AptFloat::Create(operand.value));
 }
 
 // ===========================================================================

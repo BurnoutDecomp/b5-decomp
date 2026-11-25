@@ -323,10 +323,7 @@ CarData* Profile::AddCar(CgsID lCarId, CarData::UnlockType leUnlockType)
 {
     CGS_ASSERT(miCarCount < KI_MAX_PROFILE_CAR_COUNT, CGS_ASSERT_MESSAGE_AT("miCarCount < KI_MAX_PROFILE_CAR_COUNT", CGS_ARTIST_FILE, 560));
 
-    s32 liIndex = miCarCount;
-    ++miCarCount;
-
-    CarData& lCar = maCars[liIndex];
+    CarData& lCar = maCars[miCarCount++];
     lCar.mfUnlockDeformedAmount       = 0.0f;
     lCar.mId                          = lCarId;
     lCar.mbUnlockSequenceAlreadyShown = false;
@@ -517,8 +514,7 @@ void Profile::SetCarUnlockAlreadyShown(CgsID lCarId)
     CarData* lpCarData = FindCar(lCarId);
 
     CGS_ASSERT(lpCarData, CGS_ASSERT_MESSAGE_AT("lpCarData", CGS_ARTIST_FILE, 671));
-    if (lpCarData)
-        lpCarData->mbUnlockSequenceAlreadyShown = true;
+    lpCarData->SetUnlockSequenceAlreadyShown();
 }
 
 // ====================================================================================

@@ -14,13 +14,6 @@ bool AptBoolean::GetBool() const
     return mbValue;
 }
 
-// @ 0x82AD5390 -- `return a1 == 1 ? off_8324E418 : off_8324E414` -- the shared
-// true / false singletons (off_8324E418 = true, off_8324E414 = false).
-AptBoolean* AptBoolean::Create(const bool bValue)
-{
-    return bValue ? spBooleanTrue : spBooleanFalse;
-}
-
 // Create the two shared singletons -- called by AptValueInitialize (AptInit.cpp
 // @0x82B02800) after AptAllocatorInitialize wires gpNonGCPoolManager; the
 // null-pool guard keeps a pre-boot call inert (the singletons come up with the

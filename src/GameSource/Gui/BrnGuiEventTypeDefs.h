@@ -295,10 +295,7 @@ public:
         {
             mi8IconType = static_cast<s8>(leType);
         }
-        SatNavIconType GetIconType() const
-        {
-            return static_cast<SatNavIconType>(mi8IconType);
-        }
+        SatNavIconType GetIconType() const;  // ARTIST 0x823A6B30
 
         // [H3b FLAG consumer-named faces] the PS3 DWARF exposes these head members
         // public with no setter pair; the 199 producer writes them through named faces
@@ -438,9 +435,7 @@ public:
     // ring of placeholder icons. The native member returns void.
     void DoWorstCase();
 
-    // @0x823A6B30 — range-check + return the leading icon's icon-type byte (a static
-    // helper the CrashNavMap callers use). Reads maIconInfo[0].mi8IconType.
-    static s32 SatNavI(const GuiEventUpdateSatNav* lpThis);
+
 };
 
 // The icon record is a pointer-free scalar run, so its host size is the X360 stride the

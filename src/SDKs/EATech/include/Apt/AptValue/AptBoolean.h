@@ -33,7 +33,10 @@ public:
     static void  operator delete[](void* p)             { AptValueNoGC::VerifyAptValueNoGC(); AptNonGCFreeSavedSize(p); }
 
     bool GetBool() const;
-    static AptBoolean* Create(const bool bValue);
+    static AptBoolean* Create(const bool bValue)
+    {
+        return bValue ? spBooleanTrue : spBooleanFalse;
+    }
 
 protected:
     AptBoolean()

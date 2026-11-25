@@ -190,26 +190,17 @@ EPlayerTeam GuiEventUpdateSatNav::SatNavIconInfo::GetPlayerTeam() const
     return static_cast<EPlayerTeam>( liPlayerTeam );
 }
 
-// ---------------------------------------------------------------------------
-// GuiEventUpdateSatNav::SatNavI @ 0x823A6B30
-//
-//   lbz r11,0x28(r3) ; extsb r31,r11           -> v = (s8)maIconInfo[0].mi8IconType
-//   assert v >= 0      ("leIconType >= 0",      BrnGuiEventTypeDefs.h:1911)
-//   assert v < 14      ("leIconType < E_SATNAVICON_MAX", :1912)
-//   return v
-//
-// Sign-extends and range-checks the leading icon's icon-type byte (offset +0x28),
-// returning it. The X360 guards are non-fatal (the raw byte is returned regardless).
-// ---------------------------------------------------------------------------
-s32 GuiEventUpdateSatNav::SatNavI(const GuiEventUpdateSatNav* lpThis)
+// ARTIST 0x823A6B30 uses the SatNavIconInfo receiver and its signed type byte.
+GuiEventUpdateSatNav::SatNavIconInfo::SatNavIconType
+GuiEventUpdateSatNav::SatNavIconInfo::GetIconType() const
 {
-    const s32 liIconType = lpThis->maIconInfo[0].mi8IconType; // lbz;extsb -> sign-extended
+    const s32 liIconType = mi8IconType; // lbz;extsb -> sign-extended
     CGS_ASSERT( liIconType >= 0,
         CGS_ASSERT_MESSAGE_AT("leIconType >= 0", KAC_ARTIST_ASSERT_FILE, 1911 /* ARTIST 0x823A6B64 */));
     CGS_ASSERT( liIconType < SatNavIconInfo::E_SATNAVICON_MAX,
         CGS_ASSERT_MESSAGE_AT(
             "leIconType < E_SATNAVICON_MAX", KAC_ARTIST_ASSERT_FILE, 1912 /* ARTIST 0x823A6B88 */));
-    return liIconType;
+    return static_cast<SatNavIconType>(liIconType);
 }
 
 // ---------------------------------------------------------------------------

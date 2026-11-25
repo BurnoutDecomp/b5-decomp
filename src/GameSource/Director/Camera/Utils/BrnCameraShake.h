@@ -67,8 +67,10 @@ namespace Utils
         // every behaviour parameter block that shakes (aftertouch cam/crash, bystander cam,
         // gameplay bumper, gameplay external -- each of whose serialisers drives it as one
         // nested "Shake Params" section).
-        struct Parameters
+        // ARTIST 0x82231040 identifies the nested Parameters class in the decorated visitor.
+        class Parameters
         {
+        public:
             // X360 visitor: `void Serialise<S>(S&)` (camera-tunings
             // TextFile{Read,Write}Serialiser / DebugMenuSerialiser). Per-instance body is
             // its own TU.

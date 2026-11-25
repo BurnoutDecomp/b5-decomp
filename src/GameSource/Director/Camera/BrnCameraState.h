@@ -165,6 +165,9 @@ public:
 
     // +0x10: the previous-frame per-flag state (HasChanged second operand).
     CgsContainers::BitArray<KU_NUM_FLAGS> mPreviousFlags;
+
+private:
+    static const char* KAAC_FLAG_NAMES[E_FLAG_COUNT];
 };
 
 } // namespace Camera

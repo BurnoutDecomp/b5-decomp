@@ -125,7 +125,13 @@ public:
 
     // ---- operand stack (PS3 EXTERNAL ELF) --------------------------------
     // Push: store + advance, AddRef the value (the stack owns a counted ref).
-    void       stackPush(AptValue* pValue);          // @0x7F1790
+    // ARTIST emits this helper inline in the Push0 through PushDWord opcodes.
+    void stackPush(AptValue* pValue)
+    {
+        mpStack[mnStackTop] = pValue;
+        ++mnStackTop;
+        pValue->AddRef();
+    }
     // Push without taking a reference (the caller's ref transfers to the stack).
     void       stackPushNoInc(AptValue* pValue);     // @0x7E990C
 

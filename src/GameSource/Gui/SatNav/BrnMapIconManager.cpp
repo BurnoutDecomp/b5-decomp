@@ -131,13 +131,19 @@ s32 MapIconManager::GetNumRivalIcons() const
 
     for (s32 liIndex = 0; liIndex < miNumUsedIcons; ++liIndex)
     {
-        const s8 li8IconType = mSatNavIconInfo[liIndex].GetIconTypeByte();
-        CGS_ASSERT(li8IconType >= 0, "leIconType >= 0");
-        CGS_ASSERT(li8IconType < SatNavIconInfo::E_SATNAVICON_MAX, "leIconType < E_SATNAVICON_MAX");
+        const SatNavIconInfo& lrIcon = mSatNavIconInfo[liIndex];
+        const s8 li8IconType = lrIcon.GetIconTypeByte();
+        CGS_ASSERT(li8IconType >= 0,
+            CGS_ASSERT_MESSAGE_AT("leIconType >= 0",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiEventTypeDefs.h", 1911));
+        CGS_ASSERT(li8IconType < SatNavIconInfo::E_SATNAVICON_MAX,
+            CGS_ASSERT_MESSAGE_AT("leIconType < E_SATNAVICON_MAX",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiEventTypeDefs.h", 1912));
 
-        if (li8IconType == SatNavIconInfo::E_SATNAVICON_NETWORKRIVAL ||
-            li8IconType == SatNavIconInfo::E_SATNAVICON_MARKED_MAN ||
-            li8IconType == SatNavIconInfo::E_SATNAVICON_RIVAL)
+        const bool lbIsRival = li8IconType == SatNavIconInfo::E_SATNAVICON_NETWORKRIVAL ||
+            lrIcon.GetIconType() == SatNavIconInfo::E_SATNAVICON_MARKED_MAN ||
+            lrIcon.GetIconType() == SatNavIconInfo::E_SATNAVICON_RIVAL;
+        if (lbIsRival)
         {
             ++liNumRivalIcons;
         }

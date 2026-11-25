@@ -27,16 +27,6 @@
 #include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h"    // GetRegisterValue (Register indirection)
 
 // ---------------------------------------------------------------------------
-// stackPush @0x7F1790 -- store at top, advance, AddRef.
-// ---------------------------------------------------------------------------
-void AptActionInterpreter::stackPush(AptValue* pValue)
-{
-    mpStack[mnStackTop] = pValue;
-    ++mnStackTop;
-    pValue->AddRef();
-}
-
-// ---------------------------------------------------------------------------
 // stackPushNoInc @0x7E990C -- store at top, advance, but DO NOT AddRef (the
 // caller's reference is handed to the stack).
 // ---------------------------------------------------------------------------

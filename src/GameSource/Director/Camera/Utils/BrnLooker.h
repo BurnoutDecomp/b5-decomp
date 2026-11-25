@@ -35,8 +35,10 @@ namespace Utils
     {
         // DWARF BrnLooker.h:61 -- the editable parameter block. Defaults are pinned from
         // Parameters::Construct @0x821F8D80 (stfs/stb displacements off r3).
-        struct Parameters
+        // ARTIST 0x822311C8 identifies the nested Parameters class in the decorated visitor.
+        class Parameters
         {
+        public:
             // X360 visitor: `void Serialise<S>(S&)` (camera-tunings TextFile{Read,Write}Serialiser).
             // Per-instance body is a separate TU.
             template<class TSerialiser> void Serialise(TSerialiser& lrSerialiser);
