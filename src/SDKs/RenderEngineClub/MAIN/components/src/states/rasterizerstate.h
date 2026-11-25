@@ -25,9 +25,19 @@ public:
         // ARTIST82B64498..44E0; natural padding1D..1F is untouched.
         Parameters()
             : muFillMode(0), muCullMode(2), mfDepthBias(0.0f), mfSlopeScaleDepthBias(0.0f),
-              muMultiSampleMask(0xFFFFFFFFu), muPrimitiveResetIndex(0xFFFF),
-              mbScissorTestEnable(0), mbMultiSampleAntiAlias(1), mbViewportEnable(1),
-              mbHalfPixelOffset(0), mbPrimitiveResetEnable(1) {}
+              muMultiSampleMask(0xFFFFFFFFu), muPrimitiveResetIndex(0xFFFF)
+        {
+            // ARTIST 0x82B644A4-0x82B644C0 initializes these byte fields in order.
+            mbPrimitiveResetEnable = 1;
+            mbScissorTestEnable = 0;
+            mbMultiSampleAntiAlias = 1;
+            mbViewportEnable = 1;
+            mbHalfPixelOffset = 0;
+        }
+
+        // ARTIST 0x827EC058 / 0x827EC0F0 preserves the high cull selector bit.
+        void SetCullMode(CullMode leMode) { muCullMode = (muCullMode & 4u) | leMode; }
+        void SetScissorTestEnable(bool lbEnable) { mbScissorTestEnable = lbEnable; }
 
         u32 muFillMode;
         u32 muCullMode;

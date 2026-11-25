@@ -536,7 +536,7 @@ static int GinsuPlayerCreateInstanceThunk(GinsuPlayer *self, void *apConstructor
         self, static_cast<const GinsuPlayer::PlayParams *>(apConstructorParams));
 }
 
-static PlugInDescRunTime g_GinsuPlayerDesc = {
+PlugInDescRunTime GinsuPlayer::sPlugInDescRunTime = {
     "GinsuPlayer",
     reinterpret_cast<void *>(&GinsuPlayer::GetSize),             // @0x826A40B8
     reinterpret_cast<void *>(&GinsuPlayerCreateInstanceThunk),   // @0x826C3418
@@ -549,10 +549,6 @@ static PlugInDescRunTime g_GinsuPlayerDesc = {
     0
 };
 
-char **GinsuPlayer::GetPlugInDescRunTime()
-{
-    return reinterpret_cast<char **>(&g_GinsuPlayerDesc);
-}
 
 // -------------------------------------------------------------------------------------
 // The instance's table-storage tail. BOTH GetSize (which allocates it) and PlayHandler

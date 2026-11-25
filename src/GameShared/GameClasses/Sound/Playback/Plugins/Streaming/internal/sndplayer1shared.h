@@ -184,7 +184,15 @@ public:
     virtual int VFunc2();
     virtual void Destroy(int aiFlags);
 
-    static char **GetPlugInDescRunTime();
+    static PlugInDescRunTime* GetPlugInDescRunTime()
+    {
+        return &sPlugInDescRunTime;
+    }
+
+private:
+    static PlugInDescRunTime sPlugInDescRunTime;
+
+public:
     static int CreateInstance(PlugIn *apBase, void *apContext);
     static int Process(SndPlayer1_CgsStreamMod *apSelf, Mixer *apMixer,
                        bool abDiscontinuity);

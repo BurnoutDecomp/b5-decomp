@@ -50,7 +50,7 @@ enum { KI_FRAME_SAMPLES = 256 };                  // MIXER_FRAME_SIZE (r7 at eve
 // from the XEX by the descriptor wave (progress/scratch_dossiers/plugindesc_layout_codex.md)
 // and re-read by the GainArray decode: 'JGA0', type 4, 0 constructor params, 6 attributes,
 // 0 events. Metadata FLAG'd null per the descriptor-wave convention.
-static PlugInDescRunTime g_GainArrayDesc = {
+PlugInDescRunTime GainArray::sPlugInDescRunTime = {
     "GainArray",
     reinterpret_cast<void *>(&GainArray::GetSize),        // @0x82689E08
     reinterpret_cast<void *>(&GainArray::CreateInstance), // @0x826C3A10
@@ -63,16 +63,6 @@ static PlugInDescRunTime g_GainArrayDesc = {
     0
 };
 
-// -------------------------------------------------------------------------------------
-// GetPlugInDescRunTime -- return &off_82F2E664. (The console has no standalone getter for
-// the three custom descriptors: GenericRwacFactory::GenericRwacFactory references their
-// record addresses directly at 0x826C19A4..0x826C19B0. This accessor is the host's
-// equivalent, matching the shape every stock plug-in uses.)
-// -------------------------------------------------------------------------------------
-char **GainArray::GetPlugInDescRunTime()
-{
-    return reinterpret_cast<char **>(&g_GainArrayDesc);
-}
 
 // -------------------------------------------------------------------------------------
 // GetSize @0x82689E08 -- li r3, 0x70 ; blr

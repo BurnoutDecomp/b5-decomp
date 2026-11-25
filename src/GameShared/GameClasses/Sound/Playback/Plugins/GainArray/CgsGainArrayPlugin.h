@@ -49,7 +49,15 @@ public:
     enum { KU_GUID = 0x4A474130u };   // 'JGA0'
     enum { KI_CHANNELS = 6 };         // the six gain slots the console initialises
 
-    static char **GetPlugInDescRunTime();
+    static rw::audio::core::PlugInDescRunTime* GetPlugInDescRunTime()
+    {
+        return &sPlugInDescRunTime;
+    }
+
+private:
+    static rw::audio::core::PlugInDescRunTime sPlugInDescRunTime;
+
+public:
     static int    GetSize();                                  // @0x82689E08
     static int    CreateInstance(GainArray *self);            // @0x826C3A10
     static int    Process(GainArray *self, rw::audio::core::Mixer *ctx,

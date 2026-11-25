@@ -334,7 +334,8 @@ static void RankDispListCb(LobbyApiRefT*, LobbyApiMsgT*, void* user)
   }
  }
 }
-static void RankSnapCb(LobbyApiRefT* lobby, LobbyApiMsgT* msg, void* user)
+// DecFIGS lobbyrank.c:526 and the ARTIST request callback at 82B26FDC.
+static void _LobbyRankSnapCb(LobbyApiRefT* lobby, LobbyApiMsgT* msg, void* user)
 {
  LobbyRankT* r=static_cast<LobbyRankT*>(user);
  r->iLastCallbackId=0;
@@ -392,67 +393,190 @@ static void RankSnapCb(LobbyApiRefT* lobby, LobbyApiMsgT* msg, void* user)
 
 extern "C" LobbyApiUserT* LobbyApiGetUserInfo(LobbyApiRefT*, const char*);
 extern "C" LobbyLocalizeT* LobbyLocalizeCreate(u32, s32);
-static u32 RankBuddyHash(const char** names, s32 count)
+// DecFIGS lobbyrank.c:679. Each name extends the preceding rank-list hash.
+static u32 _LobbyRankHash(u32 uHash, const char* pStr)
 {
- u32 hash=0;
- while (count--) {
-  const signed char* c=reinterpret_cast<const signed char*>(*names++);
-  while (*c) { if (*c > 32) hash=((*c & 0x5f) + 131*hash); ++c; }
- }
- return hash;
+    while (*pStr != 0)
+    {
+        if (*pStr > ' ')
+        {
+            uHash = (*pStr & 0x5f) + (131u * uHash);
+        }
+        ++pStr;
+    }
+    return uHash;
 }
-static bool RankIndexMatch(LobbyRankT* r, LobbyRankListT& list, s32 offset, s32 rows, const char** names, s32 count)
+
+// DecFIGS lobbyrank.c:800 records the full-width return and the rank-list owner.
+static s32 _LobbyRankIsIndexMatch(LobbyRankT* pRanker, LobbyRankListT* pList,
+                                  s32 iOffset, s32 iRows, const char** pBuddyList, s32 iBuddyCount)
 {
- if (r->uCategoryIndex != list.uCategoryIndex || r->uIndexIndex != list.uIndexIndex ||
-     r->uVariationIndex != list.uVariationIndex || r->uListIndex != list.uListIndex ||
-     list.iOffset != offset || list.iRows != rows || list.iBuddyCount != count) return false;
- return RankBuddyHash(names,count) == list.uBuddyHash;
+    if (pRanker->uCategoryIndex != pList->uCategoryIndex)
+    {
+        return 0;
+    }
+    if (pRanker->uIndexIndex != pList->uIndexIndex)
+    {
+        return 0;
+    }
+    if (pRanker->uVariationIndex != pList->uVariationIndex)
+    {
+        return 0;
+    }
+    if (pRanker->uListIndex != pList->uListIndex)
+    {
+        return 0;
+    }
+    if (pList->iOffset != iOffset)
+    {
+        return 0;
+    }
+    if (pList->iRows != iRows)
+    {
+        return 0;
+    }
+    if (pList->iBuddyCount != iBuddyCount)
+    {
+        return 0;
+    }
+    u32 uHash = 0;
+    for (s32 i = 0; i != iBuddyCount; ++i)
+    {
+        uHash = _LobbyRankHash(uHash, pBuddyList[i]);
+    }
+    return pList->uBuddyHash == uHash;
 }
-extern "C" s32 LobbyRankFetch(LobbyRankT* r, s32 timeout, s32 offset, s32 rows,
- const char** names, s32 count, LobbyRankCallbackT* callback, void* user)
+
+// DecFIGS lobbyrank.c:874. ARTIST 82B26F08 through 82B26F8C inlines
+// the original cache key update, including the signed request-field widths.
+static void _LobbyRankIndexUpdate(LobbyRankT* pRanker, LobbyRankListT* pList,
+                                                s32 iOffset, s32 iRows, const char** pBuddyList, s32 iBuddyCount)
 {
- (void)timeout;
- if (!(r->eStatus & 2)) return -6;
- if (!r->pLocalize) {
-  u32 locality=0x656e5553; LobbyApiUserT* info=LobbyApiGetUserInfo(r->pLobby,0);
-  if (info) locality=info->uLocality;
-  DirtyMemGroupEnter(r->iMemGroup); r->pLocalize=LobbyLocalizeCreate(locality,0); DirtyMemGroupLeave();
- }
- u32 slot=r->uListIndex % r->uListCount;
- LobbyRankListT& list=r->pLists[slot];
- if (RankIndexMatch(r,list,offset,rows,names,count)) {
-  if (callback) { LobbyApiMsgT msg; msg.kind=0x6c697374; msg.code=0; msg.pData=0; callback(r,&msg,user); }
-  return 0;
- }
- char request[1824]; request[0]=0;
- TagFieldSetNumber(request,sizeof(request),"CHAN",slot+5);
- TagFieldSetString(request,sizeof(request),"VIEW",r->strView);
- TagFieldSetNumber(request,sizeof(request),"CI",r->uCategoryIndex);
- TagFieldSetNumber(request,sizeof(request),"II",r->uIndexIndex);
- TagFieldSetNumber(request,sizeof(request),"VI",r->uVariationIndex);
- ++r->iId; TagFieldSetNumber(request,sizeof(request),"SEQN",r->iId);
- TagFieldSetNumber(request,sizeof(request),"COLS",1); list.iId=r->iId;
- if (offset == -89) TagFieldSetString(request,sizeof(request),"FIND","#");
- else if (count == 1) {
-  if (offset == -93) {
-   TagFieldSetString(request,sizeof(request),"FIND",**names ? *names : "$");
-   if (rows >= 0) TagFieldSetNumber(request,sizeof(request),"RANGE",rows);
-  }
- } else if (count <= 0) {
-  if (rows >= 0) TagFieldSetNumber(request,sizeof(request),"RANGE",rows);
-  TagFieldSetNumber(request,sizeof(request),"START",offset);
- }
- TagFieldPrintf(request,sizeof(request),"~BUDDIES=");
- for (s32 i=0; i<count; ++i) TagFieldPrintf(request,sizeof(request),",%s",*names[i] ? names[i] : "$");
- list.uCategoryIndex=r->uCategoryIndex; list.uIndexIndex=r->uIndexIndex;
- list.uVariationIndex=r->uVariationIndex; list.uListIndex=r->uListIndex;
- list.iOffset=offset; list.iRows=rows; list.iBuddyCount=count; list.uBuddyHash=RankBuddyHash(names,count);
- r->pCallback=callback; r->pUserData=user; r->eDownloadStatus=2;
- if (r->iLastCallbackId) LobbyApiCancelCB(r->pLobby,r->iLastCallbackId);
- if (list.pList) { LobbyApiListFree(r->pLobby,slot+5,list.pList); list.pList=0; }
- r->iLastCallbackId=LobbyApiRequestCB(r->pLobby,0x736e6170,request,RankSnapCb,r);
- if (r->iLastCallbackId < 0) { r->eDownloadStatus=0; return -10; }
- return 0;
+    s32 i;
+    pList->uCategoryIndex = static_cast<u16>(pRanker->uCategoryIndex);
+    pList->uIndexIndex = static_cast<u16>(pRanker->uIndexIndex);
+    pList->uVariationIndex = static_cast<u16>(pRanker->uVariationIndex);
+    pList->uListIndex = static_cast<u16>(pRanker->uListIndex);
+    pList->iOffset = static_cast<s16>(iOffset);
+    pList->iRows = static_cast<s16>(iRows);
+    pList->iBuddyCount = static_cast<s16>(iBuddyCount);
+    u32 uHash = 0;
+    for (i = 0; i != iBuddyCount; ++i)
+    {
+        uHash = _LobbyRankHash(uHash, pBuddyList[i]);
+    }
+    pList->uBuddyHash = uHash;
+}
+
+extern "C" s32 LobbyRankFetch(LobbyRankT* pRanker, s32 iTimeout, s32 iOffset, s32 iRows,
+                               const char** pBuddyList, s32 iBuddyCount,
+                               LobbyRankCallbackT* pCallback, void* pUserData)
+{
+    s32 i;
+    (void)iTimeout;
+    if (!(pRanker->eStatus & 2))
+    {
+        return -6;
+    }
+    if (!pRanker->pLocalize)
+    {
+        u32 uLocality = 0x656e5553;
+        LobbyApiUserT* pUser = LobbyApiGetUserInfo(pRanker->pLobby, 0);
+        if (pUser)
+        {
+            uLocality = pUser->uLocality;
+        }
+        DirtyMemGroupEnter(pRanker->iMemGroup);
+        pRanker->pLocalize = LobbyLocalizeCreate(uLocality, 0);
+        DirtyMemGroupLeave();
+    }
+
+    // ARTIST 82B26D08 initializes the 1824-byte Xbox 360 request before the cache lookup.
+    char strMsg[1824];
+    strMsg[0] = 0;
+    u32 uChannel = pRanker->uListIndex % pRanker->uListCount;
+    LobbyRankListT* pList = &pRanker->pLists[uChannel];
+    if (_LobbyRankIsIndexMatch(pRanker, pList, iOffset, iRows, pBuddyList, iBuddyCount))
+    {
+        if (pCallback)
+        {
+            LobbyApiMsgT Msg;
+            Msg.code = 0;
+            Msg.pData = 0;
+            Msg.kind = 0x6c697374;
+            pCallback(pRanker, &Msg, pUserData);
+        }
+        return 0;
+    }
+
+    uChannel += 5;
+    TagFieldSetNumber(strMsg, sizeof(strMsg), "CHAN", uChannel);
+    TagFieldSetString(strMsg, sizeof(strMsg), "VIEW", pRanker->strView);
+    TagFieldSetNumber(strMsg, sizeof(strMsg), "CI", pRanker->uCategoryIndex);
+    TagFieldSetNumber(strMsg, sizeof(strMsg), "II", pRanker->uIndexIndex);
+    TagFieldSetNumber(strMsg, sizeof(strMsg), "VI", pRanker->uVariationIndex);
+    TagFieldSetNumber(strMsg, sizeof(strMsg), "SEQN", ++pRanker->iId);
+    TagFieldSetNumber(strMsg, sizeof(strMsg), "COLS", 1);
+    pList->iId = pRanker->iId;
+    if (iOffset == -89)
+    {
+        TagFieldSetString(strMsg, sizeof(strMsg), "FIND", "#");
+    }
+    else if (iBuddyCount == 1)
+    {
+        if (iOffset == -93)
+        {
+            const char* pName = *pBuddyList;
+            if (*pName == 0)
+            {
+                pName = "$";
+            }
+            TagFieldSetString(strMsg, sizeof(strMsg), "FIND", pName);
+            if (iRows >= 0)
+            {
+                TagFieldSetNumber(strMsg, sizeof(strMsg), "RANGE", iRows);
+            }
+        }
+    }
+    else if (iBuddyCount <= 0)
+    {
+        if (iRows >= 0)
+        {
+            TagFieldSetNumber(strMsg, sizeof(strMsg), "RANGE", iRows);
+        }
+        TagFieldSetNumber(strMsg, sizeof(strMsg), "START", iOffset);
+    }
+
+    TagFieldPrintf(strMsg, sizeof(strMsg), "~BUDDIES=");
+    for (i = 0; i != iBuddyCount; ++i)
+    {
+        const char* pBuddy = pBuddyList[i];
+        if (*pBuddy == 0)
+        {
+            pBuddy = "$";
+        }
+        TagFieldPrintf(strMsg, sizeof(strMsg), ",%s", pBuddy);
+    }
+    _LobbyRankIndexUpdate(pRanker, pList, iOffset, iRows, pBuddyList, iBuddyCount);
+    pRanker->pCallback = pCallback;
+    pRanker->pUserData = pUserData;
+    pRanker->eDownloadStatus = 2;
+    if (pRanker->iLastCallbackId)
+    {
+        LobbyApiCancelCB(pRanker->pLobby, pRanker->iLastCallbackId);
+    }
+    if (pList->pList)
+    {
+        LobbyApiListFree(pRanker->pLobby, uChannel, pList->pList);
+        pList->pList = 0;
+    }
+    pRanker->iLastCallbackId = LobbyApiRequestCB(pRanker->pLobby, 0x736e6170, strMsg, _LobbyRankSnapCb, pRanker);
+    if (pRanker->iLastCallbackId < 0)
+    {
+        pRanker->eDownloadStatus = 0;
+        return -10;
+    }
+    return 0;
 }
 
 #include <stdlib.h>

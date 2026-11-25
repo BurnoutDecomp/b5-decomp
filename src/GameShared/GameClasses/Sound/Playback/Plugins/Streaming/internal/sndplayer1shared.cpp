@@ -1277,7 +1277,7 @@ void SndPlayer1_CgsStreamMod::RwacTimerClient(
     }
 }
 
-static PlugInDescRunTime g_JStrDesc = {
+PlugInDescRunTime SndPlayer1_CgsStreamMod::sPlugInDescRunTime = {
     "SndPlayer1_CgsStreamMod",
     reinterpret_cast<void*>(&SndPlayer1_CgsStreamMod::GetSize),
     reinterpret_cast<void*>(&SndPlayer1_CgsStreamMod::CreateInstance),
@@ -1290,9 +1290,5 @@ static PlugInDescRunTime g_JStrDesc = {
     0
 };
 
-char** SndPlayer1_CgsStreamMod::GetPlugInDescRunTime()
-{
-    return reinterpret_cast<char**>(&g_JStrDesc);
-}
 
 }}}

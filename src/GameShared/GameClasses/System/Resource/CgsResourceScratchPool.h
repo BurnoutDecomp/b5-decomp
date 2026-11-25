@@ -6,6 +6,7 @@
 #include "GameShared/GameClasses/Memory/CgsGatherStream.h"
 #include "GameShared/GameClasses/Memory/CgsScatterStream.h"
 #include "rw/rwcore_structs.h"
+#include <cstdlib>
 
 namespace CgsResource
 {
@@ -58,7 +59,11 @@ namespace CgsResource
         void BeginDistribution(s32 liMemType);
         bool UpdateGather();
         bool UpdateScatter();
-        void SortIdList();
+        void SortIdList()
+        {
+            std::qsort(mpEntryIds, muNumEntries, sizeof(ID), &SortIdsQSortCallback);
+            mpEntryIds[muNumEntries].SetHash(~u64(0));
+        }
         static s32 SortIdsQSortCallback(const void* lpLeft, const void* lpRight);
 
         s32 GetBankId() { return miBankId; }

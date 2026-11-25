@@ -317,6 +317,8 @@ struct RwacCommandQueue
     u32       mu32Read;                        // +0x4000  consumer cursor
     u32       mu32Write;                       // +0x4004  producer cursor
 
+    RwacCommandQueue() : mu32Read(0), mu32Write(0) {}
+
     // @ 0x82681888. Pop one command word into *apOutWord and advance the read
     // cursor (with wrap). Asserts the ring is non-empty before reading. Returns
     // `this` (the X360 leaves the queue pointer in r3 on the normal path).

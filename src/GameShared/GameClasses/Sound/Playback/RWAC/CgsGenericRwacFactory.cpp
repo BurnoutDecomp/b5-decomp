@@ -9,10 +9,10 @@
 //   mpSystem = apSystem;                     // stw r4,0(r31)
 //   if (!apSystem)                           // fall back to the default System
 //   {
-//       mpSystem = GetDefaultRwacSystem();   // lwz off_83271928
+//       mpSystem = off_83271928;
 //       CGS_ASSERT(mpSystem != 0, "mpSystem"); // CgsGenericRwacFactory.h:59
 //   }
-//   rw::audio::core::System::Lock(mpSystem); // engine entry RwacSystemLock
+//   rw::audio::core::System::Lock(mpSystem);
 //
 // Called by GenericRwacFactory::GenericRwacFactory and ::AddRegistry.
 // ============================================================================
@@ -153,13 +153,12 @@ RwacLock::RwacLock(rw::audio::core::System* apSystem)
 {
     if (mpSystem == 0)
     {
-        // Fall back to the process-wide default RWAC System (X360 off_83271928).
-        mpSystem = GetDefaultRwacSystem();
-        CGS_ASSERT(mpSystem != 0, "mpSystem");
+        mpSystem = off_83271928;
+        CGS_ASSERT(mpSystem, CGS_ASSERT_MESSAGE_AT("mpSystem",
+            CGS_RWAC_FACTORY_H_ASSERT_FILE, 59));
     }
 
-    // Hold the audio-core System locked for the guard's lifetime.
-    rw::audio::core::RwacSystemLock(mpSystem);
+    rw::audio::core::System::Lock(mpSystem);
 }
 
 // The guard's release -- the console @0x826C17A0 ctor tail reloads the saved
@@ -228,9 +227,9 @@ Handle<GenericRwacFactory> GenericRwacFactory::Create(Environment& arEnvironment
     // operator-new precedent.
     const size_t luBytes = sizeof(GenericRwacFactory)
                          + sizeof(Registry)
-                         + sizeof(void*) * aSpec.mu32EntityCount
-                         + aSpec.mu32DataSize
-                         + aSpec.mu32StringTableSize;
+                         + sizeof(void*) * aSpec.mRegistrySpec.mu32EntityCount
+                         + aSpec.mRegistrySpec.muDataSize
+                         + aSpec.mRegistrySpec.muStringTableSize;
 
     // The five-pair request through the ENVIRONMENT's allocator (console
     // Environment+0x30, vtable +0x10), tag "GenericRwacFactory".
@@ -259,20 +258,9 @@ GenericRwacFactory::GenericRwacFactory(Environment& arEnvironment,
                                        const GenericRwacFactorySpec& akrSpec)
     : Factory(SK_NAME, arEnvironment),
       mpSystem(akrSpec.mpSystem),
-      mCommandQueue(),
-      mpRegistry(0)
+      mpRegistry(reinterpret_cast<Registry*>(this + 1))
 {
-    mCommandQueue.mu32Write = 0;
-    mCommandQueue.mu32Read  = 0;
-    // (the +0x14..+0x4013 queue payload is NOT ctor-touched -- decode-attested)
-
-    // The in-place Registry immediately after the fixed head (console +0x4020).
-    RegistrySpec lRegistrySpec;
-    lRegistrySpec.mu32EntityCount   = akrSpec.mu32EntityCount;
-    lRegistrySpec.muDataSize        = akrSpec.mu32DataSize;
-    lRegistrySpec.muStringTableSize = akrSpec.mu32StringTableSize;
-    mpRegistry = ::new (reinterpret_cast<u8*>(this) + sizeof(GenericRwacFactory))
-        Registry(lRegistrySpec);
+    ::new (mpRegistry) Registry(akrSpec.mRegistrySpec);
 
     // ---- the registration pass, under the console's RwacLock stack guard --------
     {
@@ -312,10 +300,11 @@ GenericRwacFactory::GenericRwacFactory(Environment& arEnvironment,
         CGS_RWAC_REGISTER(rw::audio::core::Send::GetPlugInDescRunTime());                // 20 @0x82B9B798
         CGS_RWAC_REGISTER(rw::audio::core::SndPlayer1::GetPlugInDescRunTime());          // 21 @0x82B9BE60
         CGS_RWAC_REGISTER(rw::audio::core::SubMix::GetPlugInDescRunTime());              // 22 @0x82B9C370 (phase E)
-        CGS_RWAC_REGISTER(rw::audio::core::GinsuPlayer::GetPlugInDescRunTime());         // 23 off_82F2D094 (phase E)
-        CGS_RWAC_REGISTER(rw::audio::core::SndPlayer1_CgsStreamMod::GetPlugInDescRunTime()); // 24 off_82F2E124
-        CGS_RWAC_REGISTER(CgsSound::Playback::Plugins::GainArray::GetPlugInDescRunTime()); // 25 off_82F2E664 (phase E)
         #undef CGS_RWAC_REGISTER
+
+        lpPlugInRegistry->RegisterPlugInRunTime(rw::audio::core::GinsuPlayer::GetPlugInDescRunTime());
+        lpPlugInRegistry->RegisterPlugInRunTime(rw::audio::core::SndPlayer1_CgsStreamMod::GetPlugInDescRunTime());
+        lpPlugInRegistry->RegisterPlugInRunTime(CgsSound::Playback::Plugins::GainArray::GetPlugInDescRunTime());
 
         // The decoder pass: the standard runtime set (Xas1 -> Xas -> EaXma, inside
         // RegisterStandardRunTimeDecoders @0x82B6B538) + Pcm16Big registered

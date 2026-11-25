@@ -236,9 +236,9 @@ bool Module::Prepare(rw::IResourceAllocator* apAllocator,
         {
             GenericRwacFactorySpec lRwacSpec;
             lRwacSpec.mpSystem            = GetDefaultRwacSystem();
-            lRwacSpec.mu32EntityCount     = 128;
-            lRwacSpec.mu32DataSize        = 32384;
-            lRwacSpec.mu32StringTableSize = 0;
+            lRwacSpec.mRegistrySpec.mu32EntityCount = 128;
+            lRwacSpec.mRegistrySpec.muDataSize = 32384;
+            lRwacSpec.mRegistrySpec.muStringTableSize = 0;
             Handle<GenericRwacFactory> lhRwacFactory =
                 GenericRwacFactory::Create(*mhEnvironment, lRwacSpec);
             mhRwacFactory = Handle<Factory>(lhRwacFactory.GetObject());

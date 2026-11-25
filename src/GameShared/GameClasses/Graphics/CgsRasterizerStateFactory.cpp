@@ -17,24 +17,17 @@ renderengine::RasterizerState* CgsRasterizerStateFactory::saRasterizerStates[E_F
 void CgsRasterizerStateFactory::Construct(rw::IResourceAllocator* lpAllocator)
 {
     const char* const sourceFile = "..\\..\\..\\GameShared\\GameClasses\\Graphics/CgsRasterizerStateFactory.cpp";
+    renderengine::RasterizerState::Parameters lParameters;
     void* lpMemory = 0;
     rw::Resource resource(lpMemory);
-    renderengine::RasterizerState::Parameters lParameters;
 
-    lParameters.muMultiSampleMask = 0xffffffff;
-    lParameters.muPrimitiveResetIndex = 0xffff;
-    lParameters.mbPrimitiveResetEnable = 1;
-    lParameters.mbMultiSampleAntiAlias = 1;
-    lParameters.mbViewportEnable = 1;
-    lParameters.mbScissorTestEnable = 1;
+    for (u32 i = 0; i < E_FACTORY_RASTERIZER_STATE_COUNT; ++i)
+    {
+        saRasterizerStates[i] = 0;
+    }
 
-    saRasterizerStates[E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_BACK] = 0;
-    saRasterizerStates[E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_FRONT] = 0;
-    saRasterizerStates[E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_NONE] = 0;
-
-    lParameters.muFillMode = 0;
-    lParameters.muCullMode = renderengine::RasterizerState::E_CULL_BACK;
-    lParameters.mbHalfPixelOffset = 0;
+    lParameters.SetCullMode(renderengine::RasterizerState::E_CULL_BACK);
+    lParameters.SetScissorTestEnable(true);
     resource = lpAllocator->Allocate(
         renderengine::RasterizerState::GetResourceDescriptor(lParameters), 0);
     saRasterizerStates[E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_BACK] =
@@ -42,8 +35,8 @@ void CgsRasterizerStateFactory::Construct(rw::IResourceAllocator* lpAllocator)
     CGS_ASSERT_AT(saRasterizerStates[E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_BACK],
                "saRasterizerStates[ eFactoryRasterizerState_Scissor_CullModeBack ]", sourceFile, 63);
 
-    lParameters.mbScissorTestEnable = 1;
-    lParameters.muCullMode = (lParameters.muCullMode & 4) | renderengine::RasterizerState::E_CULL_FRONT;
+    lParameters.SetCullMode(renderengine::RasterizerState::E_CULL_FRONT);
+    lParameters.SetScissorTestEnable(true);
     resource = lpAllocator->Allocate(
         renderengine::RasterizerState::GetResourceDescriptor(lParameters), 0);
     saRasterizerStates[E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_FRONT] =
@@ -51,8 +44,8 @@ void CgsRasterizerStateFactory::Construct(rw::IResourceAllocator* lpAllocator)
     CGS_ASSERT_AT(saRasterizerStates[E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_FRONT],
                "saRasterizerStates[ eFactoryRasterizerState_Scissor_CullModeFront ]", sourceFile, 70);
 
-    lParameters.mbScissorTestEnable = 1;
-    lParameters.muCullMode &= 4u;
+    lParameters.SetCullMode(renderengine::RasterizerState::E_CULL_NONE);
+    lParameters.SetScissorTestEnable(true);
     resource = lpAllocator->Allocate(
         renderengine::RasterizerState::GetResourceDescriptor(lParameters), 0);
     saRasterizerStates[E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_NONE] =

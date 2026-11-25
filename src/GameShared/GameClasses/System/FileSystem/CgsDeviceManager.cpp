@@ -259,33 +259,35 @@ namespace CgsFileSystem
 
     // Read/Write/Close @0x828F1AA0/0x828F1BF8/0x828F1D58. The compound Handle selects
     // both the logical device receiving the op and the physical queue that services it.
+    // ARTIST initializes the fields the worker consumes and clears the path's first byte.
     void DeviceManager::Read(Handle lHandle, u64 luPosition, void* lpBuffer, u32 luBufferSize,
                              AsyncCompletionCallback lpfCallback, void* lpContext,
                              s32 liPriority)
     {
         mDeviceListFutex.Lock();
-        Device* lpDevice = lHandle.GetDevice();
-        Device* lpPhysicalDevice = lpDevice ? lpDevice->GetPhysicalParent() : 0;
-        s32 liDeviceIndex = 0;
-        while (liDeviceIndex < KI_MAX_PHYSICAL_DEVICES &&
-               maPhysicalDevices[liDeviceIndex].mpDevice != lpPhysicalDevice)
-            ++liDeviceIndex;
-        CGS_ASSERT(liDeviceIndex < KI_MAX_PHYSICAL_DEVICES,
-                   "Could not find physical device\n");
-
-        if (lpDevice && liDeviceIndex < KI_MAX_PHYSICAL_DEVICES)
+        Device* lpPhysicalDevice = lHandle.GetDevice()->GetPhysicalParent();
+        s32 liDeviceIndex;
+        for (liDeviceIndex = 0; liDeviceIndex < KI_MAX_PHYSICAL_DEVICES; ++liDeviceIndex)
         {
-            Operation lOperation = {};
-            lOperation.miType = E_OP_READ;
-            lOperation.mHandle = lHandle;
-            lOperation.mu64Offset = luPosition;
-            lOperation.muSize = luBufferSize;
-            lOperation.mpReadBuffer = lpBuffer;
-            lOperation.mpfCallback = lpfCallback;
-            lOperation.mpContext = lpContext;
-            lOperation.miPriority = liPriority;
-            maPhysicalDevices[liDeviceIndex].mOperations.AddOperation(&lOperation);
+            if (maPhysicalDevices[liDeviceIndex].mpDevice == lpPhysicalDevice)
+                break;
         }
+        CGS_ASSERT_STREAM_AT(liDeviceIndex < KI_MAX_PHYSICAL_DEVICES,
+            "Could not find physical device\n", CGS_DEVICE_MANAGER_ARTIST_FILE, 409);
+
+        Operation lOperation;
+        lOperation.macPath[0] = '\0';
+        lOperation.miType = E_OP_READ;
+        lOperation.mHandle = lHandle;
+        lOperation.miPriority = liPriority;
+        lOperation.mpfCallback = lpfCallback;
+        lOperation.mpContext = lpContext;
+        lOperation.mpReadBuffer = lpBuffer;
+        lOperation.mpWriteBuffer = 0;
+        lOperation.muSize = luBufferSize;
+        lOperation.mu64Offset = luPosition;
+        lOperation.muFlags = 0;
+        maPhysicalDevices[liDeviceIndex].mOperations.AddOperation(&lOperation);
         mDeviceListFutex.Unlock();
     }
 
@@ -294,28 +296,29 @@ namespace CgsFileSystem
                               s32 liPriority)
     {
         mDeviceListFutex.Lock();
-        Device* lpDevice = lHandle.GetDevice();
-        Device* lpPhysicalDevice = lpDevice ? lpDevice->GetPhysicalParent() : 0;
-        s32 liDeviceIndex = 0;
-        while (liDeviceIndex < KI_MAX_PHYSICAL_DEVICES &&
-               maPhysicalDevices[liDeviceIndex].mpDevice != lpPhysicalDevice)
-            ++liDeviceIndex;
-        CGS_ASSERT(liDeviceIndex < KI_MAX_PHYSICAL_DEVICES,
-                   "Could not find physical device\n");
-
-        if (lpDevice && liDeviceIndex < KI_MAX_PHYSICAL_DEVICES)
+        Device* lpPhysicalDevice = lHandle.GetDevice()->GetPhysicalParent();
+        s32 liDeviceIndex;
+        for (liDeviceIndex = 0; liDeviceIndex < KI_MAX_PHYSICAL_DEVICES; ++liDeviceIndex)
         {
-            Operation lOperation = {};
-            lOperation.miType = E_OP_WRITE;
-            lOperation.mHandle = lHandle;
-            lOperation.mu64Offset = luPosition;
-            lOperation.muSize = luBufferSize;
-            lOperation.mpWriteBuffer = lpBuffer;
-            lOperation.mpfCallback = lpfCallback;
-            lOperation.mpContext = lpContext;
-            lOperation.miPriority = liPriority;
-            maPhysicalDevices[liDeviceIndex].mOperations.AddOperation(&lOperation);
+            if (maPhysicalDevices[liDeviceIndex].mpDevice == lpPhysicalDevice)
+                break;
         }
+        CGS_ASSERT_STREAM_AT(liDeviceIndex < KI_MAX_PHYSICAL_DEVICES,
+            "Could not find physical device\n", CGS_DEVICE_MANAGER_ARTIST_FILE, 465);
+
+        Operation lOperation;
+        lOperation.macPath[0] = '\0';
+        lOperation.mHandle = lHandle;
+        lOperation.miPriority = liPriority;
+        lOperation.mpfCallback = lpfCallback;
+        lOperation.mpContext = lpContext;
+        lOperation.mpReadBuffer = 0;
+        lOperation.mpWriteBuffer = lpBuffer;
+        lOperation.muSize = luBufferSize;
+        lOperation.mu64Offset = luPosition;
+        lOperation.muFlags = 0;
+        lOperation.miType = E_OP_WRITE;
+        maPhysicalDevices[liDeviceIndex].mOperations.AddOperation(&lOperation);
         mDeviceListFutex.Unlock();
     }
 
@@ -323,25 +326,29 @@ namespace CgsFileSystem
                               void* lpContext, s32 liPriority)
     {
         mDeviceListFutex.Lock();
-        Device* lpDevice = lHandle.GetDevice();
-        Device* lpPhysicalDevice = lpDevice ? lpDevice->GetPhysicalParent() : 0;
-        s32 liDeviceIndex = 0;
-        while (liDeviceIndex < KI_MAX_PHYSICAL_DEVICES &&
-               maPhysicalDevices[liDeviceIndex].mpDevice != lpPhysicalDevice)
-            ++liDeviceIndex;
-        CGS_ASSERT(liDeviceIndex < KI_MAX_PHYSICAL_DEVICES,
-                   "Could not find physical device\n");
-
-        if (lpDevice && liDeviceIndex < KI_MAX_PHYSICAL_DEVICES)
+        Device* lpPhysicalDevice = lHandle.GetDevice()->GetPhysicalParent();
+        s32 liDeviceIndex;
+        for (liDeviceIndex = 0; liDeviceIndex < KI_MAX_PHYSICAL_DEVICES; ++liDeviceIndex)
         {
-            Operation lOperation = {};
-            lOperation.miType = E_OP_CLOSE;
-            lOperation.mHandle = lHandle;
-            lOperation.mpfCallback = lpfCallback;
-            lOperation.mpContext = lpContext;
-            lOperation.miPriority = liPriority;
-            maPhysicalDevices[liDeviceIndex].mOperations.AddOperation(&lOperation);
+            if (maPhysicalDevices[liDeviceIndex].mpDevice == lpPhysicalDevice)
+                break;
         }
+        CGS_ASSERT_STREAM_AT(liDeviceIndex < KI_MAX_PHYSICAL_DEVICES,
+            "Could not find physical device\n", CGS_DEVICE_MANAGER_ARTIST_FILE, 517);
+
+        Operation lOperation;
+        lOperation.macPath[0] = '\0';
+        lOperation.mHandle = lHandle;
+        lOperation.miPriority = liPriority;
+        lOperation.mpfCallback = lpfCallback;
+        lOperation.mpContext = lpContext;
+        lOperation.mpReadBuffer = 0;
+        lOperation.mpWriteBuffer = 0;
+        lOperation.muSize = 0;
+        lOperation.mu64Offset = 0;
+        lOperation.muFlags = 0;
+        lOperation.miType = E_OP_CLOSE;
+        maPhysicalDevices[liDeviceIndex].mOperations.AddOperation(&lOperation);
         mDeviceListFutex.Unlock();
     }
 

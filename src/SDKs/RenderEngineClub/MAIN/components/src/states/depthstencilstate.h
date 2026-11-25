@@ -63,6 +63,10 @@ public:
             mu8Flag5 = 0;
         }
 
+        void SetDepthEnable(bool lbEnable) { mbDepthTestEnable = lbEnable; }
+        void SetDepthFunction(Function leFunction) { muFunction = leFunction; }
+        void SetDepthWriteEnable(bool lbEnable) { mbDepthWriteEnable = lbEnable; }
+
         u32 muFunction;        // +0x00 -> muZFunc                 (the Function arg)
         u32 maState1[3];       // +0x04 -> muStencilFail / muStencilZFail / muStencilPass (zeroed)
         u32 muState4;          // +0x10 -> muStencilFunc           == 7 (E_FUNCTION_ALWAYS)

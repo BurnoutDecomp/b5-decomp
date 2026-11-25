@@ -105,7 +105,15 @@ public:
     // vt[1] -- EVENT_PLAY queues a bind+start; anything else queues a stop.
     virtual int Event(int aiEventId, void *apParam);
 
-    static char **GetPlugInDescRunTime();
+    static PlugInDescRunTime* GetPlugInDescRunTime()
+    {
+        return &sPlugInDescRunTime;
+    }
+
+private:
+    static PlugInDescRunTime sPlugInDescRunTime;
+
+public:
     static u32    GetSize(const PlugInConfig *config);                 // @0x826A40B8
     static int    CreateInstance(GinsuPlayer *self,
                                  const PlayParams *params);                // @0x826C3418

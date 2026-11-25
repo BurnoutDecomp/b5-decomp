@@ -1274,13 +1274,23 @@ namespace CgsResource
     // batch. The sorted ID list has one spare sentinel element.
     bool Pool::AddResourcesToScratchPool()
     {
-        CGS_ASSERT(mbIsValid, "Pool is not valid\n");
-        u32 lu = muNextRelocation;
-        for (; lu < muNumRelocations; ++lu)
-            if (!AddResourceToScratchPool(lu))
+        CGS_ASSERT_STREAM_AT(mbIsValid, "Pool is not valid\n", CGS_ARTIST_POOL_FILE, 2626);
+        const s32 liMonitor = _miPoolDefragMoveToTempPerfMon;
+        if (liMonitor > -1)
+            CgsDev::PerfMonCpu::StartMonitor(liMonitor);
+
+        u32 luCurrentRelocation = muNextRelocation;
+        while (luCurrentRelocation < muNumRelocations)
+        {
+            if (!AddResourceToScratchPool(luCurrentRelocation))
                 break;
-        muNextRelocation = lu;
+            ++luCurrentRelocation;
+        }
+        muNextRelocation = luCurrentRelocation;
         mpCurrentScratchPool->SortIdList();
+
+        if (liMonitor > -1)
+            CgsDev::PerfMonCpu::StopMonitor(liMonitor);
         return true;
     }
 

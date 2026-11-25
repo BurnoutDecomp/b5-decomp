@@ -226,15 +226,12 @@ namespace CgsResource
     // ARTIST 828D9378 compares complete unsigned 64-bit IDs, not their low words.
     s32 ScratchPool::SortIdsQSortCallback(const void* lpLeft, const void* lpRight)
     {
-        const ID lLeft = *static_cast<const ID*>(lpLeft);
-        const ID lRight = *static_cast<const ID*>(lpRight);
-        return lLeft < lRight ? -1 : (lLeft > lRight ? 1 : 0);
-    }
-
-    void ScratchPool::SortIdList()
-    {
-        std::qsort(mpEntryIds, muNumEntries, sizeof(ID), &SortIdsQSortCallback);
-        // Inlined in ARTIST Pool::AddResourcesToScratchPool 828F6748.
-        mpEntryIds[muNumEntries].SetHash(~u64(0));
+        const u64 luRight = static_cast<const ID*>(lpRight)->GetHash();
+        const u64 luLeft = static_cast<const ID*>(lpLeft)->GetHash();
+        if (luLeft < luRight)
+            return -1;
+        if (luLeft > luRight)
+            return 1;
+        return 0;
     }
 }

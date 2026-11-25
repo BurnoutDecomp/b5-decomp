@@ -19,13 +19,8 @@
 //   GenericRwacFactory::GenericRwacFactory(Environment&, spec)   @ 0x826C17A0
 //
 // RwacLock is a stack RAII guard holding the RenderWare audio-core System locked for
-// the lifetime of the guard (~RwacLock unlocks).
-//
-// The audio-core System has an authoritative vendor home (rw/audio/core/PlugIn.h);
-// it is NOT redefined here. The System lock is taken through the engine entry
-// RwacSystemLock (semantically rw::audio::core::System::Lock), and the process-wide
-// default System is fetched through GetDefaultRwacSystem (X360 off_83271928). Both are
-// declared BY NAME and resolved in their own TUs.
+// the lifetime of the guard (~RwacLock unlocks). A null System argument uses the
+// process-wide RenderWare default.
 // ============================================================================
 
 namespace rw
@@ -74,9 +69,7 @@ private:
 struct GenericRwacFactorySpec
 {
     rw::audio::core::System* mpSystem;            // +0x00
-    u32                      mu32EntityCount;     // +0x04 -> RegistrySpec.mu32EntityCount
-    u32                      mu32DataSize;        // +0x08 -> RegistrySpec.muDataSize
-    u32                      mu32StringTableSize; // +0x0C -> RegistrySpec.muStringTableSize
+    RegistrySpec             mRegistrySpec;       // +0x04
 };
 
 // ---------------------------------------------------------------------------
