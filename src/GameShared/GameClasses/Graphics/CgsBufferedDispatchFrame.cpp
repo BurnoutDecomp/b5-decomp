@@ -36,10 +36,13 @@ static const char KAC_ARTIST_ASSERT_FILE[] =
 namespace CgsGraphics
 {
 
+// @ 0x827E7968
 BufferedDispatchFrame::BufferedDispatchFrame()
-    : mapDispatchFrame(0), muNumDispatchFrames(2),
-      muCurrentFrameForWrite(0), muCurrentFrameForRead(1)
 {
+    muCurrentFrameForWrite = 0;
+    muNumDispatchFrames = 2;
+    muCurrentFrameForRead = 1;
+    mapDispatchFrame = NULL;
 }
 
 // @ 0x827F97F8

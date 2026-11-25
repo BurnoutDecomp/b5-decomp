@@ -222,23 +222,20 @@ void BrnRendererMemory::CreateBackBuffer(rw::IResourceAllocator* lpAllocator, u3
     lpBackBuffer->ClearColourTargetInUse();
 
     lpBackBuffer->SetDimensions(luWidth, luHeight);
-    lpBackBuffer->SetNumMipMaps(1);
-    lpBackBuffer->SetMultisampleFormat(0);
-
     lpBackBuffer->SetUseDepthStencilAsTexture(false);
-
-    lpBackBuffer->SetColourFilterMode(0, 1);
+    lpBackBuffer->SetNumMipMaps(1);
     lpBackBuffer->SetColourTargetInUse(0, true);
+    lpBackBuffer->SetDepthTargetInUse(false);
+    lpBackBuffer->SetColourFilterMode(0, 1);
+    lpBackBuffer->SetMultisampleFormat(0);
     lpBackBuffer->SetColourTargetUseDevice(0, true);
     lpBackBuffer->SetColourTargetBufferFormat(0, KU_COLOUR_SURFACE_BUFFER_FORMAT);
     lpBackBuffer->SetColourTargetTextureFormat(0, KU_COLOUR_SURFACE_TEXTURE_FORMAT);
     lpBackBuffer->SetColourTargetBaseEDRAM(0, 0);
 
-    lpBackBuffer->SetDepthTargetInUse(false);
-
     lpBackBuffer->Construct(lpAllocator);
 
-    if (!mapRenderTarget[E_RENDER_TARGET_DOWN_SAMPLE])
+    if (GetDownSampleBuffer() == NULL)
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("GetDownSampleBuffer() != NULL",
@@ -248,7 +245,7 @@ void BrnRendererMemory::CreateBackBuffer(rw::IResourceAllocator* lpAllocator, u3
 
     rw::graphics::postfx::RenderTarget* lpBackBufferTarget = lpBackBuffer->GetRenderTarget();
     rw::graphics::postfx::RenderTarget* lpDownSampleTarget =
-        mapRenderTarget[E_RENDER_TARGET_DOWN_SAMPLE]->GetRenderTarget();
+        GetDownSampleBuffer()->GetRenderTarget();
     typedef rw::graphics::postfx::RenderTarget NativeRenderTarget;
     typedef rw::graphics::postfx::Target NativeTarget;
     CGS_STATIC_ASSERT((offsetof(NativeRenderTarget, maColourTargets) +

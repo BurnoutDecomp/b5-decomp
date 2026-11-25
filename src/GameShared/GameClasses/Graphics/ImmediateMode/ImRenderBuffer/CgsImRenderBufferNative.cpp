@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBufferTemplate.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include <cstring>
 #include <ppcintrinsics.h>
@@ -19,28 +20,39 @@ void NativeAssert(const char* expression, int line)
 // ARTIST82404A50/82404308/824045B0 allocate both streams for both buffers,
 // then clear and swap twice, leaving buffer zero as the writer.
 template<class V>
-bool ImRenderBuffer<V>::Prepare(u32 commandSize, u32 vertexSize,
-                                rw::IResourceAllocator* allocator, bool failGracefully)
+bool ImRenderBuffer<V>::Prepare(u32 luCommandBufferSizeBytes, u32 luVertexBufferSizeBytes,
+                                rw::IResourceAllocator* lpAllocator, bool lbFailGracefully)
 {
-    muCommandBufferSize = commandSize;
-    muVertexBufferSize = vertexSize;
-    mbFailGracefully = failGracefully;
-    rw::ResourceDescriptor commandDescriptor;
-    commandDescriptor.m_baseResourceDescriptors[0].m_size = commandSize + 128;
-    commandDescriptor.m_baseResourceDescriptors[0].m_alignment = 128;
-    rw::ResourceDescriptor vertexDescriptor;
-    vertexDescriptor.m_baseResourceDescriptors[0].m_size = vertexSize + 128;
-    vertexDescriptor.m_baseResourceDescriptors[0].m_alignment = 128;
-    maBuffers[0].mpu8CommandBuffer = static_cast<u8*>(allocator->DoAllocate(commandDescriptor, 0).m_baseResources[0]);
-    maBuffers[0].mpu8VertexBuffer = static_cast<u8*>(allocator->DoAllocate(vertexDescriptor, 0).m_baseResources[0]);
-    maBuffers[1].mpu8CommandBuffer = static_cast<u8*>(allocator->DoAllocate(commandDescriptor, 0).m_baseResources[0]);
-    maBuffers[1].mpu8VertexBuffer = static_cast<u8*>(allocator->DoAllocate(vertexDescriptor, 0).m_baseResources[0]);
-    if (!maBuffers[0].mpu8CommandBuffer) NativeAssert("maBuffers[0].mpu8CommandBuffer", 511);
-    if (!maBuffers[0].mpu8VertexBuffer) NativeAssert("maBuffers[0].mpu8VertexBuffer", 512);
-    if (!maBuffers[1].mpu8CommandBuffer) NativeAssert("maBuffers[1].mpu8CommandBuffer", 513);
-    if (!maBuffers[1].mpu8VertexBuffer) NativeAssert("maBuffers[1].mpu8VertexBuffer", 514);
-    mpWriteBuffer = &maBuffers[0]; miWriteBufferIndex = 0; mpDispatchBuffer = &maBuffers[1];
-    Clear(); Swap(); Clear(); Swap();
+    muCommandBufferSize = luCommandBufferSizeBytes;
+    muVertexBufferSize = luVertexBufferSizeBytes;
+    mbFailGracefully = lbFailGracefully;
+
+    // ARTIST allocates each stream independently with an extra cache line.
+    maBuffers[0].mpu8CommandBuffer = static_cast<u8*>(
+        lpAllocator->AllocateMemoryResource(luCommandBufferSizeBytes + 128, 128, NULL));
+    maBuffers[0].mpu8VertexBuffer = static_cast<u8*>(
+        lpAllocator->AllocateMemoryResource(luVertexBufferSizeBytes + 128, 128, NULL));
+    maBuffers[1].mpu8CommandBuffer = static_cast<u8*>(
+        lpAllocator->AllocateMemoryResource(luCommandBufferSizeBytes + 128, 128, NULL));
+    maBuffers[1].mpu8VertexBuffer = static_cast<u8*>(
+        lpAllocator->AllocateMemoryResource(luVertexBufferSizeBytes + 128, 128, NULL));
+
+    CGS_ASSERT(maBuffers[0].mpu8CommandBuffer,
+        CGS_ASSERT_MESSAGE_AT("maBuffers[0].mpu8CommandBuffer", kFile, 511));
+    CGS_ASSERT(maBuffers[0].mpu8VertexBuffer,
+        CGS_ASSERT_MESSAGE_AT("maBuffers[0].mpu8VertexBuffer", kFile, 512));
+    CGS_ASSERT(maBuffers[1].mpu8CommandBuffer,
+        CGS_ASSERT_MESSAGE_AT("maBuffers[1].mpu8CommandBuffer", kFile, 513));
+    CGS_ASSERT(maBuffers[1].mpu8VertexBuffer,
+        CGS_ASSERT_MESSAGE_AT("maBuffers[1].mpu8VertexBuffer", kFile, 514));
+
+    miWriteBufferIndex = 0;
+    mpWriteBuffer = &maBuffers[miWriteBufferIndex];
+    mpDispatchBuffer = &maBuffers[1 - miWriteBufferIndex];
+    Clear();
+    Swap();
+    Clear();
+    Swap();
     return true;
 }
 

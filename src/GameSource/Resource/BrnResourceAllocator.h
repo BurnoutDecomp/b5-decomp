@@ -104,7 +104,7 @@ inline const rw::Resource& LinearResourceAllocator::GetLinearHeapBase() const
 
 // Accessor for the global debug allocator (asserts the backing allocator exists).
 // ARTIST823A7CB8 returns &Allocators::mGlobalDebugAllocator without allocating.
-HeapResourceAllocator* GetDebugAllocator();
+inline HeapResourceAllocator* GetDebugAllocator();
 // BrnResourceAllocator.h:381; ARTIST main allocates through mRuntimeAllocator
 // at 82F2C854, independently of the debug allocator at 82F2C7DC.
 HeapResourceAllocator* GetRuntimeAllocator();
@@ -178,6 +178,20 @@ private:
 inline LinearResourceAllocator* GetGraphicsAllocator()
 {
     return &Allocators::mGlobalGraphicsAllocator;
+}
+
+// LegacySrc BrnResourceAllocator.h:278 defines this inline. ARTIST Prepare
+// inlines both checks, and 0x823A7CB8 is the retained out-of-line entry.
+inline HeapResourceAllocator* GetDebugAllocator()
+{
+    if (!Allocators::mpInternalDebugAllocator)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("Allocators::mpInternalDebugAllocator",
+            CGS_ASSERT_LOCATION("..\\..\\..\\GameSource\\Resource/BrnResourceAllocator.h", 369));
+        CgsDev::Assert::EndAssert();
+    }
+    return &Allocators::mGlobalDebugAllocator;
 }
 
 } // namespace BrnResource

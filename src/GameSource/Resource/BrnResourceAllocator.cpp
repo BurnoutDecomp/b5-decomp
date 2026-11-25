@@ -71,19 +71,6 @@ namespace BrnResource
     rw::Resource Allocators::mGlobalResourceMemory;
     rw::ResourceDescriptor Allocators::mGlobalResourceMemoryDescriptor;
 
-    // ARTIST823A7CB8: the backing check does not initialize or replace the heap.
-    HeapResourceAllocator* GetDebugAllocator()
-    {
-        if (!Allocators::mpInternalDebugAllocator)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("Allocators::mpInternalDebugAllocator",
-                CGS_ASSERT_LOCATION(CGS_ARTIST_BRNRESOURCEALLOCATOR_FILE, 369));
-            CgsDev::Assert::EndAssert();
-        }
-        return &Allocators::mGlobalDebugAllocator;
-    }
-
     // Never written by the game (the flag sits in initialised data with readers only), so a
     // failed memory check logs but does not assert.
     bool Allocators::mbAssertOnMemoryChange = false;
