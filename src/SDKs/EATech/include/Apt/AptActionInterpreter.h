@@ -133,7 +133,11 @@ public:
         pValue->AddRef();
     }
     // Push without taking a reference (the caller's ref transfers to the stack).
-    void       stackPushNoInc(AptValue* pValue);     // @0x7E990C
+    void stackPushNoInc(AptValue* pValue)
+    {
+        mpStack[mnStackTop] = pValue;
+        ++mnStackTop;
+    }
 
     // Pop the top value, Release the stack's ref, and return it (the returned
     // pointer has already been Release()'d -- callers use it before it can die,
@@ -148,7 +152,11 @@ public:
     // reference). No bounds check, matching the console.
     AptValue*  stackGetPop();                         // @0x7DF7B4
     // Lower the top slot without releasing the value (its ref is kept elsewhere).
-    void       stackPopNoDec();                       // @0x7DF7DC
+    void stackPopNoDec()
+    {
+        if (mnStackTop > 0)
+            --mnStackTop;
+    }
 
     // Replace the top nCount operands with a single value (AddRef the new value,
     // Release the nCount popped, store the new at the collapsed slot).
@@ -181,14 +189,6 @@ public:
     // function register file (AptScriptFunctionBase::GetRegisterValue). Anything else pushes
     // as-is. The push itself is the inlined stackPush (store/advance/AddRef).
     void       stackPushIndirect(AptValue* pValue);
-
-    // GetDictEntry -- fetch string-constant dictionary slot nIndex (mpConstantPool[i],
-    // console *(4*idx + a1[17])). The console reads the slot inline at each Push*Dict*
-    // op; homed here with a null guard (deliberate x64 hardening, 2026-07-05 MAIN
-    // init-action AV: a pool miss can leave a slot null where the console pre-seeds
-    // -- returns gpUndefinedValue then). Body in
-    // AptActionInterpreterInterpHelpers.cpp.
-    AptValue*  GetDictEntry(unsigned int nIndex);
 
     // ---- lifecycle (initialize/destroy the five stacks) ------------------
     // initialize @0x82AE39D8 -- allocate the five {count,capacity,array} stacks from

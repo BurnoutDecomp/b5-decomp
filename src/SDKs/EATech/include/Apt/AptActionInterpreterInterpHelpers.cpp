@@ -123,22 +123,6 @@ done_scan:
 }
 
 // ---------------------------------------------------------------------------
-// AptInterp_GetDictEntry -- fetch a string-dictionary slot with a null guard.
-// Deliberate x64 hardening: a resolved dictionary slot can be NULL on x64 when its const
-// record resolved to nothing at parse (e.g. an AptLookup pool miss -- the
-// console pre-seeds its pools, so its slots are never null). The dict-byte
-// opcodes AddRef the slot unconditionally; a null here AV'd MAIN's first init
-// actions (2026-07-05, cdb: StringDictByteGetMember+0x75). Return `undefined`.
-// ---------------------------------------------------------------------------
-AptValue* AptActionInterpreter::GetDictEntry(unsigned int nIndex)
-{
-    AptValue* pEntry = mpConstantPool[nIndex];
-    if (!pEntry)
-        pEntry = gpUndefinedValue;
-    return pEntry;
-}
-
-// ---------------------------------------------------------------------------
 // AptInterp_HasMember @0x82AE4058 -- does pValue (or, for object/CIH-typed values,
 // its prototype) hold a member keyed by *pNameSlot? A Prototype-typed (tag 20)
 // defined value is probed directly; an Object (19) / CharacterInstHandle (12) /

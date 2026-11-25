@@ -158,10 +158,8 @@ public:
     // returns int (the export's i32 result), not bool.
     int     IsVectorFull() const { return (mnCapacity >= mnTop) ? 1 : 0; }
 
-    // ReleaseValues @0x82ADCF60 -- pop every live value off the top, Release-ing
-    // (or ForceDelete-ing) each; leaves the vector empty. Returns the last
-    // Release/ForceDelete result faithfully (X360 returns r3).
-    AptValue* ReleaseValues();
+    // ReleaseValues @0x82ADCF60 -- drain the deferred-release vector.
+    void ReleaseValues();
 
     // RemoveAt @0x82ADBFF0 -- drop the element at nIndex (shift the tail down one,
     // clear the vacated top slot). NOTE: does not Release the removed value (the

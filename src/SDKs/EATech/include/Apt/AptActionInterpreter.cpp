@@ -27,16 +27,6 @@
 #include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h"    // GetRegisterValue (Register indirection)
 
 // ---------------------------------------------------------------------------
-// stackPushNoInc @0x7E990C -- store at top, advance, but DO NOT AddRef (the
-// caller's reference is handed to the stack).
-// ---------------------------------------------------------------------------
-void AptActionInterpreter::stackPushNoInc(AptValue* pValue)
-{
-    mpStack[mnStackTop] = pValue;
-    ++mnStackTop;
-}
-
-// ---------------------------------------------------------------------------
 // stackPop @0x7F3248 -- release + pop the top value. VOID per the x64 mangling
 // (?stackPop@AptActionInterpreter@@QEAAXXZ @0x14085D380 -- the body releases and
 // decrements without returning; the old AptValue* return modelled a PPC r3
@@ -86,16 +76,6 @@ AptValue* AptActionInterpreter::stackGetPop()
 {
     --mnStackTop;
     return mpStack[mnStackTop];
-}
-
-// ---------------------------------------------------------------------------
-// stackPopNoDec @0x7DF7DC -- lower the top slot without releasing the value (its
-// reference is kept alive by another owner).
-// ---------------------------------------------------------------------------
-void AptActionInterpreter::stackPopNoDec()
-{
-    if (mnStackTop > 0)
-        --mnStackTop;
 }
 
 // ---------------------------------------------------------------------------

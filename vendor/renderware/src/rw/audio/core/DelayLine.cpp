@@ -205,21 +205,19 @@ s32 DelayLine::ReadData(const ChannelPointers *pPtrs, f32 *pDest, s32 backOffset
     if (count == 0)
         return 0;
 
-    s32 produced = count;
-    if (count >= backOffset)
-        produced = backOffset;
+    count = count < backOffset ? count : backOffset;
 
     const f32 *pSrc = pPtrs->mpCursor - backOffset;
     if (pSrc < pPtrs->mpStart || pPtrs->mpEnd <= pSrc)
         pSrc += (miCapacity - miGuardSamples); // wrap into the ring body
 
-    s32 first = static_cast<s32>(pPtrs->mpEnd - pSrc);
-    if (produced < first)
-        first = produced;
-
-    XMemCpy(pDest, pSrc, static_cast<u32>(4 * first));
-    XMemCpy(pDest + first, pPtrs->mpStart, static_cast<u32>(4 * (produced - first)));
-    return produced;
+    const s32 untilEnd = static_cast<s32>(pPtrs->mpEnd - pSrc);
+    const s32 first = count < untilEnd ? count : untilEnd;
+    const s32 remaining = count - first;
+    f32 *const pNext = pDest + first;
+    XMemCpy(pDest, pSrc, sizeof(*pSrc) * first);
+    XMemCpy(pNext, pPtrs->mpStart, sizeof(*pSrc) * remaining);
+    return count;
 }
 
 // -------------------------------------------------------------------------------------
@@ -236,11 +234,12 @@ void DelayLine::WriteData(const ChannelPointers *pPtrs, const f32 *pSrc, s32 bac
 
     if (count < static_cast<s32>(pPtrs->mpEnd - pPtrs->mpStart))
     {
-        s32 first = static_cast<s32>(pPtrs->mpEnd - pDst);
-        if (count < first)
-            first = count;
-        XMemCpy(pDst, pSrc, static_cast<u32>(4 * first));
-        XMemCpy(pPtrs->mpStart, pSrc + first, static_cast<u32>(4 * (count - first)));
+        const s32 untilEnd = static_cast<s32>(pPtrs->mpEnd - pDst);
+        const s32 first = count < untilEnd ? count : untilEnd;
+        const s32 remaining = count - first;
+        const f32 *const pNext = pSrc + first;
+        XMemCpy(pDst, pSrc, sizeof(*pSrc) * first);
+        XMemCpy(pPtrs->mpStart, pNext, sizeof(*pSrc) * remaining);
     }
 }
 
@@ -345,19 +344,17 @@ s32 DelayLine::MarshalDelayData(s32 channel, s32 count, s32 offset, TapContext *
     CalcChannelPointers(&ptrs, channel, offset);
 
     s32 tapCount = 1;
-    taps[0].miLength = miReadPosition;                 // +0x28
-    taps[0].miLength2 = miReadLength + count - 1;      // +0x10 + count - 1
-    taps[0].mpOut = 0;                                 // overwritten by LoadTaps
+    taps[0].mpOut = 0;
+    taps[0].miLength = miReadPosition;
+    taps[0].miLength2 = miReadLength + count - 1;
 
-    if (mbFilterChanged) // +0x38
+    if (mbFilterChanged)
     {
-        s32 window = count;
-        if (count >= 128)
-            window = 128;
-        taps[1].miLength = miFilterReadPosition;       // +0x2C
-        taps[1].miLength2 = miReadLength + window - 1;
+        taps[1].miLength = miFilterReadPosition;
+        const s32 window = count < KI_RAMP_LEN ? count : KI_RAMP_LEN;
         taps[1].mpOut = 0;
         tapCount = 2;
+        taps[1].miLength2 = miReadLength + window - 1;
     }
 
     f32 *const pLoadedEnd = LoadTaps(&ptrs, taps, tapCount);

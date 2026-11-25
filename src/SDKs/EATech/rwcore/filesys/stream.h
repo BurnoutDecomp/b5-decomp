@@ -4,17 +4,13 @@
 
 #include "SDKs/EATech/rwcore/filesys/device.h"   // AsyncOp / Handle / Device / Manager / gpFileSys*
 
-#include <xtl.h>  // CRITICAL_SECTION -- the host mapping of the X360 EA::Thread::Mutex
+#include "SDKs/EATech/eathread/eathread_mutex.h"
 
 // =====================================================================================
 // rw::core::filesys::Stream -- the RenderWare core filesystem streaming reader.
 //
-// Reconstructed from BURNOUT_X360_ARTIST.XEX; the PowerPC asm is authoritative. No
-// reference source and no DecFIGS DWARF hints exist for this TU. Members are modelled by
-// NAME at the X360 offsets proven by the asm (never accessed via raw `this+N` casts); the
-// host layout follows the PC ABI (pointers widen to 8 bytes), exactly as the sibling
-// device.h/asyncop.h do. The X360 EA::Thread::Mutex is a host Win32 CRITICAL_SECTION
-// (Lock/Unlock -> Enter/LeaveCriticalSection), as device.cpp already models it.
+// ARTIST establishes the native offsets. DecFIGS stream.h:243 and :246-248
+// declare the EA mutex and the Filter, Tap and Chunk lists of the shared stream.
 //
 // The public API is a lightweight cursor object (`Stream`) that references a shared
 // streaming engine (`StreamState`, the object `Stream::mpState` points at). Both are
@@ -143,29 +139,24 @@ namespace rw
             };
 
             // The shared streaming engine (the object a Stream cursor's mpState points at).
-            // The X360 byte offsets (shown for provenance) are NOT reproduced literally --
-            // the host CRITICAL_SECTION / widened pointers change them -- but the field ORDER
-            // mirrors the X360 object and every access is by NAME.
             struct StreamState
             {
                 u32                muReserved00;         // X360 +0x00
                 u32                muFlags;              // X360 +0x04  (bit0 = open-in-progress)
-                CRITICAL_SECTION   mLock;                // X360 +0x08  (EA::Thread::Mutex)
+                EA::Thread::Mutex  mLock;                // X360 +0x08
                 Request*           mpRequests;           // X360 +0x38  (fixed array; stride 0x140)
                 u32                muRequestCount;       // X360 +0x3C
-                ChunkHandler*      mpChunkHandlerHead;   // X360 +0x40
-                BufferRegion*      mpRegionHead;         // X360 +0x4C
-                ChunkNode*         mpChunkHead;          // X360 +0x58
-                ChunkNode*         mpChunkTail;          // X360 +0x5C
-                u32                muChunkCount;         // X360 +0x60
+                detail::ListSingle<ChunkHandler> mFilters; // X360 +0x40
+                detail::ListSingle<BufferRegion> mTaps;     // X360 +0x4C
+                detail::ListSingle<ChunkNode> mChunks;     // X360 +0x58
                 u8*                mpBufferBase;         // X360 +0x64
                 u8*                mpWritePtr;           // X360 +0x68
                 u8*                mpBufferTop;          // X360 +0x6C
-                s32                miState;              // X360 +0x70  (0 idle,1 running,2 waiting,3/4)
+                volatile s32       miState;              // X360 +0x70  (0 idle,1 running,2 waiting,3/4)
                 s32                miNormalPriority;     // X360 +0x74
                 s32                miUrgentPriority;     // X360 +0x78
                 s32                miThreshold;          // X360 +0x7C  (low-water mark)
-                u8                 mbNeedMore;           // X360 +0x80
+                bool               mbNeedMore;           // X360 +0x80
                 s32                miBufferUsage;        // X360 +0x84
                 u8*                mpFillPtr;            // X360 +0x88
                 u8*                mpParsePtr;           // X360 +0x8C
@@ -184,6 +175,15 @@ namespace rw
                 s32                miReadGranularity;    // X360 +0x208
                 u64                mu64FileSize;         // X360 +0x210
             };
+
+            CGS_STATIC_ASSERT(offsetof(StreamState, mpRequests) == 0x38, "ARTIST request table");
+            CGS_STATIC_ASSERT(offsetof(StreamState, mFilters) == 0x40, "ARTIST chunk filter list");
+            CGS_STATIC_ASSERT(offsetof(StreamState, mTaps) == 0x4C, "ARTIST buffer tap list");
+            CGS_STATIC_ASSERT(offsetof(StreamState, mChunks) == 0x58, "ARTIST chunk list");
+            CGS_STATIC_ASSERT(offsetof(StreamState, miState) == 0x70, "ARTIST stream state");
+            CGS_STATIC_ASSERT(offsetof(StreamState, mAsyncOp) == 0x1B8, "ARTIST embedded operation");
+            CGS_STATIC_ASSERT(offsetof(StreamState, mu64FileSize) == 0x210, "ARTIST stream file size");
+            CGS_STATIC_ASSERT(sizeof(Request) == 0x140, "ARTIST stream request stride");
 
             // The public streaming cursor. A thin handle over a shared StreamState engine.
             //   +0x00 muReserved00
@@ -212,10 +212,10 @@ namespace rw
                 s32    Kill();
 
                 // ---- private engine helpers (the asm passes the engine in r3) ---------------
-                static StreamState* freerequest(StreamState* lpState, Request* lpReq);
+                static void         freerequest(StreamState* lpState, Request* lpReq);
                 static Request*     getfreerequest(StreamState* lpState);
-                static s32          queuerequest(StreamState* lpState, Request* lpReq);
-                static s32          decbufferusage(StreamState* lpState, s32 liBytes);
+                static void         queuerequest(StreamState* lpState, Request* lpReq);
+                static void         decbufferusage(StreamState* lpState, s32 liBytes);
                 static s32          parsechunks(StreamState* lpState);
                 static s32          readcallback(StreamState* lpState);
                 static s32          restartstream(StreamState* lpState, s32 liPriority);

@@ -201,59 +201,24 @@ void AptValueVector::SetAt(int32_t nIndex, AptValue* pValue)
 }
 
 // ---------------------------------------------------------------------------
-// AptValueVector::ReleaseValues  @0x82ADCF60
-//
-// asm:
-//   r31=this
-//   while (*(+4) != 0)                     // family-(B) live top (mnCapacity)
-//   {
-//       items = *(+8);
-//       top   = *(+4) - 1;  *(+4) = top;
-//       v4    = items[top];
-//       if ( (v4->mnValueData & 0x03FFC000) != 0 )   // refcount field nonzero
-//           result = v4->ClearReleaseAtEnd();         // bl AptValue__ClearReleaseAtEnd
-//       else
-//           result = (*(*v4 + 0x2C))(v4);             // vtbl[+0x2C] = ForceDelete
-//   }
-//   return result;
-//
-// Family-(B) live count lives at +0x04 (the mnCapacity member). The
-// `rlwinm. r11, r11, 0, 6, 17` masks PPC bits 6..17 of mValueData -- the
-// 12-bit mnReferenceCount field -- so the branch is "refcount != 0"; rendered
-// via getRefCount() to stay endianness-agnostic on x64. The else branch's
-// vtable slot +0x2C is AptValue::ForceDelete (12th virtual: AddRef, Release,
-// GetNativeHashVirtual, ContainsNativeHashVirtual, GetHasClass, SetHasClass,
-// objectMemberLookup, objectMemberSet, DeleteThis, PreDestroy,
-// DestroyGCPointers, ForceDelete -> 11*4 = 0x2C).
-//
-// ClearReleaseAtEnd is declared void in the reference; the X360 leaves the v4
-// pointer in r3 across the call, so the faithful "result" of that arm is the
-// value pointer itself. Both arms therefore yield the last touched value.
+// ReleaseValues @0x82ADCF60 uses the deferred-release count at +4. A live
+// reference clears the release marker; an unreferenced value is force-deleted.
 // ---------------------------------------------------------------------------
-AptValue* AptValueVector::ReleaseValues()
+void AptValueVector::ReleaseValues()
 {
-    AptValue* result = 0;
-
-    while (mnCapacity != 0)   // [c:+0x04] family-(B) live top
+    while (mnCapacity != 0)
     {
-        AptValue** items = mppItems;                 // [c:+0x08]
-        const int32_t top = mnCapacity - 1;
-        mnCapacity = top;                            // [c:+0x04] store decremented top
-
-        AptValue* v4 = items[top];
-        if (v4->getRefCount() != 0)                  // mValueData & 0x03FFC000
+        AptValue** pItems = mppItems;
+        const int32_t nIndex = mnCapacity - 1;
+        mnCapacity = nIndex;
+        AptValue* pValue = pItems[nIndex];
+        if (pValue->getRefCount() != 0)
         {
-            v4->ClearReleaseAtEnd();
-            result = v4;
+            pValue->ClearReleaseAtEnd();
+            continue;
         }
-        else
-        {
-            v4->ForceDelete();                       // vtbl[+0x2C]
-            result = v4;
-        }
+        pValue->ForceDelete();
     }
-
-    return result;
 }
 
 // ---------------------------------------------------------------------------

@@ -62,17 +62,6 @@ namespace rw
             }
 
             // -----------------------------------------------------------------------------
-            // Manager::Free @0x82BBD678
-            //   return (*(*alloc + 12))(alloc, a1, 0);
-            // The X360 returns the Free vtable call's value (modelled as void*).
-            // -----------------------------------------------------------------------------
-            void* Manager::Free(void* lpBlock)
-            {
-                gpFileSysAllocator->Free(lpBlock, 0);
-                return lpBlock;
-            }
-
-            // -----------------------------------------------------------------------------
             // Manager::GetInstance @0x82BBD630
             //   return off_8327F078;
             // -----------------------------------------------------------------------------

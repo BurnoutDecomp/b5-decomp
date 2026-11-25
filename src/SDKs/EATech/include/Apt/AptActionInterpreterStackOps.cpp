@@ -59,9 +59,6 @@
 #include <string.h>  // _stricmp (the AS class-name compare)
 #include "SDKs/EATech/include/Apt/AptValue/AptGCReleaseVector.h"  // gValuesToRelease (the Pop drain)
 
-// AptActionInterpreter::GetDictEntry (the null-guarded dictionary-slot fetch) is
-// declared in AptActionInterpreter.h.
-
 extern AptValue* gpUndefinedValue;   // off_8324D814 (AptGlobals.cpp; wired at AptInit)
 
 // stackPushIndirect is a real member (in AptActionInterpreter.cpp): it resolves
@@ -70,23 +67,15 @@ extern AptValue* gpUndefinedValue;   // off_8324D814 (AptGlobals.cpp; wired at A
 // member directly.
 
 // ---------------------------------------------------------------------------
-// _FunctionAptActionPop @0x7F33D0 (X360 @0x82ADDDE8) -- discard the top value, but
-// only while the stack is above the run's reserved base (mnStackBase). Releases the
-// popped value; popping the LAST operand then drains the GC deferred-release vector.
+// _FunctionAptActionPop @0x82ADDDE8 -- release the top above the reserved
+// base. The initial depth of one triggers the deferred-release check.
 // ---------------------------------------------------------------------------
 void AptActionInterpreter::_FunctionAptActionPop(AptActionInterpreter* pInterp, LocalContextT*)
 {
-    const int nHadDepth = pInterp->mnStackTop;   // X360 v1 = *result (the pre-pop depth)
-    if (pInterp->mnStackBase < pInterp->mnStackTop && pInterp->mnStackTop > 0)
-    {
-        pInterp->mpStack[pInterp->mnStackTop - 1]->Release();
-        --pInterp->mnStackTop;
-    }
-    // X360 @0x82ADDDE8: when the stack held exactly one element (cmpwi v1, 1) the
-    // GC deferred-release vector is drained, mnTop-guarded like the console
-    // (off_8324E51C -> lwz r11,4(r3) -- the same drain the Branch* handlers emit).
-    // family-(B): the live count is the mnCapacity member (see AptValueVector.h).
-    if (nHadDepth == 1 && gpValuesToRelease != 0 && gpValuesToRelease->mnCapacity != 0)
+    const int nDepth = pInterp->mnStackTop;
+    if (nDepth > pInterp->mnStackBase)
+        pInterp->stackPop();
+    if (nDepth == 1 && gpValuesToRelease->GetNumValues() != 0)
         gpValuesToRelease->ReleaseValues();
 }
 
@@ -106,11 +95,12 @@ void AptActionInterpreter::_FunctionAptActionPushDuplicate(AptActionInterpreter*
 // ---------------------------------------------------------------------------
 void AptActionInterpreter::_FunctionAptActionStackSwap(AptActionInterpreter* pInterp, LocalContextT*)
 {
-    int top = pInterp->mnStackTop;
-    AptValue* a = pInterp->mpStack[top - 1];   // top
-    AptValue* b = pInterp->mpStack[top - 2];   // under
-    pInterp->mpStack[top - 2] = a;
-    pInterp->mpStack[top - 1] = b;
+    AptValue* pTop = pInterp->mpStack[pInterp->mnStackTop - 1];
+    AptValue* pSecond = pInterp->mpStack[pInterp->mnStackTop - 2];
+    pInterp->stackPopNoDec();
+    pInterp->stackPopNoDec();
+    pInterp->stackPushNoInc(pTop);
+    pInterp->stackPushNoInc(pSecond);
 }
 
 // ---------------------------------------------------------------------------
@@ -303,29 +293,33 @@ void AptActionInterpreter::_FunctionAptActionPush(AptActionInterpreter* pInterp,
 void AptActionInterpreter::_FunctionAptActionPushStringDictByte(AptActionInterpreter* pInterp,
                                                                 LocalContextT* pCtx)
 {
-    const unsigned int nIndex = *pCtx->mpProgramCounter;   // byte dictionary index
-    pCtx->mpProgramCounter += 1;
-
-    AptValue* pEntry = pInterp->GetDictEntry(nIndex);   // null-guarded slot fetch (GetDictEntry, AptActionInterpreter.h)        // console: *(4*idx + a1[17])
-    pInterp->mpStack[pInterp->mnStackTop++] = pEntry;       // inlined stackPush (store + advance)
-    pEntry->AddRef();
+    const uint8_t nIndex = *pCtx->mpProgramCounter++;
+    AptValue* pEntry = pInterp->mpConstantPool[nIndex];
+    pInterp->stackPush(pEntry);
 }
 
 // ---------------------------------------------------------------------------
-// _FunctionAptActionPushStringDictWord (0xA3; PS3 @0x7F3FF4) -- push the dictionary
+// _FunctionAptActionPushStringDictWord (0xA3; ARTIST @0x82ADE820) -- push the dictionary
 // string a big-endian inline WORD indexes (the byte form's 16-bit sibling; the
 // console masks the scaled index to 16 bits -- typed indexing of the u16 here).
 // ---------------------------------------------------------------------------
 void AptActionInterpreter::_FunctionAptActionPushStringDictWord(AptActionInterpreter* pInterp,
                                                                 LocalContextT* pCtx)
 {
-    const unsigned char* p = pCtx->mpProgramCounter;
-    const unsigned int nIndex = (static_cast<unsigned int>(p[0]) << 8) | p[1];   // ARTIST: big-endian u16
-    pCtx->mpProgramCounter += 2;
-
-    AptValue* pEntry = pInterp->GetDictEntry(nIndex);   // null-guarded slot fetch (GetDictEntry, AptActionInterpreter.h)        // console: *((4*idx & 0x3FFFC) + a1[17])
-    pInterp->mpStack[pInterp->mnStackTop++] = pEntry;       // inlined stackPush (store + advance)
-    pEntry->AddRef();
+    const unsigned char* pRead = pCtx->mpProgramCounter;
+    union
+    {
+        uint16_t index;
+        struct
+        {
+            unsigned char c0;
+            unsigned char c1;
+        } bytes;
+    } operand;
+    operand.bytes.c0 = *pRead++;
+    operand.bytes.c1 = *pRead++;
+    pCtx->mpProgramCounter = pRead;
+    pInterp->stackPush(pInterp->mpConstantPool[operand.index]);
 }
 
 // The string opcodes at 0x82AF4128, 0x82B056E8, 0x82B05788 and 0x82B05828
@@ -456,13 +450,9 @@ void AptActionInterpreter::_FunctionAptActionPushStringSetVar(AptActionInterpret
 void AptActionInterpreter::_FunctionAptActionStringDictByteGetMember(AptActionInterpreter* pInterp,
                                                                      LocalContextT* pCtx)
 {
-    const unsigned int nIndex = *pCtx->mpProgramCounter;    // byte dictionary index
-    pCtx->mpProgramCounter += 1;
-
-    AptValue* pEntry = pInterp->GetDictEntry(nIndex);   // null-guarded slot fetch (GetDictEntry, AptActionInterpreter.h)        // console: *(4*idx + a1[17])
-    pInterp->mpStack[pInterp->mnStackTop++] = pEntry;       // inlined stackPush (store + advance)
-    pEntry->AddRef();
-
+    const uint8_t nIndex = *pCtx->mpProgramCounter++;
+    AptValue* pEntry = pInterp->mpConstantPool[nIndex];
+    pInterp->stackPush(pEntry);
     _FunctionAptActionGetMember(pInterp, pCtx);
 }
 
@@ -476,22 +466,15 @@ void AptActionInterpreter::_FunctionAptActionStringDictByteGetMember(AptActionIn
 void AptActionInterpreter::_FunctionAptActionStringDictByteGetVar(AptActionInterpreter* pInterp,
                                                                   LocalContextT* pCtx)
 {
-    const unsigned int nIndex = *pCtx->mpProgramCounter;    // byte dictionary index
-    pCtx->mpProgramCounter += 1;
-
-    AptValue* pEntry = pInterp->GetDictEntry(nIndex);   // null-guarded slot fetch (GetDictEntry, AptActionInterpreter.h)        // console: *(4*idx + a1[17])
-
-    // The asm inlines Get_ToString: type-1 StringValue -> its own EAStringC (+8);
-    // else (boxed tag 33) -> the AptString at +0x20, then its EAStringC. Reuse the
-    // recovered Get_ToString (a string-typed value never touches the scratch).
-    EAStringC scratch;
-    const EAStringC* pName = AptValue::Get_ToString(pEntry, &scratch);
-
-    AptValue* pResult = pInterp->getVariable(pCtx->mpCIH, pCtx->mpPendingReleaseValue,
-                                             pName, 1, 1, 0);
-
-    pInterp->mpStack[pInterp->mnStackTop++] = pResult;      // inlined stackPush (store + advance)
-    pResult->AddRef();
+    const uint8_t nIndex = *pCtx->mpProgramCounter++;
+    AptValue* pEntry = pInterp->mpConstantPool[nIndex];
+    // The dictionary holds a primitive string or a boxed string (ARTIST 0x82B058F8–0x82B05908).
+    if (pEntry->getVtblIndex() != AptVFT_StringValue)
+        pEntry = static_cast<AptStringObject*>(pEntry)->GetBoxedString();
+    const AptNativeString* pName = static_cast<AptString*>(pEntry)->GetInternalString();
+    AptValue* pValue = pInterp->getVariable(pCtx->mpCIH, pCtx->mpPendingReleaseValue,
+                                           pName, 1, 1, 0);
+    pInterp->stackPush(pValue);
 }
 
 // ===========================================================================

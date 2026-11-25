@@ -182,7 +182,10 @@ namespace rw
                 static void* Allocate(u32 luSize);
 
                 // @0x82BBD678 -- free a block through the global filesys allocator.
-                static void* Free(void* lpBlock);
+                static void Free(void* lpBlock)
+                {
+                    gpFileSysAllocator->Free(lpBlock, 0);
+                }
 
                 // @0x82BBD630 -- return the global Manager singleton (off_8327F078).
                 static void* GetInstance();

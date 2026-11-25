@@ -292,9 +292,9 @@ public:
 
     // ARTIST 0x82370D70 receives the three-qword player ID in r5-r7,
     // the date in r8-r9, and the complete WorldRegion in r10.
-    s32  AddMugshot(s32 leMugshotType, MugshotInfo::UniquePlayerID lUniqueID,
+    s32  AddMugshot(BrnGameState::GameStateModuleIO::EImageGalleryType leMugshotType, MugshotInfo::UniquePlayerID lUniqueID,
                     CgsSystem::DateAndTime lDateTaken, BrnWorld::WorldRegion lRegion);
-    s32  GetNumMugshots(s32 leMugshotType);
+    s32  GetNumMugshots(BrnGameState::GameStateModuleIO::EImageGalleryType leMugshotType);
     s32  GetNumAllMugshots();
     // Debug-info accessors, inlined into ProgressionManager::OnMugshotSent (+117992 increment, then read).
     void OnMugshotSent()            { ++miNumMugshotsSent; }
@@ -308,9 +308,9 @@ public:
     //   DeleteMugshot: removes the liImageIndex'th mugshot of that gallery type (returns >=0 on success).
     //   LockOrUnlockMugshot: toggles that mugshot's locked-for-deletion flag (returns true if found).
     // Bodies + the real members land with the Progression mugshot TU.
-    MugshotInfo* GetMugshotInfo(s32 leMugshotType, s32 liImageIndex);
-    s32          DeleteMugshot(s32 leMugshotType, s32 liImageIndex);
-    bool         LockOrUnlockMugshot(s32 leMugshotType, s32 liImageIndex);
+    MugshotInfo* GetMugshotInfo(BrnGameState::GameStateModuleIO::EImageGalleryType leMugshotType, s32 liImageIndex);
+    s32          DeleteMugshot(BrnGameState::GameStateModuleIO::EImageGalleryType leMugshotType, s32 liImageIndex);
+    bool         LockOrUnlockMugshot(BrnGameState::GameStateModuleIO::EImageGalleryType leMugshotType, s32 liImageIndex);
 
     void SetPlayerLicencePicture(const CgsNetwork::NetworkTexture* lpNewPlayerImage);
     CgsSystem::DateAndTime GetLicenceIssuedDate() const;

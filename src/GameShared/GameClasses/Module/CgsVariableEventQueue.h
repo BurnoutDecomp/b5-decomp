@@ -423,7 +423,7 @@ namespace CgsModule
             OutputQueueContents();
             CgsDev::Assert::BeginAssert();
             CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
-            lStrStream << "CgsModule::" __FUNCTION__
+            lStrStream << __FUNCTION__
                        << "\nQueue overflow.\nWrite Pos=" << miBufferWritePos
                        << " Event Type=" << liType
                        << "\nTotalEventSize=" << liTotalEventSize
@@ -571,7 +571,7 @@ namespace CgsModule
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
-            lStrStream << "CgsModule::" __FUNCTION__
+            lStrStream << __FUNCTION__
                        << "\nQueue overflow\n";
             CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, CGS_ASSERT_LOCATION(detail::KAC_VEQ_FILE, 563));
             CgsDev::Assert::EndAssert();

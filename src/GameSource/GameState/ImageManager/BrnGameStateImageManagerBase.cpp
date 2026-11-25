@@ -441,7 +441,7 @@ void GameStateImageManagerBase::HandleImageSaveEvent(const ImageToSaveEvent* lpI
         BrnProgression::Profile* lpProfile = mpProgression->GetProfile();
 
         const s32 liNewMugshotIndex = lpProfile->AddMugshot(
-            static_cast<s32>(leImageGalleryType), lpImageSaveEvent->mUniquePlayerID,
+            leImageGalleryType, lpImageSaveEvent->mUniquePlayerID,
             lDateTaken, lrRegion);
 
         mpProgression->OnTrophyUnlock(34); // X360 li r4, 0x22
@@ -731,7 +731,7 @@ void GameStateImageManagerBase::ProcessScrollImagesEvent(const ImageGalleryReque
 
     CgsModule::VariableEventQueue<13312, 16>* lpQueue = AsVeq(lpOutput->GetGameActionQueue());
     BrnProgression::Profile* lpProfile = mpProgression->GetProfile();
-    const s32 leGalleryType = lpImageGalleryReqEvent->meImageGalleryImageType;
+    const GameStateModuleIO::EImageGalleryType leGalleryType = lpImageGalleryReqEvent->meImageGalleryImageType;
 
     mImagesToRenderBitArray.UnSetAll(); // X360 stores -1 then masks; the net effect is "republish all".
 
@@ -858,7 +858,7 @@ void GameStateImageManagerBase::ProcessDeleteRequest(const ImageGalleryRequestEv
 
     CgsModule::VariableEventQueue<13312, 16>* lpQueue = AsVeq(lpOutput->GetGameActionQueue());
     BrnProgression::Profile* lpProfile = mpProgression->GetProfile();
-    const s32 leGalleryType = lpImageGalleryReqEvent->meImageGalleryImageType;
+    const GameStateModuleIO::EImageGalleryType leGalleryType = lpImageGalleryReqEvent->meImageGalleryImageType;
 
     if (lpProfile->DeleteMugshot(leGalleryType, lpImageGalleryReqEvent->miImageIndex) < 0)
     {

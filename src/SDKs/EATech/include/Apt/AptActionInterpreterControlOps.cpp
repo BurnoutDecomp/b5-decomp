@@ -33,9 +33,6 @@
 
 #include "types.hpp"
 
-// AptActionInterpreter::GetDictEntry (the null-guarded dictionary-slot fetch) is
-// declared in AptActionInterpreter.h.
-
 // ---------------------------------------------------------------------------
 // Trace @0x82AE9B60 (0x26) -- AS trace(value): emit value's string form.
 // ---------------------------------------------------------------------------
@@ -67,21 +64,25 @@ void AptActionInterpreter::_FunctionAptActionThrow(AptActionInterpreter* pInterp
 // string type (1 / boxed 33) is left as-is; otherwise it is rendered into a fresh
 // AptString that replaces the top.
 // ---------------------------------------------------------------------------
+// ARTIST records the string-defined test at 0x82AFAD38 before branching.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 void AptActionInterpreter::_FunctionAptActionToString(AptActionInterpreter* pInterp,
                                                       LocalContextT* /*pContext*/)
 {
     AptValue* pTop = pInterp->mpStack[pInterp->mnStackTop - 1];
-    const AptVirtualFunctionTable_Indices eType = pTop->getVtblIndex();
-    if ((eType == AptVFT_StringValue || eType == static_cast<AptVirtualFunctionTable_Indices>(33))
-        && pTop->getIsDefined())
-        return;   // already a string -> nothing to do
-
-    AptString* pStr = AptString::Create("");                 // the empty seed, filled below
-    pTop->Append_ToString(pStr->GetInternalString());        // Append_ToString @0x82AF9668 (AptValueConvert.cpp)
-    pInterp->stackPop();
-    pInterp->mpStack[pInterp->mnStackTop++] = pStr;           // inlined stackPush
-    pStr->AddRef();
+    if (!pTop->isString())
+    {
+        AptString* pStr = AptString::Create();
+        pTop->Append_ToString(pStr->GetInternalString());
+        pInterp->stackPop();
+        pInterp->stackPush(pStr);
+    }
 }
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // ===========================================================================
 // Call / member / function-definition fused opcodes -- the "do a call, then a
@@ -100,9 +101,6 @@ void AptActionInterpreter::_FunctionAptActionToString(AptActionInterpreter* pInt
 // forms at 0x82B05AB0, 0x82B05B68 and 0x82B05C20 push directly from the
 // constant pool before calling their handlers.
 // ===========================================================================
-
-// The separate DictCallFuncPop implementation below still uses this helper.
-extern void AptFlushDeferredReleases();
 
 namespace
 {
@@ -161,24 +159,18 @@ void AptActionInterpreter::_FunctionAptActionCallFuncAndPop(AptActionInterpreter
 }
 
 // ---------------------------------------------------------------------------
-// DictCallFuncPop (0xB0; PS3 @0x8237BC) -- push the dictionary entry an inline BYTE
+// DictCallFuncPop (0xB0; ARTIST @0x82B059F8) -- push the dictionary entry an inline BYTE
 // indexes (the inlined stackPush + AddRef), CallFunction, drop the result, drain on
 // stack-empty. The fused dict-push + CallFuncAndPop form.
 // ---------------------------------------------------------------------------
 void AptActionInterpreter::_FunctionAptActionDictCallFuncPop(AptActionInterpreter* pInterp,
                                                              LocalContextT* pContext)
 {
-    const unsigned int nIndex = *pContext->mpProgramCounter;   // inline byte dict index
-    pContext->mpProgramCounter += 1;
-
-    AptValue* pEntry = pInterp->GetDictEntry(nIndex);   // null-guarded (x64 hardening)            // console: *(4*idx + a1[17])
-    pInterp->mpStack[pInterp->mnStackTop++] = pEntry;          // inlined stackPush
-    pEntry->AddRef();
-
+    PushDictRegister(pInterp, pContext);
     _FunctionAptActionCallFunction(pInterp, pContext);
-    pInterp->stackPop();                                       // drop the call result (Release)
-    if (pInterp->mnStackTop == 0)
-        AptFlushDeferredReleases();
+    pInterp->stackPop();
+    if (gpValuesToRelease->GetNumValues() != 0 && pInterp->mnStackTop == 0)
+        gpValuesToRelease->ReleaseValues();
 }
 
 // The value->object resolver (homed in AptActionInterpreterInterpHelpers.cpp).

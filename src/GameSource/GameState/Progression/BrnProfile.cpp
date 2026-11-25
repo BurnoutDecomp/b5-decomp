@@ -662,11 +662,11 @@ void Profile::DEBUG_ClearMedals()
 // Profile::GetNumMugshots  @ 0x82366DA0
 // The live count of one mugshot gallery.
 // ====================================================================================
-s32 Profile::GetNumMugshots(s32 leMugshotType)
+s32 Profile::GetNumMugshots(BrnGameState::GameStateModuleIO::EImageGalleryType leMugshotType)
 {
-    CGS_ASSERT(leMugshotType < 5, CGS_ASSERT_MESSAGE_AT("leMugshotType < GsmIO::E_IMAGE_GALLERY_TYPE_COUNT", CGS_ARTIST_FILE, 979));
+    CGS_ASSERT(leMugshotType < BrnGameState::GameStateModuleIO::E_IMAGE_GALLERY_TYPE_COUNT, CGS_ASSERT_MESSAGE_AT("leMugshotType < GsmIO::E_IMAGE_GALLERY_TYPE_COUNT", CGS_ARTIST_FILE, 979));
 
-    return maaMugshotInfo[leMugshotType].GetCount();
+    return maaMugshotInfo[leMugshotType].GetLength();
 }
 
 // ====================================================================================
@@ -676,8 +676,8 @@ s32 Profile::GetNumMugshots(s32 leMugshotType)
 s32 Profile::GetNumAllMugshots()
 {
     s32 liTotal = 0;
-    for (s32 liIndex = 0; liIndex < 5; ++liIndex)
-        liTotal += maaMugshotInfo[liIndex].GetCount();
+    for (s32 liIndex = 0; liIndex < BrnGameState::GameStateModuleIO::E_IMAGE_GALLERY_TYPE_COUNT; ++liIndex)
+        liTotal += maaMugshotInfo[liIndex].GetLength();
     return liTotal;
 }
 
@@ -767,10 +767,10 @@ u8  MugshotInfo::GetLockedFlag() const { return mbLocked ? 1u : 0u; }           
 // (`GetFirstNonZeroBit` + `andc`, see Profile::Construct).
 // Hex-Rays suffered a local-allocation failure on this function; the asm is the spine.
 // ====================================================================================
-s32 Profile::AddMugshot(s32 leMugshotType, MugshotInfo::UniquePlayerID lUniqueID,
+s32 Profile::AddMugshot(BrnGameState::GameStateModuleIO::EImageGalleryType leMugshotType, MugshotInfo::UniquePlayerID lUniqueID,
                         CgsSystem::DateAndTime lDateTaken, BrnWorld::WorldRegion lRegion)
 {
-    CGS_ASSERT(leMugshotType != 5, CGS_ASSERT_MESSAGE_AT("leMugshotType != GsmIO::E_IMAGE_GALLERY_TYPE_COUNT", CGS_ARTIST_FILE, 758));  // X360 BrnProfile.cpp:758
+    CGS_ASSERT(leMugshotType != BrnGameState::GameStateModuleIO::E_IMAGE_GALLERY_TYPE_COUNT, CGS_ASSERT_MESSAGE_AT("leMugshotType != GsmIO::E_IMAGE_GALLERY_TYPE_COUNT", CGS_ARTIST_FILE, 758));  // X360 BrnProfile.cpp:758
 
     CgsContainers::BitArray<20u>& lrFileIds = maAvailableMugshotFileIDs[leMugshotType];
     CgsContainers::Array<MugshotInfo, 20u>&      lrGallery = maaMugshotInfo[leMugshotType];
@@ -820,9 +820,9 @@ s32 Profile::AddMugshot(s32 leMugshotType, MugshotInfo::UniquePlayerID lUniqueID
 // (whose own "Array used before Construct/Clear was called" assert is Array::GetLength's) and
 // SIGNED-compares the index against it before calling Array<MugshotInfo,20>::GetItem.
 // ====================================================================================
-MugshotInfo* Profile::GetMugshotInfo(s32 leMugshotType, s32 liImageIndex)
+MugshotInfo* Profile::GetMugshotInfo(BrnGameState::GameStateModuleIO::EImageGalleryType leMugshotType, s32 liImageIndex)
 {
-    CGS_ASSERT(leMugshotType < 5, CGS_ASSERT_MESSAGE_AT("leMugshotType < GsmIO::E_IMAGE_GALLERY_TYPE_COUNT", CGS_ARTIST_FILE, 999));  // X360 BrnProfile.cpp:999
+    CGS_ASSERT(leMugshotType < BrnGameState::GameStateModuleIO::E_IMAGE_GALLERY_TYPE_COUNT, CGS_ASSERT_MESSAGE_AT("leMugshotType < GsmIO::E_IMAGE_GALLERY_TYPE_COUNT", CGS_ARTIST_FILE, 999));  // X360 BrnProfile.cpp:999
 
     CgsContainers::Array<MugshotInfo, 20u>& lrGallery = maaMugshotInfo[leMugshotType];
     if (liImageIndex < static_cast<s32>(lrGallery.GetLength()))
@@ -836,22 +836,22 @@ MugshotInfo* Profile::GetMugshotInfo(s32 leMugshotType, s32 liImageIndex)
 // Profile::LockOrUnlockMugshot  @ 0x823711C0
 // Toggle one record's "locked for deletion" flag. Returns true when the index named a live
 // record, false when it did not. The X360 computes `!flag` as `cntlzw ; extrwi ..,1,26`.
-// (The console fetches the record TWICE -- once to read the flag, once as the store target;
-// one reference is the same store.)
+// ARTIST 0x82371250 and 0x82371260 fetch the read and write records separately.
 // ====================================================================================
-bool Profile::LockOrUnlockMugshot(s32 leMugshotType, s32 liImageIndex)
+bool Profile::LockOrUnlockMugshot(BrnGameState::GameStateModuleIO::EImageGalleryType leMugshotType, s32 liImageIndex)
 {
-    CGS_ASSERT(leMugshotType < 5, CGS_ASSERT_MESSAGE_AT("leMugshotType < GsmIO::E_IMAGE_GALLERY_TYPE_COUNT", CGS_ARTIST_FILE, 926));  // X360 BrnProfile.cpp:926
+    CGS_ASSERT(leMugshotType < BrnGameState::GameStateModuleIO::E_IMAGE_GALLERY_TYPE_COUNT, CGS_ASSERT_MESSAGE_AT("leMugshotType < GsmIO::E_IMAGE_GALLERY_TYPE_COUNT", CGS_ARTIST_FILE, 926));  // X360 BrnProfile.cpp:926
 
     CgsContainers::Array<MugshotInfo, 20u>& lrGallery = maaMugshotInfo[leMugshotType];
-    if (liImageIndex >= static_cast<s32>(lrGallery.GetLength()))
+    if (liImageIndex < static_cast<s32>(lrGallery.GetLength()))
     {
-        return false;                                             // X360 `li r3, 0`
+        const MugshotInfo& lrSource = lrGallery.GetItem(static_cast<u32>(liImageIndex));
+        MugshotInfo& lrDestination = lrGallery.GetItem(static_cast<u32>(liImageIndex));
+        lrDestination.mbLocked = !lrSource.mbLocked;
+        return true;
     }
 
-    MugshotInfo& lrInfo = lrGallery.GetItem(static_cast<u32>(liImageIndex));
-    lrInfo.mbLocked = !lrInfo.mbLocked;                            // X360 `stb .., 0x32`
-    return true;                                                   // X360 `li r3, 1`
+    return false;
 }
 
 // ====================================================================================
@@ -860,9 +860,9 @@ bool Profile::LockOrUnlockMugshot(s32 leMugshotType, s32 liImageIndex)
 // array. Returns the freed file id, or -1 when the index is out of range or the record is
 // LOCKED. The bit index is the file id with the gallery's 1000-per-type namespace removed.
 // ====================================================================================
-s32 Profile::DeleteMugshot(s32 leMugshotType, s32 liImageIndex)
+s32 Profile::DeleteMugshot(BrnGameState::GameStateModuleIO::EImageGalleryType leMugshotType, s32 liImageIndex)
 {
-    CGS_ASSERT(leMugshotType < 5, CGS_ASSERT_MESSAGE_AT("leMugshotType < GsmIO::E_IMAGE_GALLERY_TYPE_COUNT", CGS_ARTIST_FILE, 836));  // X360 BrnProfile.cpp:836
+    CGS_ASSERT(leMugshotType < BrnGameState::GameStateModuleIO::E_IMAGE_GALLERY_TYPE_COUNT, CGS_ASSERT_MESSAGE_AT("leMugshotType < GsmIO::E_IMAGE_GALLERY_TYPE_COUNT", CGS_ARTIST_FILE, 836));  // X360 BrnProfile.cpp:836
 
     s32 liFileID = -1;                                             // X360 `li r27, -1`
 

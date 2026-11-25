@@ -1,16 +1,12 @@
 // =====================================================================================
 // rw::core::filesys::Stream -- the RenderWare core filesystem streaming reader.
 //
-// Reconstructed from BURNOUT_X360_ARTIST.XEX; the PowerPC asm is authoritative. No
-// reference source and no DecFIGS DWARF hints exist for this TU. See stream.h for the
-// object model. The X360 EA::Thread::Mutex is a host Win32 CRITICAL_SECTION, exactly as
-// device.cpp models the sibling scheduler's mutex (Lock/Unlock -> Enter/LeaveCriticalSection;
-// the X360 Unlock's r3 result is the released lock count == 0 on the host).
+// ARTIST establishes the native storage and dispatch. The StreamState owner
+// uses the original EA::Thread::Mutex and RenderWare intrusive lists.
 // =====================================================================================
 
 #include "SDKs/EATech/rwcore/filesys/stream.h"
 
-#include <xtl.h>  // Enter/LeaveCriticalSection
 #include <cstring>    // strncpy, memcpy
 
 namespace rw
@@ -30,7 +26,7 @@ namespace rw
             // -----------------------------------------------------------------------------
             Request* Stream::getfreerequest(StreamState* lpState)
             {
-                ::EnterCriticalSection(&lpState->mLock);
+                lpState->mLock.Lock();
 
                 Request* lpReq = lpState->mpFreeRequest;
                 if (lpReq)
@@ -44,15 +40,15 @@ namespace rw
                     lpReq->miId = static_cast<s32>((static_cast<u32>(lpReq->miId) & 0xFFu) | guRequestGeneration);
                 }
 
-                ::LeaveCriticalSection(&lpState->mLock);
+                lpState->mLock.Unlock();
                 return lpReq;
             }
 
             // -----------------------------------------------------------------------------
             // Stream::freerequest @0x82BBD7F8 -- unlink lpReq from the active list and push it
-            // onto the free list. Returns the engine (the X360 r3 is unchanged).
+            // onto the free list. DecFIGS stream.h:229 declares the void helper.
             // -----------------------------------------------------------------------------
-            StreamState* Stream::freerequest(StreamState* lpState, Request* lpReq)
+            void Stream::freerequest(StreamState* lpState, Request* lpReq)
             {
                 if (lpReq == lpState->mpReqHead)
                     lpState->mpReqHead = lpReq->mpNext;
@@ -75,18 +71,17 @@ namespace rw
                 lpReq->miState = 0;
                 lpReq->mpNext = lpState->mpFreeRequest;
                 lpState->mpFreeRequest = lpReq;
-                return lpState;
             }
 
             // -----------------------------------------------------------------------------
             // Stream::queuerequest @0x82BBD780 -- append lpReq to the tail of the active list.
             // -----------------------------------------------------------------------------
-            s32 Stream::queuerequest(StreamState* lpState, Request* lpReq)
+            void Stream::queuerequest(StreamState* lpState, Request* lpReq)
             {
                 lpReq->miState = 1;
                 lpReq->mpNext  = 0;
 
-                ::EnterCriticalSection(&lpState->mLock);
+                lpState->mLock.Lock();
 
                 Request* lpTail = lpState->mpReqTail;
                 if (lpTail)
@@ -102,8 +97,7 @@ namespace rw
                 }
                 lpState->mpReqTail = lpReq;
 
-                ::LeaveCriticalSection(&lpState->mLock);
-                return 0;
+                lpState->mLock.Unlock();
             }
 
             // -----------------------------------------------------------------------------
@@ -112,28 +106,30 @@ namespace rw
             // "need more" and bump the outstanding read op to the urgent priority (redirecting
             // to the default device when the op's device runs on an external thread).
             // -----------------------------------------------------------------------------
-            s32 Stream::decbufferusage(StreamState* lpState, s32 liBytes)
+            void Stream::decbufferusage(StreamState* lpState, s32 liBytes)
             {
-                ::EnterCriticalSection(&lpState->mLock);
+                lpState->mLock.Lock();
                 s32 liOldUsage = lpState->miBufferUsage;
                 lpState->miBufferUsage = liOldUsage - liBytes;
-                ::LeaveCriticalSection(&lpState->mLock);
+                lpState->mLock.Unlock();
 
-                s32 liResult = 0;
                 s32 liThreshold = lpState->miThreshold;
                 if (liOldUsage >= liThreshold && (liOldUsage - liBytes) < liThreshold)
                 {
-                    s32 liEngineState = lpState->miState;
-                    lpState->mbNeedMore = 1;
-                    if (liEngineState == 1 && lpState->mAsyncOp.miPriority != lpState->miUrgentPriority)
+                    lpState->mbNeedMore = true;
+                    if (lpState->miState == 1)
                     {
-                        Device* lpDevice = lpState->mAsyncOp.mpDevice;
-                        if (lpDevice->IsExternalThread())
-                            lpDevice = gpFileSysManager->mpDefaultDevice;
-                        liResult = lpDevice->ChangeOpPriority(&lpState->mAsyncOp, lpState->miUrgentPriority);
+                        AsyncOp* lpOp = &lpState->mAsyncOp;
+                        const s32 liPriority = lpState->miUrgentPriority;
+                        if (lpOp->miPriority != liPriority)
+                        {
+                            Device* lpDevice = lpOp->mpDevice;
+                            if (lpDevice->IsExternalThread())
+                                lpDevice = gpFileSysManager->mpDefaultDevice;
+                            lpDevice->ChangeOpPriority(lpOp, liPriority);
+                        }
                     }
                 }
-                return liResult;
             }
 
             // -----------------------------------------------------------------------------
@@ -155,7 +151,7 @@ namespace rw
                     {
                         u32 luConsumed = 0;
                         s32 liParse = 0;
-                        for (ChunkHandler* lpH = lpState->mpChunkHandlerHead; lpH; lpH = lpH->mpNext)
+                        for (ChunkHandler* lpH = lpState->mFilters.mpHead; lpH; lpH = lpH->mpNext)
                         {
                             liParse = lpReq->mpfnParse(
                                 lpState->mpParsePtr,
@@ -188,16 +184,15 @@ namespace rw
                                 return 2;
                         }
 
-                        ::EnterCriticalSection(&lpState->mLock);
+                        lpState->mLock.Lock();
                         if (lpReq->miState == 4)
                         {
-                            ::LeaveCriticalSection(&lpState->mLock);
+                            lpState->mLock.Unlock();
                             liResult = 1;
                             break;
                         }
 
-                        // X360 allocated a fixed 24-byte node; on the PC target the node is
-                        // sizeof(ChunkNode) (pointer-widened).
+                        // ARTIST 0x82BBF2A4 allocates the native 24-byte chunk node.
                         ChunkNode* lpNode = static_cast<ChunkNode*>(Manager::Allocate(sizeof(ChunkNode)));
                         if (lpNode)
                         {
@@ -209,20 +204,11 @@ namespace rw
                             lpNode->mChunk.muSize   = luConsumed;
                         }
 
-                        // Push the node onto the chunk-list tail. (The X360 dereferences the
-                        // node unconditionally here -- an OOM node would fault -- so keep the
-                        // same shape rather than inventing a graceful path.)
-                        ChunkNode* lpTail = lpState->mpChunkTail;
-                        lpNode->mpNext = 0;
-                        lpState->mpChunkTail = lpNode;
-                        lpState->muChunkCount++;
-                        if (lpTail)
-                            lpTail->mpNext = lpNode;
-                        else
-                            lpState->mpChunkHead = lpNode;
+                        // ARTIST 0x82BBF2F4 appends through the chunk list's links and count.
+                        lpState->mChunks.Append(lpNode);
 
                         // Charge the chunk to its region and the owning request.
-                        BufferRegion* lpRegion = lpState->mpRegionHead;
+                        BufferRegion* lpRegion = lpState->mTaps.mpHead;
                         for (s32 li = liRegion - 1; li; --li)
                             lpRegion = lpRegion->mpNext;
                         lpRegion->miUsage += static_cast<s32>(luConsumed);
@@ -241,7 +227,7 @@ namespace rw
                             lpState->mbNeedMore = 0;
 
                         lpNode->mChunk.miState = 0;
-                        ::LeaveCriticalSection(&lpState->mLock);
+                        lpState->mLock.Unlock();
 
                         if (liParse == 2)
                             liResult = 2;
@@ -292,10 +278,10 @@ namespace rw
 
                 if (liResult == 2 || lpReq->mbAtEnd)
                 {
-                    ::EnterCriticalSection(&lpState->mLock);
+                    lpState->mLock.Lock();
                     if (lpReq->miState != 4)
                         lpReq->miState = 3;
-                    ::LeaveCriticalSection(&lpState->mLock);
+                    lpState->mLock.Unlock();
                     return startnextrequest(lpState, lpState->miUrgentPriority);
                 }
 
@@ -311,7 +297,7 @@ namespace rw
             // -----------------------------------------------------------------------------
             s32 Stream::startnextrequest(StreamState* lpState, s32 liPriority)
             {
-                ::EnterCriticalSection(&lpState->mLock);
+                lpState->mLock.Lock();
 
                 Request* lpReq = lpState->mpReqCurrent;
                 bool bNoRequest = (lpReq == 0);
@@ -344,7 +330,7 @@ namespace rw
                     lpReq->mbAtEnd = 0;
                 }
 
-                ::LeaveCriticalSection(&lpState->mLock);
+                lpState->mLock.Unlock();
 
                 if (bNoRequest)
                     return 0;
@@ -420,31 +406,31 @@ namespace rw
             // -----------------------------------------------------------------------------
             s32 Stream::restartstream(StreamState* lpState, s32 liPriority)
             {
-                ::EnterCriticalSection(&lpState->mLock);
+                lpState->mLock.Lock();
 
                 // Phase 1: free chunks that have been released (state >= 2), advancing the
                 // fill pointer as the buffer front empties.
-                ChunkNode* lpChunk = lpState->mpChunkHead;
+                ChunkNode* lpChunk = lpState->mChunks.mpHead;
                 if (lpChunk)
                 {
                     while (lpChunk->mChunk.miState >= 2)
                     {
-                        ChunkNode* lpHead = lpState->mpChunkHead;
+                        ChunkNode* lpHead = lpState->mChunks.mpHead;
                         if (lpHead)
                         {
-                            if (lpHead == lpState->mpChunkTail)
+                            if (lpHead == lpState->mChunks.mpTail)
                             {
-                                lpState->mpChunkHead = 0;
-                                lpState->mpChunkTail = 0;
+                                lpState->mChunks.mpHead = 0;
+                                lpState->mChunks.mpTail = 0;
                             }
                             else
                             {
-                                lpState->mpChunkHead = lpHead->mpNext;
+                                lpState->mChunks.mpHead = lpHead->mpNext;
                             }
-                            lpState->muChunkCount--;
+                            lpState->mChunks.muCount--;
                             lpHead->mpNext = 0;
                         }
-                        if (!lpState->mpChunkHead)
+                        if (!lpState->mChunks.mpHead)
                         {
                             uintptr_t luAligned =
                                 reinterpret_cast<uintptr_t>(lpChunk->mChunk.mpData + lpChunk->mChunk.muSize)
@@ -453,7 +439,7 @@ namespace rw
                         }
                         lpChunk->mpNext = 0;
                         Manager::Free(lpChunk);
-                        lpChunk = lpState->mpChunkHead;
+                        lpChunk = lpState->mChunks.mpHead;
                         if (!lpChunk)
                             break;
                     }
@@ -492,7 +478,7 @@ namespace rw
                     freerequest(lpState, lpState->mpReqHead);
                 }
 
-                ::LeaveCriticalSection(&lpState->mLock);
+                lpState->mLock.Unlock();
                 s32 liResult = 0;
 
                 // Phase 3: work out how much contiguous room is free, compacting the buffer if
@@ -587,13 +573,13 @@ namespace rw
                     return restartstream(lpState, liPriority);
                 }
 
-                ::EnterCriticalSection(&lpState->mLock);
+                lpState->mLock.Lock();
                 s32 liEngineState = lpState->miState;
                 lpState->macOpenPath[0] = 0;
                 if (liEngineState == 1)
                     lpState->miState = 0;
                 freerequest(lpState, lpState->mpReqCurrent);
-                ::LeaveCriticalSection(&lpState->mLock);
+                lpState->mLock.Unlock();
 
                 s32 liNext = lpState->mbNeedMore ? lpState->miUrgentPriority : lpState->miNormalPriority;
                 return startnextrequest(lpState, liNext);
@@ -666,11 +652,11 @@ namespace rw
 
                 queuerequest(lpState, lpReq);
 
-                ::EnterCriticalSection(&lpState->mLock);
+                lpState->mLock.Lock();
                 s32 liEngineState = lpState->miState;
                 if (!liEngineState)
                     lpState->miState = 1;
-                ::LeaveCriticalSection(&lpState->mLock);
+                lpState->mLock.Unlock();
 
                 if (!liEngineState)
                 {
@@ -690,7 +676,7 @@ namespace rw
             Chunk* Stream::GetChunk()
             {
                 StreamState* lpState = mpState;
-                ::EnterCriticalSection(&lpState->mLock);
+                lpState->mLock.Lock();
 
                 Chunk* lpResult;
                 if (miRemaining)
@@ -725,7 +711,7 @@ namespace rw
                     lpResult = 0;
                 }
 
-                ::LeaveCriticalSection(&lpState->mLock);
+                lpState->mLock.Unlock();
                 return lpResult;
             }
 
@@ -737,7 +723,7 @@ namespace rw
             s32 Stream::ReleaseChunk(Chunk* lpChunk)
             {
                 StreamState* lpState = mpState;
-                ::EnterCriticalSection(&lpState->mLock);
+                lpState->mLock.Lock();
 
                 s32 liSize = static_cast<s32>(lpChunk->muSize);
                 lpChunk->miState = 2;
@@ -746,7 +732,7 @@ namespace rw
                 s32 liEngineState = lpState->miState;
                 if (liEngineState == 2)
                     lpState->miState = 1;
-                ::LeaveCriticalSection(&lpState->mLock);
+                lpState->mLock.Unlock();
                 s32 liResult = 0;
 
                 if (liEngineState == 2)
@@ -766,7 +752,7 @@ namespace rw
             s32 Stream::CancelRequest(u32 luRequestId)
             {
                 StreamState* lpState = mpState;
-                ::EnterCriticalSection(&lpState->mLock);
+                lpState->mLock.Lock();
 
                 if ((luRequestId & 0xFFu) < lpState->muRequestCount)
                 {
@@ -784,14 +770,14 @@ namespace rw
                             {
                                 bool lbTouched = false;
                                 lpReq->miState = 4;
-                                for (ChunkNode* lpNode = lpState->mpChunkHead; lpNode; lpNode = lpNode->mpNext)
+                                for (ChunkNode* lpNode = lpState->mChunks.mpHead; lpNode; lpNode = lpNode->mpNext)
                                 {
                                     if (lpNode->mChunk.muRequestId == static_cast<u32>(lpReq->miId)
                                         && !lpNode->mChunk.miState)
                                     {
                                         u32 luRegion = lpNode->mChunk.muKey;
                                         lbTouched = true;
-                                        BufferRegion* lpRegion = lpState->mpRegionHead;
+                                        BufferRegion* lpRegion = lpState->mTaps.mpHead;
                                         for (; --luRegion; lpRegion = lpRegion->mpNext)
                                             ;
                                         lpRegion->miUsage -= static_cast<s32>(lpNode->mChunk.muSize);
@@ -801,7 +787,7 @@ namespace rw
                                 }
                                 if (lbTouched)
                                 {
-                                    for (BufferRegion* lpRegion = lpState->mpRegionHead; lpRegion;
+                                    for (BufferRegion* lpRegion = lpState->mTaps.mpHead; lpRegion;
                                          lpRegion = lpRegion->mpNext)
                                     {
                                         ChunkNode* lpMatch;
@@ -813,7 +799,7 @@ namespace rw
                                         {
                                             if (!lpRegion->mpCurrentChunk->mChunk.miState)
                                                 continue;
-                                            for (lpMatch = lpState->mpChunkHead;
+                                            for (lpMatch = lpState->mChunks.mpHead;
                                                  lpMatch->mChunk.muKey != lpRegion->muKey || lpMatch->mChunk.miState;
                                                  lpMatch = lpMatch->mpNext)
                                                 ;
@@ -826,7 +812,7 @@ namespace rw
                     }
                 }
 
-                ::LeaveCriticalSection(&lpState->mLock);
+                lpState->mLock.Unlock();
                 return 0;
             }
 
@@ -862,11 +848,7 @@ namespace rw
             // -----------------------------------------------------------------------------
             bool Stream::IsEndOfStream() const
             {
-                if (mpState->miState)
-                    return false;
-                if (miRemaining)
-                    return false;
-                return true;
+                return mpState->miState == 0 && miRemaining == 0;
             }
 
             // -----------------------------------------------------------------------------
@@ -904,17 +886,17 @@ namespace rw
                         freerequest(lpState, lpState->mpReqHead);
                     lpState->mpReqCurrent->miState = 4;
 
-                    for (BufferRegion* lpRegion = lpState->mpRegionHead; lpRegion; lpRegion = lpRegion->mpNext)
+                    for (BufferRegion* lpRegion = lpState->mTaps.mpHead; lpRegion; lpRegion = lpRegion->mpNext)
                         lpRegion->miUsage = 0;
 
                     decbufferusage(lpState, lpState->miBufferUsage);
 
-                    ::EnterCriticalSection(&lpState->mLock);
-                    for (ChunkNode* lpNode = lpState->mpChunkHead; lpNode; lpNode = lpNode->mpNext)
+                    lpState->mLock.Lock();
+                    for (ChunkNode* lpNode = lpState->mChunks.mpHead; lpNode; lpNode = lpNode->mpNext)
                         lpNode->mChunk.miState = 2;
                     if (lpState->miState == 2)
                         lpState->miState = 0;
-                    ::LeaveCriticalSection(&lpState->mLock);
+                    lpState->mLock.Unlock();
                     liResult = 0;
                 }
 
