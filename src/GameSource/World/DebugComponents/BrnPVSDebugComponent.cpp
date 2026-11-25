@@ -119,8 +119,8 @@ namespace BrnWorld
         _miColourMode = 1;
         maColourModeOptions[0].miValue = 1;
         maColourModeOptions[0].mpcName = "Streaming";
-        maColourModeOptions[1].miValue = 0;
-        maColourModeOptions[1].mpcName = 0;
+        // The embedded component's terminator is already zeroed by
+        // BrnGameModule::DebugMemoryInit before placement construction.
 
         RegisterVariable(&_mbShowPVS, "Show PVS");
         RegisterVariable(&mbDrawPVSWireFrame, "Show PVS wire frame");

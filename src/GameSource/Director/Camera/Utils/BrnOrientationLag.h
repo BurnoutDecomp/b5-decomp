@@ -20,8 +20,10 @@ namespace Utils
     {
         // DWARF BrnOrientationLag.h:77. The tunables block (X360 offsets pinned by
         // Update's reads: mfSlerpSpring @+0x10 lvlx, mbUseSlerpSpring @+0x14 lbz).
-        struct Parameters
+        // ARTIST 0x822310B0 encodes Parameters as a class in the serialiser specialization.
+        class Parameters
         {
+        public:
             VersionNumber muVersion;        // +0x00 (h:80)
             f32           mfPitchSpring;    // +0x04 (h:82)
             f32           mfYawSpring;      // +0x08 (h:83)

@@ -158,33 +158,33 @@ namespace CgsDev
 
     void DebugComponent::RegisterVariable(f32* lpfValue, const char* lpcName)
     {
-        DebugUI::Variant variant(lpfValue);
         char acPath[256];
         GetComponentPath(acPath, 256);
+        DebugUI::Variant variant(lpfValue);
         GetUI().GetVariableManager().RegisterVariable(variant, acPath, lpcName);
     }
 
     void DebugComponent::RegisterVariable(s32* lpiValue, const char* lpcName)
     {
-        DebugUI::Variant variant(lpiValue);
         char acPath[256];
         GetComponentPath(acPath, 256);
+        DebugUI::Variant variant(lpiValue);
         GetUI().GetVariableManager().RegisterVariable(variant, acPath, lpcName);
     }
 
     void DebugComponent::RegisterVariable(u32* lpuValue, const char* lpcName)
     {
-        DebugUI::Variant variant(lpuValue);
         char acPath[256];
         GetComponentPath(acPath, 256);
+        DebugUI::Variant variant(lpuValue);
         GetUI().GetVariableManager().RegisterVariable(variant, acPath, lpcName);
     }
 
     void DebugComponent::RegisterVariable(bool* lpbValue, const char* lpcName)
     {
-        DebugUI::Variant variant(lpbValue);     // X360 sub_8282D800: v6[0] = 8
         char acPath[256];
         GetComponentPath(acPath, 256);
+        DebugUI::Variant variant(lpbValue);     // X360 sub_8282D800: v6[0] = 8
         GetUI().GetVariableManager().RegisterVariable(variant, acPath, lpcName);
     }
 

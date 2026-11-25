@@ -119,7 +119,7 @@ namespace BrnNetwork
         // The reset frame, then each slot's hull value + owning player id. Every field's
         // per-field status is OR-ed into the running result (0 == all succeeded).
         CgsNetwork::PackOrUnpackResult lxResult =
-            CgsNetwork::PackOrUnpackU16(this, &mu16FrameSinceStartToResetTraffic,
+            CgsNetwork::Message::PackOrUnpack(&mu16FrameSinceStartToResetTraffic,
                                         KU16_MIN_RESTART_FRAME, KU16_MAX_RESTART_FRAME) | lxBase;
 
         for (s32 leActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_0;
@@ -127,7 +127,7 @@ namespace BrnNetwork
              ++leActiveRaceCarIndex)
         {
             const CgsNetwork::PackOrUnpackResult lxHull =
-                CgsNetwork::PackOrUnpackU16(this, &mau16ActiveTrafficHulls[leActiveRaceCarIndex],
+                CgsNetwork::Message::PackOrUnpack(&mau16ActiveTrafficHulls[leActiveRaceCarIndex],
                                             KU16_MIN_HULL_VALUE, KU16_MAX_HULL_VALUE) | lxResult;
             lxResult = BrnNetworkManager::PackOrUnpack(this,
                            &maPlayerIDsForActiveHulls[leActiveRaceCarIndex]) | lxHull;

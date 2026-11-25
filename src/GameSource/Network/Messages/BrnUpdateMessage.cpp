@@ -182,8 +182,8 @@ namespace BrnNetwork
                                                  KF_UPDATE_CONTROL_MIN, KF_UPDATE_CONTROL_MAX,
                                                  KI_UPDATE_BRAKING_BITS) | lxResult;
 
-        lxResult = CgsNetwork::PackOrUnpackU16(this, &mUpdateData.mu16SentFrame, 0, KI_UPDATE_MAX_FRAME) | lxResult;
-        lxResult = CgsNetwork::PackOrUnpackU16(this, &mUpdateData.mu16FramesSinceStart, 0, KI_UPDATE_MAX_FRAME) | lxResult;
+        lxResult = CgsNetwork::Message::PackOrUnpack(&mUpdateData.mu16SentFrame, 0, KI_UPDATE_MAX_FRAME) | lxResult;
+        lxResult = CgsNetwork::Message::PackOrUnpack(&mUpdateData.mu16FramesSinceStart, 0, KI_UPDATE_MAX_FRAME) | lxResult;
 
         lxResult = CgsNetwork::Message::PackOrUnpack(&liCameraStatus, 0, KI_UPDATE_MAX_CAMERA_STATUS) | lxResult;
         lxResult = CgsNetwork::Message::PackOrUnpack(&liHeadsetStatus, 0, KI_UPDATE_MAX_HEADSET_STATUS) | lxResult;

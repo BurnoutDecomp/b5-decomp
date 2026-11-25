@@ -155,18 +155,19 @@ namespace BrnDirector
     // line and take the original scalar subtraction arm.
     void DebugLog::Update(f32 lfTimestep)
     {
-        for (u32 luLoop = 0; luLoop < mStringIndices.GetLength(); )
+        for (u32 luLoop = 0; luLoop < mStringIndices.GetLength(); ++luLoop)
         {
             const s32 liIndex = mStringIndices[luLoop];
-            if (mStringPool[liIndex].mfTimeLeft < lfTimestep)
+            if (!(mStringPool[liIndex].mfTimeLeft < lfTimestep))
             {
-                mStringPool.FreeObject(liIndex);
-                mStringIndices.Erase(luLoop);
+                mStringPool[liIndex].mfTimeLeft -= lfTimestep;
             }
             else
             {
-                mStringPool[liIndex].mfTimeLeft -= lfTimestep;
-                ++luLoop;
+                mStringPool.FreeObject(liIndex);
+                mStringIndices.Erase(luLoop);
+                // ARTIST 0x8221BAAC revisits the index after Erase shifts the array.
+                --luLoop;
             }
         }
     }

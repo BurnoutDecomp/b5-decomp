@@ -3091,14 +3091,16 @@ namespace CgsPhysics
                                          PhysicsSimulationIO::OutputBuffer* lpOutput)
     {
         (void)lpUnusedStack;   // dead on the console
+        IslandGenerator* lpIslandGenerator = NULL;
 
         CgsDev::PerfMonCpu::StartMonitor(miTimeInSim1);        // "Sim setup"
         lpInput->LockForRead();
         ProcessInputBuffers(lpInput);
 
         const f32 lfNewStep = lpInput->GetTimeStep();          // `bl sub_8289E260` -- the READ-lock const overload
-        CGS_ASSERT(lfNewStep > 0.0f, "lfNewStep > 0.0f");                              // .cpp:794
-        CGS_ASSERT(lpInput->GetMaxIterations() > 0, "lpInput->GetMaxIterations() > 0");   // .cpp:867
+        CGS_ASSERT_AT(lfNewStep > 0.0f, "lfNewStep > 0.0f", KAC_ARTIST_ASSERT_SOURCE, 794);
+        CGS_ASSERT_AT(lpInput->GetMaxIterations() > 0, "lpInput->GetMaxIterations() > 0",
+                      KAC_ARTIST_ASSERT_SOURCE, 867);
         mpSimulation->SetMaxIteration(lpInput->GetMaxIterations());  // `stw 0xAC(sim)`
 
         lpInput->UnlockForRead();
@@ -3106,7 +3108,6 @@ namespace CgsPhysics
         CgsDev::PerfMonCpu::StopMonitor(miTimeInSim1);
         CgsDev::PerfMonCpu::StartMonitor(miTimeInSim2);        // "Sim freezing"
 
-        IslandGenerator* lpIslandGenerator = NULL;
         lpTempStack->CreateIOBuffer(&lpIslandGenerator, NULL); // `bl 0x8289E0D0` -- Alloc(0x4B2)
         QuerySimulationToSetFlags();
         ActiveSetClosure(lpIslandGenerator, 100, 1024, 200);   // `li 0x64 / 0x400 / 0xC8`

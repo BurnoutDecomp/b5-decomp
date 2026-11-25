@@ -191,9 +191,9 @@ namespace BrnNetwork
         lxResult |= BrnNetworkManager::PackOrUnpack(this,&mImageSenderPlayerID);
         lxResult |= BrnNetworkManager::PackOrUnpack(this,&mImageReceiverPlayerID);
         lxResult |= CgsNetwork::Message::PackOrUnpack(&mu8ImageType, 0, 6);
-        lxResult |= CgsNetwork::PackOrUnpackU16(this, &mu16PhotoPacketNumber, 0, KI_MAX_PHOTO_PACKETS);
-        lxResult |= CgsNetwork::PackOrUnpackU16(this, &mu16TotalPhotoPacketCount, 0, KI_MAX_PHOTO_PACKETS);
-        lxResult |= CgsNetwork::PackOrUnpackU16(this, &mu16NumberOfBytesOfPhotoData, 0, KI_PHOTO_SEGMENT_SIZE);
+        lxResult |= CgsNetwork::Message::PackOrUnpack(&mu16PhotoPacketNumber, 0, KI_MAX_PHOTO_PACKETS);
+        lxResult |= CgsNetwork::Message::PackOrUnpack(&mu16TotalPhotoPacketCount, 0, KI_MAX_PHOTO_PACKETS);
+        lxResult |= CgsNetwork::Message::PackOrUnpack(&mu16NumberOfBytesOfPhotoData, 0, KI_PHOTO_SEGMENT_SIZE);
         lxResult |= CgsNetwork::Message::PackOrUnpack(&mBeatenRoadID);
 
         CGS_ASSERT(mu16NumberOfBytesOfPhotoData <= KI_PHOTO_SEGMENT_SIZE, CGS_ASSERT_MESSAGE_AT(

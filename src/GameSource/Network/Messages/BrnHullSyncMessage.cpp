@@ -90,9 +90,9 @@ namespace BrnNetwork
             HullToActivateInfo* lpInfo = (mePackOrUnpack != E_PACK_INTO_BITSTREAM)
                                              ? mBufferedHullActivates.Grow()
                                              : &mBufferedHullActivates.Ge(static_cast<u32>(liHull));
-            lxResult = CgsNetwork::PackOrUnpackU16(this, &lpInfo->muTrafUpdateToActivate, 0, 0xFFFF) | lxResult;
-            lxResult = CgsNetwork::PackOrUnpackU16(this, &lpInfo->muFramesSinceStart, 0, 0xFFFF) | lxResult;
-            lxResult = CgsNetwork::PackOrUnpackU16(this, &lpInfo->muHull, 0, KU16_MAX_HULL_NUMBER) | lxResult;
+            lxResult = CgsNetwork::Message::PackOrUnpack(&lpInfo->muTrafUpdateToActivate, 0, 0xFFFF) | lxResult;
+            lxResult = CgsNetwork::Message::PackOrUnpack(&lpInfo->muFramesSinceStart, 0, 0xFFFF) | lxResult;
+            lxResult = CgsNetwork::Message::PackOrUnpack(&lpInfo->muHull, 0, KU16_MAX_HULL_NUMBER) | lxResult;
         }
         return lxResult;
     }

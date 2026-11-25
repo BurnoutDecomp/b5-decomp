@@ -205,7 +205,7 @@ namespace BrnNetwork
         BrnGameState::LandmarkIndex laLandmarkIndex[KI_MAX_NUM_LANDMARKS];
         for (s32 liLandmarkIndex = 0; liLandmarkIndex < lu8NumLandmarks; ++liLandmarkIndex)
         {
-            lxResult = CgsNetwork::PackOrUnpackS16(this, &la16LandmarkIndices[liLandmarkIndex], 0, 0xFFFF) | lxResult;
+            lxResult = CgsNetwork::Message::PackOrUnpack(&la16LandmarkIndices[liLandmarkIndex], 0, 0xFFFF) | lxResult;
             laLandmarkIndex[liLandmarkIndex] =
                 BrnGameState::LandmarkIndex(static_cast<s32>(la16LandmarkIndices[liLandmarkIndex]));
         }

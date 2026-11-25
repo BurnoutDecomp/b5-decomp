@@ -659,10 +659,34 @@ void BrnRendererModule::Destruct()
     CgsGraphics::PerformanceTracker::Shutdown();
 }
 
-// ARTIST 0x823FC160. Remaining difference: ARTIST inlines BrnCoronaManager::Clear (with its
-// CoronaBuffer::Lock) at 0x823FC2F4. DWARF defines Clear in BrnCoronaManager.cpp:412, so the
-// inlining comes from ARTIST's unity TU (assert path "gamesource\unity\../Graphics/..."),
-// not from a header body.
+// ARTIST's renderer unity build inlines these original member operations
+// into StartOfFrame and SwapBuffers. Keep their definitions visible in this
+// translation unit so the native compiler sees the original call boundaries.
+// ARTIST823FC748..823FC770: publish the old external buffer and clear the next.
+void BrnBlobbyShadowManager::Swap()
+{
+    mu8Internal = mu8External;
+    mu8External = static_cast<u8>(1 - mu8External);
+    maBuffers[mu8External].miNumShadows = 0;
+}
+
+BrnCoronaManager::BrnSubmissionInterface* BrnCoronaManager::GetSubmissionInterface()
+{
+    return &mSubmissionInterface[mu8SubmissionSwapIndex];
+}
+
+// Inlined by ARTIST Renderer StartOfFrame/SwapBuffers/Update.
+void BrnCoronaManager::Clear()
+{
+    BrnSubmissionInterface* lpInterface = GetSubmissionInterface();
+    lpInterface->mpBuffer->Lock(lpInterface->mBufferIterator);
+}
+void BrnCoronaManager::Swap()
+{
+    mu8SubmissionSwapIndex = static_cast<u8>(mu8SubmissionSwapIndex ^ 1u);
+}
+
+// ARTIST 0x823FC160.
 void BrnRendererModule::StartOfFrame()
 {
     mDoubleBufferedDispatchFrame.GetDispatchFrameForWrite().Reset();
@@ -681,8 +705,7 @@ void BrnRendererModule::StartOfFrame()
     mCoronaManager.Clear();
 }
 
-// ARTIST 0x823FC678. Remaining difference: ARTIST inlines BrnBlobbyShadowManager::Swap and
-// BrnCoronaManager::Swap (0x823FC748..0x823FC77C), both defined in their own .cpp (unity TU).
+// ARTIST 0x823FC678.
 void BrnRendererModule::SwapBuffers()
 {
     mDoubleBufferedDispatchFrame.Swap();

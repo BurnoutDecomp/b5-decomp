@@ -66,7 +66,7 @@ namespace CgsPhysics { namespace PhysicsSimulationIO { struct InputBuffer; struc
 // match their homes (CgsIOBufferStack.h `struct`; CgsIslandGenerator.h `struct`, per the
 // DWARF's own CgsRigidBody.h:24 declaration).
 namespace CgsModule  { struct IOBufferStack; }
-namespace CgsPhysics { struct IslandGenerator; }
+namespace CgsPhysics { class IslandGenerator; }
 
 // The abstract resource allocator PhysicsSimulationModule::Prepare carves the simulation,
 // its workspace and the three pair sets out of.

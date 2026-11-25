@@ -62,9 +62,7 @@ extern AptUserFunctions gAptFuncs;   // dword_8324E818 (CgsAptAux.cpp)
 // AptAllocatorInitialize @0x82ADD118 calls dword_8324E818(48) for the
 // pool-manager objects. Every DOGMA pool reach runs inside AptAux::Prepare ->
 // InitializeApt, AFTER ConstructApt installed the hooks and
-// mAptDataHandler.Prepare wired the allocator (CgsAptAux.cpp); the one static
-// DOGMA object, gAptValueGCPool(0,0), early-outs before allocating, so the
-// through-the-table call is live at every reach.
+// mAptDataHandler.Prepare wired the allocator (CgsAptAux.cpp).
 // ---------------------------------------------------------------------------
 void* DOGMA_Malloc(size_t nSize)
 {
@@ -196,7 +194,12 @@ void DOGMA_PoolManager::operator delete[](void* p)
 // Param order matches the reference. mnOverflowPoolSize and
 // mnMaxSizeAllocation are const members set ONLY by the initializer list; the
 // X360 ctor body writes the remaining members and builds the first pool.
+// Size optimization preserves the condition recorded at 0x82ADB86C
+// and consumed by the branch at 0x82ADB8A4.
 // ---------------------------------------------------------------------------
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 DOGMA_PoolManager::DOGMA_PoolManager(size_t mainPoolSizeBytes,
     size_t overflowPoolSizeBytes,
     size_t minSizeAllocation,
@@ -204,122 +207,77 @@ DOGMA_PoolManager::DOGMA_PoolManager(size_t mainPoolSizeBytes,
     uint8_t nOffsetToStoreNextInFreeItem,
     bool bStoreFreeBlockSize, uint8_t nOffsetToStoreSizeInFreeItem,
     bool bTrackOusideAllocations)
-    : mnOverflowPoolSize(overflowPoolSizeBytes)   // a1[2] = a3
-    , mnMaxSizeAllocation(maxSizeAllocation)      // a1[3] = a5
+    : mpaFirstFreeBySize(0)
+    , mpFirstPool(0)
+    , mnOverflowPoolSize(overflowPoolSizeBytes)
+    , mnMaxSizeAllocation(maxSizeAllocation)
+    , mnMinimumAllocationSize(static_cast<uint32_t>(minSizeAllocation))
+    , mbStoreFreeBlockSize(bStoreFreeBlockSize)
+    , mbTrackOutsideAllocations(bTrackOusideAllocations)
+    , mpFirstOutSideAllocation(0)
+    , mnItemsAllocated(0)
+    , mnItemsFreed(0)
 {
-    mbTrackOutsideAllocations = bTrackOusideAllocations;   // a1[8] = a28
-
-    // Smallest item must hold the in-free-item bookkeeping (next ptr, and the
-    // optional size word): minimum = max(nOffsetToStoreNext + KN_FREE_SLOT_BYTES,
-    // bStoreFreeBlockSize ? nOffsetToStoreSize + KN_FREE_SLOT_BYTES : 0).
-    //
-    // (x64 widening, Phase-0 regime): the console literal is `+ 4` because a free-item
-    // slot is one 32-bit word there. The x64 arbiter widens it -- XB1 sub_140827C60:
-    // `v11 = a6 + 8; if ( a7 && a8 + 8 > v11 ) v11 = a8 + 8;`. Keeping the console 4
-    // left the minimum at 12, one slot short of the 16 bytes a free item actually needs
-    // (next @ +0, size @ +8).
-    size_t nMinimumItemSize = (size_t)nOffsetToStoreNextInFreeItem + KN_FREE_SLOT_BYTES;   // v11 = a6 + 8
-    if (bStoreFreeBlockSize && (size_t)nOffsetToStoreSizeInFreeItem + KN_FREE_SLOT_BYTES > nMinimumItemSize)
-        nMinimumItemSize = (size_t)nOffsetToStoreSizeInFreeItem + KN_FREE_SLOT_BYTES;      // v11 = a8 + 8
-
-    mpaFirstFreeBySize = 0;       // *a1   = 0  (re-assigned below)
-    mpFirstPool = 0;              // a1[1] = 0  (re-assigned below)
-    mnMinimumAllocationSize = (uint32_t)minSizeAllocation;                     // a1[6] = a4
-    mpFirstOutSideAllocation = 0; // a1[9]  = 0
-    mnItemsAllocated = 0;         // a1[10] = 0
-    mnItemsFreed = 0;             // a1[11] = 0
-    mbStoreFreeBlockSize = bStoreFreeBlockSize;                                // a1[7] = a7
-
-    if (minSizeAllocation < nMinimumItemSize)
-        mnMinimumAllocationSize = (uint32_t)nMinimumItemSize;                  // a1[6] = v32
-
-    // (x64 widening, Phase-0 regime -- see KN_FREE_SLOT_SHIFT above): a BYTE offset
-    // scaled to a free-item SLOT index. Console `>> 2` (4-byte slot); x64
-    // sub_140827C60 `*(a1 + 32) = a6 >> 3; *(a1 + 36) = a8 >> 3` (8-byte slot).
-    mnOffsetToStoreNext = nOffsetToStoreNextInFreeItem >> KN_FREE_SLOT_SHIFT;   // a1[4] = a6 >> 3
-    mnOffsetToStoreSize = nOffsetToStoreSizeInFreeItem >> KN_FREE_SLOT_SHIFT;   // a1[5] = a8 >> 3
-
-    // PC static-init accommodation (boot-verified): the X360 never constructs a DOGMA pool with a
-    // 0-byte main size -- gAptValueGCPool is HEAP-allocated at AptInit (AptAllocatorInitialize
-    // @0x82ADD118), AFTER StaticInitialize() sets the item sizes, with real pool sizes. On PC
-    // gAptValueGCPool is a static object constructed (0,0) before StaticInitialize runs, so
-    // maxSizeAllocation/mainPoolSizeBytes are 0 here. A 0-size DOGMA_Malloc + SetupPool would
-    // write the pool header into a 0-byte block (heap corruption). Defer the allocation: leave
-    // the pool EMPTY until it is (re)initialized at AptInit with real sizes.
-    if (mainPoolSizeBytes == 0)
+    size_t nMinimumItemSize = nOffsetToStoreNextInFreeItem + KN_FREE_SLOT_BYTES;
+    if (bStoreFreeBlockSize)
     {
-        mpaFirstFreeBySize = 0;
-        mpFirstPool        = 0;
-        return;
+        const size_t nMinimumWithSize = nOffsetToStoreSizeInFreeItem + KN_FREE_SLOT_BYTES;
+        if (nMinimumWithSize > nMinimumItemSize)
+            nMinimumItemSize = nMinimumWithSize;
     }
+    if (mnMinimumAllocationSize < nMinimumItemSize)
+        mnMinimumAllocationSize = static_cast<uint32_t>(nMinimumItemSize);
 
-    // Per-size free-list head array: one head per SLOT-SIZED size bucket up to the
-    // max allocation, plus the zero bucket. (x64 widening, Phase-0 regime): both the
-    // element width AND the bucket stride widen -- x64 sub_140827C60 allocates
-    // `8 * (a5 >> 3) + 8` and memsets `8 * (max >> 3) + 8`, i.e.
-    // sizeof(uintptr_t*) * ((maxSize >> 3) + 1); the console is 4 * ((maxSize >> 2) + 1).
-    // Only the element width had been widened before: the stride stayed `>> 2`, which
-    // merely over-allocated (harmless), but the SAME `>> 2` on the two free-item slot
-    // offsets was not harmless -- see KN_FREE_SLOT_SHIFT.
-    const size_t nFreeListBytes = sizeof(uintptr_t*) * DogmaBucketCount(maxSizeAllocation);
-    mpaFirstFreeBySize = (uintptr_t**)DOGMA_Malloc(nFreeListBytes);
+    mpaFirstFreeBySize = static_cast<uintptr_t**>(gAptFuncs.pfnMemAlloc((mnMaxSizeAllocation / sizeof(uintptr_t)) * sizeof(void*) + sizeof(uintptr_t)));
+    mpFirstPool = static_cast<DOGMA_MemPool*>(gAptFuncs.pfnMemAlloc(mainPoolSizeBytes));
+    memset(mpaFirstFreeBySize, 0, (mnMaxSizeAllocation / sizeof(uintptr_t)) * sizeof(void*) + sizeof(uintptr_t));
 
-    // First (main) pool.
-    DOGMA_MemPool* pFirstPool = (DOGMA_MemPool*)DOGMA_Malloc(mainPoolSizeBytes);
-    mpFirstPool = pFirstPool;
-
-    memset(mpaFirstFreeBySize, 0, sizeof(uintptr_t*) * DogmaBucketCount(mnMaxSizeAllocation));
-
-    pFirstPool->SetupPool(0, mainPoolSizeBytes);   // *v36=0; v36[1]=v36[2]=a2-15
+    mnOffsetToStoreNext = nOffsetToStoreNextInFreeItem / sizeof(void*);
+    mnOffsetToStoreSize = nOffsetToStoreSizeInFreeItem / sizeof(void*);
+    mpFirstPool->SetupPool(0, mainPoolSizeBytes);
 }
+
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // ---------------------------------------------------------------------------
 // Destructor @ 0x82ADB950
+// Size optimization preserves the native outside-allocation loop at 0x82ADB9B8.
 // ---------------------------------------------------------------------------
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 DOGMA_PoolManager::~DOGMA_PoolManager()
 {
-    // Free the per-size free-list head array (same byte count it was allocated --
-    // sizeof(uintptr_t*) per bucket on x64; see the ctor).
-    //
-    // The console frees it UNCONDITIONALLY (0x82ADB950: `dword_8324E820(*a1, 4 * ((a1[3] >> 2) + 1))`
-    // with no null test) because it never destructs a DEFERRED pool: every X360 DOGMA_PoolManager
-    // is heap-constructed at AptInit (AptAllocatorInitialize @0x82ADD118) with real sizes, so
-    // mpaFirstFreeBySize is always live. This guard is the MIRROR of the ctor's PC static-init
-    // accommodation above -- the (0,0) static AptValueGC_PoolManager takes the ctor's early return
-    // with mpaFirstFreeBySize == 0 / mpFirstPool == 0, and its CRT-exit destructor was handing that
-    // null straight to DOGMA_FreeSized -> gAptFuncs.pfnMemFreeSize -> AptCallbackMemory::FreeSize/
-    // Free -> AptDataHandler::AptFree(null), firing the (faithful) console null-free assert.
-    // Deferred construction must have deferred destruction; the pool-chain loop below already
-    // mirrors it, this is the same fix for the free-list array.
-    if (mpaFirstFreeBySize)
-        DOGMA_FreeSized(mpaFirstFreeBySize, sizeof(uintptr_t*) * DogmaBucketCount(mnMaxSizeAllocation));
+    // ARTIST reaches this destructor only after both native allocations.
+    gAptFuncs.pfnMemFreeSize(mpaFirstFreeBySize, sizeof(uintptr_t*) * DogmaBucketCount(mnMaxSizeAllocation));
 
-    // Free every pool in the chain. (while, not do/while: an empty/deferred pool has
-    // mpFirstPool == 0 -- see the 0-size guard in the ctor -- and must not be dereffed.)
     DOGMA_MemPool* pPool = mpFirstPool;
-    while (pPool)
+    DOGMA_MemPool* pNext = 0;
+    do
     {
-        DOGMA_MemPool* pNext = pPool->GetNextPool();
-        DOGMA_Free(pPool);
+        pNext = pPool->GetNextPool();
+        gAptFuncs.pfnMemFree(pPool);
         pPool = pNext;
     }
+    while (pPool);
 
-    // Free every tracked outside allocation.
     if (mbTrackOutsideAllocations)
     {
         OutsideAllocationT* pOutside = mpFirstOutSideAllocation;
-        if (pOutside)
+        while (pOutside)
         {
-            do
-            {
-                OutsideAllocationT* pNext = pOutside->pNext;
-                DOGMA_Free(pOutside);
-                pOutside = pNext;
-            }
-            while (pOutside);
+            OutsideAllocationT* pNext = pOutside->pNext;
+            gAptFuncs.pfnMemFree(pOutside);
+            pOutside = pNext;
         }
     }
 }
+
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // ---------------------------------------------------------------------------
 // Allocate @ 0x82AE1058

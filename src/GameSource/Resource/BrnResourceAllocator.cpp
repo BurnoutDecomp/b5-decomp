@@ -303,13 +303,6 @@ namespace BrnResource
         mpcName = lpcName;
     }
 
-    // DecFIGS h387; ARTIST8240A7A4..7C0 and other inlined callers return this
-    // exact public wrapper, without selecting the separate native rw allocator.
-    LinearResourceAllocator* GetGraphicsAllocator()
-    {
-        return &Allocators::mGlobalGraphicsAllocator;
-    }
-
     // ARTIST826647B0: fill every present resource lane with the original0xCD pattern.
     void ClearResource(rw::Resource& lrResource, const rw::ResourceDescriptor& lrDescriptor)
     {

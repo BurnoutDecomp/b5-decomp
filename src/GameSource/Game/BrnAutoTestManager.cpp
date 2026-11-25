@@ -216,7 +216,7 @@ namespace BrnGame
 
         lrStream << "        <cpumonitor";
         lrStream << " name=\"";
-        lrStream << ((lrData.mpcName != 0) ? lrData.mpcName : "<NULLSTRING>");
+        lrStream << lrData.mpcName;
         lrStream << "\"";
         lrStream << " currentvalue=\"";
         lrStream << lrData.mfCurrentValue << "\"";

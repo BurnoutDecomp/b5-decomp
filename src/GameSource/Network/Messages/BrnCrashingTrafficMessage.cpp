@@ -70,7 +70,7 @@ namespace BrnNetwork
                                         KI_MIN_CRASHING_TRAFFIC_IN_MESSAGE,
                                         KI_MAX_CRASHING_TRAFFIC_IN_MESSAGE) | lxBase;
         lxResult =
-            CgsNetwork::PackOrUnpackU16(this, &mu16FramesSinceRoundStart,
+            CgsNetwork::Message::PackOrUnpack(&mu16FramesSinceRoundStart,
                                         KU16_CRASHING_TRAFFIC_MIN_FRAMES_SINCE_SRT,
                                         KU16_CRASHING_TRAFFIC_MAX_FRAMES_SINCE_SRT) | lxResult;
 
@@ -96,7 +96,7 @@ namespace BrnNetwork
 
             // Vehicle id in [0, 1024].
             lxResult =
-                CgsNetwork::PackOrUnpackU16(this, &lrRecord.mu16VehicleID,
+                CgsNetwork::Message::PackOrUnpack(&lrRecord.mu16VehicleID,
                                             KU16_CRASHING_TRAFFIC_MIN_VEHICLE_INDEX,
                                             KU16_CRASHING_TRAFFIC_MAX_VEHICLE_INDEX) | lxMatrix;
         }

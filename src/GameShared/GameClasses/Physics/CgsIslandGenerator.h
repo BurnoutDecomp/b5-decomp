@@ -53,8 +53,10 @@
 
 namespace CgsPhysics
 {
-    struct IslandGenerator : public CgsModule::IOBuffer
+    // The original CreateIOBuffer/DestroyIOBuffer symbols use the class type key.
+    class IslandGenerator : public CgsModule::IOBuffer
     {
+    public:
         // NO own Construct/Destruct, deliberately: CreateIOBuffer<IslandGenerator> @0x8289E0D0
         // is a BARE Alloc -- the console makes no call at all after it, and DestroyIOBuffer
         // @0x8289E190 likewise folds to nothing but the Free. (The binary cannot distinguish an

@@ -9,6 +9,7 @@
 #include <new>       // placement new (raw heap-hook allocation + explicit construction)
 #include <cstring>   // std::memset / std::strlen / std::strncpy
 #include <cstdlib>   // std::srand / std::rand
+#include <cstdio>    // _snprintf
 #include "types.hpp"   // std::intptr_t
 
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3Request.h"
@@ -1020,8 +1021,9 @@ char* MassiveInet_ntop(int /*nFamily*/, const void* pSrc, char* pcDst, int nSize
         return 0;
 
     unsigned int luAddress = *static_cast<const unsigned int*>(pSrc);
-    MassiveFormatString(pcDst, nSize, "%d.%d.%d.%d", luAddress >> 24, (luAddress >> 16) & 0xFF,
-                        (luAddress >> 8) & 0xFF, luAddress & 0xFF);
+    // ARTIST 0x82BD5564 calls the XDK CRT _snprintf entry at 0x82C10930.
+    _snprintf(pcDst, static_cast<size_t>(nSize), "%d.%d.%d.%d", luAddress >> 24,
+              (luAddress >> 16) & 0xFF, (luAddress >> 8) & 0xFF, luAddress & 0xFF);
     return pcDst;
 }
 

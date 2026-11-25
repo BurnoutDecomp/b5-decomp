@@ -78,6 +78,8 @@ namespace BrnNetwork
 
     void LiveRevengeDebugComponent::Destruct()
     {
+        // ARTIST 0x822A9750 delegates to the folded base teardown body at 0x8284CB38.
+        CgsDev::DebugComponent::Destruct();
     }
 
     // ----------------------------------------------------------------------------------------------

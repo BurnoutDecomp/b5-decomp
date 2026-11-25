@@ -34,9 +34,7 @@ cParticleWaveFormTable cParticleWaveFormTable::mSingleton;
 namespace
 {
     const f32 KF_INV_511   = 0.0019569471f;     // 1/511
-    const f32 KF_INV_256   = 0.00390625f;       // 1/256
     const f32 KF_TWO_PI    = 6.2831855f;
-    const f32 KF_NOISE_SCL = 0.000015259022f;
     const f32 KF_511       = 511.0f;
 }
 
@@ -141,23 +139,19 @@ f32 cParticleWaveForm::Evaluate(f32 afTime) const
 //
 // 512-entry pseudo-random noise via a 32-bit LCG seeded with 0x12345678,
 // recurrence v = 69069*v + 41 (0x10DCD, 0x29). Each entry stores the UNSIGNED
-// low 16 bits of the value-before-update (X360 `clrlwi r7,r10,16` == luRand &
-// 0xFFFF, range [0,65535]) scaled by ~1/65536 -> table values in [0,1). The X360
-// keeps the running value in a single 32-bit register; the stored sample is the
-// value-before-update.
+// low 16 bits of the value before each update, scaled by the ARTIST constant
+// at 0x8207AD48 (1/65535). The signed sample local from DecFIGS holds values
+// 0..65535 after the mask.
 void cParticleWaveFormTable::NoiseTableBuild()
 {
-    f32* lpDst = mNoiseTable;
-    u32  luRand = 0x12345678u;
-    s32  liCount = KU_TABLE_SIZE;
-    do
+    u32 luRand = 0x12345678u;
+    for (s32 i = 0; i < KU_TABLE_SIZE; ++i)
     {
-        const u32 luSample = luRand & 0xFFFFu;   // clrlwi r7,r10,16 -> unsigned low 16 bits
-        --liCount;
+        const s32 lClip = static_cast<s32>(luRand & 0xFFFFu); // DecFIGS ParticleWaveForm.cpp:179.
+        const f32 lfValue = static_cast<f32>(lClip) * (1.0f / 65535.0f);
+        mNoiseTable[i] = lfValue;
         luRand = 69069u * luRand + 41u;
-        *lpDst++ = static_cast<f32>(luSample) * KF_NOISE_SCL;
     }
-    while (liCount != 0);
 }
 
 // cParticleWaveFormTable::SawToothTableBuild (inlined in Init @0x8290E808)
@@ -207,16 +201,18 @@ void cParticleWaveFormTable::SquareTableBuild()
 //   i >= 256: mTriangleTable[i] = -(((i-256) / 256.0) - 1.0) == 1 - (i-256)/256
 void cParticleWaveFormTable::TriangleTableBuild()
 {
+    s32 i = 0;
     f32* lpDst = mTriangleTable;
-    for (s32 i = 0; i < KU_TABLE_SIZE; ++i)
+    do
     {
         f32 lfVal;
-        if (i >= KU_HALF_SIZE)
-            lfVal = -(static_cast<f32>(i - KU_HALF_SIZE) * KF_INV_256 - 1.0f);  // fnmsubs
+        if (i < KU_HALF_SIZE)
+            lfVal = static_cast<f32>(i) * (1.0f / 256.0f);
         else
-            lfVal = static_cast<f32>(i) * KF_INV_256;
+            lfVal = -(static_cast<f32>(i - KU_HALF_SIZE) * (1.0f / 256.0f) - 1.0f);
         *lpDst++ = lfVal;
     }
+    while (++i < KU_TABLE_SIZE);
 }
 
 // cParticleWaveFormTable::Init @ 0x8290E7F0

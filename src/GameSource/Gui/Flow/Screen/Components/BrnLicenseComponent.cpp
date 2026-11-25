@@ -320,49 +320,51 @@ namespace BrnGui
     // ================================================================================
     bool LicenseComponent::HandleAptLoadTriggers(const CgsGui::GuiEventAptTriggerPayload* lpAptTrigger)
     {
-        CGS_ASSERT(lpAptTrigger != 0, "lpAptTrigger");                                   // cpp:234
+        CGS_ASSERT(lpAptTrigger != 0,
+            CGS_ASSERT_MESSAGE_AT("lpAptTrigger",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnLicenseComponent.cpp", 234));
         CGS_ASSERT(lpAptTrigger->meEventType == CgsGui::GuiEventAptTrigger::E_APT_EVENT_ONLOAD,
-                   "CgsGui::GuiEventAptTrigger::E_APT_EVENT_ONLOAD == lpAptTrigger->meEventType"); // cpp:235
+            CGS_ASSERT_MESSAGE_AT("CgsGui::GuiEventAptTrigger::E_APT_EVENT_ONLOAD == lpAptTrigger->meEventType",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnLicenseComponent.cpp", 235));
 
-        const char* lpacName = lpAptTrigger->mpacComponentName;
-
-        if (std::strcmp(mPlayerNameTextField.GetName(), lpacName) == 0)
+        bool lbTriggerDealtWith = false;
+        if (std::strcmp(mPlayerNameTextField.GetName(), lpAptTrigger->mpacComponentName) == 0)
         {
-            mPlayerNameTextField.SetText(mPlayerNameTextField.GetText());
-            return true;
+            mPlayerNameTextField.RefreshText();
+            lbTriggerDealtWith = true;
         }
-        if (std::strcmp(mNextRankTextField.GetName(), lpacName) == 0)
+        else if (std::strcmp(mNextRankTextField.GetName(), lpAptTrigger->mpacComponentName) == 0)
         {
-            mNextRankTextField.SetText(mNextRankTextField.GetText());
-            return true;
+            mNextRankTextField.RefreshText();
+            lbTriggerDealtWith = true;
         }
-        if (std::strcmp(mDateIssuedTextField.GetName(), lpacName) == 0)
+        else if (std::strcmp(mDateIssuedTextField.GetName(), lpAptTrigger->mpacComponentName) == 0)
         {
-            mDateIssuedTextField.SetText(mDateIssuedTextField.GetText());
-            return true;
+            mDateIssuedTextField.RefreshText();
+            lbTriggerDealtWith = true;
         }
-        if (std::strcmp(mCompletionMonthField.GetName(), lpacName) == 0)
+        else if (std::strcmp(mCompletionMonthField.GetName(), lpAptTrigger->mpacComponentName) == 0)
         {
-            mCompletionMonthField.SetText(mCompletionMonthField.GetText());
-            return true;
+            mCompletionMonthField.RefreshText();
+            lbTriggerDealtWith = true;
         }
-        if (std::strcmp(mCompletionDateField.GetName(), lpacName) == 0)
+        else if (std::strcmp(mCompletionDateField.GetName(), lpAptTrigger->mpacComponentName) == 0)
         {
-            mCompletionDateField.SetText(mCompletionDateField.GetText());
-            return true;
+            mCompletionDateField.RefreshText();
+            lbTriggerDealtWith = true;
         }
-        if (std::strcmp(mCompletionYearField.GetName(), lpacName) == 0)
+        else if (std::strcmp(mCompletionYearField.GetName(), lpAptTrigger->mpacComponentName) == 0)
         {
-            mCompletionYearField.SetText(mCompletionYearField.GetText());
-            return true;
+            mCompletionYearField.RefreshText();
+            lbTriggerDealtWith = true;
         }
-        if (std::strcmp(GetName(), lpacName) == 0)
+        else if (std::strcmp(GetName(), lpAptTrigger->mpacComponentName) == 0)
         {
             if (meCurrentLicenseState == E_LICENSE_UPGRADING_NEW_LICENSE_INITIALISING)
                 meCurrentLicenseState = E_LICENSE_UPGRADING_NEW_LICENSE_WAITING;
-            return true;
+            lbTriggerDealtWith = true;
         }
-        return false;
+        return lbTriggerDealtWith;
     }
 
     // ================================================================================
@@ -940,22 +942,19 @@ namespace BrnGui
     // ================================================================================
     void LicenseComponent::SetProfilePointer(BrnProgression::Profile* lpProfile)
     {
-        CGS_ASSERT(lpProfile != 0, "NULL != lpProfile");   // h:384
+        CGS_ASSERT(lpProfile != 0,
+            CGS_ASSERT_MESSAGE_AT("NULL != lpProfile",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnLicenseComponent.h", 384));
 
         if (mpProfile != lpProfile)
         {
             mpProfile = lpProfile;
-
-            const CgsSystem::DateAndTime lLicenceDate = mpProfile->GetLicenceIssuedDate();
+            CgsSystem::DateAndTime lLicenceIssuedDate = lpProfile->GetLicenceIssuedDate();
             CgsLanguage::LanguageManager* lpLanguageManager = mpStateInterface->GetLanguageManager();
-
-            const s32 liYear  = lLicenceDate.GetYear();
-            const s32 liMonth = lLicenceDate.GetMonth();
-            const s32 liDay   = lLicenceDate.GetDay();
-
-            char lacDateString[112];   // X360 sp+0x60 local (the formatter is capped at 64)
-            lpLanguageManager->FormatDateString(lacDateString, liDay, liMonth, liYear, 64);
-            mDateIssuedTextField.SetText(lacDateString);
+            char lacBuffer[64];
+            lpLanguageManager->FormatDateString(lacBuffer, lLicenceIssuedDate.GetDay(),
+                lLicenceIssuedDate.GetMonth(), lLicenceIssuedDate.GetYear(), sizeof(lacBuffer));
+            mDateIssuedTextField.SetText(lacBuffer);
         }
     }
 

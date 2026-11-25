@@ -94,6 +94,10 @@ namespace BrnGui
         // ---- members (X360 byte offsets in comments; access is by name) ------------
         EInternalState meInternalState;            // +0x038
 
+        static const u32 KU_MAX_INIT_COMPONENTS_NUM = 64;
+        u32 mauExpectedComponentIds[KU_MAX_INIT_COMPONENTS_NUM]; // +0x03C
+        u32 muNumExpectedComponents;                            // +0x13C
+
         GuiCache* mpGuiCache;                      // +0x140 (captured from event 64)
         BrnFlapt::MovieClipRef mRaceMainHudClip;   // +0x144/+0x148 (the RaceMainHUD_mc ref)
 

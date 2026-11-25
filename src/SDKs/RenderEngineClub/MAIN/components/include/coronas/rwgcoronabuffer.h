@@ -38,8 +38,8 @@ public:
     const Corona* GetCoronas() const { return mpData; }
     void Lock(Iterator& lrIterator)
     {
-        lrIterator.muIndex = 0;
         lrIterator.mpData = mpData;
+        lrIterator.muIndex = 0;
         lrIterator.muNumCoronas = muNumCoronas;
     }
     void Unlock() {}

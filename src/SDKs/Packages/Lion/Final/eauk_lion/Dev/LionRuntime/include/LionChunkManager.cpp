@@ -11,59 +11,52 @@
 
 void cLionChunk::UnLink()
 {
-    cLionChunk* lpParent = mpParent;
-    if (!lpParent)
+    if (mpParent)
     {
-        return;
-    }
-
-    if (lpParent->mpChild)
-    {
-        // Walk the parent's child/sibling list looking for this node, tracking the slot
-        // (parent->mpChild for the first child, or the predecessor's mpNext) that points
-        // at it.
-        cLionChunk** lppSlot = &lpParent->mpChild;
-        cLionChunk*  lpCur   = *lppSlot;
-        while (lpCur != this)
+        if (mpParent->mpChild)
         {
-            lppSlot = &lpCur->mpNext;
-            lpCur   = lpCur->mpNext;
-            if (!lpCur)
+            cLionChunk** lppSlot = &mpParent->mpChild;
+            cLionChunk* lpItem = *lppSlot;
+            while (lpItem)
             {
-                mpParent = 0;
-                return;
+                if (lpItem == this)
+                    break;
+                lppSlot = &lpItem->mpNext;
+                lpItem = *lppSlot;
+            }
+            if (lpItem)
+            {
+                *lppSlot = lpItem->mpNext;
+                lpItem->mpNext = 0;
             }
         }
-        // Found: splice it out.
-        if (lpCur)
-        {
-            *lppSlot     = lpCur->mpNext;
-            lpCur->mpNext = 0;
-        }
+        mpParent = 0;
     }
-
-    mpParent = 0;
 }
 
 void cLionChunkManager::ChunkGroupDeAlloc(cLionChunk* apChunk)
 {
-    cLionChunk* lpChunk = apChunk;
-    while (lpChunk)
+    if (apChunk)
     {
-        cLionChunk* lpNext = lpChunk->mpNext;
+        cLionChunk* lpChunk = apChunk;
+        do
+        {
+            cLionChunk* lpNext = lpChunk->mpNext;
 
-        // Recurse into children first, then detach and free this node.
-        ChunkGroupDeAlloc(lpChunk->mpChild);
-        lpChunk->UnLink();
+            // Recurse into children first, then detach and free this node.
+            ChunkGroupDeAlloc(lpChunk->mpChild);
+            lpChunk->UnLink();
 
-        lpChunk->mType    = 0;
-        lpChunk->mpData   = 0;
-        lpChunk->mpParent = 0;
-        lpChunk->mpChild  = 0;
-        lpChunk->mpNext   = 0;
-        mpAllocator->Free(lpChunk, 0);
+            lpChunk->mType    = 0;
+            lpChunk->mpData   = 0;
+            lpChunk->mpParent = 0;
+            lpChunk->mpChild  = 0;
+            lpChunk->mpNext   = 0;
+            GetMe()->GetpAllocator()->Free(lpChunk, 0);
 
-        lpChunk = lpNext;
+            lpChunk = lpNext;
+        }
+        while (lpChunk);
     }
 }
 
@@ -78,33 +71,14 @@ void cLionChunkManager::AppDeInit()
         // UnLink) and free it.
         ChunkGroupDeAlloc(lpChunk->mpChild);
 
-        cLionChunk* lpParent = lpChunk->mpParent;
-        if (lpParent)
-        {
-            if (lpParent->mpChild)
-            {
-                cLionChunk** lppSlot = &lpParent->mpChild;
-                cLionChunk*  lpCur   = *lppSlot;
-                while (lpCur && lpCur != lpChunk)
-                {
-                    lppSlot = &lpCur->mpNext;
-                    lpCur   = lpCur->mpNext;
-                }
-                if (lpCur == lpChunk && lpChunk)
-                {
-                    *lppSlot       = lpChunk->mpNext;
-                    lpChunk->mpNext = 0;
-                }
-            }
-            lpChunk->mpParent = 0;
-        }
+        lpChunk->UnLink();
 
         lpChunk->mType    = 0;
         lpChunk->mpData   = 0;
         lpChunk->mpParent = 0;
         lpChunk->mpChild  = 0;
         lpChunk->mpNext   = 0;
-        mpAllocator->Free(lpChunk, 0);
+        GetMe()->GetpAllocator()->Free(lpChunk, 0);
 
         lpChunk = lpNext;
     }
@@ -122,15 +96,7 @@ void cLionChunkManager::AppDeInit()
 // A file-scope object, NOT a function-local static: the console has no magic-static guard word
 // beside it (the next .bss datum is 8 bytes later).
 // ------------------------------------------------------------------------------------------------
-namespace
-{
-    cLionChunkManager gChunkManagerSingleton;   // X360 mSingleton @0x83121DC8
-}
-
-cLionChunkManager* cLionChunkManager::GetMe()
-{
-    return &gChunkManagerSingleton;
-}
+cLionChunkManager cLionChunkManager::mSingleton; // ARTIST 0x83121DC8.
 
 void cLionChunkManager::AppInit(EA::Allocator::ITaggedAllocator* apAllocator)
 {

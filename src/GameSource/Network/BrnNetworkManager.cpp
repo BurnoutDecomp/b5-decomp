@@ -651,10 +651,8 @@ namespace BrnNetwork
     // ----------------------------------------------------------------------------------------
     void BrnNetworkManager::Destruct()
     {
-        mFreeBurnWheelID        = 0;
         mPlayerIDStatsGet       = -1;
-        mFreeBurnCarID          = 0;
-        mfField86A90            = 0.0f;
+        SetFreeBurnCar(CgsID(0), CgsID(0), 0.0f);
         meCurrentDistrict       = BrnWorld::E_DISTRICT_CRISTAL_SUMMIT;
         mu16CarColourIndex      = 0;
         mu16PaintFinishIndex    = 0;
@@ -689,7 +687,8 @@ namespace BrnNetwork
         mSuspensionManager.Destruct();
         mMatchMakingManager.Destruct();
         mConnectionManager.Destruct();
-        mLaunchManager.Destruct();
+        // ARTIST 0x8258E41C calls the same Stop wrapper as the leave-game path.
+        mLaunchManager.OnLeaveGame();
         mLoginManager.Destruct();
         mServerInterface.Destruct();
 

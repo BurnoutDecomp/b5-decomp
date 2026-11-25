@@ -38,10 +38,10 @@ namespace BrnNetwork
         const CgsNetwork::PackOrUnpackResult lxBase = CgsNetwork::Message::PackOrUnpack();
 
         const CgsNetwork::PackOrUnpackResult lxSynced =
-            CgsNetwork::PackOrUnpackU16(this, &mu16SyncedFrameSinceStart, 0, 0xFFFF) | lxBase;
+            CgsNetwork::Message::PackOrUnpack(&mu16SyncedFrameSinceStart, 0, 0xFFFF) | lxBase;
         const CgsNetwork::PackOrUnpackResult lxUpdate =
-            CgsNetwork::PackOrUnpackU16(this, &mu16Update10HzFrame, 0, 0xFFFF);
-        return CgsNetwork::PackOrUnpackU16(this, &mu16TrafficHash, 0, 0xFFFF) | (lxUpdate | lxSynced);
+            CgsNetwork::Message::PackOrUnpack(&mu16Update10HzFrame, 0, 0xFFFF);
+        return CgsNetwork::Message::PackOrUnpack(&mu16TrafficHash, 0, 0xFFFF) | (lxUpdate | lxSynced);
     }
 
     void TrafficHashMessage::PrepareForSend(u16 lu16FrameCount,

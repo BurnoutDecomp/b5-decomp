@@ -138,6 +138,8 @@ namespace CgsNetwork
         PackOrUnpackResult PackOrUnpack(s8* lpi8Field, s32 liMin, s32 liMax);
 
         PackOrUnpackResult PackOrUnpack(u8* lpu8Field, s32 liMin, s32 liMax);
+        PackOrUnpackResult PackOrUnpack(s16* lps16Field, s32 liMin, s32 liMax);
+        PackOrUnpackResult PackOrUnpack(u16* lpu16Field, s32 liMin, s32 liMax);
         PackOrUnpackResult PackOrUnpack(s32* lpiField, s32 liMin, s32 liMax);
         PackOrUnpackResult PackOrUnpack(bool* lpbField);
         PackOrUnpackResult PackOrUnpack(NetworkPlayerID* lpNetworkPlayerID);
@@ -215,8 +217,6 @@ namespace CgsNetwork
     //   DateAndTime -- second, minute, hour, day, month and year as bounded ints.
     //   Matrix / Vector -- the Euler-angle and direction-angle quantisers; declaration
     //            only (their angle helpers are vector code not reconstructed yet).
-    PackOrUnpackResult PackOrUnpackS16(Message* lpMessage, s16* lps16Field, s32 liMin, s32 liMax);
-    PackOrUnpackResult PackOrUnpackU16(Message* lpMessage, u16* lpu16Field, s32 liMin, s32 liMax);
     PackOrUnpackResult PackOrUnpackUInt(Message* lpMessage, u32* lpu32Field, s32 liMin, s32 liMax);
     PackOrUnpackResult PackOrUnpackFloat(Message* lpMessage, f32* lpfField, f32 lfMin, f32 lfMax, f32 lfResolution);
     PackOrUnpackResult PackOrUnpackFloat(Message* lpMessage, f32* lpfField, f32 lfMin, f32 lfMax, s32 liNumBits);

@@ -17,8 +17,8 @@
 //   BrnNetwork::ConnectionManager::Construct           @ 0x82544510
 //   BrnNetwork::ConnectionManager::KickUnNATablePlayer @ 0x82566860
 //   BrnNetwork::ConnectionManager::UpdateNATData       @ 0x8256CFF0
-// (Prepare/Release/Destruct/Update carry no recovered body in the available
-//  exports -- the DWARF lists them as empty shells -- and are trivial no-ops.)
+//   BrnNetwork::ConnectionManager::Destruct            @ 0x822D8C38 (folded)
+// Prepare, Release and Update retain their trivial bodies.
 //
 // The NAT-kick policy: on a host that has not yet started the game, once at least
 // KF_UN_NAT_KICK_TIMEOUT seconds have elapsed since the last kick, walk the player
@@ -59,6 +59,9 @@ namespace BrnNetwork
 
     void ConnectionManager::Destruct()
     {
+        // BrnNetworkManager::Destruct 0x8258E414 calls 0x822D8C38 with this subobject.
+        // That leaf clears the manager pointer at +0x08.
+        mpNetworkManager = 0;
     }
 
     void ConnectionManager::Update()

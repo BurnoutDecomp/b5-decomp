@@ -306,12 +306,12 @@ namespace BrnParticle
                                          Vector4 lvCarColour)
     {
         FireDebrisBurstEvent lEvent;
-        lEvent.mDebrisParams        = lrDebrisParams;
-        lEvent.mSpawnPosition       = lvSpawnPosition;
-        lEvent.mvCarColour          = lvCarColour;
+        lEvent.mSpawnPosition      = lvSpawnPosition;
+        lEvent.mCameraPosition     = lvCameraPosition;
+        lEvent.mDebrisParams       = lrDebrisParams;
+        lEvent.mvCarColour         = lvCarColour;
+        lEvent.mvVelocityToInherit = lvVelocityToInherit;
         lEvent.mvEmitterHalfExtents = lvEmitterHalfExtents;
-        lEvent.mvVelocityToInherit  = lvVelocityToInherit;
-        lEvent.mCameraPosition      = lvCameraPosition;
         lEvent.mfCurrentTime        = lfCurrentTime;
         lEvent.mfScaleFactor        = lfScaleFactor;
 

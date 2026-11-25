@@ -675,13 +675,15 @@ namespace BrnGui
     // =======================================================================
     //  SetExpectedAptComponentList  @ 0x82475328
     // =======================================================================
-    // Clear the flow-1 watcher and install an EMPTY 64-slot list (count 0) -- the
-    // freeburn HUD has no per-component init handshake.
+    // ARTIST clears this state's 64 component IDs before installing the empty list.
     void FBurnMainHudState::SetExpectedAptComponentList()
     {
         mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_HUD);
-        static const u32 sauEmptyHashes[64] = { 0 };
-        mpGuiCache->SetExpectedAptComponentList(E_GUIFLOW_HUD, sauEmptyHashes, 0);
+        for (u32 luIndex = 0; luIndex < KU_MAX_INIT_COMPONENTS_NUM; ++luIndex)
+            mauExpectedComponentIds[luIndex] = 0;
+        muNumExpectedComponents = 0;
+        mpGuiCache->SetExpectedAptComponentList(E_GUIFLOW_HUD, mauExpectedComponentIds,
+                                             muNumExpectedComponents);
     }
 
     // =======================================================================

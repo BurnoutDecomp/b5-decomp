@@ -1,5 +1,6 @@
 #include "GameShared/GameClasses/Network/Packeting/BitStream/CgsIntQuantiser.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 
 // Reconstructed from BURNOUT_X360_*.XEX
 //   CgsNetwork::IntQuantiser::UnPack @ 0x82871710 -- add the packed unsigned
@@ -19,54 +20,48 @@
 
 namespace CgsNetwork
 {
+    namespace
+    {
+        const char KAC_ARTIST_FILE[] =
+            "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\BitStream\\CgsIntQuantiser.cpp";
+    }
+
     // ---- Pack @ 0x82871568 -----------------------------------------------------
     // Inverse of UnPack: clamp the value into [min,max], store the unsigned offset
     // (clamped - min) as the packed value, and report GetNumBits(min,max) bits.
     void IntQuantiser::Pack(s32 liValue, s32 liMinValue, s32 liMaxValue,
                             u32* lpuPackedValue, s32* lpiNumBitsUsed)
     {
-        // Clamp into [min,max] -- the Min/Max pair (so an out-of-range value is
-        // pinned to the nearest bound, mirroring UnPack's clamp).
-        s32 liClamped = liValue;
-        if (liClamped > liMaxValue)
-        {
-            liClamped = liMaxValue;
-        }
-        if (liClamped < liMinValue)
-        {
-            liClamped = liMinValue;
-        }
-
-        *lpuPackedValue = static_cast<u32>(liClamped - liMinValue);
-        *lpiNumBitsUsed = GetNumBits(liMinValue, liMaxValue);
-    }
-
-    // ---- UnPack @ 0x82871710 ---------------------------------------------------
-    void IntQuantiser::UnPack(s32* lpiValue, s32 liMinValue, s32 liMaxValue,
-                              u32 luPackedValue)
-    {
-        // value = min + packed (the additive inverse of Pack's value - min).
-        s32 liValue = liMinValue + static_cast<s32>(luPackedValue);
-        *lpiValue   = liValue;
-
-        // The asm asserts the reconstructed value sits inside the range before it
-        // clamps; the original streamed "Value <v> is outside the range <min>:<max>".
-        CGS_ASSERT(liValue >= liMinValue && liValue <= liMaxValue,
-                   "liValue is outside the range [liMinValue, liMaxValue]");
-
-        // Clamp to [min,max] -- the inlined Min/Max the asm folds in after the
-        // assert (so an out-of-range value still resolves to the nearest bound).
+        CGS_ASSERT_STREAM_AT(liValue >= liMinValue && liValue <= liMaxValue,
+                             "Value " << liValue << " is outside the range " << liMinValue << ":" << liMaxValue << "\n",
+                             KAC_ARTIST_FILE, 59);
         if (liValue > liMaxValue)
         {
             liValue = liMaxValue;
         }
         if (liValue < liMinValue)
         {
-            *lpiValue = liMinValue;
+            liValue = liMinValue;
         }
-        else
-        {
-            *lpiValue = liValue;
-        }
+
+        const s32 liNumBits = GetNumBits(liMinValue, liMaxValue);
+        *lpuPackedValue = static_cast<u32>(liValue) - static_cast<u32>(liMinValue);
+        *lpiNumBitsUsed = liNumBits;
+        CGS_ASSERT_AT(liNumBits == 32 || *lpuPackedValue < (1u << liNumBits),
+                      "liNumBits == 32 || ((*lpuPackedValue) < (uint32_t)(1 << liNumBits))",
+                      KAC_ARTIST_FILE, 67);
+    }
+
+    // ---- UnPack @ 0x82871710 ---------------------------------------------------
+    void IntQuantiser::UnPack(s32* lpiValue, s32 liMinValue, s32 liMaxValue,
+                              u32 luPackedValue)
+    {
+        *lpiValue = static_cast<s32>(static_cast<u32>(liMinValue) + luPackedValue);
+        CGS_ASSERT_STREAM_AT(*lpiValue >= liMinValue && *lpiValue <= liMaxValue,
+                             "Value " << *lpiValue << " is outside the range " << liMinValue << ":" << liMaxValue << "\n",
+                             KAC_ARTIST_FILE, 89);
+
+        *lpiValue = *lpiValue > liMaxValue ? liMaxValue : *lpiValue;
+        *lpiValue = *lpiValue >= liMinValue ? *lpiValue : liMinValue;
     }
 }

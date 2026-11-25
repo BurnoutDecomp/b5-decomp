@@ -43,6 +43,9 @@ namespace CgsNetwork
 
     namespace
     {
+        const char KAC_ARTIST_FILE[] =
+            "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\Messages\\CgsMessage.cpp";
+
         const f32 KF_ANGLE_PI      = 3.14159274f;
         const f32 KF_ANGLE_HALF_PI = 1.57079637f;
 
@@ -200,119 +203,128 @@ namespace CgsNetwork
     // int8_t field.
     PackOrUnpackResult Message::PackOrUnpack(s8* lpi8Field, s32 liMin, s32 liMax)
     {
-        if (mePackOrUnpack == E_PACK_INTO_BITSTREAM)
+        switch (mePackOrUnpack)
         {
-            u32 luPacked  = 0;
-            s32 liNumBits = 0;
-            IntQuantiser::Pack(static_cast<s32>(*lpi8Field), liMin, liMax, &luPacked, &liNumBits);
-            return mBitstream.AddBits(luPacked, liNumBits) ? KX_PACK_OR_UNPACK_SUCCESS
-                                                           : KX_PACK_FAILED_NO_SPACE;
+        case E_PACK_INTO_BITSTREAM:
+        {
+            u32 luPacked;
+            s32 liNumBits;
+            IntQuantiser::Pack(*lpi8Field, liMin, liMax, &luPacked, &liNumBits);
+            if (!mBitstream.AddBits(luPacked, liNumBits))
+                return KX_PACK_FAILED_NO_SPACE;
+            break;
         }
-
-        if (mePackOrUnpack == E_UNPACK_FROM_BITSTREAM)
-        {
+        case E_UNPACK_FROM_BITSTREAM:
             *lpi8Field = static_cast<s8>(mBitstream.GetQuantisedInt(liMin, liMax));
-            return KX_PACK_OR_UNPACK_SUCCESS;
+            break;
+        default:
+            CGS_ASSERT_STREAM_AT(false, "CgsNetwork::Message::PackOrUnpack"
+                                         << " called without telling it which it is doing\n",
+                                 KAC_ARTIST_FILE, 518);
+            break;
         }
-
-        CGS_ASSERT(false,
-                   "CgsNetwork::Message::PackOrUnpack called without telling "
-                   "it which it is doing\n");
         return KX_PACK_OR_UNPACK_SUCCESS;
     }
 
     // uint8_t field.
     PackOrUnpackResult Message::PackOrUnpack(u8* lpu8Field, s32 liMin, s32 liMax)
     {
-        if (mePackOrUnpack == E_PACK_INTO_BITSTREAM)
+        switch (mePackOrUnpack)
         {
-            u32 luPacked  = 0;
-            s32 liNumBits = 0;
-            IntQuantiser::Pack(static_cast<s32>(*lpu8Field), liMin, liMax, &luPacked, &liNumBits);
-            return mBitstream.AddBits(luPacked, liNumBits) ? KX_PACK_OR_UNPACK_SUCCESS
-                                                                      : KX_PACK_FAILED_NO_SPACE;
+        case E_PACK_INTO_BITSTREAM:
+        {
+            u32 luPacked;
+            s32 liNumBits;
+            IntQuantiser::Pack(*lpu8Field, liMin, liMax, &luPacked, &liNumBits);
+            if (!mBitstream.AddBits(luPacked, liNumBits))
+                return KX_PACK_FAILED_NO_SPACE;
+            break;
         }
-
-        if (mePackOrUnpack == E_UNPACK_FROM_BITSTREAM)
-        {
+        case E_UNPACK_FROM_BITSTREAM:
             *lpu8Field = static_cast<u8>(mBitstream.GetQuantisedInt(liMin, liMax));
-            return KX_PACK_OR_UNPACK_SUCCESS;
+            break;
+        default:
+            CGS_ASSERT_STREAM_AT(false, "CgsNetwork::Message::PackOrUnpack"
+                                         << " called without telling it which it is doing\n",
+                                 KAC_ARTIST_FILE, 556);
+            break;
         }
-
-        CGS_ASSERT(false,
-                   "CgsNetwork::Message::PackOrUnpack called without telling "
-                   "it which it is doing\n");
         return KX_PACK_OR_UNPACK_SUCCESS;
     }
 
-    // int16_t field. This overload fires a plain assert string instead of the
-    // assembled one.
-    PackOrUnpackResult PackOrUnpackS16(Message* lpMessage, s16* lps16Field, s32 liMin, s32 liMax)
+    // DecFIGS CgsMessage.cpp:576, :617. ARTIST 82881198 and 82881250.
+    PackOrUnpackResult Message::PackOrUnpack(s16* lps16Field, s32 liMin, s32 liMax)
     {
-        if (lpMessage->mePackOrUnpack == Message::E_PACK_INTO_BITSTREAM)
+        switch (mePackOrUnpack)
         {
-            u32 luPacked  = 0;
-            s32 liNumBits = 0;
-            IntQuantiser::Pack(static_cast<s32>(*lps16Field), liMin, liMax, &luPacked, &liNumBits);
-            return lpMessage->mBitstream.AddBits(luPacked, liNumBits) ? KX_PACK_OR_UNPACK_SUCCESS
-                                                                      : KX_PACK_FAILED_NO_SPACE;
-        }
-
-        if (lpMessage->mePackOrUnpack == Message::E_UNPACK_FROM_BITSTREAM)
+        case E_PACK_INTO_BITSTREAM:
         {
-            *lps16Field = static_cast<s16>(lpMessage->mBitstream.GetQuantisedInt(liMin, liMax));
-            return KX_PACK_OR_UNPACK_SUCCESS;
+            u32 luPacked;
+            s32 liNumBits;
+            IntQuantiser::Pack(*lps16Field, liMin, liMax, &luPacked, &liNumBits);
+            if (!mBitstream.AddBits(luPacked, liNumBits))
+                return KX_PACK_FAILED_NO_SPACE;
+            break;
         }
-
-        CGS_ASSERT(false, "PackOrUnpack called without telling it which operation to do\n");
+        case E_UNPACK_FROM_BITSTREAM:
+            *lps16Field = static_cast<s16>(mBitstream.GetQuantisedInt(liMin, liMax));
+            break;
+        default:
+            CGS_ASSERT_AT(false, "PackOrUnpack called without telling it which operation to do\n",
+                          KAC_ARTIST_FILE, 595);
+            break;
+        }
         return KX_PACK_OR_UNPACK_SUCCESS;
     }
 
-    // uint16_t field.
-    PackOrUnpackResult PackOrUnpackU16(Message* lpMessage, u16* lpu16Field, s32 liMin, s32 liMax)
+    PackOrUnpackResult Message::PackOrUnpack(u16* lpu16Field, s32 liMin, s32 liMax)
     {
-        if (lpMessage->mePackOrUnpack == Message::E_PACK_INTO_BITSTREAM)
+        switch (mePackOrUnpack)
         {
-            u32 luPacked  = 0;
-            s32 liNumBits = 0;
-            IntQuantiser::Pack(static_cast<s32>(*lpu16Field), liMin, liMax, &luPacked, &liNumBits);
-            return lpMessage->mBitstream.AddBits(luPacked, liNumBits) ? KX_PACK_OR_UNPACK_SUCCESS
-                                                                      : KX_PACK_FAILED_NO_SPACE;
-        }
-
-        if (lpMessage->mePackOrUnpack == Message::E_UNPACK_FROM_BITSTREAM)
+        case E_PACK_INTO_BITSTREAM:
         {
-            *lpu16Field = static_cast<u16>(lpMessage->mBitstream.GetQuantisedInt(liMin, liMax));
-            return KX_PACK_OR_UNPACK_SUCCESS;
+            u32 luPacked;
+            s32 liNumBits;
+            IntQuantiser::Pack(*lpu16Field, liMin, liMax, &luPacked, &liNumBits);
+            if (!mBitstream.AddBits(luPacked, liNumBits))
+                return KX_PACK_FAILED_NO_SPACE;
+            break;
         }
-
-        CGS_ASSERT(false,
-                   "CgsNetwork::Message::PackOrUnpack called without telling "
-                   "it which it is doing\n");
+        case E_UNPACK_FROM_BITSTREAM:
+            *lpu16Field = static_cast<u16>(mBitstream.GetQuantisedInt(liMin, liMax));
+            break;
+        default:
+            CGS_ASSERT_STREAM_AT(false, "CgsNetwork::Message::PackOrUnpack"
+                                         << " called without telling it which it is doing\n",
+                                 KAC_ARTIST_FILE, 635);
+            break;
+        }
         return KX_PACK_OR_UNPACK_SUCCESS;
     }
 
     // int32_t field.
     PackOrUnpackResult Message::PackOrUnpack(s32* lpiField, s32 liMin, s32 liMax)
     {
-        if (mePackOrUnpack == E_PACK_INTO_BITSTREAM)
+        switch (mePackOrUnpack)
         {
-            u32 luPacked  = 0;
-            s32 liNumBits = 0;
+        case E_PACK_INTO_BITSTREAM:
+        {
+            u32 luPacked;
+            s32 liNumBits;
             IntQuantiser::Pack(*lpiField, liMin, liMax, &luPacked, &liNumBits);
-            return mBitstream.AddBits(luPacked, liNumBits) ? KX_PACK_OR_UNPACK_SUCCESS
-                                                                      : KX_PACK_FAILED_NO_SPACE;
+            if (!mBitstream.AddBits(luPacked, liNumBits))
+                return KX_PACK_FAILED_NO_SPACE;
+            break;
         }
-
-        if (mePackOrUnpack == E_UNPACK_FROM_BITSTREAM)
-        {
-            *lpiField = mBitstream.GetQuantisedInt(liMin, liMax);
-            return KX_PACK_OR_UNPACK_SUCCESS;
+        case E_UNPACK_FROM_BITSTREAM:
+            *lpiField = static_cast<s32>(mBitstream.GetQuantisedInt(liMin, liMax));
+            break;
+        default:
+            CGS_ASSERT_STREAM_AT(false, "CgsNetwork::Message::PackOrUnpack"
+                                         << " called without telling it which it is doing\n",
+                                 KAC_ARTIST_FILE, 674);
+            break;
         }
-
-        CGS_ASSERT(false,
-                   "CgsNetwork::Message::PackOrUnpack called without telling "
-                   "it which it is doing\n");
         return KX_PACK_OR_UNPACK_SUCCESS;
     }
 
@@ -610,21 +622,21 @@ namespace CgsNetwork
     // "called without telling it which it is doing" assert.
     PackOrUnpackResult Message::PackOrUnpackBuffer(char* lpcBuffer, s32 liNumBytes)
     {
-        if (mePackOrUnpack == E_PACK_INTO_BITSTREAM)
+        switch (mePackOrUnpack)
         {
-            return mBitstream.AddRawData(lpcBuffer, liNumBytes) ? KX_PACK_OR_UNPACK_SUCCESS
-                                                                : KX_PACK_FAILED_NO_SPACE;
-        }
-
-        if (mePackOrUnpack == E_UNPACK_FROM_BITSTREAM)
-        {
+        case E_PACK_INTO_BITSTREAM:
+            if (!mBitstream.AddRawData(lpcBuffer, liNumBytes))
+                return KX_PACK_FAILED_NO_SPACE;
+            break;
+        case E_UNPACK_FROM_BITSTREAM:
             mBitstream.GetRawData(lpcBuffer, liNumBytes);
-            return KX_PACK_OR_UNPACK_SUCCESS;
+            break;
+        default:
+            CGS_ASSERT_STREAM_AT(false, "CgsNetwork::Message::PackOrUnpackBuffer"
+                                         << " called without telling it which it is doing\n",
+                                 KAC_ARTIST_FILE, 1417);
+            break;
         }
-
-        CGS_ASSERT(false,
-                   "CgsNetwork::Message::PackOrUnpackBuffer called without telling "
-                   "it which it is doing\n");
         return KX_PACK_OR_UNPACK_SUCCESS;
     }
 

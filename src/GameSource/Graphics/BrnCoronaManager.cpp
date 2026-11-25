@@ -221,21 +221,6 @@ bool BrnCoronaManager::Release(rw::IResourceAllocator& lrAllocator)
     return true;
 }
 
-// Inlined by ARTIST Renderer StartOfFrame/SwapBuffers/Update.
-void BrnCoronaManager::Clear()
-{
-    BrnSubmissionInterface& lrInterface = mSubmissionInterface[mu8SubmissionSwapIndex];
-    lrInterface.mpBuffer->Lock(lrInterface.mBufferIterator);
-}
-void BrnCoronaManager::Swap()
-{
-    mu8SubmissionSwapIndex = static_cast<u8>(mu8SubmissionSwapIndex ^ 1u);
-}
-BrnCoronaManager::BrnSubmissionInterface* BrnCoronaManager::GetSubmissionInterface()
-{
-    return &mSubmissionInterface[mu8SubmissionSwapIndex];
-}
-
 // ARTIST824075D8. Begin is unconditional after the active/atlas gates.
 void BrnCoronaManager::Render(f32 lfWhiteLevel)
 {

@@ -11,9 +11,8 @@
 //   Push()  asserts the stack was Construct/Clear'd (miLength @ +0x180 != the 0x7FFFFFFF
 //     sentinel, "Stack used before Construct/Clear was called"). The X360 emits this
 //     constructed-check TWICE (CgsStack.h:98 direct, then :169 from the inlined IsFull),
-//     then asserts !IsFull() (miLength != 96 == N, "!IsFull()", CgsStack.h:99). The committed
-//     generic collapses the doubled constructed-check into one CGS_ASSERT -- semantically
-//     identical. It then stores the element at the top slot (maData[miLength] = *lpEntry;
+//     then asserts !IsFull() (miLength != 96 == N, "!IsFull()", CgsStack.h:99). It
+//     stores the element at the top slot (maData[miLength] = *lpEntry);
 //     the asm computes `slwi miLength,2; stwx` == &maData[miLength] for the 4-byte pointer
 //     element) and grows the count (++miLength).
 //
@@ -27,7 +26,7 @@
 #include "GameShared/GameClasses/Containers/CgsStack.h"  // Stack<T,N>::Push() (inline generic)
 
 namespace BrnParticle { namespace Native {
-    class TrailEmitter;   // BrnTrailSystem.h -- incomplete; only the pointer element is needed
+    struct TrailEmitter;  // Match BrnTrailSystem.h and the DecFIGS type declaration.
 } } // namespace BrnParticle::Native
 
 template void

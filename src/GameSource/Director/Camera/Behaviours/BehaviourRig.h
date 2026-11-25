@@ -99,8 +99,10 @@ class CameraRig
 public:
     // Author-visible parameter block (DWARF CameraRig.h). Nominal 64-byte X360 body
     // (each Vector3 aligns to 16 bytes on the SIMD ISA; the bool is padded to 16).
-    struct Params
+    // ARTIST 0x8224D280 encodes Params as a class in the serialiser specialization.
+    class Params
     {
+    public:
         // X360 visitor: `void Serialise<S>(S&)` (camera-tunings TextFile{Read,Write}Serialiser).
         // Per-instance body is a separate TU.
         template<class TSerialiser> void Serialise(TSerialiser& lrSerialiser);

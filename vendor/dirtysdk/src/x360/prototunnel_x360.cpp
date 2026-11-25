@@ -509,22 +509,24 @@ extern "C" s32 ProtoTunnelAlloc(ProtoTunnelRefT* pRef,ProtoTunnelInfoT* pInfo,co
 }
 extern "C" void ProtoTunnelFree(ProtoTunnelRefT* pRef,u32 id,const char* key)
 {
+    u32 bFound = 0;
     NetCritEnter(&pRef->TunnelsCritS); NetCritEnter(&pRef->TunnelsCritR);
-    bool found=false;
-    for (s32 i=0;i<pRef->iNumTunnels;++i) {
-        ProtoTunnelT* pTunnel=&pRef->Tunnels[i];
+    ProtoTunnelT* pTunnel;
+    s32 iTunnel;
+    for (iTunnel = 0, pTunnel = pRef->Tunnels; iTunnel < pRef->iNumTunnels; ++iTunnel, ++pTunnel) {
         if (pTunnel->uVirtualAddr!=id) continue;
-        found=true;
+        bFound = 1;
         if (pTunnel->uRefCount==1) {
             NetPrintf(("prototunnel: freeing tunnel 0x%08x\n",id));
             ProtoTunnelBufferSend(pRef,pTunnel); NetCritKill(&pTunnel->PacketCrit);
-            if (i!=pRef->iNumTunnels-1) memmove(pTunnel,pTunnel+1,(pRef->iNumTunnels-i-1)*sizeof(*pTunnel));
+            if (iTunnel!=pRef->iNumTunnels-1) memmove(pTunnel,pTunnel+1,(pRef->iNumTunnels-iTunnel-1)*sizeof(*pTunnel));
             --pRef->iNumTunnels;
         } else {
             NetPrintf(("prototunnel: decrementing refcount of tunnel 0x%08x (clientId=0x%08x)\n",id,pTunnel->Info.uRemoteClientId));
-            s32 j=0;
-            for (;j<8;++j) if (!strcmp(key,pTunnel->aKeyList[j])) { memset(pTunnel->aKeyList[j],0,128); break; }
-            if (pTunnel->uSendKey==j) {
+            s32 iKey=0;
+            for (;iKey<8;++iKey) if (!strcmp(key,pTunnel->aKeyList[iKey])) { memset(pTunnel->aKeyList[iKey],0,128); break; }
+            // ARTIST 82B2E5C8 compares the stored key number to an 8-bit index.
+            if (pTunnel->uSendKey == static_cast<u8>(iKey)) {
                 NetPrintf(("prototunnel: free of current send key; picking another\n"));
                 for (s32 k=0;k<8;++k) if (pTunnel->aKeyList[k][0]) {
                     NetPrintf(("prototunnel: picking key %d (%s) offset=%d\n",k,pTunnel->aKeyList[k],pTunnel->uSendOffset));
@@ -532,12 +534,12 @@ extern "C" void ProtoTunnelFree(ProtoTunnelRefT* pRef,u32 id,const char* key)
                     CryptArc4Advance(&pTunnel->CryptSendState,pTunnel->uSendOffset*4);
                     pTunnel->uSendKey=(u8)k; break;
                 }
-            } else if (j==8) NetPrintf(("prototunnel: could not find key %s in key list on free\n",key));
+            } else if (iKey==8) NetPrintf(("prototunnel: could not find key %s in key list on free\n",key));
             --pTunnel->uRefCount;
         }
         break;
     }
-    if (pRef->iNumTunnels>0 && !found) NetPrintf(("prototunnel: could not find tunnel with id 0x%08x to free\n",id));
+    if (pRef->iNumTunnels>0 && !bFound) NetPrintf(("prototunnel: could not find tunnel with id 0x%08x to free\n",id));
     NetCritLeave(&pRef->TunnelsCritR); NetCritLeave(&pRef->TunnelsCritS);
 }
 extern "C" s32 ProtoTunnelControl(ProtoTunnelRefT* pRef,s32 select,s32 value,s32,const void*)

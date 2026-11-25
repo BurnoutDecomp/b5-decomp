@@ -56,8 +56,8 @@ namespace BrnNetwork
         CgsNetwork::PackOrUnpackResult lxResult = CgsNetwork::ReliableMessage::PackOrUnpack();
         lxResult = CgsNetwork::Message::PackOrUnpack(&mCarId) | lxResult;
         lxResult = CgsNetwork::Message::PackOrUnpack(&mWheelId) | lxResult;
-        lxResult = CgsNetwork::PackOrUnpackU16(this, &mu16ColourIndex, KI_MIN_LIVERY_INDEX, KI_MAX_COLOUR_INDEX) | lxResult;
-        lxResult = CgsNetwork::PackOrUnpackU16(this, &mu16PaintFinishIndex, KI_MIN_LIVERY_INDEX, KI_MAX_PAINT_FINISH_INDEX) | lxResult;
+        lxResult = CgsNetwork::Message::PackOrUnpack(&mu16ColourIndex, KI_MIN_LIVERY_INDEX, KI_MAX_COLOUR_INDEX) | lxResult;
+        lxResult = CgsNetwork::Message::PackOrUnpack(&mu16PaintFinishIndex, KI_MIN_LIVERY_INDEX, KI_MAX_PAINT_FINISH_INDEX) | lxResult;
         CgsNetwork::PackOrUnpackResult lxFloat =
             CgsNetwork::PackOrUnpackFloat(this, &mfBaseDeformationAmount,
                                           KF_MIN_DEFORMATION_AMOUNT, KF_MAX_DEFORMATION_AMOUNT,

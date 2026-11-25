@@ -109,7 +109,7 @@ HeapResourceAllocator* GetDebugAllocator();
 // at 82F2C854, independently of the debug allocator at 82F2C7DC.
 HeapResourceAllocator* GetRuntimeAllocator();
 // Genuine public wrapper; distinct from the retained native allocation helper.
-LinearResourceAllocator* GetGraphicsAllocator();
+inline LinearResourceAllocator* GetGraphicsAllocator();
 // Native GlobalResource wrapper at ARTIST82F2C848, independent of GlobalDebug.
 LinearResourceAllocator* GetGlobalResourceAllocator();
 // DecFIGS h405; ARTIST loading-screen allocation uses 82F2C870.
@@ -172,6 +172,13 @@ private:
     static LinearResourceAllocator mGlobalGraphicsAllocator;
     static DefaultLinearAllocator mInitialDefaultAllocator;
 };
+
+// DecFIGS BrnResourceAllocator.h:387 and LegacySrc:292 define this inline.
+// ARTIST BrnRendererModule::Release materialises the wrapper at 0x823FBD40.
+inline LinearResourceAllocator* GetGraphicsAllocator()
+{
+    return &Allocators::mGlobalGraphicsAllocator;
+}
 
 } // namespace BrnResource
 

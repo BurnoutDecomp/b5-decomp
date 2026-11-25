@@ -13,7 +13,7 @@
 //
 // +0x1C is the inherited Message::mu16Frame field, which a reliable message reuses to
 // carry its wrapped reliable id. sub_82881250 is the shared 16-bit field serialiser
-// (now CgsNetwork::PackOrUnpackU16, declared in CgsMessage.h): it packs or unpacks a
+// (CgsNetwork::Message::PackOrUnpack(uint16_t*, int32_t, int32_t)): it packs or unpacks a
 // u16 in the inclusive range [0, 65534], reading/writing through the pointer. It is
 // its own not-yet-reconstructed TU; the real body lands when that TU is worked.
 //
@@ -26,7 +26,7 @@ namespace CgsNetwork
     PackOrUnpackResult ReliableMessage::PackOrUnpack()
     {
         u16 lu16ReliableId = mu16Frame;
-        const PackOrUnpackResult lxResult = PackOrUnpackU16(this, &lu16ReliableId, 0, 65534);
+        const PackOrUnpackResult lxResult = CgsNetwork::Message::PackOrUnpack(&lu16ReliableId, 0, 65534);
         mu16Frame = lu16ReliableId;
         return lxResult;
     }
