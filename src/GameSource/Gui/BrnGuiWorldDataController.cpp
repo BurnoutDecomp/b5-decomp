@@ -458,7 +458,8 @@ const BrnWorld::PlayerCarColourPalette*
 WorldDataController::GetColourPaletteFromType(BrnWorld::EPalettesTypes lType) const
 {
     const BrnWorld::GlobalColourPalette* const lpPalette = mpPlayerCarColours.operator->();
-    CGS_ASSERT(lType < BrnWorld::eNumPalettes, "lType < eNumPalettes");
+    CGS_ASSERT_AT(lType < BrnWorld::eNumPalettes, "lType < eNumPalettes",
+                  "..\\..\\..\\SharedClasses\\../SharedClasses/Graphics/PlayerCarColours.h", 97);
     return &lpPalette->maPalettes[lType];
 }
 
@@ -467,13 +468,14 @@ s32 WorldDataController::GetRequiredWinsInRank(s32 liRank) const
 {
     if (liRank == -1)
         return 0;
-    CGS_ASSERT(meState >= E_WORLDDATACONTROLLERSTATE_WFPLAYERCARCOLOURS,
-        "E_WORLDDATACONTROLLERSTATE_READY <= meState");
-    CGS_ASSERT(liRank >= 0 && static_cast<s32>(mpProgressionData->GetProgressionRankCount()) >= liRank,
-        "(0 <= liRank) && (static_cast<int32_t>( mpProgressionData->GetProgressionRankCount() ) >= liRank)");
+    CGS_ASSERT_AT(meState >= E_WORLDDATACONTROLLERSTATE_WFPLAYERCARCOLOURS,
+        "E_WORLDDATACONTROLLERSTATE_READY <= meState", CGS_ARTIST_FILE, 270);
+    CGS_ASSERT_AT(liRank >= 0 && static_cast<s32>(mpProgressionData->GetProgressionRankCount()) >= liRank,
+        "(0 <= liRank) && (static_cast<int32_t>( mpProgressionData->GetProgressionRankCount() ) >= liRank)",
+        CGS_ARTIST_FILE, 271);
     const BrnProgression::ProgressionRankData* lpRankData =
         mpProgressionData->GetProgressionRankData(liRank);
-    CGS_ASSERT(lpRankData, "lpRankData");
+    CGS_ASSERT_AT(lpRankData, "lpRankData", CGS_ARTIST_FILE, 274);
     return lpRankData->GetMedalThresholdToNextRank();
 }
 

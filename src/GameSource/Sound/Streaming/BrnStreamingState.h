@@ -87,6 +87,9 @@ struct StreamingState : public BrnSound::Logic::BrnState
     void SetFadeOut(f32 afFadeOut) { mfFadeOut = afFadeOut; }
     f32 GetFadeOut() const { return mfFadeOut; }
 
+protected:
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State> sTypeInfo;
+
 private:
     // DWARF :105. The stream request this state is servicing (the manager-ring
     // StreamRequest type, assigned in via the deferred SetRequest).

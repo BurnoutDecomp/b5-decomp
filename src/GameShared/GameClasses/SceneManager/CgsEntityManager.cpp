@@ -4,6 +4,8 @@
 #include "GameShared/GameClasses/SceneManager/CgsVolumeStore.h"     // KI_INVALID_VOLUME_INDEX
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"          // [DIAG wave Q5] CgsDev::Log::gpDebugPrint
 #define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\CgsEntityManager.cpp"
+static const char KAC_ENTITY_MANAGER_ARTIST_HEADER[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\CgsEntityManager.h";
 // CgsSceneManager::EntityManager -- reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
 // Bodied here (DWARF primary file
@@ -163,14 +165,14 @@ s32 EntityManager::GetVolumeInstanceIndexByID(VolumeInstanceId lVolumeInstanceId
 const VolumeInstance* EntityManager::GetVolumeInstance(s32 liViIndex) const
 {
     CGS_ASSERT(liViIndex < KI_MAX_NUM_VOLUME_INSTANCES,
-               "liViIndex < KI_MAX_NUM_VOLUME_INSTANCES");
+               CGS_ASSERT_MESSAGE_AT("liViIndex < KI_MAX_NUM_VOLUME_INSTANCES", KAC_ENTITY_MANAGER_ARTIST_HEADER, 488));
 
     if (liViIndex == KI_INVALID_VOLUME_INSTANCE_INDEX)
     {
         return NULL;
     }
 
-    CGS_ASSERT(liViIndex >= 0, "liViIndex >= 0");
+    CGS_ASSERT(liViIndex >= 0, CGS_ASSERT_MESSAGE_AT("liViIndex >= 0", KAC_ENTITY_MANAGER_ARTIST_HEADER, 493));
 
     if (!mVolumeInstancePool.IsObjectAllocated(liViIndex))
     {

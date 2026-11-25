@@ -86,7 +86,7 @@ namespace CgsMemory
         // SimpleDataStreamProducer::GetResultIterator() -- i.e. the drain for this
         // producer already exists and is already mounted. (`xrefs_to` on the
         // consumer side checked before writing, per the standing rule.)
-        void AddResult(const void* lpvResult, s32 liResultIndex);
+        void AddResult(void* lpvResult, s32 liResultIndex);
 
     private:
         // --- members ---------------------------------------------------------

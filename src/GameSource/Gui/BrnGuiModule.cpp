@@ -1011,13 +1011,13 @@ void GuiModule::Destruct()
         const char* lpcComponentName, const char* lpcSwfName,
         const char* lpcActionName, const char* lpcLabel)
     {
-        CGS_ASSERT(lpUserData != NULL, "lpUserData");
-        CGS_ASSERT(lpcComponentName != NULL, "lpcComponentName");
-        CGS_ASSERT(lpcSwfName != NULL, "lpcSwfName");
-        CGS_ASSERT(lpcActionName != NULL, "lpcActionName");
-        CGS_ASSERT(lpcLabel != NULL, "lpcLabel");
+        CGS_ASSERT_AT(lpUserData != NULL, "lpUserData", CGS_ARTIST_FILE, 3184);
+        CGS_ASSERT_AT(lpcComponentName != NULL, "lpcComponentName", CGS_ARTIST_FILE, 3185);
+        CGS_ASSERT_AT(lpcSwfName != NULL, "lpcSwfName", CGS_ARTIST_FILE, 3186);
+        CGS_ASSERT_AT(lpcActionName != NULL, "lpcActionName", CGS_ARTIST_FILE, 3187);
+        CGS_ASSERT_AT(lpcLabel != NULL, "lpcLabel", CGS_ARTIST_FILE, 3188);
         GuiModule* lpThis = static_cast<GuiModule*>(lpUserData);
-        CGS_ASSERT(lpThis->mpOutputBuffer != NULL, "mpOutputBuffer");
+        CGS_ASSERT_AT(lpThis->mpOutputBuffer != NULL, "lpThis->mpOutputBuffer", CGS_ARTIST_FILE, 3192);
         GuiAudioTriggerEvent lAudio;
         lAudio.Construct(lpcComponentName, lpcActionName, lpcLabel, lpcSwfName);
         lpThis->mpOutputBuffer->AddGuiOutEvent(lAudio);

@@ -102,12 +102,6 @@ namespace Logic
         return Streaming::StreamingStateManager::GetStaticTypeInfo();
     }
 
-    // @ 0x82683A58  -> &unk_82F2E83C  == StreamingState::sTypeInfo (descriptor un-homed on host)
-    void* Streamin()
-    {
-        return (void*)"";
-    }
-
     // @ 0x826840F8  -> &unk_82F2E8BC  == TrafficEngine::sTypeInfo (descriptor un-homed on host)
     void* T()
     {

@@ -70,20 +70,22 @@ ClassTypeInfo<State>* State::GetRegisteredTypeInfo(u32 auIndex)
     return auIndex < KU_SIZEOF_CLASS_ARRAY ? gapStateTypeInfo[auIndex] : 0;
 }
 
+// ARTIST 0x82F2FA90.
+ClassTypeInfo<State> State::sTypeInfo(-1, "State", 0, 0);
+
 ClassTypeInfo<State>* State::GetStaticTypeInfo()
 {
-    static ClassTypeInfo<State> sTypeInfo(-1, "State", 0, 0); // ARTIST 0x82F2FA90
     return &sTypeInfo;
 }
 
 ClassTypeInfo<State>* State::GetTypeInfo() const
 {
-    return GetStaticTypeInfo(); // ARTIST 0x8268D410
+    return &sTypeInfo; // ARTIST 0x8268D410
 }
 
 const char* State::GetTypeName() const
 {
-    return GetStaticTypeInfo()->typeName; // ARTIST 0x8268D420
+    return sTypeInfo.typeName; // ARTIST 0x8268D420
 }
 
 // CgsState.h:370. Zero/seed the State base members. This mirrors the inline base

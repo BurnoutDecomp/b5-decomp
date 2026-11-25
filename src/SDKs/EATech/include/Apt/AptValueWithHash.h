@@ -26,7 +26,8 @@ struct AptValueWithHash : public AptValueGC
 protected:
     AptNativeHash mHash;   // x64 +0x10 -- the property table
 
-    AptValueWithHash(AptVirtualFunctionTable_Indices eType, int nHashCapacity)
+    // The shared base construction is called at ARTIST 0x82AEFE98.
+    __declspec(noinline) AptValueWithHash(AptVirtualFunctionTable_Indices eType, int nHashCapacity)
         : AptValueGC(eType), mHash(nHashCapacity)
     {
     }

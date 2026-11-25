@@ -126,9 +126,9 @@ void AptScriptColour::DestroyGCPointers()
 // ---------------------------------------------------------------------------
 void AptScriptColour::RegisterReferences()
 {
-    AptObject::RegisterReferences();   // == mHash.RegisterReferences(this) (X360: a1+8, a1)
+    mHash.RegisterReferences(this);
 
-    if (mpTarget && AptValue::sReferenceRegistrationCb)
+    if (mpTarget)
         AptValue::sReferenceRegistrationCb(this, &mpTarget, "CIH", 1);
 }
 

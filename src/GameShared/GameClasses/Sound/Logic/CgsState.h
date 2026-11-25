@@ -137,6 +137,8 @@ struct State : public CgsSound::MemBase
     void* GetAttachment() const { return mpvAttachment; }
 
 protected:
+    static ClassTypeInfo<State> sTypeInfo;
+
     void CreateSFXObjs();
     void CreateSFXCtrls();
     void ForceCreateEffectControls(s32 liMask);

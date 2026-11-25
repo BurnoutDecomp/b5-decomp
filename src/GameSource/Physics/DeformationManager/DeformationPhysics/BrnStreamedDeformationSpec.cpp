@@ -176,7 +176,7 @@ namespace Deformation
     // the 80-byte stride are not copied, matching the asm which only touches +0..+70).
     LocatorPointSpec LocatorPointSpecList::CreateLo(u32 luTag) const
     {
-        CGS_ASSERT(luTag < muNumLocators, "luTag < muNumLocators");   // BrnStreamedDeformationSpec.cpp:481
+        CGS_ASSERT(luTag < muNumLocators, CGS_ASSERT_MESSAGE_AT("luTag < muNumLocators", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.cpp", 481));   // BrnStreamedDeformationSpec.cpp:481
 
         const LocatorPointSpec& lSrc = mpaLocatorPoints[luTag];
 

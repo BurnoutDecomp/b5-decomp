@@ -12,8 +12,7 @@
 //
 // Dependencies (all homed): AptRand @0x82AE04F0 (AptRandom.cpp -- the X360
 // MT19937); AptValue::Append_ToString @0x82AF9668 (AptValueConvert.cpp;
-// StringAdd's concatenation). Random: the console traps (twllei) when the
-// modulus is <= 0; PC guards instead (platform-behaviour note, not debt).
+// StringAdd's concatenation).
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
@@ -77,24 +76,34 @@ void AptActionInterpreter::_FunctionAptActionStringAdd(AptActionInterpreter* pIn
 
 // ---------------------------------------------------------------------------
 // Random @0x82AE9BE8 (0x30) -- push AptInteger(AptRand() % top); 0 if the top is
-// undefined. (Console traps when the modulus <= 0; PC guards.)
+// undefined. A zero unsigned divisor traps in ARTIST.
 // ---------------------------------------------------------------------------
+// ARTIST 0x82AE9C18 uses the shorter record-form test before the unsigned modulus.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 void AptActionInterpreter::_FunctionAptActionRandom(AptActionInterpreter* pInterp,
                                                     LocalContextT* /*pContext*/)
 {
     AptValue* pTop = pInterp->mpStack[pInterp->mnStackTop - 1];
-    int nResult = 0;
-    if (pTop->getIsDefined())
+    // ARTIST 0x82AE9C38 traps on a zero divisor. The native operand is unsigned.
+    unsigned int nResult;
+    if (!pTop->getIsDefined())
+    {
+        nResult = 0;
+    }
+    else
     {
         const unsigned int nRange = static_cast<unsigned int>(pTop->toInteger());
-        nResult = (nRange > 0) ? static_cast<int>(AptRand() % nRange) : 0;   // console twllei-traps when <=0; PC guards
+        nResult = AptRand() % nRange;
     }
-    pInterp->stackPop();
     AptInteger* pResult = AptInteger::Create(nResult);
+    pInterp->stackPop();
     pInterp->mpStack[pInterp->mnStackTop++] = pResult;
     pResult->AddRef();
 }
 
+// ARTIST 0x82AF3D34 also uses the short CR0 check for the allocation.
 // ---------------------------------------------------------------------------
 // InitArray @0x82AF3CF8 (0x42) -- pop the element count, build an AptArray from
 // that many stack values (top-down), pop them, push the array.

@@ -28,23 +28,33 @@ extern AptValue* gpObjRegistrationFunc;
 struct AptObject : public AptValueWithHash
 {
 protected:
-    enum
+    // ARTIST 0x82AF0048 and 0x82AF5868: the implemented count is the
+    // upper byte and the class / instance flags are bits 8 and 9 in PPC order.
+    struct ClassFlags
     {
-        HAS_CLASS = 0x00800000u,
-        IS_IN_MAIN_INST = 0x00400000u
+        uint32_t mnImplementedCount : 8;
+        uint32_t mbHasClass : 1;
+        uint32_t mbIsInMainInst : 1;
     };
+    ClassFlags mClassFlags;
 
-    uint32_t mClassFlags;
-
-    AptObject(AptVirtualFunctionTable_Indices eType, int nHashCapacity)
-        : AptValueWithHash(eType, nHashCapacity), mClassFlags(0)
+    // ARTIST folds this step into its derived constructors. Their common
+    // AptValueWithHash construction remains a separate call to 0x82AEFE98.
+    __forceinline AptObject(AptVirtualFunctionTable_Indices eType, int nHashCapacity)
+        : AptValueWithHash(eType, nHashCapacity)
     {
+        mClassFlags.mnImplementedCount = 0;
+        mClassFlags.mbHasClass = false;
+        mClassFlags.mbIsInMainInst = false;
     }
 
     // Layout pinned against the x64 XB1 export (never called; member body gives
     // complete-class offsetof context).
     static void _AssertLayout()
     {
+        CGS_STATIC_ASSERT(sizeof(ClassFlags) == 4, "ARTIST AptObject class state word");
+        CGS_STATIC_ASSERT(offsetof(AptObject, mClassFlags) == 0x1C, "ARTIST AptObject class state offset");
+        CGS_STATIC_ASSERT(sizeof(AptObject) == 0x20, "ARTIST AptObject allocation size");
     }
 
 public:
@@ -73,10 +83,10 @@ public:
     virtual AptValue* objectMemberLookup(AptValue* const pThis,
                                          const AptNativeString* const pName) const;  // @0x7FC7E8
 
-    bool GetIsInMainInst() const { return (mClassFlags & IS_IN_MAIN_INST) != 0; }
+    bool GetIsInMainInst() const { return mClassFlags.mbIsInMainInst != 0; }
     void SetIsInMainInst(bool bInMainInst)
     {
-        mClassFlags = (mClassFlags & ~IS_IN_MAIN_INST) | (bInMainInst ? IS_IN_MAIN_INST : 0u);
+        mClassFlags.mbIsInMainInst = bInMainInst;
     }
 
     // ---- the implemented-interfaces set (AS `implements`) -------------------

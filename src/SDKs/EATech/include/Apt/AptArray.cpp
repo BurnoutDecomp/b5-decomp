@@ -40,8 +40,8 @@ void AptArray::operator delete(void* p, size_t size)
 // ctor @0x82D978 -- empty array (object hash capacity 8).
 AptArray::AptArray() : AptObject(AptVFT_Array, 8)
 {
-    mpArray    = 0;
     mnCapacity = 0;
+    mpArray    = 0;
     mnLength   = 0;
 }
 
@@ -155,33 +155,47 @@ void AptArray::set(int32_t nIndex, AptValue* pValue)
 }
 
 // ---- GC -------------------------------------------------------------------
+// ARTIST 0x82AE2858 uses the size-oriented condition-register form.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 void AptArray::RegisterReferences()
 {
-    AptObject::RegisterReferences();   // mark the property hash
-    if (!AptValue::sReferenceRegistrationCb)
-        return;
+    mHash.RegisterReferences(this);
     for (int i = 0; i < mnLength; ++i)
         if (mpArray[i])
             AptValue::sReferenceRegistrationCb(this, &mpArray[i], "Element", 0);
 }
 
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
+
+// ARTIST 0x82AF1D18 uses the size-oriented condition-register form.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 void AptArray::DestroyGCPointers()
 {
-    AptObject::DestroyGCPointers();    // tear down the property hash
+    mHash.DestroyGCPointers();
     for (int i = 0; i < mnLength; ++i)
     {
-        if (mpArray[i])
+        if (AptValue* pValue = mpArray[i])
         {
-            mpArray[i]->Release();
+            pValue->Release();
             mpArray[i] = 0;
         }
     }
     if (mpArray)
         gpNonGCPoolManager->Deallocate(mpArray, sizeof(AptValue*) * mnCapacity);
-    mnCapacity = 0;
     mpArray    = 0;
     mnLength   = 0;
+    mnCapacity = 0;
 }
+
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // ===========================================================================
 // ActionScript Array native methods (sMethod_*) + the default sort comparator.

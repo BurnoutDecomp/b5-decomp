@@ -55,6 +55,9 @@ struct GlobalState : public BrnSound::Logic::BrnState
     // committed GetTypeName literal).
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* GetStaticTypeInfo();
     static CgsSound::Logic::State* CreateObject(u32 auType);
+
+protected:
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State> sTypeInfo;
 };
 
 } // namespace Logic

@@ -414,11 +414,11 @@ namespace CgsGui
     // ========================================================================
     const char* AptCommunicator::GetComponentNameForHash(u32 luHash)
     {
+        const char* const lpcAssertFile = "..\\..\\..\\GameShared\\GameClasses\\Gui/View/AptInterface/CgsAptCommunicator.h";
         for (s32 liComponent = 0; liComponent < AptComponentList::KU_MAX_COMPONENTS; ++liComponent)
         {
-            CGS_ASSERT(liComponent >= 0, "Invalid Component Index");
-            CGS_ASSERT(liComponent < AptComponentList::KU_MAX_COMPONENTS, "Invalid Component Index");
-
+            CGS_ASSERT_AT(liComponent >= 0, "Invalid Component Index", lpcAssertFile, 182);
+            CGS_ASSERT_AT(liComponent < AptComponentList::KU_MAX_COMPONENTS, "Invalid Component Index", lpcAssertFile, 183);
             if (mAptComponentList.GetHashedName(liComponent) == luHash)
             {
                 return mAptComponentList.GetName(liComponent);

@@ -52,12 +52,12 @@ AptObject* AptObject::Create(int nHashCapacity)
 
 bool AptObject::GetHasClass() const
 {
-    return (mClassFlags & HAS_CLASS) != 0;
+    return mClassFlags.mbHasClass != 0;
 }
 
 void AptObject::SetHasClass(int bHasClass)
 {
-    mClassFlags = (mClassFlags & ~HAS_CLASS) | (bHasClass ? HAS_CLASS : 0u);
+    mClassFlags.mbHasClass = bHasClass != 0;
 }
 
 AptValue* AptObject::objectMemberLookup(AptValue* const /*pThis*/,
@@ -90,7 +90,7 @@ void AptObject::SetImplementedObjects(AptValue* pImplementedArray, char nCount)
     // DecreaseInternalRefCount (the ctor/dtor pair the asm inlines around Set).
     EAStringC key("__INTERFACEs__");
     mHash.Set(key, pImplementedArray);
-    reinterpret_cast<unsigned char&>(mClassFlags) = static_cast<unsigned char>(nCount);
+    mClassFlags.mnImplementedCount = static_cast<unsigned char>(nCount);
 }
 
 // GetImplementedObjects @0x82AE68F0 -- return the implemented count via
@@ -98,7 +98,7 @@ void AptObject::SetImplementedObjects(AptValue* pImplementedArray, char nCount)
 // null/0 when this object implements nothing.
 AptValue* AptObject::GetImplementedObjects(int* pnCountOut) const
 {
-    const uint8_t nCount = reinterpret_cast<const unsigned char&>(mClassFlags);
+    const uint8_t nCount = mClassFlags.mnImplementedCount;
     *pnCountOut = nCount;
     if (nCount == 0)
         return 0;
@@ -125,7 +125,7 @@ bool AptObject::DoesImplementObject(AptValue* pTarget) const
     }
 
     // ---- implemented-interfaces scan ----------------------------------------
-    const uint8_t nCount = reinterpret_cast<const unsigned char&>(mClassFlags);
+    const uint8_t nCount = mClassFlags.mnImplementedCount;
     if (nCount == 0)
         return false;
 
@@ -133,7 +133,7 @@ bool AptObject::DoesImplementObject(AptValue* pTarget) const
     AptArray* pInterfaces = static_cast<AptArray*>(mHash.Lookup(key));
 
     // The X360 re-reads the count after the Lookup; if it went to zero, bail.
-    const uint8_t nCount2 = reinterpret_cast<const unsigned char&>(mClassFlags);
+    const uint8_t nCount2 = mClassFlags.mnImplementedCount;
     if (nCount2 == 0)
         return false;   // LABEL_14: DecreaseInternalRefCount + return 0
 

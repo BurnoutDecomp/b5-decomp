@@ -177,7 +177,7 @@ inline const Neighbour* Hull::GetNeighbour(u32 luIndex) const
 
 inline const Neighbour* Hull::GetNeighbours() const
 {
-    CGS_ASSERT(mpaNeighbourData != 0, "mpaNeighbourData");
+    CGS_ASSERT_AT(mpaNeighbourData != 0, "mpaNeighbourData", CGS_ARTIST_BRNTRAFFICHULL_FILE, 231);
     return mpaNeighbourData;
 }
 

@@ -1,6 +1,6 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnPenetrationSolver.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"          // CGS_ASSERT
 #include "rw/math/vpu/vector3_operation.h"                  // rw::math::vpu::{Dot, Max, Subtract, Mult, ...}
 #include "rw/math/vpu/matrix44affine_operation.h"           // rw::math::vpu::TransformPoint
 
@@ -104,7 +104,7 @@ namespace Deformation
     // -----------------------------------------------------------------------------------------
     void PenetrationSolver::AddObject(s32 liIndex, Matrix44Affine lTransform, VecFloat lvfWeighting)
     {
-        CGS_ASSERT(liIndex < KI_MAX_PENETRATION_BODIES, "liIndex < KI_MAX_PENETRATION_BODIES");
+        CGS_ASSERT(liIndex < KI_MAX_PENETRATION_BODIES, CGS_ASSERT_MESSAGE_AT("liIndex < KI_MAX_PENETRATION_BODIES", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\deformationmanager\\deformationphysics\\BrnPenetrationSolver.h", 167));
 
         maObjectTransforms[liIndex] = lTransform;
         mavfBodyWeighting[liIndex]  = lvfWeighting;

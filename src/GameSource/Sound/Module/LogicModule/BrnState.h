@@ -47,6 +47,9 @@ struct BrnState : public CgsSound::Logic::State
     virtual const char* GetTypeName() const;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* GetStaticTypeInfo();
     static CgsSound::Logic::State* CreateObject(u32 luFlavour);
+
+protected:
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State> sTypeInfo;
 };
 
 } // namespace Logic

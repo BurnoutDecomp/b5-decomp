@@ -348,19 +348,12 @@ u32 ShaderConstantsInternal::FixUp(u8* lpBaseData)
 // mau8DirtyConstants[i] == i and the final dirty count equals mu8NumUsedConstants.
 void ShaderConstantTable::BeginFrame(CgsGraphics::DispatchBin* lpDispatchBin)
 {
-    const u32 luNumUsed = mu8NumUsedConstants;
-
     mpDispatchBin = lpDispatchBin;
     mu8NumDirtyConstants = 0;
 
-    if (luNumUsed != 0)
+    for (u32 luIndex = 0; luIndex < mu8NumUsedConstants; ++luIndex)
     {
-        u32 luIndex = 0;
-        do
-        {
-            mau8DirtyConstants[mu8NumDirtyConstants++] = static_cast<u8>(luIndex++);
-        }
-        while (luIndex < mu8NumUsedConstants);
+        mau8DirtyConstants[mu8NumDirtyConstants++] = static_cast<u8>(luIndex);
     }
 }
 

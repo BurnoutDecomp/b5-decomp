@@ -289,9 +289,9 @@ namespace CgsGui
     void ModelModule::BridgeOutGuiResource(ModelIO::OutputBuffer* lpOutput,
         const GuiResourceModuleIO::OutputBuffer* lpResourceOutput)
     {
-        CGS_ASSERT(lpOutput != 0, "lpOutput != NULL");
-        CGS_ASSERT(lpResourceOutput->GetResourceRequestQueue() != 0,
-            "lpResourceOutputBuffer->GetResourceRequestQueue() != NULL");
+        CGS_ASSERT_AT(lpOutput != 0, "lpOutput != NULL", CGS_ARTIST_CGSMODELMODULE_FILE, 491);
+        CGS_ASSERT_AT(lpResourceOutput->GetResourceRequestQueue() != 0,
+            "lpResourceOutputBuffer->GetResourceRequestQueue() != NULL", CGS_ARTIST_CGSMODELMODULE_FILE, 493);
         if (lpResourceOutput->GetResourceRequestQueue()->GetLength() > 0)
             lpOutput->SetGuiResourceRequestQueue(lpResourceOutput->GetResourceRequestQueue());
         lpOutput->AddLoadNotifications(*lpResourceOutput->GetLoadNotifications());

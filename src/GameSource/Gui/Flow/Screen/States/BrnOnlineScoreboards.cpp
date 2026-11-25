@@ -209,7 +209,7 @@ namespace BrnGui
         // cpp:1570 -- non-fatal, and the X360 sinks it into the switch's default arm (the
         // other arms provably set lpcLabel and branch past it). Either placement runs the
         // same code: the event is constructed with the null label on the unrecognised path.
-        CGS_ASSERT(lpcLabel, "lpcLabel");
+        CGS_ASSERT_AT(lpcLabel, "lpcLabel", CGS_ARTIST_FILE, 1570);
 
         // X360: Construct(r3 = the stack event, r4 = 7, r5 = "", r6 = the label, r7 = "").
         GuiAudioTriggerEvent lAudioPayload;

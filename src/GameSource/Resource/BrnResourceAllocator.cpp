@@ -5,6 +5,7 @@
 #include "ppmalloc/EAGeneralAllocator.h"   // the backing EA general allocator
 #include "rw/rwcore_general_alloc.h"       // native embedded-heap allocator
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint, CgsDev::Message::gxMessageFilterFlags
+#include "GameShared/GameClasses/Development/MessageSystem/CgsMessage.h"
 #include <xtl.h>   // GlobalMemoryStatus (PrintConsoleMemory / GetAvailableMemory)
 #define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Resource/BrnResourceAllocator.cpp"
 namespace BrnResource
@@ -91,49 +92,52 @@ namespace BrnResource
     // shifted down to MB before they are streamed.
     void PrintConsoleMemory(const char* lpcMessage)
     {
-        if (lpcMessage != NULL && (CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        if (lpcMessage != NULL)
         {
-            *CgsDev::Log::gpDebugPrint << lpcMessage << " ";
+            if ((CgsDev::Message::gxMessageFilterFlags & CgsDev::Message::KX_FILTER_GLOBAL) != 0)
+            {
+                *CgsDev::Log::gpDebugPrint << lpcMessage << " ";
+            }
         }
 
         MEMORYSTATUS lMemoryStatus;
         GlobalMemoryStatus(&lMemoryStatus);
 
-        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        if ((CgsDev::Message::gxMessageFilterFlags & CgsDev::Message::KX_FILTER_GLOBAL) != 0)
         {
             *CgsDev::Log::gpDebugPrint << "XBox 360 memory status: \n";
         }
-        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        if ((CgsDev::Message::gxMessageFilterFlags & CgsDev::Message::KX_FILTER_GLOBAL) != 0)
         {
             *CgsDev::Log::gpDebugPrint << "    " << static_cast<u32>(lMemoryStatus.dwTotalVirtual >> 20)
                                        << " total MB of virtual memory.\n";
         }
-        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        if ((CgsDev::Message::gxMessageFilterFlags & CgsDev::Message::KX_FILTER_GLOBAL) != 0)
         {
             *CgsDev::Log::gpDebugPrint << "    " << static_cast<u32>(lMemoryStatus.dwAvailVirtual >> 20)
                                        << " free MB of virtual memory.\n";
         }
-        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        if ((CgsDev::Message::gxMessageFilterFlags & CgsDev::Message::KX_FILTER_GLOBAL) != 0)
         {
             *CgsDev::Log::gpDebugPrint << "    " << static_cast<u32>(lMemoryStatus.dwTotalPhys >> 20)
                                        << " total MB of physical memory.\n";
         }
-        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        if ((CgsDev::Message::gxMessageFilterFlags & CgsDev::Message::KX_FILTER_GLOBAL) != 0)
         {
             *CgsDev::Log::gpDebugPrint << "    " << static_cast<u32>(lMemoryStatus.dwAvailPhys >> 20)
                                        << " free MB of physical memory.\n";
         }
-        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        if ((CgsDev::Message::gxMessageFilterFlags & CgsDev::Message::KX_FILTER_GLOBAL) != 0)
         {
             *CgsDev::Log::gpDebugPrint << "    " << static_cast<u32>(lMemoryStatus.dwTotalPageFile >> 20)
                                        << " total MB of paging file.\n";
         }
-        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        if ((CgsDev::Message::gxMessageFilterFlags & CgsDev::Message::KX_FILTER_GLOBAL) != 0)
         {
             *CgsDev::Log::gpDebugPrint << "    " << static_cast<u32>(lMemoryStatus.dwAvailPageFile >> 20)
                                        << " free MB of paging file.\n";
         }
-        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        if ((CgsDev::Message::gxMessageFilterFlags & CgsDev::Message::KX_FILTER_GLOBAL) != 0)
         {
             *CgsDev::Log::gpDebugPrint << "    " << static_cast<u32>(lMemoryStatus.dwMemoryLoad)
                                        << " percent of memory is in use.\n";

@@ -65,39 +65,30 @@ EmitterState::~EmitterState()
     DestroyEffects();
 }
 
-// ---------------------------------------------------------------------------
-// EmitterState::GetTypeName() const  @ 0x82686798
-//
-//   lis/addi r11, sTypeInfo(82F2F83C) ; lwz r3, 4(r11) ; blr
-//
-// Loads sTypeInfo.mpcTypeName (the +0x4 field of this class's static
-// ClassTypeInfo descriptor at 82F2F83C), the interned "EmitterState" type-name
-// literal. Per the committed leaf-GetTypeName convention (GlobalState::GetTypeName
-// @0x82686808 -> `return "GlobalState";`, CollisionStateManager::GetTypeName ->
-// `return "CollisionStateManager";`) the leaf returns that interned literal directly.
-// ---------------------------------------------------------------------------
+// ARTIST 0x82F2F83C.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State> EmitterState::sTypeInfo(0x70000, "EmitterState", &BrnState::sTypeInfo, &EmitterState::CreateObject);
+
+// ARTIST 0x82686798 reads the descriptor type name at +4.
 const char* EmitterState::GetTypeName() const
 {
-    return "EmitterState";
+    return sTypeInfo.typeName;
 }
 
 CgsSound::Logic::State* EmitterState::CreateObject(u32 luType)
 {
-    return new ("EmitterState", luType != 0) EmitterState();
+    return new (sTypeInfo.typeName, luType != 0) EmitterState();
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>*
 EmitterState::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State> sTypeInfo(
-        0x70000, "EmitterState", 0, &EmitterState::CreateObject);
     return &sTypeInfo;
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>*
 EmitterState::GetTypeInfo() const
 {
-    return GetStaticTypeInfo();
+    return &sTypeInfo;
 }
 
 static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* const

@@ -113,7 +113,8 @@ void OnlinePreEventMessages::Show(const PreEventInfo* lpInfo)
                 CgsLanguage::LanguageManager::E_FORMAT_TEXT;
             const char* lpacParam = lpInfo->maacMessageParameters[liIndex];
 
-            CGS_ASSERT(lpInfo->maiNumParams[liIndex] == 1, "lpInfo->maiNumParams[liIndex] == 1");
+            CGS_ASSERT_AT(lpInfo->maiNumParams[liIndex] == 1, "lpInfo->maiNumParams[liIndex] == 1",
+                          "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnOnlinePreEventMessages.cpp", 90);
 
             maString[liIndex].SetLocalisedText(lpInfo->maacMessageIDs[liIndex],
                                                CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP,

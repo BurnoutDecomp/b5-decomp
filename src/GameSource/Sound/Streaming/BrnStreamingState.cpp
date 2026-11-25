@@ -119,24 +119,25 @@ StreamingStateManager* StreamingState::GetStreamingStateManager() const
 
 CgsSound::Logic::State* StreamingState::CreateObject(u32 luType)
 {
-    return new ("StreamingState", luType != 0) StreamingState();
+    return new (sTypeInfo.typeName, luType != 0) StreamingState();
 }
+
+// ARTIST 0x82F2E83C.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State> StreamingState::sTypeInfo(0x60000, "StreamingState", &BrnState::sTypeInfo, &StreamingState::CreateObject);
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* StreamingState::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State> sTypeInfo(
-        0x60000, "StreamingState", 0, &StreamingState::CreateObject);
     return &sTypeInfo;
 }
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* StreamingState::GetTypeInfo() const
 {
-    return GetStaticTypeInfo();
+    return &sTypeInfo;
 }
 
 const char* StreamingState::GetTypeName() const
 {
-    return "StreamingState";
+    return sTypeInfo.typeName;
 }
 
 static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* const gpStreamingStateReg =

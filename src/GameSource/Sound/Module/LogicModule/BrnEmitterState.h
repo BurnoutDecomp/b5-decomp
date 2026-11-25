@@ -79,6 +79,9 @@ struct EmitterState : public BrnSound::Logic::BrnState
         return mEntity;
     }
 
+protected:
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State> sTypeInfo;
+
 private:
     // mEntity -- StaticSoundEntity (DWARF BrnEmitterState.h:117), the static sound
     // entity this state is attached to. StaticSoundEntity's full layout is deferred

@@ -46,7 +46,7 @@ namespace CgsMemory
     // i.e. memcpy(resultBuffer + alignedResultSize*index, lpvResult, alignedResultSize).
     // The stride AND the copy length are both miAlignedResultSize -- the console
     // uses one register for both, so a whole aligned slot is written every time.
-    void SimpleDataStreamConsumer::AddResult(const void* lpvResult, s32 liResultIndex)
+    void SimpleDataStreamConsumer::AddResult(void* lpvResult, s32 liResultIndex)
     {
         const s32 liStride = mShared.miAlignedResultSize;
 

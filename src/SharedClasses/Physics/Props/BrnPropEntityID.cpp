@@ -1,4 +1,5 @@
 #include "SharedClasses/Physics/Props/BrnPropEntityID.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // Out-of-line bodies for the BrnWorld::PropEntityID accessors the X360 ARTIST build
 // emitted. Each accessor first runs the owner tripwire (AssertIsProp) then performs a
@@ -54,7 +55,7 @@ namespace BrnWorld
     {
         AssertIsProp();
         CGS_ASSERT(luPartIndex < (1u << KU_NUM_BITS_FOR_PART_NUM),
-                   "luPartIndex < (1U << KU_NUM_BITS_FOR_PART_NUM)");
+                   CGS_ASSERT_MESSAGE_AT("luPartIndex < (1U << KU_NUM_BITS_FOR_PART_NUM)", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\CgsEntityId.h", 167));
         mEntityId.muValue = (mEntityId.muValue & ~KU_PART_INDEX_MASK)
                           | (luPartIndex << KU_PART_INDEX_BASE);
     }

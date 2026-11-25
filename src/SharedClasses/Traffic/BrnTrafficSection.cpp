@@ -449,12 +449,17 @@ namespace BrnTraffic
     // both sides scan from the same base. Kept as the console has it.
     u16 Section::FindNeighbourForRung(u32 luRung, Side leSide, const Hull* lpHull) const
     {
-        CGS_ASSERT(static_cast<u32>(leSide) < E_SIDE_COUNT, "(uint32_t)leSide < E_SIDE_COUNT");
-        CGS_ASSERT(luRung <= muNumRungs, "luRung <= muNumRungs");
-        CGS_ASSERT(lpHull != NULL, "lpHull");
+        static const char KAC_ARTIST_SOURCE_FILE[] = "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../../SharedClasses/Traffic/BrnTrafficSection.cpp";
+        CGS_ASSERT_AT(static_cast<u32>(leSide) < E_SIDE_COUNT, "(uint32_t)leSide < E_SIDE_COUNT",
+                      KAC_ARTIST_SOURCE_FILE, 170);
+        CGS_ASSERT_AT(luRung <= muNumRungs, "luRung <= muNumRungs", KAC_ARTIST_SOURCE_FILE, 172);
+        CGS_ASSERT_AT(lpHull != NULL, "lpHull", KAC_ARTIST_SOURCE_FILE, 173);
 
-        const u32 luNeighbourCount =
-            (leSide == E_RIGHT) ? muRightNeighbourCount : muLeftNeighbourCount;
+        u32 luNeighbourCount;
+        if (leSide == E_RIGHT)
+            luNeighbourCount = muRightNeighbourCount;
+        else
+            luNeighbourCount = muLeftNeighbourCount;
 
         if (luNeighbourCount == 0)
         {

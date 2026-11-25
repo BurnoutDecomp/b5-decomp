@@ -5,7 +5,7 @@
 
 #include "types.hpp"
 #include "BrnCommonTypes.h" // rw::math::vpu::Vector3 in the collision callback signature
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"
 #include "GameShared/GameClasses/RenderWare/Math/RwMathVectorTemplates.h"
@@ -62,7 +62,7 @@ namespace CgsSceneManager
         static DrawCollisionPolyCallbackData& GetDrawCollisionPolyCallback(s32 liIndex)
         {
             CGS_ASSERT(liIndex < siNumDrawPolyCallbacks,
-                       "liIndex < siNumDrawPolyCallbacks");
+                       CGS_ASSERT_MESSAGE_AT("liIndex < siNumDrawPolyCallbacks", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\trianglecollision\\CgsTriangleCollisionDebugComponent.h", 352));
             return saDrawPolyCallbacks[liIndex];
         }
 
