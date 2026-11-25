@@ -644,8 +644,7 @@ namespace BrnGui
         CgsID lHighlightedId = mCurrentSetupInfo.mCarId;
         if (mCarSelector.miHighlightedIndex > -1)
         {
-            CGS_ASSERT(mCarSelector.GetHighlighted() != 0, "GetHighlighted()");   // BrnSelectableGroup.h:218
-            lHighlightedId = mCarSelector.GetHighlighted()->GetId();
+            lHighlightedId = mCarSelector.GetHighlightedId();
         }
         lHighlightedSetupInfo.mCarId = lHighlightedId;
 
@@ -953,8 +952,7 @@ namespace BrnGui
         s32 liHighlightedIndex = 0;
         while (liHighlightedIndex < liNumCars)
         {
-            CGS_ASSERT(mCarSelector.GetHighlighted() != 0, "GetHighlighted()");  // BrnSelectableGroup.h:218
-            if (maSelectedCars[liHighlightedIndex] == mCarSelector.GetHighlighted()->GetId())
+            if (maSelectedCars[liHighlightedIndex] == mCarSelector.GetHighlightedId())
                 break;
             ++liHighlightedIndex;
         }
@@ -1025,12 +1023,10 @@ namespace BrnGui
             TriggerSound(lbClappers);
             mCarSelector.HighlightPrevious(false);
 
-            CGS_ASSERT(mCarSelector.GetHighlighted() != 0, "GetHighlighted()");   // BrnSelectableGroup.h:218
-            const bool lbCarChanged = (mCurrentSetupInfo.mCarId != mCarSelector.GetHighlighted()->GetId());
+            const bool lbCarChanged = (mCurrentSetupInfo.mCarId != mCarSelector.GetHighlightedId());
 
-            CGS_ASSERT(mCarSelector.GetHighlighted() != 0, "GetHighlighted()");   // BrnSelectableGroup.h:218
             CarSetupInfo lSetupInfo;
-            lSetupInfo.mCarId      = mCarSelector.GetHighlighted()->GetId();
+            lSetupInfo.mCarId      = mCarSelector.GetHighlightedId();
             lSetupInfo.mbSelectable = IsCarSelectable(lSetupInfo.mCarId);
 
             SetupCar(&lSetupInfo, lbCarChanged);   // this class's vtable slot +0x64
@@ -1056,12 +1052,10 @@ namespace BrnGui
             TriggerSound(lbClappers);
             mCarSelector.HighlightNext(false);
 
-            CGS_ASSERT(mCarSelector.GetHighlighted() != 0, "GetHighlighted()");   // BrnSelectableGroup.h:218
-            const bool lbCarChanged = (mCurrentSetupInfo.mCarId != mCarSelector.GetHighlighted()->GetId());
+            const bool lbCarChanged = (mCurrentSetupInfo.mCarId != mCarSelector.GetHighlightedId());
 
-            CGS_ASSERT(mCarSelector.GetHighlighted() != 0, "GetHighlighted()");   // BrnSelectableGroup.h:218
             CarSetupInfo lSetupInfo;
-            lSetupInfo.mCarId      = mCarSelector.GetHighlighted()->GetId();
+            lSetupInfo.mCarId      = mCarSelector.GetHighlightedId();
             lSetupInfo.mbSelectable = IsCarSelectable(lSetupInfo.mCarId);
 
             SetupCar(&lSetupInfo, lbCarChanged);

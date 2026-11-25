@@ -2096,7 +2096,7 @@ namespace CgsPhysics
         {
             const PhysicsSimulationIO::InUpdateExternalBody& lrEvent = lpQueue->GetEvent(li);
 
-            const s32 liBodyIndex = mBodyData.GetIndexFromGameID(RigidBodyId(lrEvent.mID));
+            const s32 liBodyIndex = mBodyData.GetIndexFromGameID(lrEvent.mID);
             if (liBodyIndex == -1)
             {
                 // [DIAG] NOT IN THE X360 BINARY. Opt-in (BRN_PROP_DIAG), first-N witness of the
@@ -2291,7 +2291,7 @@ namespace CgsPhysics
         {
             const PhysicsSimulationIO::InChangeRigidBodyInertia& lrEvent = lpQueue->GetEvent(li);
 
-            const s32 liBodyIndex = mBodyData.GetIndexFromGameID(RigidBodyId(lrEvent.mID));
+            const s32 liBodyIndex = mBodyData.GetIndexFromGameID(lrEvent.mID);
             if (liBodyIndex == -1)
             {
                 continue;   // SILENT -- 0x828A4B08
@@ -2303,7 +2303,7 @@ namespace CgsPhysics
 
             if (lrEvent.mu32Flags == 0x3F)
             {
-                *lpInertia = lrEvent.mInertia;   // the whole-object fast path: 6x ld/std, 0x828A4BA8
+                *lpInertia = *lrEvent.mInertia.GetObjectPointer();   // the whole-object fast path: 6x ld/std, 0x828A4BA8
                 continue;                        // `b loc_828A4C98`
             }
 
@@ -2311,27 +2311,27 @@ namespace CgsPhysics
             // (`lwz 0x40(r28)` six times). Console test order preserved: 1, 2, 4, 8, 0x10, 0x20.
             if ((lrEvent.mu32Flags & 0x01) != 0)
             {
-                lpInertia->SetAngularDrag(lrEvent.mInertia.GetAngularDrag());           // e+0x34 -> +0x24
+                lpInertia->SetAngularDrag(lrEvent.mInertia.GetObjectPointer()->GetAngularDrag());           // e+0x34 -> +0x24
             }
             if ((lrEvent.mu32Flags & 0x02) != 0)
             {
-                lpInertia->SetInverseInertia(lrEvent.mInertia.GetInverseInertia());     // e+0x10 -> +0x00 (+ mSpherical, see inertia.h)
+                lpInertia->SetInverseInertia(lrEvent.mInertia.GetObjectPointer()->GetInverseInertia());     // e+0x10 -> +0x00 (+ mSpherical, see inertia.h)
             }
             if ((lrEvent.mu32Flags & 0x04) != 0)
             {
-                lpInertia->SetInverseMass(lrEvent.mInertia.GetInverseMass());           // e+0x20 -> +0x10
+                lpInertia->SetInverseMass(lrEvent.mInertia.GetObjectPointer()->GetInverseMass());           // e+0x20 -> +0x10
             }
             if ((lrEvent.mu32Flags & 0x08) != 0)
             {
-                lpInertia->SetLinearDrag(lrEvent.mInertia.GetLinearDrag());             // e+0x30 -> +0x20
+                lpInertia->SetLinearDrag(lrEvent.mInertia.GetObjectPointer()->GetLinearDrag());             // e+0x30 -> +0x20
             }
             if ((lrEvent.mu32Flags & 0x10) != 0)
             {
-                lpInertia->SetMaxAngularVelocity(lrEvent.mInertia.GetMaxAngularVelocity()); // e+0x2C -> +0x1C
+                lpInertia->SetMaxAngularVelocity(lrEvent.mInertia.GetObjectPointer()->GetMaxAngularVelocity()); // e+0x2C -> +0x1C
             }
             if ((lrEvent.mu32Flags & 0x20) != 0)
             {
-                lpInertia->SetMaxLinearVelocity(lrEvent.mInertia.GetMaxLinearVelocity());   // e+0x28 -> +0x18
+                lpInertia->SetMaxLinearVelocity(lrEvent.mInertia.GetObjectPointer()->GetMaxLinearVelocity());   // e+0x28 -> +0x18
             }
         }
     }

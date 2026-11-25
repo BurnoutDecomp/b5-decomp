@@ -2941,16 +2941,9 @@ void ActiveRaceCar::AddToScene(
     // always carries one.
     lpVolume->GetRelativeTransform()->wAxis.SetY( lpVolume->GetRelativeTransform()->wAxis.GetY().GetFloat() - lfHalfDelta );
 
-    // ---- the AddDynamicVolume post (UNPARKED 2026-08-18, wave Q5 finisher) -----------
-    // 0x822EBBFC..0x822EBC08: `ld r11, 0xD0(r30) ; std ; ld r4, 0(r10)` -- the WHOLE 8-byte
-    // handle -- then `li r6, 1` and the call. The DWARF's own 64-bit overload
-    // (CgsSceneManagerIO_SceneUpdate.h:367, landed in that file's own TU this wave) is what
-    // makes this spellable; the committed 32-bit EntityId form would narrow the handle to its
-    // identically-zero low dword and post volume key 0 for all eight cars.
-    lpSceneInterface->AddDynamicVolume(
-        CgsSceneManager::VolumeId(mHandlingBodyVolumeId.muId),   // ld r4 -- ALL 64 BITS
-        laVolumeStorage,                                        // r5
-        KU8_RACECAR_VOLUME_TYPE_FLAG);                          // r6 == 1
+    // ARTIST 0x822EBBFC–0x822EBC08 posts the complete 64-bit volume ID.
+    lpSceneInterface->AddDynamicVolume(CgsSceneManager::VolumeId(mHandlingBodyVolumeId.muId),
+                                        lpVolume, KU8_RACECAR_VOLUME_TYPE_FLAG);
 
     // ---- 4. the volume instance -----------------------------------------------------
     CGS_ASSERT(IsAttached(), "IsAttached()");                    // BrnActiveRaceCar.h:1089

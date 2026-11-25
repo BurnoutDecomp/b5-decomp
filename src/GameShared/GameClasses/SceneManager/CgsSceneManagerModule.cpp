@@ -969,11 +969,10 @@ void SceneManagerModule::BridgeInputSceneUpdateInterfaceToSubModules(
             const SceneManagerIO::InEventAddDynamicVolume& lrEvent =
                 lpScene->mAddDynamicVolumeQueue.GetEvent(liEvent);
 
-            const VolRef::Volume* lpVolume =
-                reinterpret_cast<const VolRef::Volume*>(lrEvent.maVolumeData);
+            const VolRef::Volume* lpVolume = lrEvent.mVolumeBuffer.GetVolume();
             CGS_ASSERT(lpVolume != NULL, "lpVolume != NULL");
 
-            mVolumeManager.AddDynamicVolume(VolumeId(lrEvent.muId), lrEvent.mu8Flags, lpVolume);
+            mVolumeManager.AddDynamicVolume(lrEvent.mVolumeId, lrEvent.mxVolumeTypeID, lpVolume);
         }
     }
 
@@ -1033,11 +1032,10 @@ void SceneManagerModule::BridgeInputSceneUpdateInterfaceToSubModules(
             const SceneManagerIO::InEventReplaceDynamicVolume& lrEvent =
                 lpScene->mReplaceDynamicVolumeQueue.GetEvent(liEvent);
 
-            const VolRef::Volume* lpVolume =
-                reinterpret_cast<const VolRef::Volume*>(lrEvent.maVolumeData);
+            const VolRef::Volume* lpVolume = lrEvent.mVolumeBuffer.GetVolume();
             CGS_ASSERT(lpVolume != NULL, "lpVolume != NULL");   // BridgeFunctions.cpp:280
 
-            mVolumeManager.ReplaceDynamicVolume(VolumeId(lrEvent.muId), lpVolume);
+            mVolumeManager.ReplaceDynamicVolume(lrEvent.mVolumeId, lpVolume);
         }
     }
 

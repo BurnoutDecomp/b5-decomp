@@ -80,6 +80,9 @@ namespace WorldModule
 // The pseudocode's truncated callee names are resolved by the console offset each getter
 // returns, all of which BrnWorldModuleIO.h already pins to the named getters used below.
 // ---------------------------------------------------------------------------------------------
+static const char KAC_ARTIST_INPUT_TO_AI_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/Bridges/WorldBridgeInputToAI.cpp";
+
 void BridgeInputToAIModule(
         void* lpWorldModule,
         BrnAI::AIModuleIO::InputBuffer* lpAIInputBuffer,
@@ -90,14 +93,8 @@ void BridgeInputToAIModule(
     const BrnWorldIO::GameActionQueue* const lpInQueue = lpWorldInput->GetGameActionQueue();
     BrnAI::AIModuleIO::InputBuffer::GameActionQueue* const lpOutQueue = lpAIInputBuffer->GetGameActionQueue();
 
-    CGS_ASSERT(lpInQueue != 0, CGS_ASSERT_MESSAGE_AT("lpInQueue", __FILE__, 45));     // :45
-    CGS_ASSERT(lpOutQueue != 0, CGS_ASSERT_MESSAGE_AT("lpOutQueue", __FILE__, 46));   // :46
-    // [GUARD] the console falls through into Append, which dereferences both; a NULL here
-    // faults on the console too, so the early-out only changes WHERE a null dies.
-    if (lpInQueue == 0 || lpOutQueue == 0)
-    {
-        return;
-    }
+    CGS_ASSERT(lpInQueue != 0, CGS_ASSERT_MESSAGE_AT("lpInQueue", KAC_ARTIST_INPUT_TO_AI_FILE, 45));     // :45
+    CGS_ASSERT(lpOutQueue != 0, CGS_ASSERT_MESSAGE_AT("lpOutQueue", KAC_ARTIST_INPUT_TO_AI_FILE, 46));   // :46
 
     lpOutQueue->Append(*lpInQueue);
 

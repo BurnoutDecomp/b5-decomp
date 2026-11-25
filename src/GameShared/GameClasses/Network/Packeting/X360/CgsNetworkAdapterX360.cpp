@@ -23,9 +23,6 @@
 
 #include "netconn.h"    // NetConnStartup / Control / Connect / Idle / Status / Disconnect / Shutdown
 
-// XDK signin-state query. XUSER_SIGNIN_STATE_SIGNED_IN_TO_LIVE == 2 (the value the asm
-// compares against). Declared in its XDK shape; provided by the platform layer.
-
 // LobbyApiDisconnect (the X360 online-lobby disconnect hook, Demonware/Lobby glue) is
 // declared in the DirtySDK vendor shim "lobbyapi.h" (included above), matching its real
 // SDK signature (LobbyApiRefT*, int32_t) rather than a locally re-typed shim.
@@ -51,9 +48,6 @@ static const int KI_CONNECT_TIMEOUT_MS = 5000;
 // Environment selector values paired with the 'serv' control (asm immediates 0x45410006/7).
 static const int KI_SERV_VALUE_6 = 0x45410006;
 static const int KI_SERV_VALUE_7 = 0x45410007;
-
-// XUserGetSigninState result for "signed in to Xbox Live" (asm cmpwi 2).
-static const int KI_SIGNIN_STATE_LIVE = 2;
 
 // NetConnStatus high-byte sentinel meaning "the connection is down" ('-', asm cmpwi 0x2D on
 // the sign-extended top byte of the status word).
@@ -206,15 +200,15 @@ void NetworkAdapterX360::Update()
         BrnNetwork::BrnNetworkManager* lpNetworkManager =
             static_cast<BrnNetwork::BrnNetworkManager*>(mpNetworkManager);
         const s32 liUserIndex = lpNetworkManager->GetLocalUserControllerPort();
-        if (liUserIndex > -1 && XUserGetSigninState(liUserIndex) == KI_SIGNIN_STATE_LIVE)
+        if (liUserIndex > -1 && XUserGetSigninState(liUserIndex) == eXUserSigninState_SignedInToLive)
         {
             CGS_ASSERT(mpEnvironment != 0, CGS_ASSERT_MESSAGE_AT(
-                "Environment to use not set up",
+                "Environment to use not set up\n",
                 CGS_ARTIST_FILE, 168 /* ARTIST 0x8288BF4C */));
 
-            const int liConnectResult = NetConnConnect(0, static_cast<const char*>(mpEnvironment));
+            const s32 liConnectResult = NetConnConnect(0, static_cast<const char*>(mpEnvironment));
             mbConnecting = (liConnectResult == 1);
-            if (liConnectResult == 1)
+            if (mbConnecting)
             {
                 mbDuplicateLogin = false;
             }
@@ -226,8 +220,8 @@ void NetworkAdapterX360::Update()
     CgsDev::PerfMonCpu::StartMonitor(miDisconnectPerfMon);
     if (mbConnecting)
     {
-        const int liStatus = NetConnStatus(KI_NETCONN_CTRL_CONN, 0, 0, 0);
-        if (((liStatus >> 24) & 0xFF) == KI_NETCONN_STATUS_DOWN_HIGH_BYTE)
+        const s32 liStatus = NetConnStatus(KI_NETCONN_CTRL_CONN, 0, 0, 0);
+        if (static_cast<s8>(liStatus >> 24) == KI_NETCONN_STATUS_DOWN_HIGH_BYTE)
         {
             mbConnecting = false;
             mbDuplicateLogin = (liStatus == KI_NETCONN_STATUS_DUPLICATE_LOGIN);

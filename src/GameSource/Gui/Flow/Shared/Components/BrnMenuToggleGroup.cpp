@@ -37,20 +37,6 @@
 
 namespace BrnGui
 {
-    // The X360 "get the group's currently-highlighted MenuToggle row" accessor (sub_824E21B8),
-    // shared identically across every VarSize<N> (HighlightNextItem/HighlightPreviousItem both
-    // call it, then forward MenuToggle::HighlightNext/HighlightPrevious). It is
-    // SelectableGroup::GetHighlighted() -- the rows ARE the group's selectables (SetupGroup
-    // Add()s each activated row through group slot 7), so the highlighted selectable is the
-    // highlighted row.
-    namespace
-    {
-        inline MenuToggle* GetHighlightedToggle(SelectableGroup* lpGroup)
-        {
-            return static_cast<MenuToggle*>(lpGroup->GetHighlighted());
-        }
-    }
-
     // ---------------------------------------------------------------------------------
     // @ 0x82500AC0 (<2>) -- the compiler-synthesised default ctor. Its X360 body is a run of
     // sub-object vtable installs plus the rows' `vector constructor iterator's; C++ emits all
@@ -183,7 +169,7 @@ namespace BrnGui
     template <s32 TI_SIZE>
     bool MenuToggleGroupVarSize<TI_SIZE>::HighlightNextItem()
     {
-        return GetHighlightedToggle(this)->HighlightNext();
+        return static_cast<MenuToggle*>(GetHighlighted())->HighlightNext();
     }
 
     // ---------------------------------------------------------------------------------
@@ -193,7 +179,7 @@ namespace BrnGui
     template <s32 TI_SIZE>
     bool MenuToggleGroupVarSize<TI_SIZE>::HighlightPreviousItem()
     {
-        return GetHighlightedToggle(this)->HighlightPrevious();
+        return static_cast<MenuToggle*>(GetHighlighted())->HighlightPrevious();
     }
 
     // ---------------------------------------------------------------------------------

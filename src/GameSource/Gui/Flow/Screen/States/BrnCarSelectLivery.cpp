@@ -895,12 +895,13 @@ namespace BrnGui
 
         // ⚠️ EMPTY-GROUP CONTRACT (see the banner). The console asserts on GetHighlighted()
         // and then dereferences it; on an empty selector that assert does NOT fire.
-        CGS_ASSERT(mCarSelector.miHighlightedIndex > -1 && mCarSelector.GetHighlighted() != 0,
+        const SelectableGroup& lrCarSelector = mCarSelector;
+        CGS_ASSERT(mCarSelector.miHighlightedIndex > -1 && lrCarSelector.GetHighlighted() != 0,
                    "GetHighlighted()");   // BrnSelectableGroup.h:218
         const BrnResource::VehicleListEntry* lpVehicleData = 0;
         if (mCarSelector.miHighlightedIndex > -1)
         {
-            const Selectable* lpHighlighted = mCarSelector.GetHighlighted();
+            const Selectable* lpHighlighted = lrCarSelector.GetHighlighted();
             const s32 liIndex = mpVehicleList->GetVehicleIndex(lpHighlighted->GetId());
             lpVehicleData = (liIndex < 0) ? 0 : mpVehicleList->GetVehicleData(liIndex);
         }
@@ -956,14 +957,15 @@ namespace BrnGui
     // Re-enable (or disable) the whole paint surface for whichever livery car is highlighted.
     void CarSelectLivery::UpdateMenuComponents()
     {
-        CGS_ASSERT(mCarSelector.miHighlightedIndex > -1 && mCarSelector.GetHighlighted() != 0,
+        const SelectableGroup& lrCarSelector = mCarSelector;
+        CGS_ASSERT(mCarSelector.miHighlightedIndex > -1 && lrCarSelector.GetHighlighted() != 0,
                    "GetHighlighted()");   // BrnSelectableGroup.h:218
         if (mCarSelector.miHighlightedIndex <= -1)
         {
             return;
         }
 
-        const Selectable* lpHighlighted = mCarSelector.GetHighlighted();
+        const Selectable* lpHighlighted = lrCarSelector.GetHighlighted();
         const s32 liIndex = mpVehicleList->GetVehicleIndex(lpHighlighted->GetId());
         const BrnResource::VehicleListEntry* lpVehicleData =
             (liIndex < 0) ? 0 : mpVehicleList->GetVehicleData(liIndex);
@@ -1029,14 +1031,15 @@ namespace BrnGui
         mColourMenuToggle.Update();                       // toggle slot 5
 
         CGS_ASSERT(mpVehicleList != 0, "mpVehicleList");   // cpp:654
-        CGS_ASSERT(mCarSelector.miHighlightedIndex > -1 && mCarSelector.GetHighlighted() != 0,
+        const SelectableGroup& lrCarSelector = mCarSelector;
+        CGS_ASSERT(mCarSelector.miHighlightedIndex > -1 && lrCarSelector.GetHighlighted() != 0,
                    "GetHighlighted()");                    // BrnSelectableGroup.h:218
         if (mCarSelector.miHighlightedIndex <= -1)
         {
             return;
         }
 
-        const Selectable* lpHighlighted = mCarSelector.GetHighlighted();
+        const Selectable* lpHighlighted = lrCarSelector.GetHighlighted();
         const s32 liIndex = mpVehicleList->GetVehicleIndex(lpHighlighted->GetId());
         const BrnResource::VehicleListEntry* lpVehicleData =
             (liIndex < 0) ? 0 : mpVehicleList->GetVehicleData(liIndex);

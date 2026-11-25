@@ -64,6 +64,8 @@
 #include "GameShared/GameClasses/SceneManager/CacheManager/CgsTriangleCacheManagerIO.h"     // TriangleCacheManagerIO::InEvent{AddToCache,UpdateCachedPosition,RemoveFromCache}
 #include "GameShared/GameClasses/SceneManager/TriangleCollision/CgsTriangleCollisionManagerIO_Events.h" // TriangleCollisionManagerIO::InEvent{AddPolySoupList,ClearPolySoupLists}
 
+namespace rw { namespace collision { class Volume; } }
+
 namespace CgsSceneManager
 {
 namespace SceneManagerIO
@@ -118,39 +120,11 @@ namespace SceneManagerIO
         // Whole-interface count resets (X360 0x822B10C8 / 0x828BA280). Both zero the live count
         // (miLength) of every embedded queue and return `this` (the X360 forwards the pointer;
         // InputBuffer_Update::Construct tail-returns Clear's result). Bodies emitted by this TU.
-        InSceneUpdateInterface* Clear();
-        InSceneUpdateInterface* Destruct();
+        void Clear();
+        void Destruct();
 
-        // Producer methods (X360 0x822B10C8..0x822CB8E4). Each stages one event on the stack,
-        // fires the queue's "too small" tripwire assert when the target queue is full, then
-        // appends the event to the matching embedded queue. Signatures for the pre-existing
-        // declarations are LOAD-BEARING (committed consumers call them) and left unchanged.
-        void AddDynamicVolume(CgsSceneManager::EntityId lEntityId, const void* lpVolumeImage, u8 lu8VolumeTypeFlag);
-
-        // ---- the DWARF's own 64-bit form of the producer one line above --------------------
-        // ADDED 2026-08-18 (wave Q5, car-registration finisher). The DecFIGS DWARF's ONLY
-        // spelling of this producer -- there is no EntityId form in the DWARF at all:
-        //     CgsSceneManagerIO_SceneUpdate.h:367 (dumpfile :455, and again at :928/:1291/:1654)
-        //         void AddDynamicVolume(VolumeId, const VolRef::Volume*,
-        //                               InEventAddDynamicVolume::VolumeTypeFlags);
-        // `VolumeTypeFlags` is `typedef uint8_t` (DWARF CgsSceneManagerIO_FineQuery.h:39), so
-        // the u8 below IS the DWARF type. The volume argument stays `const void*` -- the same
-        // spelling the committed EntityId form and ReplaceDynamicVolume already use for this
-        // one 128-byte image -- because `VolRef::Volume` is only a forward declaration in this
-        // tree (CgsVolumeStore.h:82) and the X360 body does nothing with the pointer but
-        // `memcpy(event+0x10, a3, 0x80)`.
-        //
-        // WHY BOTH FORMS EXIST. There is ONE console body (0x822B1518) and it stores the WHOLE
-        // 64-bit r4 (`mr r11,r4 ; std r11, var_C0(r1)` @0x822B1524/0x822B153C -- Hex-Rays'
-        // `LODWORD(v4) = a2` is a 32-bit misread of a plain 64-bit register move). The committed
-        // EntityId form above is a fitted 32-bit signature; a RACE CAR cannot go through it,
-        // because ActiveRaceCar::Attach seeds mHandlingBodyVolumeId's low dword to zero and only
-        // ever writes the high one, so narrowing posts volume key 0 for all eight cars. Same
-        // width trap wave Q4 recorded for AddVolumeInstance / AddForCollision, whose 64-bit
-        // forms sit below. ADDITIVE: different first-parameter type => different mangled name,
-        // so BrnTriggerEntityModule.cpp:255-262 and every other committed caller of the EntityId
-        // form keeps binding to it unchanged and no LNK2005 is possible.
-        void AddDynamicVolume(VolumeId lVolumeId, const void* lpVolumeImage, u8 lu8VolumeTypeFlag);
+        // ARTIST 0x822B1518 preserves all 64 bits of the volume ID.
+        void AddDynamicVolume(VolumeId lVolumeId, const rw::collision::Volume* lpVolume, u8 lxVolumeTypeFlags);
 
         void AddEntity(CgsSceneManager::EntityId lEntityId, u32 luEntityTypeFlag, f32 lfBoundingRadius);
         // Full producer signature (X360 @ 0x822B11F8 stages the bounding-sphere CENTRE
@@ -233,24 +207,8 @@ namespace SceneManagerIO
         }
         void SetVolumeInstanceTransform(CgsSceneManager::EntityId lEntityId, const Matrix44Affine& lrTransform);
 
-        // ---- ReplaceDynamicVolume: the DWARF's ONE spelling, 64-bit key ----------------------
-        // CORRECTED 2026-09-24 (crash parity H-SM1, FX-SCENEMGR). DWARF
-        // CgsSceneManagerIO_SceneUpdate.h:458 (again :931/:1294) declares only
-        //     void ReplaceDynamicVolume(VolumeId, const VolRef::Volume *);
-        // and the one X360 body (0x822B15F8) stores the WHOLE r4 (`mr r11, r4` @0x822B1604 ;
-        // `std r11, var_C0(r1)` @0x822B1618 -- Hex-Rays' `LODWORD(v3) = a2` is a misread of a
-        // plain 64-bit register move). This used to be a fitted `(CgsSceneManager::EntityId,
-        // const void*)` form whose body posted `(u64)(u32)id`: the only console caller,
-        // RaceCarEntityModule::UpdatePropBoundingBoxes_PreScene @0x822F5668, passes a race car's
-        // mHandlingBodyVolumeId (`ld r11, 0xD0`), whose entity word is in the HIGH dword and whose
-        // low dword ActiveRaceCar::Attach seeds to zero -- narrowing would replace volume key 0 for
-        // every car. That fitted form had no caller anywhere (ARTIST: 0x822B15F8's xrefs_to is that
-        // one function; the queue's Add @0x822AB670 is called only from here), so it is retired
-        // rather than kept beside the real one: a 32-bit key is now a compile error, not a silent
-        // key-0 post. The volume stays `const void*` for the same reason AddDynamicVolume's does
-        // (VolRef::Volume is a forward declaration here; the body only block-copies 0x80 bytes).
-        // Body in CgsSceneManagerIO_SceneUpdate.cpp.
-        void ReplaceDynamicVolume(VolumeId lVolumeId, const void* lpVolumeImage);
+        // ARTIST 0x822B15F8 passes the complete volume ID and SDK volume.
+        void ReplaceDynamicVolume(VolumeId lVolumeId, const rw::collision::Volume* lpVolume);
 
         // ADDITIVE GROW: bodies emitted by this TU (X360 producers) -- these were not
         // previously declared. Signatures taken from the producers' asm-attested args.
@@ -381,41 +339,33 @@ namespace SceneManagerIO
         const CgsModule::EventQueue<InEventSetEntityPosition, 1024>& GetUpdatePositionQueue() const { return mUpdatePositionQueue; }
         const CgsModule::EventQueue<InEventSetEntityRadius, 512>&   GetSetEntityRadiusQueue() const { return mSetEntityRadiusQueue; }
 
-        // ---- Embedded fixed-capacity input queues (ascending X360-offset / DWARF order) ----
-        // Capacities are the committed EventQueue_*_N explicit-instantiation TUs; element
-        // types are the committed per-queue element homes. Member names are the X360 assert
-        // rodata ("SceneManager.<member> too small ...").
-        CgsModule::EventQueue<InEventSetEntityPosition, 1024>    mUpdatePositionQueue;       // SetEntityPosition
-        CgsModule::EventQueue<InEventAddEntity, 5120>           mAddEntityQueue;            // AddEntity
-        CgsModule::EventQueue<InEventAddDynamicVolume, 1280>    mAddDynamicVolumeQueue;     // AddDynamicVolume
-        CgsModule::EventQueue<InEventRemoveEntity, 10000>       mRemoveEntityQueue;         // RemoveEntity
-        CgsModule::EventQueue<InEventRemoveForCollision, 1536>  mRemoveForCollisionQueue;   // RemoveForCollision
-        CgsModule::EventQueue<InEventRemoveVolume, 1344>        mRemoveVolumeQueue;         // RemoveVolume
-        CgsModule::EventQueue<InEventRemoveVolumeInstance, 1280> mRemoveVolumeInstanceQueue; // RemoveVolumeInstance
-        CgsModule::EventQueue<InEventReplaceDynamicVolume, 64>  mReplaceDynamicVolumeQueue; // ReplaceDynamicVolume
-        CgsModule::EventQueue<InEventClearCullingTable, 64>     mClearCullingTableQueue;    // ClearCullingTable
-        CgsModule::EventQueue<InEventSetEntityRadius, 512>      mSetEntityRadiusQueue;      // SetEntityRadius
-        CgsModule::EventQueue<InEventClearEntityPadding, 16>    mClearEntityPaddingQueue;   // ClearEntityVolumesPadding
-
-        // ---- Additive: the remaining embedded queues (grounded by Construct @0x822E6550) ----
-        // Appended after the committed 11 so their offsets are unchanged. Element types +
-        // capacities are exactly what Construct passes; the X360 this-relative queue base is in
-        // each trailing comment. These are all reset by Clear/Destruct and (where a producer
-        // lives in this TU) appended to by name.
-        CgsModule::EventQueue<InEventSetVolumeInstanceTransform, 1024>     mSetVolumeInstanceTransformQueue;     // X360 +0x8010
-        CgsModule::EventQueue<InEventAddForCollision, 1536>               mAddForCollisionQueue;                // X360 +0x71040
-        CgsModule::EventQueue<InEventAddVolumeInstance, 1280>             mAddVolumeInstanceQueue;              // X360 +0x7D050
-        CgsModule::EventQueue<InEventForceNoPadding, 64>                  mForceNoPaddingQueue;                 // X360 +0x96060
-        CgsModule::EventQueue<InEventSetCullingGroupPair, 64>             mSetCullingGroupPairQueue;            // X360 +0xB4140
-        CgsModule::EventQueue<InEventSetPadding, 1280>                    mSetPaddingQueue;                     // X360 +0xB54B0
-        CgsModule::EventQueue<InEventAddVolumeInstanceForCaching, 64>     mAddVolumeInstanceForCachingQueue;    // X360 +0xBF4C0
-        CgsModule::EventQueue<InEventSetVolumeInstanceCullingGroup, 1280> mSetVolumeInstanceCullingGroupQueue;  // X360 +0xBF920
-        CgsModule::EventQueue<CgsSceneManager::TriangleCacheManagerIO::InEventAddToCache, 298>          mAddToCacheQueue;          // X360 +0xC4930
-        CgsModule::EventQueue<CgsSceneManager::TriangleCacheManagerIO::InEventUpdateCachedPosition, 298> mUpdateCachedPositionQueue; // X360 +0xC5290
-        CgsModule::EventQueue<CgsSceneManager::TriangleCacheManagerIO::InEventRemoveFromCache, 298>     mRemoveFromCacheQueue;     // X360 +0xC77E0
-        CgsModule::EventQueue<CgsSceneManager::TriangleCollisionManagerIO::InEventAddPolySoupList, 20>  mAddPolySoupListQueue;     // X360 +0xC7C94
-        CgsModule::EventQueue<CgsSceneManager::TriangleCollisionManagerIO::InEventClearPolySoupLists, 20> mClearPolySoupListsQueue; // X360 +0xC7DE0
-        CgsModule::EventQueue<InEventRemoveAllEntities, 1>                mRemoveAllEntitiesQueue;              // X360 +0xC7E3C
+        // ARTIST 0x822E6550 initializes the fixed-capacity queues at these native offsets.
+        // DecFIGS CgsSceneManagerIO_SceneUpdate.h:585–609 corroborates their declaration order.
+        CgsModule::EventQueue<InEventSetEntityPosition, 1024> mUpdatePositionQueue;  // +0x0
+        CgsModule::EventQueue<InEventSetVolumeInstanceTransform, 1024> mSetVolumeInstanceTransformQueue;  // +0x8010
+        CgsModule::EventQueue<InEventAddEntity, 5120> mAddEntityQueue;  // +0x1C020
+        CgsModule::EventQueue<InEventAddDynamicVolume, 1280> mAddDynamicVolumeQueue;  // +0x44030
+        CgsModule::EventQueue<InEventAddForCollision, 1536> mAddForCollisionQueue;  // +0x71040
+        CgsModule::EventQueue<InEventAddVolumeInstance, 1280> mAddVolumeInstanceQueue;  // +0x7D050
+        CgsModule::EventQueue<InEventForceNoPadding, 64> mForceNoPaddingQueue;  // +0x96060
+        CgsModule::EventQueue<InEventRemoveEntity, 10000> mRemoveEntityQueue;  // +0x96270
+        CgsModule::EventQueue<InEventRemoveForCollision, 1536> mRemoveForCollisionQueue;  // +0xA9B00
+        CgsModule::EventQueue<InEventRemoveVolume, 1344> mRemoveVolumeQueue;  // +0xACB10
+        CgsModule::EventQueue<InEventRemoveVolumeInstance, 1280> mRemoveVolumeInstanceQueue;  // +0xAF520
+        CgsModule::EventQueue<InEventReplaceDynamicVolume, 64> mReplaceDynamicVolumeQueue;  // +0xB1D30
+        CgsModule::EventQueue<InEventSetCullingGroupPair, 64> mSetCullingGroupPairQueue;  // +0xB4140
+        CgsModule::EventQueue<InEventClearCullingTable, 64> mClearCullingTableQueue;  // +0xB444C
+        CgsModule::EventQueue<InEventSetEntityRadius, 512> mSetEntityRadiusQueue;  // +0xB4498
+        CgsModule::EventQueue<InEventSetPadding, 1280> mSetPaddingQueue;  // +0xB54B0
+        CgsModule::EventQueue<InEventAddVolumeInstanceForCaching, 64> mAddVolumeInstanceForCachingQueue;  // +0xBF4C0
+        CgsModule::EventQueue<InEventClearEntityPadding, 16> mClearEntityPaddingQueue;  // +0xBF8D0
+        CgsModule::EventQueue<InEventSetVolumeInstanceCullingGroup, 1280> mSetVolumeInstanceCullingGroupQueue;  // +0xBF920
+        CgsModule::EventQueue<CgsSceneManager::TriangleCacheManagerIO::InEventAddToCache, 298> mAddToCacheQueue;  // +0xC4930
+        CgsModule::EventQueue<CgsSceneManager::TriangleCacheManagerIO::InEventUpdateCachedPosition, 298> mUpdateCachedPositionQueue;  // +0xC5290
+        CgsModule::EventQueue<CgsSceneManager::TriangleCacheManagerIO::InEventRemoveFromCache, 298> mRemoveFromCacheQueue;  // +0xC77E0
+        CgsModule::EventQueue<CgsSceneManager::TriangleCollisionManagerIO::InEventAddPolySoupList, 20> mAddPolySoupListQueue;  // +0xC7C94
+        CgsModule::EventQueue<CgsSceneManager::TriangleCollisionManagerIO::InEventClearPolySoupLists, 20> mClearPolySoupListsQueue;  // +0xC7DE0
+        CgsModule::EventQueue<InEventRemoveAllEntities, 1> mRemoveAllEntitiesQueue;  // +0xC7E3C
     };
 }
 }

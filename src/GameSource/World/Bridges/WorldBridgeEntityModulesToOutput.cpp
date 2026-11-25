@@ -771,6 +771,9 @@ void BridgeTrafficResourceRequestsToOutput(
 //   resource requests, route responses, the AI car-output interface, and the
 //   AI-raised game events. (Phantom made real 2026-07-24.)
 // ----------------------------------------------------------------------------
+static const char KAC_ARTIST_AI_TO_OUTPUT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/Bridges/WorldBridgeAIToOutput.cpp";
+
 void BridgeAIModuleToOutput(
     void* lpWorldModule,
     BrnWorldIO::UpdateOutputBuffer* lpWorldOutput,
@@ -778,8 +781,10 @@ void BridgeAIModuleToOutput(
 {
     (void)lpWorldModule;
 
-    CGS_ASSERT( lpWorldOutput != 0, "lpWorldOutput != NULL" );
-    CGS_ASSERT( lpAIOutputBuffer != 0, "lpAIOutputBuffer != NULL" );
+    CGS_ASSERT(lpWorldOutput != 0, CGS_ASSERT_MESSAGE_AT(
+        "lpWorldOutput != NULL", KAC_ARTIST_AI_TO_OUTPUT_FILE, 40));
+    CGS_ASSERT(lpAIOutputBuffer != 0, CGS_ASSERT_MESSAGE_AT(
+        "lpAIOutputBuffer != NULL", KAC_ARTIST_AI_TO_OUTPUT_FILE, 41));
 
     // ⭐ GUARDS DELETED 2026-08-25 (aimodule wave), exactly as the note they replaced asked
     // ("delete the guards when the AI output buffer's members land"). The four const getters

@@ -1,8 +1,6 @@
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 #include "GameShared/GameClasses/Module/CgsBaseEventQueue.h"                        // BaseEventQueue<T>::AddEvent / GetLength / GetMaxLength (inline generic)
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h"      // InSceneUpdateInterface + the embedded queues/elements
-
-#include <cstring>   // std::memcpy (opaque collision-volume image staging, models the Xbox block-copy)
 
 // =============================================================================
 // CgsSceneManager::SceneManagerIO::InSceneUpdateInterface -- the grounded producer methods
@@ -80,82 +78,36 @@ namespace SceneManagerIO
         mAddEntityQueue.AddEvent(lEvent);
     }
 
-    // ----- Add a dynamic collision volume (X360 0x822B1518) -----
-    // Stages { muId = a2, mu8Flags = a4, maVolumeData = memcpy(a3, 128) } and appends to
-    // mAddDynamicVolumeQueue.
-    void InSceneUpdateInterface::AddDynamicVolume(CgsSceneManager::EntityId lEntityId, const void* lpVolumeImage, u8 lu8VolumeTypeFlag)
+    namespace
+    {
+        const char KAC_DYNAMIC_VOLUME_ARTIST_FILE[] =
+            "..\\..\\..\\GameShared\\GameClasses\\SceneManager/CgsSceneManagerIO_SceneUpdate.h";
+    }
+
+    // ARTIST 0x822B1518 and DecFIGS CgsSceneManagerIO_SceneUpdate.h:367.
+    void InSceneUpdateInterface::AddDynamicVolume(VolumeId lVolumeId, const rw::collision::Volume* lpVolume,
+                                                 u8 lxVolumeTypeFlags)
     {
         InEventAddDynamicVolume lEvent;
-        lEvent.muId     = static_cast<u64>(static_cast<u32>(lEntityId));  // std a2 @+0x00
-        lEvent.mu8Flags = lu8VolumeTypeFlag;                             // stb a4 @+0x08
-        std::memcpy(lEvent.maVolumeData, lpVolumeImage, 128);           // memcpy(@+0x10, a3, 0x80)
-
+        lEvent.mVolumeId = lVolumeId;
+        lEvent.mxVolumeTypeID = lxVolumeTypeFlags;
+        // DecFIGS volume.h:39 aliases the SDK Volume to VolRef::Volume.
+        lEvent.mVolumeBuffer.SetVolume(reinterpret_cast<const VolRef::Volume*>(lpVolume));
         CGS_ASSERT(mAddDynamicVolumeQueue.GetLength() < mAddDynamicVolumeQueue.GetMaxLength(),
-                   "SceneManager.mAddDynamicVolumeQueue too small, increase value in SceneManagerConstants.h");
+                   CGS_ASSERT_STREAM_MESSAGE_AT("SceneManager.mAddDynamicVolumeQueue too small, increase value in SceneManagerConstants.h",
+                                                KAC_DYNAMIC_VOLUME_ARTIST_FILE, 933));
         mAddDynamicVolumeQueue.AddEvent(lEvent);
     }
 
-    // ----- Add a dynamic collision volume, DWARF form (the SAME X360 body, 0x822B1518) -----
-    // ADDED 2026-08-18 (wave Q5, car-registration finisher). DWARF
-    // CgsSceneManagerIO_SceneUpdate.h:367. Decoded from the raw `assembly` array of
-    // 0x822B1518.json -- the console has exactly one body and it is 64-bit throughout:
-    //
-    //   0x822B1524  mr    r11, r4                  ; the WHOLE 64-bit id register
-    //   0x822B1528  stb   r6, var_B8(r1)           ; event +0x08  mu8Flags
-    //   0x822B153C  std   r11, var_C0(r1)          ; event +0x00  muId  -- ALL 64 BITS
-    //   0x822B1530..40  memcpy(var_B0, r5, 0x80)   ; event +0x10  128-byte volume image
-    //   0x822B1554  lwzx  r11, this, 0x44038       ; miLength     \  "queue too small"
-    //   0x822B1558  lwzx  r10, this, 0x44034       ; miMaxLength   > tripwire, baked line
-    //   0x822B1560  blt   -> skip                                /  0x3A5 == 933
-    //   0x822B15DC  addis r3, this, 4 ; addi r3, r3, 0x4030      ; == this + 0x44030
-    //   0x822B15E8  bl    BaseEventQueue<InEventAddDynamicVolume>::AddEvent
-    //
-    // this+0x44030 is mAddDynamicVolumeQueue; the console offsets are provenance only (gotcha
-    // 1) -- this body reaches the queue BY NAME, exactly like every sibling producer here.
-    // The stack record is staged in the console's own order (flags byte, then id, then the
-    // block copy); the three are independent slots of one record, so declaration order is used.
-    //
-    // The EntityId overload above is the fitted 32-bit slice of this same body and is kept
-    // because committed callers bind to it; see the header note for why a race car needs this
-    // one.
-    void InSceneUpdateInterface::AddDynamicVolume(VolumeId lVolumeId, const void* lpVolumeImage, u8 lu8VolumeTypeFlag)
-    {
-        InEventAddDynamicVolume lEvent;
-        lEvent.muId     = lVolumeId.mId;                        // std a2 @+0x00 -- all 64 bits
-        lEvent.mu8Flags = lu8VolumeTypeFlag;                    // stb a4 @+0x08
-        std::memcpy(lEvent.maVolumeData, lpVolumeImage, 128);   // memcpy(@+0x10, a3, 0x80)
-
-        CGS_ASSERT(mAddDynamicVolumeQueue.GetLength() < mAddDynamicVolumeQueue.GetMaxLength(),
-                   "SceneManager.mAddDynamicVolumeQueue too small, increase value in SceneManagerConstants.h");
-        mAddDynamicVolumeQueue.AddEvent(lEvent);
-    }
-
-    // ----- Replace an existing dynamic volume's collision image (X360 0x822B15F8) -----
-    // DWARF CgsSceneManagerIO_SceneUpdate.h:458 `void ReplaceDynamicVolume(VolumeId, const
-    // VolRef::Volume *)` (crash parity H-SM1, 2026-09-24 -- this was a fitted 32-bit EntityId form
-    // posting `(u64)(u32)id`; see the header note). The console body, 64-bit throughout:
-    //
-    //   0x822B1604  mr    r11, r4                  ; the WHOLE 64-bit id register
-    //   0x822B160C..14  r4 = r5, r5 = 0x80, r3 = var_B0            ; memcpy args
-    //   0x822B1618  std   r11, var_C0(r1)          ; event +0x00  muId -- ALL 64 BITS
-    //   0x822B161C  bl    memcpy                   ; event +0x10  128-byte volume image
-    //   0x822B1630  lwzx  r11, this, 0xB1D34       ; miMaxLength  \  "queue too small"
-    //   0x822B1634  lwzx  r10, this, 0xB1D38       ; miLength      > tripwire (non-gating),
-    //   0x822B163C  blt   cr6 -> skip                              /  baked line 0x3BA == 954
-    //   0x822B16B8  addis r3, this, 0xB ; addi 0x1D30              ; == this + 0xB1D30
-    //   0x822B16C4  bl    BaseEventQueue<InEventReplaceDynamicVolume>::AddEvent (0x822AB670)
-    //
-    // this+0xB1D30 is mReplaceDynamicVolumeQueue, reached BY NAME. No flags byte is written
-    // (unlike AddDynamicVolume's `stb r6`): the record's +0x08 is whatever the stack held, and the
-    // consumer (CgsSceneManagerModule leg 12, 0x828D2E24) reads only the id and the image.
-    void InSceneUpdateInterface::ReplaceDynamicVolume(VolumeId lVolumeId, const void* lpVolumeImage)
+    // ARTIST 0x822B15F8 and DecFIGS CgsSceneManagerIO_SceneUpdate.h:373.
+    void InSceneUpdateInterface::ReplaceDynamicVolume(VolumeId lVolumeId, const rw::collision::Volume* lpVolume)
     {
         InEventReplaceDynamicVolume lEvent;
-        lEvent.muId = lVolumeId.mId;                            // std r11(=r4) @+0x00 -- all 64 bits
-        std::memcpy(lEvent.maVolumeData, lpVolumeImage, 128);   // memcpy(@+0x10, r5, 0x80)
-
+        lEvent.mVolumeId = lVolumeId;
+        lEvent.mVolumeBuffer.SetVolume(reinterpret_cast<const VolRef::Volume*>(lpVolume));
         CGS_ASSERT(mReplaceDynamicVolumeQueue.GetLength() < mReplaceDynamicVolumeQueue.GetMaxLength(),
-                   "SceneManager.mReplaceDynamicVolumeQueue too small, increase value in SceneManagerConstants.h");
+                   CGS_ASSERT_STREAM_MESSAGE_AT("SceneManager.mReplaceDynamicVolumeQueue too small, increase value in SceneManagerConstants.h",
+                                                KAC_DYNAMIC_VOLUME_ARTIST_FILE, 954));
         mReplaceDynamicVolumeQueue.AddEvent(lEvent);
     }
 
@@ -436,9 +388,9 @@ namespace SceneManagerIO
         mClearCullingTableQueue.Construct();
         mSetEntityRadiusQueue.Construct();
         mSetPaddingQueue.Construct();
-        mAddVolumeInstanceForCachingQueue.Construct();
         mClearEntityPaddingQueue.Construct();
         mSetVolumeInstanceCullingGroupQueue.Construct();
+        mAddVolumeInstanceForCachingQueue.Construct();
         mAddToCacheQueue.Construct();
         mUpdateCachedPositionQueue.Construct();
         mRemoveFromCacheQueue.Construct();
@@ -470,11 +422,11 @@ namespace SceneManagerIO
     // The whole-interface merge the entity-module -> scene bridges run once per phase:
     // each of the 25 embedded queues appends the matching source queue
     // (BaseEventQueue<T>::Append -- a block copy onto the tail plus the length bump).
-    // Order is irrelevant (the queues are independent); the list mirrors Clear's.
+    // ARTIST 0x827A9340 determines the order of the queue appends.
     void InSceneUpdateInterface::Append(const InSceneUpdateInterface& lrSource)
     {
-        mUpdatePositionQueue.Append(lrSource.mUpdatePositionQueue);
         mSetVolumeInstanceTransformQueue.Append(lrSource.mSetVolumeInstanceTransformQueue);
+        mUpdatePositionQueue.Append(lrSource.mUpdatePositionQueue);
         mAddEntityQueue.Append(lrSource.mAddEntityQueue);
         mAddDynamicVolumeQueue.Append(lrSource.mAddDynamicVolumeQueue);
         mAddForCollisionQueue.Append(lrSource.mAddForCollisionQueue);
@@ -489,12 +441,14 @@ namespace SceneManagerIO
         mClearCullingTableQueue.Append(lrSource.mClearCullingTableQueue);
         mSetEntityRadiusQueue.Append(lrSource.mSetEntityRadiusQueue);
         mSetPaddingQueue.Append(lrSource.mSetPaddingQueue);
+        mSetVolumeInstanceCullingGroupQueue.Append(lrSource.mSetVolumeInstanceCullingGroupQueue);
         mAddVolumeInstanceForCachingQueue.Append(lrSource.mAddVolumeInstanceForCachingQueue);
         mClearEntityPaddingQueue.Append(lrSource.mClearEntityPaddingQueue);
-        mSetVolumeInstanceCullingGroupQueue.Append(lrSource.mSetVolumeInstanceCullingGroupQueue);
         mAddToCacheQueue.Append(lrSource.mAddToCacheQueue);
         mUpdateCachedPositionQueue.Append(lrSource.mUpdateCachedPositionQueue);
         mRemoveFromCacheQueue.Append(lrSource.mRemoveFromCacheQueue);
+        // ARTIST 0x827A94F4 and 0x827A9514 append this queue twice.
+        mUpdateCachedPositionQueue.Append(lrSource.mUpdateCachedPositionQueue);
         mAddPolySoupListQueue.Append(lrSource.mAddPolySoupListQueue);
         mClearPolySoupListsQueue.Append(lrSource.mClearPolySoupListsQueue);
         mRemoveAllEntitiesQueue.Append(lrSource.mRemoveAllEntitiesQueue);
@@ -503,8 +457,8 @@ namespace SceneManagerIO
     // ----- Reset every embedded queue's live count (X360 0x822B10C8) -----
     // The X360 inlines a `stw 0, miLength(queue)` for each of the 25 embedded queues (the 25
     // zeroed offsets == Construct's 25 queue bases + 8). Each maps to the queue's own Clear()
-    // (BaseEventQueue<T>::Clear -> miLength = 0); order is irrelevant (independent counters).
-    InSceneUpdateInterface* InSceneUpdateInterface::Clear()
+    // (BaseEventQueue<T>::Clear -> miLength = 0), in the original store order.
+    void InSceneUpdateInterface::Clear()
     {
         mUpdatePositionQueue.Clear();
         mSetVolumeInstanceTransformQueue.Clear();
@@ -522,49 +476,46 @@ namespace SceneManagerIO
         mClearCullingTableQueue.Clear();
         mSetEntityRadiusQueue.Clear();
         mSetPaddingQueue.Clear();
+        mSetVolumeInstanceCullingGroupQueue.Clear();
         mAddVolumeInstanceForCachingQueue.Clear();
         mClearEntityPaddingQueue.Clear();
-        mSetVolumeInstanceCullingGroupQueue.Clear();
         mAddToCacheQueue.Clear();
         mUpdateCachedPositionQueue.Clear();
         mRemoveFromCacheQueue.Clear();
         mAddPolySoupListQueue.Clear();
         mClearPolySoupListsQueue.Clear();
         mRemoveAllEntitiesQueue.Clear();
-        return this;
     }
 
     // ----- Teardown: reset every embedded queue's live count (X360 0x828BA280) -----
-    // Byte-identical to Clear (the inline stores the same 25 miLength=0 zeroes and returns this);
-    // the inline queues own no heap, so teardown is purely the count reset.
-    InSceneUpdateInterface* InSceneUpdateInterface::Destruct()
+    // The inline queues own their backing storage, and ARTIST resets the 25 live counts.
+    void InSceneUpdateInterface::Destruct()
     {
-        mUpdatePositionQueue.Clear();
-        mSetVolumeInstanceTransformQueue.Clear();
-        mAddEntityQueue.Clear();
-        mAddDynamicVolumeQueue.Clear();
-        mAddForCollisionQueue.Clear();
-        mAddVolumeInstanceQueue.Clear();
-        mForceNoPaddingQueue.Clear();
-        mRemoveEntityQueue.Clear();
-        mRemoveForCollisionQueue.Clear();
-        mRemoveVolumeQueue.Clear();
-        mRemoveVolumeInstanceQueue.Clear();
-        mReplaceDynamicVolumeQueue.Clear();
-        mSetCullingGroupPairQueue.Clear();
-        mClearCullingTableQueue.Clear();
-        mSetEntityRadiusQueue.Clear();
-        mSetPaddingQueue.Clear();
-        mAddVolumeInstanceForCachingQueue.Clear();
-        mClearEntityPaddingQueue.Clear();
-        mSetVolumeInstanceCullingGroupQueue.Clear();
-        mAddToCacheQueue.Clear();
-        mUpdateCachedPositionQueue.Clear();
-        mRemoveFromCacheQueue.Clear();
-        mAddPolySoupListQueue.Clear();
-        mClearPolySoupListsQueue.Clear();
-        mRemoveAllEntitiesQueue.Clear();
-        return this;
+        mUpdatePositionQueue.Destruct();
+        mSetVolumeInstanceTransformQueue.Destruct();
+        mAddEntityQueue.Destruct();
+        mAddDynamicVolumeQueue.Destruct();
+        mAddForCollisionQueue.Destruct();
+        mAddVolumeInstanceQueue.Destruct();
+        mForceNoPaddingQueue.Destruct();
+        mRemoveEntityQueue.Destruct();
+        mRemoveForCollisionQueue.Destruct();
+        mRemoveVolumeQueue.Destruct();
+        mRemoveVolumeInstanceQueue.Destruct();
+        mReplaceDynamicVolumeQueue.Destruct();
+        mSetCullingGroupPairQueue.Destruct();
+        mClearCullingTableQueue.Destruct();
+        mSetEntityRadiusQueue.Destruct();
+        mSetPaddingQueue.Destruct();
+        mSetVolumeInstanceCullingGroupQueue.Destruct();
+        mAddVolumeInstanceForCachingQueue.Destruct();
+        mClearEntityPaddingQueue.Destruct();
+        mAddToCacheQueue.Destruct();
+        mRemoveFromCacheQueue.Destruct();
+        mUpdateCachedPositionQueue.Destruct();
+        mAddPolySoupListQueue.Destruct();
+        mClearPolySoupListsQueue.Destruct();
+        mRemoveAllEntitiesQueue.Destruct();
     }
 
     // Size pins for the three volume-instance element records defined by this TU (their stride

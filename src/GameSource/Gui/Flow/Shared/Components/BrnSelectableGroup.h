@@ -41,6 +41,7 @@
 // ===================================================================================
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiComponent.h"  // CgsGui::GuiComponent (second base)
 #include "GameSource/Gui/Flow/Shared/Components/BrnSelectable.h"     // BrnGui::Selectable (primary base)
 
@@ -93,9 +94,15 @@ namespace BrnGui
         // maSelectables[index].
         Selectable* GetSelectable(s32 liIndex);
         // @ 0x8240FD60 -- bounds-check the highlight cursor, return maSelectables[cursor].
-        Selectable* GetHighlighted();
+        const Selectable* GetHighlighted() const;
         // @ 0x8241EA28 -- assert a row is highlighted, return its id.
-        u64 GetHighlightedId();
+        u64 GetHighlightedId() const
+        {
+            CGS_ASSERT(GetHighlighted() != 0,
+                CGS_ASSERT_MESSAGE_AT("GetHighlighted()",
+                                      "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnSelectableGroup.h", 218));
+            return GetHighlighted()->GetId();
+        }
         // The highlight cursor itself (-1 == none). DWARF BrnSelectableGroup.h:203 declares it;
         // callers that need the INDEX rather than the item read the member inline -- e.g.
         // CrashNavOptions::HandleOptionChanged @0x824D9408 switches on it.
@@ -118,5 +125,9 @@ namespace BrnGui
         s8  miHighlightedIndex;         // +0xA5 (-1 == none)
         bool mbWrapped;                 // +0xA6
         Selectable* maSelectables[KI_MAX_SELECTABLES]; // +0xA8 (this[42 + i] on the console)
+
+    protected:
+        // @ 0x824E21B8 -- mutable access also marks the group dirty.
+        Selectable* GetHighlighted();
     };
 }

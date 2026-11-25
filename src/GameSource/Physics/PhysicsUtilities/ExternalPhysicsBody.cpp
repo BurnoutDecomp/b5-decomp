@@ -431,7 +431,7 @@ namespace BrnPhysics
     {
         if ((event->mu32Flags & 4u) && (event->mu32Flags & 2u))
         {
-            const Vector3 inverse = event->mInertia.GetInverseInertia();
+            const Vector3 inverse = event->mInertia.GetObjectPointer()->GetInverseInertia();
             const __vector4 x = {1.0f, 0.0f, 0.0f, 0.0f};
             const __vector4 y = {0.0f, 1.0f, 0.0f, 0.0f};
             const __vector4 z = {0.0f, 0.0f, 1.0f, 0.0f};
@@ -440,7 +440,7 @@ namespace BrnPhysics
             mLocalInverseInertia.zAxis.mV = z;
             mLocalInverseInertia.xAxis.mV = __vmulfp(mLocalInverseInertia.xAxis.mV, __vspltw(inverse.mV, 0));
             // This one scalar division is the actual ARTIST825A245C fdivs.
-            const f32 mass = 1.0f / event->mInertia.GetInverseMass();
+            const f32 mass = 1.0f / event->mInertia.GetObjectPointer()->GetInverseMass();
             mLocalInverseInertia.yAxis.mV = __vmulfp(mLocalInverseInertia.yAxis.mV, __vspltw(inverse.mV, 1));
             mLocalInverseInertia.zAxis.mV = __vmulfp(mLocalInverseInertia.zAxis.mV, __vspltw(inverse.mV, 2));
             mfMass.mV = SplatValue(mass);

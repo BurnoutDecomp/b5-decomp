@@ -112,17 +112,6 @@ namespace BrnWorld
             return lpOutput->GetPropInputInterface();
         }
 
-        // The scene's dynamic-volume producer keys its event off the EntityId word; a
-        // PropVolumeID's whole payload (owner byte at bits [16..23], type id at [6..15],
-        // volume number at [0..5]) lives inside that low 32-bit word, so re-typing it is
-        // lossless. The X360 hands AddDynamicVolume the raw 8-byte VolumeId in r4
-        // (`ld r30, var_138; mr r4, r30`) and the producer stores it as a 64-bit id whose
-        // top word is zero -- identical value, spelled through the committed signature.
-        CgsSceneManager::EntityId ToSceneVolumeKey(const PropVolumeID& lrVolumeId)
-        {
-            return CgsSceneManager::EntityId(static_cast<u32>(lrVolumeId.mVolumeId.mId));
-        }
-
         // ---- culling groups the prop module publishes (Prepare stage 8) --------------
         // The seven SetCullingGroupPair(a, b, enabled) calls at 0x822DA868..0x822DA8F0, in
         // asm order. The group numbers are the scene's culling-group ids; the module owns
@@ -534,7 +523,7 @@ namespace BrnWorld
                 const ::rw::collision::Volume* lpVolume = lpType->GetCollisionVolume(luVolume);
 
                 lVolumeId.AssertIsProp();
-                lpScene->AddDynamicVolume(ToSceneVolumeKey(lVolumeId),
+                lpScene->AddDynamicVolume(lVolumeId.mVolumeId,
                                           lpVolume,
                                           KU8_PROP_VOLUME_TYPE_FLAG);
                 ++lu8VolumeNumber;
@@ -551,7 +540,7 @@ namespace BrnWorld
                     const ::rw::collision::Volume* lpVolume = lrPart.GetCollisionVolume(luPartVolume);
 
                     lVolumeId.AssertIsProp();
-                    lpScene->AddDynamicVolume(ToSceneVolumeKey(lVolumeId),
+                    lpScene->AddDynamicVolume(lVolumeId.mVolumeId,
                                               lpVolume,
                                               KU8_PROP_VOLUME_TYPE_FLAG);
                     ++lu8VolumeNumber;

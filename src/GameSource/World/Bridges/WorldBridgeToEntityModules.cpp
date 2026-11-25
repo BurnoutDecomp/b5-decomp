@@ -2,6 +2,7 @@
 
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"
+#include "GameSource/GameState/BrnGameActions.h"
 
 // ---- BridgeWorldModuleToEntityModules_Render (@0x827ABE28) only ---------------------
 // That bridge is a BrnWorld::WorldModule METHOD (it reads the module's own mShadowMap), so
@@ -202,6 +203,9 @@ void WorldModule::BridgeActionsToRaceCarModule(
 // before the streamer's own request machine sees the frame's world actions.
 // Both null tripwires are NON-gating; the X360 tail leaves the last GetNextEvent
 // result in r3 as a register artifact (logical return type void).
+static const char KAC_ARTIST_ACTIONS_TO_WORLD_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/Bridges/WorldBridgeToEntityModules.cpp";
+
 void WorldModule::BridgeActionsToWorldModule(
     void* lpWorldModule,
     BrnWorld::WorldEntityIO::InputBuffer_PostPhysics* lpWorldEntityInputBuffer_PostPhysics,
@@ -213,19 +217,20 @@ void WorldModule::BridgeActionsToWorldModule(
     BrnWorld::WorldEntityIO::InputBuffer_PostPhysics::GameActionQueue* lpOutQueue =
         lpWorldEntityInputBuffer_PostPhysics->GetGameActionQueue();
 
-    CGS_ASSERT(lpInQueue != 0, CGS_ASSERT_MESSAGE_AT("lpInQueue", __FILE__, 178));     // :178 (non-gating)
-    CGS_ASSERT(lpOutQueue != 0, CGS_ASSERT_MESSAGE_AT("lpOutQueue", __FILE__, 179));   // :179 (non-gating)
+    CGS_ASSERT(lpInQueue != 0, CGS_ASSERT_MESSAGE_AT("lpInQueue", KAC_ARTIST_ACTIONS_TO_WORLD_FILE, 178));     // :178 (non-gating)
+    CGS_ASSERT(lpOutQueue != 0, CGS_ASSERT_MESSAGE_AT("lpOutQueue", KAC_ARTIST_ACTIONS_TO_WORLD_FILE, 179));   // :179 (non-gating)
 
     lpOutQueue->Clear();
 
-    const CgsModule::Event* lpEvent = 0;
-    s32 liSize = 0;
+    // GetFirstEvent writes both outputs, including on an empty queue (ARTIST 0x821FC16C).
+    const CgsModule::Event* lpEvent;
+    s32 liSize;
     s32 liType = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
     while (lpEvent)
     {
-        if (liType == 192)
+        if (liType == BrnGameState::GameStateModuleIO::E_ACTION_WAIT_FOR_STREAMING)
         {
-            lpOutQueue->AddEvent(lpEvent, 192, liSize);
+            lpOutQueue->AddEvent(lpEvent, BrnGameState::GameStateModuleIO::E_ACTION_WAIT_FOR_STREAMING, liSize);
         }
         liType = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
     }

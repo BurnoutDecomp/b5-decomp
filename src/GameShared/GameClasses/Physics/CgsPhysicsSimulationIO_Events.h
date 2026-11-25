@@ -324,16 +324,13 @@ namespace PhysicsSimulationIO
     // (each bit copies ONE Inertia field; the module .cpp quotes the offsets):
     //     bit0 mAngularDrag  bit1 mInvTens(+recompute mSpherical)  bit2 mInvMass
     //     bit3 mLinearDrag   bit4 mMaxOmega                        bit5 mMaxVelocity
-    // ⚠️ The DWARF's NonConstructedClassContainer means RAW STORAGE on the console; embedding
-    // the Inertia by value runs its default ctor per queue slot on the PC. Behaviourally
-    // invisible (AddEvent overwrites the slot before any GetEvent reads it) -- the same
-    // accepted cost as InUpdateJointLimits' embedded JointLimits.
+    // DecFIGS CgsPhysicsSimulationModuleIO.h:118–120 uses a typed handle and raw
+    // Inertia storage. ARTIST 0x828A4BA8 copies those six payload words together.
     class CGS_ALIGN(16) InChangeRigidBodyInertia : public Event   // class key: ARTIST's decorated names (VInChangeRigidBodyInertia)
     {
     public:
-        u64                  mID;        // @+0x00  DWARF :118 (a CgsPhysics::RigidBodyId handle)
-        u64                  mIDPad;     // @+0x08  pad to the payload's 16-byte slot
-        rw::physics::Inertia mInertia;   // @+0x10  DWARF :119 -- 48B, the 6x ld/std fast path
+        RigidBodyId mID;        // @+0x00  DWARF :118 (a CgsPhysics::RigidBodyId handle)
+        NonConstructedClassContainer<rw::physics::Inertia> mInertia;
         u32                  mu32Flags;  // @+0x40  DWARF :120 -- `lwz 0x40(event)`, the bit map above
     };
 
@@ -382,8 +379,7 @@ namespace PhysicsSimulationIO
     class CGS_ALIGN(16) InUpdateExternalBody : public Event   // class key: ARTIST's decorated names (VInUpdateExternalBody)
     {
     public:
-        u64                           mID;          // @+0x00  DWARF :151 (a CgsPhysics::RigidBodyId handle)
-        u64                           mIDPad;       // @+0x08  pad to the payload's 16-byte slot
+        RigidBodyId mID;          // @+0x00  DWARF :151 (a CgsPhysics::RigidBodyId handle)
         rw::math::vpu::Matrix44Affine mTransform;   // @+0x10  DWARF :152 -- 64B, the four SetTransform rows
         rw::math::vpu::Vector3        mVel;         // @+0x50  DWARF :153 -- `lvx128 v0,r30,0x50` -> body mVel
         rw::math::vpu::Vector3        mAngularVel;  // @+0x60  DWARF :154 -- `lvx128 v0,r30,0x60` -> body mOmega

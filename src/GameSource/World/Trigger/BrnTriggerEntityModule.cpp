@@ -273,7 +273,7 @@ void TriggerEntityModule::ProcessAddTriggerEvents(
         f32  lfEntityBoundingSphereRadius = 0.0f;
         u8   lu8TriggerTypeFlag           = 0;
         CGS_ALIGN(16) u8 laVolumeStorage[128];   // staged rw::collision volume image (block-copied by AddDynamicVolume)
-        bool lbVolumeOk                   = false;
+        const rw::collision::Volume* lpVolume = 0;
 
         switch (liType)
         {
@@ -300,9 +300,8 @@ void TriggerEntityModule::ProcessAddTriggerEvents(
                 // `lpVolume` assert operand below.
                 rw::Resource lResource;
                 lResource.m_baseResources[0] = laVolumeStorage;
-                rw::collision::BoxVolume* lpVolume = rw::collision::BoxVolume::Initialize(
+                lpVolume = rw::collision::BoxVolume::Initialize(
                         lResource, lfDimX, lfDimY, KF_PLANE_SEGMENT_TRIGGER_DEPTH);
-                lbVolumeOk = (lpVolume != 0);
                 // Bounding sphere radius = 0.5 * sqrt(dimX^2 + dimY^2) over the FULL dims (the asm
                 // vmsum is over X^2 + Y^2 only -- Z is dropped -- then x0.5).
                 lfEntityBoundingSphereRadius = 0.5f * sqrtf(lfDimX * lfDimX + lfDimY * lfDimY);
@@ -322,9 +321,7 @@ void TriggerEntityModule::ProcessAddTriggerEvents(
                 // Same staged rw::Resource as the two box branches (0x822D96C4..0x822D96EC).
                 rw::Resource lResource;
                 lResource.m_baseResources[0] = laVolumeStorage;
-                rw::collision::SphereVolume* lpVolume =
-                    rw::collision::SphereVolume::Initialize(lResource, lfRadius);
-                lbVolumeOk = (lpVolume != 0);
+                lpVolume = rw::collision::SphereVolume::Initialize(lResource, lfRadius);
                 lfEntityBoundingSphereRadius = lfRadius;
                 lu8TriggerTypeFlag = 2;   // (1 << E_TRIGGERTYPE_SPHERE) == 2
                 break;
@@ -341,9 +338,7 @@ void TriggerEntityModule::ProcessAddTriggerEvents(
                 // `vmulfp128 v1, v0, 0.5` builds the halved-extent Vector3 in v1).
                 rw::Resource lResource;
                 lResource.m_baseResources[0] = laVolumeStorage;
-                rw::collision::BoxVolume* lpVolume =
-                    rw::collision::BoxVolume::Initialize(lResource, lfHX, lfHY, lfHZ);
-                lbVolumeOk = (lpVolume != 0);
+                lpVolume = rw::collision::BoxVolume::Initialize(lResource, lfHX, lfHY, lfHZ);
                 // Bounding sphere radius = 0.5 * sqrt(fullX^2 + fullY^2 + fullZ^2) (the asm vmsum3
                 // is over the full dims, then x0.5). == magnitude of the halved-extent vector.
                 lfEntityBoundingSphereRadius = VectorMagnitude(lfHX, lfHY, lfHZ);
@@ -358,7 +353,7 @@ void TriggerEntityModule::ProcessAddTriggerEvents(
                 break;
         }
 
-        if (!lbVolumeOk)
+        if (!lpVolume)
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpVolume", CGS_ASSERT_LOCATION(KAC_FILE, 398));
@@ -383,7 +378,7 @@ void TriggerEntityModule::ProcessAddTriggerEvents(
         // ARTIST822D99F8..9A44: both IDs are64-bit; v1 carries the sphere centre.
         lrTrigger.mVolumeInstanceID.muId = static_cast<u64>(static_cast<u32>(lEntityId)) << 32;
         const CgsSceneManager::VolumeId lVolumeId(lrTrigger.mVolumeInstanceID.muId);
-        lpOutSceneInputInterface->AddDynamicVolume(lVolumeId, laVolumeStorage, lu8TriggerTypeFlag);
+        lpOutSceneInputInterface->AddDynamicVolume(lVolumeId, lpVolume, lu8TriggerTypeFlag);
         lpOutSceneInputInterface->AddEntity(lEntityId, KU_ENTITYTYPEFLAG_TRIGGER,
                                             lrTrigger.mTransform.Pos(), lfEntityBoundingSphereRadius);
         lpOutSceneInputInterface->AddVolumeInstance(lrTrigger.mVolumeInstanceID, lVolumeId, lrTrigger.mTransform);
