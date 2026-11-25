@@ -33,6 +33,7 @@
 // ===================================================================================
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 #include "GameSource/Gui/Flow/Shared/Components/BrnSelectableGroup.h"  // BrnGui::SelectableGroup (base)
 #include "GameSource/Gui/Flow/Shared/Components/BrnMenuToggle.h"       // BrnGui::MenuToggle (maItems element)
 
@@ -104,7 +105,15 @@ namespace BrnGui
         // @ 0x82500F18 (<3>) -- retreat the highlight on the currently-highlighted row.
         virtual bool HighlightPreviousItem();
 
-        MenuToggle* GetSelectable(s32 liIndex);
+        // Fixed row indices fold the capacity assertion at ARTIST 0x82440440.
+        MenuToggle* GetSelectable(s32 liIndex)
+        {
+            CGS_ASSERT(liIndex >= 0 && liIndex < TI_SIZE,
+                CGS_ASSERT_STREAM_MESSAGE_AT("MenuToggleGroup::GetSelectable() invalid index specified",
+                    "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnMenuToggleGroup.h", 241));
+
+            return static_cast<MenuToggle*>(SelectableGroup::GetSelectable(liIndex));
+        }
 
         // ----- recovered layout -----
         static const s32 KI_ITEMS_OFFSET   = 0x238;   // maItems @ +0x238

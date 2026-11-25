@@ -2196,7 +2196,6 @@ namespace Vehicle
             // DWARF :4156 lUpdateEvent -- the staging record. Rows/velocities first, exactly
             // the console's load order (angular, transform, linear), then the slow-mo arm.
             CgsPhysics::PhysicsSimulationIO::InUpdateExternalBody lUpdateEvent;
-            lUpdateEvent.mIDPad      = 0;   // host hygiene only: the console leaves this slot as stack garbage and nothing reads it
             lUpdateEvent.mTransform  = lrRaceCar.GetTransform();
             lUpdateEvent.mVel        = lrRaceCar.GetLinearVelocity();
             lUpdateEvent.mAngularVel = lrRaceCar.GetAngularVelocity();
@@ -2228,7 +2227,7 @@ namespace Vehicle
             CgsSceneManager::EntityId lDummyRaceCarEntityId = lDummyRaceCarId.GetEntityId();
             lDummyRaceCarEntityId.SetOwner( static_cast<u8>( BrnWorld::E_ENTITYTYPE_PROP_COLLISION_RACECAR ) );
             lDummyRaceCarId.SetEntityId( lDummyRaceCarEntityId );
-            lUpdateEvent.mID = static_cast<u64>( lDummyRaceCarId );
+            lUpdateEvent.mID = lDummyRaceCarId;
 
             // [DIAG] NOT IN THE X360 BINARY -- see PropDiagEnabled.
             {
@@ -2267,7 +2266,6 @@ namespace Vehicle
             const SimpleVehiclePhysics*   lpTrafficPhysics = lpTrafficVehicle->mpVehicleBody;
 
             CgsPhysics::PhysicsSimulationIO::InUpdateExternalBody lUpdateEvent;
-            lUpdateEvent.mIDPad      = 0;   // host hygiene only (see the race-car half)
             lUpdateEvent.mAngularVel = lpTrafficPhysics->GetAngularVelocity();   // lvx128 v127 +0x60
             lUpdateEvent.mVel        = lpTrafficPhysics->GetLinearVelocity();    // lvx128 v126 +0x50
             lUpdateEvent.mTransform  = lpTrafficPhysics->GetTransform();         // v125..v122 +0x10..
@@ -2286,7 +2284,7 @@ namespace Vehicle
             CgsSceneManager::EntityId lDummyRaceCarEntityId = lDummyCarId.GetEntityId();
             lDummyRaceCarEntityId.SetOwner( static_cast<u8>( BrnWorld::E_ENTITYTYPE_PROP_COLLISION_TRAFFIC ) );
             lDummyCarId.SetEntityId( lDummyRaceCarEntityId );
-            lUpdateEvent.mID = static_cast<u64>( lDummyCarId );
+            lUpdateEvent.mID = lDummyCarId;
 
             // [DIAG] NOT IN THE X360 BINARY -- see PropDiagEnabled.
             {
@@ -4264,11 +4262,11 @@ namespace Vehicle
                 // its owner byte replaced by 0x0B (E_ENTITYTYPE_PROP_COLLISION_RACECAR), promoted
                 // into the handle's high dword. The symmetric partner of ProcessRemoveEvents'.
                 lAddBody.mID = static_cast<u64>((luEntityWord & 0x00FFFFFFu) | 0x0B000000u) << 32;
-                lAddBody.mRigidBody.mTransform       = lEvent.mInitialTransform;
-                lAddBody.mRigidBody.mVelocity        = lEvent.mInitialVelocity;
-                lAddBody.mRigidBody.mAngularVelocity = lEvent.mAngularVelocity;
-                lAddBody.mRigidBody.mInertia         = lSimInertia;
-                lAddBody.mRigidBody.mbSpy            = true;    // `li r29,1 ; stb r29,var_680`
+                lAddBody.mRigidBody.GetObjectPointer()->mTransform       = lEvent.mInitialTransform;
+                lAddBody.mRigidBody.GetObjectPointer()->mVelocity        = lEvent.mInitialVelocity;
+                lAddBody.mRigidBody.GetObjectPointer()->mAngularVelocity = lEvent.mAngularVelocity;
+                lAddBody.mRigidBody.GetObjectPointer()->mInertia         = lSimInertia;
+                lAddBody.mRigidBody.GetObjectPointer()->mbSpy            = true;    // `li r29,1 ; stb r29,var_680`
                 lAddBody.meState = rw::physics::ACTIVE_BODY;    // `li r11,4 ; stw r11,var_670`
                 lpOutputInterface->GetRequiredRigidBodiesQueue()->AddEvent(lAddBody);
             }

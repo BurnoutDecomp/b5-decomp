@@ -415,5 +415,10 @@ namespace BrnGui
         EventPanel::EEventType   meSavedEventMode;   // +0x52C0  (DWARF h:263)
         BrnStreetData::ScoreType meSavedRRScoreType; // +0x52C4  (DWARF h:264; end of object,
                                                      //          console sizeof == 0x52C8)
+
+    private:
+        static const char* KAPC_OPTION_HEADINGS[3];
+        static const char* KAPC_TOP_LEVEL_OPTION_LABELS[4];
+        static const char* mpacAnimationStrings[E_ANIMSTATE_COUNT];
     };
 }

@@ -12,8 +12,9 @@ namespace BrnPhysics
     namespace Props
     {
         // Input event: update a prop's physics state.
-        struct CGS_ALIGN(16) UpdatePropEvent
+        class CGS_ALIGN(16) UpdatePropEvent
         {
+        public:
             Matrix44Affine         mTransform;
             Vector3                mLinearVelocity;
             Vector3                mAngularVelocity;
@@ -31,8 +32,9 @@ namespace BrnPhysics
         // (leading Matrix44Affine) => sizeof == 80, the stride the queue memcpy is faithful to
         // (BaseEventQueue<AddPhysicalPropEvent>::AddEvent @0x822C8308 / Append @0x827A7E50, and
         //  EventQueue<AddPhysicalPropEvent,50>::Construct @0x822E36E0).
-        struct CGS_ALIGN(16) AddPhysicalPropEvent
+        class CGS_ALIGN(16) AddPhysicalPropEvent
         {
+        public:
             Matrix44Affine         mTransform;            // BrnPropEvents.h:47  @0x00 (64B)
             BrnWorld::PropEntityID mEntityId;             // BrnPropEvents.h:48  @0x40 (4B)
             BrnWorld::EPropState   meState;               // BrnPropEvents.h:49  @0x44 (4B enum)
@@ -48,8 +50,9 @@ namespace BrnPhysics
         // (miSlot). alignas(16) => sizeof == 80, the stride the queue memcpy is faithful to
         // (BaseEventQueue<AddPhysicalPartEvent>::AddEvent @0x822C8498 / Append @0x827A7F40, and
         //  EventQueue<AddPhysicalPartEvent,50>::Construct @0x822E3750).
-        struct CGS_ALIGN(16) AddPhysicalPartEvent
+        class CGS_ALIGN(16) AddPhysicalPartEvent
         {
+        public:
             Matrix44Affine         mTransform;    // BrnPropEvents.h:66  @0x00 (64B)
             BrnWorld::PropEntityID mEntityId;     // BrnPropEvents.h:67  @0x40 (4B)
             s16                    miPropTypeId;  // BrnPropEvents.h:68  @0x44

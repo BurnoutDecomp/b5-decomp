@@ -7,7 +7,7 @@
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h"
 #include "GameShared/GameClasses/Core/CgsID.h"     // CgsID (u64) -- mPursuedCarID / mShutdownCarID
-#include "GameShared/GameClasses/Core/CgsAssert.h" // CGS_ASSERT (GetCurrentCarSelectType inline)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Language/CgsSku.h" // actual ESku/ELanguage
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"   // BrnGui::GuiFlow (AppendExpectedAptComponent selector)
 #include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h"
@@ -967,13 +967,12 @@ namespace BrnGui
         // header-inlines on the X360 (no out-of-line bodies exist in the image); their bodies
         // are attested by the CarSelectMain call-site inlines cited on the members below.
 
-        // DWARF h:1301 GetCurrentCarSelectType. The assert (string + BrnGuiCache.h:4378 line
-        // baked into the X360 image) fires when no car-select flow is active; raw s32 return
-        // per this header's enum convention (values: GsmIO::ECarSelectType,
-        // BrnGameStateSharedIO.h).
-        s32 GetCurrentCarSelectType() const
+        // ARTIST 0x824DFDFC and 0x824DCD04 preserve the original cache assertion location.
+        BrnGameState::GameStateModuleIO::ECarSelectType GetCurrentCarSelectType() const
         {
-            CGS_ASSERT(meCarSelectType > 0, "meCarSelectType > GsmIO::E_CAR_SELECT_TYPE_NONE");
+            CGS_ASSERT(meCarSelectType > BrnGameState::GameStateModuleIO::E_CAR_SELECT_TYPE_NONE,
+                CGS_ASSERT_MESSAGE_AT("meCarSelectType > GsmIO::E_CAR_SELECT_TYPE_NONE",
+                                      "..\\..\\..\\GameSource\\Gui/BrnGuiCache.h", 4378));
             return meCarSelectType;
         }
         bool IsJunkyardCarUnlockPending() const          { return mbJunkyardCarUnlockPending; }  // +0x4B74 (19316)
@@ -1810,15 +1809,8 @@ namespace BrnGui
         // ARTIST RecEvent event 73 stores its 8-byte GuiCarUnlockNewCarEvent CgsID here;
         // event 74 clears it. No original X360 member name is attested.
         CgsID mCarUnlockNewCarId;                       // +0x4B68..+0x4B6F
-        // ADDITIVE CARVE (BrnCarSelectMain wave G): which car-select flow is running.
-        // DWARF h:1687 `BrnGameState::GameStateModuleIO::ECarSelectType meCarSelectType`;
-        // the member NAME is baked into the X360 assert string "meCarSelectType >
-        // GsmIO::E_CAR_SELECT_TYPE_NONE" (BrnGuiCache.h:4378) fired by the inlined
-        // GetCurrentCarSelectType() in CarSelectMain::OnEnter @0x824C8B34 /
-        // ExitCarSelection @0x824C8CF4 (both: lwz mpGuiCache+0x4B70). Raw s32 per this
-        // boundary header's enum convention; the value home is
-        // BrnGameState::GameStateModuleIO::ECarSelectType (BrnGameStateSharedIO.h).
-        s32  meCarSelectType;                            // +0x4B70 (19312)
+        // DecFIGS BrnGuiCache.h:1687, ARTIST loads GuiCache +0x4B70.
+        BrnGameState::GameStateModuleIO::ECarSelectType meCarSelectType;
         // ADDITIVE CARVE (CrashNavEnterOnlineBase::HandleEnteringJunkyard @0x824CB070,
         // lbz mpGuiCache+0x4B74 == 1 -> "TO_CUNLOCK" else "TO_CSELECT"). ARTIST
         // GuiCache::Construct clears it; RecEvent event 73 (NewCarUnlockedAction) sets it

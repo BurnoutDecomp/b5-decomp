@@ -186,7 +186,7 @@ void ReplayClips::UpdateRunning()
          lpEvent != 0;
          liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
     {
-        if (liEventId == KI_EVENT_CONTROLLER_PRESSED && HandleControllerInputPressed(lpEvent))
+        if (liEventId == KI_EVENT_CONTROLLER_PRESSED && HandleControllerInputPressed(lpEvent) == true)
             return;
     }
 

@@ -573,7 +573,7 @@ namespace BrnPhysics
         CgsPhysics::PhysicsSimulationIO::InAddRigidBody lAddRigidBodyEvent;
         lAddRigidBodyEvent.mID              = lWorldRigidBodyId;   // std r30 -> event+0x00
         lAddRigidBodyEvent.mRigidBody       = lNewRigidBody;       // the 6x lvx128 + 6x ld/std copy
-        lAddRigidBodyEvent.mRigidBody.mbSpy = false;               // stb 0   -> event+0xA0
+        lAddRigidBodyEvent.mRigidBody.GetObjectPointer()->mbSpy = false;               // stb 0   -> event+0xA0
         lAddRigidBodyEvent.meState          = rw::physics::STATIC_BODY;  // stw 1 -> event+0xB0
         lAddRigidBodyQueue.AddEvent( lAddRigidBodyEvent );         // BaseEventQueue::AddEvent @0x825A3000
 

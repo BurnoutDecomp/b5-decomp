@@ -1,3 +1,4 @@
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCarSelectVehicle.cpp"
 // ===================================================================================
 // BrnGui::CarSelectVehicle  -- partfile 01: statics + the FSM/resource surface
 //   class:BrnGui::CarSelectVehicle
@@ -89,34 +90,6 @@ namespace BrnGui
         {
             GuiOverlayRequest mRequest;   // the OutputGuiEvent payload
             GuiOverlayRequestWire() {}
-        };
-
-        // The one-shot activate-car-select record Update posts on its first frame:
-        // { 8, 192, 12, u32 action, u32 carSelectType }, channel 40, 20 bytes.
-        //
-        // ⛔⛔ CORRECTED 2026-08-02 (car-select handover wave). This USED TO BE a single
-        // `u64 mu64CarSelectType` seeded with GetCurrentCarSelectType(), on the reading that the
-        // X360's one `std` writes "the 64-bit widened enum word". It does not -- and modelling it
-        // as a u64 SWAPS THE TWO PAYLOAD WORDS on a little-endian host.
-        //
-        // The consumer is ProcessGameEvents @0x823A0A18 case 94, which reads the payload as TWO
-        // words: `*_R25` == the car-select ACTION (0 start / 1 enter-modification / 4 exit) and
-        // `_R25[1]` == the car-select TYPE (1 junkyard / 2 online event). The X360 emitter here
-        // does `v13 = meCarSelectType` (a sign-extending 32->64 widen) then one `std`, so on a
-        // BIG-endian machine the high dword -- zero -- lands in word0 and the type lands in
-        // word1: { 0, type } == "start car select in this flow". A u64 member on x64 puts the
-        // type in word0 and zero in word1, i.e. { type, 0 } == action 1 (enter modification) with
-        // type 0 (E_CAR_SELECT_TYPE_NONE) -- the wrong action AND a type the dispatcher asserts
-        // on. Nothing had ever consumed the record, so it was invisible.
-        // Its siblings are CarSelectLivery::Update ({1, type}) and CarSelectMain::
-        // ExitCarSelection ({4, 1}, already modelled as two explicit words).
-        struct GuiActivateCarSelectWire : public CgsGui::GuiEvent<192>
-        {
-            u32 muAction;           // +0x0C (X360 word0: 0 == start car select)
-            u32 muCarSelectType;    // +0x10 (X360 word1: GsmIO::ECarSelectType)
-            GuiActivateCarSelectWire()
-                : muAction(0)
-                , muCarSelectType(0) {}
         };
 
         // ---- in-queue payload views (the queue delivers the header-stripped payload) ----
@@ -375,12 +348,14 @@ namespace BrnGui
 
         if (mbFirstFrame)
         {
-            CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:319
+            CGS_ASSERT(mpGuiCache != 0,
+                       CGS_ASSERT_MESSAGE_AT("mpGuiCache", CGS_ARTIST_FILE, 319));
 
-            GuiActivateCarSelectWire lCarSelectType;
-            lCarSelectType.muAction        = 0;   // X360 word0 == the sign-extension, i.e. "start"
-            lCarSelectType.muCarSelectType =
-                static_cast<u32>(mpGuiCache->GetCurrentCarSelectType());
+            const BrnGameState::GameStateModuleIO::ECarSelectType leCarSelectType =
+                mpGuiCache->GetCurrentCarSelectType();
+            GuiEventActivateCarSelect lCarSelectType;
+            lCarSelectType.meState = BrnGameState::GameStateModuleIO::E_CAR_SELECT_STATE_MODEL;
+            lCarSelectType.meCarSelectType = leCarSelectType;
             mpStateInterface->OutputGuiEvent(lCarSelectType);
 
             mbFirstFrame = false;
@@ -1784,3 +1759,5 @@ namespace BrnGui
         }
     }
 }
+
+#undef CGS_ARTIST_FILE

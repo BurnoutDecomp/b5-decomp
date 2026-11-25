@@ -130,7 +130,7 @@ namespace Deformation
     // Already forward-declared by BrnPhysicalBodyPart.h (re-stated here for local clarity):
     struct IKBodyPart;                // static IK rig spec (CreatePart arg). Owned by BrnIKBodyPart.h.
     class DeformableObject;          // owning deformable model (CreatePart arg). Owned by BrnDeformableObject.h.
-    struct OutUpdateRigidBody;       // per-frame rigid-body update event (UpdatePart). FLAG: forward-declared.
+    class OutUpdateRigidBody;       // per-frame rigid-body update event (UpdatePart). FLAG: forward-declared.
 
     // ⭐ THE FORK IS RETIRED 2026-09-06 (contact-spy wave). This was a PHANTOM
     // Deformation::ContactSpyData sharing only a name with the real

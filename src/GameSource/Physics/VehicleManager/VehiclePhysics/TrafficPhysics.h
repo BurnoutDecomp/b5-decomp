@@ -88,7 +88,7 @@ namespace Vehicle
 {
     // VehicleAttribs / BrnPlayerDriverControls / StreamedDeformationSpec are already declared by the
     // included VehiclePhysics.h (the per-TU minimal-slice pattern). Only the spawn-event type is new:
-    struct CreatePhysicalTrafficEvent;     // the spawn event (mOwnerID read from it @ +8)
+    class CreatePhysicalTrafficEvent;     // the spawn event (mOwnerID read from it @ +8)
 
     class TrafficPhysics : public VehiclePhysics
     {

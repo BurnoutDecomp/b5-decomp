@@ -89,28 +89,6 @@ namespace BrnGui
         // 20 bytes -- exactly what StateInterface::PlayAptMovie builds.
         // (Posted through PlayAptMovie below rather than open-coded.)
 
-        // Update's one-shot activate-car-select record: { 8, 192, 12, u32 action,
-        // u32 carSelectType }, channel 40, 20 bytes.
-        //
-        // ⚠️ TWO EXPLICIT WORDS, NOT ONE u64. The X360 builds the pair with
-        // `LODWORD = meCarSelectType; HIDWORD = 1; std` -- one big-endian 64-bit store of a
-        // two-word record, so word0 == 1 and word1 == the type. Modelling it as a single u64
-        // on a little-endian host SWAPS THE HALVES; that exact bug was found in this screen's
-        // sibling (BrnCarSelectVehicle) on 2026-08-02 and it emitted the wrong action with a
-        // type the game-state dispatcher asserts on.
-        // The consumer is GameStateModule::ProcessGameEvents @0x823A0A18 case 94:
-        // *_R25 == the ACTION (0 start / 1 enter-modification / 4 exit) and _R25[1] == the
-        // car-select TYPE (1 junkyard / 2 online). This screen's action is 1 -- entering the
-        // livery screen IS entering car modification.
-        struct GuiActivateCarSelectWire : public CgsGui::GuiEvent<192>
-        {
-            u32 muAction;           // +0x0C (X360 word0 == 1, enter modification)
-            u32 muCarSelectType;    // +0x10 (X360 word1 == GsmIO::ECarSelectType)
-            GuiActivateCarSelectWire()
-                : muAction(0)
-                , muCarSelectType(0) {}
-        };
-
         // ---- in-queue payload views (the queue delivers the header-stripped payload) ----
 
         // Event 82 (online countdown time): one float at +0x00.
@@ -312,12 +290,14 @@ namespace BrnGui
 
         if (mbFirstFrame)
         {
-            CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:239
+            CGS_ASSERT(mpGuiCache != 0,
+                       CGS_ASSERT_MESSAGE_AT("mpGuiCache", CGS_ARTIST_FILE, 239));
 
-            GuiActivateCarSelectWire lCarSelectType;
-            lCarSelectType.muAction        = 1;   // X360 HIDWORD == 1 (enter modification)
-            lCarSelectType.muCarSelectType =
-                static_cast<u32>(mpGuiCache->GetCurrentCarSelectType());
+            const BrnGameState::GameStateModuleIO::ECarSelectType leCarSelectType =
+                mpGuiCache->GetCurrentCarSelectType();
+            GuiEventActivateCarSelect lCarSelectType;
+            lCarSelectType.meState = BrnGameState::GameStateModuleIO::E_CAR_SELECT_STATE_LIVERY;
+            lCarSelectType.meCarSelectType = leCarSelectType;
             mpStateInterface->OutputGuiEvent(lCarSelectType);
 
             mbFirstFrame = false;

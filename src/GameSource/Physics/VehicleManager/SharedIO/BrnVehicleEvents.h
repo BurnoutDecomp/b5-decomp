@@ -216,8 +216,9 @@ namespace Vehicle
     };
 
     // Spawn a physical traffic vehicle.
-    struct CGS_ALIGN(16) CreatePhysicalTrafficEvent
+    class CGS_ALIGN(16) CreatePhysicalTrafficEvent
     {
+    public:
         VolumeInstanceId   mVolumeInstanceID;
         EntityId           mCrasherID;
         Matrix44Affine     mInitialTransform;
@@ -247,8 +248,9 @@ namespace Vehicle
     };
 
     // Spawn a race car (player/AI/network).
-    struct CGS_ALIGN(16) CreateRaceCarEvent
+    class CGS_ALIGN(16) CreateRaceCarEvent
     {
+    public:
         VolumeInstanceId       mVolumeInstanceID;
         Matrix44Affine         mInitialTransform;
         Vector3                mInitialVelocity;
@@ -301,8 +303,9 @@ namespace Vehicle
     };
 
     // Reset a vehicle's transform/velocity/deformation (e.g. after a wreck).
-    struct CGS_ALIGN(16) ResetVehicleEvent
+    class CGS_ALIGN(16) ResetVehicleEvent
     {
+    public:
         u32            miRaceCarIndex;
         Matrix44Affine mInitialTransform;
         Vector3        mInitialVelocity;
@@ -373,8 +376,9 @@ namespace Vehicle
         EntityId         mCrasherEntityID;
     };
 
-    struct CGS_ALIGN(16) UpdateNetworkTrafficEvent
+    class CGS_ALIGN(16) UpdateNetworkTrafficEvent
     {
+    public:
         VolumeInstanceId mVolumeInstanceID;
         Matrix44Affine   mTransform;
     };
@@ -413,8 +417,9 @@ namespace Vehicle
 
     // Spawn an articulated (cab + trailer) traffic vehicle. The cab/trailer halves
     // are split into two CreatePhysicalTrafficEvents downstream.
-    struct CGS_ALIGN(16) CreateArticulatedTrafficEvent
+    class CGS_ALIGN(16) CreateArticulatedTrafficEvent
     {
+    public:
         Matrix44Affine mInitialTransform_Cab;
         Matrix44Affine mInitialTransform_Trailer;
         Vector3        mInitialVelocity_Cab;

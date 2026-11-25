@@ -85,7 +85,7 @@ namespace BrnGui
     // RECOVERED 2026-09-10 from the .rdata pointer table @0x82F251E0 (tools/re/x360rd.py): entries [0] and [1] were attested (the asm comments them as
     // "$CN_PANEL_FILTER" @0x824403F4 and "$CN_PANEL_TYPE" @0x824405A8); entry [2]'s pointer
     // (0x820046A7) is the image's shared empty string, so the third caption is "".
-    static const char* KAPC_OPTION_HEADINGS[3] =
+    const char* CrashNavPanel::KAPC_OPTION_HEADINGS[3] =
     {
         "$CN_PANEL_FILTER",   // [0] @0x82F251E0
         "$CN_PANEL_TYPE",     // [1] @0x82F251E4
@@ -98,7 +98,7 @@ namespace BrnGui
     // is passed WHOLE to SetupToggle; the other three pointers (0x82049300 / 0x820492E8 /
     // 0x820492D4) resolve to the string ids below -- until they were read the drive-thru /
     // road-rule / rival captions rendered EMPTY on the crash-nav filter row.
-    static const char* KAPC_TOP_LEVEL_OPTION_LABELS[4] =
+    const char* CrashNavPanel::KAPC_TOP_LEVEL_OPTION_LABELS[4] =
     {
         "$CN_PANEL_EVENTS",   // [0] @0x82F251EC  (E_PANEL_EVENT)
         "$CN_PANEL_DRIVETHRUS", // [1] @0x82F251F0 -> 0x82049300 (E_PANEL_DRIVETHRU) -- read from the image 2026-09-10
@@ -111,7 +111,7 @@ namespace BrnGui
     // RECOVERED 2026-09-10 from the .rdata pointer table @0x82F251FC: [0] "Invisible" and [1] "transIn" are attested by the asm comment
     // pair at 0x824408B0/0x824408B4; [2] (IDLE) and [3] (TRANS_OUT) have no reader in any
     // recovered body -- SetAnimState, their only consumer, has no X360 symbol at all.
-    static const char* mpacAnimationStrings[CrashNavPanel::E_ANIMSTATE_COUNT] =
+    const char* CrashNavPanel::mpacAnimationStrings[CrashNavPanel::E_ANIMSTATE_COUNT] =
     {
         "Invisible",   // [0] E_ANIMSTATE_INVISIBLE @0x82F251FC
         "transIn",     // [1] E_ANIMSTATE_TRANS_IN  @0x82F25200
@@ -279,12 +279,11 @@ namespace BrnGui
         lpInEventRow->SetHighlightable(false);   // vtable slot 1
         lpInEventRow->SetSelectable(false);      // vtable slot 2
 
-        MenuToggle* const lpTopRow = mFilterToggles.GetSelectable(KI_TOGGLE_TOP_LEVEL);
-
         if (mpGuiCache->IsOnlineStartInProgress())   // lbz mpGuiCache+0x4B4C
         {
             // Online: the offline-only filters (events, drive-thrus) are struck out.
-            Selectable* lpOption = lpTopRow->mItemText.GetSelectable(E_PANEL_EVENT);
+            Selectable* lpOption = mFilterToggles.GetSelectable(KI_TOGGLE_TOP_LEVEL)
+                                   ->mItemText.GetSelectable(E_PANEL_EVENT);
             lpOption->SetActive(false);
             lpOption->SetSelectable(false);
 
@@ -296,7 +295,8 @@ namespace BrnGui
         else
         {
             // Offline: the rivals filter is struck out.
-            Selectable* lpOption = lpTopRow->mItemText.GetSelectable(E_PANEL_RIVALS);
+            Selectable* lpOption = mFilterToggles.GetSelectable(KI_TOGGLE_TOP_LEVEL)
+                                   ->mItemText.GetSelectable(E_PANEL_RIVALS);
             lpOption->SetActive(false);
             lpOption->SetSelectable(false);
 

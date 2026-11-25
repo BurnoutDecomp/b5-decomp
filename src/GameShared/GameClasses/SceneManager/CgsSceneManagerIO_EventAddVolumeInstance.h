@@ -36,8 +36,9 @@ namespace SceneManagerIO
     struct EventBaseAddVolumeInstance {};
 
     // mAddVolumeInstanceQueue element. 16-byte aligned (carries an rw Matrix44Affine).
-    struct CGS_ALIGN(16) InEventAddVolumeInstance : public EventBaseAddVolumeInstance
+    class CGS_ALIGN(16) InEventAddVolumeInstance : public EventBaseAddVolumeInstance
     {
+    public:
         VolumeInstanceId             mVolumeInstanceId; // +0x00 (:139)
         VolumeId                     mVolumeId;         // +0x08 (:140)
         rw::math::vpu::Matrix44Affine mTransform;       // +0x10 (:141)

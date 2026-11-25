@@ -54,8 +54,7 @@ namespace CgsModule
                     CGS_ASSERT_LOCATION(KAC_BASE_EVENT_QUEUE_FILE, 313));
                 CgsDev::Assert::EndAssert();
             }
-            mpEvents[miLength] = lEvent;
-            ++miLength;
+            mpEvents[miLength++] = lEvent;
             return true;
         }
 
@@ -85,8 +84,7 @@ namespace CgsModule
             // inside the room test and the false return follows it.
             if (miLength < miMaxLength)
             {
-                mpEvents[miLength] = lEvent;
-                ++miLength;
+                mpEvents[miLength++] = lEvent;
                 return true;
             }
             return false;
@@ -137,13 +135,13 @@ namespace CgsModule
         {
             CGS_ASSERT(mpEvents != 0, CGS_ASSERT_MESSAGE_AT(
                 "mpEvents != NULL", KAC_BASE_EVENT_QUEUE_FILE, 381));
-            if (miLength >= miMaxLength)
+            if (miLength < miMaxLength)
             {
-                return 0;
+                T* const lpEvent = &mpEvents[miLength];
+                ++miLength;
+                return lpEvent;
             }
-            s32 liIndex = miLength;
-            ++miLength;
-            return &mpEvents[liIndex];
+            return 0;
         }
 
         // Checked element accessor, const overload (X360 BaseEventQueue<T>::GetEvent(int) const,

@@ -1303,8 +1303,8 @@ namespace CgsPhysics
             // ld/std for the inertia) and works from the copy. Kept: AddBody stores the
             // inertia by value, so aliasing the queue element would be a different program if
             // the queue were ever mutated mid-drain.
-            const rw::math::vpu::Matrix44Affine lTransform = lrEvent.mRigidBody.mTransform;
-            const rw::physics::Inertia          lInertia   = lrEvent.mRigidBody.mInertia;
+            const rw::math::vpu::Matrix44Affine lTransform = lrEvent.mRigidBody.GetObjectPointer()->mTransform;
+            const rw::physics::Inertia          lInertia   = lrEvent.mRigidBody.GetObjectPointer()->mInertia;
 
             // ---- debug scan 2: the id must not already be live in the simulation ----------
             // 0x828A28C0..0x828A2AA4: a full 200-slot walk of maGameIDs (offsets 800..2400).
@@ -1328,7 +1328,7 @@ namespace CgsPhysics
             // instead would look tidier and would reorder the two writes.
             const s32 liBodyIndex = mBodyData.AddBody(
                 0,
-                RigidBodyId(lrEvent.mID),
+                lrEvent.mID,
                 lInertia);
             CGS_ASSERT(liBodyIndex != -1, "liBodyIndex != -1");   // .cpp:1065
 
@@ -1355,11 +1355,11 @@ namespace CgsPhysics
             // redundant in the original source too; kept because it is what executes.
             lpBody->SetSpy(true);
 
-            lpBody->SetLinearVelocity(lrEvent.mRigidBody.mVelocity);          // mVel   (+0x20) .xyz
-            lpBody->SetAngularVelocity(lrEvent.mRigidBody.mAngularVelocity);  // mOmega (+0x30) .xyz
+            lpBody->SetLinearVelocity(lrEvent.mRigidBody.GetObjectPointer()->mVelocity);          // mVel   (+0x20) .xyz
+            lpBody->SetAngularVelocity(lrEvent.mRigidBody.GetObjectPointer()->mAngularVelocity);  // mOmega (+0x30) .xyz
 
             // `lbz mbSpy` ; `beq` -> `clrlwi r11,r11,29` else `ori r11,r11,8` == SetSpy(bool).
-            lpBody->SetSpy(lrEvent.mRigidBody.mbSpy);
+            lpBody->SetSpy(lrEvent.mRigidBody.GetObjectPointer()->mbSpy);
 
             // `stw r31, 0x6C(r3)` -- mTag carries the module's slot index, which is how the
             // output side maps a body back to its RigidBodyData entry.

@@ -43,8 +43,9 @@ namespace BrnPhysics
         // ⭐ On the host the two pointer-pairs widen (handle 8->16, mpVehiclePhysics 4->8) and the
         // record becomes 176 -- and every SIMD member lands back on its EXACT console offset
         // (+0x20/+0x30/+0x70/+0x80), which the pre-widening 160-byte host layout did NOT.
-        struct CGS_ALIGN(16) AddDeformationModelEvent
+        class CGS_ALIGN(16) AddDeformationModelEvent
         {
+        public:
             ResourceHandle             mModelHandle;
             RigidBodyId                mHandlingBodyID;
             EntityId                   mGlobalEntityId;
@@ -110,8 +111,9 @@ namespace BrnPhysics
         // 64-byte Matrix44Affine in four 16-byte SIMD stores (offsets +0/+16/+32/+48), then the
         // two scalar dwords at +64/+68 and the bool at +72 — i.e. stride 80 (0x50). alignas(16):
         // carries a Matrix44Affine (SIMD) and the owning queue's inline buffer is 16-byte aligned.
-        struct CGS_ALIGN(16) DetachedPartRenderEvent
+        class CGS_ALIGN(16) DetachedPartRenderEvent
         {
+        public:
             Matrix44Affine mTransform;        // +0x00  (4x Vector3 lane = 64 bytes)
             EntityId       mVehicleEntityId;  // +0x40
             s32            miPartIndex;       // +0x44

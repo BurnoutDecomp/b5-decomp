@@ -131,7 +131,7 @@ namespace Deformation
     // Per-frame physics solver event the part pool feeds to Update (the post-physics rigid-body
     // transform/velocity update). Owned by the sim-output TU; referenced by pointer only. FLAG:
     // forward-declared (definition not homed in this family).
-    struct OutUpdateRigidBody;
+    class OutUpdateRigidBody;
 
     // A single potential contact handed to AddContact. ⭐ 2026-09-05 (hinge-geometry wave): this
     // is THE scene-manager record, not a deformation-local type -- an ALIAS, homed at

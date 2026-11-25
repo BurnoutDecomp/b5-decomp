@@ -37,7 +37,7 @@ namespace CgsSceneManager { namespace SceneManagerIO { struct InputBuffer_Update
 namespace BrnPhysics { namespace Props { struct PropInputInterface; } }
 // (CgsSceneManager::EntityId arrives complete through CgsRigidBody.h -> CgsEntityId.h.)
 namespace CgsMemory { class LinearMalloc; }
-namespace CgsPhysics { namespace PhysicsSimulationIO { struct OutUpdateRigidBody; } }
+namespace CgsPhysics { namespace PhysicsSimulationIO { class OutUpdateRigidBody; } }
 namespace BrnPhysics { namespace PhysicsModuleIO { class OutputBuffer; struct PotentialContactInterface; } }
 // ⭐ ADDED 2026-08-18 (breakable-props keystone). Pointer/reference use only; class keys match
 // each committed home:

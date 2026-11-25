@@ -288,7 +288,7 @@ extern bool KB_DO_NOT_FAIL_IF_RIGID_BODY_NOT_FOUND;
 // C4099 apiece and, more to the point, a second reading of what those names are.
 // CreatePhysicalTrafficEvent and RaceCarPhysics keep their forward declarations (neither header is
 // pulled in here; only pointers/refs to them appear).
-struct CreatePhysicalTrafficEvent;   // spawn event -- SharedIO/BrnVehicleEvents.h
+class CreatePhysicalTrafficEvent;   // spawn event -- SharedIO/BrnVehicleEvents.h
 struct CreateAirRamEvent;            // air-ram event -- SharedIO/BrnVehicleEvents.h (ProcessAddAirRamEvent arg)
 class  RaceCarPhysics;               // the checking race car -- RaceCarPhysics.h
 // The two create/remove drain element types. Only
@@ -296,8 +296,8 @@ class  RaceCarPhysics;               // the checking race car -- RaceCarPhysics.
 // BrnVehicleEvents.h stays out of this header. Class keys checked against their single home
 // (SharedIO/BrnVehicleEvents.h:300 / :409) -- MSVC mangles struct vs class.
 struct RemoveTrafficEvent;
-struct CreateArticulatedTrafficEvent;
-struct UpdateNetworkTrafficEvent;    // network transform event -- SharedIO/BrnVehicleEvents.h
+class CreateArticulatedTrafficEvent;
+class UpdateNetworkTrafficEvent;    // network transform event -- SharedIO/BrnVehicleEvents.h
                                      // (UpdateNetworkTrafficVehicle arg)
 
 // SimpleVehiclePhysics: the per-vehicle physics body, pointed at by mpVehicleBody and by

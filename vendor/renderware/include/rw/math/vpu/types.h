@@ -92,6 +92,16 @@ namespace vpu
         Matrix44Affine(const Matrix44Affine& lrMatrix)
             : xAxis(lrMatrix.xAxis), yAxis(lrMatrix.yAxis),
               zAxis(lrMatrix.zAxis), wAxis(lrMatrix.wAxis) {}
+        // Original SDK matrix44affine_type_inline.h:26 copies all four raw SIMD rows.
+        Matrix44Affine& operator=(const Matrix44Affine& lrMatrix)
+        {
+            xAxis.mV = lrMatrix.xAxis.mV;
+            yAxis.mV = lrMatrix.yAxis.mV;
+            zAxis.mV = lrMatrix.zAxis.mV;
+            wAxis.mV = lrMatrix.wAxis.mV;
+            return *this;
+        }
+
         Matrix44Affine(Vector3 lxAxis, Vector3 lyAxis, Vector3 lzAxis, Vector3 lwAxis)
             : xAxis(lxAxis), yAxis(lyAxis), zAxis(lzAxis), wAxis(lwAxis) {}
         void SetZero() { xAxis.SetZero(); yAxis.SetZero(); zAxis.SetZero(); wAxis.SetZero(); }

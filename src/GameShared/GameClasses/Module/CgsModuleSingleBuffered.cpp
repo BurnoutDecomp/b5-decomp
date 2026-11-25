@@ -1,6 +1,9 @@
 #include "CgsModuleSingleBuffered.h"
 
 #include <GameShared/GameClasses/Core/CgsAssertMessageAt.h>
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
+static const char KAC_CGS_MODULE_SINGLE_BUFFERED_ASSERT_HEADER[] =
+    "..\\..\\..\\GameShared\\GameClasses\\Module/CgsModuleSingleBuffered.h";
 static const char KAC_CGS_MODULE_SINGLE_BUFFERED_ASSERT_FILE[] = "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleSingleBuffered.cpp"; // ARTIST filename 0x820E84E8
 void CgsModule::ModuleSingleBuffered::Construct()
 {
@@ -170,41 +173,49 @@ void CgsModule::ModuleSingleBuffered::SetMultiThreaded(bool isMultiThreaded)
 
 void CgsModule::ModuleSingleBuffered::LockForInput()
 {
-    CGS_ASSERT(!mbIsNewModule, "This is an old module type - must use old lock/unlock etc etc\n");
-    mInputBuffer.LockForWrite();
-    mpInputStructure = mInputBuffer.GetDataStructure();
+    CGS_ASSERT_STREAM_AT(!mbIsNewModule,
+        "This is an old module type - must use old lock/unlock etc etc\n",
+        KAC_CGS_MODULE_SINGLE_BUFFERED_ASSERT_FILE, 384);
+    LockInputForWrite();
 }
 
 void CgsModule::ModuleSingleBuffered::UnlockForInput()
 {
-    CGS_ASSERT(!mbIsNewModule, "This is an old module type - must use old lock/unlock etc etc\n");
-    mInputBuffer.UnlockForWrite();
-    mpInputStructure = 0;
+    CGS_ASSERT_STREAM_AT(!mbIsNewModule,
+        "This is an old module type - must use old lock/unlock etc etc\n",
+        KAC_CGS_MODULE_SINGLE_BUFFERED_ASSERT_FILE, 400);
+    UnlockInputForWrite();
 }
 
 void CgsModule::ModuleSingleBuffered::LockForOutput()
 {
-    CGS_ASSERT(!mbIsNewModule, "This is an old module type - must use old lock/unlock etc etc\n");
-    mOutputBuffer.LockForRead();
-    mpOutputStructure = mOutputBuffer.GetDataStructure();
+    CGS_ASSERT_STREAM_AT(!mbIsNewModule,
+        "This is an old module type - must use old lock/unlock etc etc\n",
+        KAC_CGS_MODULE_SINGLE_BUFFERED_ASSERT_FILE, 416);
+    LockOutputForRead();
 }
 
 void CgsModule::ModuleSingleBuffered::UnlockForOutput()
 {
-    CGS_ASSERT(!mbIsNewModule, "This is an old module type - must use old lock/unlock etc etc\n");
-    mOutputBuffer.UnlockForRead();
-    mpOutputStructure = 0;
+    CGS_ASSERT_STREAM_AT(!mbIsNewModule,
+        "This is an old module type - must use old lock/unlock etc etc\n",
+        KAC_CGS_MODULE_SINGLE_BUFFERED_ASSERT_FILE, 432);
+    UnlockOutputForRead();
 }
 
 CgsModule::DataStructure* CgsModule::ModuleSingleBuffered::GetInputStructure() const
 {
-    CGS_ASSERT(!mbIsNewModule, "This is an old module type - must use old lock/unlock etc etc\n");
+    CGS_ASSERT_STREAM_AT(!mbIsNewModule,
+        "This is an old module type - must use old lock/unlock etc etc\n",
+        KAC_CGS_MODULE_SINGLE_BUFFERED_ASSERT_HEADER, 354);
     return mpInputStructure;
 }
 
 CgsModule::DataStructure* CgsModule::ModuleSingleBuffered::GetOutputStructure() const
 {
-    CGS_ASSERT(!mbIsNewModule, "This is an old module type - must use old lock/unlock etc etc\n");
+    CGS_ASSERT_STREAM_AT(!mbIsNewModule,
+        "This is an old module type - must use old lock/unlock etc etc\n",
+        KAC_CGS_MODULE_SINGLE_BUFFERED_ASSERT_HEADER, 370);
     return mpOutputStructure;
 }
 

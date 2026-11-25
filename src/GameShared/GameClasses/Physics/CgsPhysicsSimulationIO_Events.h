@@ -51,7 +51,9 @@
 #include <cstddef>   // offsetof (the layout pins)
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Physics/CgsRigidBody.h"
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"
+#include "GameShared/GameClasses/Containers/CgsNonConstructedClassContainer.h"
 #include "rw/math/vpu/types.h"      // Matrix44Affine / Vector3  (NewRigidBody)
 #include "rw/physics/inertia.h"     // rw::physics::Inertia      (NewRigidBody)
 #include "rw/physics/rigidbody.h"   // rw::physics::BodyState    (InAddRigidBody::meState)
@@ -265,19 +267,14 @@ namespace PhysicsSimulationIO
     // a word at +176 (meState). The DWARF field order lands on exactly those offsets, and the
     // total falls out at 176 + 4 -> **192, the attested stride**, with nothing invented.
     //
-    // ⚠️ mID IS TYPED u64, NOT CgsPhysics::RigidBodyId -- the same deliberate choice as
-    // InAddJoint's three handles above, but ⭐ NO LONGER FOR THE SAME REASON. RigidBodyId was
-    // defined twice in this tree (CgsRigidBody.h:24 and CgsPhysicsSimulationModule.h) and
-    // pulling either header in would have been a hard C2011; the fork was retired on 2026-08-04
-    // (task #141) and that collision is gone. Promoting this field is now merely a ~30-TU type
-    // change that wants its own build + boot test. It is one u64 in both readings, so the width
-    // and the stores are identical meanwhile.
-    class CGS_ALIGN(16) InAddRigidBody : public Event   // class key: ARTIST's decorated names (VInAddRigidBody)
+    // The typed ID and raw NewRigidBody container match DecFIGS lines 69 and 70.
+    // The queue byte copy at ARTIST 0x825A312C preserves the 192-byte record.
+    class CGS_ALIGN(16) InAddRigidBody : public Event
     {
     public:
-        u64          mID;          // @+0x00  DWARF :69 (a CgsPhysics::RigidBodyId handle)
-        NewRigidBody mRigidBody;   // @+0x10  DWARF :70 (NonConstructedClassContainer -- raw storage)
-        rw::physics::BodyState meState;  // @+0xB0 (176) DWARF :71
+        RigidBodyId mID;
+        NonConstructedClassContainer<NewRigidBody> mRigidBody;
+        rw::physics::BodyState meState;
     };
     CGS_STATIC_ASSERT((sizeof(InAddRigidBody) == 192), "InAddRigidBody stride 192 (AddEvent @0x825A3000)");
     CGS_STATIC_ASSERT((offsetof(InAddRigidBody, mID)       == 0),   "mID @+0x00 (asm ld 0(event))");
@@ -437,10 +434,10 @@ namespace PhysicsSimulationIO
     // below is therefore the ADJACENCY form (16 + sizeof(RigidBody)) -- on the console that
     // evaluates to the attested 192, on the host it tracks the widened body -- plus the
     // offsetof pin that catches a transposed id/payload.
-    struct CGS_ALIGN(16) InUpdateRigidBody : public Event
+    class CGS_ALIGN(16) InUpdateRigidBody : public Event
     {
-        u64                    mID;         // @+0x00  DWARF :86 (a CgsPhysics::RigidBodyId handle)
-        u64                    mIDPad;      // @+0x08  pad to the payload's 16-byte slot
+    public:
+        RigidBodyId                    mID;         // @+0x00  DWARF :86 (a CgsPhysics::RigidBodyId handle)
         rw::physics::RigidBody mRigidBody;  // @+0x10  DWARF :87 -- BY VALUE, the operator= source
     };
 
@@ -741,10 +738,10 @@ namespace PhysicsSimulationIO
     // a serialized record; the queue machinery is sizeof-driven end to end). The pin below is the
     // ADJACENCY form: 16 (id slot) + sizeof(RigidBody) == the attested 192 on the console's 4-byte
     // ABI, and it tracks the widened body on the host.
-    struct CGS_ALIGN(16) OutUpdateRigidBody : public Event
+    class CGS_ALIGN(16) OutUpdateRigidBody : public Event
     {
-        u64                    mID;         // @+0x00  DWARF :358 (a CgsPhysics::RigidBodyId handle)
-        u64                    mIDPad;      // @+0x08  pad to the payload's 16-byte slot
+    public:
+        RigidBodyId                    mID;         // @+0x00  DWARF :358 (a CgsPhysics::RigidBodyId handle)
         rw::physics::RigidBody mRigidBody;  // @+0x10  DWARF :359 -- BY VALUE, the operator= target
     };
 

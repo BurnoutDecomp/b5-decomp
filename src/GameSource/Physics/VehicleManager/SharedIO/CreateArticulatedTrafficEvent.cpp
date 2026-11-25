@@ -1,5 +1,4 @@
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"
-#include <cstring>
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
 // ARTIST8270BF70 copies through meTrafficType; trailing alignment bytes are untouched.
@@ -10,12 +9,12 @@ namespace Vehicle
     CreateArticulatedTrafficEvent&
     CreateArticulatedTrafficEvent::operator=(const CreateArticulatedTrafficEvent& lrOther)
     {
-        std::memcpy(&mInitialTransform_Cab, &lrOther.mInitialTransform_Cab, sizeof(mInitialTransform_Cab));
-        std::memcpy(&mInitialTransform_Trailer, &lrOther.mInitialTransform_Trailer, sizeof(mInitialTransform_Trailer));
-        std::memcpy(&mInitialVelocity_Cab, &lrOther.mInitialVelocity_Cab, sizeof(mInitialVelocity_Cab));
-        std::memcpy(&mInitialVelocity_Trailer, &lrOther.mInitialVelocity_Trailer, sizeof(mInitialVelocity_Trailer));
-        std::memcpy(&mAngularVelocity_Cab, &lrOther.mAngularVelocity_Cab, sizeof(mAngularVelocity_Cab));
-        std::memcpy(&mAngularVelocity_Trailer, &lrOther.mAngularVelocity_Trailer, sizeof(mAngularVelocity_Trailer));
+        mInitialTransform_Cab = lrOther.mInitialTransform_Cab;
+        mInitialTransform_Trailer = lrOther.mInitialTransform_Trailer;
+        mInitialVelocity_Cab = lrOther.mInitialVelocity_Cab;
+        mInitialVelocity_Trailer = lrOther.mInitialVelocity_Trailer;
+        mAngularVelocity_Cab = lrOther.mAngularVelocity_Cab;
+        mAngularVelocity_Trailer = lrOther.mAngularVelocity_Trailer;
         mVolumeInstanceID_Cab = lrOther.mVolumeInstanceID_Cab;
         mVolumeInstanceID_Trailer = lrOther.mVolumeInstanceID_Trailer;
         mAssetAttribKey_Cab = lrOther.mAssetAttribKey_Cab;

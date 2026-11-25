@@ -155,7 +155,7 @@ namespace Deformation
     class  PhysicalBodyPart;
     struct PenetrationSolver;
     struct CarState;
-    struct OutUpdateRigidBody;       // per-frame rigid-body update event (UpdateHandlingBody). FLAG: forward-declared.
+    class OutUpdateRigidBody;       // per-frame rigid-body update event (UpdateHandlingBody). FLAG: forward-declared.
     // ⭐⭐ 2026-08-27 (detach-3 wave): was `struct InTriangleCacheInterface;` -- a declare-only fork
     // with no definition anywhere in the tree. ALIASED to the real homed type, which is the SAME
     // spelling BrnVehicleInputInterface.h:33 already uses for the DWARF's nested name:

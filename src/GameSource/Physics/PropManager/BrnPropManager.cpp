@@ -6863,8 +6863,8 @@ void PropManager::CreatePart( PropEntityID                                      
     // ships with those bytes as stack garbage, exactly as it does on the console.
     CgsPhysics::PhysicsSimulationIO::InAddRigidBody lSimulationAddBodyEvent;
 
-    lSimulationAddBodyEvent.mRigidBody.mVelocity        = lLinearVelocity;
-    lSimulationAddBodyEvent.mRigidBody.mAngularVelocity = lAngularVelocity;
+    lSimulationAddBodyEvent.mRigidBody.GetObjectPointer()->mVelocity        = lLinearVelocity;
+    lSimulationAddBodyEvent.mRigidBody.GetObjectPointer()->mAngularVelocity = lAngularVelocity;
 
     // ⚠️⚠️ MEASURED CROSS-WIRING -- transcribed as it is, NOT "corrected". Two independent facts
     // meet here and both are solid:
@@ -6883,15 +6883,15 @@ void PropManager::CreatePart( PropEntityID                                      
     // one-off. Whether the shipped SOURCE crossed the two arguments or one of the two name maps
     // above is mislabelled is NOT decidable from the asm, and this file does not decide it: what is
     // reproduced is the stores. If a later wave settles it, fix it in ONE place with the evidence.
-    lSimulationAddBodyEvent.mRigidBody.mInertia.SetMaxLinearVelocity(  KF_PROP_MAX_ANGULAR_VEL ); // -> +0x18
-    lSimulationAddBodyEvent.mRigidBody.mInertia.SetMaxAngularVelocity( KF_PROP_MAX_LINEAR_VEL );  // -> +0x1C
-    lSimulationAddBodyEvent.mRigidBody.mInertia.SetLinearDrag(  KF_PROP_LINEAR_DRAG );            // -> +0x20
-    lSimulationAddBodyEvent.mRigidBody.mInertia.SetAngularDrag( KF_PROP_ANGULAR_DRAG );           // -> +0x24
+    lSimulationAddBodyEvent.mRigidBody.GetObjectPointer()->mInertia.SetMaxLinearVelocity(  KF_PROP_MAX_ANGULAR_VEL ); // -> +0x18
+    lSimulationAddBodyEvent.mRigidBody.GetObjectPointer()->mInertia.SetMaxAngularVelocity( KF_PROP_MAX_LINEAR_VEL );  // -> +0x1C
+    lSimulationAddBodyEvent.mRigidBody.GetObjectPointer()->mInertia.SetLinearDrag(  KF_PROP_LINEAR_DRAG );            // -> +0x20
+    lSimulationAddBodyEvent.mRigidBody.GetObjectPointer()->mInertia.SetAngularDrag( KF_PROP_ANGULAR_DRAG );           // -> +0x24
     // (KF_PROP_RESTITUTION @0x82F2A398 is the fifth of that rodata run and is NOT read anywhere in
     //  these 382 instructions -- stated because the sibling AddPropToSim banner says "the five
     //  KF_PROP_* scalars"; here it is four.)
 
-    lSimulationAddBodyEvent.mRigidBody.mbSpy = false;                       // `stb 0` 0x82627D0C
+    lSimulationAddBodyEvent.mRigidBody.GetObjectPointer()->mbSpy = false;                       // `stb 0` 0x82627D0C
     // `stw r11(=4)` 0x82627CFC. 4 == rw::physics::ACTIVE_BODY (rigidbody.h:79).
     lSimulationAddBodyEvent.meState = rw::physics::ACTIVE_BODY;
 
@@ -6913,12 +6913,12 @@ void PropManager::CreatePart( PropEntityID                                      
         | static_cast<u64>( static_cast<u16>( liPropPartIndex ) ) );
 
     lSimulationAddBodyEvent.mID = lRigidBodyId;
-    lSimulationAddBodyEvent.mRigidBody.mTransform = lTransform;
+    lSimulationAddBodyEvent.mRigidBody.GetObjectPointer()->mTransform = lTransform;
 
     // 0x82627D5C/0x82627D78 `lfs f0, 0x20(r31)` == PropPartTypeData::mfMass (console +0x20) then
     // `fdivs f0, f31, f0` with f31 == flt_82001C98 == 1.0f (byte-verified in the tree at
     // rw/physics/inertia.h:63).
-    lSimulationAddBodyEvent.mRigidBody.mInertia.SetInverseMass( 1.0f / lpPartType->GetMass() );
+    lSimulationAddBodyEvent.mRigidBody.GetObjectPointer()->mInertia.SetInverseMass( 1.0f / lpPartType->GetMass() );
 
     // :914 / :845. `bl PropManager::GetPartInertia @0x82612AC8` returns Vector3 through the hidden
     // pointer in r3 (r4 = this, r5 = lpPartType) -- a normal by-value return here.
@@ -6955,7 +6955,7 @@ void PropManager::CreatePart( PropEntityID                                      
     //    quotes); HERE the intermediate store is optimised away and only the final `stfs` at
     //    0x82627E70 lands. Same final value, one fewer dead store. Not a reason to hand-spell the
     //    two lines instead of calling the named setter.
-    lSimulationAddBodyEvent.mRigidBody.mInertia.SetInverseInertia( lInverseInertia );
+    lSimulationAddBodyEvent.mRigidBody.GetObjectPointer()->mInertia.SetInverseInertia( lInverseInertia );
 
     // 0x82627EA0 `bl CgsPhysics::PhysicsSimulationIO::InputBuffer::GetAddRigidBodyQueue @0x825BCE08`
     // (the write-lock-guarded producer overload -- its "Not locked for writing\n" assert bakes
@@ -7464,8 +7464,8 @@ void PropManager::AddPropToSim( PropEntityID                                  lE
     CgsPhysics::PhysicsSimulationIO::InAddRigidBody lSimulationAddBodyEvent;
 
     // 0x82627568 / 0x82627574 -- the two parameter vectors go straight into the record.
-    lSimulationAddBodyEvent.mRigidBody.mVelocity        = lLinearVelocity;
-    lSimulationAddBodyEvent.mRigidBody.mAngularVelocity = lAngularVelocity;
+    lSimulationAddBodyEvent.mRigidBody.GetObjectPointer()->mVelocity        = lLinearVelocity;
+    lSimulationAddBodyEvent.mRigidBody.GetObjectPointer()->mAngularVelocity = lAngularVelocity;
 
     // ⚠️⚠️ MEASURED CROSS-WIRING -- transcribed as it is, NOT "corrected". The identical pair of
     // stores exists in CreatePart, and PropManager_wQ2_04.cpp's banner records the full two-sided
@@ -7477,10 +7477,10 @@ void PropManager::AddPropToSim( PropEntityID                                  lE
     // mMaxOmega, the ANGULAR clamp). So the ANGULAR-named constant lands on the LINEAR clamp and
     // vice versa, in this body too. Whether the shipped SOURCE crossed the arguments or one of the
     // two name maps is mislabelled is NOT decidable from the asm; this file reproduces the stores.
-    lSimulationAddBodyEvent.mRigidBody.mInertia.SetMaxLinearVelocity(  KF_PROP_MAX_ANGULAR_VEL ); // -> +0x18
-    lSimulationAddBodyEvent.mRigidBody.mInertia.SetMaxAngularVelocity( KF_PROP_MAX_LINEAR_VEL );  // -> +0x1C
-    lSimulationAddBodyEvent.mRigidBody.mInertia.SetLinearDrag(  KF_PROP_LINEAR_DRAG );            // -> +0x20
-    lSimulationAddBodyEvent.mRigidBody.mInertia.SetAngularDrag( KF_PROP_ANGULAR_DRAG );           // -> +0x24
+    lSimulationAddBodyEvent.mRigidBody.GetObjectPointer()->mInertia.SetMaxLinearVelocity(  KF_PROP_MAX_ANGULAR_VEL ); // -> +0x18
+    lSimulationAddBodyEvent.mRigidBody.GetObjectPointer()->mInertia.SetMaxAngularVelocity( KF_PROP_MAX_LINEAR_VEL );  // -> +0x1C
+    lSimulationAddBodyEvent.mRigidBody.GetObjectPointer()->mInertia.SetLinearDrag(  KF_PROP_LINEAR_DRAG );            // -> +0x20
+    lSimulationAddBodyEvent.mRigidBody.GetObjectPointer()->mInertia.SetAngularDrag( KF_PROP_ANGULAR_DRAG );           // -> +0x24
     // ⚠️ KF_PROP_RESTITUTION @0x82F2A398 is the fifth constant of that rodata run and is NOT read
     //    anywhere in these 167 instructions -- stated because BrnPropManager.h's AddPropToSim banner describes this
     //    body as reading "the five KF_PROP_* drag/limit scalars". It is FOUR. Measured: the only
@@ -7503,7 +7503,7 @@ void PropManager::AddPropToSim( PropEntityID                                  lE
     // 0x826275BC `fdivs f0, f31, f13` with f31 == flt_82001C98. That constant was byte-dumped this
     // round as 3f800000 == 1.0f (scratchpad/waveQ2/probe_wQ2_05/ida_basis.txt), which is also what
     // rw/physics/inertia.h:63 already records.
-    lSimulationAddBodyEvent.mRigidBody.mInertia.SetInverseMass( 1.0f / lpType->GetMass() );
+    lSimulationAddBodyEvent.mRigidBody.GetObjectPointer()->mInertia.SetInverseMass( 1.0f / lpType->GetMass() );
 
     // 0x82627550..0x826275C8 -- `clrlwi r11, r27, 24 ; subfic r11, r11, 0 ; subfe r8, r11, r11 ;
     // rlwinm r10, r8, 0,31,29 ; addi r11, r10, 4`. Worked through: subfic leaves CA==1 exactly when
@@ -7517,7 +7517,7 @@ void PropManager::AddPropToSim( PropEntityID                                  lE
     // ⚠️ MEASURED DIFFERENCE FROM CreatePart, stated rather than harmonised: the PART path
     //    (PropManager_wQ2_04.cpp, `stb 0` @0x82627D0C) sets mbSpy FALSE. Whole props are spied,
     //    shed parts are not. Both are transcriptions, not choices.
-    lSimulationAddBodyEvent.mRigidBody.mbSpy = true;
+    lSimulationAddBodyEvent.mRigidBody.GetObjectPointer()->mbSpy = true;
 
     // 0x82627550 `lbz r9, 0x49(r30)` == mbUseOverides, tested at 0x82627570 and branched at
     // 0x826275D0; the taken arm reloads `lfs f0, 0x4C(r30)` == mfMassOverride and OVERWRITES the
@@ -7525,7 +7525,7 @@ void PropManager::AddPropToSim( PropEntityID                                  lE
     // the same slot). Two SetInverseMass calls is exactly what the DWARF callee list shows.
     if ( mbUseOverides )
     {
-        lSimulationAddBodyEvent.mRigidBody.mInertia.SetInverseMass( 1.0f / mfMassOverride );
+        lSimulationAddBodyEvent.mRigidBody.GetObjectPointer()->mInertia.SetInverseMass( 1.0f / mfMassOverride );
     }
 
     // :628. 0x826275EC `bl PropManager::GetPropInertia` with r3 = &result (the hidden sret
@@ -7563,10 +7563,10 @@ void PropManager::AddPropToSim( PropEntityID                                  lE
     // ⚠️ Same harmless scheduling difference CreatePart records: the committed inline stores the
     //    intermediate min(x,y) to +0x14 before the second compare, and here that intermediate store
     //    is optimised away (only the final `stfs` at 0x826276EC lands). Same final value.
-    lSimulationAddBodyEvent.mRigidBody.mInertia.SetInverseInertia( lInverseInertia );
+    lSimulationAddBodyEvent.mRigidBody.GetObjectPointer()->mInertia.SetInverseInertia( lInverseInertia );
 
     // 0x826276C8..0x8262770C -- four lvx/stvx pairs off r26 at +0/+0x10/+0x20/+0x30.
-    lSimulationAddBodyEvent.mRigidBody.mTransform = lTransform;
+    lSimulationAddBodyEvent.mRigidBody.GetObjectPointer()->mTransform = lTransform;
 
     // 0x82627710..0x82627740, gated on `clrlwi r8, r25, 24 ; cmplwi cr6, r8, 0`.
     // The arm splats K_PROP_EXTRA_COM_OFFSET's three lanes and folds
@@ -7605,8 +7605,8 @@ void PropManager::AddPropToSim( PropEntityID                                  lE
     //    the packed w scalars there are LIVE.
     if ( lbAddExtraComOffset )
     {
-        lSimulationAddBodyEvent.mRigidBody.mTransform.Pos() =
-            lSimulationAddBodyEvent.mRigidBody.mTransform.Pos()
+        lSimulationAddBodyEvent.mRigidBody.GetObjectPointer()->mTransform.Pos() =
+            lSimulationAddBodyEvent.mRigidBody.GetObjectPointer()->mTransform.Pos()
             + rw::math::vpu::TransformVector( lTransform, K_PROP_EXTRA_COM_OFFSET );
     }
 

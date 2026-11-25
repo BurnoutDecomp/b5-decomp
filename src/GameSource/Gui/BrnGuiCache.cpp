@@ -340,7 +340,7 @@ namespace BrnGui
         // the value ExitCarSelection's `== 1` branch tests for when it posts the junkyard
         // GuiEventActivateCarSelect. Replace this seed with the real event when the
         // GameState->Gui bridge lands (RecEvent's case 77 already consumes it).
-        meCarSelectType = 1;   // BrnGameState::GameStateModuleIO::E_CAR_SELECT_TYPE_JUNKYARD
+        meCarSelectType = BrnGameState::GameStateModuleIO::E_CAR_SELECT_TYPE_JUNKYARD;
 
         mbIsAllowingSignInOutEvents = false; // ARTIST 0x82505AC0
 
@@ -1507,7 +1507,7 @@ namespace BrnGui
         {
             if (*reinterpret_cast<const s32*>(lpEvent) != 4)
                 break;
-            meCarSelectType = 0;
+            meCarSelectType = BrnGameState::GameStateModuleIO::E_CAR_SELECT_TYPE_NONE;
             if (mpProfile)
             {
                 CGS_ASSERT(mLocalPlayerOriginalCarId != 0, "mGuiPlayerInfo.mOriginalCarId != kCGSID_NULL");
@@ -2669,7 +2669,7 @@ namespace BrnGui
         case 81:
             // Event 81 (table index 77) reaches 0x8250EE20 and copies payload word 0 to
             // this+0x4B70 (meCarSelectType).
-            meCarSelectType = *reinterpret_cast<const s32*>(lpEvent);
+            meCarSelectType = *reinterpret_cast<const BrnGameState::GameStateModuleIO::ECarSelectType*>(lpEvent);
             break;
         case 86:
             // ARTIST table index 82 reaches 0x8250F24C and stores 1 at this+0x12F0B.

@@ -678,11 +678,11 @@ namespace Vehicle
             ComputeTrafficVehicleInertia(liTrafficIndex, &lInertia);
 
             CgsPhysics::PhysicsSimulationIO::InAddRigidBody lAddBody;
-            lAddBody.mRigidBody.mTransform       = lpBody->GetTransform();
-            lAddBody.mRigidBody.mVelocity        = lpBody->GetLinearVelocity();
-            lAddBody.mRigidBody.mAngularVelocity = lpBody->GetAngularVelocity();
-            lAddBody.mRigidBody.mInertia         = lInertia;
-            lAddBody.mRigidBody.mbSpy            = true;                    // `stb r9(1), var_2E0`
+            lAddBody.mRigidBody.GetObjectPointer()->mTransform       = lpBody->GetTransform();
+            lAddBody.mRigidBody.GetObjectPointer()->mVelocity        = lpBody->GetLinearVelocity();
+            lAddBody.mRigidBody.GetObjectPointer()->mAngularVelocity = lpBody->GetAngularVelocity();
+            lAddBody.mRigidBody.GetObjectPointer()->mInertia         = lInertia;
+            lAddBody.mRigidBody.GetObjectPointer()->mbSpy            = true;                    // `stb r9(1), var_2E0`
             lAddBody.meState                     = rw::physics::ACTIVE_BODY;// `stw r11(4), var_180`
 
             const u32 luSimEntityWord =

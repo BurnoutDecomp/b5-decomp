@@ -473,16 +473,16 @@ namespace Deformation
                                       1.0f / lfTransverseInertia);
 
         lAddRigidBodyEvent.mID = GetVolumeInstanceId().muId;                 // ld 0x70 -> +0x00 (the packed id IS the rigid-body id)
-        lAddRigidBodyEvent.mRigidBody.mTransform       = mRenderTransform;   // +0x10..+0x40
-        lAddRigidBodyEvent.mRigidBody.mVelocity        = lLinearVelocity;    // +0x50 (v1)
-        lAddRigidBodyEvent.mRigidBody.mAngularVelocity = lAngularVelocity;   // +0x60 (v2)
-        lAddRigidBodyEvent.mRigidBody.mInertia.SetInverseInertia(lInverseInertia);   // +0x70 (+ the +0x84 spherical)
-        lAddRigidBodyEvent.mRigidBody.mInertia.SetInverseMass(0.1f);                 // +0x80  flt_82004014
-        lAddRigidBodyEvent.mRigidBody.mInertia.SetMaxLinearVelocity(60.0f);          // +0x88  flt_82092BC4
-        lAddRigidBodyEvent.mRigidBody.mInertia.SetMaxAngularVelocity(10.0f);         // +0x8C  flt_82004A20
-        lAddRigidBodyEvent.mRigidBody.mInertia.SetLinearDrag(0.001f);                // +0x90  flt_82013F90
-        lAddRigidBodyEvent.mRigidBody.mInertia.SetAngularDrag(0.001f);               // +0x94  flt_82013F90
-        lAddRigidBodyEvent.mRigidBody.mbSpy = true;                                   // +0xA0  stb 1
+        lAddRigidBodyEvent.mRigidBody.GetObjectPointer()->mTransform       = mRenderTransform;   // +0x10..+0x40
+        lAddRigidBodyEvent.mRigidBody.GetObjectPointer()->mVelocity        = lLinearVelocity;    // +0x50 (v1)
+        lAddRigidBodyEvent.mRigidBody.GetObjectPointer()->mAngularVelocity = lAngularVelocity;   // +0x60 (v2)
+        lAddRigidBodyEvent.mRigidBody.GetObjectPointer()->mInertia.SetInverseInertia(lInverseInertia);   // +0x70 (+ the +0x84 spherical)
+        lAddRigidBodyEvent.mRigidBody.GetObjectPointer()->mInertia.SetInverseMass(0.1f);                 // +0x80  flt_82004014
+        lAddRigidBodyEvent.mRigidBody.GetObjectPointer()->mInertia.SetMaxLinearVelocity(60.0f);          // +0x88  flt_82092BC4
+        lAddRigidBodyEvent.mRigidBody.GetObjectPointer()->mInertia.SetMaxAngularVelocity(10.0f);         // +0x8C  flt_82004A20
+        lAddRigidBodyEvent.mRigidBody.GetObjectPointer()->mInertia.SetLinearDrag(0.001f);                // +0x90  flt_82013F90
+        lAddRigidBodyEvent.mRigidBody.GetObjectPointer()->mInertia.SetAngularDrag(0.001f);               // +0x94  flt_82013F90
+        lAddRigidBodyEvent.mRigidBody.GetObjectPointer()->mbSpy = true;                                   // +0xA0  stb 1
         lAddRigidBodyEvent.meState = rw::physics::ACTIVE_BODY;                        // +0xB0  li 4
 
         lpSimInput->GetAddRigidBodyQueue()->AddEvent(lAddRigidBodyEvent);

@@ -1,10 +1,9 @@
 // BrnPhysics::Vehicle::CreateRaceCarEvent ledger TU.
 //
 // Home of the one ledger function for CreateRaceCarEvent: operator= @0x822AE040. The event
-// struct itself is reconstructed in BrnVehicleEvents.h; this TU provides the out-of-line
+// type is declared in BrnVehicleEvents.h; this TU provides the out-of-line
 // assignment-operator body (called by CgsModule::EventQueue<CreateRaceCarEvent,8>::AddEvent).
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"
-#include <cstring>
 
 namespace BrnPhysics
 {
@@ -38,9 +37,9 @@ namespace Vehicle
     CreateRaceCarEvent& CreateRaceCarEvent::operator=(const CreateRaceCarEvent& lrOther)
     {
         mVolumeInstanceID = lrOther.mVolumeInstanceID;
-        std::memcpy(&mInitialTransform, &lrOther.mInitialTransform, sizeof(mInitialTransform));
-        std::memcpy(&mInitialVelocity, &lrOther.mInitialVelocity, sizeof(mInitialVelocity));
-        std::memcpy(&mAngularVelocity, &lrOther.mAngularVelocity, sizeof(mAngularVelocity));
+        mInitialTransform = lrOther.mInitialTransform;
+        mInitialVelocity = lrOther.mInitialVelocity;
+        mAngularVelocity = lrOther.mAngularVelocity;
         mCarAssetAttribKey = lrOther.mCarAssetAttribKey;
         mModelHandle = lrOther.mModelHandle;
         mGraphicsHandle = lrOther.mGraphicsHandle;

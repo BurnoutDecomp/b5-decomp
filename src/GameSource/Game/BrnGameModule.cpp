@@ -3020,7 +3020,8 @@ namespace BrnGame
             lpInputModuleOutput->LockForRead();
             if (mHardware.HasGameBeenRebootedDueToInvite())
             {
-                BrnHW::System360HW* lpLaunchData = GetSoftRebootData();
+                // ARTIST 0x823C5784 reads the launch data from the game singleton.
+                const BrnHW::System360HW* lpLaunchData = &gpBurnoutGame->mHardware;
                 if (lpLaunchData == 0)
                 {
                     CgsDev::Assert::BeginAssert();
@@ -3028,7 +3029,7 @@ namespace BrnGame
                         CGS_ASSERT_LOCATION("d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModuleUpdateFunctions.cpp", 71));
                     CgsDev::Assert::EndAssert();
                 }
-                liStartPressedPort = static_cast<s32>(lpLaunchData->mLaunchData.mdwUserIndex);
+                liStartPressedPort = lpLaunchData->mLaunchData.mdwUserIndex;
                 miInputModuleState = E_INPUTBINDSTATE_START_PRESSED;
             }
             else
@@ -3038,7 +3039,7 @@ namespace BrnGame
                 {
                     const CgsInput::InputIO::PadOutputInformation* lpPadInfo =
                         lpcInputModuleOutput->GetPadInfo(liPort);
-                    if (((lpPadInfo->maActionInfo[E_GAMEINPUTACTIONS_START].muStatus >> 1) & 1) != 0)
+                    if (lpPadInfo->maActionInfo[E_GAMEINPUTACTIONS_START].IsPressed())
                     {
                         liStartPressedPort = static_cast<u32>(liPort);
                         miInputModuleState = E_INPUTBINDSTATE_START_PRESSED;

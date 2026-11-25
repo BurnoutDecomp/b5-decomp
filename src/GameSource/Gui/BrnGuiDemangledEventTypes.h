@@ -931,7 +931,12 @@ namespace BrnGui
         s32 GetEventType() const { return 573; }
     };  // id 573 size 16 [8-aligned: OGE off16]
     struct GuiEvent100PerCentComplete { u8 maData[1]; s32 GetEventType() const { return 469; } };  // id 469 size 1
-    struct GuiEventActivateCarSelect { u8 maData[8]; s32 GetEventType() const { return 192; } };  // id 192 size 8
+    // DecFIGS BrnGuiEventTypeDefs.h:991–995, ARTIST Update at 0x824DFCD0 and 0x824DCBF0.
+    struct GuiEventActivateCarSelect : public CgsGui::GuiEvent<192>
+    {
+        BrnGameState::GameStateModuleIO::ECarSelectState meState;
+        BrnGameState::GameStateModuleIO::ECarSelectType meCarSelectType;
+    };
     struct GuiEventAudioGenericSequence { u8 maData[4]; s32 GetEventType() const { return 468; } };  // id 468 size 4
     // BrnGui::GuiEventAudioSettings -- genuinely un-homed here (the same-named type in
     // BrnMixerControl.h is BrnSound::Logic::GuiEventAudioSettings, a different type). id 463 size 8,

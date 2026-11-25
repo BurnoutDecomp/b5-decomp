@@ -2401,21 +2401,21 @@ namespace Deformation
         lAddBodyEvent.mID = mRigidBodyId.GetBaseRigidBodyID();
 
         // +0x10..+0x40 -- the four rows the console lvx128's from this+0/0x10/0x20/0x30.
-        lAddBodyEvent.mRigidBody.mTransform = mRwBody.GetTransform();
+        lAddBodyEvent.mRigidBody.GetObjectPointer()->mTransform = mRwBody.GetTransform();
 
         // +0x50 / +0x60 -- the two velocity arguments, straight through (v127 = v1, v126 = v2).
-        lAddBodyEvent.mRigidBody.mVelocity        = lInitialLinearVelocity;
-        lAddBodyEvent.mRigidBody.mAngularVelocity = lInitialAngularVelocity;
+        lAddBodyEvent.mRigidBody.GetObjectPointer()->mVelocity        = lInitialLinearVelocity;
+        lAddBodyEvent.mRigidBody.GetObjectPointer()->mAngularVelocity = lInitialAngularVelocity;
 
         // +0x80/+0x88/+0x8C/+0x90/+0x94 -- the five scalar tuning fields.
-        lAddBodyEvent.mRigidBody.mInertia.SetInverseMass(1.0f / kfPartMass);
-        lAddBodyEvent.mRigidBody.mInertia.SetMaxLinearVelocity(kfPartMaxLinearVelocity);
-        lAddBodyEvent.mRigidBody.mInertia.SetMaxAngularVelocity(kfPartMaxAngularVelocity);
-        lAddBodyEvent.mRigidBody.mInertia.SetLinearDrag(kfPartLinearDrag);
-        lAddBodyEvent.mRigidBody.mInertia.SetAngularDrag(kfPartAngularDrag);
+        lAddBodyEvent.mRigidBody.GetObjectPointer()->mInertia.SetInverseMass(1.0f / kfPartMass);
+        lAddBodyEvent.mRigidBody.GetObjectPointer()->mInertia.SetMaxLinearVelocity(kfPartMaxLinearVelocity);
+        lAddBodyEvent.mRigidBody.GetObjectPointer()->mInertia.SetMaxAngularVelocity(kfPartMaxAngularVelocity);
+        lAddBodyEvent.mRigidBody.GetObjectPointer()->mInertia.SetLinearDrag(kfPartLinearDrag);
+        lAddBodyEvent.mRigidBody.GetObjectPointer()->mInertia.SetAngularDrag(kfPartAngularDrag);
 
         // +0xA0 `stb 1` -- TRUE here (the prop producers store 0). The sim's spy flag.
-        lAddBodyEvent.mRigidBody.mbSpy = true;
+        lAddBodyEvent.mRigidBody.GetObjectPointer()->mbSpy = true;
         // +0xB0 `stw 4`.
         lAddBodyEvent.meState = rw::physics::ACTIVE_BODY;
 
@@ -2446,7 +2446,7 @@ namespace Deformation
         const Vector3 lInverseInertia(__vrlimi(vXY, XMVectorReplicate(lfZ), 2, 0));
 
         // +0x70 mInvTens and +0x84 mSpherical == 1/min(x,y,z) -- Inertia::SetInverseInertia exactly.
-        lAddBodyEvent.mRigidBody.mInertia.SetInverseInertia(lInverseInertia);
+        lAddBodyEvent.mRigidBody.GetObjectPointer()->mInertia.SetInverseInertia(lInverseInertia);
 
         // this+0x70/+0x80/+0x90 -- the body's own LOCAL inverse-inertia tensor, built as the
         // diagonal of the same reciprocal vector (gIVector/(0,1,0,0)/(0,0,1,0) each vrlimi128'd

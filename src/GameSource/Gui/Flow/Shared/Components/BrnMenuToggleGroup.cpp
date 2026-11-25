@@ -158,18 +158,6 @@ namespace BrnGui
     }
 
     // ---------------------------------------------------------------------------------
-    // @ 0x8241DBB8 (<3>) / 0x82488C68 (<4>) / 0x82488D18 (<5>) / 0x824BA880 (<2>) --
-    // bounds-check the index against [0, TI_SIZE) (the fixed template capacity, NOT the live
-    // item count), then delegate to the base for the id and carry it back as the row pointer.
-    template <s32 TI_SIZE>
-    MenuToggle* MenuToggleGroupVarSize<TI_SIZE>::GetSelectable(s32 liIndex)
-    {
-        CGS_ASSERT(liIndex >= 0 && liIndex < TI_SIZE, CGS_ASSERT_STREAM_MESSAGE_AT("MenuToggleGroup::GetSelectable() invalid index specified", "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnMenuToggleGroup.h", 241));
-
-        return static_cast<MenuToggle*>(SelectableGroup::GetSelectable(liIndex));
-    }
-
-    // ---------------------------------------------------------------------------------
     // @ 0x824284A0 (<3>) / 0x824BD9C8 (<4>) / 0x8248E5F0 (<5>) / 0x824BD738 (<2>) --
     // highlight liItem within the row at liIndex: dispatch the row's embedded SelectableGroup
     // (+0xA8) vtable slot 12 (+0x30) with liItem; on success mark the row dirty and return true.

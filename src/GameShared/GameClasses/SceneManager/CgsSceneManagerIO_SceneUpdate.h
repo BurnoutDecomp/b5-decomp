@@ -78,8 +78,9 @@ namespace SceneManagerIO
     // four `lvx128/stvx128` matrix lanes @+0x10). 16-byte aligned (carries the affine matrix),
     // sizeof 0x50 (80). Capacity 1024 pinned by Construct (offset delta 0x8010 -> 0x1C020).
     struct EventBaseSetVolumeInstanceTransform {};
-    struct CGS_ALIGN(16) InEventSetVolumeInstanceTransform : public EventBaseSetVolumeInstanceTransform
+    class CGS_ALIGN(16) InEventSetVolumeInstanceTransform : public EventBaseSetVolumeInstanceTransform
     {
+    public:
         VolumeInstanceId mVolumeInstanceId; // +0x00 (std r4, 8B)
         // +0x08..0x0F pad to the 16-byte alignment forced by the affine matrix lane.
         Matrix44Affine   mTransform;        // +0x10 (four 16B lvx/stvx lanes, 64B)

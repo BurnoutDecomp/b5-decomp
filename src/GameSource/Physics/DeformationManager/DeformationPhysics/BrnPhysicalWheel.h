@@ -54,7 +54,7 @@ namespace Deformation
 {
     // Per-frame physics solver event Update consumes (the post-physics rigid-body update). Owned
     // by the sim-output TU; referenced by pointer only. FLAG: forward-declared.
-    struct OutUpdateRigidBody;
+    class OutUpdateRigidBody;
 
     class PhysicalWheel
     {
