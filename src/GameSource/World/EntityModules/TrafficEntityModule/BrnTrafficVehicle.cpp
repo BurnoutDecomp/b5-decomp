@@ -838,19 +838,7 @@ bool Vehicle::IsHornOn() const
     return (mxEffectState & 0x01) != 0;
 }
 
-bool Vehicle::IsAlarmOn() const
-{
-    CGS_ASSERT(IsAlive(),
-        CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1722 /* ARTIST 0x827051AC */));
-    return ((mxEffectState >> 4) & 1) != 0;
-}
 
-bool Vehicle::IsRightIndicatorOn() const
-{
-    CGS_ASSERT(IsAlive(),
-        CGS_ASSERT_MESSAGE_AT("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1736 /* ARTIST 0x8270526C */));
-    return ((mxEffectState >> 2) & 1) != 0;
-}
 
 bool Vehicle::IsIndicatingLeft() const
 {
@@ -890,15 +878,6 @@ bool Vehicle::AreBrakelightsOn() const
 // ---- crash/physical classifiers. IsCrashing/IsRecoveringFromSlam/IsBeingChecked test
 // muCrashTrafficType (+0x01, `lbz r11,1`); IsExtremeSwerving/IsNormalPhysical test
 // miPhysicalReason (+0x39). The IsPhysical() assert fires only on the hit path. ----
-// EXPORT HOLE (UpdateEffects @0x82756D48 calls it by name). Bit 1 of mxEffectState, the
-// partner of the bit-2 IsRightIndicatorOn; SetLeftIndicatorOn / ToggleLeftIndicatorOn in this
-// file already write that bit.
-bool Vehicle::IsLeftIndicatorOn() const
-{
-    CGS_ASSERT(IsAlive(), "IsAlive()");
-    return ((mxEffectState >> 1) & 1) != 0;
-}
-
 // =================================================================================================
 // Vehicle::IsSympatheticallyCrashing  @0x82704B18 (52 insns) -- NOW ATTESTED, and the previous
 // body read THE WRONG MEMBER.

@@ -17,6 +17,7 @@
 
 #include "GameShared/GameClasses/System/FileSystem/Devices/CgsDevicePhysicalX360.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::SPrintf
 
@@ -173,12 +174,17 @@ namespace CgsFileSystem
                                   u32 luSize, u32* lpuOutResult)
     {
         FileHandleRecord& lrRecord = *static_cast<FileHandleRecord*>(lpHandle);
-        CGS_ASSERT((lrRecord.miFlags & 2) != 0, "File is read only\n");
+        CGS_ASSERT_STREAM_AT((lrRecord.miFlags & KU_X360_OPEN_FLAG_WRITE) != 0, "File is read only\n",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\Devices/CgsPhysicalX360Device.cpp",
+            209);
         DWORD luWritten;
-        if (!WriteFile(lrRecord.mpHandle, lpBuffer, luSize, &luWritten, 0)) return -2;
-        lrRecord.mu64Position += luWritten;
-        *lpuOutResult = luWritten;
-        return 0;
+        if (WriteFile(lrRecord.mpHandle, lpBuffer, luSize, &luWritten, 0))
+        {
+            lrRecord.mu64Position += luWritten;
+            *lpuOutResult = luWritten;
+            return 0;
+        }
+        return -2;
     }
 
     // Seek @0x828DEB98. If the request equals the record's current position, report it without a

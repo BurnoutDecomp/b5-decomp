@@ -704,7 +704,7 @@ PlayerData* PlayerManager::AssignActiveLocalPlayer(s32 liConnectionIndex)
 
     CGS_ASSERT(false,
         CGS_ASSERT_MESSAGE_AT(
-            "Couldn't find a free inactive local player", __FILE__, 1423 /* ARTIST 0x82873B6C */));
+            "Couldn't find a free inactive local player", CGS_ARTIST_FILE, 1423 /* ARTIST 0x82873B6C */));
     return 0;
 }
 
@@ -726,7 +726,7 @@ PlayerData* PlayerManager::AssignActiveNetworkPlayer(s32 liConnectionIndex)
 
     CGS_ASSERT(false,
         CGS_ASSERT_MESSAGE_AT(
-            "Couldn't find a free inactive network player", __FILE__, 1453 /* ARTIST 0x82873C7C */));
+            "Couldn't find a free inactive network player", CGS_ARTIST_FILE, 1453 /* ARTIST 0x82873C7C */));
     return 0;
 }
 

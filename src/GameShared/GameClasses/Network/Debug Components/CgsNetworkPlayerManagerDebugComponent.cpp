@@ -60,11 +60,15 @@ namespace CgsNetwork
         const s32 liMaxA = static_cast<const MessageTypeAndMax*>(lpA)->miMaxBytes;
         const s32 liMaxB = static_cast<const MessageTypeAndMax*>(lpB)->miMaxBytes;
 
-        if (liMaxA <= liMaxB)
+        if (liMaxA > liMaxB)
         {
-            return (liMaxA < liMaxB) ? 1 : 0;
+            return -1;
         }
-        return -1;
+        if (liMaxA < liMaxB)
+        {
+            return 1;
+        }
+        return 0;
     }
 
     // ================================================================================================

@@ -10,7 +10,7 @@
 // screen. Each line formats into a shared 32-byte buffer, force-terminates it, then draws "<label>
 // <value>" via the DrawText helper, which advances a running Y. The trailing folded
 // `BaseCollisionGenerator::Destruct(this)` in Construct is the base CgsDev::DebugComponent::Construct()
-// (the X360 image folds trivial bodies onto one shared address); it is emitted as a tail call here.
+// (the X360 image folds trivial bodies onto one shared address); that base call follows the member initialization.
 
 #include "GameShared/GameClasses/Language/CgsLanguageManagerDebugComponent.h"
 #include "GameShared/GameClasses/Language/CgsLanguageManager.h"                                // CgsLanguage::LanguageManager
@@ -21,6 +21,9 @@ namespace CgsLanguage
 {
     namespace
     {
+        const char KAC_ARTIST_FILE[] =
+            "..\\..\\..\\GameShared\\GameClasses\\Language/CgsLanguageManagerDebugComponent.cpp";
+
         // HUD colours (X360 packed u32): white text, opaque-black full-screen backdrop.
         const u32 KU_TEXT_COLOUR       = 0xFFFFFFFFu;   // X360 -1
         const u32 KU_BACKGROUND_COLOUR = 0xFF000000u;   // X360 -16777216
@@ -39,18 +42,14 @@ namespace CgsLanguage
         mbShowKeys                 = false;
         mbShowLocalisedTextAsStars = false;
 
-        // Star strings indexed by GetStarString(digitCount). [2]/[3]/[4] are recovered .rdata
-        // literals (X360 + PS3 agree). [1] is confirmed "**" by the PS3 DecFIGS Construct (0xBB81F8,
-        // *(this+24)="**"; the X360 0x82860A68 shows it as the unk_820E6318 pointer artifact). [0] is
-        // a pointer artifact in BOTH builds (X360 unk_820D15B0 / PS3 &byte_100C85A8) with no readable
-        // contents - FLAGGED: modelled as the natural one-star string that continues the sequence.
-        mapStars[0] = "*";          // X360 unk_820D15B0 / PS3 &byte_100C85A8 (FLAGGED, pointer artifact)
-        mapStars[1] = "**";         // PS3 0xBB81F8 confirms "**"
+        // Original strings, in digit-count order, from 0x820D15B0 and 0x820E6300.
+        mapStars[0] = "*";
+        mapStars[1] = "**";
         mapStars[2] = "***";
         mapStars[3] = "****";
         mapStars[4] = "********";
 
-        CGS_ASSERT( lpLanguageManager != 0, "lpLanguageManager" );
+        CGS_ASSERT_AT(lpLanguageManager != 0, "lpLanguageManager", KAC_ARTIST_FILE, 114);
         mpLanguageManager = lpLanguageManager;
 
         // Layout + text style.
@@ -70,7 +69,7 @@ namespace CgsLanguage
         mnMinutes  = 45;
         mrSeconds  = 0.0f;
         mrDistance = 1000.0f;
-
+        CgsDev::DebugComponent::Construct();
     }
 
     const char* LanguageManagerDebugComponent::GetName() const

@@ -491,8 +491,7 @@ namespace BrnReplays
     //   record[0] = muVehicleType  (`lbz r11,0(r31); stb r11,0(r29)` -- vehicle BYTE 0)
     //   record[2] = liPhysicalPartsIndex (`stb r28,2(r29)`)
     //   record[1] = packed light/effect flags, built bit-by-bit (starts 0).
-    // The three IsAlive() asserts before the mxEffectState reads (asm 0x6C1/0x6C8/0x6BA)
-    // are the inlined IsAlive() guards of the raw +7 byte reads; reproduced verbatim.
+    // ARTIST reads the light and alarm bits through their inlined checked Vehicle predicates.
     void TrafficVehicleData::SetFromVehicle(TrafficVehicleDataRecord* lpRecord,
                                             const BrnTraffic::Vehicle* lpVehicle,
                                             s32 liPhysicalPartsIndex)
@@ -500,7 +499,6 @@ namespace BrnReplays
         // Leading asserts (asm 0x82713E5C / 0x82713E88 / 0x82713EC4).
         CGS_ASSERT(lpVehicle != 0, CGS_ASSERT_MESSAGE_AT("lpVehicle", CGS_ARTIST_FILE, 380));
         CGS_ASSERT(lpVehicle->IsAlive(), CGS_ASSERT_MESSAGE_AT("lpVehicle->IsAlive()", CGS_ARTIST_FILE, 381));
-        CGS_ASSERT(lpVehicle->IsAlive(), "IsAlive()");
 
         // record[0] = vehicle type byte (`lbz 0(r31); stb 0(r29)`), NOT the flags byte.
         lpRecord->muVehicleType = lpVehicle->GetVehicleType();
@@ -528,27 +526,16 @@ namespace BrnReplays
             lpRecord->muFlags |= TrafficVehicleDataRecord::E_FLAG_BRAKELIGHTS;
         }
 
-        // The next three mxEffectState (+7) reads each re-assert IsAlive() first (the
-        // inlined predicate guards at asm 0x6C1/0x6C8/0x6BA), in this exact order.
-        const u8 luEffectState = lpVehicle->GetEffectState();
-
-        CGS_ASSERT(lpVehicle->IsAlive(), "IsAlive()"); // asm 0x6C1
-        if ((luEffectState & 0x02u) != 0)              // a2[7] & 0x02 (left-indicator bit)
-        {
+        // ARTIST calls these checked predicates inline and reads each effect bit
+        // after its own alive diagnostic.
+        if (lpVehicle->IsLeftIndicatorOn())
             lpRecord->muFlags |= TrafficVehicleDataRecord::E_FLAG_LEFT_INDICATOR;
-        }
 
-        CGS_ASSERT(lpVehicle->IsAlive(), "IsAlive()"); // asm 0x6C8
-        if ((luEffectState & 0x04u) != 0)              // a2[7] & 0x04 (right-indicator bit)
-        {
+        if (lpVehicle->IsRightIndicatorOn())
             lpRecord->muFlags |= TrafficVehicleDataRecord::E_FLAG_RIGHT_INDICATOR;
-        }
 
-        CGS_ASSERT(lpVehicle->IsAlive(), "IsAlive()"); // asm 0x6BA
-        if ((luEffectState & 0x10u) != 0)              // a2[7] & 0x10 (alarm bit)
-        {
+        if (lpVehicle->IsAlarmOn())
             lpRecord->muFlags |= TrafficVehicleDataRecord::E_FLAG_ALARM;
-        }
 
         // Bit 0x20: set when the vehicle is NOT physical (`(a2[5] & 8) == 0`).
         if ((lpVehicle->GetFlags() & BrnTraffic::Vehicle::E_FLAG_PHYSICAL) == 0)

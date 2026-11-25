@@ -54,6 +54,20 @@ namespace Attrib
     class ClassExportPolicy;
     class CollectionExportPolicy;
 
+    // vechashmap.h:280. ARTIST inlines the advance in the cursor and unload walk.
+    template<class Node>
+    __forceinline u32 NextVecHashMapIndex(const Node* lpTable, u32 luCapacity, u32 luIndex)
+    {
+        if (lpTable != NULL)
+        {
+            ++luIndex;
+            while (luIndex < luCapacity && !lpTable[luIndex].IsValid())
+                ++luIndex;
+            return luIndex;
+        }
+        return luCapacity;
+    }
+
     // TablePolicy::Free -- releases a bucket array previously handed out by the policy's
     // Allocate. IDA names the free-standing thunk Attrib::TableFreeFunc; body lives in its
     // own TU (routes through the AttribSys package allocator + hash-map byte census).
@@ -108,6 +122,11 @@ public:
     unsigned int   FindIndex(u64 luKey) const;                            // 0x828063C0
     Attrib::Class* Find(u64 luKey) const;                                 // 0x828064D0
     u64            GetKeyAtIndex(u32 luIndex) const;                      // 0x82807430
+
+    u32 GetNextValidIndex(u32 luIndex) const
+    {
+        return Attrib::NextVecHashMapIndex(mpTable, muTableSize, luIndex);
+    }
 
     // The reserving-construction pair the Attrib::ClassTable ctor runs (the
     // X360 inlines both into the DatabasePrivate ctor @0x8280C598): zero the
@@ -204,6 +223,16 @@ namespace Attrib
         // X360 0x828088D0 -- public add: InternalAdd, then grow-and-rebuild if the worst
         // probe run now exceeds 96.
         bool Add(u64 luKey, Collection* lpPtr);
+        u64 GetKeyAtIndex(u32 luIndex) const;
+
+        __forceinline bool ValidIndex(u32 luIndex) const
+        {
+            return luIndex < mTableSize && mTable[luIndex].IsValid();
+        }
+        u32 GetNextValidIndex(u32 luIndex) const
+        {
+            return NextVecHashMapIndex(mTable, mTableSize, luIndex);
+        }
 
         // X360 0x82806210 -- open-addressing lookup; returns the bucket index or
         // mTableSize when absent.

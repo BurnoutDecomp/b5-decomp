@@ -578,6 +578,9 @@ namespace CgsGraphics
         V* AllocVertices(u32 luNumVertices);                                                 // @0x24DAE8
 
     protected:
+        // DecFIGS CgsImRenderBuffer.h:1213.
+        void* AllocateCommand(s32 liCommandType, u32 luCommandSize);
+
         // Buffer-full handler: discard everything written since the last EndRender
         // and latch the "full" flag so the producer stops appending. @0x24DD54.
         void SetBufferFullRewindToLastEndRender();

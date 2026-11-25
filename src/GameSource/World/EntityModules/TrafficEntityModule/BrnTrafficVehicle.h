@@ -380,10 +380,12 @@ public:
     // Read by BrnReplays::TrafficEntitySerialiser::SetVehicleData @0x82714060.
     u8  GetFlags() const { return mxFlags; }
 
-    // Raw byte reads BrnReplays::TrafficVehicleData::SetFromVehicle @0x82713E38 performs.
-    // Both are plain zero-extended byte reads with no IsAlive guard inside the getter, since
-    // SetFromVehicle asserts IsAlive() at each use site.
-    u8  GetVehicleType() const { return muVehicleType; }  // @+0
+    // ARTIST 0x82713ECC diagnoses an inactive vehicle when reading this type byte.
+    u8 GetVehicleType() const
+    {
+        CGS_ASSERT_AT(IsAlive(), "IsAlive()", CGS_ARTIST_BRNTRAFFICVEHICLE_FILE, 786);
+        return muVehicleType;
+    }
     u8  GetEffectState() const { return mxEffectState; }  // @+7
 
     // X360 @0x8270F928 asserts, then returns the index byte zero-extended (lbz with no extsb
@@ -455,6 +457,26 @@ inline Vehicle::Species GetVehicleSpecies(u32 luIndex)
         return Vehicle::E_SPECIES_STATIC;
     return Vehicle::E_SPECIES_TRAILER;
 }
+
+// ARTIST reuses these checked effect predicates in the traffic replay snapshot.
+inline bool Vehicle::IsAlarmOn() const
+{
+    CGS_ASSERT(IsAlive(), CGS_ASSERT_MESSAGE_AT("IsAlive()", CGS_ARTIST_BRNTRAFFICVEHICLE_FILE, 1722));
+    return ((mxEffectState >> 4) & 1) != 0;
+}
+
+inline bool Vehicle::IsRightIndicatorOn() const
+{
+    CGS_ASSERT(IsAlive(), CGS_ASSERT_MESSAGE_AT("IsAlive()", CGS_ARTIST_BRNTRAFFICVEHICLE_FILE, 1736));
+    return ((mxEffectState >> 2) & 1) != 0;
+}
+
+inline bool Vehicle::IsLeftIndicatorOn() const
+{
+    CGS_ASSERT(IsAlive(), CGS_ASSERT_MESSAGE_AT("IsAlive()", CGS_ARTIST_BRNTRAFFICVEHICLE_FILE, 1729));
+    return ((mxEffectState >> 1) & 1) != 0;
+}
+
 }
 
 #undef CGS_ARTIST_BRNTRAFFICVEHICLE_FILE

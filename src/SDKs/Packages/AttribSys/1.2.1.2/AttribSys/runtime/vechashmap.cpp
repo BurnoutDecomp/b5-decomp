@@ -160,15 +160,32 @@ Attrib::Class* VecHashMap_Attrib_Class_TablePolicy_0_16::RemoveIndex(u32 luIndex
     return lpRemoved;
 }
 
-// @ 0x82807430 -- GetKeyAtIndex(index): assert the index is valid (in range AND a live,
-// non-sentinel node), then return that node's key (Node::Key() yields 0 for a sentinel).
+namespace
+{
+    // ARTIST 0x82807380 and 0x82807430 instantiate vechashmap.h:168 on different node types.
+    template<class Map, class Node>
+    __forceinline u64 VecHashMapKeyAtIndex(const Map& lrMap, Node* const& lrpTable, u32 luIndex)
+    {
+        CGS_ASSERT(lrMap.ValidIndex(luIndex),
+            CGS_ASSERT_MESSAGE_AT("GetKeyAtIndex passed invalid index.",
+                "..\\..\\..\\SDKs\\Packages\\AttribSys\\1.2.1.2\\attribsys/runtime/vechashmap.h", 168));
+        return lrpTable[luIndex].Key();
+    }
+}
+
 u64 VecHashMap_Attrib_Class_TablePolicy_0_16::GetKeyAtIndex(u32 luIndex) const
 {
-    CGS_ASSERT(ValidIndex(luIndex), CGS_ASSERT_MESSAGE_AT("GetKeyAtIndex passed invalid index.",
-        "..\\..\\..\\SDKs\\Packages\\AttribSys\\1.2.1.2\\AttribSys/runtime/vechashmap.h",
-        168 /* ARTIST 0x8280748C */));
+    return VecHashMapKeyAtIndex(*this, mpTable, luIndex);
+}
 
-    return mpTable[luIndex].Key();
+namespace Attrib
+{
+    u64 CollectionHashMap::GetKeyAtIndex(u32 luIndex) const
+    {
+        return VecHashMapKeyAtIndex(*this, mTable, luIndex);
+    }
+
+
 }
 
 // @ 0x82808BB0 -- core open-addressing insert (grow-on-worst-collision is Add's job).

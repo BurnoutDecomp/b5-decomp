@@ -67,30 +67,54 @@ void ImRenderBuffer<V>::SetBufferFullRewindToLastEndRender()
 
 template<class V> bool ImRenderBuffer<V>::IsInARenderingBlock() { return mbInRenderBlock; }
 
-// The original appender warms the next 128-byte line before testing capacity.
-#define RESERVE_COMMAND(TYPE, BYTES, OPCODE) \
-    __dcbz128(static_cast<int>(mpWriteBuffer->muCommandBufferWritePos + 128u), mpWriteBuffer->mpu8CommandBuffer); \
-    const u32 position = mpWriteBuffer->muCommandBufferWritePos; \
-    const u32 next = position + (BYTES); \
-    if (next > muCommandBufferSize) { SetBufferFullRewindToLastEndRender(); \
-        if (!mbFailGracefully) NativeAssert("ImRenderBuffer command buffer is full", 1254); return; } \
-    TYPE* command = reinterpret_cast<TYPE*>(mpWriteBuffer->mpu8CommandBuffer + position); \
-    command->muSize = (BYTES); command->muType = (OPCODE); mpWriteBuffer->muCommandBufferWritePos = next
-#define ASSERT_IN_BLOCK() if (!mbInRenderBlock) NativeAssert("Command called outside of a BeginRendering/EndRendering block", 1216)
+// DecFIGS CgsImRenderBuffer.h:1213 and ARTIST's inlined command writers.
+template<class V>
+void* ImRenderBuffer<V>::AllocateCommand(s32 liCommandType, u32 luCommandSize)
+{
+    if (liCommandType != IM_CMD_BEGIN_RENDERING && liCommandType != IM_CMD_END_RENDERING)
+    {
+        CGS_ASSERT(mbInRenderBlock,
+            CGS_ASSERT_MESSAGE_AT("Command called outside of a BeginRendering/EndRendering block", kFile, 1216));
+    }
+
+    __dcbz128(static_cast<s32>(mpWriteBuffer->muCommandBufferWritePos + 128),
+        mpWriteBuffer->mpu8CommandBuffer);
+    const u32 luWritePosition = mpWriteBuffer->muCommandBufferWritePos;
+    u8* const lpCommandBuffer = mpWriteBuffer->mpu8CommandBuffer;
+    const u32 luNextPosition = luWritePosition + luCommandSize;
+    if (luNextPosition <= muCommandBufferSize)
+    {
+        ImCommand* lpCommand = reinterpret_cast<ImCommand*>(&lpCommandBuffer[luWritePosition]);
+        lpCommand->muSize = luCommandSize;
+        lpCommand->muType = liCommandType;
+        mpWriteBuffer->muCommandBufferWritePos = luNextPosition;
+        if (liCommandType == IM_CMD_END_RENDERING)
+        {
+            muLastEndRenderPos = luWritePosition;
+        }
+        return lpCommand;
+    }
+
+    SetBufferFullRewindToLastEndRender();
+    CGS_ASSERT(mbFailGracefully,
+        CGS_ASSERT_MESSAGE_AT("ImRenderBuffer command buffer is full", kFile, 1254));
+    return NULL;
+}
 
 template<class V> void ImRenderBuffer<V>::BeginRendering()
 {
-    if (mbInRenderBlock) NativeAssert("BeginRendering called inside a BeginRendering/EndRendering block", 619);
+    CGS_ASSERT(mbInRenderBlock == false,
+        CGS_ASSERT_MESSAGE_AT("BeginRendering called inside a BeginRendering/EndRendering block", kFile, 619));
     mbInRenderBlock = true;
-    RESERVE_COMMAND(ImCommand, 16u, 0u);
+    AllocateCommand(IM_CMD_BEGIN_RENDERING, 16);
 }
 
 template<class V> void ImRenderBuffer<V>::EndRendering()
 {
-    if (!mbInRenderBlock) NativeAssert("EndRendering called without a matching call to BeginRendering", 658);
+    CGS_ASSERT(mbInRenderBlock == true,
+        CGS_ASSERT_MESSAGE_AT("EndRendering called without a matching call to BeginRendering", kFile, 658));
     mbInRenderBlock = false;
-    RESERVE_COMMAND(ImCommand, 16u, 1u);
-    muLastEndRenderPos = position;
+    AllocateCommand(IM_CMD_END_RENDERING, 16);
 }
 
 template<class V> V* ImRenderBuffer<V>::AllocVertices(u32 count)
@@ -114,18 +138,28 @@ template<class V> void ImRenderBuffer<V>::Render(renderengine::PrimitiveType pri
         SetBufferFullRewindToLastEndRender();
         return;
     }
-    ASSERT_IN_BLOCK();
-    RESERVE_COMMAND(ImCommandRenderPrimitives<V>, 32u, 2u);
-    command->mePrimitiveType = primitive; command->muNumVertices = count; command->mpVertices = vertices;
-    std::memcpy(vertices, source, sizeof(V) * count);
+    ImCommandRenderPrimitives<V>* command = static_cast<ImCommandRenderPrimitives<V>*>(
+        AllocateCommand(IM_CMD_RENDER_PRIMITIVES, 32));
+    if (command)
+    {
+        command->mePrimitiveType = primitive;
+        command->muNumVertices = count;
+        command->mpVertices = vertices;
+        std::memcpy(vertices, source, sizeof(V) * count);
+    }
 }
 
 template<class V> void ImRenderBuffer<V>::RenderFromStaticVertexBuffer(renderengine::PrimitiveType primitive, const V* vertices, u32 count)
 {
     if (!vertices) NativeAssert("lpVertices", 731);
-    ASSERT_IN_BLOCK();
-    RESERVE_COMMAND(ImCommandRenderPrimitives<V>, 32u, 2u);
-    command->mePrimitiveType = primitive; command->muNumVertices = count; command->mpVertices = vertices;
+    ImCommandRenderPrimitives<V>* command = static_cast<ImCommandRenderPrimitives<V>*>(
+        AllocateCommand(IM_CMD_RENDER_PRIMITIVES, 32));
+    if (command)
+    {
+        command->mePrimitiveType = primitive;
+        command->muNumVertices = count;
+        command->mpVertices = vertices;
+    }
 }
 
 template<class V> V* ImRenderBuffer<V>::RenderStart(u32 count)
@@ -153,24 +187,39 @@ template<class V> void ImRenderBuffer<V>::RenderEnd(renderengine::PrimitiveType 
     if (miNumRendersStarted <= 0) NativeAssert("Mismatched RenderEnd/RenderStart on ImRenderBuffer", 792);
     --miNumRendersStarted;
     if (!vertices) NativeAssert("lpVerticesFromRenderStart", 796);
-    ASSERT_IN_BLOCK();
-    RESERVE_COMMAND(ImCommandRenderPrimitives<V>, 32u, 2u);
-    command->mePrimitiveType = primitive; command->muNumVertices = count; command->mpVertices = vertices;
+    ImCommandRenderPrimitives<V>* command = static_cast<ImCommandRenderPrimitives<V>*>(
+        AllocateCommand(IM_CMD_RENDER_PRIMITIVES, 32));
+    if (command)
+    {
+        command->mePrimitiveType = primitive;
+        command->muNumVertices = count;
+        command->mpVertices = vertices;
+    }
 }
 
 template<class V> void ImRenderBuffer<V>::SetTexture(renderengine::Texture* texture)
 {
     if (!texture) NativeAssert("lpTexture!=NULL", 825);
-    ASSERT_IN_BLOCK(); RESERVE_COMMAND(ImCommandSetTexture, 16u, 10u); command->mpTexture = texture;
+    ImCommandSetTexture* command = static_cast<ImCommandSetTexture*>(AllocateCommand(IM_CMD_SET_TEXTURE, 16));
+    if (command)
+    {
+        command->mpTexture = texture;
+    }
 }
 template<class V> void ImRenderBuffer<V>::SetProgram(s8 program)
 {
-    ASSERT_IN_BLOCK(); RESERVE_COMMAND(ImCommandSetShaderProgram, 16u, 15u); command->mi8ShaderProgram = program;
+    ImCommandSetShaderProgram* command = static_cast<ImCommandSetShaderProgram*>(
+        AllocateCommand(IM_CMD_SET_SHADER_PROGRAM, 16));
+    if (command)
+    {
+        command->mi8ShaderProgram = program;
+    }
 }
 #define DEFINE_STATE(TYPE, RECORD, MEMBER, OPCODE, LINE, MESSAGE) \
 template<class V> void ImRenderBuffer<V>::SetState(const renderengine::TYPE* value) \
-{ if (!value) NativeAssert(MESSAGE, LINE); ASSERT_IN_BLOCK(); \
-  RESERVE_COMMAND(RECORD, 16u, OPCODE); command->MEMBER = value; }
+{ if (!value) NativeAssert(MESSAGE, LINE); \
+  RECORD* command = static_cast<RECORD*>(AllocateCommand(OPCODE, 16)); \
+  if (command) command->MEMBER = value; }
 DEFINE_STATE(BlendState, ImCommandSetStateBlend, mpBlendState, 3u, 849, "lpBlendState!=NULL")
 DEFINE_STATE(DepthStencilState, ImCommandSetStateDepthStencil, mpDepthStencilState, 4u, 874, "lpDepthStencilState!=NULL")
 DEFINE_STATE(RasterizerState, ImCommandSetStateRasterizer, mpRasterizerState, 6u, 924, "lpRasterizerState!=NULL")
@@ -179,10 +228,12 @@ DEFINE_STATE(TextureState, ImCommandSetStateTexture, mpTextureState, 9u, 997, "l
 
 template<class V> void ImRenderBuffer<V>::SetTransform(const Im2dTransform& transform)
 {
-    ASSERT_IN_BLOCK(); RESERVE_COMMAND(ImCommandSetTransform, 80u, 16u); command->mTransform = transform;
+    ImCommandSetTransform* command = static_cast<ImCommandSetTransform*>(AllocateCommand(IM_CMD_SET_TRANSFORM, 80));
+    if (command)
+    {
+        command->mTransform = transform;
+    }
 }
-#undef ASSERT_IN_BLOCK
-#undef RESERVE_COMMAND
 
 #define INSTANTIATE(TYPE) \
 template bool ImRenderBuffer<TYPE>::Prepare(u32,u32,rw::IResourceAllocator*,bool); \

@@ -35,10 +35,8 @@
 //   [c:0x6C] mStateFlags       u32   (Set/ClearStateFlags; bit 0 + bit 1 used by
 //                              UpdateText: clear bit0 / set bit1 when text changed)
 //
-// The console packs the two flag dwords with byte-aligned colour fields (the X360
-// reads the low byte big-endian to preserve the flag bits while replacing the
-// colour). De-optimised here to endian-safe 32-bit masked bitfield math + named
-// members so the ARTIST colour occupies bits 8-31.
+// The two ARTIST words at +0x48 and +0x4C hold 24-bit RGB and packed flags.
+// The original Apt text-item fields match the stores at 0x82AE2148–0x82AE2250.
 //
 // This header models the text-instance surface (the data members the
 // AptCharacterTextInst facade touches + their inline accessors); the ctors /
@@ -50,6 +48,7 @@
 // ===========================================================================
 
 #include "types.hpp"
+#include "SDKs/EATech/include/Apt/Apt.h"
 
 #include "SDKs/EATech/include/Apt/AptRenderItem.h"          // base AptRenderItem
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"      // mTextValue / mVarValue
@@ -64,8 +63,29 @@ struct AptRenderItemDynamicText : public AptRenderItem
     intptr_t  mZID;                   // [c:0x3C] pointer-width on x64 (XB1: void* @0x68)
     uint32_t  mTextColor;             // [c:0x40]
     int32_t   mScroll;                // [c:0x44]
-    uint32_t  mFlagsAndBackColor;     // [c:0x48] alignment/drawsBackground/backColor
-    uint32_t  mFlagsAndBorderColor;   // [c:0x4C] multiline/wordWrap/boxAlign/mouse/drawsBorder/borderColor
+    union
+    {
+        uint32_t mFlagsAndBackColor;  // [c:0x48] whole word for initialization and copies
+        struct
+        {
+            uint32_t mnBackColor : 24;
+            uint32_t mbBackground : 1;
+            AptStringAlignment meAlignment : 4;
+        } mBackground;
+    };
+    union
+    {
+        uint32_t mFlagsAndBorderColor; // [c:0x4C] whole word for initialization and copies
+        struct
+        {
+            uint32_t mnBorderColor : 24;
+            uint32_t mbBorder : 1;
+            uint32_t mbMouseWheelEnabled : 1;
+            AptStringAlignment meBoxAlignment : 4;
+            uint32_t mbWordWrap : 1;
+            uint32_t mbMultiline : 1;
+        } mBorder;
+    };
     AptRect   mBounds;                // [c:0x50] (16 bytes)
     float     mFontSize;              // [c:0x60]
     int32_t   mFontID;                // [c:0x64]
@@ -93,24 +113,24 @@ struct AptRenderItemDynamicText : public AptRenderItem
 
     // ARTIST packs RGB in bits 8..31 and flags in the low byte.
     int GetTextColor() const { return static_cast<int>(mTextColor); }
-    uint32_t GetBackgroundColor() const { return (mFlagsAndBackColor >> 8) | 0xFF000000u; }
-    void SetBackgroundColor(uint32_t uColor) { mFlagsAndBackColor = (mFlagsAndBackColor & 0xFFu) | (uColor << 8); }
-    uint32_t GetBorderColor() const { return (mFlagsAndBorderColor >> 8) | 0xFF000000u; }
-    void SetBorderColor(uint32_t uColor) { mFlagsAndBorderColor = (mFlagsAndBorderColor & 0xFFu) | (uColor << 8); }
-    int GetAlignment() const { return static_cast<int32_t>(mFlagsAndBackColor << 25) >> 28; }
-    void SetAlignment(int nAlignment) { mFlagsAndBackColor = (mFlagsAndBackColor & ~0x78u) | ((static_cast<uint32_t>(nAlignment) << 3) & 0x78u); }
-    bool GetDrawsBackground() const { return (mFlagsAndBackColor & 0x80u) != 0; }
-    void SetDrawsBackground(bool bDraw) { mFlagsAndBackColor = (mFlagsAndBackColor & ~0x80u) | (bDraw ? 0x80u : 0u); }
-    bool GetDrawsBorder() const { return (mFlagsAndBorderColor & 0x80u) != 0; }
-    void SetDrawsBorder(bool bDraw) { mFlagsAndBorderColor = (mFlagsAndBorderColor & ~0x80u) | (bDraw ? 0x80u : 0u); }
-    bool GetMultiline() const { return (mFlagsAndBorderColor & 1u) != 0; }
-    void SetMultiline(bool bMultiline) { mFlagsAndBorderColor = (mFlagsAndBorderColor & ~1u) | (bMultiline ? 1u : 0u); }
-    bool GetWordWrap() const { return (mFlagsAndBorderColor & 2u) != 0; }
-    void SetWordWrap(bool bWrap) { mFlagsAndBorderColor = (mFlagsAndBorderColor & ~2u) | (bWrap ? 2u : 0u); }
-    void SetBoxAlignment(int nBoxAlignment) { mFlagsAndBorderColor = (mFlagsAndBorderColor & ~0x3Cu) | ((static_cast<uint32_t>(nBoxAlignment) << 2) & 0x3Cu); }
-    int GetBoxAlignment() const { return static_cast<int32_t>(mFlagsAndBorderColor << 26) >> 28; }
-    bool GetMouseWheelEnabled() const { return (mFlagsAndBorderColor & 0x40u) != 0; }
-    void SetMouseWheelEnabled(bool bEnabled) { mFlagsAndBorderColor = (mFlagsAndBorderColor & ~0x40u) | (bEnabled ? 0x40u : 0u); }
+    uint32_t GetBackgroundColor() const { return mBackground.mnBackColor | 0xFF000000u; }
+    void SetBackgroundColor(uint32_t uColor) { mBackground.mnBackColor = uColor; }
+    uint32_t GetBorderColor() const { return mBorder.mnBorderColor | 0xFF000000u; }
+    void SetBorderColor(uint32_t uColor) { mBorder.mnBorderColor = uColor; }
+    int GetAlignment() const { return mBackground.meAlignment; }
+    void SetAlignment(int nAlignment) { mBackground.meAlignment = static_cast<AptStringAlignment>(nAlignment); }
+    bool GetDrawsBackground() const { return mBackground.mbBackground; }
+    void SetDrawsBackground(bool bDraw) { mBackground.mbBackground = bDraw; }
+    bool GetDrawsBorder() const { return mBorder.mbBorder; }
+    void SetDrawsBorder(bool bDraw) { mBorder.mbBorder = bDraw; }
+    bool GetMultiline() const { return mBorder.mbMultiline; }
+    void SetMultiline(bool bMultiline) { mBorder.mbMultiline = bMultiline; }
+    bool GetWordWrap() const { return mBorder.mbWordWrap; }
+    void SetWordWrap(bool bWrap) { mBorder.mbWordWrap = bWrap; }
+    void SetBoxAlignment(int nBoxAlignment) { mBorder.meBoxAlignment = static_cast<AptStringAlignment>(nBoxAlignment); }
+    int GetBoxAlignment() const { return mBorder.meBoxAlignment; }
+    bool GetMouseWheelEnabled() const { return mBorder.mbMouseWheelEnabled; }
+    void SetMouseWheelEnabled(bool bEnabled) { mBorder.mbMouseWheelEnabled = bEnabled; }
 
     // ---- scroll -----------------------------------------------------------
     int  GetScroll() const { return mScroll; }                 // @0x82AD5860
