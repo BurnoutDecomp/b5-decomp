@@ -1,5 +1,9 @@
 #include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (SetSize / SetNumEntries)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+static const char KAC_ARTIST_ASSERT_HEADER[] =
+    "..\\..\\..\\GameShared\\GameClasses\\Graphics/CgsShaderConstants.h";
+static const char KAC_ARTIST_MATERIAL_ANIMATION_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\Dispatch/CgsMaterialAnimation.cpp";
 #include "GameShared/GameClasses/Development/CgsStrStream.h" // native missing shader-constant assert text
 // renderengine::ProgramBufferData / ProgramVariableHandle / ProgramBuffer::GetVariableHandleByName
 // -- the program-side half of ShaderConstantsExternal::FixUp(const ProgramBuffer*).
@@ -413,9 +417,10 @@ void ShaderConstantTableElement::SetSize(u8 lu8SizeInBytes)
 {
     mu8SizeInBytes = lu8SizeInBytes;
 
-    const int liNumQwInArray = (mu8NumEntries * mu8SizeInBytes) / 16;
-    CGS_ASSERT(liNumQwInArray <= 0xFFFF, "luNumQwInArray <= 0xFFFF");
-    mu16SizeOfArrayInQw = static_cast<u16>(liNumQwInArray);
+    const u32 luNumQwInArray = (mu8NumEntries * mu8SizeInBytes) / 16;
+    CGS_ASSERT(luNumQwInArray <= 0xFFFF,
+        CGS_ASSERT_MESSAGE_AT("luNumQwInArray <= 0xFFFF", KAC_ARTIST_ASSERT_HEADER, 148));
+    mu16SizeOfArrayInQw = static_cast<u16>(luNumQwInArray);
 }
 
 // CgsShaderConstants.cpp:171 (decl) / X360 @ 0x823F41E8
@@ -426,9 +431,10 @@ void ShaderConstantTableElement::SetNumEntries(u8 lu8NumEntries)
 {
     mu8NumEntries = lu8NumEntries;
 
-    const int liNumQwInArray = (mu8NumEntries * mu8SizeInBytes) / 16;
-    CGS_ASSERT(liNumQwInArray <= 0xFFFF, "luNumQwInArray <= 0xFFFF");
-    mu16SizeOfArrayInQw = static_cast<u16>(liNumQwInArray);
+    const u32 luNumQwInArray = (mu8NumEntries * mu8SizeInBytes) / 16;
+    CGS_ASSERT(luNumQwInArray <= 0xFFFF,
+        CGS_ASSERT_MESSAGE_AT("luNumQwInArray <= 0xFFFF", KAC_ARTIST_ASSERT_HEADER, 178));
+    mu16SizeOfArrayInQw = static_cast<u16>(luNumQwInArray);
 }
 
 // ---- ShaderConstantsCPU -----------------------------------------------------------------
@@ -444,7 +450,8 @@ void ShaderConstantTableElement::SetNumEntries(u8 lu8NumEntries)
 // fits a byte (< 256). Returns int 0 on X360 (u32 per the DWARF signature).
 u32 ShaderConstantsCPU::FixUp(u8* lpBaseData)
 {
-    CGS_ASSERT(muNumConstantsInstances < 256, "muNumConstantsInstances<256");
+    CGS_ASSERT(muNumConstantsInstances < 256,
+        CGS_ASSERT_MESSAGE_AT("muNumConstantsInstances<256", KAC_ARTIST_MATERIAL_ANIMATION_FILE, 126));
 
     const uintptr_t luBase = reinterpret_cast<uintptr_t>(lpBaseData);
 
@@ -453,7 +460,7 @@ u32 ShaderConstantsCPU::FixUp(u8* lpBaseData)
         reinterpret_cast<uintptr_t>(mppaConstantsInstanceData) + luBase);
     mppacNames = reinterpret_cast<const char**>(reinterpret_cast<uintptr_t>(mppacNames) + luBase);
 
-    if (muNumConstantsInstances != 0)
+    if (muNumConstantsInstances > 0)
     {
         u32 luIndex = 0;
         do
@@ -465,7 +472,8 @@ u32 ShaderConstantsCPU::FixUp(u8* lpBaseData)
             }
 
             mppaConstantsInstanceData[luIndex] = reinterpret_cast<u32*>(
-                reinterpret_cast<uintptr_t>(mppaConstantsInstanceData[luIndex]) + luBase);
+                reinterpret_cast<uintptr_t>(mppaConstantsInstanceData[luIndex]) +
+                reinterpret_cast<uintptr_t>(lpBaseData));
 
             ++luIndex;
         }

@@ -48,8 +48,7 @@ void BrnShaderConstantsFrame::Construct()
 // Lock-checked accessors the console emitted out-of-line. Reconstructed from
 // BURNOUT_X360_ARTIST.XEX + the DecFIGS DWARF. Every getter asserts the frame is finalized
 // (NOT still write-locked, mbLockedForWriting @this+0x31C == 0); every setter asserts it IS
-// write-locked. The X360 fires the streamed assert (dropped file/line + trailing "\n"); the
-// house CGS_ASSERT keeps the stringized condition. Each body is a single member load/store
+// write-locked. Matching builds preserve the original assertion locations. Each body is a single member load/store
 // (the SIMD lvx/stvx copy of a Matrix44/Vector4/Vector3, or an lfs/stfs of an f32).
 // ============================================================================
 
@@ -74,7 +73,8 @@ void BrnShaderConstantsFrame::SetEnvMapViewProjectionMatrix(BrnGraphics::EEnviro
 // X360 0x827B0158: write the camera transform. 64-byte affine store @this+0x50.
 void BrnShaderConstantsFrame::SetCameraTransform(Matrix44Affine lM)
 {
-    CGS_ASSERT(true == mbLockedForWriting, "true == mbLockedForWriting");
+    CGS_ASSERT(true == mbLockedForWriting,
+        CGS_ASSERT_MESSAGE_AT("true == mbLockedForWriting", KAC_ARTIST_ASSERT_FILE, 281));
     mCameraTransform = lM;
 }
 

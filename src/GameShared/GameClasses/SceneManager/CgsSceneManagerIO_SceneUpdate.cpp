@@ -2,37 +2,22 @@
 #include "GameShared/GameClasses/Module/CgsBaseEventQueue.h"                        // BaseEventQueue<T>::AddEvent / GetLength / GetMaxLength (inline generic)
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h"      // InSceneUpdateInterface + the embedded queues/elements
 
-// =============================================================================
-// CgsSceneManager::SceneManagerIO::InSceneUpdateInterface -- the grounded producer methods
-// (X360 0x822B10C8..0x822CB8E4). Reconstructed from BURNOUT_X360_ARTIST.XEX (semantic parity,
-// not byte match).
-//
-// SHARED SHAPE (every producer below): stage one event record on the stack, then
-//   if ( queue.miLength >= queue.miMaxLength )   // asm: lwzx miLength; lwzx miMaxLength; blt skip
-//       <fire "SceneManager.<member> too small, increase value in SceneManagerConstants.h">
-//   queue.AddEvent(event);                        // BaseEventQueue<T>::AddEvent -- appends unconditionally
-// The capacity assert is a NON-GATING tripwire (CGS_ASSERT collapses Begin/Fire/EndAssert and
-// the blt always skips it when there is room); AddEvent always runs. The methods return void
-// (the X360 tail-calls AddEvent and forwards its result, which the callers discard).
-//
-// The five formerly-blocked ledger functions of this class are now emitted here, grounded by
-// CgsSceneManager::SceneManagerIO::InSceneUpdateInterface::Construct @ 0x822E6550 (which names
-// every embedded queue's element type + capacity, so the whole embedded set is recovered):
-//   * Clear / Destruct              -- zero the live count (miLength) of all 25 embedded queues
-//                                      (X360 inlines 25 `stw 0, miLength(queue)`); each maps to a
-//                                      named queue's BaseEventQueue<T>::Clear(). Both return `this`.
-//   * SetVolumeInstanceTransform    -- targets mSetVolumeInstanceTransformQueue (X360 +0x8010);
-//   * AddVolumeInstanceForCaching   -- targets mAddVolumeInstanceForCachingQueue (X360 +0xBF4C0);
-//   * SetVolumeInstanceCullingGroup -- targets mSetVolumeInstanceCullingGroupQueue (X360 +0xBF920).
-//   The three volume-instance element records have no prior committed home, so their field layout
-//   is read off each producer's stores (@0x822CB7E8 / 0x8270DA10 / 0x822B1A98) and their capacity
-//   off Construct's offsets -- defined in CgsSceneManagerIO_SceneUpdate.h and size-pinned below.
-// =============================================================================
+// Scene update producers stage an event and append it to the corresponding queue.
+// ARTIST checks capacity before the append, even when the diagnostic fires.
+// The historical assertion paths and lines come from the FireAssert arguments.
 
 namespace CgsSceneManager
 {
 namespace SceneManagerIO
 {
+    namespace
+    {
+        const char KAC_SCENE_UPDATE_ARTIST_FILE[] =
+            "..\\..\\..\\GameShared\\GameClasses\\SceneManager/CgsSceneManagerIO_SceneUpdate.h";
+        const char KAC_CLEAR_CULLING_TABLE_ARTIST_FILE[] =
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\CgsSceneManagerIO_SceneUpdate.h";
+    }
+
     // ----- Update an entity's scene position (X360 0x822B1398) -----
     // Stages { mPosition = transform translation lane (v1), mEntityId = a2 } and appends to
     // mUpdatePositionQueue. The X360 receives the position pre-extracted in the v1 vmx arg; the
@@ -53,11 +38,12 @@ namespace SceneManagerIO
     void InSceneUpdateInterface::SetEntityPosition(CgsSceneManager::EntityId lEntityId, Vector3 lPosition)
     {
         InEventSetEntityPosition lEvent;
-        lEvent.mPosition = lPosition;          // stvx128 v1
-        lEvent.mEntityId = lEntityId;          // stw a2
+        lEvent.mEntityId = lEntityId;
+        lEvent.mPosition = lPosition;
 
         CGS_ASSERT(mUpdatePositionQueue.GetLength() < mUpdatePositionQueue.GetMaxLength(),
-                   "SceneManager.mUpdatePositionQueue too small, increase value in SceneManagerConstants.h");
+                   CGS_ASSERT_STREAM_MESSAGE_AT("SceneManager.mUpdatePositionQueue too small, increase value in SceneManagerConstants.h",
+                                                KAC_SCENE_UPDATE_ARTIST_FILE, 884));
         mUpdatePositionQueue.AddEvent(lEvent);
     }
 
@@ -78,12 +64,6 @@ namespace SceneManagerIO
         mAddEntityQueue.AddEvent(lEvent);
     }
 
-    namespace
-    {
-        const char KAC_DYNAMIC_VOLUME_ARTIST_FILE[] =
-            "..\\..\\..\\GameShared\\GameClasses\\SceneManager/CgsSceneManagerIO_SceneUpdate.h";
-    }
-
     // ARTIST 0x822B1518 and DecFIGS CgsSceneManagerIO_SceneUpdate.h:367.
     void InSceneUpdateInterface::AddDynamicVolume(VolumeId lVolumeId, const rw::collision::Volume* lpVolume,
                                                  u8 lxVolumeTypeFlags)
@@ -95,7 +75,7 @@ namespace SceneManagerIO
         lEvent.mVolumeBuffer.SetVolume(reinterpret_cast<const VolRef::Volume*>(lpVolume));
         CGS_ASSERT(mAddDynamicVolumeQueue.GetLength() < mAddDynamicVolumeQueue.GetMaxLength(),
                    CGS_ASSERT_STREAM_MESSAGE_AT("SceneManager.mAddDynamicVolumeQueue too small, increase value in SceneManagerConstants.h",
-                                                KAC_DYNAMIC_VOLUME_ARTIST_FILE, 933));
+                                                KAC_SCENE_UPDATE_ARTIST_FILE, 933));
         mAddDynamicVolumeQueue.AddEvent(lEvent);
     }
 
@@ -107,54 +87,57 @@ namespace SceneManagerIO
         lEvent.mVolumeBuffer.SetVolume(reinterpret_cast<const VolRef::Volume*>(lpVolume));
         CGS_ASSERT(mReplaceDynamicVolumeQueue.GetLength() < mReplaceDynamicVolumeQueue.GetMaxLength(),
                    CGS_ASSERT_STREAM_MESSAGE_AT("SceneManager.mReplaceDynamicVolumeQueue too small, increase value in SceneManagerConstants.h",
-                                                KAC_DYNAMIC_VOLUME_ARTIST_FILE, 954));
+                                                KAC_SCENE_UPDATE_ARTIST_FILE, 954));
         mReplaceDynamicVolumeQueue.AddEvent(lEvent);
     }
 
     // ----- Remove an entity from the scene (X360 0x822B12D0) -----
-    // Stages { mEntityId = a2, muOptions = a3 } and appends to mRemoveEntityQueue.
-    void InSceneUpdateInterface::RemoveEntity(CgsSceneManager::EntityId lEntityId, u32 luFlags)
+    void InSceneUpdateInterface::RemoveEntity(EntityId lEntityId, bool lbRemoveVolumeInstances)
     {
         InEventRemoveEntity lEvent;
         lEvent.mEntityId = lEntityId;   // stw a2 @+0x00
-        lEvent.muOptions = luFlags;     // stb a3 @+0x04 (option word; X360 writes its low byte)
+        lEvent.mbRemoveVolumeInstances = lbRemoveVolumeInstances;
 
         CGS_ASSERT(mRemoveEntityQueue.GetLength() < mRemoveEntityQueue.GetMaxLength(),
-                   "SceneManager.mRemoveEntityQueue too small, increase value in SceneManagerConstants.h");
+                   CGS_ASSERT_STREAM_MESSAGE_AT("SceneManager.mRemoveEntityQueue too small, increase value in SceneManagerConstants.h",
+                                                KAC_SCENE_UPDATE_ARTIST_FILE, 863));
         mRemoveEntityQueue.AddEvent(lEvent);
     }
 
     // ----- Remove an entity's body from the collision set (X360 0x822B19D0) -----
     // Stages the 64-bit id and appends to mRemoveForCollisionQueue.
-    void InSceneUpdateInterface::RemoveForCollision(CgsSceneManager::EntityId lEntityId)
+    void InSceneUpdateInterface::RemoveForCollision(VolumeInstanceId lVolumeInstanceId)
     {
         InEventRemoveForCollision lEvent;
-        lEvent.muCollisionId = static_cast<u64>(static_cast<u32>(lEntityId));  // std a2 @+0x00
+        lEvent.mVolumeInstanceId = lVolumeInstanceId;
 
         CGS_ASSERT(mRemoveForCollisionQueue.GetLength() < mRemoveForCollisionQueue.GetMaxLength(),
-                   "SceneManager.mRemoveForCollisionQueue too small, increase value in SceneManagerConstants.h");
+                   CGS_ASSERT_STREAM_MESSAGE_AT("SceneManager.mRemoveForCollisionQueue too small, increase value in SceneManagerConstants.h",
+                                                KAC_SCENE_UPDATE_ARTIST_FILE, 1089));
         mRemoveForCollisionQueue.AddEvent(lEvent);
     }
 
     // ----- Remove a dynamic volume (X360 0x822B16D0) -----
-    void InSceneUpdateInterface::RemoveVolume(CgsSceneManager::EntityId lEntityId)
+    void InSceneUpdateInterface::RemoveVolume(VolumeId lVolumeId)
     {
         InEventRemoveVolume lEvent;
-        lEvent.mVolumeId = VolumeId(static_cast<u64>(static_cast<u32>(lEntityId)));  // std a2 @+0x00
+        lEvent.mVolumeId = lVolumeId;
 
         CGS_ASSERT(mRemoveVolumeQueue.GetLength() < mRemoveVolumeQueue.GetMaxLength(),
-                   "SceneManager.mRemoveVolumeQueue too small, increase value in SceneManagerConstants.h");
+                   CGS_ASSERT_STREAM_MESSAGE_AT("SceneManager.mRemoveVolumeQueue too small, increase value in SceneManagerConstants.h",
+                                                KAC_SCENE_UPDATE_ARTIST_FILE, 973));
         mRemoveVolumeQueue.AddEvent(lEvent);
     }
 
     // ----- Remove a volume instance (X360 0x822B1798) -----
-    void InSceneUpdateInterface::RemoveVolumeInstance(CgsSceneManager::EntityId lEntityId)
+    void InSceneUpdateInterface::RemoveVolumeInstance(VolumeInstanceId lVolumeInstanceId)
     {
         InEventRemoveVolumeInstance lEvent;
-        lEvent.mVolumeInstanceId.muId = static_cast<u64>(static_cast<u32>(lEntityId));  // std a2 @+0x00
+        lEvent.mVolumeInstanceId = lVolumeInstanceId;
 
         CGS_ASSERT(mRemoveVolumeInstanceQueue.GetLength() < mRemoveVolumeInstanceQueue.GetMaxLength(),
-                   "SceneManager.mRemoveVolumeInstanceQueue too small, increase value in SceneManagerConstants.h");
+                   CGS_ASSERT_STREAM_MESSAGE_AT("SceneManager.mRemoveVolumeInstanceQueue too small, increase value in SceneManagerConstants.h",
+                                                KAC_SCENE_UPDATE_ARTIST_FILE, 1019));
         mRemoveVolumeInstanceQueue.AddEvent(lEvent);
     }
 
@@ -266,7 +249,8 @@ namespace SceneManagerIO
         lEvent.mfRadius  = lfBoundingRadius;   // stfs a3 @+0x04
 
         CGS_ASSERT(mSetEntityRadiusQueue.GetLength() < mSetEntityRadiusQueue.GetMaxLength(),
-                   "SceneManager.mSetEntityRadiusQueue too small, increase value in SceneManagerConstants.h");
+                   CGS_ASSERT_STREAM_MESSAGE_AT("SceneManager.mSetEntityRadiusQueue too small, increase value in SceneManagerConstants.h",
+                                                KAC_SCENE_UPDATE_ARTIST_FILE, 905));
         mSetEntityRadiusQueue.AddEvent(lEvent);
     }
 
@@ -278,7 +262,8 @@ namespace SceneManagerIO
         lEvent.mbCullAll = lbCullAll;   // stb a2 @+0x00
 
         CGS_ASSERT(mClearCullingTableQueue.GetLength() < mClearCullingTableQueue.GetMaxLength(),
-                   "SceneManager.mClearCullingTableQueue too small, increase value in SceneManagerConstants.h");
+                   CGS_ASSERT_STREAM_MESSAGE_AT("SceneManager.mClearCullingTableQueue too small, increase value in SceneManagerConstants.h",
+                                                KAC_CLEAR_CULLING_TABLE_ARTIST_FILE, 1150));
         mClearCullingTableQueue.AddEvent(lEvent);
     }
 
@@ -290,7 +275,8 @@ namespace SceneManagerIO
         lEvent.mEntity = lEntityId;   // stw a2 @+0x00
 
         CGS_ASSERT(mClearEntityPaddingQueue.GetLength() < mClearEntityPaddingQueue.GetMaxLength(),
-                   "SceneManager.mClearEntityPaddingQueue too small, increase value in SceneManagerConstants.h");
+                   CGS_ASSERT_STREAM_MESSAGE_AT("SceneManager.mClearEntityPaddingQueue too small, increase value in SceneManagerConstants.h",
+                                                KAC_SCENE_UPDATE_ARTIST_FILE, 1193));
         mClearEntityPaddingQueue.AddEvent(lEvent);
     }
 
@@ -304,7 +290,8 @@ namespace SceneManagerIO
         lEvent.mTransform        = lTransform;           // four stvx128 lanes @+0x10
 
         CGS_ASSERT(mSetVolumeInstanceTransformQueue.GetLength() < mSetVolumeInstanceTransformQueue.GetMaxLength(),
-                   "SceneManager.mSetVolumeInstanceTransformQueue too small, increase value in SceneManagerConstants.h");
+                   CGS_ASSERT_STREAM_MESSAGE_AT("SceneManager.mSetVolumeInstanceTransformQueue too small, increase value in SceneManagerConstants.h",
+                                                KAC_SCENE_UPDATE_ARTIST_FILE, 1040));
         mSetVolumeInstanceTransformQueue.AddEvent(lEvent);
     }
 
@@ -316,16 +303,16 @@ namespace SceneManagerIO
     }
 
     // ----- Set a volume instance's culling group (X360 0x822B1A98) -----
-    // Stages { mVolumeInstanceId = a2 (std, 8B), miCullingGroupId = a3 (stw, 4B) } and appends
-    // to mSetVolumeInstanceCullingGroupQueue.
-    void InSceneUpdateInterface::SetVolumeInstanceCullingGroup(VolumeInstanceId lVolumeInstanceId, s32 liCullingGroupId)
+    void InSceneUpdateInterface::SetVolumeInstanceCullingGroup(VolumeInstanceId lVolumeInstanceId,
+                                                               InEventAddForCollision::CullingGroup lCullingGroup)
     {
         InEventSetVolumeInstanceCullingGroup lEvent;
-        lEvent.mVolumeInstanceId = lVolumeInstanceId;   // std a2 @+0x00
-        lEvent.miCullingGroupId  = liCullingGroupId;    // stw a3 @+0x08
+        lEvent.mCullingGroup = lCullingGroup;
+        lEvent.mVolumeInstanceId = lVolumeInstanceId;
 
         CGS_ASSERT(mSetVolumeInstanceCullingGroupQueue.GetLength() < mSetVolumeInstanceCullingGroupQueue.GetMaxLength(),
-                   "SceneManager.mSetVolumeInstanceCullingGroupQueue too small, increase value in SceneManagerConstants.h");
+                   CGS_ASSERT_STREAM_MESSAGE_AT("SceneManager.mSetVolumeInstanceCullingGroupQueue too small, increase value in SceneManagerConstants.h",
+                                                KAC_SCENE_UPDATE_ARTIST_FILE, 1110));
         mSetVolumeInstanceCullingGroupQueue.AddEvent(lEvent);
     }
 
@@ -348,18 +335,17 @@ namespace SceneManagerIO
     }
 
     // ----- Enable/disable a culling-group adjacency pair (X360 0x822B1B60) -----
-    // Stages { muGroupA, muGroupB, muEnabled } (three 32-bit words) and appends to
-    // mSetCullingGroupPairQueue after the standard "queue too small" tripwire
-    // (X360-baked CgsSceneManagerIO_SceneUpdate.h:1133).
-    void InSceneUpdateInterface::SetCullingGroupPair(u8 lu8GroupA, u8 lu8GroupB, u8 lu8Flags)
+    void InSceneUpdateInterface::SetCullingGroupPair(InEventAddForCollision::CullingGroup lGroupA,
+                                                    InEventAddForCollision::CullingGroup lGroupB, bool lbCull)
     {
         InEventSetCullingGroupPair lEvent;
-        lEvent.muGroupA  = lu8GroupA;
-        lEvent.muGroupB  = lu8GroupB;
-        lEvent.muEnabled = lu8Flags;
+        lEvent.mbCull = lbCull;
+        lEvent.mCullingGroupA = lGroupA;
+        lEvent.mCullingGroupB = lGroupB;
 
         CGS_ASSERT(mSetCullingGroupPairQueue.GetLength() < mSetCullingGroupPairQueue.GetMaxLength(),
-                   "SceneManager.mSetCullingGroupPairQueue too small, increase value in SceneManagerConstants.h");
+                   CGS_ASSERT_STREAM_MESSAGE_AT("SceneManager.mSetCullingGroupPairQueue too small, increase value in SceneManagerConstants.h",
+                                                KAC_SCENE_UPDATE_ARTIST_FILE, 1133));
         mSetCullingGroupPairQueue.AddEvent(lEvent);
     }
 
@@ -414,7 +400,8 @@ namespace SceneManagerIO
         lEvent.mfField18      = lfBoundingRadius;                // stfs a4 @+0x18
 
         CGS_ASSERT(mAddEntityQueue.GetLength() < mAddEntityQueue.GetMaxLength(),
-                   "SceneManager.mAddEntityQueue too small, increase value in SceneManagerConstants.h");
+                   CGS_ASSERT_STREAM_MESSAGE_AT("SceneManager.mAddEntityQueue too small, increase value in SceneManagerConstants.h",
+                                                KAC_SCENE_UPDATE_ARTIST_FILE, 825));
         mAddEntityQueue.AddEvent(lEvent);
     }
 

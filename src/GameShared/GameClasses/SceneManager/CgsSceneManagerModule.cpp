@@ -571,7 +571,7 @@ void SceneManagerModule::EndUpdateTriangleCache(CgsModule::IOBufferStack* /*lpIn
 //
 // ⭐ RETYPED 2026-08-19 (wave Q5 / E1a) -- see the declaration's note. The two fitted
 // placeholder parameter types are gone, so the event is now read through its own named
-// members (InEventSetVolumeInstanceCullingGroup::mVolumeInstanceId / miCullingGroupId)
+// members (InEventSetVolumeInstanceCullingGroup::mVolumeInstanceId / mCullingGroup)
 // instead of a `const u32*` view over the buffer. Behaviour is unchanged: the X360 loads
 // the 64-bit id (`ld r4,0(r28)`) and the third word (`lwz r11,8(r28)`), then stores that
 // word's low byte with `stbx`.
@@ -583,7 +583,7 @@ void SceneManagerModule::ProcessSetVolumeInstanceCullingGroupEvent(
     CGS_ASSERT(lpOverlapGenerationInput != NULL, "lpOverlapGenerationInputBuffer != NULL");
 
     const VolumeInstanceId lInstanceId    = lrEvent.mVolumeInstanceId;
-    const u8               lu8CullingGroup = static_cast<u8>(lrEvent.miCullingGroupId);
+    const u8               lu8CullingGroup = static_cast<u8>(lrEvent.mCullingGroup);
 
     const s32 liVolumeInstIndex = mEntityManager.GetVolumeInstanceIndexByID(lInstanceId);
     if (liVolumeInstIndex == -1)
@@ -857,12 +857,8 @@ void SceneManagerModule::BridgeInputSceneUpdateInterfaceToSubModules(
 
     // ---- leg 4: remove entities (X360 0x828D22B0..0x828D2854) -------------------------
     // X360 order: a slot has to be free before the adds run.
-    // ⭐ THE VOLUME HALF LANDED 2026-08-19 (wave Q5 / cluster RMLEG). The console's
-    // order is RemoveAllEntityVolumeInstances (0x828D279C) BEFORE the partition unlink
-    // (0x828D27B8) and the entity free (0x828D2838), and the volume call is gated on the
-    // event's own byte at +4 (`lbz r11, 4(r25)` @0x828D2784 -- the producer writes it with
-    // `stb r5, 4` @0x822B12E8, so producer and consumer agree; on the host both sides speak
-    // the whole u32 muOptions word, which is consistent for every observed flag value).
+    // ARTIST reads the event flag at 0x828D2784 and removes the volume instances
+    // before unlinking the entity from the partition and freeing it.
     // The whole-leg `if (lpPartition != NULL)` is gone: only the graph unlink needs the
     // partition, and a missing octree must not suppress the volume registry (same reasoning
     // as the per-leg partition note in the banner).
@@ -878,7 +874,7 @@ void SceneManagerModule::BridgeInputSceneUpdateInterfaceToSubModules(
             {
                 continue;   // never registered (or already retired)
             }
-            if (lrEvent.muOptions != 0)                                     // 0x828D2784
+            if (lrEvent.mbRemoveVolumeInstances)                             // 0x828D2784
             {
                 RemoveAllEntityVolumeInstances(static_cast<u16>(liIndex),
                                                lpOverlapGenerationInput);   // 0x828D279C
@@ -1094,13 +1090,6 @@ void SceneManagerModule::BridgeInputSceneUpdateInterfaceToSubModules(
     // `if (!lPair.mbCull)`). Without this leg the grid keeps whatever leg 14's fill left in it, so
     // every pair carries that one default verdict instead of its own group pair's.
     //
-    // ⚠️ REPORTED, NOT FIXED (foreign file): the console reads the third field with
-    // `lbz r6, 8(event)` -- a BYTE -- and DWARF CgsSceneManagerIO_SceneUpdate.h:230 spells the
-    // member `bool mbCull`. This tree's CgsSceneManagerIO_EventSetCullingGroupPair.h models it
-    // as `u32 muEnabled` and its producer (CgsSceneManagerIO_SceneUpdate.cpp:404) writes the
-    // whole word, so producer and consumer agree on the host and the flag arrives intact; the
-    // NAME and TYPE are the divergence, not the value. Do not "fix" the consumer alone: a byte
-    // read of a big-endian word is 0, which is exactly the console-value-on-a-host-tree trap.
     {
         const s32 liCount = lpScene->mSetCullingGroupPairQueue.GetLength();
         for (s32 liEvent = 0; liEvent < liCount; ++liEvent)
@@ -1108,8 +1097,8 @@ void SceneManagerModule::BridgeInputSceneUpdateInterfaceToSubModules(
             const SceneManagerIO::InEventSetCullingGroupPair& lrEvent =
                 lpScene->mSetCullingGroupPairQueue.GetEvent(liEvent);
 
-            mCullingGroupManager.SetCullingGroupPair(lrEvent.muGroupA, lrEvent.muGroupB,
-                                                     lrEvent.muEnabled != 0);
+            mCullingGroupManager.SetCullingGroupPair(lrEvent.mCullingGroupA, lrEvent.mCullingGroupB,
+                                                     lrEvent.mbCull);
         }
     }
 
@@ -1866,7 +1855,7 @@ void SceneManagerModule::ProcessAddVolumeInstanceForCachingEvent(
 //
 // The mirror of the above, and the ONLY thing that takes a body back out of the sweeper:
 //   assert(lpOverlapGenerationInputBuffer != NULL)                        (:1047)
-//   liIndex = mEntityManager.GetVolumeInstanceIndexByID(event.muCollisionId)
+//   liIndex = mEntityManager.GetVolumeInstanceIndexByID(event.mVolumeInstanceId)
 //                                                       (`ld r4,0(r31)` @0x828CF870)
 //   if (liIndex == -1) { assert("Volume instance not found") (:1060); return; }  -- GATING:
 //        0x828CF888 `beq cr6, loc_828CF8C4` jumps PAST everything to the epilogue.
@@ -1876,20 +1865,13 @@ void SceneManagerModule::ProcessAddVolumeInstanceForCachingEvent(
 //        +0x08), sub_828B02D8 == the non-const GetRemoveBodyQueue, then
 //        BaseEventQueue<InRemoveBody>::AddEvent @0x828B8888.
 //
-// ⚠️ The event's payload is spelled `u64 muCollisionId` in this tree's
-// CgsSceneManagerIO_EventRemoveForCollision.h; it IS a VolumeInstanceId (the producer
-// InSceneUpdateInterface::RemoveForCollision(VolumeInstanceId) stores the whole 64-bit id
-// into it, CgsSceneManagerIO_SceneUpdate.h:208-216). Rebuilt by name here rather than
-// retyped, because that element header is not this cluster's file.
-// ===========================================================================
 void SceneManagerModule::ProcessRemoveForCollisionEvent(
     const SceneManagerIO::InEventRemoveForCollision& lrEvent,
     OverlapGenerationIO::InputBuffer* lpOverlapGenerationInput)
 {
     CGS_ASSERT(lpOverlapGenerationInput != NULL, "lpOverlapGenerationInputBuffer != NULL");  // :1047
 
-    VolumeInstanceId lVolumeInstanceId;
-    lVolumeInstanceId.muId = lrEvent.muCollisionId;
+    const VolumeInstanceId lVolumeInstanceId = lrEvent.mVolumeInstanceId;
 
     const s32 liVolumeInstanceIndex =
         mEntityManager.GetVolumeInstanceIndexByID(lVolumeInstanceId);

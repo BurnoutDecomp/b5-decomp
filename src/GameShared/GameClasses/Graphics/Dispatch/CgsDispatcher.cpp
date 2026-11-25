@@ -29,6 +29,9 @@
 static const char KAC_ARTIST_ASSERT_FILE[] =
     "..\\..\\..\\GameShared\\GameClasses\\Graphics\\Dispatch\\CgsDispatcher.h";
 
+static const char KAC_ARTIST_ASSERT_CPP[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\Dispatch/CgsDispatcher.cpp";
+
 namespace CgsGraphics
 {
 
@@ -208,7 +211,8 @@ void DispatchFrame::Construct(u32 luNumLists, u32 luBinSizeBytes, rw::IResourceA
 
     // Native new[] emits the original384-byte stride and overflow clamp.
     m_paLists = new DispatchList[luNumLists];
-    CGS_ASSERT(m_paLists != NULL, "m_paLists != NULL");
+    CGS_ASSERT(m_paLists != NULL,
+        CGS_ASSERT_MESSAGE_AT("m_paLists != NULL", KAC_ARTIST_ASSERT_CPP, 713));
 
     m_Bin.mpDispatchFrame = this;
     m_Bin.Construct(luBinSizeBytes, lpAllocator);
@@ -220,10 +224,11 @@ void DispatchFrame::Construct(u32 luNumLists, u32 luBinSizeBytes, rw::IResourceA
         lpList->mpDispatchBin   = &m_Bin;
         lpList->muChainBlockCount = 0;
         lpList->muWord00        = 0;
+        DispatchCommand* lpBinBase = lpList->mpDispatchBin->GetBase();
         lpList->mpBlockListHead = 0;
         lpList->mpBlockListTail = 0;
         lpList->mpSortedKeys    = 0;
-        lpList->m_pBinBase      = m_Bin.GetBase();
+        lpList->m_pBinBase      = lpBinBase;
     }
 }
 

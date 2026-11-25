@@ -7,34 +7,10 @@
 // fixed-capacity EventQueue<> members (mUpdatePositionQueue ... ) plus the producer
 // methods that stage one event and append it to the matching queue.
 //
-// LAYOUT (this TU is the DWARF home CgsSceneManagerIO_SceneUpdate.h). The X360 producers
-// address each embedded queue at a large this-relative byte offset and append via the
-// per-element BaseEventQueue<T>::AddEvent. The queues below are the ones this TU's own
-// producers (0x822B10C8..0x822CB8E4) touch and whose element type + capacity are grounded
-// by a committed element home + the matching EventQueue_*_N explicit-instantiation TU. They
-// are declared in ascending X360-offset order (== DWARF declaration order). PC layout is the
-// baseline (widened pointers): the 8-byte-pointer BaseEventQueue header keeps the absolute
-// PC offsets from matching the X360 byte offsets for the <=4-aligned elements, exactly as the
-// project models every recovered layout -- so the producers reach each queue BY NAME, not by
-// the X360 byte offset. Nothing external reads a raw offset (every consumer takes &member or
-// embeds the aggregate by value), so the named-member model is the faithful reconstruction.
-//
-// COMPLETE LAYOUT (grounded): the whole embedded-queue set is now recovered from
-// CgsSceneManager::SceneManagerIO::InSceneUpdateInterface::Construct @ 0x822E6550, which
-// constructs all 25 embedded queues in ascending this-relative offset order, naming each
-// queue's element type + capacity (EventQueue<T, N>). The whole-interface Clear/Destruct
-// (X360 0x822B10C8 / 0x828BA280) each zero the live count (miLength) of those 25 queues; the
-// 25 zeroed offsets in the asm are exactly Construct's 25 queue bases + 8. Every element type
-// has a committed home in the _Event*.h family, except the three volume-instance element
-// records (SetVolumeInstanceTransform / SetVolumeInstanceCullingGroup / AddVolumeInstanceForCaching)
-// whose field layout is read directly off their producers' stores (@0x822CB7E8 / 0x822B1A98 /
-// 0x8270DA10) and defined below; their capacities are pinned by Construct's offsets.
-//
-// The 14 additive queue members below are APPENDED after the 11 committed members (never
-// shifting the committed front). The named-member reconstruction is order-independent for the
-// producers (they reach each queue BY NAME) and for Clear/Destruct (independent per-queue count
-// resets), so appending -- rather than interleaving in X360-offset order -- is faithful and
-// keeps the committed members' offsets unchanged. X360 offsets are kept in per-member comments.
+// ARTIST Construct (0x822E6550) establishes the order, element types and capacities
+// of all 25 queues. DecFIGS repeats their declarations at lines 585–609.
+// Clear and Destruct reset those same queue counts (ARTIST 0x822B10C8 / 0x828BA280).
+// The offsets beside the members are the native Xbox 360 layout.
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                          // global Matrix44Affine typedef
@@ -95,7 +71,7 @@ namespace SceneManagerIO
     {
     public:
         VolumeInstanceId mVolumeInstanceId; // +0x00 (std r4, 8B)
-        s32              miCullingGroupId;  // +0x08 (stw r5, 4B)
+        InEventAddForCollision::CullingGroup mCullingGroup; // +0x08
     };
 
     // mAddVolumeInstanceForCachingQueue element (producer @0x8270DA10: `std r30` id @+0x00,
@@ -161,50 +137,10 @@ namespace SceneManagerIO
                              Vector3 lPadding,
                              EAddForCollisionCacheOptions leCacheOptions);
 
-        void RemoveEntity(CgsSceneManager::EntityId lEntityId, u32 luFlags);
-        void RemoveForCollision(CgsSceneManager::EntityId lEntityId);
-        void RemoveVolumeInstance(CgsSceneManager::EntityId lEntityId);
-        void RemoveVolume(CgsSceneManager::EntityId lEntityId);
-
-        // ---- the DWARF's own 64-bit forms of the three producers above -----------------
-        // ADDITIVE GROW (ghost-car wave 2026-08-17). The three committed declarations take a
-        // 32-bit EntityId, which was fitted to their one caller
-        // (BrnPhysics::Deformation::PhysicalBodyPart::RemoveFromScene, whose ids really are
-        // 32-bit words) and which the DecFIGS DWARF contradicts (:393 VolumeInstanceId, :378
-        // VolumeId, :423 VolumeInstanceId) -- the X360 producers store a whole 64-bit r4.
-        // ActiveRaceCar::RemoveFromScene @0x822D4100 passes the FULL mHandlingBodyVolumeId,
-        // whose entity word lives in the HIGH dword; routing it through the 32-bit form would
-        // move that word to the LOW dword and post a different handle. Both forms are kept so
-        // no committed call site changes meaning. Header-only inlines: no new link symbol.
-        void RemoveForCollision(CgsSceneManager::VolumeInstanceId lVolumeInstanceId)
-        {
-            InEventRemoveForCollision lEvent;
-            lEvent.muCollisionId = lVolumeInstanceId.muId;   // std r4 @+0x00 (the whole qword)
-
-            CGS_ASSERT(mRemoveForCollisionQueue.GetLength() < mRemoveForCollisionQueue.GetMaxLength(),
-                       "SceneManager.mRemoveForCollisionQueue too small, increase value in SceneManagerConstants.h");
-            mRemoveForCollisionQueue.AddEvent(lEvent);
-        }
-
-        void RemoveVolumeInstance(CgsSceneManager::VolumeInstanceId lVolumeInstanceId)
-        {
-            InEventRemoveVolumeInstance lEvent;
-            lEvent.mVolumeInstanceId = lVolumeInstanceId;    // std r4 @+0x00
-
-            CGS_ASSERT(mRemoveVolumeInstanceQueue.GetLength() < mRemoveVolumeInstanceQueue.GetMaxLength(),
-                       "SceneManager.mRemoveVolumeInstanceQueue too small, increase value in SceneManagerConstants.h");
-            mRemoveVolumeInstanceQueue.AddEvent(lEvent);
-        }
-
-        void RemoveVolume(CgsSceneManager::VolumeId lVolumeId)
-        {
-            InEventRemoveVolume lEvent;
-            lEvent.mVolumeId = lVolumeId;                    // std r4 @+0x00
-
-            CGS_ASSERT(mRemoveVolumeQueue.GetLength() < mRemoveVolumeQueue.GetMaxLength(),
-                       "SceneManager.mRemoveVolumeQueue too small, increase value in SceneManagerConstants.h");
-            mRemoveVolumeQueue.AddEvent(lEvent);
-        }
+        void RemoveEntity(EntityId lEntityId, bool lbRemoveVolumeInstances);
+        void RemoveForCollision(VolumeInstanceId lVolumeInstanceId);
+        void RemoveVolumeInstance(VolumeInstanceId lVolumeInstanceId);
+        void RemoveVolume(VolumeId lVolumeId);
         void SetVolumeInstanceTransform(CgsSceneManager::EntityId lEntityId, const Matrix44Affine& lrTransform);
 
         // ARTIST 0x822B15F8 passes the complete volume ID and SDK volume.
@@ -217,7 +153,8 @@ namespace SceneManagerIO
         // ADDITIVE (WorldModule::Prepare @0x827D53B0 stage 3 stages the ten
         // world culling-group pairs). Declaration-only; body with this TU's home
         // (pushes an InEventSetCullingGroupPair onto mSetCullingGroupPairQueue).
-        void SetCullingGroupPair(u8 lu8GroupA, u8 lu8GroupB, u8 lu8Flags);
+        void SetCullingGroupPair(InEventAddForCollision::CullingGroup lGroupA,
+                                 InEventAddForCollision::CullingGroup lGroupB, bool lbCull);
         void ClearEntityVolumesPadding(CgsSceneManager::EntityId lEntityId);
 
         // Merged prop-entity write-side updaters. SetVolumeInstanceTransform(VolumeInstanceId)
@@ -245,7 +182,8 @@ namespace SceneManagerIO
 
         // ADDITIVE GROW: the two remaining volume-instance producers (bodied by this TU). Args
         // are asm-attested (r4 8-byte VolumeInstanceId + a 32-bit second word each).
-        void SetVolumeInstanceCullingGroup(VolumeInstanceId lVolumeInstanceId, s32 liCullingGroupId); // @0x822B1A98
+        void SetVolumeInstanceCullingGroup(VolumeInstanceId lVolumeInstanceId,
+                                           InEventAddForCollision::CullingGroup lCullingGroup);
         void AddVolumeInstanceForCaching(VolumeInstanceId lVolumeInstanceId, s32 leCacheOptions);     // @0x8270DA10
 
         // ---- the TRIANGLE-CACHE reposition producer ------------------------------------------
