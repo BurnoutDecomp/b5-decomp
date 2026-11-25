@@ -5,7 +5,7 @@
 #include "GameSource/Network/Messages/BrnFburnChallengeSuccessMessage.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
-#include <cstring>   // memcpy
+#include <xtl.h>
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnNetwork::FburnChallengeSuccessMessage::Construct             @ 0x8257C940
@@ -110,14 +110,14 @@ namespace BrnNetwork
     {
         CGS_ASSERT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME, CGS_ASSERT_MESSAGE_AT(
             "lu16FrameCount != KU16_INVALID_FRAME",
-            __FILE__, 158 /* ARTIST 0x8257CB70 */));
+            CGS_ARTIST_FILE, 158 /* ARTIST 0x8257CB70 */));
 
         if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0)
         {
             miFramesSinceStart = liFramesSinceStart;
-            memcpy(mafActionScores, lpaActionScores, 8);            // 2 x f32
-            memcpy(mabSuccessfulActions, lpaSuccessfulActions, 2);   // 2 x bool
-            memcpy(mabAccumulationThisFrame, lpaAccumulationsThisFrame, 2);
+            XMemCpy(mafActionScores, lpaActionScores, sizeof(mafActionScores));
+            XMemCpy(mabSuccessfulActions, lpaSuccessfulActions, sizeof(mabSuccessfulActions));
+            XMemCpy(mabAccumulationThisFrame, lpaAccumulationsThisFrame, sizeof(mabAccumulationThisFrame));
             CgsNetwork::ReliableMessage::PrepareForSend(KI_FBURN_CHALLENGE_SUCCESS_MESSAGE_TYPE,
                                                         lu16FrameCount);
         }
@@ -146,9 +146,9 @@ namespace BrnNetwork
         if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0)
         {
             *lpiFramesSinceStart = miFramesSinceStart;
-            memcpy(lpaActionScores, mafActionScores, 8);
-            memcpy(lpaSuccessfulActions, mabSuccessfulActions, 2);
-            memcpy(lpaAccumulationsThisFrame, mabAccumulationThisFrame, 2);
+            XMemCpy(lpaActionScores, mafActionScores, sizeof(mafActionScores));
+            XMemCpy(lpaSuccessfulActions, mabSuccessfulActions, sizeof(mabSuccessfulActions));
+            XMemCpy(lpaAccumulationsThisFrame, mabAccumulationThisFrame, sizeof(mabAccumulationThisFrame));
             mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
             return true;
         }

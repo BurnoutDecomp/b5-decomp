@@ -10,6 +10,7 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/Boost/BrnBoostBurnout3.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/Boost/BrnBoostBurnout5.h"
 #include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"
+#include "rw/math/fpu/scalar_operation.h"
 
 namespace BrnWorld
 {
@@ -99,28 +100,11 @@ void BoostBurnout5::OnNearMiss(ENearMissType leNearMissType)
 void BoostBurnout5::OnWrecked(bool lbIsInOnlineGameMode)
 {
     RemoveBoost(mfOnWrecked);
-
-    if (mfBoostAmount < 0.0f)
-    {
-        mfBoostAmount = 0.0f;
-    }
-    if (!(mfBoostAmount <= mfMaxBoost))
-    {
-        mfBoostAmount = mfMaxBoost;
-    }
+    mfBoostAmount = rw::math::fpu::Clamp(mfBoostAmount, 0.0f, mfMaxBoost);
 
     if (lbIsInOnlineGameMode && mfBoostAmount < mfMinBoostAllowedAmount)
     {
-        f32 lfRestoredBoost = mfMinBoostAllowedAmount + 1.0f;
-        if (lfRestoredBoost < 0.0f)
-        {
-            lfRestoredBoost = 0.0f;
-        }
-        if (!(lfRestoredBoost <= mfMaxBoost))
-        {
-            lfRestoredBoost = mfMaxBoost;
-        }
-        mfBoostAmount = lfRestoredBoost;
+        mfBoostAmount = rw::math::fpu::Clamp(mfMinBoostAllowedAmount + 1.0f, 0.0f, mfMaxBoost);
     }
 }
 

@@ -368,11 +368,6 @@ void BoostStrategy::SetCarStatBoostLevel(s32 liBoostLevel,
     mfBoostAmount = std::min(std::max(mfMaxBoost * 0.5f, 0.0f), mfMaxBoost);
 }
 
-void BoostStrategy::RemoveBoost(f32 lfBoostAmount)
-{
-    mfBoostAmount = std::max(mfBoostAmount - lfBoostAmount, 0.0f);
-}
-
 void BoostStrategy::TurnOffBoosting()
 {
     mbBoosting = false;

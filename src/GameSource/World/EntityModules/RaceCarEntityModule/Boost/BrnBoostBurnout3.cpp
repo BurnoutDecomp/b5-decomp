@@ -1349,19 +1349,8 @@ BoostBurnout3::OnTakenDownByAIOrPlayer()
 // their `beq cr6` @0x822C1D30. DWARF agrees the parameter exists
 // (`virtual void OnWrecked(bool);`, BrnBoostBurnout3.h / cpp:445).
 //
-// NaN POLARITY -- the reason this is NOT rw::math::fpu::Clamp. `fsel frD,frA,frB,frC`
-// yields frB when frA >= 0 and frC otherwise, and a NaN frA is NOT >= 0, so:
-//   * lower half (0x822C2470, 0x822C24A0): frA = -v, frC = v, so a NaN input
-//     falls through UNCHANGED;
-//   * upper half (0x822C2478, 0x822C24A8): frA = max - v, frC = mfMaxBoost, so a
-//     NaN input comes out as mfMaxBoost -- the bar SELF-HEALS on console.
-// A three-argument Clamp written as `(v<lo)?lo:((hi<v)?hi:v)` returns NaN
-// unchanged and would make a NaN stick forever, so the upper half must be spelled
-// as a NEGATED ORDERED predicate. Same spelling as BoostBurnout2::OnWrecked
-// @0x822C15D8 (partfile 05), which clamps the same pair of members.
-// (Lower half: `if (v < 0.0f)` differs from the fsel only in the sign of a zero
-// result -- the fsel turns -0.0f into +0.0f, the `if` leaves it -0.0f. Every
-// other input, NaN included, agrees. The sibling spells it `<`; so does this.)
+// The two fsel pairs implement the RenderWare scalar clamp. They select
+// positive zero at the lower bound and mfMaxBoost for an unordered amount.
 //
 // The `bgelr` at 0x822C248C needs no such rewrite in the other direction: `bge`
 // after `fcmpu` is taken on greater-or-equal AND on unordered, so the guarded
@@ -1390,37 +1379,12 @@ void
 BoostBurnout3::OnWrecked(
     bool lbIsInOnlineGameMode )
 {
-    RemoveBoost( mfOnWrecked );
+    RemoveBoost(mfOnWrecked);
+    mfBoostAmount = rw::math::fpu::Clamp(mfBoostAmount, 0.0f, mfMaxBoost);
 
-    // Shared [0, mfMaxBoost] clamp -- see the NaN POLARITY note above.
-    if( mfBoostAmount < 0.0f )
+    if (lbIsInOnlineGameMode && mfBoostAmount < mfMinBoostAllowedAmount)
     {
-        mfBoostAmount = 0.0f;
-    }
-    if( !( mfBoostAmount <= mfMaxBoost ) )
-    {
-        mfBoostAmount = mfMaxBoost;
-    }
-
-    if( lbIsInOnlineGameMode )
-    {
-        // An instant wreck must not leave the car below the amount the mode
-        // guarantees, so top the bar back up to just over that floor.
-        if( mfBoostAmount < mfMinBoostAllowedAmount )
-        {
-            f32 lfRestoredBoost = mfMinBoostAllowedAmount + 1.0f;
-
-            if( lfRestoredBoost < 0.0f )
-            {
-                lfRestoredBoost = 0.0f;
-            }
-            if( !( lfRestoredBoost <= mfMaxBoost ) )
-            {
-                lfRestoredBoost = mfMaxBoost;
-            }
-
-            mfBoostAmount = lfRestoredBoost;
-        }
+        mfBoostAmount = rw::math::fpu::Clamp(mfMinBoostAllowedAmount + 1.0f, 0.0f, mfMaxBoost);
     }
 }
 

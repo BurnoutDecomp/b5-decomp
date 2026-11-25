@@ -6,7 +6,6 @@
 #include "GameSource/BurnoutConstants.h"                 // EActiveRaceCarIndex + range-guarded operator++
 #include "GameShared/GameClasses/Core/CgsAssert.h"       // CGS_ASSERT
 
-#include <cstring>
 #include <xtl.h>
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
@@ -94,23 +93,22 @@ namespace BrnNetwork
                                          u16* lpau16ActiveTrafficHulls,
                                          NetworkPlayerID* lpaPlayerIDsForActiveHulls)
     {
-        // Only hand back a payload that was actually received (the VALID flag set).
-        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0)
+        // ARTIST 0x8257EBE0 skips the payload copy and returns false when invalid.
+        if (IsMessageValid())
         {
-            return false;
+            *lpu16FrameSinceStartToResetTraffic = mu16FrameSinceStartToResetTraffic;   // lhz +0x58
+            XMemCpy(lpau16ActiveTrafficHulls,   mau16ActiveTrafficHulls,   sizeof(mau16ActiveTrafficHulls));
+            XMemCpy(lpaPlayerIDsForActiveHulls, maPlayerIDsForActiveHulls, sizeof(maPlayerIDsForActiveHulls));
+
+            // Consume the message: clear VALID, then assert it is no longer valid (the
+            // X360 re-reads +0x19 and fires the IsMessageValid assert -- always passes here).
+            mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
+            CGS_ASSERT(!IsMessageValid(), CGS_ASSERT_MESSAGE_AT(
+                "!CgsNetwork::ReliableMessage::IsMessageValid()",
+                CGS_ARTIST_FILE, 126 /* ARTIST 0x8257EC38 */));
+            return true;
         }
-
-        *lpu16FrameSinceStartToResetTraffic = mu16FrameSinceStartToResetTraffic;   // lhz +0x58
-        memcpy(lpau16ActiveTrafficHulls,   mau16ActiveTrafficHulls,   16);          // +0x48, 8 x u16
-        memcpy(lpaPlayerIDsForActiveHulls, maPlayerIDsForActiveHulls, 32);          // +0x28, 8 x s32
-
-        // Consume the message: clear VALID, then assert it is no longer valid (the
-        // X360 re-reads +0x19 and fires the IsMessageValid assert -- always passes here).
-        mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
-        CGS_ASSERT(!IsMessageValid(), CGS_ASSERT_MESSAGE_AT(
-            "!CgsNetwork::ReliableMessage::IsMessageValid()",
-            CGS_ARTIST_FILE, 126 /* ARTIST 0x8257EC38 */));
-        return true;
+        return false;
     }
 
     CgsNetwork::PackOrUnpackResult RestartTrafficMessage::PackOrUnpack()

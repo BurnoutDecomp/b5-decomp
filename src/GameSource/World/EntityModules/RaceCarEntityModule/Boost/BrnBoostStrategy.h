@@ -334,9 +334,7 @@ protected:
     // gated on mbBoostEarningEnabled && !mbCrashing; clamps to mfMaxBoost.
     virtual void AddBoost(f32 lfBoostAmount);
 
-    // NON-virtual. DecFIGS body @cpp:168 (clamp-at-zero removal); no
-    // standalone X360 symbol (inlined into callers). Body belongs to the
-    // .cpp TU wave.
+    // Non-virtual and inlined into the ARTIST boost strategies.
     void RemoveBoost(f32 lfBoostAmount);
 
     // NON-virtual. @0x822C0EB0: mfMaxBoost = miCombinedBoostLevel * 10.0f
@@ -568,5 +566,15 @@ private:
         CGS_STATIC_ASSERT((__alignof(BoostStrategy&) == 16), "Vector3 member forces 16-byte alignment (console stvx128)");
     }
 };
+
+// ARTIST 0x822A6A2C..0x822A6A40 stores the subtraction before its lower-bound test.
+inline void BoostStrategy::RemoveBoost(f32 lfBoostAmount)
+{
+    mfBoostAmount -= lfBoostAmount;
+    if (mfBoostAmount < 0.0f)
+    {
+        mfBoostAmount = 0.0f;
+    }
+}
 
 } // namespace BrnWorld

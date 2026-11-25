@@ -3,6 +3,7 @@
 #define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkBuddyManagerBase.cpp"
 #include <cstdlib>   // qsort
 #include <cstring>   // memcpy, memset
+#include <xtl.h>
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                                  // CgsCore::SPrintf
 #include "GameSource/GameState/BrnCgsPlayerName.h"                                       // CgsNetwork::PlayerName
@@ -954,11 +955,11 @@ namespace BrnNetwork
         BuddyManagerBase* lpBuddyManager = reinterpret_cast<BuddyManagerBase*>(lpData);
         CGS_ASSERT(lpBuddyManager, CGS_ASSERT_MESSAGE_AT(
             "lpBuddyManager",
-            __FILE__, 1246 /* ARTIST 0x82549E08 */));
+            CGS_ARTIST_FILE, 1246 /* ARTIST 0x82549E08 */));
 
         if (lbSuccess)
         {
-            memcpy(lpBuddyManager->maServerBuddyList, lpBuddyManager->maBuddyListAtUpload,
+            XMemCpy(lpBuddyManager->maServerBuddyList, lpBuddyManager->maBuddyListAtUpload,
                    sizeof(lpBuddyManager->maServerBuddyList));
             lpBuddyManager->miNumServerBuddies = lpBuddyManager->miNumBuddiesAtUpload;
         }
@@ -967,13 +968,13 @@ namespace BrnNetwork
             BrnServerInterface* lpServerInterface = AsBrnServerInterface(lpBuddyManager->mpServerInterface);
             CGS_ASSERT(lpServerInterface, CGS_ASSERT_MESSAGE_AT(
                 "lpServerInterface",
-                __FILE__, 1259 /* ARTIST 0x82549E70 */));
+                CGS_ARTIST_FILE, 1259 /* ARTIST 0x82549E70 */));
             CGS_ASSERT(lpServerInterface->GetCustomCommandsComponent(), CGS_ASSERT_MESSAGE_AT(
                 "lpServerInterface->GetCustomCommandsComponent()",
-                __FILE__, 1262 /* ARTIST 0x82549E98 */));
+                CGS_ARTIST_FILE, 1262 /* ARTIST 0x82549E98 */));
 
             ServerInterfaceCustomCommands* lpCustomCommands = lpServerInterface->GetCustomCommandsComponent();
-            if (lpCustomCommands->GetLastError() == CgsNetwork::E_BUDDY_ERROR_CODES_PENDING)
+            if (lpCustomCommands->GetStatus() == CgsNetwork::ServerInterfaceDirtySock::E_STATUS_ERROR)
             {
                 lpCustomCommands->ClearLastError();
             }
