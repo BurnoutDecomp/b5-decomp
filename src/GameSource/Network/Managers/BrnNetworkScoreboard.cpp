@@ -19,6 +19,7 @@
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"   // CgsDev::StrStream (the bounded-copy assert)
 
+#include <xtl.h>
 #include <cstring>   // std::strlen / std::strncpy (the cell and title copies)
 
 // Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkScoreboard.h".
@@ -126,8 +127,8 @@ namespace BrnNetwork
     {
         CGS_ASSERT(miNumberOfColumns < KI_MAX_SCOREBOARD_COLUMNS, CGS_ASSERT_MESSAGE_AT(
             "miNumberOfColumns < KI_MAX_SCOREBOARD_COLUMNS",
-            __FILE__, 198 /* ARTIST 0x82546E4C */));
-        maColumns[miNumberOfColumns] = *lpColumn;
+            KAC_ARTIST_ASSERT_SOURCE, 198 /* ARTIST 0x82546E4C */));
+        XMemCpy(&maColumns[miNumberOfColumns], lpColumn, sizeof(*lpColumn));
         ++miNumberOfColumns;
     }
 

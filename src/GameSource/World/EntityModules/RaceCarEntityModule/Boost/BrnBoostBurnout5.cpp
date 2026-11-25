@@ -1272,17 +1272,15 @@ BoostBurnout5::ApplyUpdate(f32 lfTimeStep)
 
     if (mbBoosting && !mbInfiniteBoost)
     {
-        // The per-car boost-loss stat overrides the tuned burn rate when set.
-        const f32 lfBurnRate = (mfCurrentCarBoostLossLevel == 0.0f)
-                             ? mfBurnRateBoost
-                             : mfCurrentCarBoostLossLevel;
-
-        // 0x822C2150-0x822C215C is BoostStrategy::RemoveBoost inlined: subtract,
-        // store, and clamp mfBoostAmount at zero. De-inlined per the AGENTS.md
-        // inlining-reversal rule -- RemoveBoost has no standalone X360 symbol
-        // (BrnBoostStrategy.h:331-334) and this site is one of its recovery
-        // witnesses; the base .cpp wave owns the body.
-        RemoveBoost(lfBurnRate * lfTimeStep);
+        // ARTIST 0x822C2130..0x822C214C selects the fallback before subtracting.
+        if (mfCurrentCarBoostLossLevel == 0.0f)
+        {
+            RemoveBoost(mfBurnRateBoost * lfTimeStep);
+        }
+        else
+        {
+            RemoveBoost(mfCurrentCarBoostLossLevel * lfTimeStep);
+        }
     }
 
     // 1.25f == flt_820147F8, written as the literal the image carries. The
@@ -1302,22 +1300,17 @@ BoostBurnout5::ApplyUpdate(f32 lfTimeStep)
         {
             if (mfBoostAmount > 0.0f)
             {
-                if (mbBoosting)
+                if (!mbBoosting)
                 {
-                    // Already inside a run: the console re-stores the flag
-                    // (@0x822C21FC) and does NOT restart the run timer.
-                    mbBoosting = true;
-                }
-                else
-                {
-                    // Starting a fresh run: the one-chunk floor applies and the
-                    // run timer restarts.
                     if (mfBoostAmount > mfMinBoostAllowedAmount)
                     {
                         mbBoosting = true;
                     }
-
                     mfTimeBoosting = 0.0f;
+                }
+                else
+                {
+                    mbBoosting = true;
                 }
 
                 mfTimeBoosting += lfTimeStep;
@@ -1397,7 +1390,8 @@ BoostBurnout5::ApplyUpdate(f32 lfTimeStep)
     // is u64 -- so nothing is narrowed. A static_cast<u32> here would silently
     // drop the high word and make every collection lookup miss, which is exactly
     // the defect that was fixed on this class's declaration.
-    Attrib::Gen::boostparamsasset lBoostParams(Attrib::StringToKey(lacGuidText), 0);
+    const u64 luCollectionKey = Attrib::StringToKey(lacGuidText);
+    Attrib::Gen::boostparamsasset lBoostParams(luCollectionKey);
 
     // 0x822C2288-0x822C23C4 -- the 34 record -> member stores, in ascending
     // member order (which is the order the X360 emits them: +0x10 up to +0x94,

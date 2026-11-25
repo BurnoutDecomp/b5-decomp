@@ -1493,7 +1493,8 @@ bool BoostBurnout3::Prepare()
 
     // 0x822C1708-1714: `mr r4,r3` (the whole doubleword, no clrldi), `li r5,0`
     // for the owner, then the ctor.
-    Attrib::Gen::boostparamsasset lBoostParams(Attrib::StringToKey(lacGuidText), 0);
+    const u64 luCollectionKey = Attrib::StringToKey(lacGuidText);
+    Attrib::Gen::boostparamsasset lBoostParams(luCollectionKey);
 
     // 0x822C1718-1858 -- the 34 record -> member stores, in ascending member
     // order (which is the order the X360 emits them). Each one goes through the

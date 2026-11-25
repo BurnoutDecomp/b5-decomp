@@ -383,10 +383,13 @@ namespace BrnGameState
                               CgsModule::EventReceiverQueue<3072,16>* lpReceiverQueue );
 
         // ---- street-data accessors ---------------------------------------------
-        // DWARF :326 (committed body). Returns mpStreetData.operator->().
-        // DWARF h:326, header-inline: `mpStreetData.operator->()` at every ARTIST caller
-        // (its own assert is CgsResourcePtr.h's).
-        const BrnStreetData::StreetData* GetStreetData() { return mpStreetData.operator->(); }
+        // DecFIGS BrnGameStateStreetManager.h:326 declares the read-only result.
+        // ARTIST 0x82335288 calls the const ResourcePtr overload at 0x82324DC0.
+        const BrnStreetData::StreetData* GetStreetData()
+        {
+            const CgsResource::ResourcePtr<BrnStreetData::StreetData>& lrStreetData = mpStreetData;
+            return lrStreetData.operator->();
+        }
 
         s32 GetRoadCount() const;                                        // :334
         void OnEnterNewRoad();                                           // :338

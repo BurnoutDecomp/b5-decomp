@@ -621,14 +621,15 @@ namespace BrnGameState
 // offline owns-all-roads flag taken from the ProgressionManager's complete-rules tally.
 void StreetManager::FillInRoadRulesQuery( GameStateModuleIO::RoadRulesBatchQueryAction* lpRulesQueryAction )
 {
-    lpRulesQueryAction->miNumRoads = GetStreetData()->GetRoadCount();
+    // ARTIST 0x823365C4 and 0x82336628 use the mutable ResourcePtr overload.
+    lpRulesQueryAction->miNumRoads = mpStreetData->GetRoadCount();
 
     CGS_ASSERT( lpRulesQueryAction->miNumRoads <= KI_MAX_CHALLENGES,
                 CGS_ASSERT_MESSAGE_AT("lpRulesQueryAction->miNumRoads <= KI_MAX_CHALLENGES", CGS_ARTIST_FILE, 4295) );
 
     for ( s32 liRoadIndex = 0; liRoadIndex < lpRulesQueryAction->miNumRoads; ++liRoadIndex )
     {
-        lpRulesQueryAction->maRoadIds[liRoadIndex] = GetStreetData()->GetRoad( liRoadIndex )->GetId();
+        lpRulesQueryAction->maRoadIds[liRoadIndex] = mpStreetData->GetRoad( liRoadIndex )->GetId();
 
         lpRulesQueryAction->mabPlayerBeatenParTime[liRoadIndex] =
             HasPlayerBeatenParScore( liRoadIndex, BrnStreetData::E_SCORE_TYPE_TIME )
