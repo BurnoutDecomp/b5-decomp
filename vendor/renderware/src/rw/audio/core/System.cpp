@@ -107,7 +107,7 @@ System *System::System_ctor(System *self)
 {
     self->mpExpelledVoiceList = 0;   // +0x10
     self->mpTimerListHead = 0;       // +0x5C
-    TimerManager::TimerManager_ctor(&self->mTimerManager); // +0x60
+    new (&self->mTimerManager) TimerManager;
     skSystemStackAllocator.mpSystem = 0;
     skSystemStackAllocator.mpUpperLimit = 0;
     skSystemStackAllocator.mpLowerLimit = 0;
@@ -603,7 +603,7 @@ void System::Release(System *self)
     if (profiler)
         Profiler::Release(profiler);
 
-    TimerManager::Release(&self->mTimerManager);
+    self->mTimerManager.Release();
 
     if (self->mpDeferredRingBase)
         self->mpAllocator->Free(self->mpDeferredRingBase, 0);
@@ -625,7 +625,7 @@ void System::Release(System *self)
 // -------------------------------------------------------------------------------------
 void System::RemoveTimer(System *self, TimerHandle *handle)
 {
-    TimerManager::RemoveTimer(&self->mTimerManager, handle);
+    self->mTimerManager.RemoveTimer(handle);
 }
 
 // -------------------------------------------------------------------------------------

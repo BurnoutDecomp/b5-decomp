@@ -55,20 +55,20 @@ public:
 
     // cat @0x82AECD10 / cpy @0x82AE64E8 -- the engine's string-value mutators: the
     // embedded EAStringC `str += rhs` / `str = rhs` (the X360 tail-calls
-    // EAStringC::operator+= / operator= on &str). Return the mutated string.
+    // EAStringC::operator+= / operator= on &str).
     EAStringC& cat(const EAStringC& strText) { return str += strText; }
-    EAStringC& cpy(const EAStringC& strText) { return str =  strText; }
+    void cpy(const AptNativeString* pString) { str = *pString; }
 
     // ---- ActionScript String native methods (sMethod_*) -- bodies in AptString.cpp.
     // Static natives (AptExtFunctionPtr): the VM calls f(thisString[, argCount]);
     // AS arguments come off the global native-arg stack. (slice/substring/split/cat
     // are a follow-on -- they need the UTF8 substring-extract helper homed.)
-    static AptValue* sMethod_charAt(AptString* pThis);
-    static AptValue* sMethod_charCodeAt(AptString* pThis);
-    static AptValue* sMethod_concat(AptString* pThis, int nArgCount);
-    static AptValue* sMethod_fromCharCode(AptString* pThis, int nArgCount);
-    static AptValue* sMethod_indexOf(AptString* pThis, int nArgCount);
-    static AptValue* sMethod_lastIndexOf(AptString* pThis, int nArgCount);
+    static AptValue* sMethod_charAt(AptValue* pThis, int);
+    static AptValue* sMethod_charCodeAt(AptValue* pThis, int);
+    static AptValue* sMethod_concat(AptValue* pThis, int nArgCount);
+    static AptValue* sMethod_fromCharCode(AptValue* pThis, int nArgCount);
+    static AptValue* sMethod_indexOf(AptValue* pThis, int nArgCount);
+    static AptValue* sMethod_lastIndexOf(AptValue* pThis, int nArgCount);
     static AptValue* sMethod_toLowerCase(AptString* pThis);
     static AptValue* sMethod_toUpperCase(AptString* pThis);
     static AptValue* sMethod_slice(AptString* pThis, int nArgCount);

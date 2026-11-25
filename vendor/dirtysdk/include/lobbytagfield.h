@@ -7,7 +7,7 @@
 // The "tagfield" record is the lobby wire format: a flat text record of NAME=value
 // fields separated by a divider character. The CGS DirtySock components serialise
 // their parameter/info structs into (and parse them out of) such a record through
-// these helpers. Bodies: ../src/lobbytagfield.cpp. Every entry point the game build
+// these helpers. Bodies: ../src/lobbytagfield.c. Every entry point the game build
 // carries is declared here with the DirtySDK C signature (C linkage, global scope).
 
 // Pattern characters understood by TagFieldSetStructure / TagFieldGetStructure.

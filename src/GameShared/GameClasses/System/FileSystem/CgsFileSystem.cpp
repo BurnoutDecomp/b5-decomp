@@ -687,44 +687,6 @@ namespace CgsFileSystem
 
 
 
-    // ===== Not on a DWARF line of this file =====
-    // The public wrappers (header-inline in the original: ARTIST's resource handlers inline the
-    // filesystem-wide lock) and the stream-status accessors, whose ARTIST asserts name
-    // CgsFileSystem.h (GetStatus 581, IsReadStreamOpen 653, IsReadStreamClosed 710/712,
-    // GetReadStreamIndex 730): their home is the header, not yet restored.
-    ReadStream FileSystem::OpenReadStream(
-        const char* lpcName, void* lpBuffer, u32 luBufferSize, u32 luNumBlocks,
-        s32 liNormalPriority, s32 liHighPriority, bool lbUseHDCache)
-    {
-        mFileSystemFutex.Lock();
-        ReadStream lStream = OpenReadStreamInternal(
-            lpcName, lpBuffer, luBufferSize, luNumBlocks,
-            liNormalPriority, liHighPriority, lbUseHDCache);
-        mFileSystemFutex.Unlock();
-        return lStream;
-    }
-
-    void FileSystem::CloseReadStream(ReadStream lStream)
-    {
-        mFileSystemFutex.Lock();
-        CloseReadStreamInternal(lStream);
-        mFileSystemFutex.Unlock();
-    }
-
-    s32 FileSystem::Open(const char* lpName, FileAccess leAccess, s32 liPriority, bool lbCache)
-    {
-        mFileSystemFutex.Lock();
-        const s32 liResult = OpenInternal(lpName, leAccess, liPriority, lbCache);
-        mFileSystemFutex.Unlock();
-        return liResult;
-    }
-    bool FileSystem::Close(u32 luId)
-    {
-        mFileSystemFutex.Lock();
-        const bool lbResult = CloseInternal(luId);
-        mFileSystemFutex.Unlock();
-        return lbResult;
-    }
     bool FileSystem::RegisterMemFile(const char* lpName, void* lpData, u64 luSize)
     {
         mFileSystemFutex.Lock();

@@ -19,26 +19,6 @@
 // it moved to the header for the same reason. Nothing about the values changes.
 renderengine::DepthStencilState* CgsDepthStencilStateFactory::saDepthStencilStates[E_FACTORY_DEPTH_STENCIL_STATE_COUNT] = {};
 
-namespace
-{
-
-    // Carve the backing store for one depth/stencil state through the supplied resource
-    // allocator, then initialise it. The console sizes it via
-    // DepthStencilState::GetResourceDescriptor (slot-0 {size, align}), carves it via
-    // lpAllocator's vtable slot +0x10 (DoAllocate),
-    // then DepthStencilState::Initialize. Mirrors renderengine::StateHelper::Initialize's
-    // AllocateStateResource + CreateDefaultBlendState pattern.
-    renderengine::DepthStencilState* CreateDepthStencilState(
-        rw::IResourceAllocator* lpAllocator,
-        const renderengine::DepthStencilState::Parameters* lpParameters)
-    {
-        const rw::ResourceDescriptor descriptor =
-            renderengine::DepthStencilState::GetResourceDescriptor(*lpParameters);
-        const rw::Resource resource = lpAllocator->DoAllocate(descriptor, 0);
-        return renderengine::DepthStencilState::Initialize(resource, *lpParameters);
-    }
-}
-
 CgsDepthStencilStateFactory::CgsDepthStencilStateFactory()
 {
     // Not console-attested for this TU (declaration-only); no ledger body to reconstruct from.
@@ -49,6 +29,9 @@ CgsDepthStencilStateFactory::CgsDepthStencilStateFactory()
 // the comparison function (muFunction) and the depth test/write enable flags differ.
 void CgsDepthStencilStateFactory::Construct(rw::IResourceAllocator* lpAllocator)
 {
+    const char* const sourceFile = "..\\..\\..\\GameShared\\GameClasses\\Graphics/CgsDepthStencilStateFactory.cpp";
+    void* lpMemory = 0;
+    rw::Resource resource(lpMemory);
     saDepthStencilStates[E_FACTORY_DEPTH_STENCIL_STATE_ZON_ZLEQ_ZWRITEON]   = 0;
     saDepthStencilStates[E_FACTORY_DEPTH_STENCIL_STATE_ZOFF_ZALL_ZWRITEOFF] = 0;
     saDepthStencilStates[E_FACTORY_DEPTH_STENCIL_STATE_ZON_ZLEQ_ZWRITEOFF]  = 0;
@@ -65,45 +48,55 @@ void CgsDepthStencilStateFactory::Construct(rw::IResourceAllocator* lpAllocator)
     lParameters.muState14          = 0xFFFFFFFFu;
     lParameters.muState15          = 0xFFFFFFFFu;
 
-    lParameters.muFunction         = 3u;
     lParameters.mbDepthTestEnable  = 1;
+    lParameters.muFunction         = D3DCMP_LESSEQUAL;
     lParameters.mbDepthWriteEnable = 1;
+    resource = lpAllocator->Allocate(
+        renderengine::DepthStencilState::GetResourceDescriptor(lParameters), 0);
     saDepthStencilStates[E_FACTORY_DEPTH_STENCIL_STATE_ZON_ZLEQ_ZWRITEON] =
-        CreateDepthStencilState(lpAllocator, &lParameters);
-    CGS_ASSERT(saDepthStencilStates[E_FACTORY_DEPTH_STENCIL_STATE_ZON_ZLEQ_ZWRITEON],
-               "saDepthStencilStates[ eFactoryDepthStencilState_ZON_ZLEQ_ZWRITEON ]");
+        renderengine::DepthStencilState::Initialize(resource, lParameters);
+    CGS_ASSERT_AT(saDepthStencilStates[E_FACTORY_DEPTH_STENCIL_STATE_ZON_ZLEQ_ZWRITEON],
+               "saDepthStencilStates[ eFactoryDepthStencilState_ZON_ZLEQ_ZWRITEON ]", sourceFile, 66);
 
     lParameters.muFunction         = renderengine::DepthStencilState::E_FUNCTION_ALWAYS; // == 7
     lParameters.mbDepthTestEnable  = 0;
     lParameters.mbDepthWriteEnable = 0;
+    resource = lpAllocator->Allocate(
+        renderengine::DepthStencilState::GetResourceDescriptor(lParameters), 0);
     saDepthStencilStates[E_FACTORY_DEPTH_STENCIL_STATE_ZOFF_ZALL_ZWRITEOFF] =
-        CreateDepthStencilState(lpAllocator, &lParameters);
-    CGS_ASSERT(saDepthStencilStates[E_FACTORY_DEPTH_STENCIL_STATE_ZOFF_ZALL_ZWRITEOFF],
-               "saDepthStencilStates[ eFactoryDepthStencilState_ZOFF_ZALL_ZWRITEOFF ]");
+        renderengine::DepthStencilState::Initialize(resource, lParameters);
+    CGS_ASSERT_AT(saDepthStencilStates[E_FACTORY_DEPTH_STENCIL_STATE_ZOFF_ZALL_ZWRITEOFF],
+               "saDepthStencilStates[ eFactoryDepthStencilState_ZOFF_ZALL_ZWRITEOFF ]", sourceFile, 75);
 
-    lParameters.muFunction         = 3u;
     lParameters.mbDepthTestEnable  = 1;
+    lParameters.muFunction         = D3DCMP_LESSEQUAL;
     lParameters.mbDepthWriteEnable = 0;
+    resource = lpAllocator->Allocate(
+        renderengine::DepthStencilState::GetResourceDescriptor(lParameters), 0);
     saDepthStencilStates[E_FACTORY_DEPTH_STENCIL_STATE_ZON_ZLEQ_ZWRITEOFF] =
-        CreateDepthStencilState(lpAllocator, &lParameters);
-    CGS_ASSERT(saDepthStencilStates[E_FACTORY_DEPTH_STENCIL_STATE_ZON_ZLEQ_ZWRITEOFF],
-               "saDepthStencilStates[ eFactoryDepthStencilState_ZON_ZLEQ_ZWRITEOFF ]");
+        renderengine::DepthStencilState::Initialize(resource, lParameters);
+    CGS_ASSERT_AT(saDepthStencilStates[E_FACTORY_DEPTH_STENCIL_STATE_ZON_ZLEQ_ZWRITEOFF],
+               "saDepthStencilStates[ eFactoryDepthStencilState_ZON_ZLEQ_ZWRITEOFF ]", sourceFile, 84);
 
     lParameters.muFunction         = renderengine::DepthStencilState::E_FUNCTION_ALWAYS; // == 7
     lParameters.mbDepthTestEnable  = 1;
     lParameters.mbDepthWriteEnable = 1;
+    resource = lpAllocator->Allocate(
+        renderengine::DepthStencilState::GetResourceDescriptor(lParameters), 0);
     saDepthStencilStates[E_FACTORY_DEPTH_STENCIL_STATE_ZON_ZALL_ZWRITEON] =
-        CreateDepthStencilState(lpAllocator, &lParameters);
-    CGS_ASSERT(saDepthStencilStates[E_FACTORY_DEPTH_STENCIL_STATE_ZON_ZALL_ZWRITEON],
-               "saDepthStencilStates[ eFactoryDepthStencilState_ZON_ZALL_ZWRITEON ]");
+        renderengine::DepthStencilState::Initialize(resource, lParameters);
+    CGS_ASSERT_AT(saDepthStencilStates[E_FACTORY_DEPTH_STENCIL_STATE_ZON_ZALL_ZWRITEON],
+               "saDepthStencilStates[ eFactoryDepthStencilState_ZON_ZALL_ZWRITEON ]", sourceFile, 94);
 
-    lParameters.muFunction         = 6u;
     lParameters.mbDepthTestEnable  = 1;
+    lParameters.muFunction         = D3DCMP_GREATEREQUAL;
     lParameters.mbDepthWriteEnable = 1;
+    resource = lpAllocator->Allocate(
+        renderengine::DepthStencilState::GetResourceDescriptor(lParameters), 0);
     saDepthStencilStates[E_FACTORY_DEPTH_STENCIL_STATE_ZON_ZGTEQ_ZWRITEON] =
-        CreateDepthStencilState(lpAllocator, &lParameters);
-    CGS_ASSERT(saDepthStencilStates[E_FACTORY_DEPTH_STENCIL_STATE_ZON_ZGTEQ_ZWRITEON],
-               "saDepthStencilStates[ eFactoryDepthStencilState_ZON_ZGTEQ_ZWRITEON ]");
+        renderengine::DepthStencilState::Initialize(resource, lParameters);
+    CGS_ASSERT_AT(saDepthStencilStates[E_FACTORY_DEPTH_STENCIL_STATE_ZON_ZGTEQ_ZWRITEON],
+               "saDepthStencilStates[ eFactoryDepthStencilState_ZON_ZGTEQ_ZWRITEON ]", sourceFile, 103);
 }
 
 // ARTIST vtable 0x820CDC34, slot +0x04 targets the shared return at 0x8284CB38.

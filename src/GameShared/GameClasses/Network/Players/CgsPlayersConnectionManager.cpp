@@ -1,4 +1,5 @@
 #include "CgsPlayersConnectionManager.h"
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Network\\Players\\CgsPlayersConnectionManager.cpp"
 
 namespace CgsNetwork
 {
@@ -53,20 +54,15 @@ void PlayersConnectionManager::Update(const CgsSystem::TimerStatus* lpTimerStatu
 // The handshake state of a remote player (never ask about ourselves).
 EConnectionStatus PlayersConnectionManager::GetConnectionStatus(NetworkPlayerID lPlayerID) const
 {
-    NetworkPlayerID lLocalPlayerID;
-    mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID);
+    NetworkPlayerID lNextLocalPlayerID;
+    const NetworkPlayerID lLocalPlayerID = mpPlayerManager->GetNextLocalPlayerID(&lNextLocalPlayerID)
+        ? lNextLocalPlayerID : K_INVALID_PLAYER_ID;
 
-    CGS_ASSERT(lPlayerID != K_INVALID_PLAYER_ID, CGS_ASSERT_MESSAGE_AT(
-        "lPlayerID != K_INVALID_PLAYER_ID",
-        __FILE__, 1574 /* ARTIST 0x82874DE0 */));
-    CGS_ASSERT(lPlayerID != lLocalPlayerID, CGS_ASSERT_MESSAGE_AT(
-        "lPlayerID != lLocalPlayerID",
-        __FILE__, 1575 /* ARTIST 0x82874E04 */));
+    CGS_ASSERT_AT(lPlayerID != K_INVALID_PLAYER_ID, "lPlayerID != K_INVALID_PLAYER_ID", CGS_ARTIST_FILE, 1574);
+    CGS_ASSERT_AT(lPlayerID != lLocalPlayerID, "lPlayerID != lLocalPlayerID", CGS_ARTIST_FILE, 1575);
 
     const ConnectionDataEntry* lpEntry = GetEntry(lPlayerID);
-    CGS_ASSERT(lpEntry, CGS_ASSERT_MESSAGE_AT(
-        "lpEntry",
-        __FILE__, 1580 /* ARTIST 0x82874E38 */));
+    CGS_ASSERT_AT(lpEntry, "lpEntry", CGS_ARTIST_FILE, 1580);
     return lpEntry->mPlayerConnectionData.meConnectionStatus;
 }
 
@@ -332,23 +328,25 @@ PlayersConnectionManager::AddPlayer(const CgsSystem::TimerStatus* lpTimerStatus,
 void PlayersConnectionManager::RemovePlayer(NetworkPlayerID lPlayerID)
 {
     NetworkPlayerID lLocalPlayerID;
-    mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID);
+    if (!mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID))
+    {
+        lLocalPlayerID = K_INVALID_PLAYER_ID;
+    }
 
     if (lPlayerID == lLocalPlayerID)
     {
         mpPlayerManager->RemovePlayer(lPlayerID);
         muLocalPlayerIPAddress = 0;
-        return;
     }
+    else
+    {
+        ConnectionDataEntry* lpEntry = GetEntry(lPlayerID);
+        CGS_ASSERT_AT(lpEntry, "lpEntry", CGS_ARTIST_FILE, 1115);
 
-    ConnectionDataEntry* lpEntry = GetEntry(lPlayerID);
-    CGS_ASSERT(lpEntry, CGS_ASSERT_MESSAGE_AT(
-        "lpEntry",
-        __FILE__, 1115 /* ARTIST 0x82884DA0 */));
-
-    UnRegisterMessageTypes(lpEntry);
-    mpPlayerManager->RemovePlayer(lPlayerID);
-    lpEntry->mPlayerConnectionData.mPlayerID = K_INVALID_PLAYER_ID;
+        UnRegisterMessageTypes(lpEntry);
+        mpPlayerManager->RemovePlayer(lPlayerID);
+        lpEntry->mPlayerConnectionData.mPlayerID = K_INVALID_PLAYER_ID;
+    }
 }
 
 // ---- RegisterMessageTypes ------------------------------------------------------------
@@ -356,10 +354,8 @@ void PlayersConnectionManager::RemovePlayer(NetworkPlayerID lPlayerID)
 // manager as the callbacks' user data.
 void PlayersConnectionManager::RegisterMessageTypes(ConnectionDataEntry* lpEntry)
 {
-    NetworkPlayer* lpNetPlayer = mpPlayerManager->GetPlayerByID(lpEntry->mPlayerConnectionData.mPlayerID);
-    CGS_ASSERT(lpNetPlayer, CGS_ASSERT_MESSAGE_AT(
-        "lpNetPlayer",
-        __FILE__, 1352 /* ARTIST 0x82884F10 */));
+    NetworkPlayer* lpNetPlayer = mpPlayerManager->FindActiveNetworkPlayer(lpEntry->mPlayerConnectionData.mPlayerID);
+    CGS_ASSERT_AT(lpNetPlayer, "lpNetPlayer", CGS_ARTIST_FILE, 1352);
 
     // Registered lengths are 0x28 and 0x60 console bytes.
     lpNetPlayer->RegisterMessageType(KI_E_MESSAGE_TYPE_TEST_CONNECTION, sizeof(TestConnectionMessage),
@@ -379,10 +375,8 @@ void PlayersConnectionManager::RegisterMessageTypes(ConnectionDataEntry* lpEntry
 // ---- UnRegisterMessageTypes ----------------------------------------------------------
 void PlayersConnectionManager::UnRegisterMessageTypes(ConnectionDataEntry* lpEntry)
 {
-    NetworkPlayer* lpNetPlayer = mpPlayerManager->GetPlayerByID(lpEntry->mPlayerConnectionData.mPlayerID);
-    CGS_ASSERT(lpNetPlayer, CGS_ASSERT_MESSAGE_AT(
-        "lpNetPlayer",
-        __FILE__, 1387 /* ARTIST 0x82874C3C */));
+    NetworkPlayer* lpNetPlayer = mpPlayerManager->FindActiveNetworkPlayer(lpEntry->mPlayerConnectionData.mPlayerID);
+    CGS_ASSERT_AT(lpNetPlayer, "lpNetPlayer", CGS_ARTIST_FILE, 1387);
 
     lpNetPlayer->UnRegisterMessageType(KI_E_MESSAGE_TYPE_TEST_CONNECTION);
     lpNetPlayer->UnRegisterMessageType(KI_E_MESSAGE_TYPE_CONNECTION_STATUS);
@@ -617,11 +611,9 @@ namespace CgsNetwork
 NetworkPlayerID PlayersConnectionManager::GetIDOfPlayerToKick(NetworkPlayerID lPlayerID1,
                                                               NetworkPlayerID lPlayerID2) const
 {
-    CGS_ASSERT(lPlayerID1 != lPlayerID2, CGS_ASSERT_MESSAGE_AT(
-        "Don't call with the same Player IDs",
-        "..\\..\\..\\GameShared\\GameClasses\\Network\\Players\\CgsPlayersConnectionManager.cpp", 865 /* ARTIST 0x82890638 */));
+    CGS_ASSERT_AT(lPlayerID1 != lPlayerID2, "Don't call with the same Player IDs", CGS_ARTIST_FILE, 865);
 
-    const NetworkPlayerID lHostPlayerID = mpPlayerManager->GetHostPlayerID();
+    const NetworkPlayerID lHostPlayerID = mpPlayerManager->mHostPlayerID;
     if (lPlayerID1 == lHostPlayerID)
     {
         return lPlayerID2;
@@ -655,7 +647,11 @@ NetworkPlayerID PlayersConnectionManager::GetIDOfPlayerToKick(NetworkPlayerID lP
         }
     }
 
-    return (lPlayerID1 > lPlayerID2) ? lPlayerID1 : lPlayerID2;
+    if (lPlayerID1 > lPlayerID2)
+    {
+        return lPlayerID1;
+    }
+    return lPlayerID2;
 }
 
 // ---- ConnApiStatusChangeCallback -----------------------------------------------------

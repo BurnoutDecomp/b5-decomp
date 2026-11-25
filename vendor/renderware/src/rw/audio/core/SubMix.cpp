@@ -36,7 +36,7 @@ namespace core
 // BSS on the console and are therefore zero-initialised -- there are no raw bytes in the
 // XEX to quote for them, which is why the decode marks their initial values as the static
 // initialization contract rather than a recovered word.
-ListDStack SubMix::sSubMixList = {};
+ListDStack SubMix::sSubMixList;
 ListDNode *SubMix::spSubMixNextNode = 0;
 
 // The allocation tag string the console passes to System::Alloc (rodata @0x8217B098,

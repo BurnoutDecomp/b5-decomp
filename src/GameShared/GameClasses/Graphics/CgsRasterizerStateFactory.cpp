@@ -2,7 +2,6 @@
 #include "GameShared/GameClasses/Graphics/CgsRasterizerStateFactory.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"
 
 // Reconstructed from the shipped console build of
 //   CgsRasterizerStateFactory::Construct
@@ -15,59 +14,11 @@
 // so that its readers (BrnPostFx::Render wants slot 2) can name a slot.
 renderengine::RasterizerState* CgsRasterizerStateFactory::saRasterizerStates[E_FACTORY_RASTERIZER_STATE_COUNT] = {};
 
-namespace
-{
-    // Carve the backing store for one rasteriser state through the supplied resource
-    // allocator, then initialise it. The console sizes it via
-    // RasterizerState::GetResourceDescriptor (slot-0 {52, 4}), carves through the
-    // allocator's vtable slot +0x10 (DoAllocate), copies the five returned handle words
-    // into the state-handle array with a five-iteration loop, then calls
-    // RasterizerState::Initialize.
-    //
-    // The allocator is reached BY NAME through CgsGraphics::ResourceAllocatorCreate, not
-    // through the old TU-local single-virtual `ResourceAllocator` shim this file used to
-    // declare: that shim put `Create` at vtable SLOT 0, which on the rw::IResourceAllocator
-    // actually behind the cast is the VIRTUAL DESTRUCTOR -- it allocated nothing and left
-    // the allocator permanently downgraded. The whole diagnosis is in
-    // CgsResourceAllocatorCreate.h; this is the last of the fifteen shims in that family
-    // to be retired, and it is retired here only because Construct's parameter is now the
-    // original's typed rw::IResourceAllocator* instead of a void*.
-    renderengine::RasterizerState* CreateRasterizerState(
-        rw::IResourceAllocator* lpAllocator,
-        const renderengine::RasterizerState::Parameters* lpParameters)
-    {
-        const rw::ResourceDescriptor descriptor =
-            renderengine::RasterizerState::GetResourceDescriptor(*lpParameters);
-        const rw::Resource resource = lpAllocator->DoAllocate(descriptor, 0);
-        return renderengine::RasterizerState::Initialize(resource, *lpParameters);
-    }
-}
-
-// MOVED OUT 2026-08-15 (step-3 vignette/dof/raster wave): the definitions of
-// renderengine::RasterizerState::GetResourceDescriptor and ::Initialize that used to sit here now
-// live in pc/gcm/renderengine/RasterizerState.cpp, beside the member overload they call and next to
-// their siblings DepthStencilState.cpp / states/blendstate.cpp / states/samplerstate.cpp. They are
-// renderengine's, not the factory's: on the console they sit inside the same run of the
-// render-engine state library as BlendState::Initialize and
-// SamplerState::GetResourceDescriptor -- nowhere near CgsRasterizerStateFactory::Construct,
-// which is what this file legitimately owns.
-//
-// This is a MOVE, not a copy: a second definition of either symbol is LNK2005 the moment both TUs are
-// on tools/build/build_game_exe.bat (neither is today). The bodies are unchanged apart from the
-// descriptor size, which is now spelled `static_cast<u32>(sizeof(RasterizerState))` with the console's
-// 0x34 = 52 in a comment beside it, matching the idiom the rest of the tree uses.
-
-// Build the three rasteriser states into saRasterizerStates, asserting
-// each slot came back non-null. All three share one parameter block; only muCullMode
-// differs (2 = back, `(&4)|1` = 1 = front, `&=4` = 0 = none).
-//
-// ⚠ RETURN TYPE CORRECTED THIS WAVE: void, not renderengine::RasterizerState*. The
-// console epilogue tears down the frame and returns with no return-value setup; the
-// decompiler's `result` is just the third Initialize's result still being live. The
-// original declaration agrees (`virtual void Construct(rw::IResourceAllocator *)`), and
-// nothing in the tree read the old return value.
 void CgsRasterizerStateFactory::Construct(rw::IResourceAllocator* lpAllocator)
 {
+    const char* const sourceFile = "..\\..\\..\\GameShared\\GameClasses\\Graphics/CgsRasterizerStateFactory.cpp";
+    void* lpMemory = 0;
+    rw::Resource resource(lpMemory);
     renderengine::RasterizerState::Parameters lParameters;
 
     lParameters.muMultiSampleMask = 0xffffffff;
@@ -82,26 +33,32 @@ void CgsRasterizerStateFactory::Construct(rw::IResourceAllocator* lpAllocator)
     saRasterizerStates[E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_NONE] = 0;
 
     lParameters.muFillMode = 0;
-    lParameters.muCullMode = 2;
+    lParameters.muCullMode = renderengine::RasterizerState::E_CULL_BACK;
     lParameters.mbHalfPixelOffset = 0;
+    resource = lpAllocator->Allocate(
+        renderengine::RasterizerState::GetResourceDescriptor(lParameters), 0);
     saRasterizerStates[E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_BACK] =
-        CreateRasterizerState(lpAllocator, &lParameters);
-    CGS_ASSERT(saRasterizerStates[E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_BACK],
-               "saRasterizerStates[ eFactoryRasterizerState_Scissor_CullModeBack ]");
+        renderengine::RasterizerState::Initialize(resource, lParameters);
+    CGS_ASSERT_AT(saRasterizerStates[E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_BACK],
+               "saRasterizerStates[ eFactoryRasterizerState_Scissor_CullModeBack ]", sourceFile, 63);
 
     lParameters.mbScissorTestEnable = 1;
-    lParameters.muCullMode = (lParameters.muCullMode & 4) | 1;
+    lParameters.muCullMode = (lParameters.muCullMode & 4) | renderengine::RasterizerState::E_CULL_FRONT;
+    resource = lpAllocator->Allocate(
+        renderengine::RasterizerState::GetResourceDescriptor(lParameters), 0);
     saRasterizerStates[E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_FRONT] =
-        CreateRasterizerState(lpAllocator, &lParameters);
-    CGS_ASSERT(saRasterizerStates[E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_FRONT],
-               "saRasterizerStates[ eFactoryRasterizerState_Scissor_CullModeFront ]");
+        renderengine::RasterizerState::Initialize(resource, lParameters);
+    CGS_ASSERT_AT(saRasterizerStates[E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_FRONT],
+               "saRasterizerStates[ eFactoryRasterizerState_Scissor_CullModeFront ]", sourceFile, 70);
 
     lParameters.mbScissorTestEnable = 1;
     lParameters.muCullMode &= 4u;
+    resource = lpAllocator->Allocate(
+        renderengine::RasterizerState::GetResourceDescriptor(lParameters), 0);
     saRasterizerStates[E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_NONE] =
-        CreateRasterizerState(lpAllocator, &lParameters);
-    CGS_ASSERT(saRasterizerStates[E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_NONE],
-               "saRasterizerStates[ eFactoryRasterizerState_Scissor_CullModeNone ]");
+        renderengine::RasterizerState::Initialize(resource, lParameters);
+    CGS_ASSERT_AT(saRasterizerStates[E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_NONE],
+               "saRasterizerStates[ eFactoryRasterizerState_Scissor_CullModeNone ]", sourceFile, 77);
 }
 
 // ARTIST vtable 0x820CDC28, slot +0x04 targets the shared return at 0x8284CB38.

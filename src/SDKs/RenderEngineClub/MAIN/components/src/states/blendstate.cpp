@@ -1,4 +1,5 @@
 #include "types.hpp"
+#include <cstring>
 
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h"  // shared decl surface
 
@@ -30,12 +31,18 @@ namespace renderengine
         Parameters* const pParams = &parameters;
         const BlendState* const pMaterial = this;
         pParams->mbHasCustomBlendFactors = 0;
-        for (int liChannel = 0; liChannel < 4; ++liChannel)
+        const u32 defaultFactor = KU_DEFAULT_BLEND_FACTOR;
+        const u32* source = pMaterial->maState;
+        u32* destination = pParams->maBlendFactor;
+        int remaining = sizeof(pParams->maBlendFactor) / sizeof(pParams->maBlendFactor[0]);
+        do
         {
-            pParams->maBlendFactor[liChannel] = pMaterial->maState[liChannel];
-            if (pMaterial->maState[liChannel] != KU_DEFAULT_BLEND_FACTOR)
+            *destination++ = *source;
+            if (std::memcmp(source, &defaultFactor, sizeof(defaultFactor)) != 0)
                 pParams->mbHasCustomBlendFactors = 1;
+            ++source;
         }
+        while (--remaining);
 
         pParams->muState4 = pMaterial->maState[4];
         pParams->muState5 = pMaterial->maState[5];
@@ -68,8 +75,14 @@ namespace renderengine
 
         if (pParams->mbHasCustomBlendFactors)
         {
-            for (int liChannel = 0; liChannel < 4; ++liChannel)
-                lpMat->maState[liChannel] = pParams->maBlendFactor[liChannel];
+            const u32* source = pParams->maBlendFactor;
+            u32* destination = lpMat->maState;
+            int remaining = sizeof(pParams->maBlendFactor) / sizeof(pParams->maBlendFactor[0]);
+            do
+            {
+                *destination++ = *source++;
+            }
+            while (--remaining);
         }
         else
         {

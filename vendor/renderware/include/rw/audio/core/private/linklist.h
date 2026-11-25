@@ -9,11 +9,17 @@ namespace core
 
 struct ListNode
 {
+    ListNode *GetNext() { return pnext; }
     ListNode *pnext;
 };
 
 struct ListDNode
 {
+    void SetNext(ListDNode *node) { pnext = node; }
+    void SetPrev(ListDNode *node) { pprev = node; }
+    ListDNode *GetNext() { return pnext; }
+    ListDNode *GetPrev() { return pprev; }
+
     ListDNode *pnext;
     ListDNode *pprev;
 };
@@ -22,6 +28,8 @@ struct ListDNode
 // Collection::RemoveNode at 0x82B64BEC and Pop in AddItem at 0x82B6E200.
 struct ListDStack
 {
+    ListDStack() : phead(0) {}
+
     void Reset()
     {
         phead = 0;
@@ -39,12 +47,10 @@ struct ListDStack
 
     void Push(ListDNode *node)
     {
-        // The inlined push reads the old head before touching either link (0x82B6E228).
-        ListDNode *const previousHead = phead;
-        node->pprev = 0;
-        node->pnext = previousHead;
+        node->SetNext(phead);
+        node->SetPrev(0);
         if (phead)
-            phead->pprev = node;
+            phead->SetPrev(node);
         phead = node;
     }
 
@@ -64,10 +70,16 @@ struct ListDStack
     {
         if (node == phead)
             phead = phead->pnext;
-        if (node->pprev)
-            node->pprev->pnext = node->pnext;
-        if (node->pnext)
-            node->pnext->pprev = node->pprev;
+        if (node->GetPrev())
+        {
+            ListDNode *previous = node->GetPrev();
+            previous->SetNext(node->GetNext());
+        }
+        if (node->GetNext())
+        {
+            ListDNode *next = node->GetNext();
+            next->SetPrev(node->GetPrev());
+        }
     }
 
     ListDNode *phead;
@@ -75,6 +87,8 @@ struct ListDStack
 
 struct ListQueue
 {
+    ListQueue() : phead(0), ptail(0), entries(0) {}
+
     void Reset()
     {
         phead = 0;
@@ -90,10 +104,10 @@ struct ListQueue
     void PushTail(ListNode *node)
     {
         node->pnext = 0;
-        if (phead)
-            ptail->pnext = node;
-        else
+        if (!phead)
             phead = node;
+        else
+            ptail->pnext = node;
         ptail = node;
         ++entries;
     }

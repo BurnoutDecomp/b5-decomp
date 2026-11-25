@@ -38,6 +38,9 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
+#define CGS_ARTIST_BRNPOSTBOX_CPP "..\\..\\..\\GameSource\\Director/Utils/BrnPostBox.cpp"
+#define CGS_ARTIST_BRNPOSTBOX_H "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\director\\utils\\BrnPostBox.h"
+
 namespace BrnDirector
 {
     // Single-slot mailbox for one scene-query result package.
@@ -60,15 +63,16 @@ namespace BrnDirector
         // h:46 -- the post office's AddPostBox raises this when it mints the query id.
         void WaitForPackage()
         {
-            CGS_ASSERT(meState == E_STATE_EMPTY, "meState == E_STATE_EMPTY");          // BrnPostBox.cpp:54
+            CGS_ASSERT_AT(meState == E_STATE_EMPTY, "meState == E_STATE_EMPTY",
+                          CGS_ARTIST_BRNPOSTBOX_CPP, 54);
             meState = E_STATE_WAITING_FOR_PACKAGE;
         }
 
         // h:56 -- the post office's Deliver hands the result over.
         void TakePackage(const Type& lrPackage)
         {
-            CGS_ASSERT(meState == E_STATE_WAITING_FOR_PACKAGE,
-                       "meState == E_STATE_WAITING_FOR_PACKAGE");                       // BrnPostBox.cpp:65
+            CGS_ASSERT_AT(meState == E_STATE_WAITING_FOR_PACKAGE, "meState == E_STATE_WAITING_FOR_PACKAGE",
+                          CGS_ARTIST_BRNPOSTBOX_CPP, 65);
             mPackage = lrPackage;
             meState  = E_STATE_GOT_PACKAGE;
         }
@@ -86,7 +90,7 @@ namespace BrnDirector
             // aDP4B5MainBurno_11 @0x82005790.
             CGS_ASSERT(meState == E_STATE_GOT_PACKAGE, CGS_ASSERT_MESSAGE_AT(
                 "meState == E_STATE_GOT_PACKAGE",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\director\\utils\\BrnPostBox.h", 110));
+                CGS_ARTIST_BRNPOSTBOX_H, 110));
             return mPackage;
         }
 
@@ -95,3 +99,6 @@ namespace BrnDirector
         Type   mPackage;   // +sizeof/align(EState) rounded to alignof(Type)
     };
 }
+
+#undef CGS_ARTIST_BRNPOSTBOX_H
+#undef CGS_ARTIST_BRNPOSTBOX_CPP

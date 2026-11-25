@@ -23,16 +23,9 @@ namespace CgsResource
 
     ResourceDescriptor MaterialStateResourceType::GetSerialisedResourceDescriptor(const void* /*lpResource*/) const
     {
-        // Faithful to X360 0x828A98C0: a fixed descriptor -- slot0 = the MaterialState object
-        // (X360 hardcoded {0xFC=252, 0x10=16}), slots 1..4 = {0, 1}.
+        // ARTIST 828A98C0 sizes the serialized material and its embedded state data.
         ResourceDescriptor lDescriptor;
-        u32* lpData = reinterpret_cast<u32*>(&lDescriptor);
-        lpData[0] = 0xFCu;  // X360: 0xFC=252
-        lpData[1] = 16u;
-        lpData[2] = 0u;  lpData[3] = 1u;
-        lpData[4] = 0u;  lpData[5] = 1u;
-        lpData[6] = 0u;  lpData[7] = 1u;
-        lpData[8] = 0u;  lpData[9] = 1u;
+        lDescriptor.m_baseResourceDescriptors[0] = rw::BaseResourceDescriptor(0xFC, 16);
         return lDescriptor;
     }
 
@@ -78,7 +71,7 @@ namespace CgsResource
             reinterpret_cast<uintptr_t>(lpState->mpDepthStencilState) - luBase);
         lpReferenced->muPrimitiveResetEnable = 1u;
         lpState->mpRasterizerState = reinterpret_cast<renderengine::RasterizerState*>(
-            reinterpret_cast<uintptr_t>(lpReferenced) - luBase);
+            reinterpret_cast<uintptr_t>(lpState->mpRasterizerState) - luBase);
     }
 
     uint32_t MaterialStateResourceType::GetImportCount(const void* /*lpResource*/) const

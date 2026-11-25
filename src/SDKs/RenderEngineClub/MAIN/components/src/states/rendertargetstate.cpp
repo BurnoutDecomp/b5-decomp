@@ -1,6 +1,9 @@
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/rendertargetstate.h"
 #include <cstring>
 
+// ARTIST 82B62770 calls the XDK libcMT memset provider.
+#pragma function(memset)
+
 namespace renderengine
 {
     // ARTIST 0x82B63678: five lanes, first containing a 0x18-byte state.
@@ -22,9 +25,15 @@ namespace renderengine
     RenderTargetState* RenderTargetState::Initialize(const rw::Resource& resource, const Parameters& parameters)
     {
         RenderTargetState* state = static_cast<RenderTargetState*>(resource.m_baseResources[0]);
-        std::memset(state, 0, sizeof(*state));
-        for (u32 i = 0; i < 4; ++i)
-            state->mpColorTargets[i] = parameters.targets[i];
+        memset(state, 0, sizeof(*state));
+        PixelBuffer* const* source = parameters.targets;
+        PixelBuffer** destination = state->mpColorTargets;
+        int remaining = sizeof(state->mpColorTargets) / sizeof(state->mpColorTargets[0]);
+        do
+        {
+            *destination++ = *source++;
+        }
+        while (--remaining);
         state->mpDepthTarget = parameters.targets[4];
         state->muInitialized = 1;
         return state;

@@ -31,7 +31,12 @@ namespace CgsFileSystem
     public:
         // ---- DWARF CgsFileHandle.h:48-79 ----
         void Construct(FileSystem* lpFileSystem, u32 luFileId) { mpFileSystem = lpFileSystem; muFileId = luFileId; }
-        FileHandle& operator=(const FileHandle& lOtherHandle);
+        FileHandle& operator=(const FileHandle& lOtherHandle)
+        {
+            mpFileSystem = lOtherHandle.mpFileSystem;
+            muFileId     = lOtherHandle.muFileId;
+            return *this;
+        }
         bool operator==(const FileHandle& lOtherHandle) const;
 
         // @0x8264AEE0. Takes the file-system-wide lock, delegates to FileSystem::ReadInternal,

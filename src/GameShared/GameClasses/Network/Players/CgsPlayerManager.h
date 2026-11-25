@@ -264,6 +264,21 @@ namespace CgsNetwork
         ReliableMessageManager   mReliableMessageManager;                    // +0x0E38
 
     private:
+        friend class PlayersConnectionManager;
+
+        // The connection protocol shares the active registry's lookup with GetPlayerByID.
+        NetworkPlayer* FindActiveNetworkPlayer(NetworkPlayerID lPlayerID) const
+        {
+            for (s32 i = 0; i < miNumActivePlayers; ++i)
+            {
+                if (maActivePlayers[i].GetPlayerID() == lPlayerID)
+                {
+                    return maActivePlayers[i].GetNetworkPlayer();
+                }
+            }
+            return 0;
+        }
+
         // Header-inline helpers the console folds into Construct / Prepare / Release /
         // Destruct and the disconnect callback.
         void ResetAllBandwidthCounters()

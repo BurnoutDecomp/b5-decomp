@@ -54,8 +54,20 @@ namespace CgsFileSystem
         void Destruct();    // 0x828E8A88
 
         bool HasDiskErrorOccured() const;
-        s32 Open(const char* lpcName, FileAccess leAccess, s32 liPriority, bool lbUseHDCache);
-        bool Close(u32 luFileId);
+        s32 Open(const char* lpName, FileAccess leAccess, s32 liPriority, bool lbCache)
+        {
+            mFileSystemFutex.Lock();
+            const s32 liResult = OpenInternal(lpName, leAccess, liPriority, lbCache);
+            mFileSystemFutex.Unlock();
+            return liResult;
+        }
+        bool Close(u32 luId)
+        {
+            mFileSystemFutex.Lock();
+            const bool lbResult = CloseInternal(luId);
+            mFileSystemFutex.Unlock();
+            return lbResult;
+        }
         bool RegisterMemFile(const char* lpcName, void* lpData, u64 luSize);
         bool UnregisterMemFile(const char* lpcName);
 
@@ -78,11 +90,23 @@ namespace CgsFileSystem
         bool IsReadStreamClosed(s32 liIndex);
 
         // DWARF CgsFileSystem.h:189/195. The public locked read-stream pair.
-        ReadStream OpenReadStream(const char* lpcName, void* lpBuffer,
-                                  u32 luBufferSize, u32 luNumBlocks,
-                                  s32 liNormalPriority, s32 liHighPriority,
-                                  bool lbUseHDCache);
-        void CloseReadStream(ReadStream lStream);
+        ReadStream OpenReadStream(
+            const char* lpcName, void* lpBuffer, u32 luBufferSize, u32 luNumBlocks,
+            s32 liNormalPriority, s32 liHighPriority, bool lbUseHDCache)
+        {
+            mFileSystemFutex.Lock();
+            ReadStream lStream = OpenReadStreamInternal(
+                lpcName, lpBuffer, luBufferSize, luNumBlocks,
+                liNormalPriority, liHighPriority, lbUseHDCache);
+            mFileSystemFutex.Unlock();
+            return lStream;
+        }
+        void CloseReadStream(ReadStream lStream)
+        {
+            mFileSystemFutex.Lock();
+            CloseReadStreamInternal(lStream);
+            mFileSystemFutex.Unlock();
+        }
 
         // ARTIST828FD668 and828EC8D4 inline this owned patch service.
         PatchManager* GetPatchManager() { return &mPatchManager; }

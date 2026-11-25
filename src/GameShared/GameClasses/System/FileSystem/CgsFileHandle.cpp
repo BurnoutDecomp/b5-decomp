@@ -51,11 +51,4 @@ namespace CgsFileSystem
         return mpFileSystem->GetStatus(muFileId);
     }
 
-    // Header-inline on the console (a two-word copy at every assignment site).
-    FileHandle& FileHandle::operator=(const FileHandle& lOtherHandle)
-    {
-        mpFileSystem = lOtherHandle.mpFileSystem;
-        muFileId     = lOtherHandle.muFileId;
-        return *this;
-    }
 }

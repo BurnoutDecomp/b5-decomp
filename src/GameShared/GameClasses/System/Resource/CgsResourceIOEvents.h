@@ -183,9 +183,9 @@ namespace Events
     // CgsResourceIOEvents.h -- the reply to an open-file request (queue event id 20 on
     // the requester's receiver queue); miEventId is the requester's own id for the open.
     struct CloseFileRequest : public FileHandleEvent {};
-    struct CloseFileResponse : public FileHandleEvent {};
+    class CloseFileResponse : public FileHandleEvent {};
 
-    struct OpenFileResponse : public FileHandleEvent
+    class OpenFileResponse : public FileHandleEvent
     {
     };
 
@@ -259,11 +259,11 @@ namespace Events
 
     // DWARF CgsResourceIOEvents.h:1149/1175. Both responses carry the
     // requester/event-id/read-stream triple from ReadStreamEvent.
-    struct OpenReadStreamResponse : public ReadStreamEvent
+    class OpenReadStreamResponse : public ReadStreamEvent
     {
     };
 
-    struct CloseReadStreamResponse : public ReadStreamEvent
+    class CloseReadStreamResponse : public ReadStreamEvent
     {
     };
 

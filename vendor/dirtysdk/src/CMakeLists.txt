@@ -7,7 +7,7 @@ target_sources(DirtySDK INTERFACE
     lobbydisplist.cpp
     lobbyname.cpp
     lobbysort.cpp
-    lobbytagfield.cpp
+    lobbytagfield.c
     plat-str.cpp
     plat-time.cpp
     protomangle.cpp

@@ -70,6 +70,30 @@ namespace SceneManagerIO
         CgsModule::BaseEventQueue<InEventTriangleCollisionLineTestNearest>*    mpTriangleCollisionLineTestNearestQueue;  // +0x1C
         CgsModule::BaseEventQueue<InEventTriangleCollisionSphereTest>*         mpTriangleCollisionSphereTestQueue;       // +0x20
 
+        // CgsSceneManagerModuleIO.h:329. ARTIST inlines the nine pointer stores in
+        // InputBuffer_Query::Construct and DirectorIO::SceneQueryOutputBuffer::Construct.
+        void Construct(
+            CgsModule::BaseEventQueue<InEventLineTestFine>* lpFineLineTestQueue,
+            CgsModule::BaseEventQueue<InEventLineTestNearest>* lpFineLineTestNearestQueue,
+            CgsModule::BaseEventQueue<InEventLineTestFastDoubleSided>* lpFineLineTestFastDoubleSidedQueue,
+            CgsModule::BaseEventQueue<InEventSphereTestFast>* lpFineSphereTestFastQueue,
+            CgsModule::BaseEventQueue<InEventVolumeTestDeepest>* lpFineVolumeTestDeepestQueue,
+            CgsModule::BaseEventQueue<InEventVolumeTestFine>* lpFineVolumeTestQueue,
+            CgsModule::BaseEventQueue<InEventTriangleCollisionLineTest>* lpTriangleCollisionLineTestQueue,
+            CgsModule::BaseEventQueue<InEventTriangleCollisionLineTestNearest>* lpTriangleCollisionLineTestNearestQueue,
+            CgsModule::BaseEventQueue<InEventTriangleCollisionSphereTest>* lpTriangleCollisionSphereTestQueue)
+        {
+            mpFineLineTestQueue = lpFineLineTestQueue;
+            mpFineLineTestNearestQueue = lpFineLineTestNearestQueue;
+            mpFineLineTestFastDoubleSidedQueue = lpFineLineTestFastDoubleSidedQueue;
+            mpFineSphereTestFastQueue = lpFineSphereTestFastQueue;
+            mpFineVolumeTestDeepestQueue = lpFineVolumeTestDeepestQueue;
+            mpFineVolumeTestQueue = lpFineVolumeTestQueue;
+            mpTriangleCollisionLineTestQueue = lpTriangleCollisionLineTestQueue;
+            mpTriangleCollisionLineTestNearestQueue = lpTriangleCollisionLineTestNearestQueue;
+            mpTriangleCollisionSphereTestQueue = lpTriangleCollisionSphereTestQueue;
+        }
+
         // ---- producer methods (bodies in their own TUs) ----
         // @ 0x82216EF0 -- stages an InEventLineTestFine and pushes it onto mpFineLineTestQueue.
         void LineTestFine(SceneQueryId lQueryId,

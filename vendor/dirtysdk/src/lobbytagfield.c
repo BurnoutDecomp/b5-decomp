@@ -19,16 +19,16 @@
 #include "dirtylib.h"   // NetPrintf
 #include "platform.h"   // ds_snzprintf, ds_timeinsecs, ds_secstotime, ds_timetosecs
 
-#include <cstdarg>
+#include <stdarg.h>
 #include "types.hpp"
-#include <cstring>
-#include <ctime>
+#include <string.h>
+#include <time.h>
 
-// The five translation tables, laid out back to back exactly as the SDK links them.
+// The four byte-translation tables follow their original contiguous layout.
 // Two getters index hex_decode with a sign-extended character, so a byte >= 0x80
 // reads the 128 bytes that precede the table (the tail of char_encode and
 // hex_encode); keeping the block contiguous reproduces those reads byte for byte.
-static const unsigned char _TagField_aTables[0x310 + 33] =
+static const unsigned char _TagField_aTables[0x310] =
 {
     // char_encode[256] (+0x000): bit 0 = escape in a string, bit 1 = escape in a
     // token, bit 2 = escape in a structure string, bit 3 = forces quoting.
@@ -84,17 +84,13 @@ static const unsigned char _TagField_aTables[0x310 + 33] =
     0xD0, 0xD1, 0xD2, 0xD3, 0xD4, 0xD5, 0xD6, 0xD7, 0xD8, 0xD9, 0xDA, 0xDB, 0xDC, 0xDD, 0xDE, 0xDF,
     0xE0, 0xE1, 0xE2, 0xE3, 0xE4, 0xE5, 0xE6, 0xE7, 0xE8, 0xE9, 0xEA, 0xEB, 0xEC, 0xED, 0xEE, 0xEF,
     0xF0, 0xF1, 0xF2, 0xF3, 0xF4, 0xF5, 0xF6, 0xF7, 0xF8, 0xF9, 0xFA, 0xFB, 0xFC, 0xFD, 0xFE, 0xFF,
-    // flag_encode[33] (+0x310): "@ABCDEFGHIJKLMNOPQRSTUVWXYZ0123-"
-    0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4A, 0x4B, 0x4C, 0x4D, 0x4E, 0x4F,
-    0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x59, 0x5A, 0x30, 0x31, 0x32, 0x33, 0x2D,
-    0x00,
 };
 
 static const unsigned char* const char_encode = _TagField_aTables + 0x000;
 static const unsigned char* const hex_encode  = _TagField_aTables + 0x100;
 static const unsigned char* const hex_decode  = _TagField_aTables + 0x110;
 static const unsigned char* const to_upper    = _TagField_aTables + 0x210;
-static const char* const          flag_encode = reinterpret_cast<const char*>(_TagField_aTables + 0x310);
+static const char flag_encode[33] = "@ABCDEFGHIJKLMNOPQRSTUVWXYZ0123-";
 
 // Field divider, and whether a setter also writes it after its value (TagFieldDivider,
 // which would change them, is not part of the build, so these keep their defaults).
@@ -151,7 +147,7 @@ static unsigned char* _TagFieldSetupAppend(unsigned char* pRecord, s32 iReclen, 
         {
             continue;
         }
-        for (pFindCmp = pFind, pNameCmp = reinterpret_cast<const unsigned char*>(pName);
+        for (pFindCmp = pFind, pNameCmp = (const unsigned char*)(pName);
              to_upper[*pFindCmp] == to_upper[*pNameCmp]; ++pFindCmp, ++pNameCmp)
         {
         }
@@ -243,7 +239,7 @@ static s32 _TagFieldSetupCancel(unsigned char* pRecord, unsigned char* pAppend)
 }
 
 // DecFIGS lobbytagfield.c:432. The ARTIST setters inline this finalization.
-static inline s32 _TagFieldSetupTerm(char* pRecord, char* pAppend, const char* pName)
+static __inline s32 _TagFieldSetupTerm(char* pRecord, char* pAppend, const char* pName)
 {
     char* pTerm = pAppend;
     if ((g_divafter != 0) && (pName != NULL))
@@ -268,7 +264,7 @@ static const char* _ParseNumber(const char* pData, u32* pValue, s32 iDigits)
     return pData;
 }
 
-extern "C" s32 TagFieldDupl(char* pRecord, s32 iReclen, const char* pData)
+s32 TagFieldDupl(char* pRecord, s32 iReclen, const char* pData)
 {
     s32 iLimit;
 
@@ -283,11 +279,11 @@ extern "C" s32 TagFieldDupl(char* pRecord, s32 iReclen, const char* pData)
     return iReclen - iLimit;
 }
 
-extern "C" s32 TagFieldMerge(char* pRecord_, s32 iReclen, const char* pMerge_)
+s32 TagFieldMerge(char* pRecord_, s32 iReclen, const char* pMerge_)
 {
-    unsigned char* pRecord = reinterpret_cast<unsigned char*>(pRecord_);
+    unsigned char* pRecord = (unsigned char*)(pRecord_);
     unsigned char* pLimit = pRecord + iReclen - 1;
-    const unsigned char* pMerge = reinterpret_cast<const unsigned char*>(pMerge_);
+    const unsigned char* pMerge = (const unsigned char*)(pMerge_);
     unsigned char* pSrc;
     unsigned char* pDst;
     unsigned char* pName;
@@ -324,7 +320,7 @@ extern "C" s32 TagFieldMerge(char* pRecord_, s32 iReclen, const char* pMerge_)
             else
             {
                 *pSrc = 0;
-                if (TagFieldFind(pMerge_, reinterpret_cast<const char*>(pName)) == NULL)
+                if (TagFieldFind(pMerge_, (const char*)(pName)) == NULL)
                 {
                     *pSrc++ = '=';
                     *pDst++ = '=';
@@ -388,13 +384,13 @@ extern "C" s32 TagFieldMerge(char* pRecord_, s32 iReclen, const char* pMerge_)
     return 1;
 }
 
-extern "C" s32 TagFieldDelete(char* _record, const char* name)
+s32 TagFieldDelete(char* _record, const char* name)
 {
     unsigned char* data;
     unsigned char* head;
     unsigned char* tail;
     unsigned char* last;
-    unsigned char* record = reinterpret_cast<unsigned char*>(_record);
+    unsigned char* record = (unsigned char*)(_record);
 
     data = (unsigned char*)TagFieldFind(_record, name);
     if (data == NULL)
@@ -437,14 +433,14 @@ extern "C" s32 TagFieldDelete(char* _record, const char* name)
     return 0;
 }
 
-extern "C" const char* TagFieldFind(const char* pRecord_, const char* pName_)
+const char* TagFieldFind(const char* pRecord_, const char* pName_)
 {
     s32 iNameLen;
     unsigned char uMatch = 0;
     const unsigned char* pCmp1;
     const unsigned char* pCmp2;
-    const unsigned char* pName = reinterpret_cast<const unsigned char*>(pName_);
-    const unsigned char* pRecord = reinterpret_cast<const unsigned char*>(pRecord_);
+    const unsigned char* pName = (const unsigned char*)(pName_);
+    const unsigned char* pRecord = (const unsigned char*)(pRecord_);
 
     if ((pRecord == NULL) || (pName == NULL) || (*pName == 0))
     {
@@ -463,7 +459,7 @@ extern "C" const char* TagFieldFind(const char* pRecord_, const char* pName_)
     iNameLen = (s32)(pCmp2 - pName);
     if ((uMatch == 0) && (*pRecord == '='))
     {
-        return reinterpret_cast<const char*>(pRecord + 1);
+        return (const char*)(pRecord + 1);
     }
     if (*pRecord == 0)
     {
@@ -494,13 +490,13 @@ extern "C" const char* TagFieldFind(const char* pRecord_, const char* pName_)
         }
         if (pStart + iIndex == pCmp1)
         {
-            return reinterpret_cast<const char*>(pCmp1 + 1);
+            return (const char*)(pCmp1 + 1);
         }
     }
     return NULL;
 }
 
-extern "C" const char* TagFieldFindIdx(const char* pRecord, const char* pName, s32 iIdx)
+const char* TagFieldFindIdx(const char* pRecord, const char* pName, s32 iIdx)
 {
     char strTag[256];
 
@@ -508,12 +504,12 @@ extern "C" const char* TagFieldFindIdx(const char* pRecord, const char* pName, s
     return TagFieldFind(pRecord, strTag);
 }
 
-extern "C" s32 TagFieldSetRaw(char* pRecord_, s32 iReclen, const char* pName, const char* pData_)
+s32 TagFieldSetRaw(char* pRecord_, s32 iReclen, const char* pName, const char* pData_)
 {
     unsigned char uTerm;
     unsigned char* pAppend;
-    unsigned char* pRecord = reinterpret_cast<unsigned char*>(pRecord_);
-    const unsigned char* pData = reinterpret_cast<const unsigned char*>(pData_);
+    unsigned char* pRecord = (unsigned char*)(pRecord_);
+    const unsigned char* pData = (const unsigned char*)(pData_);
 
     if (pData == NULL)
     {
@@ -536,15 +532,10 @@ extern "C" s32 TagFieldSetRaw(char* pRecord_, s32 iReclen, const char* pName, co
         *pAppend++ = *pData++;
     }
 
-    if ((g_divafter != 0) && (pName != NULL))
-    {
-        *pAppend++ = (unsigned char)g_divider;
-    }
-    *pAppend = 0;
-    return (s32)(pAppend - pRecord);
+    return _TagFieldSetupTerm((char*)pRecord, (char*)pAppend, pName);
 }
 
-extern "C" s32 TagFieldGetRaw(const char* pData, char* pBuffer, s32 iBuflen, const char* pDefval)
+s32 TagFieldGetRaw(const char* pData, char* pBuffer, s32 iBuflen, const char* pDefval)
 {
     s32 iLen;
     unsigned char uTerm;
@@ -563,7 +554,7 @@ extern "C" s32 TagFieldGetRaw(const char* pData, char* pBuffer, s32 iBuflen, con
     }
     else
     {
-        pPtr = reinterpret_cast<const unsigned char*>(pData);
+        pPtr = (const unsigned char*)(pData);
         uTerm = '!';
         for (iLen = 1; (iLen < iBuflen) && (*pPtr >= uTerm); ++iLen)
         {
@@ -575,7 +566,7 @@ extern "C" s32 TagFieldGetRaw(const char* pData, char* pBuffer, s32 iBuflen, con
     return iLen - 1;
 }
 
-extern "C" s32 TagFieldSetNumber(char* pRecord, s32 iReclen, const char* pName, s32 iValue)
+s32 TagFieldSetNumber(char* pRecord, s32 iReclen, const char* pName, s32 iValue)
 {
     s32 iLength;
     u32 uValue;
@@ -586,7 +577,7 @@ extern "C" s32 TagFieldSetNumber(char* pRecord, s32 iReclen, const char* pName, 
     if ((iValue >= 0) && (iValue < 10))
     {
         // single digit fast path
-        if ((pAppend = _TagFieldSetupAppend(reinterpret_cast<unsigned char*>(pRecord), iReclen, pName, 1)) == NULL)
+        if ((pAppend = _TagFieldSetupAppend((unsigned char*)(pRecord), iReclen, pName, 1)) == NULL)
         {
             return -1;
         }
@@ -608,7 +599,7 @@ extern "C" s32 TagFieldSetNumber(char* pRecord, s32 iReclen, const char* pName, 
             *--pData = '-';
         }
         iLength = (s32)(strData + sizeof(strData) - 1 - pData);
-        if ((pAppend = _TagFieldSetupAppend(reinterpret_cast<unsigned char*>(pRecord), iReclen, pName, iLength)) == NULL)
+        if ((pAppend = _TagFieldSetupAppend((unsigned char*)(pRecord), iReclen, pName, iLength)) == NULL)
         {
             return -1;
         }
@@ -618,15 +609,10 @@ extern "C" s32 TagFieldSetNumber(char* pRecord, s32 iReclen, const char* pName, 
         }
     }
 
-    if ((g_divafter != 0) && (pName != NULL))
-    {
-        *pAppend++ = (unsigned char)g_divider;
-    }
-    *pAppend = 0;
-    return (s32)(pAppend - reinterpret_cast<unsigned char*>(pRecord));
+    return _TagFieldSetupTerm((char*)pRecord, (char*)pAppend, pName);
 }
 
-extern "C" s32 TagFieldSetNumber64(char* pRecord, s32 iReclen, const char* pName, s64 iValue)
+s32 TagFieldSetNumber64(char* pRecord, s32 iReclen, const char* pName, s64 iValue)
 {
     s32 iLength;
     s32 iNeg = 0;
@@ -663,7 +649,7 @@ extern "C" s32 TagFieldSetNumber64(char* pRecord, s32 iReclen, const char* pName
     }
 
     iLength = (s32)(strData + sizeof(strData) - 1 - pData);
-    if ((pAppend = _TagFieldSetupAppend(reinterpret_cast<unsigned char*>(pRecord), iReclen, pName, iLength)) == NULL)
+    if ((pAppend = _TagFieldSetupAppend((unsigned char*)(pRecord), iReclen, pName, iLength)) == NULL)
     {
         return -1;
     }
@@ -671,15 +657,10 @@ extern "C" s32 TagFieldSetNumber64(char* pRecord, s32 iReclen, const char* pName
     {
         *pAppend++ = *pData++;
     }
-    if ((g_divafter != 0) && (pName != NULL))
-    {
-        *pAppend++ = (unsigned char)g_divider;
-    }
-    *pAppend = 0;
-    return (s32)(pAppend - reinterpret_cast<unsigned char*>(pRecord));
+    return _TagFieldSetupTerm((char*)pRecord, (char*)pAppend, pName);
 }
 
-extern "C" s32 TagFieldGetNumber(const char* pData, s32 iDefval)
+s32 TagFieldGetNumber(const char* pData, s32 iDefval)
 {
     s32 iSign = 1;
     u32 uDigit;
@@ -713,13 +694,13 @@ extern "C" s32 TagFieldGetNumber(const char* pData, s32 iDefval)
     return (s32)(uValue * (u32)iSign);
 }
 
-extern "C" s32 TagFieldSetFlags(char* pRecord, s32 iReclen, const char* pName, s32 iValue)
+s32 TagFieldSetFlags(char* pRecord, s32 iReclen, const char* pName, s32 iValue)
 {
     const char* pFlags;
     unsigned char* pAppend;
-    unsigned char* pLimit = reinterpret_cast<unsigned char*>(pRecord) + iReclen - g_divafter - 1;
+    unsigned char* pLimit = (unsigned char*)(pRecord) + iReclen - g_divafter - 1;
 
-    if ((pAppend = _TagFieldSetupAppend(reinterpret_cast<unsigned char*>(pRecord), iReclen, pName, 0)) == NULL)
+    if ((pAppend = _TagFieldSetupAppend((unsigned char*)(pRecord), iReclen, pName, 0)) == NULL)
     {
         return -1;
     }
@@ -729,20 +710,15 @@ extern "C" s32 TagFieldSetFlags(char* pRecord, s32 iReclen, const char* pName, s
         {
             if (pAppend >= pLimit)
             {
-                return _TagFieldSetupCancel(reinterpret_cast<unsigned char*>(pRecord), pAppend);
+                return _TagFieldSetupCancel((unsigned char*)(pRecord), pAppend);
             }
             *pAppend++ = (unsigned char)*pFlags;
         }
     }
-    if ((g_divafter != 0) && (pName != NULL))
-    {
-        *pAppend++ = (unsigned char)g_divider;
-    }
-    *pAppend = 0;
-    return (s32)(pAppend - reinterpret_cast<unsigned char*>(pRecord));
+    return _TagFieldSetupTerm((char*)pRecord, (char*)pAppend, pName);
 }
 
-extern "C" s32 TagFieldSetAddress(char* pRecord, s32 iReclen, const char* pName, u32 uAddr)
+s32 TagFieldSetAddress(char* pRecord, s32 iReclen, const char* pName, u32 uAddr)
 {
     s32 iIndex;
     unsigned char uValue;
@@ -752,10 +728,12 @@ extern "C" s32 TagFieldSetAddress(char* pRecord, s32 iReclen, const char* pName,
     unsigned char strAddr[16];
 
     // network order: most significant octet first
-    Segment[0] = (unsigned char)(uAddr >> 24);
-    Segment[1] = (unsigned char)(uAddr >> 16);
-    Segment[2] = (unsigned char)(uAddr >> 8);
-    Segment[3] = (unsigned char)(uAddr >> 0);
+    Segment[3] = (unsigned char)uAddr;
+    uAddr >>= 8;
+    Segment[2] = (unsigned char)uAddr;
+    uAddr >>= 8;
+    Segment[1] = (unsigned char)uAddr;
+    Segment[0] = (unsigned char)(uAddr >> 8);
 
     for (pData = strAddr, iIndex = 0; iIndex < 4; ++iIndex)
     {
@@ -778,7 +756,7 @@ extern "C" s32 TagFieldSetAddress(char* pRecord, s32 iReclen, const char* pName,
     }
     *pData = 0;
 
-    if ((pAppend = _TagFieldSetupAppend(reinterpret_cast<unsigned char*>(pRecord), iReclen, pName, (s32)(pData - strAddr))) == NULL)
+    if ((pAppend = _TagFieldSetupAppend((unsigned char*)(pRecord), iReclen, pName, (s32)(pData - strAddr))) == NULL)
     {
         return -1;
     }
@@ -786,15 +764,10 @@ extern "C" s32 TagFieldSetAddress(char* pRecord, s32 iReclen, const char* pName,
     {
         *pAppend++ = *pData++;
     }
-    if ((g_divafter != 0) && (pName != NULL))
-    {
-        *pAppend++ = (unsigned char)g_divider;
-    }
-    *pAppend = 0;
-    return (s32)(pAppend - reinterpret_cast<unsigned char*>(pRecord));
+    return _TagFieldSetupTerm((char*)pRecord, (char*)pAppend, pName);
 }
 
-extern "C" u32 TagFieldGetAddress(const char* pData, u32 uDefval)
+u32 TagFieldGetAddress(const char* pData, u32 uDefval)
 {
     u32 uAddr = 0;
 
@@ -819,7 +792,7 @@ extern "C" u32 TagFieldGetAddress(const char* pData, u32 uDefval)
     }
 }
 
-extern "C" s32 TagFieldSetToken(char* pRecord, s32 iReclen, const char* pName, s32 iToken)
+s32 TagFieldSetToken(char* pRecord, s32 iReclen, const char* pName, s32 iToken)
 {
     s32 iIndex;
     unsigned char uByte;
@@ -847,7 +820,7 @@ extern "C" s32 TagFieldSetToken(char* pRecord, s32 iReclen, const char* pName, s
         }
     }
 
-    if ((pAppend = _TagFieldSetupAppend(reinterpret_cast<unsigned char*>(pRecord), iReclen, pName, (s32)(strToken + sizeof(strToken) - 1 - pData))) == NULL)
+    if ((pAppend = _TagFieldSetupAppend((unsigned char*)(pRecord), iReclen, pName, (s32)(strToken + sizeof(strToken) - 1 - pData))) == NULL)
     {
         return -1;
     }
@@ -855,20 +828,15 @@ extern "C" s32 TagFieldSetToken(char* pRecord, s32 iReclen, const char* pName, s
     {
         *pAppend++ = *pData++;
     }
-    if ((g_divafter != 0) && (pName != NULL))
-    {
-        *pAppend++ = (unsigned char)g_divider;
-    }
-    *pAppend = 0;
-    return (s32)(pAppend - reinterpret_cast<unsigned char*>(pRecord));
+    return _TagFieldSetupTerm((char*)pRecord, (char*)pAppend, pName);
 }
 
-extern "C" s32 TagFieldGetToken(const char* pData_, s32 iDefault)
+s32 TagFieldGetToken(const char* pData_, s32 iDefault)
 {
     s32 iIndex;
     unsigned char uByte;
     u32 uToken = 0;
-    const unsigned char* pData = reinterpret_cast<const unsigned char*>(pData_);
+    const unsigned char* pData = (const unsigned char*)(pData_);
 
     if ((pData == NULL) || (*pData <= ' '))
     {
@@ -893,13 +861,13 @@ extern "C" s32 TagFieldGetToken(const char* pData_, s32 iDefault)
     return (s32)uToken;
 }
 
-extern "C" s32 TagFieldSetString(char* pRecord_, s32 iReclen, const char* pName, const char* pValue_)
+s32 TagFieldSetString(char* pRecord_, s32 iReclen, const char* pName, const char* pValue_)
 {
     s32 iRemain;
     unsigned char* pAppend;
     const unsigned char* pSpace;
-    unsigned char* pRecord = reinterpret_cast<unsigned char*>(pRecord_);
-    const unsigned char* pValue = reinterpret_cast<const unsigned char*>(pValue_);
+    unsigned char* pRecord = (unsigned char*)(pRecord_);
+    const unsigned char* pValue = (const unsigned char*)(pValue_);
 
     if (pValue == NULL)
     {
@@ -950,15 +918,10 @@ extern "C" s32 TagFieldSetString(char* pRecord_, s32 iReclen, const char* pName,
     {
         return _TagFieldSetupCancel(pRecord, pAppend);
     }
-    if ((g_divafter != 0) && (pName != NULL))
-    {
-        *pAppend++ = (unsigned char)g_divider;
-    }
-    *pAppend = 0;
-    return (s32)(pAppend - pRecord);
+    return _TagFieldSetupTerm((char*)pRecord, (char*)pAppend, pName);
 }
 
-extern "C" s32 TagFieldGetString(const char* data, char* buffer, s32 buflen, const char* defval)
+s32 TagFieldGetString(const char* data, char* buffer, s32 buflen, const char* defval)
 {
     s32 len;
     unsigned char term;
@@ -982,7 +945,7 @@ extern "C" s32 TagFieldGetString(const char* data, char* buffer, s32 buflen, con
         return len - 1;
     }
 
-    ptr = reinterpret_cast<const unsigned char*>(data);
+    ptr = (const unsigned char*)(data);
     term = ' ';
     if (*ptr == '"')
     {
@@ -1036,16 +999,16 @@ extern "C" s32 TagFieldGetString(const char* data, char* buffer, s32 buflen, con
     return len - 1;
 }
 
-extern "C" s32 TagFieldSetBinary(char* pRecord, s32 iReclen, const char* pName, const void* pValue_, s32 iVallen)
+s32 TagFieldSetBinary(char* pRecord, s32 iReclen, const char* pName, const void* pValue_, s32 iVallen)
 {
     unsigned char* pAppend;
-    const unsigned char* pValue = static_cast<const unsigned char*>(pValue_);
+    const unsigned char* pValue = (const unsigned char*)(pValue_);
 
     if (iVallen < 0)
     {
         return -1;
     }
-    if ((pAppend = _TagFieldSetupAppend(reinterpret_cast<unsigned char*>(pRecord), iReclen, pName, (iVallen * 2) + 1)) == NULL)
+    if ((pAppend = _TagFieldSetupAppend((unsigned char*)(pRecord), iReclen, pName, (iVallen * 2) + 1)) == NULL)
     {
         return -1;
     }
@@ -1055,26 +1018,21 @@ extern "C" s32 TagFieldSetBinary(char* pRecord, s32 iReclen, const char* pName, 
         *pAppend++ = hex_encode[*pValue >> 4];
         *pAppend++ = hex_encode[*pValue & 15];
     }
-    if ((g_divafter != 0) && (pName != NULL))
-    {
-        *pAppend++ = (unsigned char)g_divider;
-    }
-    *pAppend = 0;
-    return (s32)(pAppend - reinterpret_cast<unsigned char*>(pRecord));
+    return _TagFieldSetupTerm((char*)pRecord, (char*)pAppend, pName);
 }
 
-extern "C" s32 TagFieldSetBinary7(char* pRecord, s32 iReclen, const char* pName, const void* pValue_, s32 iVallen)
+s32 TagFieldSetBinary7(char* pRecord, s32 iReclen, const char* pName, const void* pValue_, s32 iVallen)
 {
     s32 iBits;
     u32 uBuffer;
     unsigned char* pAppend;
-    const unsigned char* pValue = static_cast<const unsigned char*>(pValue_);
+    const unsigned char* pValue = (const unsigned char*)(pValue_);
 
     if (iVallen < 0)
     {
         return -1;
     }
-    if ((pAppend = _TagFieldSetupAppend(reinterpret_cast<unsigned char*>(pRecord), iReclen, pName, (((iVallen * 8) + 6) / 7) + 1)) == NULL)
+    if ((pAppend = _TagFieldSetupAppend((unsigned char*)(pRecord), iReclen, pName, (((iVallen * 8) + 6) / 7) + 1)) == NULL)
     {
         return -1;
     }
@@ -1097,16 +1055,16 @@ extern "C" s32 TagFieldSetBinary7(char* pRecord, s32 iReclen, const char* pName,
         *pAppend++ = (unsigned char)((uBuffer & 0x7F) | 0x80);
     }
 
-    return _TagFieldSetupTerm(pRecord, reinterpret_cast<char*>(pAppend), pName);
+    return _TagFieldSetupTerm(pRecord, (char*)(pAppend), pName);
 }
 
-extern "C" s32 TagFieldGetBinary(const char* pData_, void* pBuffer_, s32 iBuflen)
+s32 TagFieldGetBinary(const char* pData_, void* pBuffer_, s32 iBuflen)
 {
     s32 iBits;
     u32 uBin7;
     const unsigned char* pBinary;
-    const unsigned char* pData = reinterpret_cast<const unsigned char*>(pData_);
-    unsigned char* pBuffer = static_cast<unsigned char*>(pBuffer_);
+    const unsigned char* pData = (const unsigned char*)(pData_);
+    unsigned char* pBuffer = (unsigned char*)(pBuffer_);
     unsigned char* pBufend = pBuffer + iBuflen;
 
     if ((pData == NULL) || ((*pData != '$') && (*pData != '^')))
@@ -1161,7 +1119,7 @@ extern "C" s32 TagFieldGetBinary(const char* pData_, void* pBuffer_, s32 iBuflen
     return (s32)(pBuffer - pBufend) + iBuflen;
 }
 
-extern "C" s32 TagFieldSetStructure(char* pRecord, s32 iReclen, const char* pName, const void* pStruct_, s32 iLength, const char* pPattern)
+s32 TagFieldSetStructure(char* pRecord, s32 iReclen, const char* pName, const void* pStruct_, s32 iLength, const char* pPattern)
 {
     s32 iShift;
     s32 iWidth;
@@ -1169,11 +1127,11 @@ extern "C" s32 TagFieldSetStructure(char* pRecord, s32 iReclen, const char* pNam
     u32 uValue = 0;
     unsigned char* pMarker;
     unsigned char* pAppend;
-    const unsigned char* pStruct = static_cast<const unsigned char*>(pStruct_);
-    const unsigned char* pLength = reinterpret_cast<unsigned char*>(pRecord) + iReclen - 2;
+    const unsigned char* pStruct = (const unsigned char*)(pStruct_);
+    const unsigned char* pLength = (unsigned char*)(pRecord) + iReclen - 2;
     const unsigned char* pLimit = (iLength < 0) ? pStruct + 0x10000 : pStruct + iLength;
 
-    if ((pAppend = _TagFieldSetupAppend(reinterpret_cast<unsigned char*>(pRecord), iReclen, pName, 0)) == NULL)
+    if ((pAppend = _TagFieldSetupAppend((unsigned char*)(pRecord), iReclen, pName, 0)) == NULL)
     {
         return -1;
     }
@@ -1231,7 +1189,7 @@ extern "C" s32 TagFieldSetStructure(char* pRecord, s32 iReclen, const char* pNam
         {
             if (pAppend + iWidth > pLength)
             {
-                return _TagFieldSetupCancel(reinterpret_cast<unsigned char*>(pRecord), pAppend);
+                return _TagFieldSetupCancel((unsigned char*)(pRecord), pAppend);
             }
             pMarker = pAppend;
             if (uValue > 0xFFFF0000u)
@@ -1264,7 +1222,7 @@ extern "C" s32 TagFieldSetStructure(char* pRecord, s32 iReclen, const char* pNam
             {
                 if (pAppend + 3 > pLength)
                 {
-                    return _TagFieldSetupCancel(reinterpret_cast<unsigned char*>(pRecord), pAppend);
+                    return _TagFieldSetupCancel((unsigned char*)(pRecord), pAppend);
                 }
                 if (char_encode[*pStruct] & 4)
                 {
@@ -1280,7 +1238,7 @@ extern "C" s32 TagFieldSetStructure(char* pRecord, s32 iReclen, const char* pNam
             pStruct += iCount - iIndex;
             if (pAppend + 1 > pLength)
             {
-                return _TagFieldSetupCancel(reinterpret_cast<unsigned char*>(pRecord), pAppend);
+                return _TagFieldSetupCancel((unsigned char*)(pRecord), pAppend);
             }
             *pAppend++ = ',';
         }
@@ -1297,15 +1255,10 @@ extern "C" s32 TagFieldSetStructure(char* pRecord, s32 iReclen, const char* pNam
     {
         --pAppend;
     }
-    if ((g_divafter != 0) && (pName != NULL))
-    {
-        *pAppend++ = (unsigned char)g_divider;
-    }
-    *pAppend = 0;
-    return (s32)(pAppend - reinterpret_cast<unsigned char*>(pRecord));
+    return _TagFieldSetupTerm((char*)pRecord, (char*)pAppend, pName);
 }
 
-extern "C" s32 TagFieldGetStructure(const char* _pData, void* _pBuf, s32 iLen, const char* pPat)
+s32 TagFieldGetStructure(const char* _pData, void* _pBuf, s32 iLen, const char* pPat)
 {
     char iNeg;
     s32 iSiz;
@@ -1314,12 +1267,12 @@ extern "C" s32 TagFieldGetStructure(const char* _pData, void* _pBuf, s32 iLen, c
     u32 uHex;
     u32 uRaw;
     unsigned char* pData = (unsigned char*)_pData;
-    unsigned char* pBuf = static_cast<unsigned char*>(_pBuf);
+    unsigned char* pBuf = (unsigned char*)(_pBuf);
     unsigned char* pEnd;
     s32 iDecodeLen;
 
     // the end is taken from the caller's buffer pointer before a NULL is replaced
-    pEnd = reinterpret_cast<unsigned char*>(reinterpret_cast<uintptr_t>(_pBuf) + ((iLen < 0) ? 0xFFFF : (uintptr_t)(intptr_t)iLen));
+    pEnd = (unsigned char*)((uintptr_t)(_pBuf) + ((iLen < 0) ? 0xFFFF : (uintptr_t)(intptr_t)iLen));
     if (pData == NULL)
     {
         pData = (unsigned char*)"";
@@ -1327,7 +1280,7 @@ extern "C" s32 TagFieldGetStructure(const char* _pData, void* _pBuf, s32 iLen, c
     if (_pBuf == NULL)
     {
         _pBuf = strTmp;
-        pBuf = reinterpret_cast<unsigned char*>(strTmp);
+        pBuf = (unsigned char*)(strTmp);
     }
 
     while ((*pPat != 0) && (*pData > ' '))
@@ -1436,7 +1389,7 @@ extern "C" s32 TagFieldGetStructure(const char* _pData, void* _pBuf, s32 iLen, c
         }
     }
 
-    iDecodeLen = (s32)(pBuf - static_cast<unsigned char*>(_pBuf));
+    iDecodeLen = (s32)(pBuf - (unsigned char*)(_pBuf));
     if (iDecodeLen < iLen)
     {
         memset(pBuf, 0, iLen - iDecodeLen);
@@ -1444,7 +1397,7 @@ extern "C" s32 TagFieldGetStructure(const char* _pData, void* _pBuf, s32 iLen, c
     return iDecodeLen;
 }
 
-extern "C" s32 TagFieldSetEpoch(char* pRecord, s32 iReclen, const char* pName, u32 uEpoch)
+s32 TagFieldSetEpoch(char* pRecord, s32 iReclen, const char* pName, u32 uEpoch)
 {
     s32 iLength;
     char strDate[20];
@@ -1463,7 +1416,7 @@ extern "C" s32 TagFieldSetEpoch(char* pRecord, s32 iReclen, const char* pName, u
     }
     iLength = ds_snzprintf(strDate, sizeof(strDate), "%d.%d.%d-%d:%02d:%02d", tm->tm_year + 1900, tm->tm_mon + 1,
                            tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec);
-    if ((pAppend = _TagFieldSetupAppend(reinterpret_cast<unsigned char*>(pRecord), iReclen, pName, iLength)) == NULL)
+    if ((pAppend = _TagFieldSetupAppend((unsigned char*)(pRecord), iReclen, pName, iLength)) == NULL)
     {
         return -1;
     }
@@ -1471,15 +1424,10 @@ extern "C" s32 TagFieldSetEpoch(char* pRecord, s32 iReclen, const char* pName, u
     {
     }
     pAppend += iLength;
-    if ((g_divafter != 0) && (pName != NULL))
-    {
-        *pAppend++ = (unsigned char)g_divider;
-    }
-    *pAppend = 0;
-    return (s32)(pAppend - reinterpret_cast<unsigned char*>(pRecord));
+    return _TagFieldSetupTerm((char*)pRecord, (char*)pAppend, pName);
 }
 
-extern "C" u32 TagFieldGetEpoch(const char* pData, u32 uDefval)
+u32 TagFieldGetEpoch(const char* pData, u32 uDefval)
 {
     struct tm tm;
     u32 uDecimal;
@@ -1511,32 +1459,32 @@ extern "C" u32 TagFieldGetEpoch(const char* pData, u32 uDefval)
                 // ... or "Y.M.D-h:m:s", one separator character between the fields
                 memset(&tm, 0, sizeof(tm));
                 tm.tm_isdst = -1;
-                pParse = _ParseNumber(pData, reinterpret_cast<u32*>(&tm.tm_year), 4);
+                pParse = _ParseNumber(pData, (u32*)(&tm.tm_year), 4);
                 if ((((signed char)*pParse < '0') || ((signed char)*pParse > '9')) && (*pParse != 0))
                 {
                     ++pParse;
                 }
-                pParse = _ParseNumber(pParse, reinterpret_cast<u32*>(&tm.tm_mon), 2);
+                pParse = _ParseNumber(pParse, (u32*)(&tm.tm_mon), 2);
                 if ((((signed char)*pParse < '0') || ((signed char)*pParse > '9')) && (*pParse != 0))
                 {
                     ++pParse;
                 }
-                pParse = _ParseNumber(pParse, reinterpret_cast<u32*>(&tm.tm_mday), 2);
+                pParse = _ParseNumber(pParse, (u32*)(&tm.tm_mday), 2);
                 if ((((signed char)*pParse < '0') || ((signed char)*pParse > '9')) && (*pParse != 0))
                 {
                     ++pParse;
                 }
-                pParse = _ParseNumber(pParse, reinterpret_cast<u32*>(&tm.tm_hour), 2);
+                pParse = _ParseNumber(pParse, (u32*)(&tm.tm_hour), 2);
                 if ((((signed char)*pParse < '0') || ((signed char)*pParse > '9')) && (*pParse != 0))
                 {
                     ++pParse;
                 }
-                pParse = _ParseNumber(pParse, reinterpret_cast<u32*>(&tm.tm_min), 2);
+                pParse = _ParseNumber(pParse, (u32*)(&tm.tm_min), 2);
                 if ((((signed char)*pParse < '0') || ((signed char)*pParse > '9')) && (*pParse != 0))
                 {
                     ++pParse;
                 }
-                _ParseNumber(pParse, reinterpret_cast<u32*>(&tm.tm_sec), 2);
+                _ParseNumber(pParse, (u32*)(&tm.tm_sec), 2);
 
                 if (((u32)(tm.tm_year - 1970) > 137) || ((u32)(tm.tm_mon - 1) > 11) || (tm.tm_mday < 1) || (tm.tm_mday > 31))
                 {
@@ -1563,7 +1511,7 @@ extern "C" u32 TagFieldGetEpoch(const char* pData, u32 uDefval)
     return uEpoch;
 }
 
-extern "C" float TagFieldGetFloat(const char* pData, float fDefval)
+float TagFieldGetFloat(const char* pData, float fDefval)
 {
     float fSign = 1.0f;
     s32 iInteger = 0;
@@ -1598,14 +1546,14 @@ extern "C" float TagFieldGetFloat(const char* pData, float fDefval)
     return (((float)iFraction / (float)iDivisor) + (float)iInteger) * fSign;
 }
 
-extern "C" s32 TagFieldPrintf(char* _pRecord, s32 iLength, const char* pFormat, ...)
+s32 TagFieldPrintf(char* _pRecord, s32 iLength, const char* pFormat, ...)
 {
     s32 iCount = iLength;
     va_list args;
     unsigned char uCh;
     s32 iInitial = iLength;
     const char* pInput = pFormat;
-    unsigned char* pRecord = reinterpret_cast<unsigned char*>(_pRecord);
+    unsigned char* pRecord = (unsigned char*)(_pRecord);
     const char* pFind = "";
 
     va_start(args, pFormat);
@@ -1648,7 +1596,7 @@ extern "C" s32 TagFieldPrintf(char* _pRecord, s32 iLength, const char* pFormat, 
                 ++iCount;
                 --pRecord;
             }
-            if ((pRecord == reinterpret_cast<unsigned char*>(_pRecord)) || ((iCount < iInitial) && (pRecord[-1] == '=')))
+            if ((pRecord == (unsigned char*)(_pRecord)) || ((iCount < iInitial) && (pRecord[-1] == '=')))
             {
                 ++pInput;
             }
@@ -1676,7 +1624,7 @@ extern "C" s32 TagFieldPrintf(char* _pRecord, s32 iLength, const char* pFormat, 
         else if (uCh == '#')
         {
             s32 iNum = va_arg(args, s32);
-            s32 iLen = ds_snzprintf(reinterpret_cast<char*>(pRecord), iCount, "%d", iNum);
+            s32 iLen = ds_snzprintf((char*)(pRecord), iCount, "%d", iNum);
             iCount -= iLen;
             pRecord += iLen;
         }
@@ -1693,32 +1641,32 @@ extern "C" s32 TagFieldPrintf(char* _pRecord, s32 iLength, const char* pFormat, 
             if (uCh == 's')
             {
                 const char* pStr = va_arg(args, const char*);
-                iLen = TagFieldSetString(reinterpret_cast<char*>(pRecord), iCount, NULL, pStr);
+                iLen = TagFieldSetString((char*)(pRecord), iCount, NULL, pStr);
             }
             else if (uCh == 'd')
             {
                 s32 iNum = va_arg(args, s32);
-                iLen = TagFieldSetNumber(reinterpret_cast<char*>(pRecord), iCount, NULL, iNum);
+                iLen = TagFieldSetNumber((char*)(pRecord), iCount, NULL, iNum);
             }
             else if (uCh == 't')
             {
                 s32 iToken = va_arg(args, s32);
-                iLen = TagFieldSetToken(reinterpret_cast<char*>(pRecord), iCount, NULL, iToken);
+                iLen = TagFieldSetToken((char*)(pRecord), iCount, NULL, iToken);
             }
             else if (uCh == 'a')
             {
                 u32 uAddr = va_arg(args, u32);
-                iLen = TagFieldSetAddress(reinterpret_cast<char*>(pRecord), iCount, NULL, uAddr);
+                iLen = TagFieldSetAddress((char*)(pRecord), iCount, NULL, uAddr);
             }
             else if (uCh == 'f')
             {
                 s32 iFlags = va_arg(args, s32);
-                iLen = TagFieldSetFlags(reinterpret_cast<char*>(pRecord), iCount, NULL, iFlags);
+                iLen = TagFieldSetFlags((char*)(pRecord), iCount, NULL, iFlags);
             }
             else if (uCh == 'e')
             {
                 u32 uEpoch = va_arg(args, u32);
-                iLen = TagFieldSetEpoch(reinterpret_cast<char*>(pRecord), iCount, NULL, uEpoch);
+                iLen = TagFieldSetEpoch((char*)(pRecord), iCount, NULL, uEpoch);
             }
             else if (uCh == 'i')
             {
@@ -1728,7 +1676,7 @@ extern "C" s32 TagFieldPrintf(char* _pRecord, s32 iLength, const char* pFormat, 
             else if (uCh == 'x')
             {
                 const char* pName = va_arg(args, const char*);
-                iLen = TagFieldSetRaw(reinterpret_cast<char*>(pRecord), iCount, NULL, TagFieldFind(pFind, pName));
+                iLen = TagFieldSetRaw((char*)(pRecord), iCount, NULL, TagFieldFind(pFind, pName));
             }
             else if (uCh == 'r')
             {
@@ -1761,12 +1709,12 @@ extern "C" s32 TagFieldPrintf(char* _pRecord, s32 iLength, const char* pFormat, 
     return iInitial - iCount;
 }
 
-extern "C" s32 TagFieldGetDelim(const char* data, char* buffer, s32 buflen, const char* defval, s32 index, s32 delim)
+s32 TagFieldGetDelim(const char* data, char* buffer, s32 buflen, const char* defval, s32 index, s32 delim)
 {
     s32 len;
     unsigned char term;
     unsigned char stop;
-    const unsigned char* ptr = reinterpret_cast<const unsigned char*>(data);
+    const unsigned char* ptr = (const unsigned char*)(data);
 
     // skip index elements
     if (ptr != NULL)

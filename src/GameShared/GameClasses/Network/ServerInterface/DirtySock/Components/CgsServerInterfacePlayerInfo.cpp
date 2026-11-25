@@ -484,8 +484,7 @@ namespace CgsNetwork
         meCurrentAction = E_ACTION_SELECT_VIEW;
         StartActionCore(KAPC_ACTION_NAMES[E_ACTION_SELECT_VIEW]);
 
-        s32 liResult = LobbyStatbookFetchView(mpStatbook,
-                                              reinterpret_cast<const u8*>(lpcView));
+        s32 liResult = LobbyStatbookFetchView(mpStatbook, lpcView);
         if (liResult < 0)
         {
             const DSErrorToServerInterfaceErrorTable& lEntry =
@@ -510,8 +509,7 @@ namespace CgsNetwork
         meCurrentAction = E_ACTION_DOWNLOADING_STATS;
         StartActionCore(KAPC_ACTION_NAMES[E_ACTION_DOWNLOADING_STATS]);  // asm: off_82F33518 = table[3]
 
-        s32 liResult = LobbyStatbookFetch(mpStatbook, 0,
-                                          reinterpret_cast<const u8*>(lpacStatList));
+        s32 liResult = LobbyStatbookFetch(mpStatbook, 0, lpacStatList);
         if (liResult < 0)
         {
             const DSErrorToServerInterfaceErrorTable& lEntry =
@@ -571,7 +569,7 @@ namespace CgsNetwork
         CGS_ASSERT(lpnType,
             CGS_ASSERT_MESSAGE_AT("lpnType", __FILE__, 913 /* ARTIST 0x828791D8 */));
 
-        LobbyStatbookRowInfoT* lpRowInfo =
+        const LobbyStatbookRowInfoT* lpRowInfo =
             LobbyStatbookRowInfo(mpStatbook, static_cast<u32>(liRow));
         if (!lpRowInfo)
             return false;

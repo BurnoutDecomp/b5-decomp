@@ -60,9 +60,8 @@ public:
     typedef void (*TimerCallback)(void *pContext, f32 fTime);
 
     // Default-construct: zero both embedded Collections, seed mfCallbackTime to -1.0, and
-    // clear the deferred-remove slot. (IDA renders `this`/return as int because `this` is
-    // the only arg; the asm r3 contract is authoritative.)
-    static TimerManager *TimerManager_ctor(TimerManager *self);
+    // clear the deferred-remove slot.
+    TimerManager();
 
     // Register a timer in Collection `collectionIndex`: grow that Collection if it has no
     // capacity yet (by 74 slots), allocate a Node wired to `handle`, then fill the handle.
@@ -85,11 +84,11 @@ public:
     void Defragment();
 
     // Clear + release both owned Collections (frees their NodeBlocks).
-    static void Release(TimerManager *self);
+    void Release();
 
     // Unregister `handle`. If it is the one currently executing, defer the unlink; else
     // unlink it now (unless already stage 3 = free). Resets the handle to stage 3.
-    static void RemoveTimer(TimerManager *self, TimerHandle *handle);
+    void RemoveTimer(TimerHandle *handle);
 
     Collection maCollections[2];          // +0x00  two 28-byte Collections
     f32 mfCallbackTime;                   // +0x38  time value handed to each callback

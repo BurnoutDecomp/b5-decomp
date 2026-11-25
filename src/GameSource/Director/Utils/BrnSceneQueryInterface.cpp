@@ -13,6 +13,18 @@
 // ⭐ TYPED 2026-09-25 (FX-DIRECTOR2): see the header banner.
 // =============================================================================
 
+namespace CgsContainers
+{
+    // ARTIST AddPostBox calls these three Contains instantiations out of line.
+    // Keep the original call at 8222D1DC, 8222D30C and 8222D6AC.
+    template __declspec(noinline) bool Array<BrnDirector::PostBox<const CgsSceneManager::SceneManagerIO::OutEventLineTestFineResult*>*, 10>::Contains(
+        BrnDirector::PostBox<const CgsSceneManager::SceneManagerIO::OutEventLineTestFineResult*>* const&) const;
+    template __declspec(noinline) bool Array<BrnDirector::PostBox<CgsSceneManager::SceneManagerIO::OutEventLineTestNearestResult>*, 40>::Contains(
+        BrnDirector::PostBox<CgsSceneManager::SceneManagerIO::OutEventLineTestNearestResult>* const&) const;
+    template __declspec(noinline) bool Array<BrnDirector::PostBox<CgsSceneManager::SceneManagerIO::OutEventVolumeTestDeepestResult>*, 10>::Contains(
+        BrnDirector::PostBox<CgsSceneManager::SceneManagerIO::OutEventVolumeTestDeepestResult>* const&) const;
+}
+
 namespace BrnDirector
 {
     // -------------------------------------------------------------------------

@@ -82,15 +82,16 @@ namespace SceneManagerIO
         mTriangleCollisionLineTestNearestQueue.Construct();
         mTriangleCollisionSphereTestQueue.Construct();
 
-        mSceneQueryInterface.mpFineLineTestQueue                     = &mFineLineTestQueue;                      // stw r30, 4(this)
-        mSceneQueryInterface.mpFineLineTestNearestQueue              = &mFineLineTestNearestQueue;               // stw r29, 8(this)
-        mSceneQueryInterface.mpFineLineTestFastDoubleSidedQueue      = &mFineLineTestFastDoubleSidedQueue;       // stw r28, 0xC(this)
-        mSceneQueryInterface.mpFineSphereTestFastQueue               = &mFineSphereTestFastQueue;                // stw r27, 0x10(this)
-        mSceneQueryInterface.mpFineVolumeTestDeepestQueue            = &mFineVolumeTestDeepestQueue;             // stw r26, 0x14(this)
-        mSceneQueryInterface.mpFineVolumeTestQueue                   = &mFineVolumeTestQueue;                    // stw r25, 0x18(this)
-        mSceneQueryInterface.mpTriangleCollisionLineTestQueue        = &mTriangleCollisionLineTestQueue;         // stw r24, 0x1C(this)
-        mSceneQueryInterface.mpTriangleCollisionLineTestNearestQueue = &mTriangleCollisionLineTestNearestQueue;  // stw r23, 0x20(this)
-        mSceneQueryInterface.mpTriangleCollisionSphereTestQueue      = &mTriangleCollisionSphereTestQueue;       // stw r22, 0x24(this)
+        mSceneQueryInterface.Construct(
+            &mFineLineTestQueue,
+            &mFineLineTestNearestQueue,
+            &mFineLineTestFastDoubleSidedQueue,
+            &mFineSphereTestFastQueue,
+            &mFineVolumeTestDeepestQueue,
+            &mFineVolumeTestQueue,
+            &mTriangleCollisionLineTestQueue,
+            &mTriangleCollisionLineTestNearestQueue,
+            &mTriangleCollisionSphereTestQueue);
     }
 
     // ---------------------------------------------------------------------------------

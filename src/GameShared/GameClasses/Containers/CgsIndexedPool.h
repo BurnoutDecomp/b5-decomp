@@ -170,35 +170,34 @@ public:
         return liLive;
     }
 
-    // Allocate (front half of an alloc; recovered from the X360 CgsFileSystem::PhysicalX360Device
+    // PopIndex (DecFIGS CgsIndexedPool.h:267; recovered from the X360 CgsFileSystem::PhysicalX360Device
     // Open @0x828F9728 / OpenDirectory @0x828F9E40, which inline this pool's claim-a-slot): pop a
     // free index. X360: read msNumFree; when it is 0 the pool is full and -1 is returned ("Out of
     // handles"). Otherwise take the FIRST free index (mpFreeIndices[0]) as the result, move the
     // LAST free entry into slot 0 (the unordered-swap pop the asm does: `*free = free[numFree-1]`),
     // bump msNumAllocated and drop msNumFree. Returns the allocated handle, or -1 when full.
-    IndexType Allocate()
+    IndexType PopIndex()
     {
-        const IndexType lsNumFree = msNumFree;
-        if (lsNumFree == 0)
+        if (msNumFree == 0)
         {
             return static_cast<IndexType>(-1);
         }
 
         const IndexType lsResult = mpFreeIndices[0];
-        mpFreeIndices[0] = mpFreeIndices[lsNumFree - 1];
+        mpFreeIndices[0] = mpFreeIndices[msNumFree - 1];
         ++msNumAllocated;
-        msNumFree = static_cast<IndexType>(lsNumFree - 1);
+        --msNumFree;
         return lsResult;
     }
 
     // Pop @ 0x828F2890 (CgsResource::ResourceModule::AddOpen/CloseFileRequest /
     // AddOpen/CloseReadStreamRequest): claim a free slot and return the OBJECT pointer rather
-    // than the handle. X360: index = Allocate(); when the pool is full (index == -1) return 0,
+    // than the handle. X360: index = PopIndex(); when the pool is full (index == -1) return 0,
     // else return &maElements[index] (the asm's `12*index + maElements` for the 12-byte
     // ResourcePoolRecord instantiation -- the stride is sizeof(T)). DWARF CgsIndexedPool.h:330.
     T* Pop()
     {
-        const IndexType lsIndex = Allocate();
+        const IndexType lsIndex = PopIndex();
         if (lsIndex == static_cast<IndexType>(-1))
         {
             return 0;

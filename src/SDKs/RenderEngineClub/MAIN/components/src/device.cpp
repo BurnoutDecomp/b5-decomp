@@ -6,6 +6,10 @@
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/vertexdescriptor.h"
 #include "rw/rwcore_structs.h"
 #include <xgraphics.h>
+#include <cstring>
+
+// ARTIST 82B618B4 and 82B63BE8 call the XDK CRT providers.
+#pragma function(memcpy, memset)
 
 D3DDevice* gpD3DDevice = 0;
 
@@ -25,8 +29,12 @@ namespace renderengine
 {
     Device::State Device::m_currentState = Device::STATE_COLD;
     Device::Parameters Device::m_parameterCopy;
-    u32 gDeviceCounter832716A8;
-    u32 gDeviceCounter832716AC;
+    struct PresentationFences
+    {
+        u32 current;
+        u32 previous;
+    };
+    PresentationFences gPresentationFences; // ARTIST 832716A8 and 832716AC.
     LARGE_INTEGER gDevicePerformanceCounter832716B0;
     VertexProgramState* gpCurrentVertexProgramState = 0;
     __declspec(align(16)) PixelBuffer gOriginalColorBuffer;
@@ -57,8 +65,8 @@ namespace renderengine
         gDeviceTileCount83271620 = 0;
         memset(gDeviceTileRects83271628, 0, sizeof(gDeviceTileRects83271628));
         gDeviceFrameCounter83271624 = 0;
-        gDeviceCounter832716A8 = 0;
-        gDeviceCounter832716AC = 0;
+        gPresentationFences.current = 0;
+        gPresentationFences.previous = 0;
         gDevicePerformanceCounter832716B0.QuadPart = 0;
         gFrontBufferIndex832716B8 = 0;
         gFrontBufferCount832716BC = 0;
@@ -80,8 +88,8 @@ namespace renderengine
         lpBuffer->Xbox2ResolveTo(gpFrontBuffer83271618, 0, 0, 0, 0, 0, 0, 1.0f, 0);
         guTilingEnabled = 0;
         gFrontBufferIndex832716B8 = (gFrontBufferIndex832716B8 + 1) % gFrontBufferCount832716BC;
-        gDeviceCounter832716AC = gDeviceCounter832716A8;
-        gDeviceCounter832716A8 = D3DDevice_InsertFence(lpDevice);
+        gPresentationFences.previous = gPresentationFences.current;
+        gPresentationFences.current = D3DDevice_InsertFence(lpDevice);
         if (gFrontBufferCount832716BC != 1)
             D3DDevice_SynchronizeToPresentationInterval(lpDevice);
         D3DDevice_Swap(lpDevice, gpFrontBuffer83271618, &m_parameterCopy.videoScalerParameters);
@@ -123,77 +131,105 @@ namespace renderengine
         gpFrontBuffer83271618->Unlock(lLocked);
     }
 
-    // ARTIST82B63840: allocate Xenos EDRAM surfaces and native front textures.
+    // ARTIST82B63840: fit the color and depth surfaces in EDRAM, then
+    // allocate physical texture storage for the one or two native front buffers.
     void Device::InitializeGlobalBuffers()
     {
         const u32 width = m_parameterCopy.backBufferWidth;
         const u32 height = m_parameterCopy.backBufferHeight;
-        u32 tileHeight = height;
-        const D3DMULTISAMPLE_TYPE msaa = m_parameterCopy.multiSampleType;
+        const D3DMULTISAMPLE_TYPE multiSampleType = m_parameterCopy.multiSampleType;
+        const bool createDepthStencil = m_parameterCopy.depthStencilAutoCreate;
         const PixelFormat colorFormat = m_parameterCopy.backBufferFormat;
+        u32 tileHeight = height;
+        u32 size = XGSurfaceSize(width, tileHeight, static_cast<D3DFORMAT>(colorFormat), multiSampleType);
         const PixelFormat depthFormat = m_parameterCopy.depthStencilFormat;
-        u32 size = XGSurfaceSize(width, tileHeight, static_cast<D3DFORMAT>(colorFormat), msaa);
-        if (m_parameterCopy.depthStencilAutoCreate)
-            size += XGSurfaceSize(width, tileHeight, static_cast<D3DFORMAT>(depthFormat), msaa);
-        if (size > 0x800)
+        if (createDepthStencil)
+            size += XGSurfaceSize(width, tileHeight, static_cast<D3DFORMAT>(depthFormat), multiSampleType);
+
+        if (size <= GPU_EDRAM_TILES)
         {
-            u32 count = 1;
+            gDeviceTileCount83271620 = 0;
+        }
+        else
+        {
+            u32 tileCount = 1;
             do
             {
-                ++count;
-                u32 h = height / count;
-                h = (msaa == 1 || msaa == 2) ? (h + 7) & ~7u : (h + 15) & ~15u;
-                tileHeight = (h + 31) & ~31u;
-                size = XGSurfaceSize(width, tileHeight, static_cast<D3DFORMAT>(colorFormat), msaa);
-                if (m_parameterCopy.depthStencilAutoCreate)
-                    size += XGSurfaceSize(width, tileHeight, static_cast<D3DFORMAT>(depthFormat), msaa);
-            } while (size > 0x800);
-            gDeviceTileCount83271620 = count;
-            gDeviceTileRects83271628[0].x1 = 0;
-            gDeviceTileRects83271628[0].y1 = 0;
-            gDeviceTileRects83271628[0].x2 = width;
-            gDeviceTileRects83271628[0].y2 = tileHeight;
-            for (u32 i = 1; i < count; ++i)
-            {
-                gDeviceTileRects83271628[i].x1 = 0;
-                gDeviceTileRects83271628[i].y1 = gDeviceTileRects83271628[i-1].y2;
-                gDeviceTileRects83271628[i].x2 = width;
-                gDeviceTileRects83271628[i].y2 = gDeviceTileRects83271628[i].y1 + tileHeight;
+                ++tileCount;
+                const u32 heightPerTile = height / tileCount;
+                const u32 alignedHeight =
+                    (multiSampleType == D3DMULTISAMPLE_2_SAMPLES ||
+                     multiSampleType == D3DMULTISAMPLE_4_SAMPLES)
+                    ? (heightPerTile + GPU_EDRAM_TILE_HEIGHT_2X - 1) & ~(GPU_EDRAM_TILE_HEIGHT_2X - 1)
+                    : (heightPerTile + GPU_EDRAM_TILE_HEIGHT_1X - 1) & ~(GPU_EDRAM_TILE_HEIGHT_1X - 1);
+                tileHeight = (alignedHeight + 31) & ~31u;
+                size = XGSurfaceSize(width, tileHeight, static_cast<D3DFORMAT>(colorFormat), multiSampleType);
+                if (createDepthStencil)
+                    size += XGSurfaceSize(width, tileHeight, static_cast<D3DFORMAT>(depthFormat), multiSampleType);
             }
-            if (gDeviceTileRects83271628[count-1].y2 > height)
-                gDeviceTileRects83271628[count-1].y2 = height;
-        }
-        else gDeviceTileCount83271620 = 0;
+            while (size > GPU_EDRAM_TILES);
 
-        PixelBuffer::Parameters surface = { PixelBuffer::TYPE_RENDERTARGET, 0, width, tileHeight, colorFormat, msaa, 0 };
-        rw::Resource resource;
-        resource.m_baseResources[0] = &gOriginalColorBuffer;
-        gpDeviceColorBuffer = PixelBuffer::Initialize(resource, surface);
-        if (m_parameterCopy.depthStencilAutoCreate)
-        {
-            surface.type = PixelBuffer::TYPE_DEPTHSTENCIL;
-            surface.format = depthFormat;
-            resource = rw::Resource();
-            resource.m_baseResources[0] = &gOriginalDepthStencilBuffer;
-            gpDeviceDepthBuffer = PixelBuffer::Initialize(resource, surface);
+            gDeviceTileCount83271620 = tileCount;
+            D3DRECT* tile = gDeviceTileRects83271628;
+            tile->x1 = 0;
+            tile->y1 = 0;
+            tile->x2 = width;
+            tile->y2 = tileHeight;
+            for (u32 remaining = tileCount - 1; remaining != 0; --remaining)
+            {
+                const LONG top = tile->y2;
+                ++tile;
+                tile->x1 = 0;
+                tile->x2 = width;
+                tile->y1 = top;
+                tile->y2 = top + tileHeight;
+            }
+            if (static_cast<u32>(tile->y2) > height)
+                tile->y2 = height;
         }
-        else gpDeviceDepthBuffer = 0;
-        Texture2D::Parameters front = { 0, m_parameterCopy.frontBufferWidth, m_parameterCopy.frontBufferHeight, 1, m_parameterCopy.frontBufferFormat };
+
+        {
+            const PixelBuffer::Parameters color = {
+                PixelBuffer::TYPE_RENDERTARGET, 0, width, tileHeight, colorFormat, multiSampleType, 0
+            };
+            void* colorMemory = &gOriginalColorBuffer;
+            const rw::Resource colorResource(colorMemory);
+            gpDeviceColorBuffer = PixelBuffer::Initialize(colorResource, color);
+        }
+
+        if (createDepthStencil)
+        {
+            const PixelBuffer::Parameters depth = {
+                PixelBuffer::TYPE_DEPTHSTENCIL, 0, width, tileHeight, m_parameterCopy.depthStencilFormat,
+                m_parameterCopy.multiSampleType, 0
+            };
+            void* depthMemory = &gOriginalDepthStencilBuffer;
+            const rw::Resource depthResource(depthMemory);
+            gpDeviceDepthBuffer = PixelBuffer::Initialize(depthResource, depth);
+        }
+        else
+        {
+            gpDeviceDepthBuffer = 0;
+        }
+
+        const Texture2D::Parameters front = {
+            0, m_parameterCopy.frontBufferWidth, m_parameterCopy.frontBufferHeight, 1,
+            m_parameterCopy.frontBufferFormat
+        };
         rw::ResourceDescriptor descriptor = Texture2D::GetResourceDescriptor(front);
-        descriptor.m_baseResourceDescriptors[0].m_size = 0;
-        descriptor.m_baseResourceDescriptors[0].m_alignment = 1;
-        resource = rw::ResourceAllocatorRegistry::GetDefaultAllocator()->DoAllocate(descriptor, 0);
+        descriptor.m_baseResourceDescriptors[0] = rw::BaseResourceDescriptor();
+        rw::Resource resource = rw::ResourceAllocatorRegistry::GetDefaultAllocator()->Allocate(descriptor, 0);
         resource.m_baseResources[0] = &gFrontBuffers83271580[0].texture;
         gpFrontBuffer83271618 = Texture2D::Initialize(resource, front);
         if (gDeviceTileCount83271620)
         {
-            resource = rw::ResourceAllocatorRegistry::GetDefaultAllocator()->DoAllocate(descriptor, 0);
+            resource = rw::ResourceAllocatorRegistry::GetDefaultAllocator()->Allocate(descriptor, 0);
             resource.m_baseResources[0] = &gFrontBuffers83271580[1].texture;
             Texture2D::Initialize(resource, front);
         }
         guTilingEnabled = 0;
         gFrontBufferIndex832716B8 = 0;
-        gFrontBufferCount832716BC = gDeviceTileCount83271620 ? 2 : 1;
+        gFrontBufferCount832716BC = 1 + (gDeviceTileCount83271620 != 0);
         EnsureDefaultRenderTarget();
     }
 
@@ -201,21 +237,19 @@ namespace renderengine
     bool Device::Start(const Parameters& lrParameters)
     {
         if (!lrParameters.Validate()) return false;
-        m_parameterCopy = lrParameters;
+        memcpy(&m_parameterCopy, &lrParameters, sizeof(m_parameterCopy));
         m_parameterCopy.FixD3DDefaults();
         D3DPRESENT_PARAMETERS lPresent;
         InitPresentParameters(lPresent, lrParameters);
         if (Direct3D_CreateDevice(0, D3DDEVTYPE_HAL, 0, lrParameters.behaviorFlags, &lPresent, &gpD3DDevice) != 0)
             return false;
-        gDeviceCounter832716A8 = 0;
-        gDeviceCounter832716AC = 0;
+        gPresentationFences.current = 0;
+        gPresentationFences.previous = 0;
         InitializeGlobalBuffers();
         D3DDevice_SetVertexDeclaration(gpD3DDevice, 0);
         RenderTargetState::Parameters lTargetParameters = { { gpDeviceColorBuffer, 0, 0, 0, gpDeviceDepthBuffer } };
-        rw::ResourceDescriptor lDescriptor;
-        lDescriptor.m_baseResourceDescriptors[0].m_size = 0x18;
-        lDescriptor.m_baseResourceDescriptors[0].m_alignment = 4;
-        rw::Resource lResource = rw::ResourceAllocatorRegistry::GetDefaultAllocator()->DoAllocate(lDescriptor, 0);
+        rw::ResourceDescriptor lDescriptor(sizeof(RenderTargetState), 4);
+        rw::Resource lResource = rw::ResourceAllocatorRegistry::GetDefaultAllocator()->Allocate(lDescriptor, 0);
         m_renderTargetState = RenderTargetState::Initialize(lResource, lTargetParameters);
         QueryPerformanceCounter(&gDevicePerformanceCounter832716B0);
         gpCurrentVertexProgramState = 0;
@@ -312,132 +346,6 @@ namespace renderengine
         lSurfaces.pRenderTarget[2] = 0;
         lSurfaces.pRenderTarget[3] = 0;
         D3DDevice_SetSurfaces(gpD3DDevice, &lSurfaces, 0);
-    }
-
-    // ARTIST82B61960: the output is the XDK's 124-byte presentation record.
-    void Device::InitPresentParameters(D3DPRESENT_PARAMETERS& lrPresent, const Parameters& lrParameters)
-    {
-        memset(&lrPresent, 0, sizeof(lrPresent));
-        lrPresent.SwapEffect = lrParameters.swapEffect;
-        lrPresent.BackBufferWidth = lrParameters.backBufferWidth;
-        lrPresent.BackBufferHeight = lrParameters.backBufferHeight;
-        lrPresent.BackBufferCount = 1;
-        lrPresent.BackBufferFormat = static_cast<D3DFORMAT>(lrParameters.backBufferFormat);
-        lrPresent.AutoDepthStencilFormat = static_cast<D3DFORMAT>(lrParameters.depthStencilFormat);
-        lrPresent.MultiSampleType = lrParameters.multiSampleType;
-        lrPresent.FullScreen_RefreshRateInHz = lrParameters.refreshRate;
-        lrPresent.Flags = lrParameters.flags;
-        lrPresent.PresentationInterval = lrParameters.numVsyncs;
-        lrPresent.DisableAutoBackBuffer = 1;
-        lrPresent.DisableAutoFrontBuffer = 1;
-        lrPresent.FrontBufferFormat = static_cast<D3DFORMAT>(lrParameters.frontBufferFormat);
-        lrPresent.FrontBufferColorSpace = lrParameters.frontBufferColorSpace;
-        lrPresent.RingBufferParameters.PrimarySize = lrParameters.primaryRingBufferSize;
-        lrPresent.RingBufferParameters.SecondarySize = lrParameters.secondaryRingBufferSize;
-        lrPresent.RingBufferParameters.SegmentCount = lrParameters.ringBufferSegmentCount;
-        lrPresent.VideoScalerParameters = lrParameters.videoScalerParameters;
-    }
-
-    // ARTIST82B616B0: accepted native formats and minimum front-buffer dimensions.
-    bool Device::Parameters::Validate() const
-    {
-        switch (static_cast<u32>(frontBufferFormat))
-        {
-        case 0x28280106: case 0x18280106: case 0x28280136: case 0x18280136: break;
-        default: return false;
-        }
-        switch (static_cast<u32>(backBufferFormat))
-        {
-        case 0x18280186: case 0x28280186: case 0x182801B6: case 0x282801B6:
-        case 0x1A2201BF: case 0x2D200199: case 0x2D22AB9F: case 0x2D20AB8D:
-        case 0x1A20AB55: case 0x2DA2ABA4: case 0x1A20015A: case 0x1A22AB60:
-        case 0x2D22ABA5: break;
-        default: return false;
-        }
-        return frontBufferWidth >= 320 && frontBufferHeight >= 200;
-    }
-
-    // ARTIST82B617F0: defaults are applied only to the device-owned copy.
-    void Device::Parameters::FixD3DDefaults()
-    {
-        if (!primaryRingBufferSize) primaryRingBufferSize = 0x8000;
-        if (!secondaryRingBufferSize) secondaryRingBufferSize = 0x200000;
-        if (!ringBufferSegmentCount)
-        {
-            const u32 luSecondaryRingBufferSize = secondaryRingBufferSize;
-            ringBufferSegmentCount = 32;
-            if (luSecondaryRingBufferSize > 0x1000000)
-            {
-                ringBufferSegmentCount = (luSecondaryRingBufferSize * 2) & 0xFFFFFC00;
-            }
-        }
-    }
-
-    // ARTIST 82B61540..82B616A8. Unknown modes deliberately preserve the
-    // previous dimensions/refresh, and the bool's three padding bytes survive.
-    void Device::Parameters::Initialize(u32 videoMode)
-    {
-        backBufferFormat = static_cast<PixelFormat>(D3DFMT_A8R8G8B8);
-        frontBufferFormat = static_cast<PixelFormat>(D3DFMT_LE_X8R8G8B8);
-        multiSampleType = D3DMULTISAMPLE_NONE;
-        behaviorFlags = D3DCREATE_BUFFER_2_FRAMES;
-        swapEffect = D3DSWAPEFFECT_DISCARD;
-        depthStencilFormat = static_cast<PixelFormat>(D3DFMT_D24S8);
-        depthStencilAutoCreate = true;
-        numVsyncs = 1;
-        flags = 0;
-        frontBufferColorSpace = D3DCOLORSPACE_RGB;
-        primaryRingBufferSize = 0;
-        secondaryRingBufferSize = 0;
-        ringBufferSegmentCount = 0;
-
-        switch (videoMode)
-        {
-        case 0:
-        case 2:
-            backBufferWidth = frontBufferWidth = 640;
-            backBufferHeight = frontBufferHeight = 480;
-            refreshRate = 60;
-            break;
-        case 1:
-            backBufferWidth = frontBufferWidth = 640;
-            backBufferHeight = frontBufferHeight = 576;
-            refreshRate = 50;
-            break;
-        case 3:
-            backBufferWidth = frontBufferWidth = 720;
-            backBufferHeight = frontBufferHeight = 480;
-            refreshRate = 60;
-            break;
-        case 4:
-            backBufferWidth = frontBufferWidth = 1280;
-            backBufferHeight = frontBufferHeight = 720;
-            refreshRate = 60;
-            break;
-        case 5:
-            backBufferWidth = frontBufferWidth = 1920;
-            backBufferHeight = frontBufferHeight = 1080;
-            refreshRate = 60;
-            break;
-        case 6:
-            {
-                XVIDEO_MODE lVideoMode = {};
-                CGS_STATIC_ASSERT((sizeof(XVIDEO_MODE) == 48), "ARTIST native video mode");
-                XGetVideoMode(&lVideoMode);
-                backBufferWidth = frontBufferWidth = lVideoMode.dwDisplayWidth;
-                backBufferHeight = frontBufferHeight = lVideoMode.dwDisplayHeight;
-                refreshRate = 60;
-            }
-            break;
-        }
-
-        videoScalerParameters.ScalerSourceRect.x1 = 0;
-        videoScalerParameters.ScalerSourceRect.y1 = 0;
-        videoScalerParameters.ScalerSourceRect.x2 = 0;
-        videoScalerParameters.ScalerSourceRect.y2 = 0;
-        videoScalerParameters.ScaledOutputWidth = 0;
-        videoScalerParameters.ScaledOutputHeight = 0;
-        videoScalerParameters.FilterProfile = 0;
     }
 
     RenderTargetState* Device::m_renderTargetState = 0;

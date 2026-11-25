@@ -823,14 +823,7 @@ bool PlayerManager::GetNextRemotePlayerID(NetworkPlayerID* lpPlayerID) const
 // unknown id).
 NetworkPlayer* PlayerManager::GetPlayerByID(NetworkPlayerID lPlayerID) const
 {
-    for (s32 i = 0; i < miNumActivePlayers; ++i)
-    {
-        if (maActivePlayers[i].GetPlayerID() == lPlayerID)
-        {
-            return maActivePlayers[i].GetNetworkPlayer();
-        }
-    }
-    return 0;
+    return FindActiveNetworkPlayer(lPlayerID);
 }
 
 // ---- GetPlayerByName -----------------------------------------------------------------

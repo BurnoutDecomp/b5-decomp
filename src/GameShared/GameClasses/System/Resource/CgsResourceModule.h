@@ -2,6 +2,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"
+#include "GameShared/GameClasses/System/Resource/CgsResourceRequestQueue.h"
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"            // base
 #include "GameShared/GameClasses/System/Resource/CgsResourceBundleLoaderModule.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourcePoolModule.h"
@@ -60,7 +61,7 @@ namespace CgsResource
         struct PendingFileResponse
         {
             void* mpResponse;
-            s32   meEvent;
+            ResourceIO::EEventType   meEvent;
             u32   muFileId;
         };
 
@@ -146,7 +147,7 @@ namespace CgsResource
         void ProcessPendingFileSystemResponses();                                           // @0x828F42B8
 
     private:
-        template<class Response> Response* FileSystemAlloc();
+        template<class Response> void FileSystemAlloc(Response** lppResponse);
         template<class Response> void FileSystemFree(Response* lpResponse);
         static void AssertNativeInitOptions();
 

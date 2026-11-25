@@ -17,6 +17,8 @@
 #endif
 
 #include "SDKs/EATech/include/Apt/AptValue/AptString.h"
+#include "SDKs/EATech/include/Apt/AptActionInterpreter.h"
+#include "SDKs/EATech/include/Apt/AptValue/AptStringObject.h"
 
 #include "SDKs/EATech/include/Apt/AptValue/AptInteger.h"   // AptInteger::Create (boxed indices)
 #include "SDKs/EATech/include/Apt/AptArray.h"              // sMethod_split returns an Array
@@ -38,6 +40,7 @@
 // gppAptNativeArgStack[gnAptNativeArgCount-1-i].
 extern AptValue** gppAptNativeArgStack;   // off_8324E768
 extern int        gnAptNativeArgCount;    // dword_8324E760
+extern AptActionInterpreter gAptActionInterpreter;
 
 // The shared "undefined" value (off_8324D814). Defined in AptGlobals.cpp; built
 // by AptValueInitialize (AptInit.cpp @0x82B02800).
@@ -49,29 +52,23 @@ extern AptValue* gpUndefinedValue;
 // negative or out of range. The single argument sits on top of the native-call
 // arg stack.
 // ---------------------------------------------------------------------------
-AptValue* AptString::sMethod_charAt(AptString* pThis)
+AptValue* AptString::sMethod_charAt(AptValue* pThis, int)
 {
-    const int nIndex = gppAptNativeArgStack[gnAptNativeArgCount - 1]->toInteger();
-
-    // The receiver may be a raw StringValue or a boxed StringObject; c_string()
-    // resolves both to the underlying AptString (the X360 `a1 = a1[8]` unwrap).
-    AptString* pStr = (pThis->getVtblIndex() == AptVFT_StringValue)
-                          ? pThis
-                          : pThis->c_string();
-
+    AptValue* pIndex = gAptActionInterpreter.stackAt(0);
+    const int nIndex = pIndex->toInteger();
+    if (pThis->getVtblIndex() != AptVFT_StringValue)
+        pThis = static_cast<AptStringObject*>(pThis)->GetBoxedString();
     if (nIndex < 0)
         return gpUndefinedValue;
 
-    // The UTF-8 byte run that begins the `nIndex`-th character (null past the end).
-    const char* pCharRun = pStr->GetInternalString()->UTF8_GetBuffer(nIndex);
-    if (!pCharRun)
+    const char* pBuffer = EAStringC::UTF8_GetBuffer(static_cast<AptString*>(pThis)->GetInternalString()->GetBuffer(), nIndex);
+    if (pBuffer == 0)
         return gpUndefinedValue;
 
-    EAStringC strChar;                 // empty (the &unk_82F72FF8 sentinel)
-    strChar.UTF8_Append(pCharRun, 1);  // one UTF-8 character unit
-
-    AptString* pResult = AptString::Create("");
-    *pResult->GetInternalString() = strChar;
+    EAStringC strChar;
+    strChar.UTF8_Append(pBuffer, 1);
+    AptString* pResult = AptString::Create();
+    pResult->cpy(&strChar);
     return pResult;
 }
 
@@ -81,28 +78,25 @@ AptValue* AptString::sMethod_charAt(AptString* pThis)
 // formats it with "%d" and boxes it as a String), or undefined when the index
 // is negative or out of range. The single argument is on top of the arg stack.
 // ---------------------------------------------------------------------------
-AptValue* AptString::sMethod_charCodeAt(AptString* pThis)
+AptValue* AptString::sMethod_charCodeAt(AptValue* pThis, int)
 {
-    const int nIndex = gppAptNativeArgStack[gnAptNativeArgCount - 1]->toInteger();
-
-    AptString* pStr = (pThis->getVtblIndex() == AptVFT_StringValue)
-                          ? pThis
-                          : pThis->c_string();
-
-    const char* pCharRun =
-        (nIndex >= 0) ? pStr->GetInternalString()->UTF8_GetBuffer(nIndex) : 0;
-    if (nIndex < 0 || !pCharRun)
+    AptValue* pIndex = gAptActionInterpreter.stackAt(0);
+    const int nIndex = pIndex->toInteger();
+    if (pThis->getVtblIndex() != AptVFT_StringValue)
+        pThis = static_cast<AptStringObject*>(pThis)->GetBoxedString();
+    if (nIndex < 0)
         return gpUndefinedValue;
 
-    const int nCharCode = EAStringC::UTF8_GetCharacter(pCharRun);
+    const char* pBuffer = EAStringC::UTF8_GetBuffer(static_cast<AptString*>(pThis)->GetInternalString()->GetBuffer(), nIndex);
+    if (pBuffer == 0)
+        return gpUndefinedValue;
 
+    const int nCharCode = EAStringC::UTF8_GetCharacter(pBuffer);
     char szCode[8];
     sprintf(szCode, "%d", nCharCode);
-
-    EAStringC strCode(szCode);   // InitFromBuffer
-
-    AptString* pResult = AptString::Create("");
-    *pResult->GetInternalString() = strCode;
+    EAStringC strCode(szCode);
+    AptString* pResult = AptString::Create();
+    pResult->cpy(&strCode);
     return pResult;
 }
 
@@ -112,7 +106,7 @@ AptValue* AptString::sMethod_charCodeAt(AptString* pThis)
 // concatenated in pushed order, i.e. arg 0 is the first one appended) and box
 // the result as a new String.
 // ---------------------------------------------------------------------------
-AptValue* AptString::sMethod_concat(AptString* pThis, int nArgCount)
+AptValue* AptString::sMethod_concat(AptValue* pThis, int nArgCount)
 {
     EAStringC strResult;                 // empty
     pThis->toString(&strResult);
@@ -120,7 +114,7 @@ AptValue* AptString::sMethod_concat(AptString* pThis, int nArgCount)
     for (int i = 0; i < nArgCount; ++i)
     {
         EAStringC strArg;
-        gppAptNativeArgStack[gnAptNativeArgCount - i - 1]->toString(&strArg);
+        gAptActionInterpreter.stackAt(i)->toString(&strArg);
         strResult += strArg;
     }
 
@@ -135,14 +129,14 @@ AptValue* AptString::sMethod_concat(AptString* pThis, int nArgCount)
 // as one UTF-8 character). Static AS method; the receiver is unused. The result
 // buffer is pre-reserved for 2 bytes per code.
 // ---------------------------------------------------------------------------
-AptValue* AptString::sMethod_fromCharCode(AptString* /*pThis*/, int nArgCount)
+AptValue* AptString::sMethod_fromCharCode(AptValue* /*pThis*/, int nArgCount)
 {
     EAStringC strResult(static_cast<uint32_t>(2 * nArgCount));   // reserve
 
     for (int i = 0; i < nArgCount; ++i)
     {
         const int nCharCode =
-            gppAptNativeArgStack[gnAptNativeArgCount - i - 1]->toInteger();
+            gAptActionInterpreter.stackAt(i)->toInteger();
 
         EAStringC strChar;
         strChar.UTF8_Initialize(nCharCode);
@@ -160,27 +154,25 @@ AptValue* AptString::sMethod_fromCharCode(AptString* /*pThis*/, int nArgCount)
 // after `fromIndex` (default 0; a negative fromIndex is clamped to 0), or -1.
 // With no arguments it returns undefined.
 // ---------------------------------------------------------------------------
-AptValue* AptString::sMethod_indexOf(AptString* pThis, int nArgCount)
+AptValue* AptString::sMethod_indexOf(AptValue* pThis, int nArgCount)
 {
     EAStringC strThis;
+    EAStringC strSearch;
+    int nStart = 0;
     pThis->toString(&strThis);
-
     if (nArgCount == 0)
         return gpUndefinedValue;
 
-    EAStringC strSearch;
-    gppAptNativeArgStack[gnAptNativeArgCount - 1]->toString(&strSearch);
-
-    int nStart = 0;
+    AptValue* pSearch = gAptActionInterpreter.stackAt(0);
+    pSearch->toString(&strSearch);
     if (nArgCount == 2)
     {
-        nStart = gppAptNativeArgStack[gnAptNativeArgCount - 2]->toInteger();
+        AptValue* pStart = gAptActionInterpreter.stackAt(1);
+        nStart = pStart->toInteger();
         if (nStart < 0)
             nStart = 0;
     }
-
-    const int nFound = strThis.UTF8_Find(strSearch.GetBuffer(), nStart);
-    return AptInteger::Create(nFound);
+    return AptInteger::Create(strThis.UTF8_Find(strSearch.GetBuffer(), nStart));
 }
 
 // ---------------------------------------------------------------------------
@@ -188,25 +180,28 @@ AptValue* AptString::sMethod_indexOf(AptString* pThis, int nArgCount)
 // return the index of the last occurrence of `search` at or before `fromIndex`
 // (default: the end of the string), or -1. With no arguments it returns undefined.
 // ---------------------------------------------------------------------------
-AptValue* AptString::sMethod_lastIndexOf(AptString* pThis, int nArgCount)
+AptValue* AptString::sMethod_lastIndexOf(AptValue* pThis, int nArgCount)
 {
     EAStringC strThis;
+    EAStringC strSearch;
     pThis->toString(&strThis);
-
     if (nArgCount == 0)
         return gpUndefinedValue;
 
-    EAStringC strSearch;
-    gppAptNativeArgStack[gnAptNativeArgCount - 1]->toString(&strSearch);
+    AptValue* pSearch = gAptActionInterpreter.stackAt(0);
+    pSearch->toString(&strSearch);
 
     int nStart;
-    if (nArgCount <= 1)
-        nStart = static_cast<int>(strThis.GetLength());
+    if (nArgCount > 1)
+    {
+        AptValue* pStart = gAptActionInterpreter.stackAt(1);
+        nStart = pStart->toInteger();
+    }
     else
-        nStart = gppAptNativeArgStack[gnAptNativeArgCount - 2]->toInteger();
-
-    const int nFound = strThis.LastIndexOf(strSearch.GetBuffer(), nStart);
-    return AptInteger::Create(nFound);
+    {
+        nStart = strThis.GetLength();
+    }
+    return AptInteger::Create(strThis.LastIndexOf(strSearch.GetBuffer(), nStart));
 }
 
 // sMethod_toLowerCase @0x82AFC9E0 -- AS String.toLowerCase(): render this value

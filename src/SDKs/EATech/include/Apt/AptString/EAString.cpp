@@ -110,41 +110,36 @@ void EAStringC::ChangeBuffer(const uint32_t uSizeToReserve, const uint32_t uOffs
                              const uint32_t uSizeCopy, const CBPushZero ePushZero,
                              const uint32_t uInternalSize)
 {
-    DebugDataC* const old = m_pData;
-
-    if (m_pData->m_uRefCount == 1 && m_pData->m_uMaxSize >= uSizeToReserve)
+    if (GetInternalRefCount() == 1)
     {
-        // In-place.
-        if (uOffsetCopy)
+        if (uSizeToReserve <= GetInternalMaxSize())
         {
-            char* const buf = GetInternalBuffer();
-            memmove(buf, buf + uOffsetCopy, uSizeCopy);
+            if (uOffsetCopy)
+                memmove(GetInternalBuffer(), GetInternalBuffer() + uOffsetCopy, uSizeCopy);
+            SetInternalSize(uInternalSize);
+            InvalidateHashValue();
+            if (ePushZero)
+                GetInternalBuffer()[uInternalSize] = '\0';
+            return;
         }
-        m_pData->m_uSize = static_cast<uint16_t>(uInternalSize);
-        m_pData->m_uHash = 0;
-        if (ePushZero)
-            GetInternalBuffer()[uInternalSize] = 0;
-        return;
     }
 
-    if (uSizeToReserve)
+    const char* pOldBuffer = GetInternalBuffer();
+    DebugDataC* pOldData = m_pData;
+    if (uSizeToReserve != 0)
     {
-        // Reallocate (copy-on-write or grow); the source bytes come from the old
-        // block, captured before AllocateBuffer re-points m_pData.
-        const char* const oldBuf = reinterpret_cast<const char*>(old) + sizeof(StringDataC);
-        AllocateBuffer(uSizeToReserve + (uSizeToReserve >> 3));
-        m_pData->m_uSize = static_cast<uint16_t>(uInternalSize);
-        m_pData->m_uHash = 0;
-        memcpy(GetInternalBuffer(), oldBuf + uOffsetCopy, uSizeCopy);
+        AllocateBuffer(uSizeToReserve + uSizeToReserve / 8);
+        SetInternalSize(uInternalSize);
+        InvalidateHashValue();
+        memcpy(GetInternalBuffer(), pOldBuffer + uOffsetCopy, uSizeCopy);
         if (ePushZero)
-            GetInternalBuffer()[uInternalSize] = 0;
-        DecreaseInternalRefCount(old);
+            GetInternalBuffer()[uInternalSize] = '\0';
     }
     else
     {
         m_pData = reinterpret_cast<DebugDataC*>(&s_EmptyInternalData);
-        DecreaseInternalRefCount(old);
     }
+    DecreaseInternalRefCount(pOldData);
 }
 
 // ---------------------------------------------------------------------------
@@ -347,25 +342,10 @@ bool EAStringC::operator!=(const char* const pStrText) const
     return strcmp(GetInternalBuffer(), pStrText) != 0;
 }
 
-// Ordering against a C string.  X360 0x82AD5498 (operator<) / 0x82AD54D8 (<=) /
-// 0x82AD5520 (>) / 0x82AD5570 (>=).  operator< is the console's hand-rolled byte
-// walk (unsigned lbz loads, delta = *this[i] - rhs[i], stop at first difference or
-// a NUL in *this, return delta<0); the other three fold to the same strcmp sign the
-// asm computes, matching the sibling Compare @0x82AD5628.
+// Compare C strings using the XDK inline strcmp implementation.
 bool EAStringC::operator<(const char* const pStrText) const
 {
-    const unsigned char* p = reinterpret_cast<const unsigned char*>(GetInternalBuffer());
-    const unsigned char* q = reinterpret_cast<const unsigned char*>(pStrText);
-    int32_t delta;
-    for (;;)
-    {
-        delta = static_cast<int32_t>(*p) - static_cast<int32_t>(*q);
-        if (*p == 0 || delta != 0)
-            break;
-        ++p;
-        ++q;
-    }
-    return delta < 0;
+    return strcmp(GetBuffer(), pStrText) < 0;
 }
 
 bool EAStringC::operator<=(const char* const pStrText) const
@@ -375,7 +355,8 @@ bool EAStringC::operator<=(const char* const pStrText) const
 
 bool EAStringC::operator>(const char* const pStrText) const
 {
-    return strcmp(GetInternalBuffer(), pStrText) > 0;
+    const bool bLessOrEqual = strcmp(GetBuffer(), pStrText) <= 0;
+    return !bLessOrEqual;
 }
 
 bool EAStringC::operator>=(const char* const pStrText) const
@@ -484,42 +465,47 @@ int32_t EAStringC::UTF8_GetCharacter(const char* const pBuffer)
 {
     const unsigned int c = static_cast<unsigned char>(pBuffer[0]);
     if (c <= 0x7F)
-        return static_cast<int32_t>(c);
+        return c;
     if ((c & 0xE0) == 0xC0)
-        return static_cast<int32_t>(((c << 6) & 0x7C0) | (static_cast<unsigned char>(pBuffer[1]) & 0x3F));
-    const unsigned int b1 = static_cast<unsigned char>(pBuffer[1]);
+        return ((c & 0x1F) << 6) | (static_cast<unsigned char>(pBuffer[1]) & 0x3F);
     if ((c & 0xF0) == 0xE0)
-        return static_cast<int32_t>((((((c << 6) & 0x3C0) | (b1 & 0x3F)) << 6)) |
-                                    (static_cast<unsigned char>(pBuffer[2]) & 0x3F));
-    return static_cast<int32_t>(
-        (((((((c << 6) & 0x1C0) | (b1 & 0x3F)) << 6) | (static_cast<unsigned char>(pBuffer[2]) & 0x3F)) << 6)) |
-        (static_cast<unsigned char>(pBuffer[3]) & 0x3F));
+        return ((c & 0xF) << 12) | ((static_cast<unsigned char>(pBuffer[1]) & 0x3F) << 6) |
+               (static_cast<unsigned char>(pBuffer[2]) & 0x3F);
+    return ((c & 7) << 18) | ((static_cast<unsigned char>(pBuffer[1]) & 0x3F) << 12) |
+           ((static_cast<unsigned char>(pBuffer[2]) & 0x3F) << 6) |
+           (static_cast<unsigned char>(pBuffer[3]) & 0x3F);
 }
 
 const char* EAStringC::UTF8_ReadCharacter(const char* const pBuffer, int32_t* const iCharacter)
 {
     const unsigned int c = static_cast<unsigned char>(pBuffer[0]);
+    int32_t iCodePoint;
+    const char* pNext;
     if (c <= 0x7F)
     {
-        *iCharacter = static_cast<int32_t>(c);
-        return pBuffer + 1;
+        iCodePoint = c;
+        pNext = pBuffer + 1;
     }
-    if ((c & 0xE0) == 0xC0)
+    else if ((c & 0xE0) == 0xC0)
     {
-        *iCharacter = static_cast<int32_t>(((c << 6) & 0x7C0) | (static_cast<unsigned char>(pBuffer[1]) & 0x3F));
-        return pBuffer + 2;
+        iCodePoint = ((c & 0x1F) << 6) | (static_cast<unsigned char>(pBuffer[1]) & 0x3F);
+        pNext = pBuffer + 2;
     }
-    const unsigned int b1 = static_cast<unsigned char>(pBuffer[1]);
-    if ((c & 0xF0) == 0xE0)
+    else if ((c & 0xF0) == 0xE0)
     {
-        *iCharacter = static_cast<int32_t>((((((c << 6) & 0x3C0) | (b1 & 0x3F)) << 6)) |
-                                           (static_cast<unsigned char>(pBuffer[2]) & 0x3F));
-        return pBuffer + 3;
+        iCodePoint = ((c & 0xF) << 12) | ((static_cast<unsigned char>(pBuffer[1]) & 0x3F) << 6) |
+                     (static_cast<unsigned char>(pBuffer[2]) & 0x3F);
+        pNext = pBuffer + 3;
     }
-    *iCharacter = static_cast<int32_t>(
-        (((((((c << 6) & 0x1C0) | (b1 & 0x3F)) << 6) | (static_cast<unsigned char>(pBuffer[2]) & 0x3F)) << 6)) |
-        (static_cast<unsigned char>(pBuffer[3]) & 0x3F));
-    return pBuffer + 4;
+    else
+    {
+        iCodePoint = ((c & 7) << 18) | ((static_cast<unsigned char>(pBuffer[1]) & 0x3F) << 12) |
+                     ((static_cast<unsigned char>(pBuffer[2]) & 0x3F) << 6) |
+                     (static_cast<unsigned char>(pBuffer[3]) & 0x3F);
+        pNext = pBuffer + 4;
+    }
+    *iCharacter = iCodePoint;
+    return pNext;
 }
 
 void EAStringC::UTF8_SetCharacter(char* const pBuffer, const int32_t iCharacter)
@@ -550,7 +536,9 @@ void EAStringC::UTF8_SetCharacter(char* const pBuffer, const int32_t iCharacter)
 
 bool EAStringC::UTF8_IsValid(const int32_t iCharacter)
 {
-    return static_cast<uint32_t>(iCharacter) <= 0x10FFFFu;
+    if (iCharacter > 0x10FFFF)
+        return false;
+    return true;
 }
 
 // Encode a single code point into the (already-reserved) buffer and set the
@@ -686,67 +674,61 @@ int32_t EAStringC::LastIndexOf(const char* const pStrText, const int32_t iStart)
 // ---------------------------------------------------------------------------
 int32_t EAStringC::Delete(const int32_t iIndex, const int32_t iCount)
 {
-    int32_t iFrom = iIndex;
-    int32_t iTo   = iIndex + iCount;
-    if (iCount <= 0 || iTo <= 0)
+    int32_t iFirst = iIndex;
+    int32_t iEnd = iIndex + iCount;
+    if (iCount <= 0)
     {
-        // Nothing (or everything before 0) to keep -> empty string.
-        DecreaseInternalRefCount(m_pData);
-        m_pData = reinterpret_cast<DebugDataC*>(&s_EmptyInternalData);
-        IncreaseInternalRefCount();
+        Clear();
         return 0;
     }
-
-    if (iIndex < 0)
-        iFrom = 0;
-    const int32_t iSize = static_cast<int32_t>(m_pData->m_uSize);
-    if (iTo >= iSize)
-        iTo = iSize;
-
-    if (iFrom == 0)
+    if (iEnd <= 0)
     {
-        // Cut the head: keep the tail [iTo .. size).
-        const int32_t iKept = iSize - iTo;
-        ChangeBuffer(iKept, static_cast<uint32_t>(iTo), iKept, CB_PUSH_ZERO, iKept);
-        return iKept;
+        Clear();
+        return 0;
+    }
+    if (iFirst < 0)
+        iFirst = 0;
+
+    const int32_t iOldSize = GetLength();
+    if (iEnd >= iOldSize)
+        iEnd = iOldSize;
+    if (iFirst == 0)
+    {
+        const int32_t iNewSize = iOldSize - iEnd;
+        ChangeBuffer(iNewSize, iEnd, iNewSize, CB_PUSH_ZERO, iNewSize);
+        return iNewSize;
+    }
+    if (iEnd == iOldSize)
+    {
+        ChangeBuffer(iFirst, 0, iFirst, CB_PUSH_ZERO, iFirst);
+        return iFirst;
     }
 
-    if (iTo != iSize)
-    {
-        // Cut a middle span: keep the head [0 .. iFrom) then splice the tail in.
-        const int32_t iTail = iSize - iTo;
-        const int32_t iKept = iTail + iFrom;
-        char* const   src   = GetInternalBuffer() + iTo;
-        ChangeBuffer(iKept, 0, iFrom, CB_NO_PUSH_ZERO, iKept);
-        memcpy(GetInternalBuffer() + iFrom, src, static_cast<size_t>(iTail) + 1);
-        return iKept;
-    }
-
-    // Cut the tail: keep the head [0 .. iFrom).
-    ChangeBuffer(iFrom, 0, iFrom, CB_PUSH_ZERO, iFrom);
-    return iFrom;
+    const char* pOldBuffer = GetInternalBuffer();
+    const int32_t iTailSize = iOldSize - iEnd;
+    const int32_t iNewSize = iFirst + iTailSize;
+    ChangeBuffer(iNewSize, 0, iFirst, CB_NO_PUSH_ZERO, iNewSize);
+    memcpy(GetInternalBuffer() + iFirst, pOldBuffer + iEnd, iTailSize + 1);
+    return iNewSize;
 }
 
 EAStringC& EAStringC::Append(const char* const pStrText, const uint32_t uSize)
 {
-    if (uSize)
+    const char* p = pStrText;
+    uint32_t uLength;
+    for (uLength = 0; uLength < uSize; ++uLength)
     {
-        // Append at most uSize chars, stopping early at a NUL.
-        uint32_t uLen = 0;
-        const char* p = pStrText;
-        while (uLen < uSize && *p)
-        {
-            ++p;
-            ++uLen;
-        }
-        if (uLen)
-        {
-            const uint32_t uOld = m_pData->m_uSize;
-            ChangeBuffer(uOld + uLen, 0, uOld, CB_PUSH_ZERO, uOld + uLen);
-            memcpy(GetInternalBuffer() + uOld, pStrText, uLen);
-            GetInternalBuffer()[uOld + uLen] = 0;
-        }
+        if (*p++ == '\0')
+            break;
     }
+    if (uLength == 0)
+        return *this;
+
+    const uint32_t uOld = GetLength();
+    ChangeBuffer(uOld + uLength, 0, uOld, CB_PUSH_ZERO, uOld + uLength);
+    char* pBuffer = GetInternalBuffer();
+    pBuffer += uOld;
+    memcpy(pBuffer, pStrText, uLength);
     return *this;
 }
 
@@ -870,21 +852,15 @@ EAStringC operator+(const char* const pStrText, const EAStringC& strText)
 // Static: advance pBuffer by iIndex code points; null if the string ends first.
 const char* EAStringC::UTF8_GetBuffer(const char* const pBuffer, const int32_t iIndex)
 {
-    if (iIndex <= 0)
-        return pBuffer;
-
     const char* p = pBuffer;
-    int32_t     n = 0;
-    for (;;)
+    int32_t iCodePoint;
+    for (int32_t i = 0; i < iIndex; ++i)
     {
-        int32_t cp;
-        p = UTF8_ReadCharacter(p, &cp);
-        ++n;
-        if (cp == 0)
-            return 0;        // hit the terminator before reaching iIndex
-        if (n == iIndex)
-            return p;
+        p = UTF8_ReadCharacter(p, &iCodePoint);
+        if (iCodePoint == 0)
+            return 0;
     }
+    return p;
 }
 
 // Member: the same skip, anchored at this string's buffer.
@@ -897,16 +873,15 @@ const char* EAStringC::UTF8_GetBuffer(const int32_t iIndex)
 int32_t EAStringC::UTF8_Size() const
 {
     const char* p = GetInternalBuffer();
-    int32_t     n = 0;
-    for (;;)
+    int32_t iCodePoint;
+    int32_t iCount = 0;
+    for (;; ++iCount)
     {
-        int32_t cp;
-        p = UTF8_ReadCharacter(p, &cp);
-        if (cp == 0)
+        p = UTF8_ReadCharacter(p, &iCodePoint);
+        if (iCodePoint == 0)
             break;
-        ++n;
     }
-    return n;
+    return iCount;
 }
 
 int32_t EAStringC::UTF8_CharAt(const int32_t iIndex) const
@@ -981,22 +956,15 @@ EAStringC EAStringC::UTF8_Mid(const int32_t iFirst, const int32_t iCount) const
 
 EAStringC& EAStringC::UTF8_Append(const char* const pStrText, const int32_t iSize)
 {
-    // Walk iSize code points (stopping early at a NUL) to find the byte length.
+    int32_t iCodePoint;
     const char* p = pStrText;
-    int32_t     n = 0;
-    if (iSize > 0)
+    for (int32_t i = 0; i < iSize; ++i)
     {
-        for (;;)
-        {
-            int32_t cp;
-            p = UTF8_ReadCharacter(p, &cp);
-            if (cp == 0)
-                break;
-            if (++n >= iSize)
-                break;
-        }
+        p = UTF8_ReadCharacter(p, &iCodePoint);
+        if (iCodePoint == 0)
+            break;
     }
-    return Append(pStrText, static_cast<uint32_t>(p - pStrText));
+    return Append(pStrText, p - pStrText);
 }
 
 // void: both ARTIST callers (AptString::sMethod_fromCharCode 0x82AF2A48, sMethod_split
@@ -1017,44 +985,41 @@ void EAStringC::UTF8_Initialize(const int32_t iCharacter)
 
 EAStringC& EAStringC::UTF8_MakeLower()
 {
-    // Force a private, fully-sized copy, then lower each code point in place.
-    const uint32_t uSize = m_pData->m_uSize;
+    const uint32_t uSize = GetLength();
     ChangeBuffer(uSize, 0, uSize, CB_PUSH_ZERO, uSize);
 
-    char* dst = GetInternalBuffer();
-    const char* src = dst;
+    int32_t iCodePoint;
+    const char* pSource = GetInternalBuffer();
+    char* pDestination = const_cast<char*>(pSource);
     for (;;)
     {
-        int32_t cp;
-        const char* next = UTF8_ReadCharacter(src, &cp);
-        if (cp == 0)
+        pSource = UTF8_ReadCharacter(pSource, &iCodePoint);
+        if (iCodePoint == 0)
             break;
-        UTF8_SetCharacter(dst, tolower(cp));
-        dst += UTF8_GetCharacterSize(dst);
-        src  = next;
+        UTF8_SetCharacter(pDestination, tolower(iCodePoint));
+        pDestination = const_cast<char*>(pSource);
     }
     return *this;
 }
 
 EAStringC& EAStringC::UTF8_MakeUpper()
 {
-    const uint32_t uSize = m_pData->m_uSize;
+    const uint32_t uSize = GetLength();
     ChangeBuffer(uSize, 0, uSize, CB_PUSH_ZERO, uSize);
 
-    char* dst = GetInternalBuffer();
-    const char* src = dst;
+    int32_t iCodePoint;
+    const char* pSource = GetInternalBuffer();
+    char* pDestination = const_cast<char*>(pSource);
     for (;;)
     {
-        int32_t cp;
-        const char* next = UTF8_ReadCharacter(src, &cp);
-        if (cp == 0)
+        pSource = UTF8_ReadCharacter(pSource, &iCodePoint);
+        if (iCodePoint == 0)
             break;
-        // The console only upper-cases the ASCII range (<= 0x7F).
-        if (cp <= 0x7F)
-            cp = toupper(cp);
-        UTF8_SetCharacter(dst, cp);
-        dst += UTF8_GetCharacterSize(dst);
-        src  = next;
+        if (iCodePoint <= 0x7F)
+            UTF8_SetCharacter(pDestination, toupper(iCodePoint));
+        else
+            UTF8_SetCharacter(pDestination, iCodePoint);
+        pDestination = const_cast<char*>(pSource);
     }
     return *this;
 }
@@ -1078,24 +1043,21 @@ EAStringC& EAStringC::UTF8_MakeUpper()
 // ---------------------------------------------------------------------------
 void EAStringC::vsFormat(const char* const pStrFormat, va_list Args)
 {
-    // Initial reserve: 4 * strlen(format) (X360 walks to the NUL then `slwi ,2`).
-    uint32_t uReserve = 4u * static_cast<uint32_t>(strlen(pStrFormat));
-
-    int iResult;
+    int32_t iReserve = 4 * static_cast<uint32_t>(strlen(pStrFormat));
+    int32_t iResult;
+    char* pBuffer;
     for (;;)
     {
-        ChangeBuffer(uReserve, 0, 0, CB_NO_PUSH_ZERO, 0);
-        char* const pBuffer = GetInternalBuffer();           // *m_pData + 8
-        // MaxCount = m_uMaxSize (the usable char capacity of the reserved block).
-        iResult = vsnprintf(pBuffer, m_pData->m_uMaxSize, pStrFormat, Args);
+        ChangeBuffer(iReserve, 0, 0, CB_NO_PUSH_ZERO, 0);
+        pBuffer = GetInternalBuffer();
+        iResult = vsnprintf(pBuffer, GetInternalMaxSize(), pStrFormat, Args);
         if (iResult >= 0)
             break;
-        uReserve *= 2;                                       // didn't fit -> grow + retry
+        iReserve *= 2;
     }
-
-    GetInternalBuffer()[iResult] = 0;
-    m_pData->m_uSize = static_cast<uint16_t>(iResult);
-    m_pData->m_uHash = 0;
+    pBuffer[iResult] = '\0';
+    SetInternalSize(iResult);
+    InvalidateHashValue();
 }
 
 void EAStringC::Format(const char* const pStrFormat, ...)

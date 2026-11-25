@@ -7,6 +7,9 @@
 #include "rw/rwcore_structs.h"
 #include <cstring>
 
+// ARTIST calls the XDK libcMT memcpy provider for the viewport at 82B63DC0.
+#pragma function(memcpy)
+
 namespace renderengine
 {
 namespace StateHelper
@@ -63,11 +66,9 @@ int ResizeDefaultScissorRectAndViewportParameters()
     const u32 height = gOriginalColorBuffer.Height + 1;
     const D3DVIEWPORTF9 viewport =
         { 0.0f, 0.0f, static_cast<f32>(width), static_cast<f32>(height), 0.0f, 1.0f, 0 };
-    void* const result = std::memcpy(&m_defaultViewportParams, &viewport, sizeof(viewport));
-    m_defaultScissorRectParams.x1 = 0;
-    m_defaultScissorRectParams.y1 = 0;
-    m_defaultScissorRectParams.x2 = width;
-    m_defaultScissorRectParams.y2 = height;
+    void* const result = memcpy(&m_defaultViewportParams, &viewport, sizeof(viewport));
+    const D3DRECT scissor = { 0, 0, width, height };
+    m_defaultScissorRectParams = scissor;
     return reinterpret_cast<int>(result);
 }
 }

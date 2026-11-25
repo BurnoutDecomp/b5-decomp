@@ -45,11 +45,11 @@ void LobbyStatbookDestroy(LobbyStatbookT* pStatbook);
 
 // Fetch the stat row of persona pPersona (the local user when empty) for the selected view
 // into slot uSlot. 0 when the request was sent, otherwise a LOBBYSTATBOOK_ERROR_* value.
-s32 LobbyStatbookFetch(LobbyStatbookT* pStatbook, u32 uSlot, const u8* pPersona);
+s32 LobbyStatbookFetch(LobbyStatbookT* pStatbook, u32 uSlot, const char* pPersona);
 
 // Select the view pView and fetch its column layout. 0 when the request was sent (or the
 // view is already selected), otherwise a LOBBYSTATBOOK_ERROR_* value.
-s32 LobbyStatbookFetchView(LobbyStatbookT* pStatbook, const u8* pView);
+s32 LobbyStatbookFetchView(LobbyStatbookT* pStatbook, const char* pView);
 
 // Fetch the list of available views. 0 when the request was sent (or the list is present),
 // otherwise a LOBBYSTATBOOK_ERROR_* value.
@@ -72,7 +72,7 @@ s32 LobbyStatbookViewCount(LobbyStatbookT* pStatbook);
 const char* LobbyStatbookRowData(LobbyStatbookT* pStatbook, u32 uSlot, u32 uRow, char* pBuffer, s32 iBuflen);
 
 // Per-row info record of the selected view's row uRow (NULL when absent).
-LobbyStatbookRowInfoT* LobbyStatbookRowInfo(LobbyStatbookT* pStatbook, u32 uRow);
+const LobbyStatbookRowInfoT* LobbyStatbookRowInfo(LobbyStatbookT* pStatbook, u32 uRow);
 
 #ifdef __cplusplus
 }

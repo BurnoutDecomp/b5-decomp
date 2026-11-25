@@ -12,6 +12,7 @@
 #include "SDKs/EATech/rwcore/filesys/stream.h" // rw::core::filesys::Stream::Kill
 
 #include <cstddef> // offsetof
+#include <cfloat>
 
 namespace rw
 {
@@ -31,13 +32,6 @@ namespace
     // so that the lookup fails for the console's own reason and stays correct if a future
     // slice ever does find the creation path. See the header banner.
     ListDNode *gpStreamPoolListHead = 0;
-
-    // 100.0f @0x8214AED0 -- the eviction ceiling. A candidate whose priority is not
-    // ordered-below BOTH the incoming priority and this constant is never replaced.
-    const f32 KF_MAX_REPLACEABLE_PRIORITY = 100.0f;
-
-    // DBL_MAX @0x8214B270 (7F EF FF FF FF FF FF FF) -- the initial tie-break timestamp.
-    const f64 KD_INITIAL_TIMESTAMP = 1.7976931348623157e+308;
 }
 
 // -------------------------------------------------------------------------------------
@@ -98,6 +92,11 @@ StreamPool::StreamDesc *StreamPool::AllocateStream(StreamDesc *apStreamDesc,
 // null guard, and no guard is added: SndPlayer1 calls this with a pool that is ALWAYS
 // null in retail, so the console would fault here too. See the header banner.
 // -------------------------------------------------------------------------------------
+#if defined(_XBOX) && defined(_MSC_VER)
+// The native rwAudio common object uses the size form for these stream loops
+// and the refcount test (ARTIST 0x82B6BAB0 and 0x82B6BC48).
+#pragma optimize("s", on)
+#endif
 StreamPool::StreamHandle StreamPool::AcquireStream(f32 afPriority,
                                                    StreamLostCallback apfnStreamLost,
                                                    void *apStreamLostContext)
@@ -128,7 +127,7 @@ StreamPool::StreamHandle StreamPool::AcquireStream(f32 afPriority,
     // The running best starts AT the incoming priority, so a candidate must be strictly
     // below the caller's own priority to be considered at all.
     f32 lfSelectedPriority = afPriority;
-    f64 ldSelectedTimeStamp = KD_INITIAL_TIMESTAMP;
+    f64 ldSelectedTimeStamp = DBL_MAX;
     StreamDesc *lpSelected = 0;
 
     for (int liIndex = 0; liIndex < mNumStreams; ++liIndex)
@@ -153,7 +152,7 @@ StreamPool::StreamHandle StreamPool::AcquireStream(f32 afPriority,
     // the NOT-taken path when the comparison is unordered, so a NaN priority must FAIL to
     // qualify. Rewriting either as `>=` inverts the NaN case.
     if (!(lfSelectedPriority < afPriority) ||
-        !(lfSelectedPriority < KF_MAX_REPLACEABLE_PRIORITY))
+        !(lfSelectedPriority < 100.0f))
     {
         return 0;
     }
@@ -182,6 +181,10 @@ void StreamPool::ReleaseStream(StreamHandle apStreamHandle)
         lpStreamDesc->allocated = 0;           // @0x82B6BC7C
     }
 }
+
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", off)
+#endif
 
 // -------------------------------------------------------------------------------------
 // The vendor's two inline handle accessors. No ARTIST body of their own -- they are

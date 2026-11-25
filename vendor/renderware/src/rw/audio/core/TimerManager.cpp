@@ -42,21 +42,9 @@ u32 GetCpuCycle();
 // slot, and seed the shared callback time to -1.0. mpCurrentHandle / miCurrentCollection
 // are deliberately left uninitialised (the asm writes neither).
 // -------------------------------------------------------------------------------------
-TimerManager *TimerManager::TimerManager_ctor(TimerManager *self)
+TimerManager::TimerManager()
+    : mfCallbackTime(-1.0f), mpDeferredRemoveNode(0)
 {
-    for (int i = 0; i < 2; ++i)
-    {
-        Collection *pCollection = &self->maCollections[i];
-        pCollection->mNodeBlocks.Reset();
-        pCollection->mFree.Reset();
-        pCollection->mUsed.Reset();
-        pCollection->mSize = 0;
-        pCollection->mCapacity = 0;
-    }
-
-    self->mpDeferredRemoveNode = 0; // +0x44 = 0
-    self->mfCallbackTime = -1.0f;         // +0x38 = -1.0
-    return self;
 }
 
 // -------------------------------------------------------------------------------------
@@ -74,7 +62,7 @@ bool TimerManager::AddTimer(TimerHandle *handle, TimerCallback const callback, v
     Collection *pCollection = &maCollections[stage];
 
     if (pCollection->mCapacity == 0)
-        Collection::AddCapacity(pCollection, 74);
+        pCollection->AddCapacity(74);
 
     const bool failed = pCollection->AddItem(&handle->mItemHandle);
     if (!failed)
@@ -120,7 +108,7 @@ void TimerManager::ExecuteTimers(TimerManager *self, int collectionIndex)
 
         if (pDeferred)
         {
-            Collection::RemoveNode(&self->maCollections[self->miCurrentCollection], pDeferred);
+            self->maCollections[self->miCurrentCollection].RemoveNode(pDeferred);
             self->mpDeferredRemoveNode = 0; // +0x44 = 0
         }
         else
@@ -145,57 +133,7 @@ void TimerManager::ExecuteTimers(TimerManager *self, int collectionIndex)
 void TimerManager::Defragment()
 {
     for (int i = 0; i < 2; ++i)
-        Collection::Defragment(&maCollections[i]);
-}
-
-// -------------------------------------------------------------------------------------
-// Release @0x82B6DEE8
-// Clear the handles, then release the blocks of each collection.
-// -------------------------------------------------------------------------------------
-void TimerManager::Release(TimerManager *self)
-{
-    Collection *pCollection = &self->maCollections[0];
-    int i = 2;
-    do
-    {
-        Collection::Clear(pCollection);
-        pCollection->Release();
-        --i;
-        ++pCollection;
-    } while (i);
-}
-
-// -------------------------------------------------------------------------------------
-// RemoveTimer @0x82B6DE70
-// Unregister `handle`. If it is the handle currently executing, we cannot unlink its node
-// yet (ExecuteTimers is walking the list) -- defer it: record the node + its Collection
-// index for ExecuteTimers to finish. Otherwise, unless the handle is already free
-// (stage 3), unlink its node from its Collection now. Either way the handle is reset to
-// stage 3 with a zeroed cycle count.
-// -------------------------------------------------------------------------------------
-void TimerManager::RemoveTimer(TimerManager *self, TimerHandle *handle)
-{
-    u8 stage = handle->mStage; // +0x14 (Collection index while live, or 3 = free)
-
-    if (handle == self->mpCurrentHandle)
-    {
-        // Deferred self-remove: hand the node off to ExecuteTimers.
-        self->miCurrentCollection = stage; // +0x40
-        Collection::ItemNode *pNode = handle->mItemHandle.pNode;
-        handle->mItemHandle.pNode = 0;
-        pNode->pHandle = 0;
-        self->mpDeferredRemoveNode = pNode; // +0x44
-    }
-    else if (stage != 3)
-    {
-        Collection::ItemNode *pNode = handle->mItemHandle.pNode;
-        handle->mItemHandle.pNode = 0;
-        pNode->pHandle = 0;
-        Collection::RemoveNode(&self->maCollections[stage], pNode);
-    }
-
-    handle->mCpuTicks = 0; // +0x10
-    handle->mStage = 3;    // +0x14
+        maCollections[i].Defragment();
 }
 
 } // namespace core

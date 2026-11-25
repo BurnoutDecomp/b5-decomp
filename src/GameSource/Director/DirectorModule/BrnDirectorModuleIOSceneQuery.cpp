@@ -61,15 +61,16 @@ namespace DirectorIO
         mFineVolumeTestDeepestQueue.Clear();
         mFineVolumeTestQueue.Clear();
 
-        mSceneQueryInterface.mpFineLineTestQueue                      = &mFineLineTestQueue;
-        mSceneQueryInterface.mpFineLineTestNearestQueue               = &mFineLineTestNearestQueue;
-        mSceneQueryInterface.mpFineLineTestFastDoubleSidedQueue       = &mFineLineTestFastDoubleSidedQueue;
-        mSceneQueryInterface.mpFineSphereTestFastQueue                = &mSphereTestFastQueue;
-        mSceneQueryInterface.mpFineVolumeTestDeepestQueue             = &mFineVolumeTestDeepestQueue;
-        mSceneQueryInterface.mpFineVolumeTestQueue                    = &mFineVolumeTestQueue;
-        mSceneQueryInterface.mpTriangleCollisionLineTestQueue         = 0;
-        mSceneQueryInterface.mpTriangleCollisionLineTestNearestQueue  = 0;
-        mSceneQueryInterface.mpTriangleCollisionSphereTestQueue       = 0;
+        mSceneQueryInterface.Construct(
+            &mFineLineTestQueue,
+            &mFineLineTestNearestQueue,
+            &mFineLineTestFastDoubleSidedQueue,
+            &mSphereTestFastQueue,
+            &mFineVolumeTestDeepestQueue,
+            &mFineVolumeTestQueue,
+            0,
+            0,
+            0);
     }
 
     // X360 0x8221B3F8 (DestroyIOBuffer<SceneQueryOutputBuffer> @0x823AF590 calls it): four `stw 0`

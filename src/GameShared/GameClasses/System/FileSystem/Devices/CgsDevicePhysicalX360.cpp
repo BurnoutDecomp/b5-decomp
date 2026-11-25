@@ -110,7 +110,7 @@ namespace CgsFileSystem
                                     ldwDisposition, FILE_ATTRIBUTE_NORMAL, NULL);
         if (lhFile != INVALID_HANDLE_VALUE)
         {
-            const s8 lsSlot = mHandlePool.Allocate();
+            const s8 lsSlot = mHandlePool.PopIndex();
             CGS_ASSERT(lsSlot != -1, "Out of handles\n");
 
             FileHandleRecord& lRecord = mHandlePool[lsSlot];
@@ -302,7 +302,7 @@ namespace CgsFileSystem
         }
 
         // Claim a pool slot to carry the find handle (so ReadDirectory/CloseDirectory can reuse it).
-        const s8 lsSlot = mHandlePool.Allocate();
+        const s8 lsSlot = mHandlePool.PopIndex();
         CGS_ASSERT(lsSlot != -1, "Out of handles\n");
 
         FileHandleRecord& lRecord = mHandlePool[lsSlot];

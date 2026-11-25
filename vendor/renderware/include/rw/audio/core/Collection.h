@@ -17,6 +17,8 @@ namespace core
 class Collection
 {
 public:
+    Collection() : mSize(0), mCapacity(0) {}
+
     struct ItemNode;
 
     struct ItemHandle
@@ -33,34 +35,46 @@ public:
     };
 
     // ARTIST carves item nodes after the eight-byte NodeBlockHeader.
-    struct NodeBlock
+    struct NodeBlockHeader
     {
         ListNode node;
         s32 size;
-        ItemNode maNodes[1];
+
+        ItemNode *GetNodeArray()
+        {
+            return reinterpret_cast<ItemNode *>(this + 1);
+        }
     };
 
     // Grow the pool by `count` free Node slots (allocates one NodeBlock and threads its
     // Nodes onto the free list). Returns true if allocation fails.
-    static bool AddCapacity(Collection *self, int count);
+    bool AddCapacity(int count);
 
     // Attach a free node to the handle and push it onto the used list.
     // Returns true if the pool could not grow.
     bool AddItem(ItemHandle *handle);
 
     // Release every in-use Node back to the free list (clears each owner back-pointer).
-    static void Clear(Collection *self);
+    void Clear();
 
     // Compact the pool: if the head NodeBlock's Nodes all fit in the remaining capacity,
     // migrate its live Nodes into other blocks and free the head block. Returns 1 when a
     // block was reclaimed, 0 otherwise.
-    static bool Defragment(Collection *self);
+    bool Defragment();
 
     // Free every owned NodeBlock and zero the container back to empty.
     void Release();
 
     // Unlink `node` from the used list and push it back onto the free list.
-    static void RemoveNode(Collection *self, ItemNode *node);
+    void RemoveNode(ItemNode *node);
+
+    ItemNode *RemoveItemDeferred(ItemHandle *handle)
+    {
+        ItemNode *item = handle->pNode;
+        handle->pNode = 0;
+        item->pHandle = 0;
+        return item;
+    }
 
     ItemNode *GetNodes() const
     {

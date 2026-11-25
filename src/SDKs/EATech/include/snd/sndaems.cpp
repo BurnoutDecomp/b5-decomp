@@ -1394,8 +1394,7 @@ void RemoveAemsTimer()
 {
     if (!gbAemsTimerAdded)
         return;
-    rw::audio::core::TimerManager::RemoveTimer(
-        &off_83271928->mTimerManager, &gAemsTimerHandle);
+    off_83271928->mTimerManager.RemoveTimer(&gAemsTimerHandle);
     gbAemsTimerAdded = false;
     gfAemsTimerPeriod = -1.0f;
 }

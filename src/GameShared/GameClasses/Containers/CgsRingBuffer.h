@@ -134,7 +134,15 @@ RingBuffer<Type>::Push(const Type* lpEntry)
     {
         miLength  = miMaxLength;
         miReadPos = (miReadPos + 1) % miMaxLength;
-        CGS_ASSERT_STREAM_AT(miReadPos == miWritePos, "Read pos should equal write pos if buffer is full\n", CGS_ARTIST_CGSRINGBUFFER_FILE, 137);
+        if (miReadPos != miWritePos)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+            lStream << "Read pos should equal write pos if buffer is full\n";
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+                CGS_ASSERT_LOCATION(CGS_ARTIST_CGSRINGBUFFER_FILE, 137));
+            CgsDev::Assert::EndAssert();
+        }
     }
 }
 
