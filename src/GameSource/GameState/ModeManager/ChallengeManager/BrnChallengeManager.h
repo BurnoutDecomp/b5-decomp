@@ -263,7 +263,7 @@ namespace BrnGameState
                             s32 liFramesSinceNetworkStart,
                             const CgsModule::BaseEventQueue<GameStateModuleIO::CompletedFburnChallengesData>* lpCompletedChallengeStatusQueue,
                             const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarOutputInterface,
-                            bool lbIsOnline,
+                            bool lbIsArbitrator,
                             GameStateModuleIO::OutputBuffer* lpOutputBuffer);
         // X360 0x8233AC28 (DWARF :141 -- but see drift note). X360-vs-DWARF DRIFT: the PS3 DWARF
         // lists TWO parameters; the X360 body takes a THIRD, middle parameter in r5 (spilled to
@@ -377,7 +377,7 @@ namespace BrnGameState
         // X360 0x82353008 / 0x82345FD0 (DWARF :509/:515).
         void UpdateRunning(f32 lfTimeStep, s32 liFramesSinceNetworkStart, TGameActionQueue* lpActionQueue,
                            const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarOutputInterface,
-                           bool lbIsOnline, bool lbIsTimerFrequency50Hz);
+                           bool lbSimTimerAt50Hz, bool lbIsArbitrator);
         void UpdateResults(f32 lfTimeStep, TGameActionQueue* lpActionQueue);
 
         // X360 0x823460A0 / 0x82351AF8 (DWARF :526/:534).

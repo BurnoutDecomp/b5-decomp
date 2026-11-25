@@ -17,17 +17,6 @@ CgsSystem::TimerStatusInterface::Clear()
 // TimerStatusInterface::operator= and TimerStatus::operator= are header-inline (DWARF h:98 / h:77,
 // no CgsTimerStatusInterface.cpp definition): see CgsTimerStatusInterface.h.
 
-// CgsSystem::TimerStatusInterface::IsSimTimerFrequency50Hz  @ 0x8230E990
-// X360: return (*(a1+32) * *(a1+28)) == 0.02;
-//   *(a1+28) = mSimTimerStatus.mfBaseTimeStep        (sim block +24, member +4)
-//   *(a1+32) = mSimTimerStatus.mfTimeStepMultiplier  (sim block +24, member +8)
-// product = sim current time step; 0.02s == 1/50 => 50Hz.
-bool
-CgsSystem::TimerStatusInterface::IsSimTimerFrequency50Hz() const
-{
-    return mSimTimerStatus.GetCurrentTimeStep() == 0.02f;
-}
-
 // CgsSystem::TimerStatusInterface::StoreTimers  @ 0x828D7518
 // Snapshot a live Timer pair into the two TimerStatus blocks. The console body is one
 // straight run of loads/stores per timer (game block at this+0, sim block at this+0x18),

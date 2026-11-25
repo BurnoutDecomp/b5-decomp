@@ -350,7 +350,7 @@ void RoadRuleComponent::Prepare(const char* lpacName, const BrnFlapt::FileRef& l
 {
     CGS_ASSERT(lpacName != 0, "lacName != NULL");   // BrnGuiFlaptComponent.h:133 (non-gating)
 
-    lrFile.FindComponent(&mAptRef, lpacName);
+    mAptRef = lrFile.FindComponent(lpacName);
     CGS_ASSERT(mAptRef.mpMovieClipInst != 0, "mpMovieClipInst");   // BrnFlaptMovieClipRef.h:272 (non-gating)
     mAptRef.mpMovieClipInst->ResetTimeline();
     mAptRef.SetFrameTriggerCallback(

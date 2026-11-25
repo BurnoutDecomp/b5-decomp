@@ -49,16 +49,15 @@ namespace BrnNetwork
     // slot. False when nothing has arrived.
     bool LiveRevengeSyncMessage::Retrieve(LiveRevengeRelationship* lpLiveRevengeRelationship)
     {
-        if (!IsMessageValid())
+        if (IsMessageValid())
         {
-            return false;
+            *lpLiveRevengeRelationship = mLiveRevengeRelationship;
+            lpLiveRevengeRelationship->FlipPointOfView();
+            mLiveRevengeRelationship.Release();
+            SetMessageInvalid();
+            return true;
         }
-
-        *lpLiveRevengeRelationship = mLiveRevengeRelationship;
-        lpLiveRevengeRelationship->FlipPointOfView();
-        mLiveRevengeRelationship.Release();
-        SetMessageInvalid();
-        return true;
+        return false;
     }
 
     // Clear the payload so the size is the same every call, then let the base pack and measure.

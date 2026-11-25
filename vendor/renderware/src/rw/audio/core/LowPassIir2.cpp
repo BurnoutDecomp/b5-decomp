@@ -70,28 +70,28 @@ char **LowPassIir2::GetPlugInDescRunTime()
 // -------------------------------------------------------------------------------------
 // CalculateFilterCoefficients @0x82B97DC0
 // omega = pre-warped cutoff angular frequency (rad/sample). Computes the 5 biquad
-// coefficients into mCoeffs (block at +0x90). With s = sin(omega), c = cos(omega) and
+// coefficients into mCoeffs (block at +0x90). With s = sin(static_cast<f64>(omega)), c = cos(static_cast<f64>(omega)) and
 // k = 1 / (1 + s/2) the asm computes (a1[36..40] -> a1,a2,b0,b1,b2):
 //   a1 = -2*c * k
 //   a2 = (1 - s/2) * k
 //   b1 = (1 - c) * k
 //   b0 = (1 - c) / (2*(1 + s/2))
 //   b2 = (1 - c) / (2*(1 + s/2))
-// (sin is rounded to single precision before reuse: fp31 holds s as a 32-bit value.)
+// The sine and cosine results are narrowed before coefficient arithmetic.
 // -------------------------------------------------------------------------------------
-void LowPassIir2::CalculateFilterCoefficients(f64 omega)
+void LowPassIir2::CalculateFilterCoefficients(f32 omega)
 {
-    const f32 s = static_cast<f32>(sin(omega)); // fp31 (frsp'd)
-    const f64 c = cos(omega);
+    const f32 sine = static_cast<f32>(sin(static_cast<f64>(omega)));
+    const f32 cosine = static_cast<f32>(cos(static_cast<f64>(omega)));
+    const f32 halfSine = sine * 0.5f;
+    const f32 denominator = halfSine + 1.0f;
+    const f32 reciprocal = 1.0f / denominator;
 
-    const f64 half = s * 0.5;
-    const f64 k = 1.0 / (half + 1.0);
-
-    mCoeffs.a1 = static_cast<f32>((c * -2.0) * k);
-    mCoeffs.a2 = static_cast<f32>((1.0 - half) * k);
-    mCoeffs.b1 = static_cast<f32>((1.0 - c) * k);
-    mCoeffs.b0 = static_cast<f32>((1.0 - c) / ((half + 1.0) * 2.0));
-    mCoeffs.b2 = static_cast<f32>((1.0 - c) / ((half + 1.0) * 2.0));
+    mCoeffs.a1 = (cosine * -2.0f) * reciprocal;
+    mCoeffs.a2 = (1.0f - halfSine) * reciprocal;
+    mCoeffs.b1 = (1.0f - cosine) * reciprocal;
+    mCoeffs.b0 = (1.0f - cosine) / (denominator * 2.0f);
+    mCoeffs.b2 = (1.0f - cosine) / (denominator * 2.0f);
 }
 
 // -------------------------------------------------------------------------------------

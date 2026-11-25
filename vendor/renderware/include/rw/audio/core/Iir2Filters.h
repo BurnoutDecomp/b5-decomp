@@ -154,7 +154,6 @@ class LowPassIir2
 public:
     static char  **GetPlugInDescRunTime();                  // @0x82B97DB0
     static LowPassIir2 *CreateInstance(LowPassIir2 *self);  // @0x82BA3130
-    void CalculateFilterCoefficients(f64 omega);            // @0x82B97DC0
     int  Process(AudioProcessContext *ctx);                 // @0x82B9E5C8
 
     PlugInBaseView mBase;                     // +0x00 .. +0x23
@@ -164,6 +163,9 @@ public:
     Iir2  mState[KI_IIR2_MAX_CHANNELS];  // +0x30 .. +0x8F
     Iir2::FilterCoefficients mCoeffs;                       // +0x90 .. +0xA3
     f32        mfLastCutoffOmega;             // +0xA4
+
+private:
+    void CalculateFilterCoefficients(f32 omega);            // @0x82B97DC0
 };
 
 // -------------------------------------------------------------------------------------
@@ -177,7 +179,6 @@ class HighPassIir2
 public:
     static char **GetPlugInDescRunTime();                   // @0x82B978B0
     static int    CreateInstance(HighPassIir2 *self);       // @0x82BA2E40
-    void CalculateFilterCoefficients(f64 omega);            // @0x82B978C0
     int  Process(AudioProcessContext *ctx);                 // @0x82B9E0A0
 
     PlugInBaseView mBase;                     // +0x00 .. +0x23
@@ -187,6 +188,9 @@ public:
     Iir2  mState[KI_IIR2_MAX_CHANNELS];  // +0x30 .. +0x8F
     Iir2::FilterCoefficients mCoeffs;                       // +0x90 .. +0xA3
     f32        mfLastCutoffOmega;             // +0xA4
+
+private:
+    void CalculateFilterCoefficients(f32 omega);            // @0x82B978C0
 };
 
 // -------------------------------------------------------------------------------------

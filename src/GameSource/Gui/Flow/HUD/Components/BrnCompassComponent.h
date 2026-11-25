@@ -140,6 +140,8 @@ namespace BrnGui
 
         // BrnCompassComponent.h:44
         typedef FlaptAnimatorComponent MarkerAnimatorType;
+        static const char* KAPC_FRAMES_EAST[CgsLanguage::E_LANGUAGE_TOTAL];
+        static const char* KAPC_FRAMES_WEST[CgsLanguage::E_LANGUAGE_TOTAL];
 
         MarkerAnimatorType     mPlayerMarkerAnimator;    // +0x0C
         GuiCache*              mpGuiCache;               // +0x44

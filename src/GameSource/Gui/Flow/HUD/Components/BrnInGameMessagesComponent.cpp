@@ -279,7 +279,7 @@ namespace
         CGS_ASSERT(lacName != NULL, "lacName != NULL");
 
         BrnFlapt::MovieClipRef lComponentRef;
-        lFile.FindComponent(&lComponentRef, lacName);
+        lComponentRef = lFile.FindComponent(lacName);
         mAptRef.mpMovieClipInst = lComponentRef.mpMovieClipInst;
         mAptRef.mpTransform     = lComponentRef.mpTransform;
 

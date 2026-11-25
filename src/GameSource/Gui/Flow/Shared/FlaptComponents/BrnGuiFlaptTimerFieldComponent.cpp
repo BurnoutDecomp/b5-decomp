@@ -105,7 +105,7 @@ namespace BrnGui
         CGS_ASSERT(lacName != 0, "lacName != NULL");
 
         // Bind this component's own movie clip and reset its timeline.
-        lFlaptFile.FindComponent(&mAptRef, lacName);
+        mAptRef = lFlaptFile.FindComponent(lacName);
         CGS_ASSERT(mAptRef.mpMovieClipInst != 0, "mpMovieClipInst");
         mAptRef.mpMovieClipInst->ResetTimeline();
 

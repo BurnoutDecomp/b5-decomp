@@ -2049,7 +2049,7 @@ namespace
 // the source wrote `CGS_ASSERT(lpProfileEvent, ...)` after taking the address. Reproduced as the
 // same test on the accessor's return so the assert exists where the console has it.
 // ===================================================================================
-u32 ProgressionManager::GetEventCountForType(s32 leModeType) const
+u32 ProgressionManager::GetEventCountForType(RaceEventData::EModeType leModeType) const
 {
     const u32 luEventCount = mProfile.GetEventCount();
     u32       luEventTypeCount = 0;
@@ -2080,7 +2080,7 @@ u32 ProgressionManager::GetEventCountForType(s32 leModeType) const
         }
 
         // `lbz r11, 0xEC(r31) / cmpw r11, r19` -- RaceEventData::mu8Mode against the argument.
-        if (static_cast<s32>(lpEventData->GetMode()) == leModeType)
+        if (static_cast<RaceEventData::EModeType>(lpEventData->GetMode()) == leModeType)
         {
             ++luEventTypeCount;
         }
@@ -2094,13 +2094,12 @@ u32 ProgressionManager::GetEventCountForType(s32 leModeType) const
 //
 // The same walk as GetEventCountForType, additionally requiring the record's FLAGS to carry the
 // caller's win bit: `lhz r11, 4(r30) / and r11, r11, r17 / cmpwi 0 / beq`. The mask arrives as a
-// u16 (r5, used through `and` on a halfword load), which is why the parameter is ProfileEvent::
-// Flags in the DWARF and a u16 here.
+// ProfileEvent::Flags value in r5, used with the halfword loaded from the profile record.
 //
 // The console's own assert line numbers differ from the twin above (:4401 / :4404) because the
 // two functions sit ~2800 lines apart in BrnProgressionManager.cpp; they are the same two texts.
 // ===================================================================================
-u32 ProgressionManager::GetEventTypeUniqueWinCount(s32 leModeType, u16 lu16WinTypeMask) const
+u32 ProgressionManager::GetEventTypeUniqueWinCount(RaceEventData::EModeType leModeType, ProfileEvent::Flags leWinType) const
 {
     const u32 luEventCount = mProfile.GetEventCount();
     u32       luWinCount   = 0;
@@ -2126,8 +2125,8 @@ u32 ProgressionManager::GetEventTypeUniqueWinCount(s32 leModeType, u16 lu16WinTy
             continue;   // [PC GUARD] -- see GetEventCountForType's note on the same tail
         }
 
-        if (static_cast<s32>(lpEventData->GetMode()) == leModeType &&
-            (lpProfileEvent->GetFlags() & lu16WinTypeMask) != 0)
+        if (static_cast<RaceEventData::EModeType>(lpEventData->GetMode()) == leModeType &&
+            (lpProfileEvent->GetFlags() & leWinType) != 0)
         {
             ++luWinCount;
         }
@@ -2163,7 +2162,7 @@ u32 ProgressionManager::GetEventTypeUniqueWinCount(s32 leModeType, u16 lu16WinTy
 // AllEventTypeWonAction::leGameEventType.
 // ===================================================================================
 void ProgressionManager::CheckForAllModeTypeCompletion(
-        GsmIO::GameActionQueue* lpGameActionQueue, s32 leModeType)
+        GsmIO::GameActionQueue* lpGameActionQueue, RaceEventData::EModeType leModeType)
 {
     // `clrlwi r11, r3, 24 / cmplwi 0 / bne` -- already shown for this mode, nothing to do.
     if (mProfile.GetSeenAllEventTypeWonMessage(leModeType))
@@ -2173,12 +2172,10 @@ void ProgressionManager::CheckForAllModeTypeCompletion(
 
     const u32 luEventCountForType = GetEventCountForType(leModeType);
 
-    const u16 lu16WinTypeMask =
-        (leModeType == RaceEventData::E_MODE_BURNING_ROUTE)
-            ? static_cast<u16>(ProfileEvent::E_FLAG_WON_SPECIAL_EVENT_BEFORE)   // li r5, 0x10
-            : static_cast<u16>(ProfileEvent::E_FLAG_RANK_WIN);                  // li r5, 4
-
-    const u32 luEventTypeUniqueWinCount = GetEventTypeUniqueWinCount(leModeType, lu16WinTypeMask);
+    const u32 luEventTypeUniqueWinCount =
+        (leModeType != RaceEventData::E_MODE_BURNING_ROUTE)
+            ? GetEventTypeUniqueWinCount(leModeType, ProfileEvent::E_FLAG_RANK_WIN)
+            : GetEventTypeUniqueWinCount(RaceEventData::E_MODE_BURNING_ROUTE, ProfileEvent::E_FLAG_WON_SPECIAL_EVENT_BEFORE);
 
     if (luEventTypeUniqueWinCount < luEventCountForType)
     {
@@ -2189,7 +2186,7 @@ void ProgressionManager::CheckForAllModeTypeCompletion(
     lAllEventTypeWonAction.leGameEventType =
         static_cast<GsmIO::EGameModeType>(GetEvent(leModeType));
     lpGameActionQueue->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(&lAllEventTypeWonAction),
+        &lAllEventTypeWonAction,
         GsmIO::E_ACTION_ALL_EVENT_TYPE_WON,                                     // li r5, 0xCE
         static_cast<s32>(sizeof(lAllEventTypeWonAction)));                      // li r6, 4
 
@@ -3001,7 +2998,7 @@ void ProgressionManager::ArmAllWinTypesCheckIfAtLastRank(const RaceEventData* lp
 
     mbCheckAllWinTypesPending   = false;
     mbCheckAllWinTypesArmed     = true;
-    meModeToCheckForAllWinTypes = static_cast<s32>(lpcRaceEventData->GetMode());
+    meModeToCheckForAllWinTypes = static_cast<RaceEventData::EModeType>(lpcRaceEventData->GetMode());
 }
 
 } // namespace BrnProgression
@@ -3689,7 +3686,7 @@ namespace
 //                                                        of zero, i.e. the whole CgsID)
 //   +0x20980 mbNeedToShowAllRivalsBeatenMessage +0x20981 mbShowShutDownAllIfNeeded
 //   +0x20984 mfTimeTillShowAllRivalsBeatenMessage = 0.0f
-//   +0x20978 meModeToCheckForAllWinTypes = -1   +0x2096F mbForceAutoSaveForOneHundredPercent
+//   +0x20978 meModeToCheckForAllWinTypes = RaceEventData::E_MODE_INVALID   +0x2096F mbForceAutoSaveForOneHundredPercent
 //   +0x2098C miPreWorldUpdate     +0x20990 miPostWorldUpdate  (the two AddMonitor handles)
 //   +0x20800 mbSendAchievementAwardedEvent_DEBUG (stb)  +0x20804 miAchievementToAward_DEBUG (stw)
 //
@@ -3769,7 +3766,7 @@ void ProgressionManager::Construct(BrnGameState::CarSelectManager* lpCarSelectMa
     mbNeedToShowAllRivalsBeatenMessage   = false;         // +0x20980
     mbShowShutDownAllIfNeeded            = false;         // +0x20981
     mfTimeTillShowAllRivalsBeatenMessage = KF_HUD_MESSAGE_HOLD_CLEARED;       // +0x20984
-    meModeToCheckForAllWinTypes  = -1;                    // +0x20978, `li r8, -1` as a WORD
+    meModeToCheckForAllWinTypes  = RaceEventData::E_MODE_INVALID;                    // +0x20978, `li r8, -1` as a WORD
     mbAutosaveRequested          = false;                 // +0x2096F
 
     // 0x8237A8C8 / 0x8237A8F4 -- the two CPU monitors, then the console's own >= 0 asserts.
@@ -5079,7 +5076,7 @@ void ProgressionManager::PreWorldUpdate(
             mfTimeTillAllEventTypeCompleteHudMessage += lfSimTimeStep;          // +0x2097C
             if (mfTimeTillAllEventTypeCompleteHudMessage > KF_HUD_MESSAGE_HOLD_SECONDS)
             {
-                if (meModeToCheckForAllWinTypes == -1)                          // E_MODE_INVALID
+                if (meModeToCheckForAllWinTypes == RaceEventData::E_MODE_INVALID)                          // E_MODE_INVALID
                 {
                     CgsDev::Assert::BeginAssert();
                     CgsDev::Assert::FireAssert(
@@ -5100,7 +5097,7 @@ void ProgressionManager::PreWorldUpdate(
                 mbCheckAllWinTypesPending                = false;               // stb 0 -> +0x20975
                 mbCheckAllWinTypesArmed                  = false;               // stb 0 -> +0x20976
                 mfTimeTillAllEventTypeCompleteHudMessage = 0.0f;                // flt_82001CC0
-                meModeToCheckForAllWinTypes              = -1;                  // li r11, -1
+                meModeToCheckForAllWinTypes              = RaceEventData::E_MODE_INVALID;                  // li r11, -1
             }
         }
     }

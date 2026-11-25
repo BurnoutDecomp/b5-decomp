@@ -43,23 +43,27 @@ namespace core
 // body, so it is modelled as honest placeholder storage here rather than fabricating an
 // address. These are opaque data symbols; modelled as placeholders so the bodies below link
 // without fabricating their contents.
-// off_82F8CE60 -- the "HighPassButterworth" runtime descriptor, REAL
-// (descriptor-record wave). Metadata FLAG'd null.
-// The dispatch thunk for the record's Process slot: the console callback takes
-// the instance in r3; the PC body is a member, so this static forward IS the
-// dispatched (instance, ctx) shape.
-static int HighPassButterworthProcessThunk(HighPassButterworth *self, AudioProcessContext *ctx)
-{
-    return self->Process(ctx);
-}
+// ARTIST loads the high-pass channel maps and attributes through the runtime descriptor.
+ChannelMapPair HighPassButterworth::sChannelMaps[] = {
+    { CHANNELMAPVALUE_STANDARD, CHANNELMAPVALUE_SAMEASINPUT },
+    { CHANNELMAPVALUE_TERMINATOR, CHANNELMAPVALUE_TERMINATOR }
+};
 
-static PlugInDescRunTime g_HighPassButterworthDesc = {
+ParameterDescRunTime HighPassButterworth::sParameterDescRunTime[] = {
+    { PARAMETERDIRECTION_INPUT, PARAMETERTYPE_FLOAT32, 0.0, 96000.0, 0 },
+    { PARAMETERDIRECTION_INPUT, PARAMETERTYPE_FLOAT32, 1.0, 4.0, 0 },
+    { PARAMETERDIRECTION_INPUT, PARAMETERTYPE_FLOAT32, 0.1f, 2.0, 0 }
+};
+
+PlugInDescRunTime HighPassButterworth::sPlugInDescRunTime = {
     "HighPassButterworth",
     reinterpret_cast<void *>(&HighPassButterworth::GetSize),        // @0x82B9DF88
     reinterpret_cast<void *>(&HighPassButterworth::CreateInstance), // @0x82BA2CB0
     0,
-    reinterpret_cast<void *>(&HighPassButterworthProcessThunk),        // @0x82B976E0
-    0, 0, 0, 0,
+    reinterpret_cast<void *>(&HighPassButterworth::Process),        // @0x82B976E0
+    sChannelMaps,
+    sParameterDescRunTime,
+    0, 0,
     0,
     0x48504230u,       // 'HPB0'
     4, 0, 3, 0, 0, 0,
@@ -85,9 +89,9 @@ static const f32 KF_MARGIN = 0.0099999998f;  // flt_82002138 (~1% Nyquist guard 
 // (its label is the string "HighPassButterworth").
 //   return &off_82F8CE60;
 // -------------------------------------------------------------------------------------
-char **HighPassButterworth::GetPlugInDescRunTime()
+PlugInDescRunTime *HighPassButterworth::GetPlugInDescRunTime()
 {
-    return reinterpret_cast<char **>(&g_HighPassButterworthDesc); // &off_82F8CE60 (the record address)
+    return &sPlugInDescRunTime; // &off_82F8CE60 (the record address)
 }
 
 // -------------------------------------------------------------------------------------
@@ -95,7 +99,7 @@ char **HighPassButterworth::GetPlugInDescRunTime()
 // Voice::CreateInstance passes the stage config to this hook. The channel byte
 // at config +0x08 sizes the kernel after the plug-in header.
 // -------------------------------------------------------------------------------------
-u32 HighPassButterworth::GetSize(const PlugInConfig *config)
+u32 HighPassButterworth::GetSize(PlugInConfig *config)
 {
     return Butterworth::GetSize(config->outputChannels)
         + offsetof(HighPassButterworth, mButterworth);
@@ -127,8 +131,9 @@ void *HighPassButterworth::VectorDeletingDestructor(HighPassButterworth *self, c
 // own mDecaySamples at 450 -- the same decay-rebase idiom the Iir2* shapes use.
 // Returns 1 (the asm loads r3 = 1 for the return).
 // -------------------------------------------------------------------------------------
-HighPassButterworth *HighPassButterworth::CreateInstance(HighPassButterworth *self)
+bool HighPassButterworth::CreateInstance(PlugIn *pPlugIn, void * /*pConstructorParams*/)
 {
+    HighPassButterworth *const self = reinterpret_cast<HighPassButterworth *>(pPlugIn);
     if (self)
         self->mBase.mpVTable = KHB_HighPassButterworthVTable; // off_8217F3F4
 
@@ -157,7 +162,7 @@ HighPassButterworth *HighPassButterworth::CreateInstance(HighPassButterworth *se
     const f32 oldDecay = self->mBase.mDecaySamples; // lfs 0x18
     self->mBase.mpVoice->mfFadeStart = (KF_LATENCY - oldDecay) + self->mBase.mpVoice->mfFadeStart;
     self->mBase.mDecaySamples = KF_LATENCY; // stfs +0x18 (450.0)
-    return self;
+    return true;
 }
 
 // -------------------------------------------------------------------------------------
@@ -169,12 +174,13 @@ HighPassButterworth *HighPassButterworth::CreateInstance(HighPassButterworth *se
 // the Butterworth filter. Below the low guard band it flushes the running state on the first
 // frame the cutoff drops out of band, and parks the last-cutoff. Returns 1.
 // -------------------------------------------------------------------------------------
-int HighPassButterworth::Process(AudioProcessContext *ctx)
+BufferStatus HighPassButterworth::Process(PlugIn *pPlugIn, Mixer *ctx, bool /*discontinuity*/)
 {
+    HighPassButterworth *const self = reinterpret_cast<HighPassButterworth *>(pPlugIn);
     Butterworth *bw = reinterpret_cast<Butterworth *>(
-        reinterpret_cast<char *>(this) + muButterworthOffset); // v7 = self + *(self+0x58)
+        reinterpret_cast<char *>(self) + self->muButterworthOffset); // v7 = self + *(self+0x58)
 
-    const f32 cutoff = mfCutoffFreq; // v6 = *(self+0x28)
+    const f32 cutoff = self->mfCutoffFreq; // v6 = *(self+0x28)
 
     const f32 nyquist = ctx->mpFormat->mfSampleRate * KF_HALF; // sampleRate * 0.5
     const f32 lowGuard = nyquist * KF_MARGIN;                  // v8 = Nyquist * margin
@@ -188,19 +194,19 @@ int HighPassButterworth::Process(AudioProcessContext *ctx)
     {
         // Clamp the live cutoff down into the upper guard band.
         if (cutoff > highGuard)
-            mfCutoffFreq = highGuard;
+            self->mfCutoffFreq = highGuard;
 
         // Recompute coefficients only when a design parameter actually changed.
-        if (mfCutoffFreq != mfLastCutoffFreq ||
-            mfFilterOrder != mfLastFilterOrder ||
-            mfParam3 != mfLastParam3)
+        if (self->mfCutoffFreq != self->mfLastCutoffFreq ||
+            self->mfFilterOrder != self->mfLastFilterOrder ||
+            self->mfParam3 != self->mfLastParam3)
         {
             // ARTIST: cutoff/order/rate/type/shape use f1/r5/f2/r7/f3.
             bw->CalculateFilterCoefficients(
-                mfCutoffFreq, static_cast<u32>(mfFilterOrder), ctx->mpFormat->mfSampleRate,
-                Butterworth::KFILTER_HIGHPASS, mfParam3);
-            mfLastCutoffFreq = mfCutoffFreq;   // stfs +0x40
-            mfLastFilterOrder = mfFilterOrder; // stfs +0x48  (note: +0x50/mfLastParam3 NOT latched)
+                self->mfCutoffFreq, static_cast<u32>(self->mfFilterOrder), ctx->mpFormat->mfSampleRate,
+                Butterworth::KFILTER_HIGHPASS, self->mfParam3);
+            self->mfLastCutoffFreq = self->mfCutoffFreq;   // stfs +0x40
+            self->mfLastFilterOrder = self->mfFilterOrder; // stfs +0x48  (note: +0x50/self->mfLastParam3 NOT latched)
         }
 
         bw->Filter(ctx);
@@ -210,12 +216,12 @@ int HighPassButterworth::Process(AudioProcessContext *ctx)
         // Cutoff below the guard band: flush the filter state the first frame it drops out.
         // NaN POLARITY (phase-E fix): the console skips the clear only on an ORDERED
         // less-than, so an unordered cached cutoff DOES clear. The negated form preserves
-        // that; the previous `mfLastCutoffFreq >= lowGuard` inverted it for NaN.
-        if (!(mfLastCutoffFreq < lowGuard))
+        // that; the previous `self->mfLastCutoffFreq >= lowGuard` inverted it for NaN.
+        if (!(self->mfLastCutoffFreq < lowGuard))
             bw->ClearBuffer();
-        mfLastCutoffFreq = mfCutoffFreq; // stfs +0x40
+        self->mfLastCutoffFreq = self->mfCutoffFreq; // stfs +0x40
     }
-    return 1;
+    return BUFFERSTATUS_AVAILABLE;
 }
 
 } // namespace core

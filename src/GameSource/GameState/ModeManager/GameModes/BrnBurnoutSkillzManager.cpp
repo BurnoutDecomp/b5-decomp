@@ -791,7 +791,7 @@ void BurnoutSkillzManager::ProcessGameEventInputQueuePreWorld(
                         CgsNetwork::PlayerName lName;
                         lHighScoreEntry.GetScore(BrnStreetData::E_SCORE_TYPE_TIME, &liScore, &lName);
                         f32 lfRoundedTime = static_cast<f32>(liScore) * 0.001f;
-                        BrnNetwork::NetworkRounder::RoundFloatToAccuracy(&lfRoundedTime, 0.0049999999);
+                        BrnNetwork::NetworkRounder::RoundFloatToAccuracy(&lfRoundedTime, 0.005f);
                         lNetEvent.mafSkillzData[UpdatePlayerSkillsNetEvent::KI_ROAD_RULE_TIME_SLOT] =
                             lfRoundedTime;
                     }
@@ -801,7 +801,7 @@ void BurnoutSkillzManager::ProcessGameEventInputQueuePreWorld(
                         CgsNetwork::PlayerName lName;
                         lHighScoreEntry.GetScore(BrnStreetData::E_SCORE_TYPE_CRASH, &liScore, &lName);
                         f32 lfRoundedCrash = static_cast<f32>(liScore);
-                        BrnNetwork::NetworkRounder::RoundFloatToAccuracy(&lfRoundedCrash, 0.0049999999);
+                        BrnNetwork::NetworkRounder::RoundFloatToAccuracy(&lfRoundedCrash, 0.005f);
                         lNetEvent.mafSkillzData[UpdatePlayerSkillsNetEvent::KI_ROAD_RULE_CRASH_SLOT] =
                             lfRoundedCrash;
                     }
@@ -980,7 +980,7 @@ void BurnoutSkillzManager::UpdateBurnoutSkillzTotals(::EActiveRaceCarIndex leLoc
             if (lfNewTotal != lfStoredTotal)
             {
                 f32 lfRounded = lafTotals[liCar];
-                BrnNetwork::NetworkRounder::RoundFloatToAccuracy(&lfRounded, 0.0049999999);
+                BrnNetwork::NetworkRounder::RoundFloatToAccuracy(&lfRounded, 0.005f);
                 lpSkillzData->SetBurnoutSkill(BurnoutSkillzData::E_BURNOUT_SKILL_TOTAL, lfRounded);
 
                 mabDirtyFlags.SetBit(static_cast<u32>(liCar));
@@ -1107,7 +1107,7 @@ void BurnoutSkillzManager::PreWorldUpdate(
                         CgsNetwork::PlayerName lName;
                         lHighScoreEntry.GetScore(BrnStreetData::E_SCORE_TYPE_TIME, &liScore, &lName);
                         f32 lfRoundedTime = static_cast<f32>(liScore) * 0.001f;
-                        BrnNetwork::NetworkRounder::RoundFloatToAccuracy(&lfRoundedTime, 0.0049999999);
+                        BrnNetwork::NetworkRounder::RoundFloatToAccuracy(&lfRoundedTime, 0.005f);
                         lNetEvent.mafSkillzData[UpdatePlayerSkillsNetEvent::KI_ROAD_RULE_TIME_SLOT] =
                             lfRoundedTime;
                     }
@@ -1117,7 +1117,7 @@ void BurnoutSkillzManager::PreWorldUpdate(
                         CgsNetwork::PlayerName lName;
                         lHighScoreEntry.GetScore(BrnStreetData::E_SCORE_TYPE_CRASH, &liScore, &lName);
                         f32 lfRoundedCrash = static_cast<f32>(liScore);
-                        BrnNetwork::NetworkRounder::RoundFloatToAccuracy(&lfRoundedCrash, 0.0049999999);
+                        BrnNetwork::NetworkRounder::RoundFloatToAccuracy(&lfRoundedCrash, 0.005f);
                         lNetEvent.mafSkillzData[UpdatePlayerSkillsNetEvent::KI_ROAD_RULE_CRASH_SLOT] =
                             lfRoundedCrash;
                     }

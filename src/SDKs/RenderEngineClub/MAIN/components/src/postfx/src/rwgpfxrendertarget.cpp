@@ -13,7 +13,7 @@ namespace rw { namespace graphics { namespace postfx {
 // ARTIST 827E73B0 inlines the five Target parameter constructors.
 Target::Parameters::Parameters()
     : mpAllocator(0), mu32Width(0), mu32Height(0), mu32Pitch(0),
-      mBufferFormat(~0u), mTextureFormat(~0u), mTextureType(1),
+      mBufferFormat(renderengine::PIXELFORMAT_NA), mTextureFormat(renderengine::PIXELFORMAT_NA), mTextureType(1),
       mu32MultiSampleFormat(0), mFilterMode(1), mbUseStencil(false),
       mn32BaseEDRAM(0), mn32HierarchicalZAddress(0), mn32CompressionBase(-1),
       mbSystemMemory(false), mpBufferAddress(0), mn8TileIndex(-1),
@@ -23,9 +23,10 @@ Target::Parameters::Parameters()
 RenderTarget::Parameters::Parameters()
     : mpAllocator(0), mu32Width(0), mu32Height(0), mu32NumMipMaps(1),
       mColourMode(eRenderTarget_CREATE), mDepthStencilMode(eRenderTarget_CREATE), mbUseDepthStencilAsTexture(false),
-      mu8NumSections(1), mpProvidedDepthStencilTarget(0)
+      mu8NumSections(1)
 {
     for (u32 i = 0; i < 4; ++i) mapProvidedColourTarget[i] = 0;
+    mpProvidedDepthStencilTarget = 0;
 }
 
 // ARTIST 82403420. Both descriptors and allocations have five native lanes.
@@ -33,7 +34,9 @@ static renderengine::Texture* AllocateAndInitializeTexture(
     const Target::Parameters& target, const renderengine::Texture::Parameters& parameters)
 {
     const rw::ResourceDescriptor descriptor = renderengine::Texture::GetResourceDescriptor(parameters);
-    const rw::Resource resource = target.mpAllocator->DoAllocate(descriptor, 0);
+    void* lpMemory = NULL;
+    rw::Resource resource(lpMemory);
+    resource = target.mpAllocator->Allocate(descriptor, NULL);
     return renderengine::Texture::Initialize(resource, parameters);
 }
 
@@ -48,7 +51,7 @@ void Target::CreateColor(const Parameters& parameters)
     texture.muHeight = parameters.mu32Height;
     texture.muDepth = 1;
     texture.muNumLevels = 1;
-    texture.meFormat = static_cast<renderengine::PixelFormat>(parameters.mTextureFormat);
+    texture.meFormat = parameters.mTextureFormat;
     mpTexture = AllocateAndInitializeTexture(parameters, texture);
     if (mpTexture)
     {
@@ -68,7 +71,7 @@ void Target::CreateColor(const Parameters& parameters)
     buffer.flags = 1;
     buffer.width = parameters.mu32Width;
     buffer.height = parameters.mu32Height;
-    buffer.format = static_cast<renderengine::PixelFormat>(parameters.mBufferFormat);
+    buffer.format = parameters.mBufferFormat;
     buffer.multiSampleType = parameters.mu32MultiSampleFormat;
     buffer.colorExpBias = 0;
     const rw::ResourceDescriptor descriptor = renderengine::PixelBuffer::GetResourceDescriptor(buffer);
@@ -87,7 +90,7 @@ void Target::CreateDepth(const Parameters& parameters)
     texture.muHeight = parameters.mu8NumSections * parameters.mu32Height;
     texture.muDepth = 1;
     texture.muNumLevels = 1;
-    texture.meFormat = static_cast<renderengine::PixelFormat>(parameters.mTextureFormat);
+    texture.meFormat = parameters.mTextureFormat;
     mpTexture = AllocateAndInitializeTexture(parameters, texture);
     mpHiZTexture = 0;
     if (parameters.mbUseStencil)
@@ -104,7 +107,7 @@ void Target::CreateDepth(const Parameters& parameters)
     buffer.flags = 1;
     buffer.width = parameters.mu32Width;
     buffer.height = parameters.mu32Height;
-    buffer.format = static_cast<renderengine::PixelFormat>(parameters.mBufferFormat);
+    buffer.format = parameters.mBufferFormat;
     buffer.multiSampleType = parameters.mu32MultiSampleFormat;
     buffer.colorExpBias = 0;
     const rw::ResourceDescriptor descriptor = renderengine::PixelBuffer::GetResourceDescriptor(buffer);
@@ -174,7 +177,7 @@ void RenderTarget::End(bool resolve)
 }
 void RenderTarget::Resolve(bool resolveDepth, bool resolveColour)
 {
-    if (resolveColour && maColourTargets[0].mpTexture)
+    if (resolveColour)
         maColourTargets[0].Resolve();
     if (mu8HasColour && resolveDepth)
         mDepthTarget.Resolve();

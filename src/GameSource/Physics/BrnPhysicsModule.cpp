@@ -282,6 +282,65 @@ namespace BrnPhysics
         lpInputBuffer->UnlockForRead();
     }
 
+    bool PhysicsModule::Release()
+    {
+        switch (meReleaseStage)
+        {
+        case E_RELEASESTAGE_START:
+        case E_RELEASESTAGE_MANAGER:
+            meReleaseStage = E_RELEASESTAGE_MANAGER;
+            if (!ModuleSingleBuffered::Release())
+                return false;
+            // fall through
+
+        case E_RELEASESTAGE_VEHICLEMODULE:
+            meReleaseStage = E_RELEASESTAGE_VEHICLEMODULE;
+            if (!mVehicleManager.Release())
+                return false;
+            // fall through
+
+        case E_RELEASESTAGE_PROPMANAGER:
+            meReleaseStage = E_RELEASESTAGE_PROPMANAGER;
+            if (!mPropManager.Release())
+                return false;
+            // fall through
+
+        case E_RELEASESTAGE_DEFORMATIONMANAGER:
+            meReleaseStage = E_RELEASESTAGE_DEFORMATIONMANAGER;
+            if (!mDeformationManager.Release())
+                return false;
+            // fall through
+
+        case E_RELEASESTAGE_SIMULATIONMODULE:
+            meReleaseStage = E_RELEASESTAGE_SIMULATIONMODULE;
+            if (!mSimulationModule.Release())
+                return false;
+            // fall through
+
+        case E_RELEASESTAGE_CONTACTMAPPER:
+            meReleaseStage = E_RELEASESTAGE_CONTACTMAPPER;
+            // fall through
+
+        case E_RELEASESTAGE_DONE:
+            meReleaseStage = E_RELEASESTAGE_MANAGER;
+            mePrepareStage = E_PREPARESTAGE_START;
+            return true;
+
+        default:
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Invalid Stage\n", KAC_PHYSICS_MODULE_ASSERT_FILE, 433));
+            return false;
+        }
+    }
+
+    void PhysicsModule::Destruct()
+    {
+        ModuleSingleBuffered::Destruct();
+        mDeformationManager.Destruct();
+        mPropManager.Destruct();
+        mVehicleManager.Destruct();
+        mSimulationModule.Destruct();
+    }
+
     // PhysicsModule::Prepare -- X360 @0x825ADB68 (BrnPhysicsModule.cpp:192).
     //
     // STAGE 3 IS THE LOAD-BEARING ONE. The simulation module's own Prepare is the ONLY assignment

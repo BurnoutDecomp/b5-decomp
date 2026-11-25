@@ -499,7 +499,7 @@ OutputBuffer_PrePhysics::GetGameEventQueue() const
 OutputBuffer_PrePhysics::VehicleDriverInputInterface*
 OutputBuffer_PrePhysics::GetVehicleDriverInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 483));
     return &mVehicleDriverInterface;
 }
 
@@ -512,7 +512,7 @@ OutputBuffer_PrePhysics::GetVehicleDriverInterface()
 BrnPhysics::Vehicle::VehicleEffectsInputInterface*
 OutputBuffer_PrePhysics::GetVehicleEffectsInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 486));
     return &mVehicleEffectsInterface;
 }
 
@@ -542,7 +542,7 @@ OutputBuffer_PrePhysics::GetPlayerResetInterface()
 OutputBuffer_PrePhysics::GameEventQueue*
 OutputBuffer_PrePhysics::GetGameEventQueue()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 492));
     return &mGameEventQueue;
 }
 
@@ -710,7 +710,7 @@ OutputBuffer_PostPhysics::GetActiveRaceCarOutputInterface() const
 RCEntityActiveRaceCarOutputInterface*
 OutputBuffer_PostPhysics::GetActiveRaceCarOutputInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 582));
     return &mActiveRaceCarOutputInterface;
 }
 
@@ -726,7 +726,7 @@ OutputBuffer_PostPhysics::GetGlobalRaceCarOutputInterface() const
 RCEntityGlobalRaceCarOutputInterface*
 OutputBuffer_PostPhysics::GetGlobalRaceCarOutputInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 585));
     return &mGlobalRaceCarOutputInterface;
 }
 
@@ -1328,7 +1328,7 @@ InputBuffer_GenerateDispatchLists::SetDispatchFrame(CgsGraphics::DispatchFrame* 
 void
 InputBuffer_GenerateDispatchLists::SetShadowMap(BrnWorld::ShadowMap* lpShadowMap)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    CGS_ASSERT(IsBufferLockedForWriting(), CGS_ASSERT_STREAM_MESSAGE_AT("Not locked for writing\n", CGS_ARTIST_FILE, 652));
     mpShadowMap = lpShadowMap;
 }
 

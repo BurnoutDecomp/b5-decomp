@@ -1,3 +1,4 @@
+#include <cstring>
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"
 
@@ -22,25 +23,16 @@
 namespace BrnFlapt
 {
 
-// ---- FindComponent @ 0x8246EC90 ------------------------------------------
-// Assert the handle and the name, hash the NUL-terminated name (length excludes
-// the terminator, matching the inlined strlen the X360 performs), then forward to
-// FlaptFileInstance::FindComponent, which writes the located component's
-// MovieClipRef into lpOutRef and returns it.
-MovieClipRef* FileRef::FindComponent(MovieClipRef* lpOutRef, const char* lpcName) const
+// ARTIST 0x8246EC90.
+MovieClipRef FileRef::FindComponent(const char* lpcName) const
 {
-    CGS_ASSERT(mpFileInstance != 0, "mpFileInst");
-    CGS_ASSERT(lpcName != 0, "lpcName");
+    CGS_ASSERT_AT(mpFileInstance != 0, "mpFileInst", "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptFileRef.cpp", 45);
+    CGS_ASSERT_AT(lpcName != 0, "lpcName", "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptFileRef.cpp", 46);
 
-    int liLength = 0;
-    while (lpcName[liLength] != '\0')
-    {
-        ++liLength;
-    }
-
-    u32 luHash = CgsContainers::CgsHash::CalculateHash(const_cast<char*>(lpcName), liLength);
-
-    return static_cast<FlaptFileInstance*>(mpFileInstance)->FindComponent(luHash, lpOutRef, lpcName);
+    const u32 luHash = CgsContainers::CgsHash::CalculateHash(const_cast<char*>(lpcName), static_cast<u32>(std::strlen(lpcName)));
+    MovieClipRef lComponent;
+    static_cast<FlaptFileInstance*>(mpFileInstance)->FindComponent(luHash, &lComponent, lpcName);
+    return lComponent;
 }
 
 // ---- GetRootMovieClip @ 0x8246B410 ---------------------------------------

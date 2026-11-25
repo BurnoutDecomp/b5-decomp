@@ -61,14 +61,15 @@ namespace core
 //   +0x58  muButterworthOffset
 //   +0x60  mButterworth
 // -------------------------------------------------------------------------------------
+class PlugInDescRunTime;
+struct ChannelMapPair;
+struct ParameterDescRunTime;
+
 class LowPassButterworth
 {
 public:
-    static char **GetPlugInDescRunTime();                                  // @0x82B97BF0
-    static u32    GetSize(const PlugInConfig *config);                 // @0x82B9E4B0
-    static int    CreateInstance(LowPassButterworth *self);                // @0x82BA2FA0
-    static int    Process(LowPassButterworth *self, AudioProcessContext *ctx,
-                          bool discontinuity);                             // @0x82B97C00
+    static PlugInDescRunTime *GetPlugInDescRunTime(); // @0x82B97BF0
+    static BufferStatus Process(PlugIn *pPlugIn, Mixer *ctx, bool discontinuity); // @0x82B97C00
     static void  *VectorDeletingDestructor(LowPassButterworth *self,
                                            char flags);                    // @0x82BA1908
 
@@ -89,6 +90,14 @@ public:
     u16         muButterworthOffset;           // +0x58
     char        mPad5A[0x60 - 0x5A];          // +0x5A .. +0x5F
     Butterworth mButterworth;                  // +0x60 (LAST member; trailing work buffers)
+
+private:
+    static u32 GetSize(PlugInConfig *config);
+    static bool CreateInstance(PlugIn *pPlugIn, void *pConstructorParams);
+
+    static ChannelMapPair sChannelMaps[];
+    static ParameterDescRunTime sParameterDescRunTime[];
+    static PlugInDescRunTime sPlugInDescRunTime;
 };
 
 } // namespace core

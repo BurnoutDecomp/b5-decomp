@@ -462,6 +462,7 @@ namespace Camera
 
         // The pool slot this handle names. X360 `BrnDirec(handle[+8], handle[+4])`.
         BehaviourManager::BehaviourHelper& GetHelper() const;
+        TBehaviour* Get();
 
         // Drop the manager-side hold and clear the handle. X360-attested
         // (BehaviourHandle::Release @0x8222DD00). Always returns true. Body out-of-line below.
@@ -730,6 +731,13 @@ namespace Camera
     inline BehaviourManager::BehaviourHelper& BehaviourHandle<TBehaviour>::GetHelper() const
     {
         return (*mpHelperPool)[BehaviourHelperIndex(static_cast<s32>(muAllocationKey))];
+    }
+
+    template <typename TBehaviour>
+    inline TBehaviour* BehaviourHandle<TBehaviour>::Get()
+    {
+        CGS_ASSERT(IsAllocated(), CGS_ASSERT_MESSAGE_AT("IsAllocated()", CGS_ARTIST_BRNBEHAVIOURMANAGER_FILE, 589));
+        return static_cast<TBehaviour*>(GetHelper().GetPoolHandle().Get());
     }
 
     // ------------------------------------------------------------------------

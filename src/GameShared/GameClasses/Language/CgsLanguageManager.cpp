@@ -7,6 +7,8 @@
 
 #include <rw/math/fpu/scalar_operation.h>
 
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
+
 #include <cstring>   // std::strlen / std::strncpy (the FormatText resolver)
 #include <cstdlib>   // std::atof / std::atoi (the FormatText value branches)
 
@@ -663,32 +665,31 @@ namespace CgsLanguage
     }
 
 
-    // @ 0x82862650 -- render liValue into the caller's buffer under one of the
-    // four integer formats. The out-of-range assert (cpp:940) and the unknown-
-    // format assert (cpp:968) both stream on the console; folded static. Every
-    // path NUL-terminates the buffer's last byte and returns true.
     bool LanguageManager::FormatText(char* lpacBuffer, u32 luBufferSize, s32 liValue,
                                      ParameterFormatType leType)
     {
-        CGS_ASSERT(leType < E_FORMAT_COUNT,
-                   "Invalid Localisation Format supplied to TextField::FormatText");   // cpp:940
+        CGS_ASSERT_STREAM_AT(leType < E_FORMAT_COUNT,
+            "Invalid Localisation Format supplied to TextField::FormatText",
+            CGS_ARTIST_LANGUAGE_MANAGER_FILE, 940);
 
+        CgsUnicode::CgsUtf8* lpUtf8Target = reinterpret_cast<CgsUnicode::CgsUtf8*>(lpacBuffer);
         switch (leType)
         {
         case E_FORMAT_INTEGER:
-            FormatIntegerString(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpacBuffer), liValue, static_cast<s32>(luBufferSize));
+            FormatIntegerString(lpUtf8Target, liValue, static_cast<s32>(luBufferSize));
             break;
         case E_FORMAT_INTEGER_NOSEPERATOR:
-            FormatIntegerNoSeperatorString(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpacBuffer), liValue, static_cast<s32>(luBufferSize));
+            FormatIntegerNoSeperatorString(lpUtf8Target, liValue, static_cast<s32>(luBufferSize));
             break;
         case E_FORMAT_PERCENTAGE:
-            FormatPercentageString(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpacBuffer), liValue, static_cast<s32>(luBufferSize));
+            FormatPercentageString(lpUtf8Target, liValue, static_cast<s32>(luBufferSize));
             break;
         case E_FORMAT_MONEY:
-            FormatCurrencyString(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpacBuffer), liValue, static_cast<s32>(luBufferSize));
+            FormatCurrencyString(lpUtf8Target, liValue, static_cast<s32>(luBufferSize));
             break;
         default:
-            CGS_ASSERT(false, "Invalid Parameter sent to SetLocalisedText with int");   // cpp:968
+            CGS_ASSERT_STREAM_AT(false, "Invalid Parameter sent to SetLocalisedText with int",
+                CGS_ARTIST_LANGUAGE_MANAGER_FILE, 968);
             break;
         }
 
@@ -744,37 +745,36 @@ namespace CgsLanguage
                                       const char* lpcSourceText, ParameterFormatType leType,
                                       s32 liNumParams, va_list lArguments)
     {
-        CGS_ASSERT(lpacBuffer != 0, "Target field is invalid in LanguageManager::FormatText");   // cpp:1062
-        CGS_ASSERT(lpcSourceText != 0, "Text field is invalid in LanguageManager::FormatText");  // cpp:1063
-        CGS_ASSERT(liNumParams > 0 && liNumParams < 4, "Wrong number of Parameters int SetLocalisedText"); // cpp:1064
+        CGS_ASSERT_STREAM_AT(lpacBuffer != 0, "Target field is invalid in LanguageManager::FormatText",
+            CGS_ARTIST_LANGUAGE_MANAGER_FILE, 1062);
+        CGS_ASSERT_STREAM_AT(lpcSourceText != 0, "Text field is invalid in LanguageManager::FormatText",
+            CGS_ARTIST_LANGUAGE_MANAGER_FILE, 1063);
+        CGS_ASSERT_STREAM_AT(liNumParams < 4 && liNumParams > 0,
+            "Wrong number of Parameters int SetLocalisedText", CGS_ARTIST_LANGUAGE_MANAGER_FILE, 1064);
 
         char lacSourceBuffer[1024];
-        FormatText(lacSourceBuffer, 1024, lpcSourceText, leType);
+        FormatText(lacSourceBuffer, sizeof(lacSourceBuffer), lpcSourceText, leType);
 
-        // One 512-byte slot + one argument pointer per parameter (the X360 reserves
-        // four pointer slots on its stack; the count is asserted to 1..3 above).
         const CgsUnicode::CgsUtf8* lapUtf8Params[4];
         char lacParamBuffers[4][512];
-
         for (s32 liParam = 0; liParam < liNumParams; ++liParam)
         {
-            CGS_ASSERT(lArguments != 0, "lpArgument");   // cpp:1086 (the console's va cursor check)
+            CGS_ASSERT_AT(lArguments != 0, "lpArgument", CGS_ARTIST_LANGUAGE_MANAGER_FILE, 1086);
+            const char* lpcParamText = va_arg(lArguments, const char*);
+            const s32 liParamFormat = va_arg(lArguments, s32);
+            CGS_ASSERT_AT(lpcParamText != 0, "Invalid Text Pointer in Parameterised SetLocalisedText",
+                CGS_ARTIST_LANGUAGE_MANAGER_FILE, 1093);
+            CGS_ASSERT_AT(liParamFormat >= 0 && liParamFormat < E_FORMAT_COUNT, "Invalid Parameter",
+                CGS_ARTIST_LANGUAGE_MANAGER_FILE, 1094);
 
-            const char* lpcParamText   = va_arg(lArguments, const char*);
-            const u32   luParamFormat  = va_arg(lArguments, u32);
-
-            CGS_ASSERT(lpcParamText != 0, "Invalid Text Pointer in Parameterised SetLocalisedText"); // cpp:1093
-            CGS_ASSERT(luParamFormat <= 0x14, "Invalid Parameter");                                   // cpp:1094
-
-            FormatText(lacParamBuffers[liParam], 512, lpcParamText,
-                       static_cast<ParameterFormatType>(luParamFormat));
+            FormatText(lacParamBuffers[liParam], sizeof(lacParamBuffers[liParam]), lpcParamText,
+                       static_cast<ParameterFormatType>(liParamFormat));
             lapUtf8Params[liParam] = reinterpret_cast<const CgsUnicode::CgsUtf8*>(lacParamBuffers[liParam]);
         }
 
         CgsUnicode::_Print(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpacBuffer),
                            reinterpret_cast<const CgsUnicode::CgsUtf8*>(lacSourceBuffer),
-                           static_cast<s32>(luBufferSize), lapUtf8Params,
-                           static_cast<u8>(liNumParams));
+                           static_cast<s32>(luBufferSize), lapUtf8Params, static_cast<u8>(liNumParams));
         return true;
     }
 
@@ -821,83 +821,49 @@ namespace CgsLanguage
         return !lbAnyParamFailed;
     }
 
-    // @ 0x82865710 (DWARF CgsLanguageManager.h:260, cpp:1185/1186) -- FormatText's
-    // one-int-parameter sibling and the last unresolved external the HUD-message analyzer
-    // mount needs (HandleStuntPerformed's four "STUNT_RUN_MULTIPLIER_*_MULTIPLE" renders in
-    // BrnGuiHudMessageAnalyzer_wC_03.cpp).
-    //
-    // Register map from the asm (r5 == luBufferSize is NEVER READ -- see below):
-    //   r3 this · r4 lpacBuffer · r5 luBufferSize · r6 lpcSourceText · r7 leType
-    //   r8 liValue · r9 leValueType
-    // Body, store-for-store:
-    //   0x8286581C-34  var_4D0 := &var_4C0            (the one-entry parameter array)
-    //   0x82865834     sub_82864C48(this, var_480, 1024, lpcSourceText, leType)
-    //                  == FormatText(char*, u32, const char*, ParameterFormatType)
-    //   0x8286584C     FormatText(this, var_4C0, 64, liValue, leValueType)
-    //                  == FormatText(char*, u32, s32, ParameterFormatType) @0x82862650
-    //   0x82865864     CgsUnicode::_Print(lpacBuffer, var_480, 1024, &var_4D0, 1)
-    //   0x82865868     li r3, 1        -- unconditionally true
-    //
-    // ⚠ CONSOLE DEFECT, reproduced verbatim: `li r5, 0x400` at 0x82865858 passes the
-    // SOURCE scratch buffer's size (1024) as _Print's lnTargetStringSize, i.e. as the
-    // TARGET cap -- luBufferSize is dropped on the floor. Both console call sites pass 63
-    // against a 64-byte stack buffer (HandleStuntPerformed @0x8251B7F0/B93C/BA88/BCDC), so
-    // the cap is wrong by 16x on the platform this shipped on too. It does not smash in
-    // practice because _Print copies the SOURCE up to its terminator and the cap is only a
-    // maximum -- the resolved "%1 spins"-class strings are far shorter than 64. Left as the
-    // binary has it (the sibling FormatTextV/Obsolete_FormatTextByArray above DO forward
-    // luBufferSize, which is what makes this one visibly an oversight rather than a
-    // convention). Do NOT "fix" it to luBufferSize without re-reading 0x82865858.
+    // ARTIST passes the source scratch buffer's 1024-byte size to _Print
+    // in both single-value overloads, at 0x82865858 and 0x828659C4.
     bool LanguageManager::FormatTextFromInt(char* lpacBuffer, u32 luBufferSize,
                                             const char* lpcSourceText, ParameterFormatType leType,
                                             s32 liValue, ParameterFormatType leValueType)
     {
-        CGS_ASSERT(lpacBuffer != 0, "Target field is invalid in LanguageManager::FormatText");  // cpp:1185
-        CGS_ASSERT(lpcSourceText != 0, "Text field is invalid in TextField::SetLocalisedText"); // cpp:1186
-
-        (void)luBufferSize;   // see the CONSOLE DEFECT note above
+        CGS_ASSERT_STREAM_AT(lpacBuffer != 0, "Target field is invalid in LanguageManager::FormatText",
+            CGS_ARTIST_LANGUAGE_MANAGER_FILE, 1185);
+        CGS_ASSERT_STREAM_AT(lpcSourceText != 0, "Text field is invalid in TextField::SetLocalisedText",
+            CGS_ARTIST_LANGUAGE_MANAGER_FILE, 1186);
+        (void)luBufferSize;
 
         char lacSourceBuffer[1024];
-        FormatText(lacSourceBuffer, 1024, lpcSourceText, leType);
-
         char lacValueBuffer[64];
-        FormatText(lacValueBuffer, 64, liValue, leValueType);
-
-        const CgsUnicode::CgsUtf8* lapUtf8Params[1];
+        const CgsUnicode::CgsUtf8* lapUtf8Params[4];
         lapUtf8Params[0] = reinterpret_cast<const CgsUnicode::CgsUtf8*>(lacValueBuffer);
-
+        FormatText(lacSourceBuffer, sizeof(lacSourceBuffer), lpcSourceText, leType);
+        FormatText(lacValueBuffer, sizeof(lacValueBuffer), liValue, leValueType);
         CgsUnicode::_Print(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpacBuffer),
                            reinterpret_cast<const CgsUnicode::CgsUtf8*>(lacSourceBuffer),
-                           1024, lapUtf8Params, 1);
+                           sizeof(lacSourceBuffer), lapUtf8Params, 1);
         return true;
     }
 
-    // [H1 wave 2026-08-25] @ 0x82865878 (asserts cpp:1221/1222) -- FormatTextFromInt's float
-    // sibling, store-for-store: resolve the source id into a 1024 scratch, render the float
-    // value into a 64-byte slot through the FLOAT dispatcher, print into %1.
-    // ⚠ The SAME console defect as FormatTextFromInt above, reproduced verbatim: _Print's
-    // target cap is the literal 1024 source-scratch size; luBufferSize is dropped.
     bool LanguageManager::FormatTextFromFloat(char* lpacBuffer, u32 luBufferSize,
                                               const char* lpcSourceText, ParameterFormatType leType,
                                               f32 lfValue, ParameterFormatType leValueType)
     {
-        CGS_ASSERT(lpacBuffer != 0, "Target field is invalid in LanguageManager::FormatText");  // cpp:1221
-        CGS_ASSERT(lpcSourceText != 0, "Text field is invalid in TextField::SetLocalisedText"); // cpp:1222
-
-        (void)luBufferSize;   // see the CONSOLE DEFECT note on FormatTextFromInt
+        CGS_ASSERT_STREAM_AT(lpacBuffer != 0, "Target field is invalid in LanguageManager::FormatText",
+            CGS_ARTIST_LANGUAGE_MANAGER_FILE, 1221);
+        CGS_ASSERT_STREAM_AT(lpcSourceText != 0, "Text field is invalid in TextField::SetLocalisedText",
+            CGS_ARTIST_LANGUAGE_MANAGER_FILE, 1222);
+        (void)luBufferSize;
 
         char lacSourceBuffer[1024];
-        FormatText(lacSourceBuffer, 1024, lpcSourceText, leType);
-
         char lacValueBuffer[64];
-        FormatText(lacValueBuffer, 64, lfValue, leValueType);
-
-        const CgsUnicode::CgsUtf8* lapUtf8Params[1];
+        const CgsUnicode::CgsUtf8* lapUtf8Params[4];
         lapUtf8Params[0] = reinterpret_cast<const CgsUnicode::CgsUtf8*>(lacValueBuffer);
-
+        FormatText(lacSourceBuffer, sizeof(lacSourceBuffer), lpcSourceText, leType);
+        FormatText(lacValueBuffer, sizeof(lacValueBuffer), lfValue, leValueType);
         CgsUnicode::_Print(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpacBuffer),
                            reinterpret_cast<const CgsUnicode::CgsUtf8*>(lacSourceBuffer),
-                           1024, lapUtf8Params, 1);
+                           sizeof(lacSourceBuffer), lapUtf8Params, 1);
         return true;
     }
 
@@ -1543,61 +1509,70 @@ namespace CgsLanguage
                           liTargetSize, lValue.GetBuffer());
     }
 
-    // @ 0x828641F0 -- the FLOAT value dispatcher (DWARF CgsLanguageManager.h: the
-    // (char*, u32, f32, ParameterFormatType) overload): switch the format onto its
-    // time/percentage/currency/distance leaf, streamed-assert on an unknown format
-    // ("Invalid Parameter sent to SetLocalisedText with float"), always NUL the
-    // buffer's last byte, return true. The leaves are the FLAG trap-stubs above until
-    // their decompiles land -- no boot/menu text rides a float format.
     bool LanguageManager::FormatText(char* lpacBuffer, u32 luBufferSize, f32 lfValue,
                                      ParameterFormatType leType)
     {
-        CGS_ASSERT(leType < 21, "Invalid Localisation Format supplied to TextField::FormatText");
+        CGS_ASSERT_STREAM_AT(leType < E_FORMAT_COUNT,
+            "Invalid Localisation Format supplied to TextField::FormatText",
+            CGS_ARTIST_LANGUAGE_MANAGER_FILE, 823);
 
+        CgsUnicode::CgsUtf8* lpUtf8Target = reinterpret_cast<CgsUnicode::CgsUtf8*>(lpacBuffer);
         switch (leType)
         {
-        // ⛔ TARGET CORRECTED [pause-stats wave 2026-08-29]. This case used to call
-        // FormatHoursAndMinutesAndSecondsString(u8*, f32, s32). The X360 dispatcher's case 1
-        // calls sub_82862838 -- which IS FormatHoursMinutesAndSecondsString(char*, f32, s32),
-        // the float wrapper that floors seconds and splits h/m/s before handing the SPLIT
-        // INTEGERS to FormatHoursAndMinutesAndSecondsString. The two names differ by one "And"
-        // and by their whole signature; the wrong one was wired here.
-        case 1:  FormatHoursMinutesAndSecondsString(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpacBuffer), lfValue,
-                     static_cast<s32>(luBufferSize));                                    break;
-        case 2:  FormatMinutesAndSecondsAndHundredsString(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpacBuffer), lfValue,
-                     static_cast<s32>(luBufferSize));                                    break;
-        case 3:  FormatMinutesAndSecondsString(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpacBuffer), lfValue,
-                     static_cast<s32>(luBufferSize));                                    break;
-        case 4:  FormatSecondsAndHundredsString(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpacBuffer), lfValue,
-                     static_cast<s32>(luBufferSize));                                    break;
-        case 5:  FormatSecondsAndHundredsStringLong(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpacBuffer), lfValue,
-                     static_cast<s32>(luBufferSize));                                    break;
-        case 6:  FormatSecondsString(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpacBuffer), lfValue,
-                     static_cast<s32>(luBufferSize));                                    break;
-        case 7:  FormatSecondsStringLong(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpacBuffer), lfValue,
-                     static_cast<s32>(luBufferSize));                                    break;
-        case 8:  FormatMinutesSecondsStringMediumText(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpacBuffer), lfValue,
-                     static_cast<s32>(luBufferSize));                                    break;
-        case 11: FormatIntegerString(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpacBuffer), static_cast<s32>(lfValue),
-                     static_cast<s32>(luBufferSize));                                    break;
-        case 13: FormatPercentageString(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpacBuffer), static_cast<s32>(lfValue),
-                     static_cast<s32>(luBufferSize));                                    break;
-        case 14: FormatCurrencyString(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpacBuffer), static_cast<s32>(lfValue),
-                     static_cast<s32>(luBufferSize));                                    break;
-        case 15: FormatAutoDistanceString(lpacBuffer, lfValue,
-                     static_cast<s32>(luBufferSize));                                    break;
-        case 16: FormatAutoDistanceStringLong(lpacBuffer, lfValue,
-                     static_cast<s32>(luBufferSize));                                    break;
-        case 17: FormatSmallDistanceString(lpacBuffer, lfValue,
-                     static_cast<s32>(luBufferSize));                                    break;
-        case 18: FormatSmallDistanceStringLong(lpacBuffer, lfValue,
-                     static_cast<s32>(luBufferSize));                                    break;
-        case 19: FormatLargeDistanceString(lpacBuffer, lfValue,
-                     static_cast<s32>(luBufferSize));                                    break;
-        case 20: FormatLargeDistanceStringLong(lpacBuffer, lfValue,
-                     static_cast<s32>(luBufferSize));                                    break;
+        case E_FORMAT_INTEGER:
+            FormatIntegerString(lpUtf8Target, static_cast<s32>(lfValue), static_cast<s32>(luBufferSize));
+            break;
+        case E_FORMAT_PERCENTAGE:
+            FormatPercentageString(lpUtf8Target, static_cast<s32>(lfValue), static_cast<s32>(luBufferSize));
+            break;
+        case E_FORMAT_HOURS_MINUTES_SECONDS:
+            FormatHoursMinutesAndSecondsString(lpUtf8Target, lfValue, static_cast<s32>(luBufferSize));
+            break;
+        case E_FORMAT_MINUTES_SECONDS_HUNDREDTHS:
+            FormatMinutesAndSecondsAndHundredsString(lpUtf8Target, lfValue, static_cast<s32>(luBufferSize));
+            break;
+        case E_FORMAT_MINUTES_SECONDS:
+            FormatMinutesAndSecondsString(lpUtf8Target, lfValue, static_cast<s32>(luBufferSize));
+            break;
+        case E_FORMAT_SECONDS_HUNDREDTHS:
+            FormatSecondsAndHundredsString(lpUtf8Target, lfValue, static_cast<s32>(luBufferSize));
+            break;
+        case E_FORMAT_SECONDS:
+            FormatSecondsString(lpUtf8Target, lfValue, static_cast<s32>(luBufferSize));
+            break;
+        case E_FORMAT_SECONDS_LONG:
+            FormatSecondsStringLong(lpUtf8Target, lfValue, static_cast<s32>(luBufferSize));
+            break;
+        case E_FORMAT_MINUTES_SECONDS_MID_TEXT:
+            FormatMinutesSecondsStringMediumText(lpUtf8Target, lfValue, static_cast<s32>(luBufferSize));
+            break;
+        case E_FORMAT_AUTO_DISTANCE:
+            FormatAutoDistanceString(lpacBuffer, lfValue, static_cast<s32>(luBufferSize));
+            break;
+        case E_FORMAT_SECONDS_HUNDREDTHS_LONG:
+            FormatSecondsAndHundredsStringLong(lpUtf8Target, lfValue, static_cast<s32>(luBufferSize));
+            break;
+        case E_FORMAT_AUTO_DISTANCE_LONG:
+            FormatAutoDistanceStringLong(lpacBuffer, lfValue, static_cast<s32>(luBufferSize));
+            break;
+        case E_FORMAT_SMALL_DISTANCE:
+            FormatSmallDistanceString(lpacBuffer, lfValue, static_cast<s32>(luBufferSize));
+            break;
+        case E_FORMAT_SMALL_DISTANCE_LONG:
+            FormatSmallDistanceStringLong(lpacBuffer, lfValue, static_cast<s32>(luBufferSize));
+            break;
+        case E_FORMAT_LARGE_DISTANCE:
+            FormatLargeDistanceString(lpacBuffer, lfValue, static_cast<s32>(luBufferSize));
+            break;
+        case E_FORMAT_LARGE_DISTANCE_LONG:
+            FormatLargeDistanceStringLong(lpacBuffer, lfValue, static_cast<s32>(luBufferSize));
+            break;
+        case E_FORMAT_MONEY:
+            FormatCurrencyString(lpUtf8Target, static_cast<s32>(lfValue), static_cast<s32>(luBufferSize));
+            break;
         default:
-            CGS_ASSERT(false, "Invalid Parameter sent to SetLocalisedText with float : ");
+            CGS_ASSERT_STREAM_AT(false, "Invalid Parameter sent to SetLocalisedText with float : " << leType << "\n",
+                CGS_ARTIST_LANGUAGE_MANAGER_FILE, 916);
             break;
         }
 

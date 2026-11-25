@@ -840,6 +840,23 @@ public:
     // the body only uses DoAllocate, which is the base's virtual. `struct` is the
     // class-key rwcore_structs.h uses -- MSVC mangles struct vs class.
     bool Prepare(rw::IResourceAllocator* lpPhysicsAllocator);
+    bool Release();
+
+    void Destruct()
+    {
+        mPotentialTrafficVehicles.Destruct();
+        mTrafficDeformationModelsActive.Destruct();
+        mUnusedPotentialTrafficQueue.Destruct();
+        mUsedSimpleVehiclePhysics.Destruct();
+        mUsedFullTrafficPhysics.Destruct();
+        mUsedTrafficVehicles.Destruct();
+        mAddedTrafficVehicles.Destruct();
+        mRemovedTrafficVehicles.Destruct();
+        mMadeSimpleTrafficVehicles.Destruct();
+        mpaSimpleVehiclePhysics = 0;
+        mpaTrafficVehicles = 0;
+        mpaTrafficDrivers = 0;
+    }
 
     void Construct();
 

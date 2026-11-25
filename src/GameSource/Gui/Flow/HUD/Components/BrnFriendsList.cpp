@@ -990,7 +990,7 @@ void FriendsListComponent::Prepare(const char* lacName, const BrnFlapt::FileRef&
         CgsCore::SnPrintf(name, 127, "%s_%s", lacName, KAPC_BRANCH_COMPONENTS[i]);
         name[127] = 0;
         BrnFlapt::MovieClipRef clip, parent;
-        lFile.FindComponent(&clip, name);
+        clip = lFile.FindComponent(name);
         clip.SetVisible(false);
         clip.GetParent(&parent);
         parent.FindChildTextField(&mBranchTextfields[i], KAPC_BRANCH_TEXT_FIELDS[i]);

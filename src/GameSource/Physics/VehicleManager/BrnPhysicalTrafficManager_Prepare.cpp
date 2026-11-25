@@ -168,5 +168,34 @@ bool PhysicalTrafficManager::Prepare(rw::IResourceAllocator* lpPhysicsAllocator)
     return true;   // 0x8262CEC4 `li r3, 1`
 }
 
+// ARTIST 0x825EEA58. Release the frame state and each allocated traffic slot.
+bool PhysicalTrafficManager::Release()
+{
+    mPotentialTrafficVehicles.Destruct();
+    mTrafficDeformationModelsActive.Destruct();
+    mUnusedPotentialTrafficQueue.Clear();
+    mUsedSimpleVehiclePhysics.Destruct();
+    mUsedFullTrafficPhysics.Destruct();
+    mUsedTrafficVehicles.Destruct();
+    mAddedTrafficVehicles.Destruct();
+    mRemovedTrafficVehicles.Destruct();
+    mMadeSimpleTrafficVehicles.Destruct();
+
+    for (u8 lu8Driver = 0; lu8Driver < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC; ++lu8Driver)
+    {
+        mpaTrafficDrivers[lu8Driver].Release();
+    }
+    for (u8 lu8Simple = 0; lu8Simple < KU_NUM_SIMPLE_TRAFFIC_PHYSICS; ++lu8Simple)
+    {
+        mpaSimpleVehiclePhysics[lu8Simple].ExternalPhysicsBody::Release();
+    }
+    for (u8 lu8Vehicle = 0; lu8Vehicle < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC; ++lu8Vehicle)
+    {
+        mpaTrafficVehicles[lu8Vehicle].mbRammed = false;
+    }
+    return true;
+}
+
+
 }
 }

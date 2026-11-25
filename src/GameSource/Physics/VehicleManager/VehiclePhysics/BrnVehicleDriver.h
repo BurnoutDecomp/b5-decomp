@@ -51,9 +51,8 @@ namespace Vehicle
         void Construct();
 
         // ---- the DWARF surface -------------------------------------------------------------------
-        // Prepare, UpdateVehicle, StartCatchupInterpolation and ClearControls have bodies in
-        // BrnVehicleDriver.cpp. The rest are left DECLARED-ONLY on purpose: a declared non-virtual
-        // with no definition costs nothing until something calls it.
+        // Lifecycle, UpdateVehicle, StartCatchupInterpolation and ClearControls
+        // are defined in BrnVehicleDriver.cpp.
         void Destruct();
         bool Prepare();
         bool Release();

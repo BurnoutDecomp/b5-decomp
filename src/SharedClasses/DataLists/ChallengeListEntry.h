@@ -271,8 +271,8 @@ struct ChallengeListEntry
     CgsID                         GetCarID() const;                  // :402  RECONSTRUCTED (inline below)
     void                          SetChallengeID(CgsID lID);         // :409  declared-only
     void                          SetNumPlayers(int32_t liNum);      // :412  declared-only
-    void                          SetNewNumPlayers(int32_t liNum);   // :415  declared-only
-    void                          ResetNumPlayers();                 // :418  declared-only
+    void                          SetNewNumPlayers(int32_t liNum);   // :415
+    void                          ResetNumPlayers();                 // :418
     void                          SetNumActions(int32_t liNum);      // :421  declared-only
     ChallengeListEntryAction*     GetAction(int32_t liActionIndex);  // :424  RECONSTRUCTED (inline below)
     void                          SetDifficulty(EChallengeDifficulty leDifficulty); // :427 declared-only
@@ -481,6 +481,20 @@ inline void ChallengeListEntry::SetNumPlayers( int32_t liNum )
     CGS_ASSERT( liNum <= KI_MAX_PLAYERS, CGS_ASSERT_MESSAGE_AT( "liNumPlayers <= KI_MAX_PLAYERS", CGS_ARTIST_CHALLENGELISTENTRY_FILE, 876 ) );
 
     muNumPlayers = static_cast<uint8_t>( 17 * liNum );
+}
+
+// ARTIST UpdateRunning only replaces the active count. The original count stays in the high nibble.
+inline void ChallengeListEntry::SetNewNumPlayers( int32_t liNumPlayers )
+{
+    muNumPlayers = static_cast<uint8_t>( (muNumPlayers & 0xF0) | (liNumPlayers & 0xF) );
+}
+
+inline void ChallengeListEntry::ResetNumPlayers()
+{
+    const int32_t liNumPlayers = GetOriginalNumPlayers();
+    CGS_ASSERT( liNumPlayers >= 1, CGS_ASSERT_MESSAGE_AT( "liNumPlayers >= 1", CGS_ARTIST_CHALLENGELISTENTRY_FILE, 888 ) );
+    CGS_ASSERT( liNumPlayers <= KI_MAX_PLAYERS, CGS_ASSERT_MESSAGE_AT( "liNumPlayers <= KI_MAX_PLAYERS", CGS_ARTIST_CHALLENGELISTENTRY_FILE, 890 ) );
+    muNumPlayers = static_cast<uint8_t>( (muNumPlayers & 0xF0) | liNumPlayers );
 }
 
 // ChallengeListEntryAction::SetCombineAction (DWARF :253) -- X360-inlined into

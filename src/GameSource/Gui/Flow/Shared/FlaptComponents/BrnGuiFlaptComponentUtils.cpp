@@ -54,7 +54,7 @@ namespace BrnGui
         lacComponentPath[KI_COMPONENT_PATH_LENGTH - 1] = '\0';
 
         MovieClipRef lComponentClip;
-        lFile.FindComponent(&lComponentClip, lacComponentPath);
+        lComponentClip = lFile.FindComponent(lacComponentPath);
         lComponentClip.SetVisible(false);
 
         MovieClipRef lParentClip;

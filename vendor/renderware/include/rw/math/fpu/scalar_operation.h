@@ -90,6 +90,12 @@ namespace fpu
         return static_cast<int>(Floor(lValue));
     }
 
+    // Legacy rwmath scalar.h:77-80. ARTIST's network rounders inline the float form.
+    template <typename T> inline T Round(T lValue)
+    {
+        return Floor(lValue + 0.5f);
+    }
+
     template <typename T> inline int IntRound(T lValue)
     {
         return IntFloor(lValue + 0.5f);

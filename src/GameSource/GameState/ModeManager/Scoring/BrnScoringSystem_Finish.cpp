@@ -22,33 +22,19 @@
 //       (+0x14), has-finished (+0x45) and total-finish-time (+0x00, new SetFinishTime grow)
 //       all have NAMED accessors after the CarScoreData grow. The lbFinished branch snaps the
 //       finish time to the network grid via BrnNetwork::NetworkRounder::RoundTimeToNetworkAccuracy
-//       (DWARF home BrnNetworkRounder.h; forward-declared above in its namespace model).
+//       (DWARF home BrnNetworkRounder.h).
 //   RaceCarHasReachedCheckPointWithinEvent (0x82326E50) -- now unblocked: bumps the CarData
 //       checkpoint counter (+0x154, IncrementCheckpointCount) and, in Eliminator mode, reads the
 //       car's live race position (CarScoreData +0x08, GetRacePosition) and flags
 //       mbEliminationRequired when the car is last (position == actual-cars - 1).
 #define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\Scoring/BrnScoringSystem.h"
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"
+#include "GameSource/Network/Utilities/BrnNetworkRounder.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 // KI_MAX_LANDMARKS_IN_MODE (== 16) lives in GameStateModuleIO, already pulled in by the
 // keystone via BrnGameStateSharedIO.h; no extra include needed beyond the assert macro.
-
-// BrnNetwork::NetworkRounder::RoundTimeToNetworkAccuracy snaps a CgsSystem::Time to the
-// network time grid in place. DWARF home is GameSource/Network/Utilities/BrnNetworkRounder.h
-// (the .cpp peer is committed; this function's body is reconstructed/reviewed in that home but
-// the project models the rounder as a namespace of free functions -- see RoundFloatToAccuracy
-// in BrnNetworkRounder.cpp). There is no committed header for it yet, so it is forward-declared
-// here in that namespace, matching the committed namespace-based model. RegisterFinishForCar's
-// finish branch calls it (X360 0x8231F2DC) only when the lbFinished flag is set.
-namespace BrnNetwork
-{
-    namespace NetworkRounder
-    {
-        void RoundTimeToNetworkAccuracy(CgsSystem::Time* lpTime);
-    }
-}
 
 namespace BrnGameState
 {

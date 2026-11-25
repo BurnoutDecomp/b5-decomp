@@ -45,15 +45,15 @@ static const char KAC_ARTIST_ASSERT_FILE[] =
 // The X360 compiler inlined this constructor five times - once per record - into the class ctor.
 CgsRenderTarget::CgsRenderTargetSurface::CgsRenderTargetSurface()
 {
-    mu32FilterMode       = 1;
     mbInUse              = false;
     mbUseSystemMemory    = false;
+    mpTarget             = 0;
+    mu32TextureType      = 1;
+    mu32FilterMode       = 1;
     miPS3CompressionBase = -1;
     ms8TileIndex         = -1;
     ms8ZCullIndex        = -1;
     miZCullAddress       = -1;
-    mpTarget             = 0;
-    mu32TextureType      = 1;
     mpSharedTarget       = 0;
     mpSharedAddress      = 0;
 }
@@ -114,8 +114,8 @@ void CgsRenderTarget::Construct(rw::IResourceAllocator* lpAllocator)
         lrColour.SetAllocator(lpAllocator);
         lrColour.SetWidth(mu32MaxWidth);
         lrColour.SetHeight(mu32MaxHeight);
-        lrColour.SetBufferFormat(lrSurface.mu32BufferFormat);
-        lrColour.SetTextureFormat(lrSurface.mu32TextureFormat);
+        lrColour.SetBufferFormat(static_cast<renderengine::PixelFormat>(lrSurface.mu32BufferFormat));
+        lrColour.SetTextureFormat(static_cast<renderengine::PixelFormat>(lrSurface.mu32TextureFormat));
         lrColour.SetTextureType(lrSurface.mu32TextureType);
         lrColour.SetMultisampleFormat(static_cast<u32>(mn32MultiSampleFormat));
         lrColour.SetFilterMode(lrSurface.mu32FilterMode);
@@ -161,8 +161,8 @@ void CgsRenderTarget::Construct(rw::IResourceAllocator* lpAllocator)
     lrDepth.SetAllocator(lpAllocator);
     lrDepth.SetWidth(mu32MaxWidth);
     lrDepth.SetHeight(mu32MaxHeight);
-    lrDepth.SetBufferFormat(mDepthTarget.mu32BufferFormat);
-    lrDepth.SetTextureFormat(mDepthTarget.mu32TextureFormat);
+    lrDepth.SetBufferFormat(static_cast<renderengine::PixelFormat>(mDepthTarget.mu32BufferFormat));
+    lrDepth.SetTextureFormat(static_cast<renderengine::PixelFormat>(mDepthTarget.mu32TextureFormat));
     lrDepth.SetMultisampleFormat(static_cast<u32>(mn32MultiSampleFormat));
     lrDepth.SetBaseEDRAM(static_cast<s32>(mDepthTarget.mu32BaseEDRAM));
     lrDepth.SetUseSystemMemory(mDepthTarget.mbUseSystemMemory);

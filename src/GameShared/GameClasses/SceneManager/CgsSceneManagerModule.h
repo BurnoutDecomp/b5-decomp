@@ -247,14 +247,14 @@ namespace CgsSceneManager
         void ProcessFineVolumeTest( const SceneManagerIO::InEventVolumeTestFine*, SpatialPartitionIO::OutputBuffer*,
                                     SceneManagerIO::OutputBuffer*, FineIntersectionTestIO::OutputBuffer* );
         void ProcessTriangleCollisionLineTests( CgsCollision::BaseCollisionGenerator*,
-                                                CgsModule::EventQueue<SceneManagerIO::InEventTriangleCollisionLineTest, 256>*,
+                                                const CgsModule::BaseEventQueue<SceneManagerIO::InEventTriangleCollisionLineTest>*,
                                                 SceneManagerIO::OutputBuffer* );
         // The world line tests, synchronously (< 100) or through the poly-soup tester jobs (>= 100).
         void ProcessTriangleCollisionLineTestNearests( CgsCollision::BaseCollisionGenerator*,
-                                                       CgsModule::EventQueue<SceneManagerIO::InEventTriangleCollisionLineTestNearest, 256>*,
+                                                       const CgsModule::BaseEventQueue<SceneManagerIO::InEventTriangleCollisionLineTestNearest>*,
                                                        SceneManagerIO::OutputBuffer* );
         void ProcessTriangleCollisionSphereTests( CgsCollision::BaseCollisionGenerator*,
-                                                  CgsModule::EventQueue<SceneManagerIO::InEventTriangleCollisionSphereTest, 256>*,
+                                                  const CgsModule::BaseEventQueue<SceneManagerIO::InEventTriangleCollisionSphereTest>*,
                                                   SceneManagerIO::OutputBuffer* );                                         // never implemented; asserts when non-empty
 
         // @ 0x828D4C28 -- the X360 vtbl+64 entry: fan the scene input's update
@@ -475,7 +475,7 @@ namespace CgsSceneManager
         void BridgeInputSceneUpdateInterfaceToSubModules(
             OverlapGenerationIO::InputBuffer* lpOverlapGenerationInput,
             SpatialPartitionIO::InputBuffer_Update* lpSpatialPartitionInput,
-            SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer,
+            const SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer,
             bool lbPrepare);
 
     private:

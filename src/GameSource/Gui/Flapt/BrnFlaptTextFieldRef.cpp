@@ -2,7 +2,7 @@
 #define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flapt\\BrnFlaptTextFieldRef.h"
 #include "GameSource/Gui/Flapt/BrnFlaptTextFieldInstance.h"       // BrnFlapt::TextFieldInstance (SetText)
 #include "GameShared/GameClasses/Language/CgsLanguageManager.h"   // CgsLanguage::LanguageManager (FormatText / Obsolete_FormatTextByArray)
-#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                // CGS_ASSERT
 #include <cstdarg>                                                // va_list (the varargs SetLocalisedText)
 
 // BrnFlapt::TextFieldRef member functions, reconstructed from
@@ -227,12 +227,11 @@ bool TextFieldRef::SetLocalisedText(const char* lpcStringId, s32 liStringIdType,
 bool TextFieldRef::SetLocalisedText(f32 lfValue, s32 liFormatType)
 {
     CGS_ASSERT(liFormatType < 21,
-               "Invalid Localisation Format supplied to TextField::SetLocalisedText");   // cpp:114 (non-gating)
-
-    CgsLanguage::LanguageManager* lpLanguageManager = GetLanguageManager();
+        CGS_ASSERT_STREAM_MESSAGE_AT("Invalid Localisation Format supplied to TextField::SetLocalisedText",
+            "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptTextFieldRef.cpp", 114));
 
     char lacBuffer[64];
-    lpLanguageManager->FormatText(
+    GetLanguageManager()->FormatText(
         lacBuffer, 64, lfValue,
         static_cast<CgsLanguage::LanguageManager::ParameterFormatType>(liFormatType));
 
@@ -247,12 +246,11 @@ bool TextFieldRef::SetLocalisedText(f32 lfValue, s32 liFormatType)
 bool TextFieldRef::SetLocalisedText(s32 liValue, s32 liFormatType)
 {
     CGS_ASSERT(liFormatType < 21,
-               "Invalid Localisation Format supplied to TextField::SetLocalisedText");   // cpp:137 (non-gating)
-
-    CgsLanguage::LanguageManager* lpLanguageManager = GetLanguageManager();
+        CGS_ASSERT_STREAM_MESSAGE_AT("Invalid Localisation Format supplied to TextField::SetLocalisedText",
+            "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptTextFieldRef.cpp", 137));
 
     char lacBuffer[64];
-    lpLanguageManager->FormatText(
+    GetLanguageManager()->FormatText(
         lacBuffer, 64, liValue,
         static_cast<CgsLanguage::LanguageManager::ParameterFormatType>(liFormatType));
 

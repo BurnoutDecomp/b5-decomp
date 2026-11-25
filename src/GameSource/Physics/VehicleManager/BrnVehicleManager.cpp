@@ -1737,6 +1737,47 @@ namespace Vehicle
     s32 gs_iUpdateCrashesPM           = KI_PERFMON_UNREGISTERED;   // dword_82F2A198
     s32 gs_iUpdatePassBysPM           = KI_PERFMON_UNREGISTERED;   // dword_82F2A19C
 
+    // ARTIST 0x82615FF8. Release the driver and physics state for every race-car slot.
+    bool VehicleManager::Release()
+    {
+        mbTrafficCheckingAllowed = true;
+        mUsedRaceCars.Destruct();
+        mRaceCarsAddedForCollision.Destruct();
+        mNetworkCarsAddedForCollisionThisFrame.Destruct();
+        mHiddenRaceCars.Destruct();
+
+        for (s32 liCar = 0; liCar < 8; ++liCar)
+        {
+            maRaceCarDrivers[liCar].Release();
+            maRaceCarVehicles[liCar].VehiclePhysics::Release();
+            maRaceCarEntityIDs[liCar].muValue = CgsSceneManager::K_INVALID_ENTITY_ID;
+            maRaceCarHandlingBodyIDs[liCar] = CgsPhysics::K_INVALID_RIGID_BODY_ID;
+        }
+        mPhysicalTrafficManager.Release();
+        return true;
+    }
+
+    // ARTIST 0x826337F0. Destroy embedded owners and invalidate their registered IDs.
+    void VehicleManager::Destruct()
+    {
+        mbTrafficCheckingAllowed = true;
+        mDebugComponent.Destruct();
+        mUsedRaceCars.Destruct();
+        mRaceCarsAddedForCollision.Destruct();
+        mNetworkCarsAddedForCollisionThisFrame.Destruct();
+        mHiddenRaceCars.Destruct();
+
+        for (s32 liCar = 0; liCar < 8; ++liCar)
+        {
+            maRaceCarDrivers[liCar].Destruct();
+            maRaceCarVehicles[liCar].VehiclePhysics::Destruct();
+            maRaceCarEntityIDs[liCar].muValue = CgsSceneManager::K_INVALID_ENTITY_ID;
+            maRaceCarHandlingBodyIDs[liCar] = CgsPhysics::K_INVALID_RIGID_BODY_ID;
+        }
+        mPhysicalTrafficManager.Destruct();
+        mPlayerAiDriver.Destruct();
+    }
+
     // ==============================================================================================
     // VehicleManager::Construct  @0x8263B7C8 -- 943 instructions.
     //

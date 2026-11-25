@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "SDKs/RenderEngineClub/MAIN/components/src/pixelformat.h"
 #include "rw/rwcore_structs.h"                  // rw::IResourceAllocator (the render-target's allocator)
 // renderengine::TextureState is held only by pointer here (mpColourTextureState / Target::mpTextureState);
 // forward-declared below rather than pulling its (header-less) home in, so consumers that re-declare
@@ -61,8 +62,8 @@ namespace postfx
             u32   mu32Width;                                  // +0x04
             u32   mu32Height;                                 // +0x08
             u32   mu32Pitch;                                  // +0x0C
-            u32   mBufferFormat;                              // +0x10  renderengine::PixelFormat
-            u32   mTextureFormat;                             // +0x14  renderengine::PixelFormat
+            renderengine::PixelFormat mBufferFormat;                              // +0x10  renderengine::PixelFormat
+            renderengine::PixelFormat mTextureFormat;                             // +0x14  renderengine::PixelFormat
             u32   mTextureType;                               // +0x18  renderengine::Texture::Type
             u32   mu32MultiSampleFormat;                      // +0x1C
             u32   mFilterMode;                                // +0x20  SamplerState::FilterMode
@@ -83,8 +84,8 @@ namespace postfx
             void SetAllocator(rw::IResourceAllocator* lpAllocator) { mpAllocator = lpAllocator; }
             void SetWidth(u32 lu32Width)                           { mu32Width = lu32Width; }
             void SetHeight(u32 lu32Height)                         { mu32Height = lu32Height; }
-            void SetBufferFormat(u32 lFormat)                      { mBufferFormat = lFormat; }
-            void SetTextureFormat(u32 lFormat)                     { mTextureFormat = lFormat; }
+            void SetBufferFormat(renderengine::PixelFormat lFormat)                      { mBufferFormat = lFormat; }
+            void SetTextureFormat(renderengine::PixelFormat lFormat)                     { mTextureFormat = lFormat; }
             void SetTextureType(u32 lType)                         { mTextureType = lType; }
             void SetMultisampleFormat(u32 lu32Format)              { mu32MultiSampleFormat = lu32Format; }
             void SetFilterMode(u32 lMode)                          { mFilterMode = lMode; }

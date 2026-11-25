@@ -376,6 +376,8 @@ namespace Vehicle
         // block further down in this header for the full shape and every default the tuning bank
         // seeds; the body was written straight off it.
         void Construct();
+        bool Release();
+        void Destruct();
 
         // ==================================================================================
         // The per-frame FORCE

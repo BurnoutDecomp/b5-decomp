@@ -264,10 +264,10 @@ namespace Vehicle         { struct VehicleManagerOutputBuffer; } // home BrnVehi
         PhysicsModule();
 
         // Virtual overrides declared by the DWARF (BrnPhysicsModule.cpp:52/192/348/449).
-        // Only Construct is bodied so far (BrnPhysicsModule.cpp); the module-level
-        // Prepare/Release/Destruct surface is the no-arg base contract, while the argful
-        // entry points above are the physics module's own driver methods.
-        void Construct() ;
+        // ARTIST vtable slots +0x00, +0x08 and +0x0C.
+        void Construct();
+        bool Release();
+        void Destruct();
 
         // Layout gate. Never called; defined in the MOUNTED BrnPhysicsModule_layout_check.cpp
         // so its static_asserts are actually compiled. It needs member-function context to

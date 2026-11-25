@@ -1,8 +1,7 @@
 // BrnPhysics::Vehicle::VehicleDriver -- the per-car driver.
 //
-// This TU holds Construct @0x825B83C8 (96 instructions, ZERO callees) and -- since the
-// driving-path wave -- UpdateVehicle @0x825D7290 (219 instructions). Everything
-// else on the class is declare-only in the header.
+// Driver lifecycle and catch-up interpolation. The lifecycle initializes and
+// resets the two affine transforms used by UpdateVehicle.
 
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnVehicleDriver.h"
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"   // VehiclePhysics (Get/SetTransform, IsFrozen)
@@ -75,6 +74,14 @@ namespace Vehicle
         mbSnappedThisFrame  = false;                        // +0xD5
     }
 
+    // ARTIST 0x825B8548 and DecFIGS BrnVehicleDriver.cpp:81.
+    void VehicleDriver::Destruct()
+    {
+        mCatchupTargetTransform.SetIdentity();
+        mSlerpTransform.SetIdentity();
+        mi8NumOfInterpSteps = 0;
+    }
+
     // @0x825B8680  VehicleDriver::Prepare (98 instructions). Store-for-store the same body as
     // Construct (the controls word + seven floats + seven flag bytes zeroed, both transforms the
     // identity affine built from flt_82001C98 / flt_82001CC0, meDriverType = 4, +0xD4/+0xD5 = 0),
@@ -105,6 +112,15 @@ namespace Vehicle
         meDriverType        = E_NUM_E_DRIVER_TYPE_EVENTS;
         mi8NumOfInterpSteps = 0;
         mbSnappedThisFrame  = false;
+        return true;
+    }
+
+    // ARTIST 0x825B8808 repeats the teardown and returns success.
+    bool VehicleDriver::Release()
+    {
+        mCatchupTargetTransform.SetIdentity();
+        mSlerpTransform.SetIdentity();
+        mi8NumOfInterpSteps = 0;
         return true;
     }
 

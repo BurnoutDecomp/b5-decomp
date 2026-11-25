@@ -12,6 +12,7 @@
 // [progression wave: lifecycle] BrnProgression::Race is a BY-VALUE element of maPresetRaces
 // (Array<Race,64>, X360 +121216), so the complete type is required here. BrnRace.h pulls only
 // BrnBaseRace.h + BrnGameStateTypes.h (already included above) -- no new closure, no cycle.
+#include "SharedClasses/Progression/BrnRaceEventData.h"          // RaceEventData::EModeType
 #include "SharedClasses/Progression/BrnRace.h"                    // BrnProgression::Race (maPresetRaces element)
 
 #include <cstddef> // offsetof (uncalled _AssertLayout)
@@ -62,9 +63,6 @@ namespace BrnResource     { struct VehicleList; struct VehicleListEntry; }
 
 namespace BrnProgression
 {
-// [stuntrace waveB / agent 10] pointer-only in this header (SharedClasses/Progression/
-// BrnRaceEventData.h is the owner; BrnProgressionManager_EventFinish.cpp includes it).
-struct RaceEventData;
 // [D1 profile-event-list wave, 2026-08-27] same treatment for the junction record
 // AddEventTypeToEventTotals / UnlockToProgressionRank take by pointer. Same owner header.
 struct EventJunction;
@@ -811,27 +809,21 @@ public:
     // was already live on PC while the body was missing. All seven bodies land in
     // BrnProgressionManager_Completion.cpp (already mounted); every one is read off the X360 asm.
     //
-    // ⓘ leModeType is BrnProgression::RaceEventData::EModeType (DWARF :2288/:205/:238) and
-    //   leWinType is BrnProgression::ProfileEvent::Flags. Both are spelled as the plain integers
-    //   the X360 compares (`cmpw` against a widened byte / `and` against a halfword) so this
-    //   shared header pulls in no further Progression headers -- the same treatment
-    //   meModeToCheckForAllWinTypes already gets in the private section below.
-    //
     // X360 0x82389698. PreWorldUpdate's 2 s hold fires this: if the profile has not yet seen the
     // "all <mode> events won" message and the unique-win count has caught up with the authored
     // event count for that mode, post AllEventTypeWonAction (game action 206, size 4) and latch
     // the profile bit. DWARF :1486.
     void CheckForAllModeTypeCompletion(
-             BrnGameState::GameStateModuleIO::GameActionQueue* lpGameActionQueue, s32 leModeType);
+             BrnGameState::GameStateModuleIO::GameActionQueue* lpGameActionQueue, RaceEventData::EModeType leModeType);
 
     // X360 0x8236F9D8. How many of the profile's events are authored with mode leModeType
     // (walks maEvents, resolves each id through ProgressionData's junction table). DWARF :1530.
-    u32 GetEventCountForType(s32 leModeType) const;
+    u32 GetEventCountForType(RaceEventData::EModeType leModeType) const;
 
     // X360 0x82370758. The same walk, additionally requiring (ProfileEvent::GetFlags() &
     // lu16WinTypeMask) != 0 -- i.e. how many DISTINCT events of that mode carry that win flag.
     // DWARF :4283.
-    u32 GetEventTypeUniqueWinCount(s32 leModeType, u16 lu16WinTypeMask) const;
+    u32 GetEventTypeUniqueWinCount(RaceEventData::EModeType leModeType, ProfileEvent::Flags leWinType) const;
 
     // X360 0x82395FE8. OnEventFinishUpdateProfile's "every event of this game mode is now
     // completed" seat: a 9-case jump table from EGameModeType onto the matching
@@ -1116,9 +1108,8 @@ private:
     // X360 +133496 (0x20978). PINNED BY THE ASSERT STRING: PreWorldUpdate @0x823A4F68 fires
     // "meModeToCheckForAllWinTypes != RaceEventData::E_MODE_INVALID"
     // (BrnProgressionManager.cpp:382) against this very word before handing it to
-    // CheckForAllModeTypeCompletion. Logical type BrnProgression::RaceEventData::EModeType;
-    // stored as the s32 the X360 writes (`stwx` of the event record's +0xEC mode BYTE, so the
-    // stored value is a zero-extended byte). Construct seeds -1 (E_MODE_INVALID).
+    // CheckForAllModeTypeCompletion. The X360 widens the event record's mode byte to the
+    // stored enum. Construct seeds E_MODE_INVALID.
 
     // X360 +133500 (0x2097C). DWARF :206 `mfTimeTillAllEventTypeCompleteHudMessage` -- the 2 s
     // (flt_82001D9C) hold PreWorldUpdate runs on the sim step before CheckForAllModeTypeCompletion.
@@ -1456,7 +1447,7 @@ private:
     bool mbPlayerJustWonATrophyUpdateRequired;                   //20974
     bool mbCheckAllWinTypesPending;                              //20975
     bool mbCheckAllWinTypesArmed;                                //20976
-    s32 meModeToCheckForAllWinTypes;                              //20978
+    RaceEventData::EModeType meModeToCheckForAllWinTypes;          //20978
     f32 mfTimeTillAllEventTypeCompleteHudMessage;                  //2097C
     bool mbNeedToShowAllRivalsBeatenMessage;                       //20980
     bool mbShowShutDownAllIfNeeded;                               //20981

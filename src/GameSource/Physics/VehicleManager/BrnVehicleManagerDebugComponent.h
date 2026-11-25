@@ -53,6 +53,7 @@
 // unresolved and the stored count is not normalized or clamped.
 // ============================================================================================
 
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                                  // Vector3, Matrix44Affine
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h" // CgsDev::DebugComponent (real base)
@@ -85,6 +86,16 @@ namespace Vehicle
         // manager and reset every recorded contact/slam/shunt/line-test slot.
         // ------------------------------------------------------------------------------------
         void Construct(VehicleManager* lpVehicleManager);
+
+        // ARTIST inlines this owner at the start of VehicleManager's teardown.
+        void Destruct()
+        {
+            CGS_ASSERT_AT(mpVehicleManager != 0, "mpVehicleManager != NULL",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/VehicleManager/BrnVehicleManagerDebugComponent.cpp",
+                150);
+            mpVehicleManager = 0;
+            CgsDev::DebugComponent::Destruct();
+        }
 
         // @0x825B7270. Snapshot the last distinct race-car / traffic contact for the
         // registered "Draw last RC-traffic contact" debug view.

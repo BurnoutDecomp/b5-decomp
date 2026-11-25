@@ -35,12 +35,19 @@
 
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 
 namespace CgsSceneManager
 {
 namespace SceneManagerIO
 {
+    namespace
+    {
+        const char KAC_ARTIST_FILE[] =
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\CgsSceneManagerModuleIO.h";
+    }
+
     // ---------------------------------------------------------------------------------
     // InputBuffer_Query::Construct @ 0x828C7BC0
     //
@@ -91,7 +98,7 @@ namespace SceneManagerIO
     // ---------------------------------------------------------------------------------
     const InputBuffer_Query::InSmCoarseQueryQueue* InputBuffer_Query::GetCoarseQueryQueue() const   // @0x828AF270 :509
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", KAC_ARTIST_FILE, 509);
         return &mCoarseQueryQueue;
     }
 
@@ -103,55 +110,55 @@ namespace SceneManagerIO
 
     const InputBuffer_Query::InFineLineTestQueue* InputBuffer_Query::GetFineLineTestQueue() const   // @0x828AF318 :511
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", KAC_ARTIST_FILE, 511);
         return &mFineLineTestQueue;
     }
 
     const InputBuffer_Query::InFineLineTestNearestQueue* InputBuffer_Query::GetFineLineTestNearestQueue() const   // @0x828AF3C0 :512
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", KAC_ARTIST_FILE, 512);
         return &mFineLineTestNearestQueue;
     }
 
     const InputBuffer_Query::InFineLineTestFastDoubleSidedQueue* InputBuffer_Query::GetFineLineTestFastDoubleSidedQueue() const   // @0x828AF468 :513
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", KAC_ARTIST_FILE, 513);
         return &mFineLineTestFastDoubleSidedQueue;
     }
 
     const InputBuffer_Query::InFineSphereTestFastQueue* InputBuffer_Query::GetFineSphereTestFastQueue() const   // @0x828AF510 :514
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", KAC_ARTIST_FILE, 514);
         return &mFineSphereTestFastQueue;
     }
 
     const InputBuffer_Query::InFineVolumeTestDeepestQueue* InputBuffer_Query::GetFineVolumeTestDeepestQueue() const   // @0x828AF5B8 :515
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", KAC_ARTIST_FILE, 515);
         return &mFineVolumeTestDeepestQueue;
     }
 
     const InputBuffer_Query::InFineVolumeTestQueue* InputBuffer_Query::GetFineVolumeTestQueue() const   // @0x828AF660 :516
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", KAC_ARTIST_FILE, 516);
         return &mFineVolumeTestQueue;
     }
 
     const InputBuffer_Query::InTriangleCollisionLineTestQueue* InputBuffer_Query::GetTriangleCollisionLineTestQueue() const   // @0x828AF708 :517
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", KAC_ARTIST_FILE, 517);
         return &mTriangleCollisionLineTestQueue;
     }
 
     const InputBuffer_Query::InTriangleCollisionLineTestNearestQueue* InputBuffer_Query::GetTriangleCollisionLineTestNearestQueue() const   // @0x828AF7B0 :518
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", KAC_ARTIST_FILE, 518);
         return &mTriangleCollisionLineTestNearestQueue;
     }
 
     const InputBuffer_Query::InTriangleCollisionSphereTestQueue* InputBuffer_Query::GetTriangleCollisionSphereTestQueue() const   // @0x828AF858 :519
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n", KAC_ARTIST_FILE, 519);
         return &mTriangleCollisionSphereTestQueue;
     }
 
@@ -178,19 +185,19 @@ namespace SceneManagerIO
 
     InputBuffer_Query::InTriangleCollisionLineTestQueue* TriCacheQueryBuffer::GetTriangleCollisionLineTestQueue()   // @0x828AFBA0 :678
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", KAC_ARTIST_FILE, 678);
         return &mTriangleCollisionLineTestQueue;
     }
 
     InputBuffer_Query::InTriangleCollisionLineTestNearestQueue* TriCacheQueryBuffer::GetTriangleCollisionLineTestNearestQueue()   // @0x828AFC48 :679
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", KAC_ARTIST_FILE, 679);
         return &mTriangleCollisionLineTestNearestQueue;
     }
 
     InputBuffer_Query::InTriangleCollisionSphereTestQueue* TriCacheQueryBuffer::GetTriangleCollisionSphereTestQueue()   // @0x828AFCF0 :680
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForWriting(), "Not locked for writing\n", KAC_ARTIST_FILE, 680);
         return &mTriangleCollisionSphereTestQueue;
     }
 }

@@ -105,7 +105,7 @@ namespace BrnGui
         CGS_ASSERT(lacName != 0, "lacName != NULL");
 
         // Bind this component's own top-level clip into the base mAptRef (@+0x04).
-        lFile.FindComponent(&mAptRef, lacName);
+        mAptRef = lFile.FindComponent(lacName);
         CGS_ASSERT(mAptRef.mpMovieClipInst != 0, "mpMovieClipInst");
         mAptRef.mpMovieClipInst->ResetTimeline();
 

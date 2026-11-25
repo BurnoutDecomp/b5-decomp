@@ -94,7 +94,8 @@ void BehaviourCollection<TBehaviour, TParameters, N>::AddShot(const TParameters*
     CGS_ASSERT(!mbAllocatedShots,
                CGS_ASSERT_MESSAGE_AT("can't add shots when the behaviours have been allocated (although this could be changed)", CGS_ARTIST_FILE, 159));   // :159
 
-    Shot lShot;                 // BehaviourHandle() clears the five handle words
+    Shot lShot;
+    lShot.mHandle.Construct();
     lShot.mpParams = lpParams;
     maShots.Append(lShot);
 }
@@ -135,9 +136,7 @@ bool BehaviourCollection<TBehaviour, TParameters, N>::Prepare(Camera::BehaviourM
             const_cast<ArbitratorState*>(mpArbStateOwner), mpMomentOwner, 1);
         if (maShots[miCurrentCamera].mpParams)
         {
-            Shot& lrShot = maShots[miCurrentCamera];
-            TBehaviour* lpBehaviour = static_cast<TBehaviour*>(lrShot.mHandle.GetHelper().GetPoolHandle().Get());
-            lpBehaviour->SetParameters(lrShot.mpParams);
+            maShots[miCurrentCamera].mHandle.Get()->SetParameters(maShots[miCurrentCamera].mpParams);
         }
         mbHasCurrentCamera = true;
         mbAllocatedShots = true;
@@ -148,25 +147,21 @@ bool BehaviourCollection<TBehaviour, TParameters, N>::Prepare(Camera::BehaviourM
 template <typename TBehaviour, typename TParameters, u32 N>
 bool BehaviourCollection<TBehaviour, TParameters, N>::HasFailed()
 {
-    CGS_ASSERT(mbAllocatedShots, "mbAllocatedShots");
-    CGS_ASSERT(mbHasCurrentCamera, "mbHasCurrentCamera");
+    CGS_ASSERT(mbAllocatedShots,
+               CGS_ASSERT_MESSAGE_AT("mbAllocatedShots", CGS_ARTIST_FILE, 146));
+    CGS_ASSERT(mbHasCurrentCamera,
+               CGS_ASSERT_MESSAGE_AT("mbHasCurrentCamera", CGS_ARTIST_FILE, 147));
     return false;
 }
 
 template <typename TBehaviour, typename TParameters, u32 N>
 bool BehaviourCollection<TBehaviour, TParameters, N>::CanSwitchToMeNow()
 {
-    CGS_ASSERT(mbAllocatedShots, "mbAllocatedShots");
-    CGS_ASSERT(mbHasCurrentCamera, "mbHasCurrentCamera");
+    CGS_ASSERT(mbAllocatedShots,
+               CGS_ASSERT_MESSAGE_AT("mbAllocatedShots", CGS_ARTIST_FILE, 123));
+    CGS_ASSERT(mbHasCurrentCamera,
+               CGS_ASSERT_MESSAGE_AT("mbHasCurrentCamera", CGS_ARTIST_FILE, 124));
     return true;
-}
-
-template <typename TBehaviour, typename TParameters, u32 N>
-TBehaviour& BehaviourCollection<TBehaviour, TParameters, N>::GetBehaviour()
-{
-    CGS_ASSERT(mbAllocatedShots, "mbAllocatedShots");
-    CGS_ASSERT(mbHasCurrentCamera, "mbHasCurrentCamera");
-    return *static_cast<TBehaviour*>(maShots[miCurrentCamera].mHandle.GetHelper().GetPoolHandle().Get());
 }
 
 // ============================================================================
@@ -382,18 +377,18 @@ MomentPlayerJumping::EStatus MomentPlayerJumping::GetCameraStatus()
         else if (mIceCollection.CanSwitchToMeNow())
             leStatus = E_STATUS_READY;
         break;
-    case E_TYPE_DROPPED_RIG_THEN_ATTACHED_RIG_SEQUENCE:
-    case E_TYPE_DROPPED_RIG_SHOT:
-        if (mDroppedRigCollection.HasFailed())
-            leStatus = E_STATUS_FAILED;
-        else if (mDroppedRigCollection.CanSwitchToMeNow())
-            leStatus = E_STATUS_READY;
-        break;
     case E_TYPE_BYSTANDER_THEN_ATTACHED_RIG_SEQUENCE:
     case E_TYPE_BYSTANDER_SHOT:
         if (mBystanderCollection.HasFailed())
             leStatus = E_STATUS_FAILED;
         else if (mBystanderCollection.CanSwitchToMeNow())
+            leStatus = E_STATUS_READY;
+        break;
+    case E_TYPE_DROPPED_RIG_THEN_ATTACHED_RIG_SEQUENCE:
+    case E_TYPE_DROPPED_RIG_SHOT:
+        if (mDroppedRigCollection.HasFailed())
+            leStatus = E_STATUS_FAILED;
+        else if (mDroppedRigCollection.CanSwitchToMeNow())
             leStatus = E_STATUS_READY;
         break;
     case E_TYPE_ATTACHED_RIG_SHOT:

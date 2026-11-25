@@ -82,64 +82,64 @@ namespace BrnGui
     // stride and the right base: the four exceptions land exactly on the four languages
     // whose compass words begin with O, and nowhere else.
     // --------------------------------------------------------------------------
+    const char* CompassComponent::KAPC_FRAMES_EAST[CgsLanguage::E_LANGUAGE_TOTAL] =
+    {
+        "E",  // E_LANGUAGE_ARABIC
+        "E",  // E_LANGUAGE_CHINESE
+        "E",  // E_LANGUAGE_CHINESE_SIMPLIFIED
+        "E",  // E_LANGUAGE_CHINESE_TRADITIONAL
+        "E",  // E_LANGUAGE_CZECH
+        "E",  // E_LANGUAGE_DANISH
+        "E",  // E_LANGUAGE_DUTCH
+        "E",  // E_LANGUAGE_ENGLISH_US
+        "E",  // E_LANGUAGE_ENGLISH_UK
+        "E",  // E_LANGUAGE_FINNISH
+        "E",  // E_LANGUAGE_FRENCH
+        "O",  // E_LANGUAGE_GERMAN                -- "Ost"
+        "E",  // E_LANGUAGE_GREEK
+        "E",  // E_LANGUAGE_HEBREW
+        "E",  // E_LANGUAGE_HUNGARIAN
+        "E",  // E_LANGUAGE_ITALIAN
+        "E",  // E_LANGUAGE_JAPANESE
+        "E",  // E_LANGUAGE_KOREAN
+        "E",  // E_LANGUAGE_NORWEGIAN
+        "E",  // E_LANGUAGE_POLISH
+        "E",  // E_LANGUAGE_PORTUGUESE_BRAZIL
+        "E",  // E_LANGUAGE_PORTUGUESE_PORTUGAL
+        "E",  // E_LANGUAGE_SPANISH
+        "E",  // E_LANGUAGE_SWEDISH
+    };
+
+    const char* CompassComponent::KAPC_FRAMES_WEST[CgsLanguage::E_LANGUAGE_TOTAL] =
+    {
+        "W",  // E_LANGUAGE_ARABIC
+        "W",  // E_LANGUAGE_CHINESE
+        "W",  // E_LANGUAGE_CHINESE_SIMPLIFIED
+        "W",  // E_LANGUAGE_CHINESE_TRADITIONAL
+        "W",  // E_LANGUAGE_CZECH
+        "W",  // E_LANGUAGE_DANISH
+        "W",  // E_LANGUAGE_DUTCH
+        "W",  // E_LANGUAGE_ENGLISH_US
+        "W",  // E_LANGUAGE_ENGLISH_UK
+        "W",  // E_LANGUAGE_FINNISH
+        "O",  // E_LANGUAGE_FRENCH                -- "Ouest"
+        "W",  // E_LANGUAGE_GERMAN
+        "W",  // E_LANGUAGE_GREEK
+        "W",  // E_LANGUAGE_HEBREW
+        "W",  // E_LANGUAGE_HUNGARIAN
+        "O",  // E_LANGUAGE_ITALIAN               -- "Ovest"
+        "W",  // E_LANGUAGE_JAPANESE
+        "W",  // E_LANGUAGE_KOREAN
+        "W",  // E_LANGUAGE_NORWEGIAN
+        "W",  // E_LANGUAGE_POLISH
+        "W",  // E_LANGUAGE_PORTUGUESE_BRAZIL
+        "W",  // E_LANGUAGE_PORTUGUESE_PORTUGAL
+        "O",  // E_LANGUAGE_SPANISH               -- "Oeste"
+        "W",  // E_LANGUAGE_SWEDISH
+    };
+
     namespace
     {
-        const char* const KAPC_FRAMES_EAST[CgsLanguage::E_LANGUAGE_TOTAL] =
-        {
-            "E",  // E_LANGUAGE_ARABIC
-            "E",  // E_LANGUAGE_CHINESE
-            "E",  // E_LANGUAGE_CHINESE_SIMPLIFIED
-            "E",  // E_LANGUAGE_CHINESE_TRADITIONAL
-            "E",  // E_LANGUAGE_CZECH
-            "E",  // E_LANGUAGE_DANISH
-            "E",  // E_LANGUAGE_DUTCH
-            "E",  // E_LANGUAGE_ENGLISH_US
-            "E",  // E_LANGUAGE_ENGLISH_UK
-            "E",  // E_LANGUAGE_FINNISH
-            "E",  // E_LANGUAGE_FRENCH
-            "O",  // E_LANGUAGE_GERMAN                -- "Ost"
-            "E",  // E_LANGUAGE_GREEK
-            "E",  // E_LANGUAGE_HEBREW
-            "E",  // E_LANGUAGE_HUNGARIAN
-            "E",  // E_LANGUAGE_ITALIAN
-            "E",  // E_LANGUAGE_JAPANESE
-            "E",  // E_LANGUAGE_KOREAN
-            "E",  // E_LANGUAGE_NORWEGIAN
-            "E",  // E_LANGUAGE_POLISH
-            "E",  // E_LANGUAGE_PORTUGUESE_BRAZIL
-            "E",  // E_LANGUAGE_PORTUGUESE_PORTUGAL
-            "E",  // E_LANGUAGE_SPANISH
-            "E",  // E_LANGUAGE_SWEDISH
-        };
-
-        const char* const KAPC_FRAMES_WEST[CgsLanguage::E_LANGUAGE_TOTAL] =
-        {
-            "W",  // E_LANGUAGE_ARABIC
-            "W",  // E_LANGUAGE_CHINESE
-            "W",  // E_LANGUAGE_CHINESE_SIMPLIFIED
-            "W",  // E_LANGUAGE_CHINESE_TRADITIONAL
-            "W",  // E_LANGUAGE_CZECH
-            "W",  // E_LANGUAGE_DANISH
-            "W",  // E_LANGUAGE_DUTCH
-            "W",  // E_LANGUAGE_ENGLISH_US
-            "W",  // E_LANGUAGE_ENGLISH_UK
-            "W",  // E_LANGUAGE_FINNISH
-            "O",  // E_LANGUAGE_FRENCH                -- "Ouest"
-            "W",  // E_LANGUAGE_GERMAN
-            "W",  // E_LANGUAGE_GREEK
-            "W",  // E_LANGUAGE_HEBREW
-            "W",  // E_LANGUAGE_HUNGARIAN
-            "O",  // E_LANGUAGE_ITALIAN               -- "Ovest"
-            "W",  // E_LANGUAGE_JAPANESE
-            "W",  // E_LANGUAGE_KOREAN
-            "W",  // E_LANGUAGE_NORWEGIAN
-            "W",  // E_LANGUAGE_POLISH
-            "W",  // E_LANGUAGE_PORTUGUESE_BRAZIL
-            "W",  // E_LANGUAGE_PORTUGUESE_PORTUGAL
-            "O",  // E_LANGUAGE_SPANISH               -- "Oeste"
-            "W",  // E_LANGUAGE_SWEDISH
-        };
-
         // The compass's world frame, both read as 16-byte constant vectors beside the
         // bearing math: NORTH is +Z and UP is +Y -- the very same pair the sat-nav icon
         // heading uses (GameBridgeWorldToGui's rotation derivation), so a compass bearing
@@ -310,13 +310,11 @@ namespace BrnGui
     void CompassComponent::FormatDirectionLetters(CgsLanguage::ELanguage leLanguage,
                                                   BrnFlapt::MovieClipRef* lpMovieClipRef)
     {
-        BrnFlapt::MovieClipRef lEastMovie;
-        BrnFlapt::MovieClipRef lWestMovie;
-        lEastMovie = lpMovieClipRef->FindChildMovieClip("East_mc");
-        lWestMovie = lpMovieClipRef->FindChildMovieClip("West_mc");
+        BrnFlapt::MovieClipRef lEast = lpMovieClipRef->FindChildMovieClip("East_mc");
+        BrnFlapt::MovieClipRef lWest = lpMovieClipRef->FindChildMovieClip("West_mc");
 
-        lEastMovie.GotoAndPlayLabel(KAPC_FRAMES_EAST[leLanguage]);
-        lWestMovie.GotoAndPlayLabel(KAPC_FRAMES_WEST[leLanguage]);
+        lEast.GotoAndPlayLabel(KAPC_FRAMES_EAST[leLanguage]);
+        lWest.GotoAndPlayLabel(KAPC_FRAMES_WEST[leLanguage]);
     }
 
     // @ 0x82411568 -- adopt the state channel through the base component, construct the
@@ -344,9 +342,19 @@ namespace BrnGui
     void CompassComponent::SetVisibility(bool lbVisible, bool lbImmediate)
     {
         if (lbVisible)
-            mAptRef.GotoAndPlayLabel(lbImmediate ? "visible" : "transin");
+        {
+            if (lbImmediate)
+                mAptRef.GotoAndPlayLabel("visible");
+            else
+                mAptRef.GotoAndPlayLabel("transin");
+        }
         else
-            mAptRef.GotoAndPlayLabel(lbImmediate ? "invisible" : "transout");
+        {
+            if (lbImmediate)
+                mAptRef.GotoAndPlayLabel("invisible");
+            else
+                mAptRef.GotoAndPlayLabel("transout");
+        }
     }
 
     // @ 0x82428C68 -- fetch the sat-nav icon record for the landmark and place its world
@@ -485,18 +493,15 @@ namespace BrnGui
     //   * format the direction letters on all six view sub-clips for the SKU language.
     void CompassComponent::Prepare(const char* lacName, const BrnFlapt::FileRef& lFile)
     {
-        CGS_ASSERT(lacName != NULL, "lacName != NULL");   // BrnGuiFlaptComponent.h:133
+        CGS_ASSERT_AT(lacName != NULL, "lacName != NULL",
+                      "..\\..\\..\\GameSource\\Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptComponent.h", 133);
 
-        BrnFlapt::MovieClipRef lComponent;
-        mAptRef = *lFile.FindComponent(&lComponent, lacName);
+        mAptRef = lFile.FindComponent(lacName);
 
-        CGS_ASSERT(mAptRef.mpMovieClipInst != NULL, "mpMovieClipInst");   // BrnFlaptMovieClipRef.h:272
-        mAptRef.mpMovieClipInst->ResetTimeline();
+        mAptRef.ResetTimeline();
 
-        BrnFlapt::MovieClipRef lCompassViewParent;
-        lCompassViewParent = mAptRef.FindChildMovieClip("CVParent_mc");
-        CGS_ASSERT(lCompassViewParent.mpMovieClipInst != NULL, "mpMovieClipInst");   // BrnFlaptMovieClipRef.h:272
-        lCompassViewParent.mpMovieClipInst->ResetTimeline();
+        BrnFlapt::MovieClipRef lCompassViewParent = mAptRef.FindChildMovieClip("CVParent_mc");
+        lCompassViewParent.ResetTimeline();
 
         mCompassViewMovie = lCompassViewParent.FindChildMovieClip("CompassView_mc");
         mDestMarkerMovie  = lCompassViewParent.FindChildMovieClip("DestMarker_mc");
@@ -515,8 +520,8 @@ namespace BrnGui
         lCompassViewBackRight = mCompassViewMovie.FindChildMovieClip(  "RightView_Back_mc");
 
         mv2InitialViewPos       = mCompassViewMovie.GetPosition();
-        mfSingleViewLength      = lCompassViewFrontRight.GetPosition().mV.x
-                                - lCompassViewFrontCentre.GetPosition().mV.x;
+        const f32 lfFrontRight = lCompassViewFrontRight.GetPosition().mV.x;
+        mfSingleViewLength      = lfFrontRight - lCompassViewFrontCentre.GetPosition().mV.x;
         mv2InitialDestMarkerPos = mDestMarkerMovie.GetPosition();
 
         char lacTempString[32];
@@ -526,10 +531,10 @@ namespace BrnGui
 
         const CgsLanguage::ELanguage leLanguage =
             static_cast<CgsLanguage::ELanguage>(CgsSystem::HardwareSku::FindLanguage());
-        CGS_ASSERT(leLanguage > CgsLanguage::E_LANGUAGE_INVALID,
-                   "leLanguage > CgsLanguage::E_LANGUAGE_INVALID");
-        CGS_ASSERT(leLanguage < CgsLanguage::E_LANGUAGE_TOTAL,
-                   "leLanguage < CgsLanguage::E_LANGUAGE_TOTAL");
+        CGS_ASSERT_AT(leLanguage > CgsLanguage::E_LANGUAGE_INVALID,
+                      "leLanguage > CgsLanguage::E_LANGUAGE_INVALID", CGS_ARTIST_FILE, 247);
+        CGS_ASSERT_AT(leLanguage < CgsLanguage::E_LANGUAGE_TOTAL,
+                      "leLanguage < CgsLanguage::E_LANGUAGE_TOTAL", CGS_ARTIST_FILE, 248);
 
         FormatDirectionLetters(leLanguage, &lCompassViewFrontLeft);
         FormatDirectionLetters(leLanguage, &lCompassViewFrontCentre);

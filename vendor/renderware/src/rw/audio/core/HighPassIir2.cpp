@@ -99,7 +99,7 @@ int HighPassIir2::CreateInstance(HighPassIir2 *self)
 
 // -------------------------------------------------------------------------------------
 // CalculateFilterCoefficients @0x82B978C0
-// s = sin(omega), c = cos(omega), k = 1/(1 + s/2). Stores (a1[36..40] ->
+// s = sin(static_cast<f64>(omega)), c = cos(static_cast<f64>(omega)), k = 1/(1 + s/2). Stores (a1[36..40] ->
 // a1,a2,b0,b1,b2):
 //   a1 = -2*c * k
 //   a2 = (1 - s/2) * k
@@ -107,19 +107,19 @@ int HighPassIir2::CreateInstance(HighPassIir2 *self)
 //   b2 = (c + 1) / (2*(1 + s/2))
 //   b1 = -((c + 1) * k)
 // -------------------------------------------------------------------------------------
-void HighPassIir2::CalculateFilterCoefficients(f64 omega)
+void HighPassIir2::CalculateFilterCoefficients(f32 omega)
 {
-    const f32 s = static_cast<f32>(sin(omega)); // fp31 (frsp'd)
-    const f64 c = cos(omega);
+    const f32 sine = static_cast<f32>(sin(static_cast<f64>(omega)));
+    const f32 cosine = static_cast<f32>(cos(static_cast<f64>(omega)));
+    const f32 halfSine = sine * 0.5f;
+    const f32 denominator = halfSine + 1.0f;
+    const f32 reciprocal = 1.0f / denominator;
 
-    const f64 half = s * 0.5;
-    const f64 k = 1.0 / (half + 1.0);
-
-    mCoeffs.a1 = static_cast<f32>((c * -2.0) * k);
-    mCoeffs.a2 = static_cast<f32>((1.0 - half) * k);
-    mCoeffs.b0 = static_cast<f32>((c + 1.0) / ((half + 1.0) * 2.0));
-    mCoeffs.b2 = static_cast<f32>((c + 1.0) / ((half + 1.0) * 2.0));
-    mCoeffs.b1 = static_cast<f32>(-((c + 1.0) * k));
+    mCoeffs.a1 = (cosine * -2.0f) * reciprocal;
+    mCoeffs.a2 = (1.0f - halfSine) * reciprocal;
+    mCoeffs.b0 = (cosine + 1.0f) / (denominator * 2.0f);
+    mCoeffs.b2 = (cosine + 1.0f) / (denominator * 2.0f);
+    mCoeffs.b1 = -((cosine + 1.0f) * reciprocal);
 }
 
 // -------------------------------------------------------------------------------------

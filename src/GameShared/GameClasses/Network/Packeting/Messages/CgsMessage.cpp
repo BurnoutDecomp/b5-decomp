@@ -529,7 +529,7 @@ namespace CgsNetwork
         return PackOrUnpackTime(lpMessage, lpTimeField, 0, 0x7FFFFFFF, lfResolution);
     }
 
-    // ---- DateAndTime field -----------------------------------------------------------
+    // ---- DateAndTime field @ 0x82881DF8 ----------------------------------------------
     // Second and minute in [0, 59], hour in [0, 23], day in [1, 31], month in [1, 12] and
     // year in [0, 5000], in that order. A pack stops at the first field that does not fit.
     PackOrUnpackResult PackOrUnpackDateAndTime(Message* lpMessage, CgsSystem::DateAndTime* lpDateAndTime)
@@ -543,47 +543,76 @@ namespace CgsNetwork
         const s32 KI_MAX_MONTH  = 12;
         const s32 KI_MAX_YEAR   = 5000;
 
-        if (lpMessage->mePackOrUnpack == Message::E_PACK_INTO_BITSTREAM)
+        switch (lpMessage->mePackOrUnpack)
         {
-            u32 luPacked  = 0;
-            s32 liNumBits = 0;
-
-            IntQuantiser::Pack(lpDateAndTime->GetSecond(), 0, KI_MAX_SECOND, &luPacked, &liNumBits);
-            if (!lpMessage->mBitstream.AddBits(luPacked, liNumBits))
+        case Message::E_PACK_INTO_BITSTREAM:
+        {
+            // ARTIST 0x82881F8C-0x828820DC reads each field before quantising it
+            // into its own packed value and bit count.
             {
-                return KX_PACK_FAILED_NO_SPACE;
+                u32 luPacked;
+                s32 liNumBits;
+                const s32 liValue = lpDateAndTime->GetSecond();
+                IntQuantiser::Pack(liValue, 0, KI_MAX_SECOND, &luPacked, &liNumBits);
+                if (!lpMessage->mBitstream.AddBits(luPacked, liNumBits))
+                {
+                    return KX_PACK_FAILED_NO_SPACE;
+                }
             }
-
-            IntQuantiser::Pack(lpDateAndTime->GetMinute(), 0, KI_MAX_MINUTE, &luPacked, &liNumBits);
-            if (!lpMessage->mBitstream.AddBits(luPacked, liNumBits))
             {
-                return KX_PACK_FAILED_NO_SPACE;
+                u32 luPacked;
+                s32 liNumBits;
+                const s32 liValue = lpDateAndTime->GetMinute();
+                IntQuantiser::Pack(liValue, 0, KI_MAX_MINUTE, &luPacked, &liNumBits);
+                if (!lpMessage->mBitstream.AddBits(luPacked, liNumBits))
+                {
+                    return KX_PACK_FAILED_NO_SPACE;
+                }
             }
-
-            IntQuantiser::Pack(lpDateAndTime->GetHour(), 0, KI_MAX_HOUR, &luPacked, &liNumBits);
-            if (!lpMessage->mBitstream.AddBits(luPacked, liNumBits))
             {
-                return KX_PACK_FAILED_NO_SPACE;
+                u32 luPacked;
+                s32 liNumBits;
+                const s32 liValue = lpDateAndTime->GetHour();
+                IntQuantiser::Pack(liValue, 0, KI_MAX_HOUR, &luPacked, &liNumBits);
+                if (!lpMessage->mBitstream.AddBits(luPacked, liNumBits))
+                {
+                    return KX_PACK_FAILED_NO_SPACE;
+                }
             }
-
-            IntQuantiser::Pack(lpDateAndTime->GetDay(), KI_MIN_DAY, KI_MAX_DAY, &luPacked, &liNumBits);
-            if (!lpMessage->mBitstream.AddBits(luPacked, liNumBits))
             {
-                return KX_PACK_FAILED_NO_SPACE;
+                u32 luPacked;
+                s32 liNumBits;
+                const s32 liValue = lpDateAndTime->GetDay();
+                IntQuantiser::Pack(liValue, KI_MIN_DAY, KI_MAX_DAY, &luPacked, &liNumBits);
+                if (!lpMessage->mBitstream.AddBits(luPacked, liNumBits))
+                {
+                    return KX_PACK_FAILED_NO_SPACE;
+                }
             }
-
-            IntQuantiser::Pack(lpDateAndTime->GetMonth(), KI_MIN_MONTH, KI_MAX_MONTH, &luPacked, &liNumBits);
-            if (!lpMessage->mBitstream.AddBits(luPacked, liNumBits))
             {
-                return KX_PACK_FAILED_NO_SPACE;
+                u32 luPacked;
+                s32 liNumBits;
+                const s32 liValue = lpDateAndTime->GetMonth();
+                IntQuantiser::Pack(liValue, KI_MIN_MONTH, KI_MAX_MONTH, &luPacked, &liNumBits);
+                if (!lpMessage->mBitstream.AddBits(luPacked, liNumBits))
+                {
+                    return KX_PACK_FAILED_NO_SPACE;
+                }
             }
-
-            IntQuantiser::Pack(lpDateAndTime->GetYear(), 0, KI_MAX_YEAR, &luPacked, &liNumBits);
-            return lpMessage->mBitstream.AddBits(luPacked, liNumBits) ? KX_PACK_OR_UNPACK_SUCCESS
-                                                                      : KX_PACK_FAILED_NO_SPACE;
+            {
+                u32 luPacked;
+                s32 liNumBits;
+                const s32 liValue = lpDateAndTime->GetYear();
+                IntQuantiser::Pack(liValue, 0, KI_MAX_YEAR, &luPacked, &liNumBits);
+                if (!lpMessage->mBitstream.AddBits(luPacked, liNumBits))
+                {
+                    return KX_PACK_FAILED_NO_SPACE;
+                }
+            }
+            break;
         }
 
-        if (lpMessage->mePackOrUnpack == Message::E_UNPACK_FROM_BITSTREAM)
+        case Message::E_UNPACK_FROM_BITSTREAM:
         {
             SmartBitStream& lrStream = lpMessage->mBitstream;
             const s32 liSecond = lrStream.GetQuantisedInt(0, KI_MAX_SECOND);
@@ -602,9 +631,12 @@ namespace CgsNetwork
             return KX_PACK_OR_UNPACK_SUCCESS;
         }
 
-        CGS_ASSERT(false,
-                   "CgsNetwork::Message::PackOrUnpack called without telling "
-                   "it which it is doing\n");
+        default:
+            CGS_ASSERT_STREAM_AT(false, "CgsNetwork::Message::PackOrUnpack"
+                                         << " called without telling it which it is doing\n",
+                                 KAC_ARTIST_FILE, 1377);
+            break;
+        }
         return KX_PACK_OR_UNPACK_SUCCESS;
     }
 

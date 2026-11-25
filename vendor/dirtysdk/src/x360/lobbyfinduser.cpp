@@ -35,7 +35,7 @@ typedef char FindUserSizeCheck[sizeof(LobbyFindUserT) == 4600 ? 1 : -1];
 typedef char FindUserCacheOffsetCheck[offsetof(LobbyFindUserT, aCache) == 48 ? 1 : -1];
 typedef char FindUserRateOffsetCheck[offsetof(LobbyFindUserT, uRate) == 4596 ? 1 : -1];
 
-static s32 _LobbyFindUserCache(LobbyFindUserT* pRef, const char* pData)
+static s32 _LobbyFindUserExtractToCache(LobbyFindUserT* pRef, const char* pData)
 {
     const u32 uNow = static_cast<u32>(LobbyApiStatus(pRef->pLobby, 0x7469636b, 0, 0));
     s32 iOldest = 0;
@@ -73,7 +73,7 @@ static void _LobbyFindUserCallback(LobbyApiRefT*, LobbyApiMsgT* pMsg, void* pUse
         TagFieldGetString(TagFieldFind(pMsg->pData, "N"), strName, 16, "");
         if (LobbyNameCmp(pRef->strUser, strName))
             return;
-        const s32 iCache = _LobbyFindUserCache(pRef, pMsg->pData);
+        const s32 iCache = _LobbyFindUserExtractToCache(pRef, pMsg->pData);
         pRef->pCallback(pRef->pCalldata, pRef->strUser, &pRef->aCache[iCache]);
     }
     pRef->strUser[0] = 0;

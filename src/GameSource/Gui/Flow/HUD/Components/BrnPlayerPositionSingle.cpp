@@ -115,8 +115,7 @@ void PlayerPositionSingleComponent::Prepare(const char* lacName, const BrnFlapt:
     CGS_ASSERT(lacName != NULL, "lacName != NULL");
 
     // Bind the row's own clip and rewind it.
-    BrnFlapt::MovieClipRef lFound;
-    mAptRef = *lFile.FindComponent(&lFound, lacName);
+    mAptRef = lFile.FindComponent(lacName);
     CGS_ASSERT(mAptRef.mpMovieClipInst != NULL, "mpMovieClipInst");  // BrnFlaptMovieClipRef.h:272
     mAptRef.mpMovieClipInst->ResetTimeline();
 
@@ -132,6 +131,7 @@ void PlayerPositionSingleComponent::Prepare(const char* lacName, const BrnFlapt:
     mPlayerTextColourAnimator.Prepare(lacChildName, lFile, NULL);
 
     // The two icons on the row's current frame.
+    BrnFlapt::MovieClipRef lFound;
     mRevenge = *mAptRef.FindChildMovieClipOnFrame(&lFound, "RevengeIcon_mc");
     mAudio   = *mAptRef.FindChildMovieClipOnFrame(&lFound, "AudioIcon_mc");
 

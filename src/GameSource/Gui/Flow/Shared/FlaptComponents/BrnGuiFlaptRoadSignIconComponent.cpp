@@ -119,7 +119,7 @@ namespace BrnGui
         CGS_ASSERT(lacName != 0, "lacName");
         CGS_ASSERT(lacName != 0, "lacName != NULL");
 
-        lFile.FindComponent(&mAptRef, lacName);
+        mAptRef = lFile.FindComponent(lacName);
 
         CGS_ASSERT(mAptRef.mpMovieClipInst != 0, "mpMovieClipInst");
 

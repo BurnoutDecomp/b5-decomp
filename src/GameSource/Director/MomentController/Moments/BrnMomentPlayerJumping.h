@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/MomentController/BrnMoment.h"                  // BrnDirector::Moment (base); pulls BrnBehaviourManager.h (BehaviourHandle / the BehaviourInterpolate slice)
 #include "GameSource/Director/Camera/Behaviours/BehaviourRig.h"             // Camera::BehaviourRig(::Parameters) + the Behaviour base slice
 #include "GameSource/Director/Camera/Behaviours/BehaviourBystanderCam.h"    // Camera::BehaviourBystanderCam(::Parameters)
@@ -73,25 +74,28 @@ namespace BrnDirector
         bool                   mbAllocatedShots;
     };
 
-    // BehaviourCollection<TBehaviour,TParameters,N>::GetCamera const
-    // (declared). The console asserts carry this .h's source path
-    // so the body genuinely lives in the header (unlike
-    // HasActiveCamera whose asserts carry the .cpp). N=5 (mIceCollection) is the copy the
-    // ledger forces.
-    //
-    // Console body: read mbAllocatedShots at +0x89 (assert), read mbHasCurrentCamera at
-    //     +0x88 (assert), then maShots[miCurrentCamera] (Array<Shot,N>::operator[] const)
-    // mHandle.GetProducedCamera(). GetProducedCamera itself carries the single IsAllocated()
-    // assert plus the GetBehaviourSlotFromHandle resolve + deref,
-    // so NO separate explicit IsAllocated assert is emitted here (that would double-fire).
+#define CGS_ARTIST_JUMPING_HEADER "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\director\\momentcontroller\\Moments/BrnMomentPlayerJumping.h"
+
+    template <typename TBehaviour, typename TParameters, u32 N>
+    inline TBehaviour& BehaviourCollection<TBehaviour, TParameters, N>::GetBehaviour()
+    {
+        CGS_ASSERT(mbAllocatedShots, CGS_ASSERT_MESSAGE_AT("mbAllocatedShots", CGS_ARTIST_JUMPING_HEADER, 89));
+        CGS_ASSERT(mbHasCurrentCamera, CGS_ASSERT_MESSAGE_AT("mbHasCurrentCamera", CGS_ARTIST_JUMPING_HEADER, 90));
+        return *maShots[miCurrentCamera].mHandle.Get();
+    }
+
+    // ARTIST gets the current Shot through the checked const array accessor, then
+    // resolves its handle to the camera in the behaviour helper pool.
     template <typename TBehaviour, typename TParameters, u32 N>
     inline const Camera::Camera&
     BehaviourCollection<TBehaviour, TParameters, N>::GetCamera() const
     {
-        CGS_ASSERT(mbAllocatedShots, "mbAllocatedShots");
-        CGS_ASSERT(mbHasCurrentCamera, "mbHasCurrentCamera");
+        CGS_ASSERT(mbAllocatedShots, CGS_ASSERT_MESSAGE_AT("mbAllocatedShots", CGS_ARTIST_JUMPING_HEADER, 97));
+        CGS_ASSERT(mbHasCurrentCamera, CGS_ASSERT_MESSAGE_AT("mbHasCurrentCamera", CGS_ARTIST_JUMPING_HEADER, 98));
         return maShots[static_cast<u32>(miCurrentCamera)].mHandle.GetProducedCamera();
     }
+
+#undef CGS_ARTIST_JUMPING_HEADER
 
     class MomentPlayerJumping : public Moment
     {

@@ -767,7 +767,7 @@ void SceneManagerModule::UpdateContactGeneration(CgsModule::IOBufferStack* lpInp
 void SceneManagerModule::BridgeInputSceneUpdateInterfaceToSubModules(
     OverlapGenerationIO::InputBuffer* lpOverlapGenerationInput,
     SpatialPartitionIO::InputBuffer_Update* /*lpSpatialPartitionInput*/,
-    SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer,
+    const SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer,
     bool lbPrepare)
 {
     // The console's three tripwires, in its order (BridgeFunctions.cpp:60/:61/:62). The
@@ -782,7 +782,7 @@ void SceneManagerModule::BridgeInputSceneUpdateInterfaceToSubModules(
         return;
     }
 
-    SceneManagerIO::InSceneUpdateInterface* lpScene =
+    const SceneManagerIO::InSceneUpdateInterface* lpScene =
         lpSceneInputBuffer->GetInSceneUpdateInterface();
     if (lpScene == NULL)
     {
@@ -1267,18 +1267,8 @@ bool SceneManagerModule::UpdateScene(CgsModule::IOBufferStack* lpInputBufferStac
     OverlapGenerationIO::InputBuffer* lpOverlapGenerationInput = 0;
     lpInputBufferStack->CreateIOBuffer(&lpOverlapGenerationInput, "OverlapGeneration");
 
-    // NOTE the WRITE lock on the SCENE input: InputBuffer_Update::GetInSceneUpdateInterface
-    // @0x825BD8C0 guards on the write bit (bit 3, "Not locked for writing\n"), because on the
-    // console this buffer reaches UpdateScene still owned by the producer side. Read-locking
-    // it here trips that tripwire on the first frame.
-    // ⚠️ MEASURED DIVERGENCE, deliberately left alone: the CONSOLE read-locks it here
-    // (0x828D4D64 `bl IOBuffer::LockForRead`) and its bridge reaches the interface through the
-    // CONST accessor 0x828AF1C8, whose own tripwire is "Not locked for reading". The tree's
-    // non-const accessor + write lock is a committed, runtime-witnessed pairing (the sibling
-    // StartUpdateTriangleCache learned the same lesson from the other side: 927 asserts and a
-    // wedged boot when it used the wrong overload). Flipping BOTH halves at once is the only
-    // correct move and it is not this cluster's mandate -- recorded, not changed.
-    lpSceneInputBuffer->LockForWrite();
+    // ARTIST 828D4D64 locks the input for the const bridge to consume.
+    lpSceneInputBuffer->LockForRead();
     if (lpOverlapGenerationInput != 0)
     {
         lpOverlapGenerationInput->LockForWrite();
@@ -1291,7 +1281,7 @@ bool SceneManagerModule::UpdateScene(CgsModule::IOBufferStack* lpInputBufferStac
     {
         lpOverlapGenerationInput->UnlockForWrite();
     }
-    lpSceneInputBuffer->UnlockForWrite();
+    lpSceneInputBuffer->UnlockForRead();
 
     // The partition's own per-frame pass (re-derive the loose bounds of every branch the
     // adds/removes flagged). The X360 reaches it through SpatialPartitionManager::
@@ -3254,7 +3244,7 @@ namespace CgsSceneManager
     // =========================================================================================
     void SceneManagerModule::ProcessTriangleCollisionLineTestNearests(
         CgsCollision::BaseCollisionGenerator*                                  lpCollisionGenerator,
-        CgsModule::EventQueue<SceneManagerIO::InEventTriangleCollisionLineTestNearest, 256>* lpQueue,
+        const CgsModule::BaseEventQueue<SceneManagerIO::InEventTriangleCollisionLineTestNearest>* lpQueue,
         SceneManagerIO::OutputBuffer*                                          lpSceneOutputBuffer)
     {
         StartPassMonitor(siProcessTriCollisionLineTestNearestsPerfMon);
@@ -3491,7 +3481,7 @@ namespace CgsSceneManager
     // ProcessTriangleCollisionSphereTests -- the pass that was never implemented.
     // =========================================================================================
     void SceneManagerModule::ProcessTriangleCollisionSphereTests(CgsCollision::BaseCollisionGenerator*,
-                                                                 CgsModule::EventQueue<SceneManagerIO::InEventTriangleCollisionSphereTest, 256>* lpQueue,
+                                                                 const CgsModule::BaseEventQueue<SceneManagerIO::InEventTriangleCollisionSphereTest>* lpQueue,
                                                                  SceneManagerIO::OutputBuffer*)
     {
         // NOT a trap: this IS the console's body. The triangle-collision sphere pass was never
@@ -4205,7 +4195,7 @@ namespace CgsSceneManager
     // Every record of a queued test is answered, an empty one included.
     // =========================================================================================
     void SceneManagerModule::ProcessTriangleCollisionLineTests(CgsCollision::BaseCollisionGenerator*                                    lpCollisionGenerator,
-                                                               CgsModule::EventQueue<SceneManagerIO::InEventTriangleCollisionLineTest, 256>* lpQueue,
+                                                               const CgsModule::BaseEventQueue<SceneManagerIO::InEventTriangleCollisionLineTest>* lpQueue,
                                                                SceneManagerIO::OutputBuffer*                                            lpSceneOutputBuffer)
     {
         StartPassMonitor(siProcessTriCollisionLineTestsPerfMon);

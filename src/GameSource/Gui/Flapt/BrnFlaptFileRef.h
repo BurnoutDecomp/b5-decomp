@@ -20,10 +20,8 @@ namespace BrnFlapt
 {
     struct FileRef
     {
-        // FindComponent @ 0x8246EC90 : hash lpcName and look the named component up
-        // in the referenced FlaptFileInstance, returning a MovieClipRef by value
-        // (modeled, per the module's house style, as a written-into out buffer).
-        MovieClipRef* FindComponent(MovieClipRef* lpOutRef, const char* lpcName) const;
+        // ARTIST 0x8246EC90 uses the hidden result buffer for the returned clip.
+        MovieClipRef FindComponent(const char* lpcName) const;
 
         // GetRootMovieClip @ 0x8246B410 : return a MovieClipRef onto the referenced
         // file instance's root timeline, by value into lpOutRef.

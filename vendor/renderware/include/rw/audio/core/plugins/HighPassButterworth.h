@@ -76,15 +76,17 @@ struct PlugInConfig;
 //   +0x58  muButterworthOffset     -- relative offset (from `this`) to the embedded Butterworth.
 //   +0x60  mButterworth            -- the embedded cascaded-Butterworth DSP kernel + buffers.
 // -------------------------------------------------------------------------------------
+class PlugInDescRunTime;
+struct ChannelMapPair;
+struct ParameterDescRunTime;
+
 class HighPassButterworth
 {
 public:
-    static char **GetPlugInDescRunTime();                                    // @0x82B976D0
-    int           Process(AudioProcessContext *ctx);                         // @0x82B976E0
+    static PlugInDescRunTime *GetPlugInDescRunTime(); // @0x82B976D0
+    static BufferStatus Process(PlugIn *pPlugIn, Mixer *ctx, bool discontinuity); // @0x82B976E0
     static void  *VectorDeletingDestructor(HighPassButterworth *self,
                                            char flags);                      // @0x82BA17A0
-    static u32    GetSize(const PlugInConfig *config);                  // @0x82B9DF88
-    static HighPassButterworth *CreateInstance(HighPassButterworth *self);   // @0x82BA2CB0
 
     PlugInBaseView mBase;                     // +0x00 .. +0x23
     char        mPad24[0x28 - 0x24];          // +0x24 .. +0x27
@@ -103,6 +105,14 @@ public:
     u16         muButterworthOffset;           // +0x58
     char        mPad5A[0x60 - 0x5A];          // +0x5A .. +0x5F
     Butterworth mButterworth;                  // +0x60 (LAST member; trailing runtime work buffers)
+
+private:
+    static u32 GetSize(PlugInConfig *config);
+    static bool CreateInstance(PlugIn *pPlugIn, void *pConstructorParams);
+
+    static ChannelMapPair sChannelMaps[];
+    static ParameterDescRunTime sParameterDescRunTime[];
+    static PlugInDescRunTime sPlugInDescRunTime;
 };
 
 } // namespace core

@@ -62,7 +62,7 @@ static s32 CommSRPSendImmediate(CommSRPRef* ref, CommSRPPacket* packet)
     return size;
 }
 
-static void CommSRPRememberPeer(CommSRPRef* ref, const sockaddr* address)
+static void _CommSRPSetAddrInfo(CommSRPRef* ref, const sockaddr* address)
 {
     const u8* bytes = reinterpret_cast<const u8*>(address);
     ref->common.peerip = (u32(bytes[4]) << 24) | (u32(bytes[5]) << 16) | (u32(bytes[6]) << 8) | bytes[7];
@@ -88,17 +88,17 @@ static void CommSRPProcessSetup(CommSRPRef* ref)
     CommSRPSendImmediate(ref, &packet);
 }
 // ARTIST 82B3CF38, connection control packets.
-static void CommSRPProcessControl(CommSRPRef* ref, CommSRPPacket* packet, const sockaddr* from)
+static void _CommSRPProcessCtrl(CommSRPRef* ref, CommSRPPacket* packet, const sockaddr* from)
 {
     ref->lastRecv = NetTick() - 1000;
     switch (packet->code)
     {
     case 16:
-        if (ref->state == 2) { memcpy(&ref->peer, from, 16); CommSRPRememberPeer(ref, from); ref->state = 3; }
+        if (ref->state == 2) { memcpy(&ref->peer, from, 16); _CommSRPSetAddrInfo(ref, from); ref->state = 3; }
         { CommSRPPacket reply; reply.length = 0; reply.code = 18; CommSRPSendImmediate(ref, &reply); }
         break;
     case 17: if (ref->state == 1) memcpy(&ref->peer, from, 16); break;
-    case 18: if (ref->state == 1) { CommSRPRememberPeer(ref, from); ref->state = 3; } break;
+    case 18: if (ref->state == 1) { _CommSRPSetAddrInfo(ref, from); ref->state = 3; } break;
     case 19: break;
     case 20: if (ref->state == 3) ref->state = 4; break;
     default: NetPrintfCode("_CommSRPProcessSetup: Unrecognized control packet type %d\n", packet->code); break;
@@ -150,7 +150,7 @@ static void CommSRPProcessRecvQueue(CommSRPRef* ref)
         const u8* bytes = reinterpret_cast<const u8*>(&from);
         packet->tick = (u32(bytes[8]) << 24) | (u32(bytes[9]) << 16) | (u32(bytes[10]) << 8) | bytes[11];
         const u8 code = packet->code;
-        if (code >= 16 && code <= 63) CommSRPProcessControl(ref, packet, &from);
+        if (code >= 16 && code <= 63) _CommSRPProcessCtrl(ref, packet, &from);
         else if (code < 192)
         {
             processed = CommSRPProcessData(ref, packet);

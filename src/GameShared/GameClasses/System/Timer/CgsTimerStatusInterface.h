@@ -20,8 +20,8 @@
 // => sizeof(TimerStatus) == 24. TimerStatusInterface = { game @ +0, sim @ +24 },
 //    sizeof == 48 (Clear writes the sim block at +24..+44).
 //
-// CgsTimerStatusInterface.cpp owns TimerStatusInterface::Clear, StoreTimers and
-// IsSimTimerFrequency50Hz. The four GetGameTimerStatus / GetSimTimerStatus overloads,
+// CgsTimerStatusInterface.cpp owns TimerStatusInterface::Clear and StoreTimers.
+// The frequency query and the four GetGameTimerStatus / GetSimTimerStatus overloads,
 // TimerStatus's accessors, TimerStatus::Clear and both operator= are inline below.
 // IsGameTimerFrequency50Hz is the one declaration without a body.
 namespace CgsSystem
@@ -71,6 +71,12 @@ namespace CgsSystem
         TimerStatus mGameTimerStatus;   // DWARF :123  @ +0
         TimerStatus mSimTimerStatus;    // DWARF :124  @ +24
     };
+
+    // ARTIST 0x8235372C inlines the live sim-timer frequency query.
+    inline bool TimerStatusInterface::IsSimTimerFrequency50Hz() const
+    {
+        return mSimTimerStatus.GetCurrentTimeStep() == 0.02f;
+    }
 
     // ---- GetCurrentTimeStep: base step scaled by the multiplier --------------
     // (inlined into IsSimTimerFrequency50Hz on X360 as mfBaseTimeStep*mfTimeStepMultiplier;

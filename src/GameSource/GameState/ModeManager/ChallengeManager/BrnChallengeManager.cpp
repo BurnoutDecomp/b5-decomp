@@ -724,19 +724,29 @@ namespace BrnGameState
     // player when all-one-player, xHALF that when all-two-player. The GetChallengeIndex call is
     // kept for its (debug-print/assert) side effects; its result is discarded in the asm.
     // Default scale is 1.0f (flt_82001C98).
+    inline bool ChallengeManager::ChallengesAreAllOnePlayer()
+    {
+        return mbChallengesAreAllOnePlayer;
+    }
+
+    inline bool ChallengeManager::ChallengesAreAllTwoPlayer()
+    {
+        return !mbChallengesAreAllOnePlayer && mbChallengesAreAllTwoPlayer;
+    }
+
     f32 ChallengeManager::GetScaleFactor()
     {
         f32 lfScaleFactor = 1.0f;                                   // flt_82001C98
 
-        if ( mbChallengesAreAllOnePlayer )                          // byte_82FAD9C1
+        if ( ChallengesAreAllOnePlayer() )                          // byte_82FAD9C1
         {
             GetChallengeIndex( mpCurrentChallenge->GetChallengeID() );
-            return static_cast<f32>( mpCurrentChallenge->GetOriginalNumPlayers() );
+            lfScaleFactor = static_cast<f32>( mpCurrentChallenge->GetOriginalNumPlayers() );
         }
-        else if ( mbChallengesAreAllTwoPlayer )                     // byte_82FAD9C0
+        else if ( ChallengesAreAllTwoPlayer() )                     // byte_82FAD9C0
         {
             GetChallengeIndex( mpCurrentChallenge->GetChallengeID() );
-            return static_cast<f32>( mpCurrentChallenge->GetOriginalNumPlayers() ) * 0.5f; // flt_82001DA0
+            lfScaleFactor = static_cast<f32>( mpCurrentChallenge->GetOriginalNumPlayers() ) * 0.5f; // flt_82001DA0
         }
 
         return lfScaleFactor;
@@ -1046,7 +1056,7 @@ void ChallengeManager::Destruct()
     mLocalChallengeCompletionData.UnSetAll();     // X360 loop base +0xD00: 32 std of 0 (PITFALL 1)
     maBillboardsCollected.Clear();                // X360 stw 0,+0x3A0 (miCount = 0)
     mLastSecondSuccessStatus.UnSetAll();          // X360 std 0,+0xE00 (PITFALL 1)
-    mPotentiallyLeaptCars.Construct();            // X360 std 0,+0x100 (occupancy only; PITFALL 1)
+    mPotentiallyLeaptCars.Destruct();            // X360 std 0,+0x100 (occupancy only; PITFALL 1)
 
     ClearPlayerSuccessData();
 
@@ -1112,8 +1122,7 @@ bool ChallengeManager::Prepare(const BrnResource::ChallengeList* lpFreeburnChall
 // ----------------------------------------------------------------------------
 // UnHackAllChallenges -- X360 0x82333040. Undoes HackAllChallenges: for every challenge in the
 // list, restore the active num-players (byte +0xD3 low nibble) from the backup HackAllChallenges
-// stashed in the high nibble. The range asserts ("liNumPlayers >= 1" / "<= KI_MAX_PLAYERS",
-// ChallengeListEntry.h:888/890) live inside the entry's GetOriginalNumPlayers accessor.
+// stashed in the high nibble. The range asserts (ChallengeListEntry.h:888/890) belong to ResetNumPlayers.
 // ----------------------------------------------------------------------------
 void ChallengeManager::UnHackAllChallenges()
 {
@@ -1121,8 +1130,7 @@ void ChallengeManager::UnHackAllChallenges()
     {
         BrnResource::ChallengeListEntry* lpChallenge =
             const_cast<BrnResource::ChallengeListEntry*>(mpFreeburnChallengeList->GetChallengeData(liChallenge));
-        // X360: newByte = (byte0xD3 & 0xF0) | (byte0xD3 >> 4) -> SetNumPlayers(GetOriginalNumPlayers()).
-        lpChallenge->SetNumPlayers(lpChallenge->GetOriginalNumPlayers());
+        lpChallenge->ResetNumPlayers();
     }
 }
 
@@ -1459,18 +1467,11 @@ bool ChallengeManager::UpdateTimer(f32 lfTimeStep)
 
     if (lbTimerRunning && mfChallengeTimer > 0.0f)
     {
-        // f0 = timer - dt; fsel(-(timer-dt), 0.0, f0) clamps the countdown at 0.0
-        // (X360 fsubs / fneg / fsel f0,f13,f31,f0).
-        const f32 lfNewTimer = mfChallengeTimer - lfTimeStep;
-        mfChallengeTimer = (lfNewTimer >= 0.0f) ? lfNewTimer : 0.0f;
+        mfChallengeTimer = rw::math::fpu::Max(0.0f, mfChallengeTimer - lfTimeStep);
     }
 
-    // X360 tail (cntlzw/extrwi == "== 0"): expired iff the timer is running AND has reached 0.0.
-    if (lbTimerRunning && mfChallengeTimer <= 0.0f)
-    {
-        return false;
-    }
-    return true;
+    const bool lbTimerElapsed = lbTimerRunning && mfChallengeTimer <= 0.0f;
+    return !lbTimerElapsed;
 }
 
 // ----------------------------------------------------------------------------
@@ -2837,38 +2838,33 @@ namespace BrnGameState
 // 50Hz-fixed-step predicate is IsSimTimerFrequency50Hz() (X360 inlines it as a fresh
 // `simStep == 0.02f` compare against flt_82005574).
 //
-// X360 trailing-bool NOTE: the X360 build passes UpdateRunning's last two GPR args as
-// (r8 = is-50Hz, r9 = is-online) -- i.e. the SIM-50Hz predicate lands in UpdateRunning's 5th
-// parameter slot and the online flag in its 6th. That order is preserved verbatim below (the two
-// values are handed to the slots exactly as the binary does); UpdateRunning consumes them in the
-// same slot order (5th -> UpdateChallenge, 6th -> the UpdateArbitration gate).
+// ARTIST passes the current 50 Hz predicate in r8 and the local arbitrator flag in r9.
 // ----------------------------------------------------------------------------
 void ChallengeManager::PreWorldUpdate(
     const CgsSystem::TimerStatusInterface*                                       lpTimerStatusInterface,
     s32                                                                          liFramesSinceNetworkStart,
     const CgsModule::BaseEventQueue<GameStateModuleIO::CompletedFburnChallengesData>* lpCompletedChallengeStatusQueue,
     const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarOutputInterface,
-    bool                                                                         lbIsOnline,
+    bool                                                                         lbIsArbitrator,
     GameStateModuleIO::OutputBuffer*                                             lpOutputBuffer)
 {
     CGS_ASSERT(lpOutputBuffer, CGS_ASSERT_MESSAGE_AT("lpOutput", CGS_ARTIST_FILE, 688));                                       // X360 line 0x2B0
-    CGS_ASSERT(lpOutputBuffer->GetGuiOutputQueue(), CGS_ASSERT_MESSAGE_AT("lpOutput->GetGameActionQueue()", CGS_ARTIST_FILE, 689)); // X360 line 0x2B1
+    CGS_ASSERT(lpOutputBuffer->GetGameActionQueue(), CGS_ASSERT_MESSAGE_AT("lpOutput->GetGameActionQueue()", CGS_ARTIST_FILE, 689)); // X360 line 0x2B1
     CGS_ASSERT(lpTimerStatusInterface, CGS_ASSERT_MESSAGE_AT("lpTimerStatusInterface", CGS_ARTIST_FILE, 692));                 // X360 line 0x2B4
 
     // Fixed frame step + the network-frame snapshot (X360 stw,+0xFFC).
     const f32 lfTimeStep = lpTimerStatusInterface->GetSimTimerStatus()->GetCurrentTimeStep(); // lfs +0x20 * lfs +0x1C
     miFramesSinceNetworkStart = liFramesSinceNetworkStart;
 
-    UpdateRemotePlayerSuccessStatus(lpCompletedChallengeStatusQueue, lpOutputBuffer->GetGuiOutputQueue());
-    UpdateRemoteRequests(lpOutputBuffer->GetGuiOutputQueue(), lpActiveRaceCarOutputInterface, lbIsOnline);
+    UpdateRemotePlayerSuccessStatus(lpCompletedChallengeStatusQueue, lpOutputBuffer->GetGameActionQueue());
+    UpdateRemoteRequests(lpOutputBuffer->GetGameActionQueue(), lpActiveRaceCarOutputInterface, lbIsArbitrator);
 
     const bool lbIsSimTimerFrequency50Hz = lpTimerStatusInterface->IsSimTimerFrequency50Hz(); // fresh simStep == 0.02f
 
-    // X360-attested arg slots: is-50Hz into the 5th slot, is-online into the 6th (see NOTE above).
-    UpdateRunning(lfTimeStep, liFramesSinceNetworkStart, lpOutputBuffer->GetGuiOutputQueue(),
-                  lpActiveRaceCarOutputInterface, lbIsSimTimerFrequency50Hz, lbIsOnline);
+    UpdateRunning(lfTimeStep, liFramesSinceNetworkStart, lpOutputBuffer->GetGameActionQueue(),
+                  lpActiveRaceCarOutputInterface, lbIsSimTimerFrequency50Hz, lbIsArbitrator);
 
-    UpdateResults(lfTimeStep, lpOutputBuffer->GetGuiOutputQueue());
+    UpdateResults(lfTimeStep, lpOutputBuffer->GetGameActionQueue());
     WriteDataToOutput(lpOutputBuffer);
     UpdateFreeburnSkillsThisFrame(lpActiveRaceCarOutputInterface, lfTimeStep);
 
@@ -2880,7 +2876,7 @@ void ChallengeManager::PreWorldUpdate(
 // ----------------------------------------------------------------------------
 // First reconciles the two "make every challenge N-player" debug toggles against the last-applied
 // state: when a toggle newly turns ON, every challenge's active player count (ChallengeListEntry
-// byte +0xD3 low nibble) is forced to 1 (all-one-player) or 2 (all-two-player) via SetNumPlayers;
+// byte +0xD3 low nibble) is forced to 1 (all-one-player) or 2 (all-two-player) via SetNewNumPlayers;
 // when it turns OFF, UnHackAllChallenges restores the backed-up counts. The effective all-two flag
 // is gated by the all-one flag (all-one wins).
 //
@@ -2888,18 +2884,15 @@ void ChallengeManager::PreWorldUpdate(
 // the per-challenge update, latching the local player's received-success flag; the meet-up /
 // convoy arbitration pass runs on the trailing gate.
 //
-// X360 slot NOTE (mirrors PreWorldUpdate): the 5th parameter (declared lbIsOnline) carries the
-// SIM-50Hz predicate the binary routes into UpdateChallenge, and the 6th (declared
-// lbIsTimerFrequency50Hz) carries the online flag that gates UpdateArbitration. The parameters are
-// used strictly in that slot order below, reproducing the X360 data flow exactly.
+// ARTIST passes the sim timer frequency to UpdateChallenge and gates arbitration on the host flag.
 // ----------------------------------------------------------------------------
 void ChallengeManager::UpdateRunning(
     f32                                                                          lfTimeStep,
     s32                                                                          liFramesSinceNetworkStart,
     TGameActionQueue*                                                            lpActionQueue,
     const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarOutputInterface,
-    bool                                                                         lbIsOnline,
-    bool                                                                         lbIsTimerFrequency50Hz)
+    bool                                                                         lbSimTimerAt50Hz,
+    bool                                                                         lbIsArbitrator)
 {
     // ---- all-one-player toggle ---- (byte101C vs byte_82FAD9C1 == mbChallengesAreAllOnePlayer)
     if (mbWereAllChallengesOnePlayer != mbChallengesAreAllOnePlayer)
@@ -2911,7 +2904,7 @@ void ChallengeManager::UpdateRunning(
             {
                 BrnResource::ChallengeListEntry* lpChallenge =
                     const_cast<BrnResource::ChallengeListEntry*>(mpFreeburnChallengeList->GetChallengeData(liChallenge));
-                lpChallenge->SetNumPlayers(1);
+                lpChallenge->SetNewNumPlayers(1);
             }
         }
         else
@@ -2923,31 +2916,28 @@ void ChallengeManager::UpdateRunning(
 
     // Effective all-two-player state: mbChallengesAreAllTwoPlayer AND NOT mbChallengesAreAllOnePlayer
     // (all-one wins). X360: `(!C1 && C0) ? 1 : 0`, C1 == AllOnePlayer, C0 == AllTwoPlayer.
-    const bool lbEffectiveAllTwoPlayer =
-        (!mbChallengesAreAllOnePlayer) && mbChallengesAreAllTwoPlayer;
-    if (mbWereAllChallengesTwoPlayer != lbEffectiveAllTwoPlayer)
+    if (mbWereAllChallengesTwoPlayer != ChallengesAreAllTwoPlayer())
     {
-        if (lbEffectiveAllTwoPlayer)
+        if (ChallengesAreAllTwoPlayer())
         {
             // Hack every entry's active player count to 2 (X360 rlwimi ,1,28,23 with rol 1 -> low nibble = 2).
             for (s32 liChallenge = 0; liChallenge < mpFreeburnChallengeList->GetChallengeCount(); ++liChallenge)
             {
                 BrnResource::ChallengeListEntry* lpChallenge =
                     const_cast<BrnResource::ChallengeListEntry*>(mpFreeburnChallengeList->GetChallengeData(liChallenge));
-                lpChallenge->SetNumPlayers(2);
+                lpChallenge->SetNewNumPlayers(2);
             }
         }
         else
         {
             UnHackAllChallenges();
         }
-        mbWereAllChallengesTwoPlayer =
-            (!mbChallengesAreAllOnePlayer) && mbChallengesAreAllTwoPlayer;
+        mbWereAllChallengesTwoPlayer = ChallengesAreAllTwoPlayer();
     }
 
     if (meChallengeManagerStatus == E_CHALLENGE_MANAGER_STATUS_RUNNING)   // dwordE08 == 2
     {
-        bool lbTimerNotFinished = false;   // r28; set when the countdown is still running
+        bool lbChallengeFailed = false;
 
         CGS_ASSERT(mpCurrentChallenge, CGS_ASSERT_MESSAGE_AT("mpCurrentChallenge", CGS_ARTIST_FILE, 995));             // X360 line 0x3E3
 
@@ -2958,22 +2948,21 @@ void ChallengeManager::UpdateRunning(
         CGS_ASSERT(lePlayerActiveRaceCarIndex < ::E_ACTIVE_RACE_CAR_INDEX_COUNT,
                    CGS_ASSERT_MESSAGE_AT("lePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 1000));   // X360 line 0x3E8
 
-        if (UpdateTimer(lfTimeStep))
+        if (!UpdateTimer(lfTimeStep))
         {
-            // 5th param (X360-routed SIM-50Hz predicate) flows into UpdateChallenge.
-            UpdateChallenge(lfTimeStep, liFramesSinceNetworkStart, lpActiveRaceCarOutputInterface,
-                            lpActionQueue, lbIsOnline);
-            mabReceivedSuccessUpdates[lePlayerActiveRaceCarIndex] = true;  // stb 1,+0x590+idx
+            lbChallengeFailed = true;
         }
         else
         {
-            lbTimerNotFinished = true;
+            UpdateChallenge(lfTimeStep, liFramesSinceNetworkStart, lpActiveRaceCarOutputInterface,
+                            lpActionQueue, lbSimTimerAt50Hz);
+            mabReceivedSuccessUpdates[lePlayerActiveRaceCarIndex] = true;
         }
 
-        // 6th param (X360-routed online flag) gates the arbitration pass.
-        if (lbIsTimerFrequency50Hz)
+        // Only the local arbitrator advances challenge arbitration.
+        if (lbIsArbitrator)
         {
-            UpdateArbitration(lfTimeStep, lpActionQueue, lpActiveRaceCarOutputInterface, lbTimerNotFinished);
+            UpdateArbitration(lfTimeStep, lpActionQueue, lpActiveRaceCarOutputInterface, lbChallengeFailed);
         }
     }
 }
@@ -3531,27 +3520,21 @@ void ChallengeManager::BeginChallenge(
     CgsID lChallengeID,
     TGameActionQueue* lpActionQueue,
     const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarOutputInterface,
-    bool lbIsOnline,
-    bool lbRemote)
+    bool lbIsHost,
+    bool lbSendAction)
 {
     // X360 folds the two status compares into one bool in r11 (`cmpwi 2` / `cmpwi 3`), then
     // branches on it -- a plain short-circuit || in the source.
-    if (meChallengeManagerStatus == E_CHALLENGE_MANAGER_STATUS_RUNNING ||
-        meChallengeManagerStatus == E_CHALLENGE_MANAGER_STATUS_RESULTS)
+    const bool lbChallengeActive = (meChallengeManagerStatus == E_CHALLENGE_MANAGER_STATUS_RUNNING ||
+                                    meChallengeManagerStatus == E_CHALLENGE_MANAGER_STATUS_RESULTS);
+    if (lbChallengeActive)
     {
         EndChallenge(E_CHALLENGE_STATUS_ABORTED, lpActionQueue, true);   // li r4,2 / li r6,1
     }
 
-    // Resolve the entry: index first, and only fetch the entry when the id was found
-    // (a miss leaves the cached challenge NULL -- `mr r29,r30` with r30 == 0).
-    const BrnResource::ChallengeListEntry* lpChallenge = 0;
-    const s32 liChallengeIndex = mpFreeburnChallengeList->GetChallengeIndex(lChallengeID);
-    if (liChallengeIndex >= 0)
-    {
-        lpChallenge = mpFreeburnChallengeList->GetChallengeData(liChallengeIndex);
-    }
+    const BrnResource::ChallengeListEntry* lpChallenge = mpFreeburnChallengeList->GetChallengeData(lChallengeID);
 
-    if (lbRemote)
+    if (lbSendAction)
     {
         // The posted id is the RESOLVED entry's id (`ld 0xC0(r29)`), not the parameter; the X360
         // does not null-check lpChallenge here.
@@ -3562,10 +3545,10 @@ void ChallengeManager::BeginChallenge(
         lAction.miActionIndex                 = 0;
         lAction.miNumChallengesComplete       = -1;
         lAction.miTotalNumChallenges          = -1;
-        lAction.mbIsHost                      = lbIsOnline;   // stb r26 (r7), +0x1C
+        lAction.mbIsHost                      = lbIsHost;   // stb r26 (r7), +0x1C
         lAction.mbAbortingToStartNewChallenge = false;
 
-        lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lAction),
+        lpActionQueue->AddEvent(&lAction,
                                 GameStateModuleIO::E_ACTION_FREEBURN_CHALLENGE,
                                 sizeof(GameStateModuleIO::FreeburnChallengeAction));
     }

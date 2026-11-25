@@ -1,5 +1,6 @@
 #include "GameSource/Gui/Flow/HUD/Components/BrnEventInfo.h"
 #define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnEventInfo.cpp"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface::IsUsingMetricUnits
 #include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"                         // BrnFlapt::FileRef::FindComponent
@@ -11,8 +12,7 @@
 #include "GameSource/Gui/Flapt/BrnFlaptTextFieldRef.h"                             // TextFieldRef::{SetText,SetAutoSize,SetColour}
 #include "GameSource/Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptComponentUtils.h"  // TryFindTextFieldFromMovieClip
 #include "GameSource/Gui/SatNav/BrnGuiTracker.h"
-#include <cmath>                                                  // std::floor (the inlined BrnMath::IntRound)
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"          // the [event-info] deferred-arm log
+#include "rw/math/fpu/scalar_operation.h"                       // fpu::Clamp and IntRound
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"            // CgsCore::SPrintf / CgsCore::SnPrintf
 #include "GameSource/BurnoutConstants.h"                           // EActiveRaceCarIndex, E_ACTIVE_RACE_CAR_INDEX_COUNT
 #include "GameSource/Gui/BrnGuiCache.h"                            // BrnGui::GuiCache (+ StuntToDisplayInfo)
@@ -150,13 +150,11 @@ void EventInfoComponent::Construct(const char* lacName,
 // ---------------------------------------------------------------------------
 void EventInfoComponent::Prepare(const char* lacFullName, const BrnFlapt::FileRef& lFile)
 {
-    CGS_ASSERT(lacFullName != 0, "lacName != NULL");   // BrnGuiFlaptComponent.h:133 (non-gating)
+    CGS_ASSERT_AT(lacFullName != 0, "lacName != NULL", "..\\..\\..\\GameSource\\Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptComponent.h", 133);
 
-    lFile.FindComponent(&mAptRef, lacFullName);
+    mAptRef = lFile.FindComponent(lacFullName);
 
-    CGS_ASSERT(mAptRef.mpMovieClipInst != 0, "mpMovieClipInst");   // BrnFlaptMovieClipRef.h:272 (non-gating)
-
-    mAptRef.mpMovieClipInst->ResetTimeline();
+    mAptRef.ResetTimeline();
 
     mpEventInfoComponentName = lacFullName;
     mHUDFileRef              = lFile;
@@ -238,20 +236,29 @@ void EventInfoComponent::ClearEventSpecificData()
 // ---------------------------------------------------------------------------
 void EventInfoComponent::SetPositionTextState(s32 liPosition)
 {
-    CGS_ASSERT(liPosition > 0 && liPosition <= 8,
-               "Invalid player position provided - ");
-
-    if (liPosition == 1)
+    if (!(liPosition > 0 && liPosition <= 8))
     {
-        mTextStateAnimatorRace.Run("Gold");
+        CgsDev::Assert::BeginAssert();
+        CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+        lStream << "Invalid player position provided - " << liPosition;
+        CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, CGS_ASSERT_LOCATION("..\\..\\..\\GameSource\\Gui/Flow/hud/Components/BrnEventInfo.h", 485));
+        CgsDev::Assert::EndAssert();
     }
-    else if (liPosition < KI_POSITION_WARNING_THRESHOLD)
+
+    if (liPosition != 1)
     {
-        mTextStateAnimatorRace.Run("Normal");
+        if (liPosition >= KI_POSITION_WARNING_THRESHOLD)
+        {
+            mTextStateAnimatorRace.Run("Warning");
+        }
+        else
+        {
+            mTextStateAnimatorRace.Run("Normal");
+        }
     }
     else
     {
-        mTextStateAnimatorRace.Run("Warning");
+        mTextStateAnimatorRace.Run("Gold");
     }
 }
 
@@ -271,16 +278,22 @@ void EventInfoComponent::SetPositionTextState(s32 liPosition)
 // ---------------------------------------------------------------------------
 void EventInfoComponent::SetTakedownsDigitsState()
 {
-    CGS_ASSERT(miCurrentTakedowns >= 0,
-               "Invalid takedown count provided - ");
-
-    if (miCurrentTakedowns >= 10)
+    if (!(miCurrentTakedowns >= 0))
     {
-        mTakedownNumbersAnimator.Run("MultipleDigits");
+        CgsDev::Assert::BeginAssert();
+        CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+        lStream << "Invalid takedown count provided - " << miCurrentTakedowns;
+        CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 2227));
+        CgsDev::Assert::EndAssert();
+    }
+
+    if (miCurrentTakedowns < 10)
+    {
+        mTakedownNumbersAnimator.Run("SingleDigit");
     }
     else
     {
-        mTakedownNumbersAnimator.Run("SingleDigit");
+        mTakedownNumbersAnimator.Run("MultipleDigits");
     }
 }
 
@@ -906,9 +919,6 @@ namespace
     // tot-up block -- which is only possible if the constant is exactly 1.0f.
     const f32 KF_TOTUP_DURATION = 1.0f;                       // 0x3F800000
 
-    // IntRound's bias (flt_82001DA0, `fadds` @0x8242A2F4/@0x8242A2F8).
-    const f32 KF_INT_ROUND_BIAS = 0.5f;                       // 0x3F000000
-
     // CgsCore::SPrintf's stack buffer (v96[128], `li r4, 0x80`) and the stunt-score
     // SnPrintf's (v97[64], capped at `li r4, 0x3F` == 63).
     const s32 KI_TEXT_BUFFER_SIZE        = 128;
@@ -942,18 +952,7 @@ namespace
     const u32 KU_STUNT_MASK_REVERSE_TAKEOFF =
         1u << static_cast<u32>(BrnGameState::E_STUNT_TYPE_REVERSE_TAKEOFF);  // 0x00004000
 
-    // BrnMath::IntRound, inlined by the console at @0x8242A2EC-@0x8242A360 as the
-    // classic add-then-subtract-2^52 floor trick: fsel picks +/-4503599627370496.0
-    // (dbl_82001CB0 / dbl_82001CB8) by the sign of the input, the round-trip snaps to
-    // the nearest integer, and a second fsel pair (dbl_82001CA0 == 1.0, dbl_82001CA8 ==
-    // 0.0) subtracts the one-off when that landed above the input -- i.e. floor(). It is
-    // applied to (value + 0.5f), so the whole thing is round-half-up.
-    // [FLAG no BrnMath home] DELETE-WHEN a BrnMath TU lands IntRound and this becomes a
-    // real call to it.
-    s32 IntRound(f32 lfValue)
-    {
-        return static_cast<s32>(std::floor(lfValue + KF_INT_ROUND_BIAS));
-    }
+
 }
 
 // ---------------------------------------------------------------------------
@@ -1237,17 +1236,8 @@ void EventInfoComponent::UpdateStuntAttack(GuiCache* lpCache, bool lbOnline)
             // Clamp<s32>(index, 0, KI_NUM_TIMEOUT_WEDGE_FRAMES - 1), inlined
             // @0x8242A0A4-0x8242A0D4. Note the asserted bound is 5 but the clamp is 4:
             // the console tolerates the off-by-one rather than reading past the table.
-            s32 liClampedFrameNameIndex;
-            if (liFrameNameIndex >= 0)
-            {
-                liClampedFrameNameIndex = (liFrameNameIndex > KI_LAST_TIMEOUT_WEDGE_FRAME)
-                                        ? KI_LAST_TIMEOUT_WEDGE_FRAME
-                                        : liFrameNameIndex;
-            }
-            else
-            {
-                liClampedFrameNameIndex = 0;
-            }
+            const s32 liClampedFrameNameIndex =
+                rw::math::fpu::Clamp(liFrameNameIndex, 0, KI_LAST_TIMEOUT_WEDGE_FRAME);
 
             mbComboWarningActive = true;                                           // stb before the Run
             mScoreAnimator.Run(KAPC_TIMEOUT_WEDGE_FRAME_NAMES[liClampedFrameNameIndex]);
@@ -1308,15 +1298,11 @@ void EventInfoComponent::UpdateStuntAttack(GuiCache* lpCache, bool lbOnline)
         // lerps are `fmadds` (delta * t + start) and each is IntRound'ed.
         const f32 lfElapsed = lpCache->GetTime() - mfTotupStartTime;
 
-        f32 lfProgression = (lfElapsed <= 0.0f) ? 0.0f : (lfElapsed / KF_TOTUP_DURATION);
-        if (lfProgression > 1.0f)
-        {
-            lfProgression = 1.0f;
-        }
+        const f32 lfProgression = rw::math::fpu::Clamp(lfElapsed / KF_TOTUP_DURATION, 0.0f, 1.0f);
 
-        const s32 liTotupMultiplier = IntRound(mfTotupStartMultiplier
+        const s32 liTotupMultiplier = rw::math::fpu::IntRound(mfTotupStartMultiplier
             + (mfTotupFinishMultiplier - mfTotupStartMultiplier) * lfProgression);
-        const s32 liTotupScore = IntRound(mfTotupStartScore
+        const s32 liTotupScore = rw::math::fpu::IntRound(mfTotupStartScore
             + (mfTotupFinishScore - mfTotupStartScore) * lfProgression);
 
         // The banked running total goes to its OWN field (mBankScoreTextField, X360
@@ -1605,39 +1591,18 @@ void EventInfoComponent::UpdateCrash(GuiCache* lpCache)
 // with the showtime score chain. Each remaining gate logs once and returns;
 // entering one of those modes today shows an un-updated (blank) event panel,
 // which the log line makes attributable. Console addresses for the follow-on
-// wave (also in the BrnEventInfo.h declaration banner):
-//   UpdateRace @0x8242FCF0 / UpdateRoadRage
-//   @0x82429A48 / UpdateBurningRoute @0x8242A830 / UpdateSurvivor @0x82421530 /
-//   UpdateOnlineRace @0x824296B0 / UpdateFreeBurnLobby @0x8242FE98.
-// DELETE-WHEN (per arm): its real body lands in this TU family.
-// ============================================================================
-namespace
+// ARTIST 0x824296B0.
+void EventInfoComponent::UpdateOnlineRace(GuiCache* lpCache)
 {
-    void LogDeferredModeArm(const char* lpacArm)
+    UpdateDestinationText(lpCache);
+    if (lpCache->GetDistanceInEvent() != mfDistToCheckpoint)
     {
-        static const char* sapcLogged[8] = {};
-        for (int i = 0; i < 8; ++i)
-        {
-            if (sapcLogged[i] == lpacArm)
-            {
-                return;
-            }
-            if (sapcLogged[i] == 0)
-            {
-                sapcLogged[i] = lpacArm;
-                break;
-            }
-        }
-        if (CgsDev::Log::gpDebugPrint != 0)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[event-info] " << lpacArm
-                << ": deferred per-mode arm (stunt wave gated it) [FLAG]\n";
-        }
+        mfDistToCheckpoint = lpCache->GetDistanceInEvent();
+        maTextField[4].SetLocalisedText(mfDistToCheckpoint, KI_FORMAT_LARGE_DISTANCE);
     }
+    SetPositionData(lpCache, &maTextField[2], &maTextField[3]);
 }
 
-void EventInfoComponent::UpdateOnlineRace(GuiCache*)   { LogDeferredModeArm("UpdateOnlineRace"); }
 // ---- the free-burn lobby panel (mode 15) ------------------------------------------
 namespace
 {
@@ -2137,18 +2102,30 @@ void EventInfoComponent::UpdateRoadRage(GuiCache* lpCache)
 // ---------------------------------------------------------------------------
 void EventInfoComponent::SetTakedownsTextState()
 {
-    CGS_ASSERT(miCurrentTakedowns >= 0,
-               "Invalid takedown count provided - ");
-    CGS_ASSERT(miTargetTakedowns > 0,
-               "Invalid takedown target provided - ");
-
-    if (miCurrentTakedowns >= miTargetTakedowns)
+    if (!(miCurrentTakedowns >= 0))
     {
-        mTextStateAnimatorRRage.Run(KPC_TAKEDOWNS_STATE_NORMAL);
+        CgsDev::Assert::BeginAssert();
+        CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+        lStream << "Invalid takedown count provided - " << miCurrentTakedowns;
+        CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 2201));
+        CgsDev::Assert::EndAssert();
+    }
+    if (!(miTargetTakedowns > 0))
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+        lStream << "Invalid takedown target provided - " << miTargetTakedowns;
+        CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 2202));
+        CgsDev::Assert::EndAssert();
+    }
+
+    if (miCurrentTakedowns < miTargetTakedowns)
+    {
+        mTextStateAnimatorRRage.Run(KPC_TAKEDOWNS_STATE_WARNING);
     }
     else
     {
-        mTextStateAnimatorRRage.Run(KPC_TAKEDOWNS_STATE_WARNING);
+        mTextStateAnimatorRRage.Run(KPC_TAKEDOWNS_STATE_NORMAL);
     }
 }
 

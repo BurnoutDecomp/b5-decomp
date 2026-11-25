@@ -39,7 +39,7 @@ namespace BrnGui
                                     const BrnFlapt::FileRef& lFile,
                                     const char* lacParentName)
     {
-        CGS_ASSERT(lacName != 0, "lacName != NULL");
+        CGS_ASSERT_AT(lacName != 0, "lacName != NULL", "..\\..\\..\\GameSource\\Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptComponent.h", 133);
 
         const char* lpcComponentName = lacName;
 
@@ -53,14 +53,9 @@ namespace BrnGui
             lpcComponentName = lacComponentPath;
         }
 
-        // Bind the resolved component's MovieClipRef directly into mAptRef (the
-        // X360 went via a stack temp then copied both handle words; that is exactly
-        // a MovieClipRef write into mAptRef).
-        lFile.FindComponent(&mAptRef, lpcComponentName);
+        mAptRef = lFile.FindComponent(lpcComponentName);
 
-        CGS_ASSERT(mAptRef.mpMovieClipInst != 0, "mpMovieClipInst");
-
-        mAptRef.mpMovieClipInst->ResetTimeline();
+        mAptRef.ResetTimeline();
     }
 
     // @ 0x8240E740 (DWARF home BrnGuiFlaptComponent.h:164; the X360 kept an
@@ -69,12 +64,10 @@ namespace BrnGui
     // clip's timeline (the same asserted-reset tail as the FileRef Prepare above).
     void BrnFlaptComponent::Prepare(const BrnFlapt::MovieClipRef* lpMovieClipRef)
     {
-        CGS_ASSERT(lpMovieClipRef != 0, "NULL != lpMovieClipRef");
+        CGS_ASSERT_AT(lpMovieClipRef != 0, "NULL != lpMovieClipRef", "..\\..\\..\\GameSource\\Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptComponent.h", 164);
 
         mAptRef = *lpMovieClipRef;
 
-        CGS_ASSERT(mAptRef.mpMovieClipInst != 0, "mpMovieClipInst");
-
-        mAptRef.mpMovieClipInst->ResetTimeline();
+        mAptRef.ResetTimeline();
     }
 }

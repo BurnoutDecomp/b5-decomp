@@ -43,19 +43,28 @@ static const f32 KF_LATENCY = 450.0f;            // flt_8203869C
 static const f32 KF_HALF = 0.5f;                 // flt_82001DA0 (Nyquist = sampleRate * 0.5)
 static const f32 KF_MARGIN = 0.0099999998f;      // flt_82002138 (~1% Nyquist guard band)
 
-// The dispatch thunk for the record's Process slot is unnecessary -- the PC body is already
-// the dispatched static shape.
-
 // off_82F8D24C -- the "LowPassButterworth" runtime descriptor, REAL (its 52 bytes were
 // re-read from the XEX by the decode: 'LPB0', type 4, 0 ctor params, 3 attributes, 0 events).
-// Metadata FLAG'd null per the descriptor-wave convention.
-static PlugInDescRunTime g_LowPassButterworthDesc = {
+ChannelMapPair LowPassButterworth::sChannelMaps[] = {
+    { CHANNELMAPVALUE_STANDARD, CHANNELMAPVALUE_SAMEASINPUT },
+    { CHANNELMAPVALUE_TERMINATOR, CHANNELMAPVALUE_TERMINATOR }
+};
+
+ParameterDescRunTime LowPassButterworth::sParameterDescRunTime[] = {
+    { PARAMETERDIRECTION_INPUT, PARAMETERTYPE_FLOAT32, 0.0, 96000.0, 0 },
+    { PARAMETERDIRECTION_INPUT, PARAMETERTYPE_FLOAT32, 1.0, 4.0, 0 },
+    { PARAMETERDIRECTION_INPUT, PARAMETERTYPE_FLOAT32, 0.1f, 2.0, 0 }
+};
+
+PlugInDescRunTime LowPassButterworth::sPlugInDescRunTime = {
     "LowPassButterworth",
     reinterpret_cast<void *>(&LowPassButterworth::GetSize),        // @0x82B9E4B0
     reinterpret_cast<void *>(&LowPassButterworth::CreateInstance), // @0x82BA2FA0
     0,
     reinterpret_cast<void *>(&LowPassButterworth::Process),        // @0x82B97C00
-    0, 0, 0, 0,
+    sChannelMaps,
+    sParameterDescRunTime,
+    0, 0,
     0,
     0x4C504230u,       // 'LPB0'
     4, 0, 3, 0, 0, 0,
@@ -65,9 +74,9 @@ static PlugInDescRunTime g_LowPassButterworthDesc = {
 // -------------------------------------------------------------------------------------
 // GetPlugInDescRunTime @0x82B97BF0 -- return &off_82F8D24C.
 // -------------------------------------------------------------------------------------
-char **LowPassButterworth::GetPlugInDescRunTime()
+PlugInDescRunTime *LowPassButterworth::GetPlugInDescRunTime()
 {
-    return reinterpret_cast<char **>(&g_LowPassButterworthDesc);
+    return &sPlugInDescRunTime;
 }
 
 // -------------------------------------------------------------------------------------
@@ -77,7 +86,7 @@ char **LowPassButterworth::GetPlugInDescRunTime()
 // The factory passes the stage config to both Butterworth size hooks. The
 // channel count at +0x08 sizes the kernel after the plug-in header.
 // -------------------------------------------------------------------------------------
-u32 LowPassButterworth::GetSize(const PlugInConfig *config)
+u32 LowPassButterworth::GetSize(PlugInConfig *config)
 {
     return Butterworth::GetSize(config->outputChannels)
         + offsetof(LowPassButterworth, mButterworth);
@@ -101,8 +110,9 @@ void *LowPassButterworth::VectorDeletingDestructor(LowPassButterworth *self, cha
 // voice's accumulator and parks its own mDecaySamples at 450. Returns 1 (the asm loads
 // r3 = 1; it does NOT return self).
 // -------------------------------------------------------------------------------------
-int LowPassButterworth::CreateInstance(LowPassButterworth *self)
+bool LowPassButterworth::CreateInstance(PlugIn *pPlugIn, void * /*pConstructorParams*/)
 {
+    LowPassButterworth *const self = reinterpret_cast<LowPassButterworth *>(pPlugIn);
     if (self)
         self->mBase.mpVTable = KLB_LowPassButterworthVTable; // off_8217F444
 
@@ -131,7 +141,7 @@ int LowPassButterworth::CreateInstance(LowPassButterworth *self)
     self->mBase.mpVoice->mfFadeStart =
         (KF_LATENCY - lfOldDecay) + self->mBase.mpVoice->mfFadeStart;
     self->mBase.mDecaySamples = KF_LATENCY;             // stfs +0x18 (450.0)
-    return 1;
+    return true;
 }
 
 // -------------------------------------------------------------------------------------
@@ -144,9 +154,9 @@ int LowPassButterworth::CreateInstance(LowPassButterworth *self)
 // so the frame passes through untouched -- with the running state flushed on the first frame
 // that leaves the band.
 // -------------------------------------------------------------------------------------
-int LowPassButterworth::Process(LowPassButterworth *self, AudioProcessContext *ctx,
-                                bool /*discontinuity*/)
+BufferStatus LowPassButterworth::Process(PlugIn *pPlugIn, Mixer *ctx, bool /*discontinuity*/)
 {
+    LowPassButterworth *const self = reinterpret_cast<LowPassButterworth *>(pPlugIn);
     Butterworth *lpButterworth = reinterpret_cast<Butterworth *>(
         reinterpret_cast<char *>(self) + self->muButterworthOffset);  // self + *(self+0x58)
 
@@ -165,7 +175,7 @@ int LowPassButterworth::Process(LowPassButterworth *self, AudioProcessContext *c
         if (!(self->mfLastCutoffFreq > lfHighGuard))
             lpButterworth->ClearBuffer();
         self->mfLastCutoffFreq = self->mfCutoffFreq;                  // stfs +0x40
-        return 1;                                                     // no Filter, no swap
+        return BUFFERSTATUS_AVAILABLE;
     }
 
     // Clamp the live cutoff UP into the low guard band (the high-pass clamps DOWN instead).
@@ -191,7 +201,7 @@ int LowPassButterworth::Process(LowPassButterworth *self, AudioProcessContext *c
     }
 
     lpButterworth->Filter(ctx);
-    return 1;   // BUFFERSTATUS_AVAILABLE
+    return BUFFERSTATUS_AVAILABLE;
 }
 
 } // namespace core

@@ -219,16 +219,16 @@ extern "C" void LobbyRankDestroy(LobbyRankT* r)
 // with the ranker first): LobbyRankSelect passes the ranker in r3 (0x82B26AA0).
 static s32 RankSelectIndex(LobbyRankT* pRanker, u32 oldIndex, s32 requested, u32 count)
 {
- // ARTIST dispatches -100..-91 through a byte table (0x821465D8: 00 08 10 18 58 30 44
- // 6C 6C 00): -91 shares -100's body, -93/-92 the shared -1 return, -96 the default.
+ // ARTIST dispatches -100..-91 through the byte table at 0x821465D8.
+ // The last three entries share the -1 return at 0x82B26280.
  switch (requested) {
- case -100: case -91: return oldIndex;
+ case -100: return oldIndex;
  case -99: return 0;
  case -98: return count-1;
  case -97: return oldIndex+1 == count ? oldIndex : oldIndex+1;
  case -95: return oldIndex == count ? 0 : oldIndex+1;
  case -94: return oldIndex == 0 ? count-1 : oldIndex-1;
- case -93: case -92: break;
+ case -93: case -92: case -91: break;
  default:
   if (requested >= 0 && (u32)requested < count) return requested;
   break;
