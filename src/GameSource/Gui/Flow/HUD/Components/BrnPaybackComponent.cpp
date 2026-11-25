@@ -345,7 +345,7 @@ s32 PaybackComponent::ChooseRandomAward()
     {
         liAward = static_cast<s32>(mRandom.RandomUInt() % 3u);
     }
-    while (liAward == mePreviouslyShownPayback);
+    while (mePreviouslyShownPayback == liAward);
 
     mePreviouslyShownPayback = static_cast<EAwardTypes>(liAward);   // +0xD8
     return liAward;

@@ -66,9 +66,9 @@ namespace BrnGui
     const char CrashNavEnterOnlineBase::KAC_CREATE_ACCOUNT_TITLE_STRING_ID[35]    = "$ONLINE_LOGIN_CREATE_ACCOUNT_TITLE";  // @0x82066238
 
     // ---- the login-question body text, indexed by CgsGui::ELoginQuestion --------------
-    // The leading '~' on two of them is verbatim: it is the database-text marker the
-    // text field strips, not a typo.
-    const char* const CrashNavEnterOnlineBase::KAPC_LOGIN_QUESTION_STRING_ID[7] =   // @0x82F26D94
+    // ARTIST loads these pointers from the table. DecFIGS declares the entries as
+    // const char*. The text field uses the leading '~' as a database-text marker.
+    const char* CrashNavEnterOnlineBase::KAPC_LOGIN_QUESTION_STRING_ID[7] =   // @0x82F26D94
     {
         "$ONLINE_LOGIN_QUESTION_TOS",             // E_LOGIN_QUESTION_TOS
         "~ONLINE_LOGIN_QUESTION_CREATE_ACCOUNT",  // E_LOGIN_QUESTION_CREATE_ACCOUNT
@@ -493,9 +493,10 @@ namespace BrnGui
     void CrashNavEnterOnlineBase::ShowCreateAccount()
     {
         mTOSQuestion.SetText(KAC_CREATE_ACCOUNT_TITLE_STRING_ID);
-        mTOSText.SetText(KAPC_LOGIN_QUESTION_STRING_ID[CgsGui::E_LOGIN_QUESTION_CREATE_ACCOUNT]);
-        mTOSText.ResetScroll();          // X360 inlines the single stb 1, 0x125(field) @0x824BC808
-        mTOSText.OutputAptData();
+        TextField& lrTOSText = mTOSText;
+        lrTOSText.SetText(KAPC_LOGIN_QUESTION_STRING_ID[CgsGui::E_LOGIN_QUESTION_CREATE_ACCOUNT]);
+        lrTOSText.ResetScroll();
+        lrTOSText.OutputAptData();
 
         mMessageButtons.SetupMenu(2, true);
         for (s32 li = 0; li < 2; ++li)
@@ -589,9 +590,10 @@ namespace BrnGui
     void CrashNavEnterOnlineBase::ShowTOS()
     {
         mTOSQuestion.SetText(KAPC_LOGIN_QUESTION_STRING_ID[CgsGui::E_LOGIN_QUESTION_TOS]);
-        mTOSText.SetText(KAC_TOS_TEXT_STRING_ID);   // "~TOS_TEXT" -- the '~' is the database-text marker
-        mTOSText.ResetScroll();                     // X360 inlines the single stb 1, 0x125(field) @0x824BC5D4
-        mTOSText.OutputAptData();
+        TextField& lrTOSText = mTOSText;
+        lrTOSText.SetText(KAC_TOS_TEXT_STRING_ID);
+        lrTOSText.ResetScroll();
+        lrTOSText.OutputAptData();
 
         mMessageButtons.SetupMenu(2, true);
         for (s32 li = 0; li < 2; ++li)

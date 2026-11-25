@@ -30,6 +30,7 @@
 // (0.0/0.5/0.6/0.55/0.4/1.0/3.0/10.0/20.0/30.0/50.0/80.0/100.0/10000.0) are used inline.
 
 static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\World/AI/BrnAICar.h";
+static const char* const KPC_AICAR_CPP = "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/BrnAICar.cpp";
 
 namespace BrnAI
 {
@@ -576,7 +577,7 @@ namespace BrnAI
                 break;
 
             default:
-                CGS_ASSERT(false, "Invalid route finding style");
+                CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("Invalid route finding style", KPC_AICAR_CPP, 1008));
                 break;
         }
     }
@@ -608,8 +609,7 @@ namespace BrnAI
         if (!mbWantsAlternativeRoute)
             return;
 
-        const f32 lfHoldTime = static_cast<f32>(miOpponentIndex) * KF_ALT_ROUTE_HOLD_PER_OPP +
-                               KF_ALT_ROUTE_HOLD_BASE;
+        const f32 lfHoldTime = KF_ALT_ROUTE_HOLD_BASE + static_cast<f32>(miOpponentIndex) * KF_ALT_ROUTE_HOLD_PER_OPP;
         if (mfAlternativeRouteTimer < lfHoldTime)                      // bgelr 0x82765E7C
         {
             mfAlternativeRouteTimer = mfAlternativeRouteTimer + lfTimeStep;
@@ -958,7 +958,6 @@ namespace BrnAI
 
     // The console's file strings (the unity .cpp path for .cpp-line asserts, the relative path
     // for the inlined BrnAICar.h accessors).
-    static const char* const KPC_AICAR_CPP = "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/BrnAICar.cpp";
     static const char* const KPC_AICAR_H   = "..\\..\\..\\GameSource\\World/AI/BrnAICar.h";
 
     // ===== the BrnAICar.cpp file-scope RNG (.data 0x8300D5D0) ==============================

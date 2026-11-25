@@ -270,22 +270,12 @@ bool MomentController::NewMoment(Moment::EType leMomentType,
 
     lrMomentHandleInOut.Prepare(lVoidHandle, *this, lrBehaviourManager);
 
-    CGS_ASSERT(lrMomentHandleInOut.IsAllocated(), "mbIsAllocated");
     CGS_ASSERT(lrMomentHandleInOut.GetMoment().GetType() == leMomentType,
                CGS_ASSERT_MESSAGE_AT("lrMomentHandleInOut.GetMoment().GetType() == leMomentType", CGS_ARTIST_FILE, 211));
 
     Moment::Parameters* lpParameters = mMomentParameterBank.GetParameters(leMomentParamID);
 
-    CGS_ASSERT(lrMomentHandleInOut.IsAllocated(), "mbIsAllocated");
     lrMomentHandleInOut.GetMoment().SetParameters(lpParameters);
-
-    // [DIAG] NOT IN THE console BINARY. One line per moment TYPE the factory really allocates (the
-    // selectors' Prepares call NewMoment a handful of times and then never again), so a log shows
-    // which moments exist. Behind BRN_CRASHCAM_DIAG (the crash-camera gate, default off) since
-    // 2026-09-24 (crash-parity diag hygiene): it used to print whenever a log existed.
-    {
-        static bool sbaLoggedType[Moment::E_MOMENT_COUNT] = { false };
-    }
 
     return true;
 }

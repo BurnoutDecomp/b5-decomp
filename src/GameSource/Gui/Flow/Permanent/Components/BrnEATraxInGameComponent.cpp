@@ -54,9 +54,10 @@ namespace BrnGui
     static const char* const KAC_SONG_FIELD_NAME   = "SongName_txt";
     static const char* const KAC_ALBUM_FIELD_NAME  = "AlbumName_txt";
 
-    // The timeline frames the chyron plays (X360 off_82F24F74 / off_82F24F78).
-    static const char* const KAPC_ANIM_IN_FRAME  = "AnimIn";
-    static const char* const KAPC_ANIM_OUT_FRAME = "AnimOut";
+    // ARTIST loads the frame pointers at 0x82F24F74 and 0x82F24F78. DecFIGS declares
+    // both as static const char* members.
+    const char* EATraxInGameComponent::KAPC_ANIM_IN_FRAME  = "AnimIn";
+    const char* EATraxInGameComponent::KAPC_ANIM_OUT_FRAME = "AnimOut";
 
     // How long the chyron stays up after a new track starts (seconds). The X360 adds
     // this to the current game time to arm mfAnimOutTime_Seconds (asm: fadds with
@@ -77,21 +78,6 @@ namespace BrnGui
 
         GuiEATraxChyronActive() : mbActive(false) {}
     };
-
-    // The GuiEventOut channel id and the on-queue record size the X360 passes to
-    // AddEvent (asm: `li r5, 0x28` == 40, `li r6, 0x10` == 16).
-    static const s32 KI_GUI_EVENT_OUT_CHANNEL = 40;
-    static const s32 KI_CHYRON_EVENT_RECORD_SIZE = 16;
-
-    // Publish a GuiEATraxChyronActive(lbActive) event onto the owning state's output
-    // queue. Factored out of Update / DisplayNewTrackNotification (the X360 inlined
-    // the same record build + AddEvent at both sites).
-    static void PublishChyronActiveEvent(CgsGui::StateInterface* lpStateInterface, bool lbActive)
-    {
-        GuiEATraxChyronActive lActiveEvent;
-        lActiveEvent.mbActive = lbActive;
-        lpStateInterface->OutputGuiEvent(lActiveEvent);
-    }
 
     // @ 0x824249F8 -- bind the state interface, invalidate the apt clip + the three
     // text-field handles, and zero the runtime state.
@@ -163,7 +149,9 @@ namespace BrnGui
         {
             meComponentState = E_CS_INVISIBLE;
             mAptRef.GotoAndPlayLabel(KAPC_ANIM_OUT_FRAME);
-            PublishChyronActiveEvent(mpStateInterface, false);
+            GuiEATraxChyronActive lActiveEvent;
+            lActiveEvent.mbActive = false;
+            mpStateInterface->OutputGuiEvent(lActiveEvent);
         }
     }
 
@@ -192,6 +180,8 @@ namespace BrnGui
         }
 
         mAptRef.GotoAndPlayLabel(KAPC_ANIM_IN_FRAME);
-        PublishChyronActiveEvent(mpStateInterface, true);
+        GuiEATraxChyronActive lActiveEvent;
+        lActiveEvent.mbActive = true;
+        mpStateInterface->OutputGuiEvent(lActiveEvent);
     }
 }

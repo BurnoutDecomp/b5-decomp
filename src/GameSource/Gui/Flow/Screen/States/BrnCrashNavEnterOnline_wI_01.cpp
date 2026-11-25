@@ -36,9 +36,10 @@ namespace BrnGui
     void CrashNavEnterOnlineBase::ShowOpenAccountInUS()
     {
         mTOSQuestion.SetText(KAC_CREATE_ACCOUNT_TITLE_STRING_ID);
-        mTOSText.SetText(KAPC_LOGIN_QUESTION_STRING_ID[CgsGui::E_LOGIN_QUESTION_OPEN_US_ACCOUNT]);
-        mTOSText.ResetScroll();          // X360 inlines the single stb 1, 0x125(field)
-        mTOSText.OutputAptData();
+        TextField& lrTOSText = mTOSText;
+        lrTOSText.SetText(KAPC_LOGIN_QUESTION_STRING_ID[CgsGui::E_LOGIN_QUESTION_OPEN_US_ACCOUNT]);
+        lrTOSText.ResetScroll();
+        lrTOSText.OutputAptData();
 
         mMessageButtons.SetupMenu(2, true);
         for (s32 li = 0; li < 2; ++li)

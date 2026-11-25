@@ -30,13 +30,17 @@
 // scratchpad/waveQ4/probe_collision/probe_incl2.cpp, which compiles the accessors against
 // this header ALONE -- so naming them here changes no include closure, it only stops the
 // header depending on a sibling's private choice of includes.
-#include "GameShared/GameClasses/Core/CgsAssert.h"    // CGS_ASSERT (the two setters' tripwires)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "rw/physics/rigidbody.h"                     // rw::physics::BodyState
 
 namespace CgsSceneManager
 {
 namespace SceneManagerIO
 {
+    // The inline event setters and scene producers shared this ARTIST header.
+    static const char KAC_SCENE_UPDATE_ARTIST_FILE[] =
+        "..\\..\\..\\GameShared\\GameClasses\\SceneManager/CgsSceneManagerIO_SceneUpdate.h";
+
     // Empty per-module event base (CgsModule event-queue convention; the queue stores events by
     // byte image). SceneManagerIO::Event now lives in CgsSceneManagerIO_Event.h as a single
     // canonical definition (was formerly redefined here -- the redefinition tripped C2011 once
@@ -96,7 +100,8 @@ namespace SceneManagerIO
 
         void SetBodyState(rw::physics::BodyState leBodyState)
         {
-            CGS_ASSERT(static_cast<int>(leBodyState) <= 0xff, "(int)leBodyState <= 0xff");
+            CGS_ASSERT(static_cast<int>(leBodyState) <= 0xff,
+                       CGS_ASSERT_MESSAGE_AT("(int)leBodyState <= 0xff", KAC_SCENE_UPDATE_ARTIST_FILE, 188));
             muBodyState = static_cast<u8>(leBodyState);
         }
 
@@ -107,7 +112,8 @@ namespace SceneManagerIO
 
         void SetCacheOptions(EAddForCollisionCacheOptions leOptions)
         {
-            CGS_ASSERT(static_cast<int>(leOptions) <= 0xff, "(int)leOptions <= 0xff");
+            CGS_ASSERT(static_cast<int>(leOptions) <= 0xff,
+                       CGS_ASSERT_MESSAGE_AT("(int)leOptions <= 0xff", KAC_SCENE_UPDATE_ARTIST_FILE, 201));
             muCacheOptions = static_cast<u8>(leOptions);
         }
 

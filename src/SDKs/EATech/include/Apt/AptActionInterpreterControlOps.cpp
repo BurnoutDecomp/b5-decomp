@@ -29,6 +29,7 @@
 #include "SDKs/EATech/include/Apt/AptNativeHash.h"         // AptNativeHash::Set (catch binding)
 #include "SDKs/EATech/include/Apt/AptCIH.h"                // ctx->mpCIH -> AptValue* upcast
 #include "SDKs/EATech/include/Apt/Apt.h"                   // gAptFuncs (pfnDebugPrint)
+#include "SDKs/EATech/include/Apt/AptValue/AptGCReleaseVector.h"
 
 #include "types.hpp"
 
@@ -93,27 +94,14 @@ void AptActionInterpreter::_FunctionAptActionToString(AptActionInterpreter* pInt
 //     DictCallMethodPop    @0x82B05B68 -- push dict-register, CallMethod,   drop the top
 //     DictCallMethodSetVar @0x82B05C20 -- push dict-register, CallMethod,   SetVariable
 //
-// Each is a thin composition of the already-reconstructed leaf handlers
-// (_FunctionAptActionCallFunction / _FunctionAptActionCallMethod /
-// _FunctionAptActionSetVariable) plus, for the Dict* forms, an inline operand-
-// stack push of a value taken from the string-constant dictionary (mpConstantPool,
-// console +0x44) indexed by a single dictionary byte read from the program
-// counter. After the side-effect each flushes the AptGC deferred-release value
-// vector once the operand stack has drained (the console guards the flush by
-// `off_8324E51C->count != 0 && mnStackTop == 0`; the count side of the guard is
-// folded into AptFlushDeferredReleases, exactly as the sibling Var/Member
-// opcodes do).
-//
-// The AptGC deferred-release vector flush (console off_8324E51C /
-// AptValueVector::ReleaseValues; the AptGC layer). Encapsulated as
-// AptFlushDeferredReleases (the same hook the Var/Member opcodes use); the
-// stack-empty guard that triggers it is faithful + engine-side.
+// The fused call opcodes reuse the normal CallFunction, CallMethod and
+// SetVariable handlers. ARTIST 0x82B05454 starts the deferred release check
+// with the vector count, then tests the operand-stack depth. The dictionary
+// forms at 0x82B05AB0, 0x82B05B68 and 0x82B05C20 push directly from the
+// constant pool before calling their handlers.
 // ===========================================================================
 
-// The AptGC deferred-release drain (AptValueVector::ReleaseValues over
-// off_8324E51C == gValuesToRelease): drain the vector once the operand stack
-// empties. Shared with the Var/Member opcodes (declared there too); homed in
-// AptGC.cpp.
+// The separate DictCallFuncPop implementation below still uses this helper.
 extern void AptFlushDeferredReleases();
 
 namespace
@@ -122,14 +110,13 @@ namespace
     // dictionary byte onto the operand stack (the shared prologue of the three
     // Dict* fused ops). Console: r10 = byte<<2 (a 4-byte-pointer index into
     // mpConstantPool @ +0x44); the value is stored at the top, the top advanced, and
-    // vtbl[0] (AddRef) invoked -- i.e. stackPush of mpConstantPool[dictByte]. On x64
-    // the dictionary is an AptValue* array, so it indexes by element.
+    // vtbl[0] (AddRef) invoked -- i.e. stackPush of mpConstantPool[dictByte].
     inline void PushDictRegister(AptActionInterpreter* pInterp,
                                  AptActionInterpreter::LocalContextT* pContext)
     {
         const uint8_t nDictByte = *pContext->mpProgramCounter;
         ++pContext->mpProgramCounter;                       // advance past the byte
-        AptValue* pValue = pInterp->GetDictEntry(nDictByte);   // null-guarded (x64 hardening; see GetDictEntry)
+        AptValue* pValue = pInterp->mpConstantPool[nDictByte];
         pInterp->mpStack[pInterp->mnStackTop++] = pValue;   // inlined stackPush
         pValue->AddRef();
     }
@@ -143,8 +130,8 @@ void AptActionInterpreter::_FunctionAptActionCallFuncSetVar(AptActionInterpreter
 {
     _FunctionAptActionCallFunction(pInterp, pContext);
     _FunctionAptActionSetVariable(pInterp, pContext);
-    if (pInterp->mnStackTop == 0)
-        AptFlushDeferredReleases();   // gValuesToRelease drain (homed in AptGC.cpp)
+    if (gpValuesToRelease->GetNumValues() != 0 && pInterp->mnStackTop == 0)
+        gpValuesToRelease->ReleaseValues();
 }
 
 // ---------------------------------------------------------------------------
@@ -155,12 +142,12 @@ void AptActionInterpreter::_FunctionAptActionCallMethodPop(AptActionInterpreter*
 {
     _FunctionAptActionCallMethod(pInterp, pContext);
     pInterp->stackPop();                  // console AptValue>::Pop -- drop the call result
-    if (pInterp->mnStackTop == 0)
-        AptFlushDeferredReleases();   // gValuesToRelease drain (homed in AptGC.cpp)
+    if (gpValuesToRelease->GetNumValues() != 0 && pInterp->mnStackTop == 0)
+        gpValuesToRelease->ReleaseValues();
 }
 
 // ---------------------------------------------------------------------------
-// CallFuncAndPop (0x5B; PS3 @0x823970) -- CallFunction, drop the result, drain the
+// CallFuncAndPop (0x5B; ARTIST 0x82B053D0) -- CallFunction, drop the result, drain the
 // deferred-release vector once the operand stack has fully unwound. CallMethodPop's
 // function-call sibling.
 // ---------------------------------------------------------------------------
@@ -169,8 +156,8 @@ void AptActionInterpreter::_FunctionAptActionCallFuncAndPop(AptActionInterpreter
 {
     _FunctionAptActionCallFunction(pInterp, pContext);
     pInterp->stackPop();                  // drop the call result (Release)
-    if (pInterp->mnStackTop == 0)
-        AptFlushDeferredReleases();   // console: vector-count && top==0 -> ReleaseValues
+    if (gpValuesToRelease->GetNumValues() != 0 && pInterp->mnStackTop == 0)
+        gpValuesToRelease->ReleaseValues();
 }
 
 // ---------------------------------------------------------------------------
@@ -242,8 +229,8 @@ void AptActionInterpreter::_FunctionAptActionCallMethodSetVar(AptActionInterpret
 {
     _FunctionAptActionCallMethod(pInterp, pContext);
     _FunctionAptActionSetVariable(pInterp, pContext);
-    if (pInterp->mnStackTop == 0)
-        AptFlushDeferredReleases();   // gValuesToRelease drain (homed in AptGC.cpp)
+    if (gpValuesToRelease->GetNumValues() != 0 && pInterp->mnStackTop == 0)
+        gpValuesToRelease->ReleaseValues();
 }
 
 // ---------------------------------------------------------------------------
@@ -256,8 +243,8 @@ void AptActionInterpreter::_FunctionAptActionDictCallFuncSetVar(AptActionInterpr
     PushDictRegister(pInterp, pContext);
     _FunctionAptActionCallFunction(pInterp, pContext);
     _FunctionAptActionSetVariable(pInterp, pContext);
-    if (pInterp->mnStackTop == 0)
-        AptFlushDeferredReleases();   // gValuesToRelease drain (homed in AptGC.cpp)
+    if (gpValuesToRelease->GetNumValues() != 0 && pInterp->mnStackTop == 0)
+        gpValuesToRelease->ReleaseValues();
 }
 
 // ---------------------------------------------------------------------------
@@ -270,8 +257,8 @@ void AptActionInterpreter::_FunctionAptActionDictCallMethodPop(AptActionInterpre
     PushDictRegister(pInterp, pContext);
     _FunctionAptActionCallMethod(pInterp, pContext);
     pInterp->stackPop();                  // console AptValue>::Pop -- drop the call result
-    if (pInterp->mnStackTop == 0)
-        AptFlushDeferredReleases();   // gValuesToRelease drain (homed in AptGC.cpp)
+    if (gpValuesToRelease->GetNumValues() != 0 && pInterp->mnStackTop == 0)
+        gpValuesToRelease->ReleaseValues();
 }
 
 // ---------------------------------------------------------------------------
@@ -284,8 +271,8 @@ void AptActionInterpreter::_FunctionAptActionDictCallMethodSetVar(AptActionInter
     PushDictRegister(pInterp, pContext);
     _FunctionAptActionCallMethod(pInterp, pContext);
     _FunctionAptActionSetVariable(pInterp, pContext);
-    if (pInterp->mnStackTop == 0)
-        AptFlushDeferredReleases();   // gValuesToRelease drain (homed in AptGC.cpp)
+    if (gpValuesToRelease->GetNumValues() != 0 && pInterp->mnStackTop == 0)
+        gpValuesToRelease->ReleaseValues();
 }
 
 // ===========================================================================

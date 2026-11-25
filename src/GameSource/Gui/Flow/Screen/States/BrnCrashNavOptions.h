@@ -304,11 +304,7 @@ namespace BrnGui
 
         // @0x824B8028 (this TU, cpp:853) -- pull the options model from the profile
         // block the GUI cache exposes.
-        void SetSettingsFromProfile()
-        {
-            CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // :853 (non-gating)
-            mOptionsData.SetFromProfile(mpGuiCache->GetMenuOptionsData());
-        }
+        void SetSettingsFromProfile();
 
     private:
         bool UpdateInitSetup();                                       // @0x824C18B8

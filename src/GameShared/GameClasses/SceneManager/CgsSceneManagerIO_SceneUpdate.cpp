@@ -12,9 +12,7 @@ namespace SceneManagerIO
 {
     namespace
     {
-        const char KAC_SCENE_UPDATE_ARTIST_FILE[] =
-            "..\\..\\..\\GameShared\\GameClasses\\SceneManager/CgsSceneManagerIO_SceneUpdate.h";
-        const char KAC_CLEAR_CULLING_TABLE_ARTIST_FILE[] =
+        const char KAC_SCENE_UPDATE_ABSOLUTE_ARTIST_FILE[] =
             "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\CgsSceneManagerIO_SceneUpdate.h";
     }
 
@@ -176,8 +174,18 @@ namespace SceneManagerIO
                                                    VolumeId lVolumeId,
                                                    const Matrix44Affine& lrTransform)
     {
-        CGS_ASSERT(lVolumeInstanceId.GetEntityIDOwner() <= VolumeInstanceId::KU_MAX_ENTITY_TYPE,
-                   "Burnout Specific: Bad Volume Instance ");
+        if (lVolumeInstanceId.GetEntityIDOwner() > VolumeInstanceId::KU_MAX_ENTITY_TYPE)
+        {
+            // ARTIST 0x822CB6E4–0x822CB6FC prints the packed ID in hexadecimal,
+            // then restores decimal mode on the shared assertion stream.
+            CgsDev::Assert::BeginAssert();
+            CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+            ((lMessage << "Burnout Specific: Bad Volume Instance ").SetPrintMode(CgsDev::E_PRINTMODE_HEX)
+                << lVolumeInstanceId.muId).SetPrintMode(CgsDev::E_PRINTMODE_DECIMAL);
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+                                       CGS_ASSERT_LOCATION(KAC_SCENE_UPDATE_ARTIST_FILE, 994));
+            CgsDev::Assert::EndAssert();
+        }
 
         InEventAddVolumeInstance lEvent;
         lEvent.mVolumeInstanceId = lVolumeInstanceId;   // std a2 @+0x00
@@ -185,7 +193,8 @@ namespace SceneManagerIO
         lEvent.mTransform        = lrTransform;         // four stvx128 lanes @+0x10
 
         CGS_ASSERT(mAddVolumeInstanceQueue.GetLength() < mAddVolumeInstanceQueue.GetMaxLength(),
-                   "SceneManager.mAddVolumeInstanceQueue too small, increase value in SceneManagerConstants.h");
+                   CGS_ASSERT_STREAM_MESSAGE_AT("SceneManager.mAddVolumeInstanceQueue too small, increase value in SceneManagerConstants.h",
+                                                KAC_SCENE_UPDATE_ARTIST_FILE, 1000));
         mAddVolumeInstanceQueue.AddEvent(lEvent);
     }
 
@@ -217,26 +226,25 @@ namespace SceneManagerIO
     // this+0x71040 is mAddForCollisionQueue. Console offsets are provenance only; the body
     // reaches the queue by name.
     //
-    // FIELD-ORDER NOTE: the asm writes mVolumeInstanceId (+0x10) BEFORE mPadding (+0x00)
-    // because the vmx store had to wait for v127's copy of v1; the two stores are independent
-    // slots of the same stack record, so declaration order is used here.
     void InSceneUpdateInterface::AddForCollision(VolumeInstanceId lVolumeInstanceId,
                                                  InEventAddForCollision::CullingGroup lCullingGroup,
                                                  rw::physics::BodyState leBodyState,
                                                  Vector3 lPadding,
                                                  EAddForCollisionCacheOptions leCacheOptions)
     {
-        CGS_ASSERT(leCacheOptions < E_NUM_CACHE_OPTIONS, "leCacheOptions < E_NUM_CACHE_OPTIONS");
+        CGS_ASSERT(leCacheOptions < E_NUM_CACHE_OPTIONS,
+                   CGS_ASSERT_MESSAGE_AT("leCacheOptions < E_NUM_CACHE_OPTIONS", KAC_SCENE_UPDATE_ARTIST_FILE, 1062));
 
         InEventAddForCollision lEvent;
-        lEvent.mPadding          = lPadding;             // stvx128 v1 @+0x00
-        lEvent.mVolumeInstanceId = lVolumeInstanceId;    // std a2 @+0x10
+        lEvent.mVolumeInstanceId = lVolumeInstanceId;
+        lEvent.mPadding = lPadding;
         lEvent.mCullGroup        = lCullingGroup;        // stw a3 @+0x18
         lEvent.SetBodyState(leBodyState);                // stb @+0x1C, own tripwire
         lEvent.SetCacheOptions(leCacheOptions);          // stb @+0x1D, own tripwire
 
         CGS_ASSERT(mAddForCollisionQueue.GetLength() < mAddForCollisionQueue.GetMaxLength(),
-                   "SceneManager.mAddForCollisionQueue too small, increase value in SceneManagerConstants.h");
+                   CGS_ASSERT_STREAM_MESSAGE_AT("SceneManager.mAddForCollisionQueue too small, increase value in SceneManagerConstants.h",
+                                                KAC_SCENE_UPDATE_ARTIST_FILE, 1070));
         mAddForCollisionQueue.AddEvent(lEvent);
     }
 
@@ -263,7 +271,7 @@ namespace SceneManagerIO
 
         CGS_ASSERT(mClearCullingTableQueue.GetLength() < mClearCullingTableQueue.GetMaxLength(),
                    CGS_ASSERT_STREAM_MESSAGE_AT("SceneManager.mClearCullingTableQueue too small, increase value in SceneManagerConstants.h",
-                                                KAC_CLEAR_CULLING_TABLE_ARTIST_FILE, 1150));
+                                                KAC_SCENE_UPDATE_ABSOLUTE_ARTIST_FILE, 1150));
         mClearCullingTableQueue.AddEvent(lEvent);
     }
 
@@ -320,17 +328,21 @@ namespace SceneManagerIO
     // Two non-gating range tripwires guard the cache-options enum (asm `cmpwi 3; blt` and
     // `cmpwi 2; bne`), then stage { mVolumeInstanceId = a2 (std, 8B), meCacheOptions = a3
     // (stw, 4B) } and append to mAddVolumeInstanceForCachingQueue.
-    void InSceneUpdateInterface::AddVolumeInstanceForCaching(VolumeInstanceId lVolumeInstanceId, s32 leCacheOptions)
+    void InSceneUpdateInterface::AddVolumeInstanceForCaching(VolumeInstanceId lVolumeInstanceId,
+                                                              EAddForCollisionCacheOptions leCacheOptions)
     {
-        CGS_ASSERT(leCacheOptions < 3,  "leCacheOptions < E_NUM_CACHE_OPTIONS");           // enum bound E_NUM_CACHE_OPTIONS == 3
-        CGS_ASSERT(leCacheOptions != 2, "leCacheOptions != E_DO_NOT_ADD_TO_CACHE_MANAGER"); // enum value E_DO_NOT_ADD_TO_CACHE_MANAGER == 2
+        CGS_ASSERT(leCacheOptions < E_NUM_CACHE_OPTIONS,
+                   CGS_ASSERT_MESSAGE_AT("leCacheOptions < E_NUM_CACHE_OPTIONS", KAC_SCENE_UPDATE_ABSOLUTE_ARTIST_FILE, 1232));
+        CGS_ASSERT(leCacheOptions != E_DO_NOT_ADD_TO_CACHE_MANAGER,
+                   CGS_ASSERT_MESSAGE_AT("leCacheOptions != E_DO_NOT_ADD_TO_CACHE_MANAGER", KAC_SCENE_UPDATE_ABSOLUTE_ARTIST_FILE, 1233));
 
         InEventAddVolumeInstanceForCaching lEvent;
         lEvent.mVolumeInstanceId = lVolumeInstanceId;   // std a2 @+0x00
         lEvent.meCacheOptions    = leCacheOptions;      // stw a3 @+0x08
 
         CGS_ASSERT(mAddVolumeInstanceForCachingQueue.GetLength() < mAddVolumeInstanceForCachingQueue.GetMaxLength(),
-                   "SceneManager.mAddVolumeInstanceForCachingQueue too small, increase value in SceneManagerConstants.h");
+                   CGS_ASSERT_STREAM_MESSAGE_AT("SceneManager.mAddVolumeInstanceForCachingQueue too small, increase value in SceneManagerConstants.h",
+                                                KAC_SCENE_UPDATE_ABSOLUTE_ARTIST_FILE, 1240));
         mAddVolumeInstanceForCachingQueue.AddEvent(lEvent);
     }
 

@@ -183,16 +183,15 @@ namespace CgsNetwork
     // =========================================================================
     u32 BuddyManagerX360::ShowProfile(const PlayerName* lpBuddyName)
     {
-        CGS_ASSERT(lpBuddyName && lpBuddyName->GetPlayerName()[0] != '\0', CGS_ASSERT_MESSAGE_AT(
+        CGS_ASSERT(lpBuddyName->GetPlayerName()[0] != '\0', CGS_ASSERT_MESSAGE_AT(
             "!lpBuddyName->IsEmpty()",
             CGS_ARTIST_FILE, 862 /* ARTIST 0x82880058 */));
 
         const u32 luUserIndex = mpNetworkManager->GetActiveControllerPort();
 
-        // The asm takes the high 32 bits of the XUID (>> 32) for XShowGamerCardUI's
-        // second argument; the XDK packs the gamertag id in the high dword.
+        // ARTIST 0x82880074 moves the full XUID returned in r3 into r4.
         const u64 luXuid = GetBuddyXUID(lpBuddyName);
-        return XShowGamerCardUI(luUserIndex, luXuid >> 32);
+        return XShowGamerCardUI(luUserIndex, luXuid);
     }
 
     // =========================================================================
@@ -620,18 +619,20 @@ namespace CgsNetwork
     bool BuddyManagerX360::GetNextUnreadMessage(const PlayerName* /*lpPlayerName*/,
                                                 char* /*lpcOut*/, s32 /*liMaxLength*/)
     {
-        CGS_ASSERT(false,
-                   "CgsNetwork::BuddyManagerX360::GetNextUnreadMessage does nothing on the X360 "
-                   "you should be using the guide instead of the buddy manager");
+        CGS_ASSERT_STREAM_AT(false,
+            "CgsNetwork::BuddyManagerX360::GetNextUnreadMessage"
+            << " does nothing on the X360 you should be using the guide instead of the buddy manager",
+            CGS_ARTIST_FILE, 528);
         return false;
     }
 
     bool BuddyManagerX360::GetMessage(const PlayerName* /*lpPlayerName*/, s32 /*liIndex*/,
                                       char* /*lpcOut*/, s32 /*liMaxLength*/)
     {
-        CGS_ASSERT(false,
-                   "CgsNetwork::BuddyManagerX360::GetMessage does nothing on the X360 "
-                   "you should be using the guide instead of the buddy manager");
+        CGS_ASSERT_STREAM_AT(false,
+            "CgsNetwork::BuddyManagerX360::GetMessage"
+            << " does nothing on the X360 you should be using the guide instead of the buddy manager",
+            CGS_ARTIST_FILE, 550);
         return false;
     }
 
@@ -643,9 +644,10 @@ namespace CgsNetwork
     // =========================================================================
     const char* BuddyManagerX360::GetTitle(const PlayerName* /*lpPlayerName*/)
     {
-        CGS_ASSERT(false,
-                   "CgsNetwork::BuddyManagerX360::GetTitle does nothing on the X360 "
-                   "you should be using the guide instead of the buddy manager");
+        CGS_ASSERT_STREAM_AT(false,
+            "CgsNetwork::BuddyManagerX360::GetTitle"
+            << " does nothing on the X360 you should be using the guide instead of the buddy manager",
+            CGS_ARTIST_FILE, 565);
         return "Information not available";
     }
 

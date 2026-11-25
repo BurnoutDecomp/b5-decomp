@@ -51,12 +51,11 @@ namespace CgsDev
         // calls the child's virtual char* sink; null text becomes "<NULLSTRING>").
         void LogCombined::Append(const char* lpcText)
         {
-            const char* lpcOut = lpcText ? lpcText : "<NULLSTRING>";
             for (s32 li = 0; li < KI_MAX_COMBINED_STREAMS; ++li)
             {
                 if (mapStreams[li] != 0)
                 {
-                    *mapStreams[li] << lpcOut;
+                    *mapStreams[li] << lpcText;
                 }
             }
         }

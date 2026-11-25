@@ -165,16 +165,17 @@ const f32 KF_SPURT_PASSING_SPEED_SCALE = 0.44704f; // .data 0x82F31928 == 0x3EE4
 // NaN polarity (FX-AINAN2): the two range asserts are `fcmpu x,-1.0 ; bge` @0x827669EC/0x827669F0
 // and `fcmpu x,1.0 ; ble` @0x82766A18/0x82766A1C, both TAKEN on an unordered compare, so a NaN
 // input skips both asserts on the console; spelt as the negated strict compares. The arm test
-// (ble @0x82766A48) is left as written: either arm returns NaN for a NaN input.
+// uses ble @0x82766A48 to send a nonpositive or unordered input to the second arm.
 f32 CurveToKeepLarge(f32 lfInput)
 {
-    CGS_ASSERT(!(lfInput < -1.0f), "lfDistScale >= -1.0f");
-    CGS_ASSERT(!(lfInput > 1.0f), "lfDistScale <= 1.0f");
+    static const char KAC_ARTIST_FILE[] = "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/BrnAIAggression.cpp";
+    CGS_ASSERT(!(lfInput < -1.0f), CGS_ASSERT_MESSAGE_AT("lfDistScale >= -1.0f", KAC_ARTIST_FILE, 2182));
+    CGS_ASSERT(!(lfInput > 1.0f), CGS_ASSERT_MESSAGE_AT("lfDistScale <= 1.0f", KAC_ARTIST_FILE, 2183));
 
-    if ( lfInput <= 0.0f )
-        return ((lfInput + 1.0f) * (lfInput + 1.0f)) - 1.0f;
-    else
+    if ( lfInput > 0.0f )
         return -(((1.0f - lfInput) * (1.0f - lfInput)) - 1.0f);
+    else
+        return ((lfInput + 1.0f) * (lfInput + 1.0f)) - 1.0f;
 }
 
 // BrnAI::AIAggression::AcrossSeparationTooBig @0x8277DE38.
@@ -254,8 +255,10 @@ f32 AIAggression::CalcSpeedMatchSpeed(f32 lfTimeStep, f32 lfTargetSpeed)
     const f32 lfDesiredSpeed = GetSpeedMatchSpeed(lfTargetSpeed);
 
     f32 lfMaxAccel;
-    if (mpCar->meRouteFindingStyle == E_ROUTE_FINDING_ROAD_RAGE ||
-        mpCar->meRouteFindingStyle == E_ROUTE_FINDING_MARKED_MAN)   // == 2 || == 6
+    const ERouteFindingStyle leStyle = mpCar->meRouteFindingStyle;
+    const bool lbAggressiveStyle = leStyle == E_ROUTE_FINDING_ROAD_RAGE ||
+                                   leStyle == E_ROUTE_FINDING_MARKED_MAN;
+    if (lbAggressiveStyle)
     {
         lfMaxAccel = 20.0f;
     }
@@ -331,10 +334,10 @@ void AIAggression::CheckForCarVeeringAwayFromPlayer(f32 lfTimeStep)
     {
         const f32 lfRemaining = mfRecentHitTimer - lfTimeStep;
         mfRecentHitTimer = lfRemaining;
-        if ( lfRemaining > 0.0f )
-            mfContinuousContactTimer += lfTimeStep;
-        else
+        if ( !(lfRemaining > 0.0f) )
             mfContinuousContactTimer = 0.0f;
+        else
+            mfContinuousContactTimer += lfTimeStep;
     }
 
     if ( mpCar->mbIsTouchingPlayer )
@@ -343,18 +346,15 @@ void AIAggression::CheckForCarVeeringAwayFromPlayer(f32 lfTimeStep)
         // unordered compare: a NaN contact time takes the short-touch arm, whose `blelr` @0x82770A50
         // then returns -- no veer at all, where `contact <= 1` sent it to VEER_EXTREME (FX-AINAN2).
         const f32 lfContact = mfContinuousContactTimer;
-        if ( !(lfContact > 1.0f) )
-        {
-            if ( lfContact > 0.2f )
-            {
-                mfStateTime = 1.0f;
-                meAggressionState = E_AI_AGGRESSION_STATE_VEER;
-            }
-        }
-        else
+        if ( lfContact > 1.0f )
         {
             mfStateTime = 1.0f;
             meAggressionState = E_AI_AGGRESSION_STATE_VEER_EXTREME;
+        }
+        else if ( lfContact > 0.2f )
+        {
+            mfStateTime = 1.0f;
+            meAggressionState = E_AI_AGGRESSION_STATE_VEER;
         }
     }
 }

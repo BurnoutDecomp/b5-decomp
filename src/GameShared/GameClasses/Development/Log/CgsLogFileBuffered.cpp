@@ -1,5 +1,6 @@
 #include "GameShared/GameClasses/Development/Log/CgsLogFileBuffered.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
+#include "rw/core/debug/DebugCriticalSection.h"
 #define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Development/Log/CgsLogFileBuffered.cpp"
 #include <cstring>
 
@@ -35,17 +36,19 @@ namespace Log
     // and retains the name/buffer for subsequent append-mode flushes.
     bool LogFileBuffered::Open(const char* lpcFileName, char* lpcBuffer, s32 liBufferLength)
     {
-        const s32 liLength = static_cast<s32>(std::strlen(lpcFileName));
-        if (liLength >= 512)
+        if (std::strlen(lpcFileName) >= sizeof(macFileName))
         {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::SimpleStrStream lMessage;
-            lMessage << "String " << (lpcFileName ? lpcFileName : "<NULLSTRING>")
-                     << " is too long. Buffer size = " << 512
-                     << ", string length = " << liLength << "\n";
-            CgsDev::Assert::FireAssert(lMessage.GetBuffer(),
+            // The string-copy assertion at 0x828209CC formats into the shared
+            // assert buffer while holding its mutex.
+            Assert::gAssertMutex.Enter();
+            StrStream lMessage(Assert::gpcMessageBuffer, Assert::giMessageBufferSize, E_PRINTMODE_DECIMAL);
+            const u32 luLength = static_cast<u32>(std::strlen(lpcFileName));
+            lMessage << "String " << lpcFileName
+                     << " is too long. Buffer size = " << static_cast<u32>(sizeof(macFileName))
+                     << ", string length = " << luLength << "\n";
+            Assert::FireAssert(Assert::gpcMessageBuffer,
                 CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 65));
-            CgsDev::Assert::EndAssert();
+            Assert::gAssertMutex.Leave();
         }
         std::strcpy(macFileName, lpcFileName);
         mpcBuffer = lpcBuffer;
@@ -55,10 +58,10 @@ namespace Log
                              CREATE_ALWAYS, 0, 0);
         if (miFile == INVALID_HANDLE_VALUE)
         {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("mFileHandle != INVALID_HANDLE_VALUE",
+            Assert::gAssertMutex.Enter();
+            Assert::FireAssert("mFileHandle != INVALID_HANDLE_VALUE",
                 CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 66));
-            CgsDev::Assert::EndAssert();
+            Assert::gAssertMutex.Leave();
         }
         CloseHandle(miFile);
         miFile = INVALID_HANDLE_VALUE;
@@ -68,16 +71,19 @@ namespace Log
     // ARTIST82820B90: even a zero-byte flush reopens an existing named file.
     void LogFileBuffered::Flush()
     {
+        // ARTIST 0x82820BA8..0x82820BAC forms the filename argument and tests the member separately.
+        const char* lpcFileName = macFileName;
         if (macFileName[0] != '\0')
         {
-            miFile = CreateFileA(macFileName, GENERIC_WRITE, FILE_SHARE_WRITE,
+            miFile = CreateFileA(lpcFileName, GENERIC_WRITE, FILE_SHARE_WRITE,
                                  0, OPEN_EXISTING, 0, 0);
             if (miFile == INVALID_HANDLE_VALUE)
             {
-                CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert("mFileHandle != INVALID_HANDLE_VALUE",
+                // ARTIST 0x82820BE0 enters and leaves the assert mutex here.
+                Assert::gAssertMutex.Enter();
+                Assert::FireAssert("mFileHandle != INVALID_HANDLE_VALUE",
                     CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 156));
-                CgsDev::Assert::EndAssert();
+                Assert::gAssertMutex.Leave();
             }
             SetFilePointer(miFile, 0, 0, FILE_END);
             DWORD luWritten;
@@ -108,20 +114,20 @@ namespace Log
         {
             const s32 liRemaining = liLength - liCopied;
             const s32 liAvailable = miBufferLength - miBufferPosition;
-            if (liAvailable >= liRemaining)
+            if (liAvailable < liRemaining)
             {
                 std::memcpy(mpcBuffer + miBufferPosition, lpcText + liCopied,
-                            static_cast<size_t>(liRemaining));
-                liCopied += liRemaining;
-                miBufferPosition += liRemaining;
+                            static_cast<size_t>(liAvailable));
+                miBufferPosition += liAvailable;
+                liCopied += liAvailable;
+                Flush();
             }
             else
             {
                 std::memcpy(mpcBuffer + miBufferPosition, lpcText + liCopied,
-                            static_cast<size_t>(liAvailable));
-                liCopied += liAvailable;
-                miBufferPosition += liAvailable;
-                Flush();
+                            static_cast<size_t>(liRemaining));
+                miBufferPosition += liRemaining;
+                liCopied += liRemaining;
             }
         }
     }

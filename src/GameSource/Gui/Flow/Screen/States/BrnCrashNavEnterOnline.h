@@ -132,7 +132,7 @@ namespace BrnGui
         static const char KAC_DISCONNECTED_WITH_REASON_STRING_ID[13]; // "OnConFailRsn"
         static const char KAC_TOS_TEXT_STRING_ID[10];               // "~TOS_TEXT"
         static const char KAC_CREATE_ACCOUNT_TITLE_STRING_ID[35];   // "$ONLINE_LOGIN_CREATE_ACCOUNT_TITLE"
-        static const char* const KAPC_LOGIN_QUESTION_STRING_ID[7];  // @0x82F26D94 (by ELoginQuestion)
+        static const char* KAPC_LOGIN_QUESTION_STRING_ID[7];  // @0x82F26D94 (by ELoginQuestion)
         static const char* const KAPC_TOS_BUTTON_STRING_ID[2];      // @0x82F26E40
         static const char* const KAPC_YES_NO_BUTTON_STRING_ID[2];   // @0x82F26E48
         static const char* const KAPC_RETRY_CANCEL_BUTTON_STRING_ID[2];  // @0x82F26E50

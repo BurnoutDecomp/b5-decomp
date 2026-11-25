@@ -1061,7 +1061,7 @@ void RoadRulesManager::OnRoadRulesDataRequest(CgsID lRoadId, GameStateModuleIO::
          ++liRoadIndex)
     {
         const BrnStreetData::Road* lpRoad = mpStreetManager->GetStreetData()->GetRoad(liRoadIndex);
-        if (lpRoad->GetId() == lRoadId)
+        if (lRoadId == lpRoad->GetId())
         {
             OnEnterRoad(lpGameActionQueue, liRoadIndex);
             return;

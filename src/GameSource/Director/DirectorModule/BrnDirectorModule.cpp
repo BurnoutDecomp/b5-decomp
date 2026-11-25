@@ -146,30 +146,30 @@ void DirectorModule::Construct(f32 lfTime)
 // clears mePrepareStage. An out-of-range stage asserts and reports failure. Faithful to
 // the asm: NO added control flow; the fall-through chain matches the jump table.
 //
-// NOTE: the asm's final stage literal is 4, not EReleaseStage::E_RELEASESTAGE_DONE (6)
-// -- kept faithful to the asm value rather than "corrected" to the DWARF DONE
-// enumerator (this TU's Release only progresses local bookkeeping to stage 4; the
-// WORLDMAP/DONE stages the DWARF enum lists are driven by other, not-yet-reconstructed
-// code paths).
+// ARTIST 0x822391E8 dispatches stage 4 (E_RELEASESTAGE_MANAGER) directly to
+// the successful completion path, making repeated releases succeed.
 // ----------------------------------------------------------------------------
 bool DirectorModule::Release()
 {
     switch (meReleaseStage)
     {
-    case 0:
-    case 1:
-        meReleaseStage = static_cast<EReleaseStage>(1);
+    case E_RELEASESTAGE_START:
+    case E_RELEASESTAGE_ARBITRATOR:
+        meReleaseStage = E_RELEASESTAGE_ARBITRATOR;
         if (!mMainDirector.Release())
             return false;
         // fall through
-    case 2:
-        meReleaseStage = static_cast<EReleaseStage>(3);
+    case E_RELEASESTAGE_MOMENT_CONTROLLER:
+        meReleaseStage = E_RELEASESTAGE_BEHAVIOUR_CONTROLLER;
         // fall through
-    case 3:
-        meReleaseStage = static_cast<EReleaseStage>(3);
+    case E_RELEASESTAGE_BEHAVIOUR_CONTROLLER:
+        meReleaseStage = E_RELEASESTAGE_BEHAVIOUR_CONTROLLER;
         if (!CgsModule::ModuleSingleBuffered::Release())
             return false;
-        meReleaseStage = static_cast<EReleaseStage>(4);
+        // ARTIST 0x822391E8 dispatches an already completed release here.
+        // fall through
+    case E_RELEASESTAGE_MANAGER:
+        meReleaseStage = E_RELEASESTAGE_MANAGER;
         mePrepareStage = E_PREPARESTAGE_START;
         return true;
 

@@ -76,10 +76,11 @@ void DeveloperChallengeManager::Construct(BrnProgression::ProgressionManager* lp
     //   stw 0x80/0x84/0x88 -> maRoadRageTakedownTimes read/write/length = 0 (FifoQueue Clear)
     //   std 0x90  -> maTakenDownRaceCars (single u64 field) = 0
     //   std 0x98  -> maCompletedChallenges (single u64 field) = 0
-    maCollectedBillboards.Clear();
-    maRoadRageTakedownTimes.Clear();
-    maTakenDownRaceCars.UnSetAll();
+    // ARTIST 0x82372F5C-0x82372F70 clears the completion bitset first.
     maCompletedChallenges.UnSetAll();
+    maRoadRageTakedownTimes.Clear();
+    maCollectedBillboards.Clear();
+    maTakenDownRaceCars.UnSetAll();
 }
 
 // ----------------------------------------------------------------------------

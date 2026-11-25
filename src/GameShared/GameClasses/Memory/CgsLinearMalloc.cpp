@@ -64,17 +64,17 @@ namespace CgsMemory
     // aligned address. Advances mnNextAddress even on overflow, returning null in that case.
     void* LinearMalloc::Malloc(size_t lnSize)
     {
-        CGS_ASSERT(mbCreated, "mbCreated");   // CgsLinearMalloc.cpp:336
+        CGS_ASSERT_AT(mbCreated, "mbCreated", CGS_ARTIST_FILE, 336);
 
-        size_t lnAligned = (mnNextAddress + mnAlignment - 1) & ~(mnAlignment - 1);
+        const size_t lnAligned = (mnNextAddress + mnAlignment - 1) & ~(mnAlignment - 1);
         mnNextAddress = lnAligned + lnSize;
-        if (mnNextAddress <= mnEndAddress)
+        if (mnNextAddress > mnEndAddress)
         {
-            mpLastAlloc = reinterpret_cast<void*>(lnAligned);
-            return mpLastAlloc;
+            mpLastAlloc = 0;
+            return 0;
         }
-        mpLastAlloc = 0;
-        return 0;
+        mpLastAlloc = reinterpret_cast<void*>(lnAligned);
+        return mpLastAlloc;
     }
 
     // 0x82866E60 - reset the bump pointer to the region start (X360: next = start), freeing
@@ -87,7 +87,7 @@ namespace CgsMemory
     // ARTIST 0x828691C8. Stop restores the table before owned backing is released.
     void LinearMalloc::Destruct()
     {
-        if (mpActiveRWAllocator == this)
+        if (this == mpActiveRWAllocator)
             StopRWAllocation();
 
         if (mpAlloc != 0)
@@ -158,7 +158,7 @@ namespace CgsMemory
     // ARTIST 0x82866C38. Assertion continuation still restores the cached table.
     void LinearMalloc::StopRWAllocation()
     {
-        if (mpActiveRWAllocator != this)
+        if (this != mpActiveRWAllocator)
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(

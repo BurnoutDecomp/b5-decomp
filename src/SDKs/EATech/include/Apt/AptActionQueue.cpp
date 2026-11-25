@@ -20,9 +20,8 @@
 //
 //  The queue is a circular deque of AptAnimationPoolData slots. mpFront is the
 //  next slot to dequeue and mpBack is one-past the last live slot; mpFront ==
-//  mpBack means empty. The ring is allocated with mnCapacity+1 slots (the extra
-//  slot is what lets full be distinguished from empty), so a slot pointer wraps
-//  from the last physical slot back to mpBegin. Throughout, the X360 advances a
+//  mpBack means empty. The ring wraps from the last physical slot back to
+//  mpBegin. Throughout, the X360 advances a
 //  slot pointer by the 20-byte slot stride and wraps it against
 //  (mpBegin + mnCapacity*20); modelled here as ++/-- on the typed slot pointer
 //  with an explicit wrap helper.
@@ -56,31 +55,20 @@ namespace
 }
 
 // ---- AptActionQueueC @ 0x82AE6780 ----------------------------------------
-// Allocate the ring (mnCapacity+1 slots) from the shared Apt DOGMA pool, point
-// all three cursors at the first slot, and clear it. The X360 clamps the byte
-// size to -1 if the requested count would overflow the 20-byte stride (count >
-// 0x0CCCCCCC), then asks the pool for size+4 bytes (the pool stores its own
-// slot count in the leading dword and returns the slot region just past it).
+// Allocate the ring and its leading size word from the shared DOGMA pool.
+// The 20-byte element product is bounded by the unsigned 32-bit size limit.
 AptActionQueueC::AptActionQueueC(u32 nCapacity)
 {
     mnCapacity = nCapacity;
 
-    // x64 native stride (the committed port rule; same fix as SetupStaticData's tables): the console
-    // allocates 20-byte slots (KU_X360_SLOT_STRIDE); the x64 AptAnimationPoolData is
-    // pointer-widened (sizeof == 32/0x20 -- the x64 deque accessors' `shl reg,5`), and every walker (enqueue/drain/WrapForward)
-    // indexes by element -- allocating the console byte size would let the ring roam
-    // past its block once the cursors pass slot (20*cap)/sizeof.
-    s32 liByteSize = static_cast<s32>(sizeof(AptAnimationPoolData) * nCapacity);
-    if (nCapacity > (0x7FFFFFFFu / sizeof(AptAnimationPoolData)))   // would overflow (console: > 0x0CCCCCCC for 20)
-    {
-        liByteSize = -1;
-    }
+    // ARTIST 0x82AE6798 compares capacity against the unsigned size limit.
+    u32 luByteSize = sizeof(AptAnimationPoolData) * nCapacity;
+    if (nCapacity > (0xFFFFFFFFu / sizeof(AptAnimationPoolData)))
+        luByteSize = 0xFFFFFFFFu;
 
-    // The pool block leads with a slot-count dword; the usable ring starts just
-    // past it. (X360: Allocate(off_8324D808, liByteSize + 4); *p = liByteSize;
-    // ring = p + 1.)
-    s32* lpBlock = static_cast<s32*>(gpAptPseudoDataPool->Allocate(liByteSize + 4));
-    *lpBlock = liByteSize;
+    // The ring begins after the allocation size stored in the leading word.
+    u32* lpBlock = static_cast<u32*>(gpAptPseudoDataPool->Allocate(luByteSize + sizeof(u32)));
+    *lpBlock = luByteSize;
 
     AptAnimationPoolData* lpRing =
         reinterpret_cast<AptAnimationPoolData*>(lpBlock + 1);
@@ -430,7 +418,7 @@ AptAnimationPoolData* AptActionQueueC::GetNextItem(AptAnimationPoolData* pSlot)
 // True iff pSlot is exactly the back of the queue.
 bool AptActionQueueC::IsLastItem(AptAnimationPoolData* pSlot) const
 {
-    return mpBack == pSlot;
+    return pSlot == mpBack;
 }
 
 // ---- IsLastItemOrBeyond @ 0x82AD5E20 -------------------------------------

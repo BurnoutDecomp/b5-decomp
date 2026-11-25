@@ -59,13 +59,16 @@ namespace CgsDev
 
     StrStreamBase& StrStreamBase::operator<<(u64 luValue)
     {
-        if (mePrintMode == E_PRINTMODE_DECIMAL)
-            Append64IntDecimal(luValue);
-        else if (static_cast<u32>(mePrintMode) < 3)
+        switch (mePrintMode)
         {
+        case E_PRINTMODE_HEX:
+        case E_PRINTMODE_HEXONCE:
             Append64IntHex(luValue);
-            if (mePrintMode == E_PRINTMODE_HEXONCE)
-                mePrintMode = E_PRINTMODE_DECIMAL;
+            mePrintMode = mePrintMode == E_PRINTMODE_HEXONCE ? E_PRINTMODE_DECIMAL : mePrintMode;
+            break;
+        case E_PRINTMODE_DECIMAL:
+            Append64IntDecimal(luValue);
+            break;
         }
         return *this;
     }
@@ -123,15 +126,14 @@ namespace CgsDev
         Append(lacBuffer);
     }
 
-    // FAKEMATCH: retain the out-of-line text insertion body at ARTIST 0x821F01A8.
-#pragma inline_depth(0)
-    void StrStreamBase::Append64IntDecimal(u64 luValue)
+    // ARTIST 0x82203F34..0x82203F54 inlines the decimal helper and
+    // sends the converted 64-bit value straight to the virtual sink.
+    inline void StrStreamBase::Append64IntDecimal(u64 luValue)
     {
-        char lacBuffer[KI_FORMAT_BUFFER_SIZE];
+        char lacBuffer[24];
         rw::core::stdc::ConvertI64ToA(static_cast<s64>(luValue), lacBuffer, 10);
-        *this << lacBuffer;
+        Append(lacBuffer);
     }
-#pragma inline_depth()
 
     void StrStreamBase::Append64IntHex(u64 luValue)
     {

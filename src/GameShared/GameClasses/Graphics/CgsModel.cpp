@@ -15,6 +15,7 @@
 // (lbz 0x10/0x12, lwz 0/4/8 of `this`).
 
 static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameShared\\GameClasses\\Graphics/CgsModel.h";
+static const char KAC_ARTIST_ASSERT_CPP[] = "..\\..\\..\\GameShared\\GameClasses\\Graphics/CgsModel.cpp";
 
 namespace CgsGraphics
 {
@@ -355,7 +356,8 @@ namespace ModelInstanceCollector
     // =========================================================================
     void EndInstanceCollection()
     {
-        CGS_ASSERT(sbIsDuringInstanceCollection, "sbIsDuringInstanceCollection");
+        CGS_ASSERT(sbIsDuringInstanceCollection,
+            CGS_ASSERT_MESSAGE_AT("sbIsDuringInstanceCollection", KAC_ARTIST_ASSERT_CPP, 708));
 
         FlushInstanceCollection();
         sbIsDuringInstanceCollection = false;

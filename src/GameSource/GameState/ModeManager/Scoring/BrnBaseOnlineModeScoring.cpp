@@ -129,13 +129,13 @@ void BaseOnlineModeScoring::CompareDistanceToFinish(f32 lfDistance1, f32 lfDista
 
     if (*lpiResult == 0)
     {
-        if (lfDistance1 < lfDistance2)
-        {
-            *lpiResult = -1;
-        }
-        else if (lfDistance1 > lfDistance2)
+        if (lfDistance1 > lfDistance2)
         {
             *lpiResult = 1;
+        }
+        else if (lfDistance1 < lfDistance2)
+        {
+            *lpiResult = -1;
         }
         else
         {
@@ -154,13 +154,13 @@ void BaseOnlineModeScoring::CompareNetworkPlayerID(BrnNetwork::NetworkPlayerID l
 
     if (*lpiResult == 0)
     {
-        if (lID1 < lID2)
-        {
-            *lpiResult = -1;
-        }
-        else if (lID1 > lID2)
+        if (lID1 > lID2)
         {
             *lpiResult = 1;
+        }
+        else if (lID1 < lID2)
+        {
+            *lpiResult = -1;
         }
         else
         {
@@ -187,13 +187,13 @@ void BaseOnlineModeScoring::CompareFinishTime(const CgsSystem::Time* lpTime1,
         const f32 lfTime1 = lpTime1->GetFloatVal();
         const f32 lfTime2 = lpTime2->GetFloatVal();
 
-        if (lfTime1 < lfTime2)
-        {
-            *lpiResult = -1;
-        }
-        else if (lfTime1 > lfTime2)
+        if (lfTime1 > lfTime2)
         {
             *lpiResult = 1;
+        }
+        else if (lfTime1 < lfTime2)
+        {
+            *lpiResult = -1;
         }
         else
         {

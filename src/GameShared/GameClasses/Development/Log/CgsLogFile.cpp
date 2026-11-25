@@ -1,8 +1,11 @@
 #include "GameShared/GameClasses/Development/Log/CgsLogFile.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (flagged substitute for the StrStream assert path)
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
+#include "rw/core/debug/DebugCriticalSection.h"
 
-#include <cstring>     // (strlen replaced by the X360's inline NUL-walk below)
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Development/Log/CgsLogFile.cpp"
+
+#include <cstring>
 #include <xtl.h>   // CreateFileA / WriteFile / CloseHandle / SetFilePointer
 
 // CgsDev::Log::LogFile member functions, reconstructed from BURNOUT_X360_ARTIST.XEX.
@@ -25,8 +28,8 @@
 //   - Append: if miFile != -1, walks lpcString to its NUL to compute the length (the X360 inlines
 //     strlen: `r11 = end - start - 1`), then WriteFile(miFile, lpcString, length, &written, NULL).
 //     (Hex-Rays mislabels the buffer pointer; the asm preserves r4 = lpcString as lpBuffer.)
-//   - The X360 assert string is rodata, reproduced verbatim; the X360-baked file/line cites are
-//     replaced by CGS_ASSERT's __FILE__/__LINE__ per project policy.
+//   - Open uses the literal assert message and the mutex directly at
+//     0x828208D0..0x82820944.
 
 namespace CgsDev
 {
@@ -35,18 +38,30 @@ namespace Log
     // X360 0x82820880.
     bool LogFile::Open(const char* lpcFileName, bool lbAppend)
     {
-        if (lbAppend)
+        if (!lbAppend)
         {
             miFile = CreateFileA(lpcFileName, GENERIC_WRITE, FILE_SHARE_WRITE, NULL,
-                                 OPEN_ALWAYS, 0, NULL);
-            CGS_ASSERT(miFile != INVALID_HANDLE_VALUE, "mFileHandle != INVALID_HANDLE_VALUE");
-            SetFilePointer(miFile, 0, NULL, FILE_END);
+                                 CREATE_ALWAYS, 0, NULL);
+            if (miFile == INVALID_HANDLE_VALUE)
+            {
+                Assert::gAssertMutex.Enter();
+                Assert::FireAssert("mFileHandle != INVALID_HANDLE_VALUE",
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 79));
+                Assert::gAssertMutex.Leave();
+            }
         }
         else
         {
             miFile = CreateFileA(lpcFileName, GENERIC_WRITE, FILE_SHARE_WRITE, NULL,
-                                 CREATE_ALWAYS, 0, NULL);
-            CGS_ASSERT(miFile != INVALID_HANDLE_VALUE, "mFileHandle != INVALID_HANDLE_VALUE");
+                                 OPEN_ALWAYS, 0, NULL);
+            if (miFile == INVALID_HANDLE_VALUE)
+            {
+                Assert::gAssertMutex.Enter();
+                Assert::FireAssert("mFileHandle != INVALID_HANDLE_VALUE",
+                    CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 85));
+                Assert::gAssertMutex.Leave();
+            }
+            SetFilePointer(miFile, 0, NULL, FILE_END);
         }
         return true;
     }
@@ -66,15 +81,12 @@ namespace Log
     {
         if (miFile != INVALID_HANDLE_VALUE)
         {
-            // X360 inlined NUL-walk to measure the string length (no trailing NUL written).
-            const char* lpc = lpcString;
-            while (*lpc)
-                ++lpc;
-            const DWORD luLength = static_cast<DWORD>(lpc - lpcString);
-
-            DWORD luBytesWritten = 0;
+            const DWORD luLength = static_cast<DWORD>(std::strlen(lpcString));
+            DWORD luBytesWritten;
             WriteFile(miFile, lpcString, luLength, &luBytesWritten, NULL);
         }
     }
 }
 }
+
+#undef CGS_ARTIST_FILE

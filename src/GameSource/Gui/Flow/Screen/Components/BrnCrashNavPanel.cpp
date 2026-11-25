@@ -568,9 +568,9 @@ namespace BrnGui
     // @ 0x8243A8F0
     void CrashNavPanel::SetDrivethruPanelData(CgsID lDriveThruId)
     {
-        // X360 `cmplwi mePanelType, 2 ; bge` -- i.e. EVENT (0) or DRIVETHRU (1) pass.
-        CGS_ASSERT(mePanelType < E_PANEL_ROADSIGN,
-                   "(E_PANEL_DRIVETHRU == mePanelType) || (E_PANEL_EVENT == mePanelType)"); // cpp:657
+        CGS_ASSERT_AT(E_PANEL_DRIVETHRU == mePanelType || E_PANEL_EVENT == mePanelType,
+                      "(E_PANEL_DRIVETHRU == mePanelType) || (E_PANEL_EVENT == mePanelType)",
+                      CGS_ARTIST_FILE, 657);
 
         ChangeVisiblePanelState(E_PANEL_DRIVETHRU, RivalMapPanel::E_RIVAL_TYPE_COUNT);
         mDrivethruPanel.SetDriveThruData(lDriveThruId);

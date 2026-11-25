@@ -451,22 +451,13 @@ namespace BrnDirector
 
         meState = E_STATE_INACTIVE;   // X360: *(a1+1576) = 0
 
-        if (mTakedownDebugCam.IsAllocated())
-        {
-            mTakedownDebugCam.Release();
-        }
+        mTakedownDebugCam.Release();
 
         mMomentSelector.Release();
 
-        if (mInterpolator.IsAllocated())
-        {
-            mInterpolator.Release();
-        }
+        mInterpolator.Release();
 
-        if (mGyroCam.IsAllocated())
-        {
-            mGyroCam.Release();
-        }
+        mGyroCam.Release();
 
         lrSharedInfo.mpBehaviourManager->CheckNoBehavioursAreAllocatedByState(this);
 

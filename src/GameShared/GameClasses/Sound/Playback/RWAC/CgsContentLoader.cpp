@@ -43,14 +43,6 @@ namespace CgsSound
 {
 namespace Playback
 {
-    template <class ResType>
-    void* ContentLoader<ResType>::GetData()
-    {
-        void* lpvData = const_cast<void*>(mpResource.operator->()->GetData());
-        CGS_ASSERT(lpvData, "lpvData");
-        return lpvData;
-    }
-
     // Load @ 0x826DCBF8. Only the resource-module load method (mu8LoadMethod==1) is supported;
     // a load service must be present. If a load is already in flight (mpLoadData set) restart it,
     // else begin a fresh resource-module load. Baked asserts CgsContentLoader.cpp:68 / :52.
@@ -364,7 +356,6 @@ namespace Playback
     // X360 build attests -- BinaryFileResource (GenericRwacWaveContent) and
     // AlignedBinaryFileResource (GenericRwacReverbIRContent).
     #define CGS_INSTANTIATE_CONTENT_LOADER(RES_TYPE) \
-        template void* ContentLoader<RES_TYPE>::GetData(); \
         template bool ContentLoader<RES_TYPE>::Load(Content&, const ContentSpec&); \
         template bool ContentLoader<RES_TYPE>::Unload(Content&, const ContentSpec&); \
         template void ContentLoader<RES_TYPE>::Update(Content&, const ContentSpec&); \

@@ -10,6 +10,7 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                          // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"   // CgsDev::PerfMonCpu::StartMonitor / StopMonitor
 
 #include <xtl.h> // XUserSetContext / XUserSetProperty
@@ -99,7 +100,8 @@ intptr_t RichPresenceManagerX360::PresenceThread(void* lpRichPresenceManager)
     RichPresenceManagerX360* lpManager = static_cast<RichPresenceManagerX360*>(lpRichPresenceManager);
     for (;;)
     {
-        PresenceContext* lpContext = 0;
+        // ARTIST 0x82372CB4 waits for the pending queue to supply the record.
+        PresenceContext* lpContext;
         lpManager->mPendingPresenceContextQueue.Pop(&lpContext, true, KI_PRESENCE_THREAD_SLEEP_MS);
         XUserSetContext(lpContext->muUserIndex, lpContext->muContextId, lpContext->muContextValue);
         lpManager->mFreePresenceContextQueue.Post(&lpContext, true, KI_PRESENCE_THREAD_SLEEP_MS);
@@ -111,7 +113,8 @@ void RichPresenceManagerX360::SetContext(u32 luUserIndex, u32 luContextId, u32 l
 {
     CgsDev::PerfMonCpu::StartMonitor(miSetContextPM);
 
-    PresenceContext* lpContext = 0;
+    // ARTIST 0x82372C4C takes the record from the blocking queue pop.
+    PresenceContext* lpContext;
     mFreePresenceContextQueue.Pop(&lpContext, true, KI_CONTEXT_QUEUE_SLEEP_MS);
     lpContext->muUserIndex    = luUserIndex;
     lpContext->muContextId    = luContextId;
@@ -184,7 +187,7 @@ void RichPresenceManagerX360::SetRankedStatus(EGameRankedType leRanked)
             break;
 
         default:
-            CGS_ASSERT(false, "Unexpected ranked game status");
+            CGS_ASSERT_STREAM_AT(false, "Unexpected ranked game status", CGS_ARTIST_FILE, 314);
             break;
     }
 }

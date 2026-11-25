@@ -288,6 +288,9 @@ void AptActionInterpreter::_FunctionAptActionPushStringDictWord(AptActionInterpr
     pEntry->AddRef();
 }
 
+// The string opcodes at 0x82AF4128, 0x82B056E8, 0x82B05788 and 0x82B05828
+// advance the aligned operand slot before allocating, then read the string
+// pointer from that slot after AptString::Create.
 // ---------------------------------------------------------------------------
 // _FunctionAptActionPushStringGetMember @0x82B056E8 -- build an AptString from the
 // inline dictionary string, push it, then run the GetMember opcode (object[name]).
@@ -299,14 +302,13 @@ void AptActionInterpreter::_FunctionAptActionPushStringGetMember(AptActionInterp
     const unsigned char* pAligned =
         reinterpret_cast<const unsigned char*>(
             (reinterpret_cast<uintptr_t>(pCtx->mpProgramCounter) + 3u) & ~static_cast<uintptr_t>(3u));
-    const char* szName = *reinterpret_cast<const char* const*>(pAligned);   // native 32-bit pointer
     pCtx->mpProgramCounter = pAligned + 4;
 
     // AptString::Create("") + InitFromBuffer/operator=/Decrease idiom (the X360's
     // empty-seed-then-assign); the temporary EAStringC's ctor/dtor are the asm's
     // InitFromBuffer / DecreaseInternalRefCount pair.
     AptString* pStr = AptString::Create("");                // console AptString::Create(&unk_820046A7) ("")
-    *pStr->GetInternalString() = EAStringC(szName);
+    *pStr->GetInternalString() = EAStringC(*reinterpret_cast<const char* const*>(pAligned));
 
     pInterp->mpStack[pInterp->mnStackTop++] = pStr;         // inlined stackPush (store + advance)
     pStr->AddRef();
@@ -351,11 +353,10 @@ void AptActionInterpreter::_FunctionAptActionPushStringSetMember(AptActionInterp
     const unsigned char* pAligned =
         reinterpret_cast<const unsigned char*>(
             (reinterpret_cast<uintptr_t>(pCtx->mpProgramCounter) + 3u) & ~static_cast<uintptr_t>(3u));
-    const char* szName = *reinterpret_cast<const char* const*>(pAligned);   // native 32-bit pointer
     pCtx->mpProgramCounter = pAligned + 4;
 
     AptString* pStr = AptString::Create("");                // console AptString::Create(&unk_820046A7) ("")
-    *pStr->GetInternalString() = EAStringC(szName);
+    *pStr->GetInternalString() = EAStringC(*reinterpret_cast<const char* const*>(pAligned));
 
     pInterp->mpStack[pInterp->mnStackTop++] = pStr;         // inlined stackPush (store + advance)
     pStr->AddRef();
@@ -367,7 +368,7 @@ void AptActionInterpreter::_FunctionAptActionPushStringSetMember(AptActionInterp
 // _FunctionAptActionPushString @0x82AF4128 (opcode 0xA1; the address extracted from
 // the console dispatch table @0x82F73068 entry 0xA1) -- build an AptString from the
 // INLINE string operand and push it: the push half of the fused Get/Set forms below
-// (_parseStream treats 0xA1's operand identically to 0xA4..0xA7 -- one 8-aligned
+// (_parseStream treats 0xA1's operand identically to 0xA4..0xA7 -- one four-aligned
 // relocated string pointer). This opcode is what PLACE clipAction construct blocks
 // use to seed instance variables (mPromptType/mText/mAlignment/...); the unwired
 // slot made every construct block a silent no-op (undefined help-bar prompt vars).
@@ -378,11 +379,10 @@ void AptActionInterpreter::_FunctionAptActionPushString(AptActionInterpreter* pI
     const unsigned char* pAligned =
         reinterpret_cast<const unsigned char*>(
             (reinterpret_cast<uintptr_t>(pCtx->mpProgramCounter) + 3u) & ~static_cast<uintptr_t>(3u));
-    const char* szName = *reinterpret_cast<const char* const*>(pAligned);   // native 32-bit pointer
     pCtx->mpProgramCounter = pAligned + 4;
 
     AptString* pStr = AptString::Create("");                // console AptString::Create(&unk_820046A7) ("")
-    *pStr->GetInternalString() = EAStringC(szName);
+    *pStr->GetInternalString() = EAStringC(*reinterpret_cast<const char* const*>(pAligned));
 
     pInterp->mpStack[pInterp->mnStackTop++] = pStr;         // inlined stackPush (store + advance)
     pStr->AddRef();
@@ -398,11 +398,10 @@ void AptActionInterpreter::_FunctionAptActionPushStringSetVar(AptActionInterpret
     const unsigned char* pAligned =
         reinterpret_cast<const unsigned char*>(
             (reinterpret_cast<uintptr_t>(pCtx->mpProgramCounter) + 3u) & ~static_cast<uintptr_t>(3u));
-    const char* szName = *reinterpret_cast<const char* const*>(pAligned);   // native 32-bit pointer
     pCtx->mpProgramCounter = pAligned + 4;
 
     AptString* pStr = AptString::Create("");                // console AptString::Create(&unk_820046A7) ("")
-    *pStr->GetInternalString() = EAStringC(szName);
+    *pStr->GetInternalString() = EAStringC(*reinterpret_cast<const char* const*>(pAligned));
 
     pInterp->mpStack[pInterp->mnStackTop++] = pStr;         // inlined stackPush (store + advance)
     pStr->AddRef();

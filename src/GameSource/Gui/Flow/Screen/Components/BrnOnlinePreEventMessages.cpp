@@ -135,7 +135,8 @@ void OnlinePreEventMessages::Show(const PreEventInfo* lpInfo)
 // Transition out.
 void OnlinePreEventMessages::Hide()
 {
-    if (!mbIsShowing)
+    // ARTIST compares the flag to true at 0x8241A3C0.
+    if (mbIsShowing != true)
     {
         return;
     }

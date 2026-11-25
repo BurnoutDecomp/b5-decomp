@@ -81,7 +81,7 @@ namespace SceneManagerIO
     {
     public:
         VolumeInstanceId mVolumeInstanceId; // +0x00 (std r30, 8B)
-        s32              meCacheOptions;     // +0x08 (stw r31, 4B; E_*_CACHE_OPTIONS enum word)
+        EAddForCollisionCacheOptions meCacheOptions; // +0x08
     };
 
     struct CGS_ALIGN(16) InSceneUpdateInterface
@@ -184,7 +184,8 @@ namespace SceneManagerIO
         // are asm-attested (r4 8-byte VolumeInstanceId + a 32-bit second word each).
         void SetVolumeInstanceCullingGroup(VolumeInstanceId lVolumeInstanceId,
                                            InEventAddForCollision::CullingGroup lCullingGroup);
-        void AddVolumeInstanceForCaching(VolumeInstanceId lVolumeInstanceId, s32 leCacheOptions);     // @0x8270DA10
+        void AddVolumeInstanceForCaching(VolumeInstanceId lVolumeInstanceId,
+                                         EAddForCollisionCacheOptions leCacheOptions);
 
         // ---- the TRIANGLE-CACHE reposition producer ------------------------------------------
         // ADDED 2026-08-18 (wave Q round 2, shared-header owner). DWARF

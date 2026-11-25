@@ -51,9 +51,7 @@ void SplicerContent::DoUpdate(f32 /*af32DeltaTime*/)
 
 void* SplicerContent::DoGetData()
 {
-    void* lpData = mLoader.GetData();
-    CGS_ASSERT(lpData != 0, "lpvData");
-    return lpData;
+    return mLoader.GetData();
 }
 
 // @ 0x826D5AB0. Claim the first of eight bank slots, resolve the endian-mapped

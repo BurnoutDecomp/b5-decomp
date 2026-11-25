@@ -1,31 +1,27 @@
 #include "CgsStringUtils.h"
 
 #include <GameShared/GameClasses/Core/CgsAssert.h>
+#include <GameShared/GameClasses/Development/CgsStrStream.h>
 
 #include <cctype>
 #include <cstdarg>
 #include <cstring>
 #include <stdio.h>
 
-// In-place lower-cases up to uMaxLen characters of a NUL-terminated string and
-// returns the (unchanged) buffer pointer. Recovered from
-// CGSSTRNLOWER @ 0x82815D80; the all-caps symbol is kept verbatim so the
-// cross-build identity join (callers FontResourceType::FixUp,
-// FontCollection::FindFont, CgsAptString::Prepare) still resolves by name.
-char* CGSSTRNLOWER(char* pcString, u32 uMaxLen)
+// ARTIST 0x82815D80 streams its assertion and passes signed char to tolower
+// (extsb at 0x82815E30). DecFIGS declares a void return.
+void CGSSTRNLOWER(char* pcString, u32 uMaxLen)
 {
-    CGS_ASSERT(pcString != 0, "Passed a null string to CGSSTRNLOWER");
+    CGS_ASSERT_STREAM_AT(pcString, "Passed a null string to CGSSTRNLOWER",
+        "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\core\\CgsStringUtils.cpp", 48);
 
-    char* pc = pcString;
-    for (u32 i = 0; *pc; ++i)
+    for (u32 luIndex = 0; *pcString; ++luIndex)
     {
-        if (i >= uMaxLen)
+        if (luIndex >= uMaxLen)
             break;
-        *pc = static_cast<char>(tolower(static_cast<unsigned char>(*pc)));
-        ++pc;
+        *pcString = static_cast<char>(tolower(*pcString));
+        ++pcString;
     }
-
-    return pcString;
 }
 
 // DecFIGS declares the wrapper void. ARTIST returns directly after vsnprintf on

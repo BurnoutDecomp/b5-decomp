@@ -11,7 +11,8 @@
 #include "GameSource/Sound/Module/SharedIO/BrnPreUpdateSharedIo.h" // AudioEffectsMessageQueue (adopted real type)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // AudioCarDataLoadedEvent (queue element)
 #include "GameSource/Sound/Module/SharedIO/BrnSoundRootSharedIO.h"
-#include "GameSource/Replays/BrnReplayRequestInterface.h" // BrnReplays::ReplayIO::RequestInterface (the replay request member; phase C1)
+#include "GameSource/Replays/BrnReplayRequestInterface.h" // BrnReplays::ReplayIO::RequestInterface
+#include "GameSource/Replays/BrnReplayStatusInterface.h"  // BrnReplays::ReplayIO::StatusInterface
 #include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h"
 #include "GameSource/Director/Camera/Camera.h"            // BrnDirector::Camera::Camera (mDirectorCamera)
 #include "GameSource/Physics/ContactSpies/BrnContactSpyInterface.h"
@@ -224,7 +225,8 @@ namespace Io
         // DWARF-named member-interface types (nested so accessor bodies name them
         // RootInputBuffer::X). Sizes are the X360-attested copy widths where available,
         // else nominal (absorbed by pads).
-        struct ReplayStatusInterface         { u8 mData[4]; };
+        // ARTIST 0x823B7F64 calls ReplayIO::StatusInterface::operator= on this member.
+        typedef BrnReplays::ReplayIO::StatusInterface ReplayStatusInterface;
         typedef BrnDirector::Camera::Camera DirectorCamera;
         typedef BrnPhysics::ContactSpy::ContactSpyInterface
             InputContactSpyQueueInterface;
@@ -453,6 +455,7 @@ namespace Io
             // + SEQUENCE with the console inter-member gaps as pads; the old absolute
             // offsetof asserts past +0x620 are retired (console offsets stay in the
             // member comments).
+            CGS_STATIC_ASSERT((sizeof(ReplayStatusInterface) == 0x618), "ARTIST replay status extent");
             CGS_STATIC_ASSERT((offsetof(RootInputBuffer, mReplayStatusInterface)  == 0x00004), "mReplayStatusInterface @ +0x004");
             CGS_STATIC_ASSERT((offsetof(RootInputBuffer, mVehicleData)            == 0x00620), "mVehicleData @ +0x620");
         }

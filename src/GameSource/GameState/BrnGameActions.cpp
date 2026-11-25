@@ -104,11 +104,12 @@ void SetupNetworkCarAction::Construct(EPlayerScoringIndex lePlayerScoringIndex,
 
     mfBaseDeformationAmount = lfBaseDeformationAmount;   // stfs f31, 0x38(r31) @0x82355140
     mWorldSpacePosition  = lPos;
-    mAt                  = lAt;
+    // ARTIST 0x82355148-0x82355158 stores the indices before the model IDs and orientation.
+    mePlayerScoringIndex = lePlayerScoringIndex;
+    meActiveRaceCarIndex = leActiveRaceCarIndex;
     mModelId             = lModelId;
     mWheelModelId        = lWheelModelId;
-    meActiveRaceCarIndex = leActiveRaceCarIndex;
-    mePlayerScoringIndex = lePlayerScoringIndex;
+    mAt                  = lAt;
 }
 
 // X360 0x823551F0. Bounds-checked setter for the added player's scoring slot.

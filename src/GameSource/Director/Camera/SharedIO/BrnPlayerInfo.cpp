@@ -14,6 +14,7 @@
 // ============================================================================
 
 #include "GameSource/Director/Camera/SharedIO/BrnPlayerInfo.h"
+#include <xtl.h>
 
 namespace BrnDirector
 {
@@ -42,7 +43,7 @@ namespace Camera
     //   then the same trailing-field copies as the ctor. Returns this (r3 = r31).
     VehicleInfo& VehicleInfo::operator=(const VehicleInfo& rhs)
     {
-        mRaceCarState                 = rhs.mRaceCarState;
+        XMemCpy(&mRaceCarState, &rhs.mRaceCarState, sizeof(mRaceCarState));
         mCrashingCentreOfMass         = rhs.mCrashingCentreOfMass;
         mAABB                         = rhs.mAABB;
         mHardestNormalStressNormal    = rhs.mHardestNormalStressNormal;

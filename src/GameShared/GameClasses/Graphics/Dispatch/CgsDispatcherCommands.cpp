@@ -169,12 +169,10 @@ void CallbackFn::Interpret(DispatchCommand* lpCommand, DispatchFrame* /*lpFrame*
 // =============================================================================
 DispatchPacketInterpreter::DispatchPacketInterpreter(InterpretFn* lpaInterpreters,
                                                      u32 luNumInterpreters)
-    : m_paInterpreters(lpaInterpreters)
-    , m_uNumInterpreters(luNumInterpreters)
     // X360 @0x827E9360 writes ONLY +0x00 (table) and +0x04 (count); mfTime (+0x08) and
     // mpSingleBufferedDispatchFrame (+0x0C) are deliberately left uninitialised by the ctor.
 {
-    CGS_ASSERT(lpaInterpreters != 0, "paInterpreters != NULL");
+    AssertDispatcher(lpaInterpreters != 0, "paInterpreters != NULL", 2754);
     m_paInterpreters   = lpaInterpreters;
     m_uNumInterpreters = luNumInterpreters;
 }

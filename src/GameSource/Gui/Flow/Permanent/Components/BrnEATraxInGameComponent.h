@@ -88,6 +88,9 @@ namespace BrnGui
                                          bool lbLocalised);
 
     private:
+        static const char* KAPC_ANIM_IN_FRAME;
+        static const char* KAPC_ANIM_OUT_FRAME;
+
         ComponentState         meComponentState;            // +0x0C
         f32                    mfCurrentGameTime_Seconds;   // +0x10
         f32                    mfAnimOutTime_Seconds;       // +0x14

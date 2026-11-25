@@ -36,6 +36,7 @@
 namespace BrnGui
 {
     typedef CgsLanguage::LanguageManager LM;
+    static const char KAC_ARTIST_FILE[] = "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnRoadPanel.cpp";
 
     // The build's shared empty string literal (X360 `&unk_820046A7`).
     static const char KAC_EMPTY_STRING[] = "";
@@ -315,20 +316,19 @@ namespace BrnGui
     // @ 0x8243A3E0 -------------------------------------------------------------------
     void RoadPanel::SwitchScoreMode()
     {
-        // A two-way toggle: OFFLINE <-> ONLINE. Anything else is asserted and treated as
-        // ONLINE (the console's non-zero arm).
-        if (meCurrentScoreMode != KI_ROAD_PANEL_MODE_OFFLINE)
+        s32 liNextScoreMode;
+        if (meCurrentScoreMode == KI_ROAD_PANEL_MODE_OFFLINE)
         {
-            CGS_ASSERT(meCurrentScoreMode == KI_ROAD_PANEL_MODE_ONLINE,
-                       "GuiEventSetRoadRuleScoreMode::E_ROAD_PANEL_MODE_ONLINE == "
-                       "meCurrentScoreMode");   // cpp:306
-            meCurrentScoreMode = KI_ROAD_PANEL_MODE_OFFLINE;
+            liNextScoreMode = KI_ROAD_PANEL_MODE_ONLINE;
         }
         else
         {
-            meCurrentScoreMode = KI_ROAD_PANEL_MODE_ONLINE;
+            CGS_ASSERT_AT(meCurrentScoreMode == KI_ROAD_PANEL_MODE_ONLINE,
+                          "GuiEventSetRoadRuleScoreMode::E_ROAD_PANEL_MODE_ONLINE == meCurrentScoreMode",
+                          KAC_ARTIST_FILE, 306);
+            liNextScoreMode = KI_ROAD_PANEL_MODE_OFFLINE;
         }
-
+        meCurrentScoreMode = liNextScoreMode;
         UpdateVisibleScores();
 
         // Tell the rest of the GUI which scoreboard the road panel is now showing.

@@ -229,8 +229,9 @@ void AchievementManagerX360::Update(const GameStateModuleIO::PreWorldInputBuffer
         miState     = KI_STATE_IDLE;
     }
 
-    const bool lbSignedIn = (miUserIndex != KI_NO_USER) &&
-                            (XUserGetSigninState(static_cast<u32>(miUserIndex)) != 0);
+    const bool lbSignedIn = miUserIndex == KI_NO_USER
+        ? false
+        : XUserGetSigninState(static_cast<u32>(miUserIndex)) != eXUserSigninState_NotSignedIn;
     if (!lbSignedIn)
     {
         return;

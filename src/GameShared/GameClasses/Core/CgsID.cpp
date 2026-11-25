@@ -34,71 +34,23 @@ CgsID CgsIDCompress(const char* lpcString)
         lID *= 40;
 
         if (liChar == '_')
-        {
             lID += 39;
-        }
-        else if (liChar < 'a')
-        {
-            if (liChar < 'A')
-            {
-                if (liChar < '0')
-                {
-                    if (liChar == '/')
-                        lID += 2;
-                    else if (liChar == '-')
-                        lID += 1;
-                    // any other punctuation maps to slot 0 (space)
-                }
-                else
-                {
-                    // '0'..'9' -> 3..12
-                    lID += liChar - ('0' - 3);
-                }
-            }
-            else
-            {
-                // 'A'..'Z' -> 13..38
-                lID += liChar - ('A' - 13);
-            }
-        }
-        else
-        {
-            // 'a'..'z' -> 13..38 (same indices as the uppercase letters)
+        else if (liChar >= 'a')
             lID += liChar - ('a' - 13);
-        }
+        else if (liChar >= 'A')
+            lID += liChar - ('A' - 13);
+        else if (liChar >= '0')
+            lID += liChar - ('0' - 3);
+        else if (liChar == '/')
+            lID += 2;
+        else if (liChar == '-')
+            lID += 1;
     }
 
-    // CgsID.cpp:180 - string did not fit in 12 characters.
-    if (lpcString[liI])
-    {
-        char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-        CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-        lStrStream << "CgsIDCompress: input string too long! - \"";
-        lStrStream << (lpcString ? lpcString : "<NULLSTRING>");
-        lStrStream << "\"\n";
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            lacMessage,
-            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
-            180));
-        CgsDev::Assert::EndAssert();
-    }
-
-    // CgsID.cpp:185 - duplicate guard in the original source.
-    if (lpcString[liI])
-    {
-        char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-        CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-        lStrStream << "CgsIDCompress: input string too long! - \"";
-        lStrStream << (lpcString ? lpcString : "<NULLSTRING>");
-        lStrStream << "\"\n";
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            lacMessage,
-            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE,
-            185));
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT_STREAM_AT(!lpcString[liI],
+        "CgsIDCompress: input string too long! - \"" << lpcString << "\"\n", CGS_ARTIST_FILE, 180);
+    CGS_ASSERT_STREAM_AT(!lpcString[liI],
+        "CgsIDCompress: input string too long! - \"" << lpcString << "\"\n", CGS_ARTIST_FILE, 185);
 
     // Left-justify: shift the encoded characters up to the top of the base-40 word.
     for (; liI < KI_CGSID_STRING_LEN - 1; ++liI)

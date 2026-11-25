@@ -1055,8 +1055,7 @@ namespace BrnGame
         BridgeGuiToSound(lpSoundInputBuffer, mpGuiOutputBuffer);
 
         const BrnReplays::ReplayIO::OutputBuffer_PreSim* lpcReplayOutputBuffer = lpReplaysPreSimOutputBuffer;
-        lpSoundInputBuffer->SetReplayStatusInterface(
-            reinterpret_cast<const RootIn::ReplayStatusInterface*>(lpcReplayOutputBuffer->GetStatusInterface()));
+        lpSoundInputBuffer->SetReplayStatusInterface(lpcReplayOutputBuffer->GetStatusInterface());
 
         CgsModule::UnlockBuffersForIO(lpSoundInputBuffer, lpDirectorOutputBuffer, lpWorldOutputBuffer,
             lpGameStateOutputBuffer, lpGuiOutputBuffer, lpReplaysPreSimOutputBuffer);

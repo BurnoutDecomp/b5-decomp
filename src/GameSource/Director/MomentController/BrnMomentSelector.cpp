@@ -654,73 +654,58 @@ bool MomentSelector::SelectBestMomentWithExclusion(CgsNumeric::Random& lRandom, 
 //     mRecencyArray[best] = 1.0f.
 bool MomentSelector::SelectBestLRUMomentWithExclusion(s32 liExclusion)
 {
-    if (muValidMoments == 0)
+    if (muValidMoments != 0)
     {
-        return false;
-    }
+        const s32 liMomentCount = static_cast<s32>(mMomentDescriptionArray.GetLength());   // +0x0A0
 
-    const s32 liMomentCount = static_cast<s32>(mMomentDescriptionArray.GetLength());   // +0x0A0
+        bool lbFoundOne    = false;
+        s32  liBestMoment  = 0;
+        f32  lfBestScore   = 0.0f;
 
-    bool lbFoundOne    = false;
-    s32  liBestMoment  = 0;
-    f32  lfBestScore   = 0.0f;
-
-    for (s32 liLoop = 0; liLoop < liMomentCount; ++liLoop)
-    {
-        if (!mMomentHandleArray[static_cast<u32>(liLoop)].IsAllocated())
+        for (s32 liLoop = 0; liLoop < liMomentCount; ++liLoop)
         {
-            continue;
+            if (!mMomentHandleArray[static_cast<u32>(liLoop)].IsAllocated())
+            {
+                continue;
+            }
+
+            if (mMomentHandleArray[static_cast<u32>(liLoop)].GetMoment().GetState() !=
+                Moment::E_STATE_VALID)                                   // +0x174 == 3
+            {
+                continue;
+            }
+
+            if (!mMomentHandleArray[static_cast<u32>(liLoop)].GetMoment().CanSwitchToMeNow())
+            {                                                            // +0x178
+                continue;
+            }
+
+            if (liLoop == liExclusion)
+            {
+                continue;
+            }
+
+            const MomentDescription& lrDescription = mMomentDescriptionArray[static_cast<u32>(liLoop)];
+            const f32 lfScore =
+                (1.0f - mRecencyArray[static_cast<u32>(liLoop)]) * lrDescription.mfWeighting;
+
+            if (lfScore >= lfBestScore)                                  // ties: the later index wins
+            {
+                lbFoundOne   = true;
+                lfBestScore  = lfScore;
+                liBestMoment = liLoop;
+            }
         }
 
-        if (mMomentHandleArray[static_cast<u32>(liLoop)].GetMoment().GetState() !=
-            Moment::E_STATE_VALID)                                   // +0x174 == 3
+        if (lbFoundOne)
         {
-            continue;
-        }
-
-        if (!mMomentHandleArray[static_cast<u32>(liLoop)].GetMoment().CanSwitchToMeNow())
-        {                                                            // +0x178
-            continue;
-        }
-
-        if (liLoop == liExclusion)
-        {
-            continue;
-        }
-
-        const MomentDescription& lrDescription = mMomentDescriptionArray[static_cast<u32>(liLoop)];
-        const f32 lfScore =
-            (1.0f - mRecencyArray[static_cast<u32>(liLoop)]) * lrDescription.mfWeighting;
-
-        if (lfScore >= lfBestScore)                                  // ties: the later index wins
-        {
-            lbFoundOne   = true;
-            lfBestScore  = lfScore;
-            liBestMoment = liLoop;
-        }
-    }
-
-    if (!lbFoundOne)
-    {
-        return false;
-    }
-
-    miSelectedMoment    = liBestMoment;   // +0x1D8
-    mbHasSelectedMoment = true;           // +0x1E0
-    mRecencyArray[static_cast<u32>(liBestMoment)] = 1.0f;
-
-    // [DIAG] NOT IN THE CONSOLE BINARY. Rung 7 of the `[jump-ladder]`: a cutaway moment was
-    // actually PICKED. One-shot; costs one predictable branch per successful selection and
-    // nothing at all once it has fired.
-    {
-        static bool sbLoggedFirstSelection = false;
-        if (!sbLoggedFirstSelection && CgsDev::Log::gpDebugPrint != 0)
-        {
-            sbLoggedFirstSelection = true;
+            miSelectedMoment = liBestMoment;
+            mbHasSelectedMoment = true;
+            mRecencyArray[static_cast<u32>(liBestMoment)] = 1.0f;
+            return true;
         }
     }
-
-    return true;
+    return false;
 }
 
 // SelectBestRandomMomentWithExclusion -- the E_MODE_RANDOM_BEST arm of

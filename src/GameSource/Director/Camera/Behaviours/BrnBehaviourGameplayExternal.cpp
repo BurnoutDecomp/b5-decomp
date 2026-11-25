@@ -369,10 +369,7 @@ CollisionPolicy* BehaviourGameplayExternal::GetCollisionPolicy()
 {
     CGS_ASSERT(mpParameters != 0, CGS_ASSERT_MESSAGE_AT("calling GetCollisionPolicy() with no parameters", CGS_ARTIST_FILE, 120));
 
-    if (!mpParameters->mbIsValid)
-        return 0;
-
-    return &mCollisionPolicy;
+    return mpParameters->mbIsValid ? &mCollisionPolicy : 0;
 }
 
 // ============================================================================

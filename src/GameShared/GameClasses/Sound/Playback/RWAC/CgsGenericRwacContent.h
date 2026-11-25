@@ -6,6 +6,8 @@
 #include "GameShared/GameClasses/Sound/Playback/CgsContent.h"      // CgsSound::Playback::Content
 #include "GameShared/GameClasses/Sound/Playback/CgsVoice.h"        // Slot implementation/factory surface
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h" // CgsResource::ResourcePtr<T>
+#include "GameShared/GameClasses/System/Resource/CgsBinaryFileResource.h"
+#include "GameShared/GameClasses/System/Resource/CgsAlignedBinaryFileResource.h"
 
 // ============================================================================
 // GameShared/GameClasses/Sound/Playback/Rwac/CgsGenericRwacContent.h
@@ -41,30 +43,14 @@
 // is emitted; its body is empty because the member/base destructors do all the
 // work the asm performs.
 //
-// ContentLoader<T> is HOMED MINIMALLY here (no committed home exists yet). Its
-// member layout matches the DWARF (CgsContentLoader.h: mpResource, mpLoadData,
-// meUnloadState); its load/unload/update method family is its own TU and is
-// DECLARED-ONLY here. The element resource types (BinaryFileResource /
-// AlignedBinaryFileResource -- the resource *payload* classes, NOT the committed
-// *ResourceType classes) are not yet homed; ResourcePtr<T> adds no data members
-// and these dtors touch only the BaseResourcePtr portion, so the payload types
-// are forward-declared (incomplete is sufficient -- no T-sized member exists).
-// ============================================================================
-
-namespace CgsResource
-{
-    // Resource payload records (their complete homes are included by the loader TU).
-    struct BinaryFileResource;
-    struct AlignedBinaryFileResource;
-}
-
+// ContentLoader<T> owns the resource pointer and load-state bookkeeping. Its
+// load/unload state machine is defined in CgsContentLoader.cpp.
 namespace CgsSound
 {
 namespace Playback
 {
     // CgsContentLoader.h:52 (DWARF). Drives load/unload of a resource module for a
-    // Content. MINIMAL home: layout-faithful members only; the method family lives
-    // in its own (not-yet-done) ContentLoader TU and is declared-only here.
+    // Content. The payload accessor was inline in CgsContentLoader.h.
     //
     // Layout (DWARF CgsContentLoader.h):
     //   mpResource     ResourcePtr<ResType>   (intrusive alias-list smart ptr)
@@ -101,8 +87,16 @@ namespace Playback
 
         ContentLoader() : mpLoadData(0), meUnloadState(E_US_IDLE) {}
 
-        // Method family -- own TU (declared only; not exercised by the dtor TUs).
-        void* GetData();
+        // ARTIST 0x826D9E08..0x826D9E14 inlines BinaryFileResource::GetData
+        // after ResourcePtr::operator-> has resolved the resource.
+        void* GetData()
+        {
+            void* lpvData = const_cast<void*>(mpResource->GetData());
+            CGS_ASSERT(lpvData, CGS_ASSERT_MESSAGE_AT("lpvData",
+                "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsContentLoader.h", 165));
+            return lpvData;
+        }
+
         bool  Load(Content& aContent, const ContentSpec& aSpec);    // :71
         bool  Unload(Content& aContent, const ContentSpec& aSpec);  // :76
         void  Update(Content& aContent, const ContentSpec& aSpec);  // :81

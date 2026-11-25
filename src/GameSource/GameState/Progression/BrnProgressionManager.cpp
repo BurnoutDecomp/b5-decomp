@@ -2587,7 +2587,7 @@ bool ProgressionManager::HasEventBeenWonPreviously(u32 luEventId)
 bool ProgressionManager::PlayerHasFinishedLastRank() const
 {
     const s32 liRankCount = static_cast<s32>(mpProgressionData->GetProgressionRankCount());
-    return liRankCount == static_cast<s32>(mi8ProgressionRank);
+    return static_cast<s32>(mi8ProgressionRank) == liRankCount;
 }
 
 // ------------------------------------------------------------------------------------

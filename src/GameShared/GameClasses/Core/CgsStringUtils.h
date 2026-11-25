@@ -2,8 +2,8 @@
 #include "types.hpp"
 
 // Global legacy helper (all-caps symbol preserved for cross-build identity):
-// in-place lower-cases up to uMaxLen chars and returns the buffer.
-extern char* CGSSTRNLOWER(char* pcString, u32 uMaxLen);
+// Lower-cases up to uMaxLen characters in place (DecFIGS CgsStringUtils.cpp:46).
+extern void CGSSTRNLOWER(char* pcString, u32 uMaxLen);
 
 namespace CgsCore
 {

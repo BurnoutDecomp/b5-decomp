@@ -277,8 +277,10 @@ f32 Slope::GetValue(f32 lfInput, Curve::ECurveType leCurve) const
 {
     const f32 lfFraction = rw::math::fpu::Clamp(
         (lfInput - mParams.mfMinInput) / (mParams.mfMaxInput - mParams.mfMinInput), 0.0f, 1.0f);
-    return (mParams.mfMaxOutput - mParams.mfMinOutput) * Curve::GetOutput(lfFraction, leCurve) +
-           mParams.mfMinOutput;
+    const f32 lfCurveOutput = Curve::GetOutput(lfFraction, leCurve);
+    const f32 lfMinOutput = mParams.mfMinOutput;
+    const f32 lfOutputRange = mParams.mfMaxOutput - lfMinOutput;
+    return lfOutputRange * lfCurveOutput + lfMinOutput;
 }
 
 // ============================================================================================

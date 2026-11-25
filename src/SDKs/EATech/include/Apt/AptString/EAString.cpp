@@ -38,12 +38,12 @@
 // ---------------------------------------------------------------------------
 // Statics.
 //   s_EmptyInternalData : the shared empty string. 8-byte StringDataC header
-//   (refcount/size/maxsize/hash, all zero) + 1 null terminator byte. Zero-init,
-//   so c_str() on a default string returns a valid "" and every field reads 0.
+//   (refcount/size/maxsize/hash) followed by one NUL byte. ARTIST 0x82F72FF8
+//   initializes the big-endian reference count to 0x0101 and the other fields to zero.
 //   sAptCallbacks       : the Apt user-function table, recorded by MemInitialize
 //   (used by Format/vsFormat); null until then.
 // ---------------------------------------------------------------------------
-char              EAStringC::s_EmptyInternalData[8 + 1] = { 0 };
+char              EAStringC::s_EmptyInternalData[8 + 1] = { 0x01, 0x01 };
 AptUserFunctions* EAStringC::sAptCallbacks              = 0;
 
 // ---------------------------------------------------------------------------
@@ -91,22 +91,18 @@ void EAStringC::DeallocateBuffer(const void* const pBuffer, const uint32_t uSize
 
 void EAStringC::InitFromBuffer(const char* const pStrText)
 {
-    if (*pStrText)
+    if (*pStrText == '\0')
     {
-        const uint32_t uLen = static_cast<uint32_t>(strlen(pStrText));
-        AllocateBuffer(uLen);
-        m_pData->m_uSize = static_cast<uint16_t>(uLen);
-        m_pData->m_uHash = 0;
-        memcpy(GetInternalBuffer(), pStrText, uLen + 1);
-    }
-    else
-    {
-        // FIX (verifier fail @0x82AE35A0): the X360 empty branch only stores
-        // &s_EmptyInternalData into m_pData and returns -- no atomic/no bl. The
-        // refcount bump the copy/default ctors do is NOT emitted here (the empty
-        // sentinel is guarded anyway), so this is store-for-store faithful.
+        // ARTIST 0x82AE35C0 sets the empty sentinel and returns.
         m_pData = reinterpret_cast<DebugDataC*>(&s_EmptyInternalData);
+        return;
     }
+
+    const uint32_t uLen = static_cast<uint32_t>(strlen(pStrText));
+    AllocateBuffer(uLen);
+    m_pData->m_uSize = static_cast<uint16_t>(uLen);
+    m_pData->m_uHash = 0;
+    memcpy(GetInternalBuffer(), pStrText, uLen + 1);
 }
 
 // ARTIST @0x82AE34A0: in-place update or 12.5-percent-slack copy-on-write.
@@ -310,12 +306,13 @@ void EAStringC::Validate(const EAStringC& strText)
 
 EAStringC& EAStringC::Duplicate(const EAStringC& strText)
 {
-    const uint16_t uSize = strText.m_pData->m_uSize;
+    const uint32_t uSize = strText.GetLength();
     ReserveSize(uSize);
     char* const buf = GetInternalBuffer();
     memcpy(buf, strText.GetInternalBuffer(), uSize);
-    buf[uSize]        = 0;
-    m_pData->m_uSize  = uSize;
+    // ARTIST 0x82AEDE18-0x82AEDE2C uses the same length for the copy and terminator.
+    *(buf + uSize)    = 0;
+    m_pData->m_uSize  = static_cast<uint16_t>(uSize);
     m_pData->m_uHash  = strText.m_pData->m_uHash;
     return *this;
 }
@@ -792,12 +789,12 @@ bool EAStringC::EndWithRemove(const char* const pStrText)
 {
     const uint32_t uSize   = m_pData->m_uSize;
     const uint32_t uNeedle = static_cast<uint32_t>(strlen(pStrText));
-    if (uSize < uNeedle)
-        return false;
-    if (memcmp(GetInternalBuffer() + uSize - uNeedle, pStrText, uNeedle) != 0)
-        return false;
-    *this = Left(static_cast<int32_t>(uSize - uNeedle));
-    return true;
+    if (uSize >= uNeedle && memcmp(GetInternalBuffer() + uSize - uNeedle, pStrText, uNeedle) == 0)
+    {
+        *this = Left(static_cast<int32_t>(uSize - uNeedle));
+        return true;
+    }
+    return false;
 }
 
 bool EAStringC::EndWithRemoveIgnoreCase(const char* const pStrText)

@@ -121,9 +121,9 @@ void BehaviourDebugFlyWorld::ChangeMovingSpeed(void* lpData)
     lpThis->mfPitchSpeed = -0.039999999f;
     lpThis->mfRollSpeed  =  0.02f;
 
-    // Cycle SLOW -> NORMAL -> FAST -> SLOW.
+    // ARTIST 0x821FB7D4 uses an unsigned remainder for the three presets.
     lpThis->meMoveSpeedState =
-        static_cast<EMoveSpeedType>((lpThis->meMoveSpeedState + 1) % 3);
+        static_cast<EMoveSpeedType>((static_cast<u32>(lpThis->meMoveSpeedState) + 1) % 3);
 
     f32 lfTranslationScale;
     f32 lfRotationScale;

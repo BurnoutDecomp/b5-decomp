@@ -74,8 +74,8 @@ void Param::Construct()
     mxFlags                   = 0;
     mxEffectAndHistoryState   = 0;
     muCurrentSectionDirection = E_DIR_STRAIGHT_ON;
-    miBehaviour               = KI_BEHAVIOUR_INVALID;
     muNextStopLineIndex       = static_cast<u8>(KU_UNKNOWN_STOPLINE);
+    miBehaviour               = KI_BEHAVIOUR_INVALID;
     muExtraBehaviourFlags     = 0;
     mSympCrashTarget.muValue  = 0xFFFFFFFFu;
 
@@ -373,35 +373,25 @@ void Param::SetDyingState(u32 luParam, ParamSoaData& lSoaData)
 // (note: the second plan is only inspected when its type is E_TYPE_CHANGE_SECTION).
 bool Param::ShouldBeIndicatingRight() const
 {
-    // E_DIR_STRAIGHT_ON = 0, E_DIR_LEFT = 1, E_DIR_RIGHT = 2 (BrnTrafficSharedConstants.h).
-    if (muCurrentSectionDirection == 2) // E_DIR_RIGHT
-    {
+    if (muCurrentSectionDirection == E_DIR_RIGHT)
         return true;
-    }
-    if (muCurrentSectionDirection != 0) // not E_DIR_STRAIGHT_ON
+
+    if (muCurrentSectionDirection == E_DIR_STRAIGHT_ON)
     {
-        return false;
+        const u8 luPlanType = maPlans[0].muType;
+        if (luPlanType == ParamPlan::E_TYPE_CHANGE_LANE ||
+            luPlanType == ParamPlan::E_TYPE_CHANGE_SECTION)
+        {
+            if (maPlans[0].muDirection == E_DIR_RIGHT)
+                return true;
+
+            if (maPlans[0].muDirection == E_DIR_STRAIGHT_ON &&
+                maPlans[1].muType == ParamPlan::E_TYPE_CHANGE_SECTION)
+                return maPlans[1].muDirection == E_DIR_RIGHT;
+        }
     }
 
-    const u8 luPlan0Type = maPlans[0].muType;
-    if (luPlan0Type != ParamPlan::E_TYPE_CHANGE_LANE &&
-        luPlan0Type != ParamPlan::E_TYPE_CHANGE_SECTION)
-    {
-        return false;
-    }
-
-    if (maPlans[0].muDirection == 2) // E_DIR_RIGHT
-    {
-        return true;
-    }
-    if (maPlans[0].muDirection != 0) // not E_DIR_STRAIGHT_ON
-    {
-        return false;
-    }
-
-    // X360 only tests plan[1].muType == E_TYPE_CHANGE_SECTION here.
-    return maPlans[1].muType == ParamPlan::E_TYPE_CHANGE_SECTION &&
-           maPlans[1].muDirection == 2; // E_DIR_RIGHT
+    return false;
 }
 
 // ===========================================================================

@@ -1101,15 +1101,7 @@ namespace BrnDirector
         }
         mMomentSelector.Release();
 
-        if (mInterpolater.mbAllocated)          // +0x180 block
-        {
-            mInterpolater.mpManager->UnSetBehaviourUsedByHandle(mInterpolater.muAllocationKey);
-            mInterpolater.muHelperIndex = 0;
-            mInterpolater.mpManager     = 0;
-            mInterpolater.mpBehaviour   = 0;
-            mInterpolater.mbAllocated   = false;
-        }
-
+        // ARTIST 0x82234970 releases the road-runner before its interpolater.
         if (mRoadRunnerCam.mbAllocated)         // +0x194 block
         {
             mRoadRunnerCam.mpManager->UnSetBehaviourUsedByHandle(mRoadRunnerCam.muAllocationKey);
@@ -1117,6 +1109,15 @@ namespace BrnDirector
             mRoadRunnerCam.mpManager     = 0;
             mRoadRunnerCam.mpBehaviour   = 0;
             mRoadRunnerCam.mbAllocated   = false;
+        }
+
+        if (mInterpolater.mbAllocated)          // +0x180 block
+        {
+            mInterpolater.mpManager->UnSetBehaviourUsedByHandle(mInterpolater.muAllocationKey);
+            mInterpolater.muHelperIndex = 0;
+            mInterpolater.mpManager     = 0;
+            mInterpolater.mpBehaviour   = 0;
+            mInterpolater.mbAllocated   = false;
         }
 
         meState = E_STATE_INACTIVE;             // +0x3BC = 0

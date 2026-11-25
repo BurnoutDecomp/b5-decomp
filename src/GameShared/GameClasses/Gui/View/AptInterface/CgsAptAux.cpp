@@ -554,7 +554,10 @@ namespace CgsGui
         va_start(lArgs, lpacFormat);
         const int liCopied = vsnprintf(lacBuffer, sizeof(lacBuffer), lpacFormat, lArgs);
         va_end(lArgs);
-        CGS_ASSERT(liCopied < static_cast<int>(sizeof(lacBuffer)), "lNumBytesCopied<(int32_t)luBytes");
+        CGS_ASSERT(liCopied < static_cast<int>(sizeof(lacBuffer)),
+            CGS_ASSERT_MESSAGE_AT("lNumBytesCopied<(int32_t)luBytes",
+                "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 96));
+        lacBuffer[sizeof(lacBuffer) - 1] = '\0';
 
         if (CgsDev::Message::gxMessageFilterFlags & 1)
         {

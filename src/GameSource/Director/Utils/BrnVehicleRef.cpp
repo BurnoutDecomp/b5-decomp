@@ -45,7 +45,7 @@ namespace BrnDirector
             break;
 
         case E_TRAFFIC_VEHICLE:
-            CGS_ASSERT(false, "not implemented yet");   // BrnVehicleRef.h:189 (non-gating)
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT("not implemented yet", CGS_ARTIST_FILE, 189));   // BrnVehicleRef.h:189 (non-gating)
             break;
 
         default:
@@ -79,14 +79,11 @@ namespace BrnDirector
     // the four fields (type, race car, set-flag, ref slot -- the asm's compare order).
     bool VehicleRef::operator!=(const VehicleRef& lrOther) const
     {
-        if (meType != lrOther.meType
-            || miRaceCarIndex != lrOther.miRaceCarIndex
-            || mbSet != lrOther.mbSet
-            || muRef != lrOther.muRef)
-        {
-            return true;
-        }
-        return false;
+        const bool lbEqual = meType == lrOther.meType
+            && miRaceCarIndex == lrOther.miRaceCarIndex
+            && mbSet == lrOther.mbSet
+            && muRef == lrOther.muRef;
+        return !lbEqual;
     }
 }
 

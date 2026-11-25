@@ -58,9 +58,7 @@ void CsisContent::DoUpdate(f32 /*af32Dt*/)
 
 void* CsisContent::DoGetData()
 {
-    void* lpData = mLoader.GetData();
-    CGS_ASSERT(lpData != 0, "lpvData");
-    return lpData;
+    return mLoader.GetData();
 }
 
 // ARTIST @0x826D9CF0.
@@ -107,9 +105,7 @@ void AemsContent::DoUpdate(f32 /*af32Dt*/)
 
 void* AemsContent::DoGetData()
 {
-    void* lpData = mLoader.GetData();
-    CGS_ASSERT(lpData != 0, "lpvData");
-    return lpData;
+    return mLoader.GetData();
 }
 
 void* AemsContent::AddAemsBankCallback(void* apData, int /*aiResidentSize*/,

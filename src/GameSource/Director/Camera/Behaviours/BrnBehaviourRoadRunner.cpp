@@ -603,12 +603,13 @@ void TrafficLaneTruck::MoveAlongTrafficLane(BrnTraffic::Directions lePreferredDi
 {
     CGS_ASSERT(lpPositionInOut->mbValid, CGS_ASSERT_MESSAGE_AT("lpPositionInOut->mbValid", CGS_ARTIST_FILE, 517));
 
-    if (lfDistToMove >= KF_ZERO)
-        MoveAlongTrafficLaneForwards(lePreferredDirection, lrWorldMap, lfDistToMove,
-                                     lpPositionInOut, lpTransformOut);
-    else
+    // ARTIST 0x8222BCB4 takes the forwards path only for an ordered >= comparison.
+    if (!(lfDistToMove >= KF_ZERO))
         MoveAlongTrafficLaneBackwards(lePreferredDirection, lrWorldMap, -lfDistToMove,
                                       lpPositionInOut, lpTransformOut);
+    else
+        MoveAlongTrafficLaneForwards(lePreferredDirection, lrWorldMap, lfDistToMove,
+                                     lpPositionInOut, lpTransformOut);
 }
 
 // ----------------------------------------------------------------------------

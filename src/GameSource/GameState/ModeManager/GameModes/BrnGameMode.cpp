@@ -629,16 +629,15 @@ s32 GameMode::CalculateMaxPlayerWrecks(const StartGameModeParams* lpStartGameMod
 // again. Returns false (and writes nothing) when nothing changed.
 bool GameMode::HasCountdownDisplayChanged(s32* lpiNewCountdownDisplay)
 {
-    if (!mbCountdownDisplayChanged)
+    if (mbCountdownDisplayChanged)
     {
-        return false;
+        CGS_ASSERT(lpiNewCountdownDisplay != 0, CGS_ASSERT_MESSAGE_AT("lpiNewCountdownDisplay != NULL", CGS_ARTIST_BRNGAMEMODE_FILE, 449));
+
+        *lpiNewCountdownDisplay = miCountdownDisplay;
+        mbCountdownDisplayChanged = false;
+        return true;
     }
-
-    CGS_ASSERT(lpiNewCountdownDisplay != 0, CGS_ASSERT_MESSAGE_AT("lpiNewCountdownDisplay != NULL", CGS_ARTIST_BRNGAMEMODE_FILE, 449));
-
-    *lpiNewCountdownDisplay = miCountdownDisplay;
-    mbCountdownDisplayChanged = false;
-    return true;
+    return false;
 }
 
 // ===========================================================================

@@ -19,9 +19,8 @@
 //
 // All former deferrals are landed: AptValue::toString (AptValueConvert.cpp
 // @0x82AF8FA0) backs the non-string Get_ToString path; the tag-33 boxed string is
-// the named AptStringObject::GetBoxedString member; the deferred-release drain is
-// the homed AptFlushDeferredReleases over gValuesToRelease (AptGC.cpp,
-// off_8324E51C). The stack-empty guard that triggers it is engine-side.
+// the named AptStringObject::GetBoxedString member. SetVariable checks the
+// original deferred-release vector before testing whether the operand stack is empty.
 //
 // The member opcodes GetMember/SetMember (0x4E/0x4F) are the follow-on: they add
 // the array / string / __proto__ fast paths and lean on the value-layer type tags
@@ -36,11 +35,7 @@
 #include "SDKs/EATech/include/Apt/AptValue/AptStringObject.h" // the tag-33 boxed-string form
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"   // EAStringC
 #include "SDKs/EATech/include/Apt/AptCIH.h"               // AptCIH : AptValueGC (mpCIH -> AptValue* upcast)
-
-// The deferred-release drain over off_8324E51C (`if (vector.count)
-// vector.ReleaseValues()`) -- homed in AptGC.cpp over the real gValuesToRelease
-// vector; SetVariable's stack-empty guard decides when to call it.
-extern void AptFlushDeferredReleases();
+#include "SDKs/EATech/include/Apt/AptValue/AptGCReleaseVector.h"
 
 // ---------------------------------------------------------------------------
 // AptValue::Get_ToString @0x82AD8558 -- coerce a value to an EAStringC name.
@@ -110,6 +105,7 @@ void AptActionInterpreter::_FunctionAptActionSetVariable(AptActionInterpreter* p
 
     pInterp->stackPop(2);                                 // pop name + value
 
-    if (pInterp->mnStackTop == 0)
-        AptFlushDeferredReleases();   // off_8324E51C drain (homed, AptGC.cpp)
+    // ARTIST 0x82B039E8 reads the deferred vector count before testing the stack.
+    if (gpValuesToRelease->GetNumValues() != 0 && pInterp->mnStackTop == 0)
+        gpValuesToRelease->ReleaseValues();
 }

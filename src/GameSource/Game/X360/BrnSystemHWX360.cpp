@@ -6,11 +6,6 @@
 #define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\X360/BrnSystemHWX360.cpp"
 #include <cstring>   // strrchr, strlen
 
-// Case-insensitive bounded compare (console strnicmp -> MSVC _strnicmp).
-#if defined(_MSC_VER)
-#  define strnicmp _strnicmp
-#endif
-
 // Reconstructed store-for-store from BURNOUT_X360_ARTIST.XEX:
 //   BrnHW::operator++(System360HW::EPrepareStage&, int)  @ 0x823A8A18
 //   BrnHW::System360HW::Prepare                          @ 0x823AAE10
@@ -159,19 +154,15 @@ namespace BrnHW
     // in, and the live profile name matches the snapshot taken at launch.
     bool System360HW::HasGameBeenRebootedDueToInvite()
     {
-        if (mLaunchData.mbIsLocalUserChange == 0)
-            return false;
-        if (mLaunchData.macSessionID[0] == 0)
-            return false;
-        if (XUserGetSigninState(mLaunchData.mdwUserIndex) == 0)
-            return false;
-
-        char lacLiveName[16];
-        XUserGetName(mLaunchData.mdwUserIndex, lacLiveName, 16);
-        if (strnicmp(lacLiveName, mLaunchData.macUserName, 16) != 0)
-            return false;
-
-        return true;
+        if (mLaunchData.mbIsLocalUserChange != 0 && mLaunchData.macSessionID[0] != '\0' &&
+            XUserGetSigninState(mLaunchData.mdwUserIndex) != eXUserSigninState_NotSignedIn)
+        {
+            char lacLiveName[sizeof(mLaunchData.macUserName)];
+            XUserGetName(mLaunchData.mdwUserIndex, lacLiveName, sizeof(lacLiveName));
+            if (_strnicmp(lacLiveName, mLaunchData.macUserName, sizeof(lacLiveName)) == 0)
+                return true;
+        }
+        return false;
     }
 }
 

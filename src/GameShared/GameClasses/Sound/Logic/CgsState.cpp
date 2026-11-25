@@ -121,7 +121,7 @@ State::State()
 // the supplied pointer is this state's attachment.
 bool State::IsAttachedToThis(void* apvAttachment)
 {
-    return mpvAttachment == apvAttachment;
+    return apvAttachment == mpvAttachment;
 }
 
 void State::CreateSFXObjs()

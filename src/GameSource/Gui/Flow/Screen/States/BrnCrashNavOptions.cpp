@@ -659,6 +659,12 @@ namespace BrnGui
         // [DIAG] NOT IN THE X360 BINARY -- [opt] the edited model, per keypress.
     }
 
+    void CrashNavOptions::SetSettingsFromProfile()
+    {
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 853);
+        mOptionsData.SetFromProfile(mpGuiCache->GetMenuOptionsData());
+    }
+
     // ---- ApplyAndSaveSettings @0x824CDD00 ------------------------------------------
     // ⭐ THE WHOLE POINT OF THE TAB. SetToProfile persists the edited model into the
     // profile block the GUI cache owns; OutputEvents publishes the same model as the six
