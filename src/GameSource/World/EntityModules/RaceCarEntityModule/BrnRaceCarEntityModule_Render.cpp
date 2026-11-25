@@ -1206,7 +1206,7 @@ void RaceCarEntityModule::GenerateDispatchLists(
                     mReplaySerialiser.GetStaticLayout()->mLiveFrame.mActiveRaceCars;
                 if (!lrActive.IsRaceCarActive(leIndex))
                     continue;
-                const BrnPhysics::Vehicle::RaceCarState* lpState = lrActive.GetRaceCarStateMutable(leIndex);
+                const BrnPhysics::Vehicle::RaceCarState* lpState = lrActive.GetRaceCarState(leIndex);
                 __vector4 lvSquared;
                 const rw::math::vpu::VecFloat lDistance = RaceCarDistance(lvCameraPosition.mV, lpState->mTransform.wAxis.mV, lvSquared);
                 if (lbEnvironmentMapPass)

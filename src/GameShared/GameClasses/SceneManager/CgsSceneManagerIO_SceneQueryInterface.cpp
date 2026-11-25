@@ -2,9 +2,8 @@
 #include "GameShared/GameClasses/Module/CgsBaseEventQueue.h"                              // CgsModule::BaseEventQueue<T>::AddEvent (inline generic)
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneQueryInterface.h"    // CgsSceneManager::SceneManagerIO::SceneQueryInterface
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventLineTest.h"          // InEventLineTestFine element (committed, 0x40 stride) + EExclusionMode
-#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventVolumeTestDeepest.h" // InEventVolumeTestDeepest element (224B opaque)
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventVolumeTestDeepest.h" // InEventVolumeTestDeepest
 
-#include <cstring>   // std::memcpy (volume/transform opaque staging, models the Xbox block-copy)
 
 // =============================================================================
 // CgsSceneManager::SceneManagerIO::SceneQueryInterface -- two of the producer methods
@@ -63,49 +62,35 @@ bool CgsSceneManager::SceneManagerIO::SceneQueryInterface::LineTestFine(
 // -----------------------------------------------------------------------------
 // CgsSceneManager::SceneManagerIO::SceneQueryInterface::VolumeTestDeepest  @ 0x822170B0
 //
-// Stages a deepest-volume-test query event on the stack and appends it to
-// mpFineVolumeTestDeepestQueue (member +0x10). The 224-byte InEventVolumeTestDeepest element is
-// an OPAQUE byte span (no field-level DWARF; see CgsSceneManagerIO_EventVolumeTestDeepest.h), so
-// the producer's stack staging is reproduced by writing the asm-attested BYTE OFFSETS into the
-// opaque payload rather than naming interior fields:
-//   +0x00 transform  : 64-byte block copied from a6 (lpTransform, four SIMD lanes)
-//   +0x40 query id    : a2
-//   +0x44 entity-type-flags : a3
-//   +0x48 exclude-entity-id : a7
-//   +0x4C exclusion-mode    : a8 (the range-asserted value)
-//   +0x50 volume data : 128-byte opaque rw-collision-volume image copied from a5 (lpVolumeData)
-//   +0xD0 volume-type-flags : a4 (byte, stored last)
-// a6 (transform) and a5 (volume) are TWO DISTINCT source pointers. Both asserts are non-gating
-// tripwires; the AddEvent always runs.
-// -----------------------------------------------------------------------------
-int CgsSceneManager::SceneManagerIO::SceneQueryInterface::VolumeTestDeepest(
-    u32            lQueryId,            // a2 -> payload +0x40
-    u32            lx32EntityTypeFlags, // a3 -> payload +0x44
-    u8             lxVolumeTypeFlags,   // a4 -> payload +0xD0 (byte, stored last)
-    const void*    lpVolumeData,        // a5 -> 128-byte blob source (payload +0x50)
-    const void*    lpTransform,         // a6 -> 64-byte transform-lane source (payload +0x00..+0x40)
-    u32            lExcludeEntityId,    // a7 -> payload +0x48
-    EExclusionMode leExclusionMode)     // a8 -> payload +0x4C (asserted in-range)
+// DecFIGS CgsSceneManagerModuleIO.h:390 and the ARTIST caller at 0x82233128.
+void CgsSceneManager::SceneManagerIO::SceneQueryInterface::VolumeTestDeepest(
+    SceneQueryId lQueryId,
+    u32 lx32EntityTypeFlags,
+    u8 lxVolumeTypeFlags,
+    const rw::collision::Volume* lpVolume,
+    const Matrix44Affine& lrTransform,
+    EntityId lExcludeEntityId,
+    EExclusionMode leExclusionMode)
 {
+    static const char KAC_ARTIST_FILE[] =
+        "..\\..\\..\\GameShared\\GameClasses\\SceneManager/CgsSceneManagerModuleIO.h";
+
     CGS_ASSERT(leExclusionMode == E_EXCLUDE_ALL_CHILD_PARTS || leExclusionMode == E_EXCLUDE_ENTITY_ONLY,
-               "leExclusionMode == E_EXCLUDE_ALL_CHILD_PARTS || leExclusionMode == E_EXCLUDE_ENTITY_ONLY");
-    CGS_ASSERT(mpFineVolumeTestDeepestQueue, "mpFineVolumeTestDeepestQueue");
+               CGS_ASSERT_MESSAGE_AT("leExclusionMode == E_EXCLUDE_ALL_CHILD_PARTS || leExclusionMode == E_EXCLUDE_ENTITY_ONLY",
+                                     KAC_ARTIST_FILE, 1094));
+    CGS_ASSERT(mpFineVolumeTestDeepestQueue,
+               CGS_ASSERT_MESSAGE_AT("mpFineVolumeTestDeepestQueue", KAC_ARTIST_FILE, 1095));
 
     InEventVolumeTestDeepest lEvent;
-    u8* lpPayload = lEvent.macOpaquePayload;
-
-    // +0x00 transform (64-byte block from a6); +0x50 volume image (128-byte block from a5).
-    std::memcpy(lpPayload + 0x00, lpTransform,  64);
-    std::memcpy(lpPayload + 0x50, lpVolumeData, 128);
-
-    // Scalar fields staged at their asm-attested byte offsets.
-    *reinterpret_cast<u32*>(lpPayload + 0x40) = lQueryId;
-    *reinterpret_cast<u32*>(lpPayload + 0x44) = lx32EntityTypeFlags;
-    *reinterpret_cast<u32*>(lpPayload + 0x48) = lExcludeEntityId;
-    *reinterpret_cast<u32*>(lpPayload + 0x4C) = static_cast<u32>(leExclusionMode);
-    lpPayload[0xD0]                           = lxVolumeTypeFlags;  // stored last
-
-    return mpFineVolumeTestDeepestQueue->AddEvent(lEvent) ? 1 : 0;
+    lEvent.mQueryId = lQueryId;
+    lEvent.mx32EntityTypeFlags = lx32EntityTypeFlags;
+    lEvent.mTransform = lrTransform;
+    lEvent.mxVolumeTypeFlags = lxVolumeTypeFlags;
+    lEvent.mExcludeEntityId = lExcludeEntityId;
+    lEvent.meExclusionMode = leExclusionMode;
+    // DecFIGS volume.h:39 aliases the SDK Volume type to VolRef::Volume.
+    lEvent.mVolumeBuffer.SetVolume(reinterpret_cast<const VolRef::Volume*>(lpVolume));
+    mpFineVolumeTestDeepestQueue->AddEvent(lEvent);
 }
 
 // -----------------------------------------------------------------------------

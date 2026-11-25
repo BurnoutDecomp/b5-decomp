@@ -48,6 +48,8 @@
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventTriangleCollisionLineTestNearest.h" // InEventTriangleCollisionLineTestNearest
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventTriangleCollisionSphereTest.h"      // InEventTriangleCollisionSphereTest
 
+namespace rw { namespace collision { class Volume; } }
+
 namespace CgsSceneManager
 {
 namespace SceneManagerIO
@@ -88,14 +90,13 @@ namespace SceneManagerIO
                              EExclusionMode  leExclusionMode);
 
         // @ 0x822170B0 -- stages an InEventVolumeTestDeepest and pushes it onto mpFineVolumeTestDeepestQueue.
-        // Returns int (Hex-Rays shape; AddEvent's bool widened back to r3).
-        int VolumeTestDeepest(u32            lQueryId,
-                              u32            lx32EntityTypeFlags,
-                              u8             lxVolumeTypeFlags,
-                              const void*    lpVolumeData,
-                              const void*    lpTransform,
-                              u32            lExcludeEntityId,
-                              EExclusionMode leExclusionMode);
+        void VolumeTestDeepest(SceneQueryId lQueryId,
+                               u32 lx32EntityTypeFlags,
+                               u8 lxVolumeTypeFlags,
+                               const rw::collision::Volume* lpVolume,
+                               const Matrix44Affine& lrTransform,
+                               EntityId lExcludeEntityId,
+                               EExclusionMode leExclusionMode);
 
         // @ 0x82204E48 -- true iff any tested query queue is non-null and non-empty. Body in
         // CgsSceneManagerModuleIO.cpp.

@@ -2951,8 +2951,10 @@ namespace BrnGame
         const CgsGui::ModelIO::OutputBuffer* lpModelRead = lpModelOutput;
         const CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiRead = lpGuiOutput;
         CgsModule::LockBuffersForIO(lpGameDataInput, lpModelRead, lpGuiRead);
-        lpGameDataInput->GetRequestInterface()->mRequestQueue.Append(
-            *lpGuiRead->GetGuiResourceRequestQueue());
+        BrnResource::GameDataIO::RequestInterface<
+            BrnResource::GameDataIO::InputBuffer::knRequestInterfaceQueueSize>* const lpRequests =
+            lpGameDataInput->GetRequestInterface();
+        lpRequests->mRequestQueue.Append(*lpGuiRead->GetGuiResourceRequestQueue());
         CgsModule::UnlockBuffersForIO(lpGameDataInput, lpModelRead, lpGuiRead);
     }
 

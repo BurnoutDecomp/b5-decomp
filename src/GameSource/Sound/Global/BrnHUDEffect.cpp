@@ -441,7 +441,7 @@ void HUDEffect::UpdateSlipStreaming(f32 afDeltaTime)
             CGS_ASSERT(liFrontCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
                        "Invalid RaceCarIndex");
             const BrnPhysics::Vehicle::RaceCarState* lpFrontCar =
-                lrVehicles.GetRaceCarStateMutable(
+                lrVehicles.GetRaceCarState(
                     static_cast<EActiveRaceCarIndex>(liFrontCarIndex));
             CGS_ASSERT(lpFrontCar != 0,
                        "Cannot find the RaceCarState for the Car in front of the player in the convoy");

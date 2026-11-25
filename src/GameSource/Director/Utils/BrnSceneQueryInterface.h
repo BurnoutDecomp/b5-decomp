@@ -85,12 +85,11 @@ namespace BrnDirector
                              CgsSceneManager::SceneManagerIO::EExclusionMode  leExclusionMode) const;
 
         // @ 0x82233128 (DWARF :147) -- the DEEPEST penetration of a volume. The volume and its
-        // transform are the producer's opaque 128-byte / 64-byte images (see
-        // CgsSceneManagerIO_SceneQueryInterface.cpp).
+        // transform are passed to the scene query's typed producer.
         void VolumeTestDeepest(VolumeTestDeepestPostBox&                         lrPostBox,
                                u32                                               lx32EntityTypeFlags,
                                u8                                                lxVolumeTypeFlags,
-                               const void*                                       lpVolume,
+                               const rw::collision::Volume* lpVolume,
                                const Matrix44Affine&                             lrTransform,
                                CgsSceneManager::EntityId                         lExcludeEntityId,
                                CgsSceneManager::SceneManagerIO::EExclusionMode  leExclusionMode) const;

@@ -2,7 +2,6 @@
 #include "rw/rwcore_structs.h"                     // rw::BaseResourceDescriptor
 #include "SDKs/EATech/rwcollision/volume_debug_access.h" // rw::collision::Volume::GetType
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include <string.h>                                // memcpy (VolumeSlot::SetVolume)
 
 // CgsSceneManager::VolumeStore<4608> + VolumeSlot -- reconstructed from
 // BURNOUT_X360_ARTIST.XEX.
@@ -28,31 +27,6 @@
 
 namespace CgsSceneManager
 {
-
-// ---------------------------------------------------------------------------
-// VolumeSlot
-// ---------------------------------------------------------------------------
-
-// h:59. The slot's only member is the buffer at offset 0, so "the volume" IS the slot
-// address -- the console's inlined form is literally the pool's operator[] result, which
-// VolumeManager::GetRwVolume @0x828C5F30 tail-returns unchanged. DWARF declares the
-// method const but the returned pointer non-const.
-VolRef::Volume* VolumeSlot::GetVolume() const
-{
-    return reinterpret_cast<VolRef::Volume*>(const_cast<u8*>(macBuffer));
-}
-
-// h:56. Copy a serialised volume image into the slot. The tripwire is the one the X360
-// bakes inside ReplaceVolume's inlined expansion of this method (it names this method's
-// own size parameter, `miSize`), with the lower bound spelled
-// `(int32_t) sizeof( rw::collision::Volume )` == 96 == 0x60 (the serialised record size
-// pinned a second time by SharedClasses/Physics/Props/BrnPhysicsPropTypeData.h:201).
-void VolumeSlot::SetVolume(const VolRef::Volume* lpVolume, s32 liSizeInBytes)
-{
-    CGS_ASSERT(liSizeInBytes >= 0x60 && liSizeInBytes <= KI_VOLUME_SLOT_SIZE,
-               "( miSize >= ( int32_t ) sizeof( rw::collision::Volume ) ) && ( miSize <= KI_VOLUME_SLOT_SIZE )");
-    memcpy(macBuffer, lpVolume, static_cast<size_t>(liSizeInBytes));
-}
 
 // ---------------------------------------------------------------------------
 // VolumeStore<N>

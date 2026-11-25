@@ -73,6 +73,9 @@
 // ===========================================================================
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+
+#include <cstring>
 #include "GameShared/GameClasses/Containers/CgsObjectPool.h"          // CgsContainers::ObjectPool<T,N,TIndex>
 #include "GameShared/GameClasses/System/Resource/CgsResourceType.h"   // CgsResource::ResourceDescriptor (rw::BaseResourceDescriptors<5>)
 
@@ -95,18 +98,20 @@ namespace CgsSceneManager
     // alignment block in the banner.
     struct CGS_ALIGN(16) VolumeSlot
     {
-        // CgsVolumeStore.h:56 -- copy a serialised volume of liSizeInBytes bytes into
-        // macBuffer. Inlined by the console into VolumeStore<4608>::ReplaceVolume
-        // @0x828CC1D8, which is where its size tripwire is baked; de-inlined back to its
-        // DWARF-declared home here.
-        void SetVolume(const VolRef::Volume* lpVolume, s32 liSizeInBytes);
+        // ARTIST 0x828CC290 checks both bounds before the variable-size copy.
+        void SetVolume(const VolRef::Volume* lpVolume, s32 liSizeInBytes = KI_VOLUME_SLOT_SIZE)
+        {
+            CGS_ASSERT_AT(liSizeInBytes >= 0x60 && liSizeInBytes <= KI_VOLUME_SLOT_SIZE,
+                          "( miSize >= ( int32_t ) sizeof( rw::collision::Volume ) ) && ( miSize <= KI_VOLUME_SLOT_SIZE )",
+                          "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\CgsVolumeStore.h", 146);
+            std::memcpy(macBuffer, lpVolume, static_cast<size_t>(liSizeInBytes));
+        }
 
-        // CgsVolumeStore.h:59 -- view macBuffer as the volume it holds. The console's
-        // inlined form is a bare `slot address` (the buffer is the slot's only member, at
-        // offset 0): VolumeManager::GetRwVolume @0x828C5E68 tail-calls
-        // ObjectPool<VolumeSlot,4608,int>::operator[] @0x828B9280 and returns its result
-        // unchanged. DWARF declares it const-qualified but returning a NON-const Volume*.
-        VolRef::Volume* GetVolume() const;
+        // ARTIST 0x828C5E68 returns the slot address as its volume view.
+        VolRef::Volume* GetVolume() const
+        {
+            return reinterpret_cast<VolRef::Volume*>(const_cast<u8*>(macBuffer));
+        }
 
     private:
         u8 macBuffer[KI_VOLUME_SLOT_SIZE];   // CgsVolumeStore.h:64 (+0x00)

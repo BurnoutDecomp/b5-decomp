@@ -3983,15 +3983,12 @@ namespace CgsSceneManager
         CGS_STATIC_ASSERT((sizeof(lpQuery->mVolumeBuffer) == KU_EVENT_VOLUME_SIZE), "the event's volume image is 0x80 bytes");
         CGS_STATIC_ASSERT((sizeof(lpQuery->mTransform) == sizeof(Matrix44Affine)), "the event's transform is a Matrix44Affine");
 
-        // mTransform holds the DWARF Matrix44Affine's four rows (see the header), so it is viewed as one, in place: the
-        // console hands the event's own transform (r31 + 0) to VolumeTest.
-        const Matrix44Affine& lrTransform = *reinterpret_cast<const Matrix44Affine*>(lpQuery->mTransform);   // +0x00
-        const u32 lx32EntityTypeFlags     = lpQuery->mx32EntityTypeFlags;                                     // +0x44
-        const rw::collision::Volume* lpVolume =
-            reinterpret_cast<const rw::collision::Volume*>(&lpQuery->mVolumeBuffer);                          // +0x50
-
-        SceneQueryId lQueryId;
-        lQueryId.mId = lpQuery->mQueryId.mId;                                                                 // +0x40
+        const Matrix44Affine& lrTransform = lpQuery->mTransform;
+        const u32 lx32EntityTypeFlags = lpQuery->mx32EntityTypeFlags;
+        const VolRef::Volume* lpSlotVolume = lpQuery->mVolumeBuffer.GetVolume();
+        // DecFIGS volume.h:39 aliases the SDK Volume type to VolRef::Volume.
+        const rw::collision::Volume* lpVolume = reinterpret_cast<const rw::collision::Volume*>(lpSlotVolume);
+        const SceneQueryId lQueryId = lpQuery->mQueryId;
 
         SceneManagerIO::OutSceneQueryResultsQueue<32768>* lpResultsQueue = lpSceneOutputBuffer->GetResultsQueue();
 
@@ -4033,7 +4030,7 @@ namespace CgsSceneManager
         CoarseQueryResultBuffer<16384>* lpCoarseResults = lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer();
         lpCoarseResults->BeginResultsBatch();
         mSpatialPartitionManager.GetSpatialPartition()->VolumeTest(lx32EntityTypeFlags,
-                                                                   reinterpret_cast<const VolRef::Volume*>(lpVolume),
+                                                                   lpSlotVolume,
                                                                    &lrTransform,
                                                                    lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer());
         SceneQueryId lCoarseQueryId;                                                                  // `lwz r21, 0x40(r31)` after the call
@@ -4044,9 +4041,9 @@ namespace CgsSceneManager
         lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->EndResultsBatch();
 
         // ---- 3. the exclude entity ------------------------------------------------------------------------------
-        const EntityId lExcludeEntityId = EntityId(lpQuery->mExcludeEntityId);                                // +0x48
+        const EntityId lExcludeEntityId = lpQuery->mExcludeEntityId;                                // +0x48
         const bool     lbExcludeParts   = (lpQuery->meExclusionMode                                           // +0x4C
-                                           == static_cast<u32>(SceneManagerIO::E_EXCLUDE_ALL_CHILD_PARTS));
+                                           == SceneManagerIO::E_EXCLUDE_ALL_CHILD_PARTS);
         u16 lu16ExcludeEntityIndex = 0xFFFF;
         if (lExcludeEntityId != InvalidEntityId())
         {

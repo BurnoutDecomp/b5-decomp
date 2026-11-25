@@ -975,7 +975,7 @@ namespace RaceCarEntityModuleIO
 
     // ============================================================================
     // Element accessors homed in BrnRaceCarEntityModuleOutputInterface.h (NOT here):
-    //   0x8227D690 RCEntityActiveRaceCarOutputInterface::GetRaceCarStateMutable(EActiveRaceCarIndex)
+    //   0x8227D690 RCEntityActiveRaceCarOutputInterface::GetRaceCarState(EActiveRaceCarIndex) const
     //              (asserts + IsRaceCarActive gate; &maRaceCarStates[idx]).
     //   0x823101C0 RCEntityGlobalRaceCarOutputInterface::GetActiveCarDataElementAddress(EActiveRaceCarIndex) const
     //              (const void* into the parallel-array window; 36*idx + base + 528).

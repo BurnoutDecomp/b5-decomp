@@ -197,8 +197,9 @@ namespace Playback
         maAemsSubMixPlugInConfig[1].mpInitialValue  = 0;
         maAemsSubMixPlugInConfig[1].muPlugInHandle  = mPan2DHandle;
         maAemsSubMixPlugInConfig[1].mu8ChannelCount = 6;
-        maAemsSubMixPlugInConfig[2].mpInitialValue  = 0;
+        // ARTIST 0x826C2834 stores the Send handle before its initial value.
         maAemsSubMixPlugInConfig[2].muPlugInHandle  = mSendHandle;
+        maAemsSubMixPlugInConfig[2].mpInitialValue  = 0;
         maAemsSubMixPlugInConfig[2].mu8ChannelCount = 6;
     }
 

@@ -1251,7 +1251,11 @@ namespace BrnGui
     };
     struct GuiMuteDac { u8 maData[1]; s32 GetEventType() const { return 88; } };  // id 88 size 1
     struct GuiNetworkCustomRouteCreated { u8 maData[8]; s32 GetEventType() const { return 286; } };  // id 286 size 8
-    struct GuiReplayDeleteReelEvent { u8 maData[4]; s32 GetEventType() const { return 527; } };  // id 527 size 4
+    class GuiReplayDeleteReelEvent : public CgsGui::GuiEvent<527>
+    {
+    public:
+        s32 miReel;
+    };
     // ARTIST82518E7C..82518E8C and8252A0D0..8252A0DC publish the
     // contained GUI serialiser; BridgeGuiToReplay_PostSim823CCEB8 reads that
     // same pointer and registers it through the actual replay request owner.
@@ -1262,7 +1266,11 @@ namespace BrnGui
     };
     CGS_STATIC_ASSERT((sizeof(GuiReplayRegisterSerialiser) == sizeof(BrnReplays::BaseSerialiser*)),
                   "GUI replay registration carries one full native pointer");
-    struct GuiReplaySetModeEvent { u8 maData[4]; s32 GetEventType() const { return 525; } };  // id 525 size 4
+    class GuiReplaySetModeEvent : public CgsGui::GuiEvent<525>
+    {
+    public:
+        s32 miMode;
+    };
     struct GuiRequestCarControlChangeEvent { u8 maData[1]; s32 GetEventType() const { return 65; } };  // id 65 size 1
     // ARTIST825293D8..82529584: preserve the request word and write the
     // formatted local date/time into32 bytes; there is no in-payload header.

@@ -2705,15 +2705,7 @@ void TrafficEntityModule::UpdateRaceCarHulls(const BrnTrafficIO::InputBuffer_Pos
             // The sim-box centre, console default (0x82721590): the player car's world
             // position, `GetRaceCarState(lePlay)->mTransform.wAxis` (asm `addi r11, state,
             // 0x1F0 ; lvx128 v126, r11, 0x30`, where 0x1F0 is RaceCarState::mTransform and
-            // +0x30 its translation row). IDA names the call GetRaceCarStateMutable
-            // @0x8227D690 because the const twin was ICF-folded onto it; a const interface
-            // pointer needs the const form.
-            //
-            // ASSERT DELTA, deliberate: 0x8227D690 carries three asserts (index >= 0,
-            // index < COUNT, IsRaceCarActive(index)); the committed const :220 body carries
-            // only the two bounds ones. The third is unreachable here, since
-            // IsPlayerCarActive() already returned true. Same applies at
-            // PostPhysicsUpdate's tail, which reaches the same accessor.
+            // +0x30 its translation row). ARTIST 0x8227D690 also checks that the state is active.
             const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface::RaceCarState*
                 lpPlayerState = lpActiveRaceCars->GetRaceCarState(lePlayerCar);
             Vector3 lSimCentre = lpPlayerState->mTransform.wAxis;

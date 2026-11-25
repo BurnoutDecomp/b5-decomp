@@ -536,28 +536,17 @@ bool RCEntityActiveRaceCarOutputInterface::IsCarDisconnected(EActiveRaceCarIndex
 }
 
 // ============================================================================
-// DWARF :220 -- the const per-index race-car state accessor (the sibling of the
-// committed non-const GetRaceCarStateMutable @0x8227D690, which returns
-// &maRaceCarStates[idx] after the same two range asserts; the const form was
-// ICF-folded on the console so it has no own export). Read by
-// WorldEntityModule::PreSceneUpdate for the player car's PVS position/velocity.
-// ============================================================================
+// DecFIGS BrnRaceCarEntityModuleOutputInterface.h:220 declares the const getter.
+// ARTIST 0x8227D690 checks the two index bounds and the existing active-state query.
 const RCEntityActiveRaceCarOutputInterface::RaceCarState*
 RCEntityActiveRaceCarOutputInterface::GetRaceCarState(EActiveRaceCarIndex leActiveRaceCarIndex) const
 {
-    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,     "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
-    return &maRaceCarStates[leActiveRaceCarIndex];
-}
-
-// The non-const twin (its own out-of-line body on the console): the same two range asserts
-// plus the IsRaceCarActive gate, then &maRaceCarStates[idx].
-RCEntityActiveRaceCarOutputInterface::RaceCarState*
-RCEntityActiveRaceCarOutputInterface::GetRaceCarStateMutable(EActiveRaceCarIndex leActiveRaceCarIndex)
-{
-    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,    "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
-    CGS_ASSERT(IsRaceCarActive(leActiveRaceCarIndex),               "IsRaceCarActive( leActiveRaceCarIndex )");
+    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+        CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_BRN_RACE_CAR_ENTITY_MODULE_OUTPUT_INTERFACE_ASSERT_FILE, 790));
+    CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+        CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_BRN_RACE_CAR_ENTITY_MODULE_OUTPUT_INTERFACE_ASSERT_FILE, 791));
+    CGS_ASSERT(IsRaceCarActive(leActiveRaceCarIndex),
+        CGS_ASSERT_MESSAGE_AT("IsRaceCarActive( leActiveRaceCarIndex )", KAC_BRN_RACE_CAR_ENTITY_MODULE_OUTPUT_INTERFACE_ASSERT_FILE, 792));
     return &maRaceCarStates[leActiveRaceCarIndex];
 }
 

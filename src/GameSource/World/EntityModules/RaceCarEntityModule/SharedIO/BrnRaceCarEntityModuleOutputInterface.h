@@ -143,8 +143,7 @@ namespace RaceCarEntityModuleIO
     // DWARF :208 -- the per-active-race-car output interface (the player + up to 7 rivals).
     // maRaceCarStates is the real BrnPhysics::Vehicle::RaceCarState[8] (complete 1120-byte
     // type, by value). maRaceCarMaterialColours is the real RwRGBAReal[8] (by value). All
-    // member accessors are declared-only (their own TUs); only GetRaceCarStateMutable is
-    // routed to this header's .cpp (X360 0x8227D690).
+    // GetRaceCarState is implemented in its owning .cpp (ARTIST 0x8227D690).
     struct RCEntityActiveRaceCarOutputInterface
     {
         typedef BrnPhysics::Vehicle::RaceCarState RaceCarState;   // :61
@@ -389,7 +388,6 @@ namespace RaceCarEntityModuleIO
 
         // X360-only NON-const per-index element getter (X360 0x8227D690). DISTINCT from the
         // const GetRaceCarState(:220); routed to this header's .cpp. Returns &maRaceCarStates[idx].
-        RaceCarState* GetRaceCarStateMutable(EActiveRaceCarIndex);
 
     private:
         BoostOutputInfo           maBoostOutputInfo[8];                  // :443

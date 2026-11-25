@@ -97,7 +97,7 @@ namespace BrnDirector
     void SceneQueryInterface::VolumeTestDeepest(VolumeTestDeepestPostBox&                        lrPostBox,
                                                 u32                                              lx32EntityTypeFlags,
                                                 u8                                               lxVolumeTypeFlags,
-                                                const void*                                      lpVolume,
+                                                const rw::collision::Volume* lpVolume,
                                                 const Matrix44Affine&                            lrTransform,
                                                 CgsSceneManager::EntityId                        lExcludeEntityId,
                                                 CgsSceneManager::SceneManagerIO::EExclusionMode leExclusionMode) const
@@ -108,9 +108,8 @@ namespace BrnDirector
         CgsSceneManager::SceneQueryId lQueryId;
         lQueryId.Set(KU_DIRECTOR_QUERY_OWNER, mpVolumeTestDeepestPostOffice->AddPostBox(lrPostBox));
 
-        mpSceneQueryInterface->VolumeTestDeepest(lQueryId.mId, lx32EntityTypeFlags, lxVolumeTypeFlags,
-                                                 lpVolume, &lrTransform,
-                                                 static_cast<u32>(lExcludeEntityId), leExclusionMode);
+        mpSceneQueryInterface->VolumeTestDeepest(lQueryId, lx32EntityTypeFlags, lxVolumeTypeFlags,
+                                                 lpVolume, lrTransform, lExcludeEntityId, leExclusionMode);
     }
 }
 

@@ -1,6 +1,7 @@
 #include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 
 #include <cstddef>   // offsetof
 
@@ -35,7 +36,8 @@ namespace CgsGuiModuleIO
     // X360 0x8284F2E0: const overload -- read-lock handle to the resource-request queue at this+4.
     const OutputBuffer::GuiResourceRequestQueueStorage* OutputBuffer::GetGuiResourceRequestQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT_STREAM_AT(IsBufferLockedForReading(), "Not locked for reading\n",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\CgsGuiModuleIO.cpp", 198);
         return &mResourceRequestQueue;
     }
 

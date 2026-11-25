@@ -234,10 +234,10 @@ void GameStateModule::UpdateRoadRulesManager(GameStateModuleIO::OutputBuffer*   
 
     // The player's RaceCarState, fetched twice by the console (once per read).
     const bool lbInAir =
-        mLastActiveRaceCarInterface.GetRaceCarStateMutable(GetPlayerActiveRaceCarIndex())->mfTimeInAir > 0.0f;
+        mLastActiveRaceCarInterface.GetRaceCarState(GetPlayerActiveRaceCarIndex())->mfTimeInAir > 0.0f;
     const f32  lfPlayerNoInputTime = mModeManager.GetScoringSystem()->GetPlayerNoInputTime();
     const bool lbPlayerIsCrashing =
-        mLastActiveRaceCarInterface.GetRaceCarStateMutable(GetPlayerActiveRaceCarIndex())->mbCrashing;
+        mLastActiveRaceCarInterface.GetRaceCarState(GetPlayerActiveRaceCarIndex())->mbCrashing;
 
     mRoadRulesManager.Update(lpControllerInput,
                              liCurrentRoadIndex,

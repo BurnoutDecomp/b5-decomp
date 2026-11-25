@@ -2,7 +2,7 @@
 
 #include "GameSource/Gui/Flow/Screen/States/Replays/BrnReplayClipsOnline.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                          // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                          // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                         // CgsGui::GuiEvent<N>
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"                        // CgsGui::GuiAccessPointers
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"    // StateInterface
@@ -17,6 +17,8 @@ namespace BrnGui
 {
 namespace
 {
+    const char KAC_REPLAY_CLIPS_FILE[] = "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/Replays/BrnReplayClipsOnline.cpp";
+
     typedef CgsModule::VariableEventQueue<18432, 16> InGuiEventQueue;
 
     const s32 KI_CHANNEL_GUI_OUT = 40;
@@ -37,28 +39,6 @@ namespace
         s32 miPadId;      // +0x00
         s32 miButtonId;   // +0x04 (EGameInputActions)
     };
-
-    // GuiReplaySetModeEvent (console id 525): { 4, 525, 12 } + the mode word, 16 bytes.
-    struct GuiReplaySetModeWire : public CgsGui::GuiEvent<525>
-    {
-        s32 miMode;   // +0x0C
-        explicit GuiReplaySetModeWire(s32 liMode) : miMode(liMode) {}
-        GuiReplaySetModeWire() {}
-    };
-
-    // GuiReplayDeleteReelEvent (console id 527): { 4, 527, 12 } + the reel index, 16 bytes.
-    struct GuiReplayDeleteReelWire : public CgsGui::GuiEvent<527>
-    {
-        s32 miReel;   // +0x0C
-        explicit GuiReplayDeleteReelWire(s32 liReel) : miReel(liReel) {}
-        GuiReplayDeleteReelWire() {}
-    };
-
-    template <typename TWire>
-    void PostOut(CgsGui::StateInterface* lpStateInterface, TWire& lrWire)
-    {
-        lpStateInterface->OutputGuiEvent(lrWire);
-    }
 }
 
 const s32 ReplayClipsOnline::maiEventToObserve[1] = { KI_EVENT_CONTROLLER_PRESSED };
@@ -237,10 +217,13 @@ bool ReplayClipsOnline::HandleControllerInputPressed(const CgsModule::Event* lpE
 
     case E_GAMEINPUTACTIONS_GUI_CANCEL:
     {
-        GuiReplaySetModeWire lSetMode(0);
-        PostOut(mpStateInterface, lSetMode);
+        GuiReplaySetModeEvent lSetMode;
+        lSetMode.miMode = 0;
+        mpStateInterface->OutputGuiEvent(lSetMode);
 
-        CGS_ASSERT(mpGuiCache->IsReplayInfoVisible(), "mpGuiCache->IsReplayInfoVisible()");
+        CGS_ASSERT(mpGuiCache->IsReplayInfoVisible(),
+            CGS_ASSERT_MESSAGE_AT("mpGuiCache->IsReplayInfoVisible()",
+                                  KAC_REPLAY_CLIPS_FILE, 344));
         mpStateInterface->PlayAptMovie("", KI_INFO_MOVIE_LEVEL);
         mpGuiCache->mbReplayInfoVisible = false;
         mpGuiCache->UnloadResources(maInfoResourcesToLoad, 1);
@@ -252,9 +235,9 @@ bool ReplayClipsOnline::HandleControllerInputPressed(const CgsModule::Event* lpE
     case E_GAMEINPUTACTIONS_GUI_OPTION1:
         if (mpGuiCache->GetReplayNumberSlotsUsed() > 0)
         {
-            GuiReplayDeleteReelWire lDelete(
-                mpGuiCache->ReplayConvertGuiSlotIndexToReelIndex(mSlotMenu.GetHighlightedIndex()));
-            PostOut(mpStateInterface, lDelete);
+            GuiReplayDeleteReelEvent lDelete;
+            lDelete.miReel = mpGuiCache->ReplayConvertGuiSlotIndexToReelIndex(mSlotMenu.GetHighlightedIndex());
+            mpStateInterface->OutputGuiEvent(lDelete);
         }
         return false;
 

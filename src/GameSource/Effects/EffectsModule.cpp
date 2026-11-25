@@ -2981,7 +2981,7 @@ void EffectsModule::FireJumpSparks(f32 lfCurrentTimeStep,
 //   * an entity whose EntityId owner byte is E_ENTITYTYPE_RACECAR (1) contributes its 14-bit entity
 //     index as the accumulator slot AND is skipped entirely when that car's RaceCarState says
 //     mbIsHidden (`lbz r11, 0x452(r3)` == +1106); anything else uses slot 8. The console reads the
-//     state through GetRaceCarStateMutable @0x8227D690, which returns &maRaceCarStates[i] and is
+//     state through GetRaceCarState @0x8227D690, which returns &maRaceCarStates[i] and is
 //     never null, and it tests the byte without a null check -- so there is none here either;
 //   * the dust arm needs |mVelocity| > 0.5 m/s, the spark arm |mVelocity| > 10 m/s and the
 //     surface's visualfxsurface "sparks enabled" bool at +0x4F.

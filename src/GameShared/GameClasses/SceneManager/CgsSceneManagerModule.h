@@ -73,7 +73,7 @@ namespace CgsSceneManager
         class InEventLineTestNearest;
         struct InEventLineTestFastDoubleSided;
         struct InEventSphereTestFast;
-        struct InEventVolumeTestDeepest;
+        class InEventVolumeTestDeepest;
         struct InEventVolumeTestFine;
         class InEventTriangleCollisionLineTest;
         class InEventTriangleCollisionLineTestNearest;
