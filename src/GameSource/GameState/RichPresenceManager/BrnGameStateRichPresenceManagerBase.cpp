@@ -224,14 +224,15 @@ bool RichPresenceManagerBase::SetRankedParameter()
 {
     CGS_ASSERT(mpNetworkRoundManager, CGS_ASSERT_MESSAGE_AT("mpNetworkRoundManager", CGS_ARTIST_FILE, 336));
 
+    bool lbChanged = false;
     if (meIsRanked != meOldRankedStatus)
     {
         meOldRankedStatus = meIsRanked;
         SetRankedStatus(meIsRanked);
-        return true;
+        lbChanged = true;
     }
 
-    return false;
+    return lbChanged;
 }
 
 // The per-frame presence update (GameStateModule::PreWorldUpdate). The user is the

@@ -249,13 +249,12 @@ namespace BrnGameState
         // cmpwi cr6, r11, 0; bne` -- meCurrentGameModeType (mm+3476) compared with 0 ==
         // E_MODE_OFFLINE_RACE, NOT the mode pointer (+0xD98). Free burn (E_MODE_NONE == -1) takes
         // this arm; only an offline race uses the reset window below.
-        if (mpModeManager->GetCurrentGameModeType() != GameStateModuleIO::E_MODE_OFFLINE_RACE)
+        if (mpModeManager->GetCurrentGameModeType() == GameStateModuleIO::E_MODE_OFFLINE_RACE)
         {
-            return !mbDoneResetThisTakedown;
+            return (mfTakedownCameraTimer > KF_MIN_NORMAL_RESET_TIME) &&
+                   (mfTakedownCameraTimer < KF_MAX_NORMAL_RESET_TIME);
         }
-
-        return (mfTakedownCameraTimer > KF_MIN_NORMAL_RESET_TIME) &&
-               (mfTakedownCameraTimer < KF_MAX_NORMAL_RESET_TIME);
+        return !mbDoneResetThisTakedown;
     }
 
     // No out-of-line X360 symbol (DWARF :120, cpp:883): inlined at IsBeingAttacked @0x8236F138..

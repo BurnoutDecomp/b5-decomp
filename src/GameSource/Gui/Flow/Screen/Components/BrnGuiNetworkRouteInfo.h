@@ -60,7 +60,7 @@ namespace BrnGui
 
         // The loaded-count value SetInfo / Update / IsComponentLoaded gate on. The owning
         // screens store and compare it directly, so it stays reachable to them.
-        static const s32 KI_NUM_COMPONENTS_TO_LOAD = 11;
+        static const s32 KI_NUM_COMPONENTS_TO_LOAD;
 
         GuiNetworkRouteInfo();
 

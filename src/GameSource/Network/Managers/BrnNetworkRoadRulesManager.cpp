@@ -823,7 +823,8 @@ namespace BrnNetwork
             {
                 BrnNetworkModuleIO::NetworkOutRecvRoadRulesPBEvent lRoadRulesPbEvent;
                 mRoadRulesPersonalBestBuffer.Pop( &lRoadRulesPbEvent );
-                mpNetworkModule->GetNetworkEventQueue()->AddEvent(
+                BrnNetworkModuleIO::NetworkEventQueue* lpEventQueue = mpNetworkModule->GetNetworkEventQueue();
+                lpEventQueue->AddEvent(
                     reinterpret_cast<const CgsModule::Event*>( &lRoadRulesPbEvent ),
                     lRoadRulesPbEvent.GetEventType(), sizeof( lRoadRulesPbEvent ) );
             }
@@ -832,13 +833,19 @@ namespace BrnNetwork
         switch ( meState )
         {
             case E_ROAD_RULES_STATE_UPLOADING:
-                mTimeUntilNextResultUpload -= CgsSystem::Time( lfGameTimeStep );
+            {
+                const CgsSystem::Time lTimeStep( lfGameTimeStep );
+                mTimeUntilNextResultUpload -= lTimeStep;
                 break;
+            }
 
             case E_ROAD_RULES_STATE_DOWNLOADING:
             case E_ROAD_RULES_STATE_DOWNLOADING_LOCAL:
-                mTimeUntilNextResultDownload -= CgsSystem::Time( lfGameTimeStep );
+            {
+                const CgsSystem::Time lTimeStep( lfGameTimeStep );
+                mTimeUntilNextResultDownload -= lTimeStep;
                 break;
+            }
 
             case KI_STATE_AUTO_LOGIN_PRIMED:
                 if ( mIndexOfNextLocalChallengeToDownload < KI_NUMBER_OF_LOCAL_CHALLENGE_SLOTS )

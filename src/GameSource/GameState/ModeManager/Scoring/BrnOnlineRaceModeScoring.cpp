@@ -62,25 +62,25 @@ void OnlineRaceModeScoring::WriteDataToOutput(GameStateModuleIO::OnlineScoringOu
 // below mean "order by finish time, break ties by player id".
 int OnlineRaceModeScoring::_PlayerFinishTimesCompare(const void* lpPlayer1, const void* lpPlayer2)
 {
+    s32 liResult = 0;
+
     CGS_ASSERT(lpPlayer1, CGS_ASSERT_MESSAGE_AT("lpPlayer1", CGS_ARTIST_FILE, 126));
     CGS_ASSERT(lpPlayer2, CGS_ASSERT_MESSAGE_AT("lpPlayer2", CGS_ARTIST_FILE, 127));
 
     const IndexToFinishTuple* lpP1 = static_cast<const IndexToFinishTuple*>(lpPlayer1);
     const IndexToFinishTuple* lpP2 = static_cast<const IndexToFinishTuple*>(lpPlayer2);
 
-    s32 liResult = 0;
-
     // "Has a finish time" is derived from the time value (GetFloatVal != 0), NOT from mbFinished.
-    const bool lbP1HasFinishTime = (lpP1->mFinishTime.GetFloatVal() != 0.0f);
-    const bool lbP2HasFinishTime = (lpP2->mFinishTime.GetFloatVal() != 0.0f);
+    bool lbP1HasFinishTime = (lpP1->mFinishTime.GetFloatVal() != 0.0f);
+    bool lbP2HasFinishTime = (lpP2->mFinishTime.GetFloatVal() != 0.0f);
 
-    const bool lbP1StillRacing =
+    bool lbP1StillRacing =
         !(lbP1HasFinishTime || lpP1->mbTimedOut || lpP1->mbDisconnected);
-    const bool lbP2StillRacing =
+    bool lbP2StillRacing =
         !(lbP2HasFinishTime || lpP2->mbTimedOut || lpP2->mbDisconnected);
 
-    const bool lbP1FinishedButDisconnected = (lbP1HasFinishTime && lpP1->mbDisconnected);
-    const bool lbP2FinishedButDisconnected = (lbP2HasFinishTime && lpP2->mbDisconnected);
+    bool lbP1FinishedButDisconnected = (lbP1HasFinishTime && lpP1->mbDisconnected);
+    bool lbP2FinishedButDisconnected = (lbP2HasFinishTime && lpP2->mbDisconnected);
 
     // Empty slots sort last.
     if (lpP1->mNetworkPlayerID == -1)

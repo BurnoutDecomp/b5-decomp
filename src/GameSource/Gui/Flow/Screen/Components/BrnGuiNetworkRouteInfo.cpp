@@ -214,6 +214,7 @@ namespace BrnGui
     const char* const GuiNetworkRouteInfo::KPAC_STATE_ID[E_STATE_COUNT]  = { "visible", "invisible" };
     const char* const GuiNetworkRouteInfo::KPAC_OPTION_STATE_ID[2]       = { "visible", "invisible" };
 
+    const s32 GuiNetworkRouteInfo::KI_NUM_COMPONENTS_TO_LOAD = 11; // ARTIST 0x8204C7A0
     const char GuiNetworkRouteInfo::macCrashNavBoroughName[11] = "Borough_mc";
     const char GuiNetworkRouteInfo::macSatNavIconBaseName[11]  = "SatNavIcon";
 

@@ -28,7 +28,10 @@
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N> / GuiEventWrapper
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface / GuiEventNetworkSuspension
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // the state in-queue / AddEvent
-#include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache
+#include "GameSource/Gui/BrnGuiCache.h"
+#include "GameSource/Gui/BrnGuiShared.h"
+
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineQuickMatch.cpp"                                   // BrnGui::GuiCache
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"                     // GuiEventNetworkQuickMatch / GuiEventNetworkCustomMatchResults
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // GuiEventActivateCrashNav, GuiFlow
 
@@ -297,14 +300,15 @@ namespace BrnGui
     // ================================================================================
     void OnlineQuickMatch::CheckForCompletedLoads()
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 267);
 
         if (meSubState == E_SUBSTATE_LOADING_SCREEN)
         {
             if (mpGuiCache->EnsureResourcesAreLoaded(maResourceTuplesToLoad,
                                                      static_cast<u32>(miNumResourcesToLoad)))
             {
-                mpStateInterface->PlayAptMovie("ON_QWKM", KI_APT_MOVIE_LEVEL);
+                mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[maResourceTuplesToLoad[0].muId],
+                                               KI_APT_MOVIE_LEVEL);
                 meSubState = E_SUBSTATE_LOADING_COMPONENTS;
             }
         }
@@ -315,7 +319,7 @@ namespace BrnGui
             {
                 mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
 
-                CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+                CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 293);
 
                 // Both flags go out clear when the player is already online (the byte the
                 // cache keeps at +0x4B4C); otherwise they are the flags the online menu set.
@@ -574,3 +578,5 @@ namespace BrnGui
         meSubState = E_SUBSTATE_NO_GAMES_FOUND_IN_GAME;
     }
 }
+
+#undef CGS_ARTIST_FILE

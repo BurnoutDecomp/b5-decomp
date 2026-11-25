@@ -1405,9 +1405,10 @@ CgsModule::VariableEventQueue<18432, 16>* GameStateModule::GetOutputGuiEventQueu
 // Profile::SetCarUnlockAlreadyShown.
 void GameStateModule::SetCarUnlockAlreadyShown(CgsID lCarId)
 {
-    BrnProgression::Profile* lpProfile = mProgressionManager.GetProfile();
-    CGS_ASSERT(lpProfile != 0, CGS_ASSERT_MESSAGE_AT("mProgressionManager.GetProfile()", CGS_ARTIST_FILE, 4823));
-    lpProfile->SetCarUnlockAlreadyShown(lCarId);
+    CGS_ASSERT(mProgressionManager.GetProfile(),
+        CGS_ASSERT_MESSAGE_AT("mProgressionManager.GetProfile()",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateModule.h", 1338));
+    mProgressionManager.GetProfile()->SetCarUnlockAlreadyShown(lCarId);
 }
 
 // ============================================================================================

@@ -846,24 +846,20 @@ StreetManager::HasPlayerBeatenParScore( BrnStreetData::ChallengeIndex liIndex,
         return E_ROAD_RULE_COMPLETION_STATUS_NOT_BEATEN;
     }
 
-    if ( !lParScore.ContainsData( leScoreType ) )
+    if ( lParScore.ContainsData( leScoreType ) )
     {
-        return E_ROAD_RULE_COMPLETION_STATUS_NO_DATA;
+        const s32 liPlayerScore = lUserScore.GetScore( leScoreType );
+        s32 liParScore;
+        CgsID lParRivalId;
+        lParScore.GetScore( leScoreType, &liParScore, &lParRivalId );
+
+        if ( BrnStreetData::ChallengeData::CompareScores( leScoreType, liPlayerScore, liParScore ) > 0 )
+        {
+            return E_ROAD_RULE_COMPLETION_STATUS_NOT_BEATEN;
+        }
+        return E_ROAD_RULE_COMPLETION_STATUS_BEATEN;
     }
-
-    const s32 liPlayerScore = lUserScore.GetScore( leScoreType );
-
-    s32   liParScore = 0;
-    CgsID lParRivalId = 0;
-    lParScore.GetScore( leScoreType, &liParScore, &lParRivalId );
-
-    // `cmpwi r3, 0 / bgt` -- strictly greater means the player has NOT beaten it.
-    if ( BrnStreetData::ChallengeData::CompareScores( leScoreType, liPlayerScore, liParScore ) > 0 )
-    {
-        return E_ROAD_RULE_COMPLETION_STATUS_NOT_BEATEN;
-    }
-
-    return E_ROAD_RULE_COMPLETION_STATUS_BEATEN;
+    return E_ROAD_RULE_COMPLETION_STATUS_NO_DATA;
 }
 
 // @ 0x823362A0. The friend-table twin: has the local player beaten his friends' best?

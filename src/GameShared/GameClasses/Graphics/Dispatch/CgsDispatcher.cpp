@@ -232,54 +232,60 @@ void DispatchFrame::Construct(u32 luNumLists, u32 luBinSizeBytes, rw::IResourceA
     }
 }
 
-// @ 0x827FA8E0
-// Start-of-frame rewind: snapshot the used-qword count, rewind the bin write
-// head, then clear every list back to one fresh key block.
+// DecFIGS CgsDispatcher.cpp:102. ARTIST 0x827FA924?0x827FA930
+// inlines the bin's used-qword snapshot and rewind into DispatchFrame::Reset.
+void DispatchBin::Reset()
+{
+    m_uUsedQwordsSnapshot = static_cast<u32>(m_pNextWord - m_pBin);
+    m_pNextWord = m_pBin;
+}
+
+// DecFIGS CgsDispatcher.cpp:331. ARTIST 0x827FA950?0x827FA964
+// inlines the empty-list state and calls the original block allocator.
+void DispatchList::Reset()
+{
+    mpBlockListHead = NULL;
+    mpBlockListTail = NULL;
+    muCount = 0;
+    muChainBlockCount = 0;
+    mpSortedKeys = NULL;
+    AllocateKeyBlock();
+}
+
+// ARTIST 0x827FA8E0.
 void DispatchFrame::Reset()
 {
-    CGS_ASSERT(m_paLists != NULL, "m_paLists != NULL");
+    CGS_ASSERT(m_paLists != NULL,
+        CGS_ASSERT_MESSAGE_AT("m_paLists != NULL", KAC_ARTIST_ASSERT_CPP, 743));
 
-    m_Bin.m_uUsedQwordsSnapshot = static_cast<u32>(m_Bin.m_pNextWord - m_Bin.m_pBin);
-    m_Bin.m_pNextWord           = m_Bin.m_pBin;
-
+    m_Bin.Reset();
     for (u32 luListId = 0; luListId < muNumDispatchLists; ++luListId)
     {
-        DispatchList* lpList  = GetList(luListId);
-        lpList->mpBlockListHead = 0;
-        lpList->mpBlockListTail = 0;
-        lpList->muCount         = 0;
-        lpList->muChainBlockCount = 0;
-        lpList->mpSortedKeys    = 0;
-        lpList->AllocateKeyBlock();
+        m_paLists[luListId].Reset();
     }
 }
 
-// @ 0x827E96A8
-// End-of-life teardown: free the list array (operator delete[], the mirror of
-// Construct's operator new[]) and rewind the embedded bin's bookkeeping. The
-// X360 body inlines DispatchBin::Release here -- its assert string is
-// "m_pPacketStart == NULL" attributed to CgsDispatcher.cpp:86 (the bin's own
-// line) while the leading "m_paLists != NULL" assert is line 727 (the frame's) --
-// hence the two asserts inside one function. Store map (frame words):
-//   a1[0]  m_paLists                 -> operator delete__
-//   a1[36] (0x90) m_Bin.m_pPacketStart  -> asserted NULL
-//   a1[34] (0x88) m_Bin.m_pBin          -> cleared when non-NULL
-//   a1[35] (0x8C) m_Bin.m_pNextWord     -> cleared
-//   a1[64] (0x100) muNumDispatchLists   -> cleared
+// DecFIGS CgsDispatcher.cpp:84. ARTIST 0x827E96F0?0x827E9730.
+void DispatchBin::Release()
+{
+    CGS_ASSERT(m_pPacketStart == NULL,
+        CGS_ASSERT_MESSAGE_AT("m_pPacketStart == NULL", KAC_ARTIST_ASSERT_CPP, 86));
+
+    if (m_pBin != NULL)
+    {
+        m_pBin = NULL;
+    }
+    m_pNextWord = NULL;
+}
+
+// ARTIST 0x827E96A8.
 void DispatchFrame::Release()
 {
-    CGS_ASSERT(m_paLists != NULL, "m_paLists != NULL");
+    CGS_ASSERT(m_paLists != NULL,
+        CGS_ASSERT_MESSAGE_AT("m_paLists != NULL", KAC_ARTIST_ASSERT_CPP, 727));
 
-    // The original releases the array without clearing its stored pointer.
     delete[] m_paLists;
-
-    CGS_ASSERT(m_Bin.m_pPacketStart == NULL, "m_pPacketStart == NULL");
-
-    if (m_Bin.m_pBin != NULL)
-    {
-        m_Bin.m_pBin = 0;
-    }
-    m_Bin.m_pNextWord  = 0;
+    m_Bin.Release();
     muNumDispatchLists = 0;
 }
 

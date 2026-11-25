@@ -7287,29 +7287,10 @@ void ModeManager::PlayerFinishedMode(const GameStateModuleIO::PlayerFinishedMode
         mScoringSystem.RegisterFinishForCar(true, lePlayerActiveRaceCarIndex, lFinishTime);
     }
 
-    // The tail, in the console's order. THREE stores, no assert -- re-derived instruction for
-    // instruction from 0x823281AC..0x823281D8 (fix round 2026-08-26):
-    //     0x823281D0  stwx  r9(-1), r31, 0x9518   -> miDebugFinishPosition = -1
-    //     0x823281D4  stbx  r28(1), r31, 0x94F7   -> mbFinishCurrentModeNextUpdate = true
-    //     0x823281D8  stwx  r6(2),  r10, 0x38B64  -> meControllerState = INACTIVE_GAME_MODE (parked)
-    // [!] FIX ROUND: the -1 store was previously lost. This body called
-    // FinishCurrentModeNextUpdate() alone and its comment claimed that call was "the inlined pair" --
-    // it is not: ModeManager::FinishCurrentModeNextUpdate (BrnModeManager_Accessors.cpp:210-213)
-    // sets ONLY the bool. Without the -1, any earlier
-    // FinishCurrentModeNextUpdateWithFinishPosition(n) override survives, and the committed
-    // SendModeResults gate (BrnModeManager.cpp:373, `mbFinishCurrentModeNextUpdate &&
-    // miDebugFinishPosition > 0`) then forces a stale finish position into every later result.
-    // The store is emitted here, in console order, ahead of the bool.
-    // [!] FIX ROUND: the invented `CGS_ASSERT(mpGameStateModule != nullptr, "mpGameStateModule")`
-    // that used to sit here is DELETED -- 0x823281AC..0x823281D8 fires no assert. This body's one
-    // real mpGameStateModule assert is BrnModeManager.cpp:5700 (`li r5,0x1644` @0x8232817C) inside
-    // the mbCrossedFinishLine arm, and it is already reproduced above.
-    // RE-ARMED 2026-08-26 (mode-tick verify): header_request #9b's setter landed
-    // (BrnGameStateModule.h:750), so the console's inlined store runs BY NAME. Console
-    // `stwx 2, gsm, 0x38B64` == GameStateModule::SetInActiveGameModeState().
+    // ARTIST 0x823281D0-0x823281D8 clears the finish override and arms the
+    // deferred finish before parking the controller.
+    FinishCurrentModeNextUpdate();
     mpGameStateModule->SetInActiveGameModeState();
-    miDebugFinishPosition = -1;      // console: stwx r9(-1), r31, 0x9518 @0x823281D0
-    FinishCurrentModeNextUpdate();   // console: stbx r28(1), r31, 0x94F7 @0x823281D4
 }
 
 // ============================================================================================

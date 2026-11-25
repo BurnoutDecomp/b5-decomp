@@ -545,13 +545,12 @@ namespace BrnNetwork
         return &mInputGuiEventQueue;
     }
 
-    // -> &mNetworkEventQueue (+852392). BrnNetworkModuleIO.h still spells NetworkEventQueue as a
-    // pointer-only class rather than the VariableEventQueue<14000,16> typedef, so the address is
-    // handed back under that name; the cast becomes an identity cast once the typedef lands there.
+    // ARTIST 0x82542DE4 returns the NetworkEventQueue at +852392.
     BrnNetworkModuleIO::NetworkEventQueue* BrnNetworkModule::GetNetworkEventQueue()
     {
-        CGS_ASSERT(mbIsUpdating, "Can not use this function unless module is updating\n");
-        return reinterpret_cast<BrnNetworkModuleIO::NetworkEventQueue*>(&mNetworkEventQueue);
+        CGS_ASSERT(mbIsUpdating, CGS_ASSERT_STREAM_MESSAGE_AT(
+            "Can not use this function unless module is updating\n", CGS_ARTIST_FILE_BRNNETWORKMODULE, 530));
+        return &mNetworkEventQueue;
     }
 
     // -> mbOutputSendUpdateMessages (+614664).

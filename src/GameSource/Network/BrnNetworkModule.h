@@ -232,7 +232,7 @@ namespace BrnNetwork
         CgsModule::EventQueue<BrnGameState::TakedownEvent, 8>   mTakedownEventInputQueue;         // +829496
         CgsModule::VariableEventQueue<18432, 16>                mInputGuiEventQueue;              // +829832
         GuiEventQueueSmall                                      mOutputGuiEventQueue;             // +848280
-        CgsModule::VariableEventQueue<14000, 16>                mNetworkEventQueue;               // +852392
+        BrnNetworkModuleIO::NetworkEventQueue                   mNetworkEventQueue;               // +852392
 
         // Perf-monitor ids registered by Construct ("Module - Process before", "Module - Process
         // after", "... after 1".."... after 5", "Man - ProcessAfterSimulation()", "... after 7",

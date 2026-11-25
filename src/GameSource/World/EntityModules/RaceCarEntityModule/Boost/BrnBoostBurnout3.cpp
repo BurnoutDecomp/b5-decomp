@@ -66,6 +66,9 @@
 namespace BrnWorld
 {
 
+// DecFIGS BrnBoostBurnout3.cpp:43, used by Prepare and ApplyUpdate.
+const s64 KI_DEFAULT_AGGRESSION_BOOST_PARAMS_GUID = 576011;
+
 // ---------------------------------------------------------------------------
 // GetName @ 0x822A6A70 -- vtable slot 15.
 //
@@ -1014,74 +1017,43 @@ void BoostBurnout3::ApplyUpdate(f32 lfTimeStep)
         AddBoost(mfTailgatingEarning * lfTimeStep);         // lfs f0, 0x44(r31)
     }
 
-    // ---- burning ---------------------------------------------------------
-    // `lbz r10, 0xC5(r31)` @0x822C1988 -- mbBoosting is sampled ONCE into r10,
-    // and that pre-update value is what BOTH the latch test @0x822C1994 and the
-    // "boost has just started" test @0x822C1A00 use. (No store to +0xC5 can
-    // precede either test: the two stores at 0x822C19DC / 0x822C19F8 both branch
-    // straight to loc_822C1A40.)
+    // ARTIST 0x822C1988 samples the flag before either update path writes it.
     const bool lbWasBoosting = mbBoosting;
-
-    // The minimum-boost-time latch (r11 @0x822C199C-0x822C19B8): already
-    // boosting, and the current burst is younger than 1.25 s.
-    //
-    // 1.25f is flt_820147F8, loaded by all three strategies' ApplyUpdate
-    // (B2 @0x822C1340, B3 here, B5 @0x822C2170) -- consistent with the shared
-    // BrnBoostStrategy.h-level KF_MIN_BOOST_TIME (h:49), whose value the
-    // BrnBoostStrategy.cpp wave has not pinned. It is NOT spelled as that name
-    // here because the .rdata float region is not a per-header constant array:
-    // flt_820147E8, four slots earlier, is a BrnBoostBurnout3.cpp-local constant
-    // (0.15f; loaded by OnEndCrashPlay @0x822A6B40/0x822A6B48 -- landed as a
-    // literal in BoostBurnout3_wP_02.cpp -- and again by SetCarStatBoostLevel
-    // @0x822C1C44, BoostBurnout3_wP_06.cpp), so position in that pool identifies
-    // nothing. (RemoveAllBoostAndChunks @0x822A6B68 never touches flt_820147E8;
-    // it loads flt_82001CC0 == 0.0f.)
-    // The literal the asm actually loads is written instead of asserting an
-    // identification this TU cannot prove.
     const bool lbWithinMinBoostTime = lbWasBoosting && (mfTimeBoosting < 1.25f);
-
-    if (mbBoostRequested || lbWithinMinBoostTime)           // lbz 0xC7 ; bne / clrlwi r11
+    if (mbBoostRequested || lbWithinMinBoostTime)
     {
-        if (mbInfiniteBoost)                                // lbz 0xC4 @0x822C19D0
+        if (mbInfiniteBoost)
         {
-            mbBoosting = true;                              // stb r8(=1), 0xC5
+            mbBoosting = true;
         }
-        else if (mfBoostAmount > 0.0f)                      // lfs 0xA0 ; fcmpu ; bgt
+        // ARTIST 0x822C19F4 takes the burn path only for an ordered positive amount.
+        else if (!(mfBoostAmount > 0.0f))
         {
-            // A fresh burst restarts the timer (`cmplwi r10,0 ; bne` @0x822C1A00
-            // skips the zero-store when we were already boosting).
-            if (!lbWasBoosting)
-            {
-                mfTimeBoosting = 0.0f;                      // stfs f0(=0.0), 0x13C
-            }
-            mfTimeBoosting += lfTimeStep;                   // lfs/fadds f31/stfs 0x13C
-            mbBoosting = true;                              // stb r8(=1), 0xC5
-
-            // Per-car drain rate, with the attrib default as the fallback.
-            f32 lfBoostBurnRate = mfCurrentCarBoostLossLevel;   // lfs f13, 0xF0
-            if (lfBoostBurnRate == 0.0f)                        // fcmpu ; bne
-            {
-                lfBoostBurnRate = mfBurnRateBoost;              // lfs f13, 0x70
-            }
-
-            // 0x822C1A2C fnmsubs f13, f13, f31, f12 (== mfBoostAmount - rate*dt)
-            // + 0x822C1A30 stfs 0xA0 + 0x822C1A34 fcmpu / `bge` @0x822C1A38 /
-            // 0x822C1A3C stfs 0.0. That subtract-then-clamp-at-zero pair IS
-            // BoostStrategy::RemoveBoost (no standalone X360 symbol -- inlined at
-            // every call site). Reversing the inline restores the call, matching
-            // the landed sibling partfiles BoostBurnout2_wP_11 and _wP_05.
-            // NaN note unchanged: RemoveBoost's own `<` is false for NaN, exactly
-            // as `bge` is taken when the compare is unordered.
-            RemoveBoost(lfBoostBurnRate * lfTimeStep);
+            mbBoosting = false;
         }
         else
         {
-            mbBoosting = false;                             // stb r9(=0), 0xC5 (loc_822C19F8)
+            if (!lbWasBoosting)
+            {
+                mfTimeBoosting = 0.0f;
+            }
+            mbBoosting = true;
+            mfTimeBoosting += lfTimeStep;
+
+            // Select the burn rate at 0x822C1A20 and apply the shared subtraction.
+            if (mfCurrentCarBoostLossLevel == 0.0f)
+            {
+                RemoveBoost(mfBurnRateBoost * lfTimeStep);
+            }
+            else
+            {
+                RemoveBoost(mfCurrentCarBoostLossLevel * lfTimeStep);
+            }
         }
     }
     else
     {
-        mbBoosting = false;                                 // stb r9(=0), 0xC5 (loc_822C19F8)
+        mbBoosting = false;
     }
 
     // ---- re-read the boost tuning parameters (loc_822C1A40) ---------------
@@ -1089,12 +1061,6 @@ void BoostBurnout3::ApplyUpdate(f32 lfTimeStep)
     // the text into a collection key, construct a stack boostparamsasset over
     // it, then copy the 34-slot (0x88-byte) record into the base's 34 tuning
     // members. The same block runs in BoostBurnout3::Prepare @0x822C1680.
-    //
-    // 576011 == 0x8CA0B, staged as `lis r3,8 ; ori r3,r3,0xCA0B` @0x822C1A40/4C.
-    // The DecFIGS DWARF names it BrnWorld::KI_DEFAULT_AGGRESSION_BOOST_PARAMS_GUID
-    // (BrnBoostBurnout3.cpp:43, `const int64_t = 576011`). That namespace-scope
-    // definition belongs to whichever partfile lands Prepare -- spelling it here
-    // too would duplicate it -- so the literal is written out.
     //
     // The 512-byte text buffer is not DWARF-attested for THIS function (the
     // dwarfdump for BrnBoostBurnout3.cpp carries only the GUID constant). The
@@ -1104,12 +1070,13 @@ void BoostBurnout3::ApplyUpdate(f32 lfTimeStep)
     // CgsAttribSys::AttribSysCollectionKey::GetHashKey (DWARF cpp:81, already
     // landed as `char lacTemp[512]`).
     char lacGuidText[512];                                  // sp+0x70
-    rw::core::stdc::ConvertI64ToA(576011, lacGuidText, 10);
+    rw::core::stdc::ConvertI64ToA(KI_DEFAULT_AGGRESSION_BOOST_PARAMS_GUID, lacGuidText, 10);
 
     // `bl Attrib__StringToKey` @0x822C1A58 -> `mr r4, r3` @0x822C1A5C: the FULL
     // 64-bit hash, moved whole (no clrldi), is the ctor's collection key.
     // `li r5, 0` @0x822C1A60 is the owner.
-    Attrib::Gen::boostparamsasset lBoostParams(Attrib::StringToKey(lacGuidText), 0);
+    const u64 luCollectionKey = Attrib::StringToKey(lacGuidText);
+    Attrib::Gen::boostparamsasset lBoostParams(luCollectionKey);
 
     // The console loads the layout block once (`lwz r11, 4(inst)` @0x822C1A6C --
     // Attrib::Instance::mpAttributeData) and then reads it at fixed offsets.
@@ -1427,16 +1394,6 @@ BoostBurnout3::OnWrecked(
 
 namespace BrnWorld
 {
-
-// The boostparams asset GUID this strategy resolves its tuning collection from.
-// NAME, TYPE and VALUE are all DecFIGS-attested verbatim -- the DWARF dump of
-// BrnBoostBurnout3.cpp:43 declares
-//   const int64_t KI_DEFAULT_AGGRESSION_BOOST_PARAMS_GUID = 576011;
-// and the X360 stages exactly that value inline at 0x822C16DC/0x822C16E8
-// (`lis r3,8` + `ori r3,r3,0xCA0B` == 0x0008CA0B == 576011). int64_t is also
-// what ConvertI64ToA takes. BoostBurnout2 uses 576005; each strategy has its own
-// collection.
-const s64 KI_DEFAULT_AGGRESSION_BOOST_PARAMS_GUID = 576011;
 
 // ----------------------------------------------------------------------------
 // Prepare -- vtable slot 0.  X360 @0x822C1680.

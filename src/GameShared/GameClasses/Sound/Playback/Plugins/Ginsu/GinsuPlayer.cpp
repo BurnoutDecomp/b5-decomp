@@ -175,7 +175,7 @@ namespace
 // GetTotalTableSize @0x8268B308 -- how many bytes of instance tail the two copied index
 // tables need. NOTE the side effect: it endian-adjusts the blob if that has not happened.
 // -------------------------------------------------------------------------------------
-u32 GinsuSynthData::GetTotalTableSize(void *apGinFile)
+u32 GinsuPlayer::GinsuSynthData::GetTotalTableSize(void *apGinFile)
 {
     u8 *lpBytes = static_cast<u8 *>(apGinFile);
     if (!HasGinsuMagic(lpBytes))
@@ -192,7 +192,7 @@ u32 GinsuSynthData::GetTotalTableSize(void *apGinFile)
 // instance's allocation tail, point mSampleData at the encoded stream, and precompute the
 // smallest cycle period (which SampleToCycle's search uses to bound its steps).
 // -------------------------------------------------------------------------------------
-bool GinsuSynthData::BindToData(void *apGinFile, void *apTableStorage)
+bool GinsuPlayer::GinsuSynthData::BindToData(void *apGinFile, void *apTableStorage)
 {
     mMinFrequency = KF_ZERO;
     mMaxFrequency = KF_ZERO;
@@ -255,7 +255,7 @@ bool GinsuSynthData::BindToData(void *apGinFile, void *apTableStorage)
 // NOTE there is NO sign extension of the two initial samples -- the recurrence runs in
 // float from whatever those 12-bit values are, exactly as the console does.
 // -------------------------------------------------------------------------------------
-void GinsuSynthData::DecodeBlock(int aiBlock, bool abUseOldData, System * /*apSystem*/)
+void GinsuPlayer::GinsuSynthData::DecodeBlock(int aiBlock, bool abUseOldData, System * /*apSystem*/)
 {
     mCurrentBlock = aiBlock;
 
@@ -299,7 +299,7 @@ void GinsuSynthData::DecodeBlock(int aiBlock, bool abUseOldData, System * /*apSy
 // FrequencyToSample @0x8268B7B8 -- map an engine frequency to a sample index through the
 // segment table, linearly interpolating between adjacent entries.
 // -------------------------------------------------------------------------------------
-int GinsuSynthData::FrequencyToSample(f32 afFrequency) const
+int GinsuPlayer::GinsuSynthData::FrequencyToSample(f32 afFrequency) const
 {
     if (mSegCount < 1)
         return 0;
@@ -322,7 +322,7 @@ int GinsuSynthData::FrequencyToSample(f32 afFrequency) const
 // CycleToSample @0x8268B8F8 -- the cycle-table counterpart (no dossier; the decode
 // recovered it from the raw XEX at file 0x0068E8F8).
 // -------------------------------------------------------------------------------------
-int GinsuSynthData::CycleToSample(f32 afCycle) const
+int GinsuPlayer::GinsuSynthData::CycleToSample(f32 afCycle) const
 {
     if (mCycleCount < 1)
         return 0;
@@ -350,7 +350,7 @@ int GinsuSynthData::CycleToSample(f32 afCycle) const
 // ⚠️ The left-edge arm reads T[2], so valid content must carry at least two cycles; the
 // console has no defensive case for mCycleCount == 1 and neither does this.
 // -------------------------------------------------------------------------------------
-f32 GinsuSynthData::CyclePeriod(f32 afCycle) const
+f32 GinsuPlayer::GinsuSynthData::CyclePeriod(f32 afCycle) const
 {
     const int liCount = mCycleCount;
     if (liCount < 1)
@@ -397,7 +397,7 @@ f32 GinsuSynthData::CyclePeriod(f32 afCycle) const
 // position of the sample within the remaining span, then bounds the next interval using
 // mMinPeriod (the smallest possible cycle length), which is why BindToData precomputes it.
 // -------------------------------------------------------------------------------------
-f32 GinsuSynthData::SampleToCycle(int aiSample) const
+f32 GinsuPlayer::GinsuSynthData::SampleToCycle(int aiSample) const
 {
     const int liCount = mCycleCount;
     if (liCount < 1)
@@ -455,7 +455,7 @@ f32 GinsuSynthData::SampleToCycle(int aiSample) const
 // the interpolator has the previous call's final sample as its left neighbour -- that
 // prefix is what makes consecutive chunks join without a discontinuity.
 // -------------------------------------------------------------------------------------
-bool GinsuSynthData::GetSamples(int aiStartSample, int aiNumInputSamples,
+bool GinsuPlayer::GinsuSynthData::GetSamples(int aiStartSample, int aiNumInputSamples,
                                 int aiNumOutputSamples, f32 *apOutput,
                                 f32 *apResampleBuffer, bool abUseOldData,
                                 System *apSystem)
@@ -573,14 +573,15 @@ size_t GinsuPlayer::TableStorageOffset()
 // GetSize @0x826A40B8 -- the instance plus the copied index tables. With no constructor
 // params the console reserves a flat 4096-byte tail.
 // -------------------------------------------------------------------------------------
-int GinsuPlayer::GetSize(const PlugInConfig *config)
+u32 GinsuPlayer::GetSize(const PlugInConfig *config)
 {
     const PlayParams *lpParams =
         static_cast<const PlayParams *>(config->pConstructorParams);
-    const size_t luTableBytes = lpParams
-        ? GinsuSynthData::GetTotalTableSize(lpParams->pGinFile)
-        : 4096u;                                      // X360: 0x11D0 - 0x1D0
-    return static_cast<int>(TableStorageOffset() + luTableBytes);
+    if (lpParams)
+        return static_cast<u32>(TableStorageOffset() +
+                                GinsuSynthData::GetTotalTableSize(lpParams->pGinFile));
+
+    return static_cast<u32>(TableStorageOffset() + 4096u);
 }
 
 // -------------------------------------------------------------------------------------

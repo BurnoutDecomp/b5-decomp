@@ -1,5 +1,6 @@
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineViewChallenges.h"
 #include "GameSource/Gui/BrnGuiCache.h"
+#include "GameSource/Gui/BrnGuiShared.h"
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"
@@ -82,7 +83,7 @@ void OnlineViewChallenges::CheckForCompletedLoads()
     {
         if (mpGuiCache->EnsureResourcesAreLoaded(maResourceTuplesToLoad, miNumResourcesToLoad))
         {
-            mpStateInterface->PlayAptMovie("ON_CHAL", 3);
+            mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[maResourceTuplesToLoad[0].muId], 3);
             meSubState = E_SUBSTATE_LOADING_COMPONENTS;
         }
     }

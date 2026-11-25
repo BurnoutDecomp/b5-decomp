@@ -62,58 +62,6 @@ enum
 };
 
 // -------------------------------------------------------------------------------------
-// GinsuSynthData -- the bound-content decoder. Console extent 0x154 at player +0x58.
-// mFreqOffset / mCycleOffset are RELATIVE offsets from this object (not serialized
-// pointers), because the tables are copied into the instance's own allocation tail.
-// -------------------------------------------------------------------------------------
-class GinsuSynthData
-{
-public:
-    static u32  GetTotalTableSize(void *apGinFile);                       // @0x8268B308
-    bool BindToData(void *apGinFile, void *apTableStorage);               // @0x8268B398
-    void DecodeBlock(int aiBlock, bool abUseOldData, System *apSystem);   // @0x8268B588
-    int   FrequencyToSample(f32 afFrequency) const;                       // @0x8268B7B8
-    int   CycleToSample(f32 afCycle) const;                               // @0x8268B8F8
-    f32   CyclePeriod(f32 afCycle) const;                                 // @0x8268BA20
-    f32   SampleToCycle(int aiSample) const;                              // @0x8268BBF8
-    bool  GetSamples(int aiStartSample, int aiNumInputSamples,
-                     int aiNumOutputSamples, f32 *apOutput,
-                     f32 *apResampleBuffer, bool abUseOldData,
-                     System *apSystem);                                   // @0x8268BED8
-
-    // The two copied tables live in the instance's allocation tail; both are reached
-    // through a relative offset so they stay correct at host widths.
-    const s32 *FrequencyTable() const
-    {
-        return reinterpret_cast<const s32 *>(
-            reinterpret_cast<const u8 *>(this) + mFreqOffset);
-    }
-    const s32 *CycleTable() const
-    {
-        return reinterpret_cast<const s32 *>(
-            reinterpret_cast<const u8 *>(this) + mCycleOffset);
-    }
-
-    u8   mOldDataBlock[KI_GINSU_OLD_BYTES]; // +0x00 -- the crossfade look-back record cache
-    s32  mOldDataBlockIndex;                // +0x98 -- first block the cache covers; -1 == invalid
-    s32  mTempStoreBlockIndex;              // +0x9C
-    f32 *mpTempStore;                       // +0xA0
-    f32  mLastInputSample;                  // +0xA4 -- continuity for the resampler's prefix
-    s32  mCycleCount;                       // +0xA8
-    f32  mMinFrequency;                     // +0xAC
-    f32  mMaxFrequency;                     // +0xB0
-    s32  mSegCount;                         // +0xB4
-    s32  mSampleCount;                      // +0xB8
-    s32  mSampleRate;                       // +0xBC
-    size_t mFreqOffset;                     // +0xC0 -- RELATIVE to this
-    size_t mCycleOffset;                    // +0xC4 -- RELATIVE to this
-    const u8 *mSampleData;                  // +0xC8 -- into the bound blob
-    f32  mMinPeriod;                        // +0xCC -- smallest adjacent cycle-table delta
-    s32  mCurrentBlock;                     // +0xD0 -- which block mSample holds; -1 == none
-    f32  mSample[KI_GINSU_BLOCK_SAMPLES];   // +0xD4 -- the decoded block
-};
-
-// -------------------------------------------------------------------------------------
 // GinsuPlayer -- console sizeof 0x1D0, followed by the copied frequency/cycle tables in an
 // over-allocated tail (which is why GetSize is content-dependent).
 // -------------------------------------------------------------------------------------
@@ -158,7 +106,7 @@ public:
     virtual int Event(int aiEventId, void *apParam);
 
     static char **GetPlugInDescRunTime();
-    static int    GetSize(const PlugInConfig *config);                 // @0x826A40B8
+    static u32    GetSize(const PlugInConfig *config);                 // @0x826A40B8
     static int    CreateInstance(GinsuPlayer *self,
                                  const PlayParams *params);                // @0x826C3418
     static int    PreProcess(GinsuPlayer *self, Mixer *ctx, bool discontinuity,
@@ -171,6 +119,58 @@ public:
     // tables start relative to the instance base. The console's 0x1D0/0x11D0/(self+0x1D7)&~7
     // are console extents containing 32-bit pointers and do NOT survive on x64.
     static size_t TableStorageOffset();
+
+    // -------------------------------------------------------------------------------------
+    // GinsuSynthData -- the bound-content decoder. Console extent 0x154 at player +0x58.
+    // mFreqOffset / mCycleOffset are RELATIVE offsets from this object (not serialized
+    // pointers), because the tables are copied into the instance's own allocation tail.
+    // -------------------------------------------------------------------------------------
+    class GinsuSynthData
+    {
+    public:
+        static u32  GetTotalTableSize(void *apGinFile);                       // @0x8268B308
+        bool BindToData(void *apGinFile, void *apTableStorage);               // @0x8268B398
+        void DecodeBlock(int aiBlock, bool abUseOldData, System *apSystem);   // @0x8268B588
+        int   FrequencyToSample(f32 afFrequency) const;                       // @0x8268B7B8
+        int   CycleToSample(f32 afCycle) const;                               // @0x8268B8F8
+        f32   CyclePeriod(f32 afCycle) const;                                 // @0x8268BA20
+        f32   SampleToCycle(int aiSample) const;                              // @0x8268BBF8
+        bool  GetSamples(int aiStartSample, int aiNumInputSamples,
+                         int aiNumOutputSamples, f32 *apOutput,
+                         f32 *apResampleBuffer, bool abUseOldData,
+                         System *apSystem);                                   // @0x8268BED8
+
+        // The two copied tables live in the instance's allocation tail; both are reached
+        // through a relative offset so they stay correct at host widths.
+        const s32 *FrequencyTable() const
+        {
+            return reinterpret_cast<const s32 *>(
+                reinterpret_cast<const u8 *>(this) + mFreqOffset);
+        }
+        const s32 *CycleTable() const
+        {
+            return reinterpret_cast<const s32 *>(
+                reinterpret_cast<const u8 *>(this) + mCycleOffset);
+        }
+
+        u8   mOldDataBlock[KI_GINSU_OLD_BYTES]; // +0x00 -- the crossfade look-back record cache
+        s32  mOldDataBlockIndex;                // +0x98 -- first block the cache covers; -1 == invalid
+        s32  mTempStoreBlockIndex;              // +0x9C
+        f32 *mpTempStore;                       // +0xA0
+        f32  mLastInputSample;                  // +0xA4 -- continuity for the resampler's prefix
+        s32  mCycleCount;                       // +0xA8
+        f32  mMinFrequency;                     // +0xAC
+        f32  mMaxFrequency;                     // +0xB0
+        s32  mSegCount;                         // +0xB4
+        s32  mSampleCount;                      // +0xB8
+        s32  mSampleRate;                       // +0xBC
+        size_t mFreqOffset;                     // +0xC0 -- RELATIVE to this
+        size_t mCycleOffset;                    // +0xC4 -- RELATIVE to this
+        const u8 *mSampleData;                  // +0xC8 -- into the bound blob
+        f32  mMinPeriod;                        // +0xCC -- smallest adjacent cycle-table delta
+        s32  mCurrentBlock;                     // +0xD0 -- which block mSample holds; -1 == none
+        f32  mSample[KI_GINSU_BLOCK_SAMPLES];   // +0xD4 -- the decoded block
+    };
 
     PlugIn::Attribute_t mAttribute[ATTRIBUTE_MAX]; // +0x28 .. +0x4F
     u8   mPlaying;                                 // +0x50

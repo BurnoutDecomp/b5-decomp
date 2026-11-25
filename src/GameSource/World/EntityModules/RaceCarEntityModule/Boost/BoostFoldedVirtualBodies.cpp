@@ -58,9 +58,6 @@ void BoostBurnout5::OnPlayerAttacksRival(BrnPhysics::Vehicle::EImpactType leImpa
 {
     switch (leImpactType)
     {
-    case BrnPhysics::Vehicle::E_IMPACT_TRADING_PAINT:
-        AddBoost(mfTradingPaintEarning);
-        break;
     case BrnPhysics::Vehicle::E_IMPACT_SLAM:
     case BrnPhysics::Vehicle::E_IMPACT_BOOST_SLAM:
         AddBoost(mfSlamEarning);
@@ -68,6 +65,9 @@ void BoostBurnout5::OnPlayerAttacksRival(BrnPhysics::Vehicle::EImpactType leImpa
     case BrnPhysics::Vehicle::E_IMPACT_SHUNT:
     case BrnPhysics::Vehicle::E_IMPACT_BOOST_SHUNT:
         AddBoost(mfShuntEarning);
+        break;
+    case BrnPhysics::Vehicle::E_IMPACT_TRADING_PAINT:
+        AddBoost(mfTradingPaintEarning);
         break;
     case BrnPhysics::Vehicle::E_IMPACT_GRINDING:
         AddBoost(mfGrindingEarning);

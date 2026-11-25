@@ -33,7 +33,7 @@ public:
     // ARTIST8228D6C0/822850D8; DecFIGS rwgcoronabuffer.h:42/43.
     static rw::ResourceDescriptor GetResourceDescriptor(Parameters& lrParameters);
     static CoronaBuffer* Initialize(const rw::Resource& lrResource, Parameters& lrParameters);
-    void Release() {}
+    void Release();
     u32 GetNumCoronas() const { return muNumCoronas; }
     const Corona* GetCoronas() const { return mpData; }
     void Lock(Iterator& lrIterator)

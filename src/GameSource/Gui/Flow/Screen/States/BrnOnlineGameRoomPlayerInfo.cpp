@@ -863,16 +863,17 @@ namespace BrnGui
         mViewEventOptions.Construct(KAC_VIEW_EVENT_MENU_OPTIONS_COMPONENT, mpStateInterface, 1, 0,
                                     0xFFFFFFFFull);
 
+        // DecFIGS lines 412-423 recover the reset order behind ARTIST 0x824A3B54-0x824A3BD8.
         mpGuiCache                 = 0;       // X360 +87516 (OUR cache ptr, not the base's)
         mSelectedPlayerID          = -1;      // X360 +87512
-        mfTimeToDisableNextEATrack = 0.0f;    // X360 +87524 (flt_82001CC0)
         miCurrentRoundDisplayed    = 0;       // X360 +87508
-        mbShownFromPause           = false;   // X360 +87536
         mfTimeUntilNextEATrack     = 0.0f;    // X360 +87520 (flt_82001CC0)
+        mfTimeToDisableNextEATrack = 0.0f;    // X360 +87524 (flt_82001CC0)
+        mbShowSplashScreen         = false;   // X360 +87533
         mbKicked                   = false;   // X360 +87535
+        mbShownFromPause           = false;   // X360 +87536
         mbNeedToClearSplashScreen  = false;   // X360 +87534
         mbHighlightedNewPlayer     = false;   // X360 +87537
-        mbShowSplashScreen         = false;   // X360 +87533
 
         // Inlined CrashNavOptionsData::Construct: the nine stores at X360 +87480..+87500
         // are exactly its nine parameters in declared field order
@@ -6174,23 +6175,24 @@ namespace BrnGui
     // Raise the current game mode's splash overlay and clear the pending-splash latch.
     void OnlineGameRoomPlayerInfo::ShowSplashScreen()
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache",
+                      KAC_BRN_ONLINE_GAME_ROOM_PLAYER_INFO_ASSERT_FILE, 3877);
 
         const s32 leGameModeType = mpGuiCache->GetGameMode();
-        CGS_ASSERT(leGameModeType > BrnGameState::GameStateModuleIO::E_MODE_NONE,
-                   "leGameModeType > GsmIO::E_MODE_NONE");
-        CGS_ASSERT(leGameModeType < KI_GAME_MODE_COUNT, "leGameModeType < GsmIO::E_MODE_COUNT");
+        CGS_ASSERT_AT(leGameModeType > BrnGameState::GameStateModuleIO::E_MODE_NONE,
+                      "leGameModeType > GsmIO::E_MODE_NONE", KAC_BRN_ONLINE_GAME_ROOM_PLAYER_INFO_ASSERT_FILE, 3879);
+        CGS_ASSERT_AT(leGameModeType < KI_GAME_MODE_COUNT,
+                      "leGameModeType < GsmIO::E_MODE_COUNT", KAC_BRN_ONLINE_GAME_ROOM_PLAYER_INFO_ASSERT_FILE, 3880);
 
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
         {
-            *CgsDev::Log::gpDebugPrint << "RG :: Starting an overlay for game mode : ";
-            *CgsDev::Log::gpDebugPrint << leGameModeType;
-            *CgsDev::Log::gpDebugPrint << "\n";
+            *CgsDev::Log::gpDebugPrint << "RG :: Starting an overlay for game mode : " << leGameModeType << "\n";
         }
 
         const char* lpcSplashScreenID = GetSplashScreenIDForGameMode(
             static_cast<BrnGameState::GameStateModuleIO::EGameModeType>(leGameModeType));
-        CGS_ASSERT(lpcSplashScreenID != 0, "lpcSplashScreenID != NULL");
+        CGS_ASSERT_AT(lpcSplashScreenID != 0, "lpcSplashScreenID != NULL",
+                      KAC_BRN_ONLINE_GAME_ROOM_PLAYER_INFO_ASSERT_FILE, 3888);
 
         GuiOverlayRequestWire lWire;
         lWire.mRequest.Construct(lpcSplashScreenID);

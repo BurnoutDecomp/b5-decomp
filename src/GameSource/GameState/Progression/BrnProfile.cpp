@@ -1409,7 +1409,7 @@ s32 Profile::GetMedalAchievedForEventWithID(s32 liEventID) const
                 return 1;
             if (lEvent.IsFlagSet(ProfileEvent::E_FLAG_WON_SPECIAL_EVENT_BEFORE))
                 return 2;
-            return -1;
+            break;
         }
     }
     return -1;

@@ -148,6 +148,7 @@ public:
 
     // ---- Functions bodied by this TU (CgsGraphicsDispatchList.cpp) -----------
     DispatchList* ReserveKey();                                       // @ 0x822A0788
+    void Reset();
     void Submit(u64 lu64SortKey, DispatchCommand* lpPacket);           // @ 0x822A0808
     // @ 0x827FA730 -- append a fresh 64-record KeyBlock (carved from the list's bin)
     // to the chain and make it the tail.
@@ -244,6 +245,8 @@ public:
     // shared-memory bookkeeping, then carve the command block from the rw resource
     // allocator (lane 0: align128(size)+128 bytes @ 128 alignment).
     void             Construct(u32 luSizeBytes, rw::IResourceAllocator* lpAllocator);
+    void             Reset();
+    void             Release();
 
     // DispatchAllMeshes/DrawRenderable::Interpret headroom check + the walkers'
     // packet decode (m_pBinBase + qword offset) need these reads.

@@ -21,4 +21,10 @@ CoronaBuffer* CoronaBuffer::Initialize(const rw::Resource& lrResource, Parameter
     lpBuffer->mpData = reinterpret_cast<Corona*>(luData);
     return lpBuffer;
 }
+
+// DecFIGS rwgcoronabuffer.cpp:37. ARTIST 0x823F7764/0x823F776C call
+// the original out-of-line Release, folded to the return at 0x8284CB38.
+void CoronaBuffer::Release()
+{
+}
 }
