@@ -5,7 +5,7 @@
 #include "GameShared/GameClasses/Core/CgsID.h"                        // CgsIDCompress / CgsIDUnCompress
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                    // CGS_ASSERT (flagged assert substitute)
 
-#include <cstring>   // strncpy
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"
 
 extern "C" {
 #include "lua.h"
@@ -26,6 +26,9 @@ static const char KAC_ARTIST_ASSERT_FILE[] =
 
 namespace CgsFsm
 {
+
+const char* LuaState::KPC_NEXT_STATE_FUNCTION_NAME = "NextState";
+const char* LuaState::KPC_GET_STATE_FUNCTION_NAME = "GetCurrentState";
 
 // @ 0x82835D50
 void LuaState::Construct()
@@ -53,7 +56,7 @@ bool LuaState::Prepare(CgsResource::LuaCodeResource* lpLuaCodeResource, CgsMemor
 {
     mpHeapMalloc = lpHeapMalloc;
     mpLuaState   = lua_newstate(reinterpret_cast<lua_Alloc>(&LuaState::LuaAllocator), lpHeapMalloc);
-    CGS_ASSERT(mpLuaState != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Failed to allocate LUA state, out of memory", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\fsm\\CgsLuaState.cpp", 85));
+    CGS_ASSERT(mpLuaState != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Failed to allocate LUA state, out of memory", KAC_ARTIST_ASSERT_FILE, 85));
 
     // Load the script chunk and run it (defining the FSM's Lua globals).
     luaL_loadbuffer(mpLuaState, lpLuaCodeResource->GetSource(),
@@ -63,13 +66,12 @@ bool LuaState::Prepare(CgsResource::LuaCodeResource* lpLuaCodeResource, CgsMemor
 }
 
 // @ DWARF CgsLuaState.cpp:103 (folded in ARTIST).
-void LuaState::Release()
+bool LuaState::Release()
 {
-    if (mpLuaState != 0)
-    {
-        lua_close(mpLuaState);
-        mpLuaState = 0;
-    }
+    CGS_ASSERT_AT(mpLuaState != 0, "mpLuaState", KAC_ARTIST_ASSERT_FILE, 105);
+    lua_close(mpLuaState);
+    mpLuaState = 0;
+    return true;
 }
 
 // @ 0x82835E78
@@ -95,14 +97,15 @@ void LuaState::LuaPushId(CgsID lId)
 // @ 0x82836514 -- call the Lua global GetCurrentState() and compress its returned name.
 CgsID LuaState::GetCurrentState()
 {
-    CGS_ASSERT(mpLuaState != 0, "mpLuaState");
-    CgsID lResult = 0;
-    lua_getfield(mpLuaState, LUA_GLOBALSINDEX, "GetCurrentState");
+    CGS_ASSERT_AT(mpLuaState != 0, "mpLuaState", KAC_ARTIST_ASSERT_FILE, 369);
+    CgsID lResult = CgsIDCompress("UNKNOWN");
+    lua_getfield(mpLuaState, LUA_GLOBALSINDEX, KPC_GET_STATE_FUNCTION_NAME);
     lua_pcall(mpLuaState, 0, 1, 0);
     if (lua_isstring(mpLuaState, -1))
         lResult = CgsIDCompress(lua_tolstring(mpLuaState, -1, 0));
     else
-        CGS_ASSERT(false, "Could not get the current state from Lua");
+        CGS_ASSERT_STREAM_AT(false, "Could not find state ID: " << lResult << " in Lua",
+                             KAC_ARTIST_ASSERT_FILE, 386);
     lua_settop(mpLuaState, 0);
     return lResult;
 }
@@ -110,17 +113,18 @@ CgsID LuaState::GetCurrentState()
 // Call the Lua global NextState(eventId) to advance the machine.
 void LuaState::NextState(CgsID lEventId)
 {
-    CGS_ASSERT(mpLuaState != 0, "mpLuaState");
-    lua_getfield(mpLuaState, LUA_GLOBALSINDEX, "NextState");
+    CGS_ASSERT_AT(mpLuaState != 0, "mpLuaState", KAC_ARTIST_ASSERT_FILE, 341);
+    lua_getfield(mpLuaState, LUA_GLOBALSINDEX, KPC_NEXT_STATE_FUNCTION_NAME);
     LuaPushId(lEventId);
     lua_pcall(mpLuaState, 1, 0, 0);
     lua_settop(mpLuaState, 0);
+    lua_gc(mpLuaState, LUA_GCCOLLECT, 0);
 }
 
 // @ 0x828360EC -- call <fn>(id) and read an integer result.
 int LuaState::GetInt(const char* lpcFunctionName, CgsID lVariableId)
 {
-    CGS_ASSERT(mpLuaState != 0, "mpLuaState");
+    CGS_ASSERT_AT(mpLuaState != 0, "mpLuaState", KAC_ARTIST_ASSERT_FILE, 169);
     int liResult = 0;
     lua_getfield(mpLuaState, LUA_GLOBALSINDEX, lpcFunctionName);
     LuaPushId(lVariableId);
@@ -128,35 +132,33 @@ int LuaState::GetInt(const char* lpcFunctionName, CgsID lVariableId)
     if (lua_isnumber(mpLuaState, -1))
         liResult = static_cast<int>(lua_tonumber(mpLuaState, -1));
     else
-        CGS_ASSERT(false, "Could not find int variable in Lua");
+        CGS_ASSERT_STREAM_AT(false, "Could not find int variable in Lua: " << lVariableId,
+                             KAC_ARTIST_ASSERT_FILE, 187);
     lua_settop(mpLuaState, 0);
     return liResult;
 }
 
 // @ 0x82836234 -- call <fn>(id) and copy the string result into the caller's buffer.
-void LuaState::GetString(const char* lpcFunctionName, CgsID lVariableId, char* lpcOut, int liOutSize)
+const char* LuaState::GetString(const char* lpcFunctionName, CgsID lVariableId, char* lpcOut, int liOutSize)
 {
-    CGS_ASSERT(mpLuaState != 0, "mpLuaState");
-    lpcOut[0] = '\0';  // ARTIST 0x8283628C: retain an empty output if Lua returns no string.
+    CGS_ASSERT_AT(mpLuaState != 0, "mpLuaState", KAC_ARTIST_ASSERT_FILE, 212);
+    lpcOut[0] = '\0';
     lua_getfield(mpLuaState, LUA_GLOBALSINDEX, lpcFunctionName);
     LuaPushId(lVariableId);
     lua_pcall(mpLuaState, 1, 1, 0);
     if (lua_isstring(mpLuaState, -1))
     {
-        usize luLen = 0;
-        const char* lpcStr = lua_tolstring(mpLuaState, -1, &luLen);
-        CGS_ASSERT(static_cast<int>(luLen) < liOutSize, "Lua string variable too long for buffer");
-        if (lpcOut != 0 && liOutSize > 0)
-        {
-            std::strncpy(lpcOut, lpcStr, static_cast<usize>(liOutSize) - 1);
-            lpcOut[liOutSize - 1] = 0;
-        }
+        const char* lpcString = lua_tostring(mpLuaState, -1);
+        CgsCore::StrnCpy(lpcOut, lpcString, static_cast<u32>(liOutSize - 1));
+        lpcOut[liOutSize - 1] = '\0';
     }
     else
     {
-        CGS_ASSERT(false, "Could not find string variable in Lua");
+        CGS_ASSERT_STREAM_AT(false, "Could not find string variable in Lua: " << lVariableId,
+                             KAC_ARTIST_ASSERT_FILE, 232);
     }
     lua_settop(mpLuaState, 0);
+    return lpcOut;
 }
 
 // Call <fn>(id, value) -- the value setters (folded in ARTIST; uniform pattern).

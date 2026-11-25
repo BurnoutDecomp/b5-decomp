@@ -1,3 +1,4 @@
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/device.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/pixelbuffer.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/texture2d.h"
@@ -451,10 +452,10 @@ namespace renderengine
     {
         D3DVECTOR4* lpConstants;
         if (lrHandle.mu8ShaderType)
-            D3DDevice_BeginPixelShaderConstantF1(gpD3DDevice, lrHandle.mu8RegisterSet,
+            D3DDevice_BeginPixelShaderConstantF1(gpD3DDevice, lrHandle.mu8RegisterIndex,
                 &lpConstants, lrHandle.mu8RegisterCount);
         else
-            D3DDevice_BeginVertexShaderConstantF1(gpD3DDevice, lrHandle.mu8RegisterSet,
+            D3DDevice_BeginVertexShaderConstantF1(gpD3DDevice, lrHandle.mu8RegisterIndex,
                 &lpConstants, lrHandle.mu8RegisterCount);
         lrIterator.m_dest = reinterpret_cast<rw::math::vpu::Vector4*>(lpConstants);
         lrIterator.m_handle = lrHandle;
@@ -480,6 +481,23 @@ namespace renderengine
                     }
                 }
             }
+        }
+    }
+
+    // ARTIST 82B62088 unbinds the active shader before ProgramBuffer::Release poisons its type.
+    void Device::UnSetResource(const ProgramBufferData* lpProgram)
+    {
+        D3DDevice* const lpDevice = gpD3DDevice;
+        D3DResource* const lpShader = reinterpret_cast<D3DResource*>(const_cast<ProgramBufferData*>(lpProgram + 1));
+        if (lpProgram->miShaderType == 0)
+        {
+            if (D3DResource_IsSet(lpShader, lpDevice))
+                D3DDevice_SetVertexShader(lpDevice, 0);
+        }
+        else
+        {
+            if (D3DResource_IsSet(lpShader, lpDevice))
+                D3DDevice_SetPixelShader(lpDevice, 0);
         }
     }
 }

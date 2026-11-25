@@ -46,7 +46,7 @@
 // Shared AS/runtime singletons (storage HOMED in AptGlobals.cpp; declared per-TU
 // by their console-name equivalents, the established Apt convention):
 //   gAptActionInterpreter (console &dword_8324E760) -- the AS interpreter context
-//     (its operand stack is mpStack[mnStackTop]); declared in AptActionInterpreter.h.
+//     (its operand stack is mOperandStack.mppItems[mOperandStack.mnTop]); declared in AptActionInterpreter.h.
 //   gnAptActionFrameId    (console dword_8324E514)  -- the running AS-action frame id
 //     queueClipEvents stamps onto each queued clip event.
 //   gbAptRecorderGate     (console byte_82F733F7)   -- the input-recorder/replay gate:

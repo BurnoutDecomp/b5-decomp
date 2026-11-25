@@ -60,13 +60,13 @@ s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
                "Adding too many shader programs to the immediate mode renderer");
 
     renderengine::ProgramBufferParameters lVertexParams;
-    lVertexParams.muShaderType        = 0;
-    lVertexParams.muMicrocodePart1    = 0;
-    lVertexParams.muMicrocodePart3    = 0;
+    lVertexParams.miShaderType        = 0;
+    lVertexParams.mMicrocodeParts.cbCachedPartSize    = 0;
+    lVertexParams.mMicrocodeParts.cbPhysicalPartSize    = 0;
     lVertexParams.muConstantTableSize = 0;
     lVertexParams.muNumVariables      = 0;
-    lVertexParams.muFunction          = static_cast<u32>(reinterpret_cast<uintptr_t>(lpVertexProgramBinary));
-    lVertexParams.muReserved8         = luVertexProgramSize;
+    lVertexParams.mpFunction          = lpVertexProgramBinary;
+    lVertexParams.muProgramSize         = luVertexProgramSize;
 
     rw::ResourceDescriptor lVertexDescriptor;
     renderengine::ProgramBuffer::GetResourceDescriptor(&lVertexDescriptor, &lVertexParams);
@@ -77,13 +77,13 @@ s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
             renderengine::ProgramBuffer::Initialize(&lVertexLayout, &lVertexParams));
 
     renderengine::ProgramBufferParameters lPixelParams;
-    lPixelParams.muMicrocodePart1    = 0;
-    lPixelParams.muMicrocodePart3    = 0;
+    lPixelParams.mMicrocodeParts.cbCachedPartSize    = 0;
+    lPixelParams.mMicrocodeParts.cbPhysicalPartSize    = 0;
     lPixelParams.muConstantTableSize = 0;
     lPixelParams.muNumVariables      = 0;
-    lPixelParams.muFunction          = static_cast<u32>(reinterpret_cast<uintptr_t>(lpPixelProgramBinary));
-    lPixelParams.muReserved8         = luPixelProgramSize;
-    lPixelParams.muShaderType        = 1;
+    lPixelParams.mpFunction          = lpPixelProgramBinary;
+    lPixelParams.muProgramSize         = luPixelProgramSize;
+    lPixelParams.miShaderType        = 1;
 
     rw::ResourceDescriptor lPixelDescriptor;
     renderengine::ProgramBuffer::GetResourceDescriptor(&lPixelDescriptor, &lPixelParams);

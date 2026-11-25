@@ -27,42 +27,17 @@
 
 #include <cstring>   // memmove (RemoveAt tail shift)
 
-// ---------------------------------------------------------------------------
-// PopAndPush @ 0x82ADBAB8
-//
-// asm:
-//   r31=this r30=nCount r28=pProducer
-//   if (this->mnTop < nCount) skip
-//   r3 = pProducer->vtbl[0](pProducer)          // produce
-//   for (i=1; i<=nCount; ++i)
-//       item = mppItems[mnTop - i]
-//       item->vtbl[+4](item)                     // Release
-//   mppItems[mnTop - nCount] = pProducer         // (stores r28, the producer)
-//   mnTop = mnTop - nCount + 1
-// The slot store writes r28 (the producer object itself), not the r3 produce
-// result -- the producer constructs the pushed value in place and the binary
-// reuses its pointer. Modelled verbatim.
-// ---------------------------------------------------------------------------
-AptValue* AptValueVector::PopAndPush(int32_t nCount, AptValueProducer* pProducer)
+// PopAndPush @ 0x82ADBAB8. The replacement can already be in the stack.
+void AptValueVector::PopAndPush(int32_t nCount, AptValue* pValue)
 {
-    AptValue* result = 0;
-
     if (mnTop >= nCount)
     {
-        result = pProducer->Produce();
-
+        pValue->AddRef();
         for (int32_t i = 1; i <= nCount; ++i)
-        {
-            AptValue* pItem = mppItems[mnTop - i];
-            pItem->Release();
-            result = pItem;
-        }
-
-        mppItems[mnTop - nCount] = reinterpret_cast<AptValue*>(pProducer);
+            mppItems[mnTop - i]->Release();
+        mppItems[mnTop - nCount] = pValue;
         mnTop = mnTop - nCount + 1;
     }
-
-    return result;
 }
 
 // ---------------------------------------------------------------------------

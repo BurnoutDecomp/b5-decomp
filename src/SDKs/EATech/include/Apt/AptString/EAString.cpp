@@ -191,7 +191,6 @@ EAStringC::EAStringC(const uint32_t cChar, const uint32_t uLength)
 const char* EAStringC::c_str()        const { return GetInternalBuffer(); }
 const char* EAStringC::ConstRawPtr()  const { return GetInternalBuffer(); }
 int         EAStringC::Size()         const { return m_pData->m_uSize; }
-bool        EAStringC::IsEmpty()      const { return m_pData == reinterpret_cast<DebugDataC*>(&s_EmptyInternalData); }
 
 uint32_t EAStringC::GetInternalMaxSize()  const { return m_pData->m_uMaxSize; }
 uint32_t EAStringC::GetInternalRefCount() const { return m_pData->m_uRefCount; }
@@ -208,25 +207,19 @@ void EAStringC::SetInternalRefCount(const uint32_t uRefCount) { m_pData->m_uRefC
 // ---------------------------------------------------------------------------
 uint16_t EAStringC::CalculateHashValue(const char* const pText)
 {
-    unsigned char c = static_cast<unsigned char>(*pText);
-    if (c == 0)
-        return 40389;   // 0x9DC5 = low-16 of the FNV offset basis (empty-string hash)
-
-    const char* p     = pText + 1;
-    uint32_t    hash  = 0x811C9DC5u;   // FNV offset basis
-    uint32_t    x     = 0;
-    do
+    uint32_t uHash = 0x811c9dc5;
+    int32_t c;
+    const char* pStr = pText;
+    while ((c = *pStr++) != 0)
     {
-        if (static_cast<unsigned>(c - 'A') <= 25u)   // ASCII A-Z -> lowercase
-            c = static_cast<unsigned char>(c + 32);
-        x    = hash ^ c;
-        c    = static_cast<unsigned char>(*p++);
-        hash = 0x01000193u * x;        // FNV prime (unused after the final char)
+        if (c <= 'Z' && c >= 'A')
+            c += 32;
+        uHash ^= c;
+        uHash *= 0x1000193;
     }
-    while (c);
-
-    const uint16_t folded = static_cast<uint16_t>(403u * x);
-    return folded ? folded : static_cast<uint16_t>(ZERO_HASH);
+    if (static_cast<uint16_t>(uHash) == 0)
+        return ZERO_HASH;
+    return static_cast<uint16_t>(uHash);
 }
 
 void EAStringC::CalculateHashValue() const
@@ -289,11 +282,6 @@ void EAStringC::Invalidate()
 {
     DecreaseInternalRefCount(m_pData);
     m_pData = 0;
-}
-
-bool EAStringC::IsValid() const
-{
-    return m_pData != 0;
 }
 
 void EAStringC::Validate(const EAStringC& strText)

@@ -42,7 +42,7 @@ void AptActionInterpreter::_FunctionAptActionBranchAlways(AptActionInterpreter* 
 {
     const int32_t* pOffset = AdvancePastBranchOffset(pCtx);
     pCtx->mpProgramCounter = *pOffset + pCtx->mpProgramCounter;
-    if (gpValuesToRelease->GetNumValues() != 0 && pInterp->mnStackTop == 0)
+    if (gpValuesToRelease->GetNumValues() != 0 && pInterp->mOperandStack.mnTop == 0)
         gpValuesToRelease->ReleaseValues();
 }
 
@@ -52,10 +52,10 @@ void AptActionInterpreter::_FunctionAptActionBranchAlways(AptActionInterpreter* 
 void AptActionInterpreter::_FunctionAptActionBranchIfTrue(AptActionInterpreter* pInterp, LocalContextT* pCtx)
 {
     const int32_t* pOffset = AdvancePastBranchOffset(pCtx);
-    if (pInterp->mpStack[pInterp->mnStackTop - 1]->toBool() == true)
+    if (pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1]->toBool() == true)
         pCtx->mpProgramCounter = *pOffset + pCtx->mpProgramCounter;
     pInterp->stackPop();   // release the condition
-    if (gpValuesToRelease->GetNumValues() != 0 && pInterp->mnStackTop == 0)
+    if (gpValuesToRelease->GetNumValues() != 0 && pInterp->mOperandStack.mnTop == 0)
         gpValuesToRelease->ReleaseValues();
 }
 
@@ -70,9 +70,9 @@ void AptActionInterpreter::_FunctionAptActionBranchIfTrue(AptActionInterpreter* 
 void AptActionInterpreter::_FunctionAptActionBranchIfFalse(AptActionInterpreter* pInterp, LocalContextT* pCtx)
 {
     const int32_t* pOffset = AdvancePastBranchOffset(pCtx);
-    if (!pInterp->mpStack[pInterp->mnStackTop - 1]->toBool())
+    if (!pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1]->toBool())
         pCtx->mpProgramCounter = *pOffset + pCtx->mpProgramCounter;
     pInterp->stackPop();   // release the condition
-    if (gpValuesToRelease->GetNumValues() != 0 && pInterp->mnStackTop == 0)
+    if (gpValuesToRelease->GetNumValues() != 0 && pInterp->mOperandStack.mnTop == 0)
         gpValuesToRelease->ReleaseValues();
 }

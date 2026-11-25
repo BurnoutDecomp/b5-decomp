@@ -22,7 +22,7 @@
 void AptActionInterpreter::_FunctionAptActionDelete2(AptActionInterpreter* pInterp,
                                                      LocalContextT* pContext)
 {
-    AptValue* pTop = pInterp->mpStack[pInterp->mnStackTop - 1];   // the variable name
+    AptValue* pTop = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];   // the variable name
     EAStringC scratch;
     const EAStringC* pName = AptValue::Get_ToString(pTop, &scratch);
 
@@ -31,7 +31,7 @@ void AptActionInterpreter::_FunctionAptActionDelete2(AptActionInterpreter* pInte
 
     pInterp->stackPop();                                          // pop the name
     AptInteger* pResult = AptInteger::Create(1);                  // delete -> true
-    pInterp->mpStack[pInterp->mnStackTop++] = pResult;            // inlined stackPush
+    pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = pResult;            // inlined stackPush
     pResult->AddRef();
 }
 
@@ -45,8 +45,8 @@ void AptActionInterpreter::_FunctionAptActionDelete2(AptActionInterpreter* pInte
 void AptActionInterpreter::_FunctionAptActionDelete(AptActionInterpreter* pInterp,
                                                     LocalContextT* pContext)
 {
-    AptValue* pName   = pInterp->mpStack[pInterp->mnStackTop - 1];   // v5 (top)
-    AptValue* pObject = pInterp->mpStack[pInterp->mnStackTop - 2];   // v6 (under)
+    AptValue* pName   = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];   // v5 (top)
+    AptValue* pObject = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 2];   // v6 (under)
 
     if (pObject->ContainsNativeHashVirtual())                        // console vtbl+0xC
     {
@@ -57,6 +57,6 @@ void AptActionInterpreter::_FunctionAptActionDelete(AptActionInterpreter* pInter
 
     pInterp->stackPop(2);                                            // release name + object
     AptInteger* pResult = AptInteger::Create(1);                     // delete -> true
-    pInterp->mpStack[pInterp->mnStackTop++] = pResult;               // inlined stackPush
+    pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = pResult;               // inlined stackPush
     pResult->AddRef();
 }

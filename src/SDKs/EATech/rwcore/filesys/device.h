@@ -2,7 +2,7 @@
 
 #include "types.hpp"
 
-#include "SDKs/EATech/rwcore/filesys/asyncop.h"          // AsyncOp / AsyncOpList / OpStream
+#include "SDKs/EATech/rwcore/filesys/asyncop.h"          // AsyncOp / AsyncOpList / Handle
 #include "SDKs/EATech/rwcore/filesys/list.h"             // detail::ListSingle (the registered-device list)
 #include "eathread/eathread_thread.h"                     // EA::Thread::Thread / ThreadParameters / ThreadSleep
 #include "eathread/eathread_mutex.h"                      // EA::Thread::Mutex
@@ -263,7 +263,7 @@ namespace rw
 
                 // Block under the completion lock until lpOp has a result or the absolute
                 // timeout has passed. Returns the completion-lock Unlock result.
-                int Wait(AsyncOp* lpOp, const EA::Thread::ThreadTime& lTimeoutAbsolute);
+                int Wait(const AsyncOp* lpOp, const EA::Thread::ThreadTime& lTimeoutAbsolute);
 
                 // Read accessor for the driver pointer; the AsyncOp DoIo callbacks hand the
                 // driver to the Stream IO vtable slots as an opaque argument.

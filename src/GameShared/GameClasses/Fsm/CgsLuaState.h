@@ -33,7 +33,7 @@ namespace CgsFsm
         // script chunk via luaL_loadbuffer, and run it (lua_pcall) to define its globals.
         bool Prepare(CgsResource::LuaCodeResource* lpLuaCodeResource, CgsMemory::HeapMalloc* lpHeapMalloc);
         // @ DWARF CgsLuaState.cpp:103 -- lua_close + clear (ICF-folded in ARTIST).
-        void Release();
+        bool Release();
         // @ 0x82835E78 -- true while the lua_State exists.
         bool IsLuaResourceValid() const;
 
@@ -41,12 +41,15 @@ namespace CgsFsm
         CgsID GetCurrentState();                                            // @ 0x82836514
         void  NextState(CgsID lEventId);                                    // calls Lua NextState(eventId)
         int   GetInt(const char* lpcFunctionName, CgsID lVariableId);       // @ 0x828360EC
-        void  GetString(const char* lpcFunctionName, CgsID lVariableId, char* lpcOut, int liOutSize); // @ 0x82836234
+        const char* GetString(const char* lpcFunctionName, CgsID lVariableId, char* lpcOut, int liOutSize); // @ 0x82836234
         void  SetInt(const char* lpcFunctionName, CgsID lVariableId, s32 liValue);
         void  SetBool(const char* lpcFunctionName, CgsID lVariableId, bool lbValue);
         void  SetString(const char* lpcFunctionName, CgsID lVariableId, const char* lpcValue);
 
     private:
+        static const char* KPC_NEXT_STATE_FUNCTION_NAME;
+        static const char* KPC_GET_STATE_FUNCTION_NAME;
+
         // @ 0x82835DD0 -- uncompress a CgsID to its printable form (trim trailing pad) and
         // push it as a Lua string argument.
         void LuaPushId(CgsID lId);

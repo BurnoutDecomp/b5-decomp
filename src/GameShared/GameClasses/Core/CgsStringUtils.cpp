@@ -54,31 +54,3 @@ void CgsCore::SnPrintf(char* buffer, u32 len, const char* fmt, ...)
     vsnprintf(buffer, len, fmt, args);
     va_end(args);
 }
-
-void CgsCore::StrCpy(char* dest, u32 len, const char* src)
-{
-    if (len == 0)
-        return;
-
-    u32 i = 0;
-    for (; i < len - 1 && src[i] != '\0'; ++i)
-        dest[i] = src[i];
-
-    dest[i] = '\0';
-}
-
-void CgsCore::StrCat(char* dest, u32 len, const char* src)
-{
-    if (len == 0)
-        return;
-
-    u32 destLen = 0;
-    while (destLen < len && dest[destLen] != '\0')
-        ++destLen;
-
-    u32 i = 0;
-    for (; destLen + i < len - 1 && src[i] != '\0'; ++i)
-        dest[destLen + i] = src[i];
-
-    dest[destLen + i] = '\0';
-}

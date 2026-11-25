@@ -1,6 +1,7 @@
 #pragma once
 
 #include "SDKs/EATech/include/rw/math/vpu/maskscalar.h"
+#include "SDKs/EATech/include/rw/math/vpu/vector_intrinsic_operation.h"
 
 namespace rw { namespace math { namespace vpu {
 inline MaskScalar::MaskScalar() {}
@@ -17,9 +18,7 @@ inline MaskScalar::MaskScalar(unsigned int value)
 inline bool MaskScalar::GetBool() const
 {
     // ARTIST821F0D78..98: not(all four FP lanes compare equal to zero).
-    unsigned int condition;
-    __vcmpeqfpR(mV, __vspltisw(0), &condition);
-    return (condition & 0x80u) == 0;
+    return !_asmIsEqualV4(mV, __vspltisw(0));
 }
 inline unsigned int MaskScalar::ToUInt32() const
 {

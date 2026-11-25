@@ -374,9 +374,12 @@ namespace CgsNetwork
         s32  GetLastError(EComponents leComponent) const;
         void ClearLastError(EComponents leComponent);
         s32  GetAndClearLastError(EComponents leComponent);
-        void SetConnApiGameCallback(ServerInterfaceComponentData::ServerInterfaceConnApiCallback lpfnCallback)
+        void SetConnApiComponentCallback(EComponents leComponent,
+                                         ServerInterfaceComponentData::ServerInterfaceConnApiCallback lpfnCallback)
         {
-            maComponents[E_COMPONENTS_GAMES].mConnApiCallback = lpfnCallback;
+            CGS_ASSERT_AT(maComponents[leComponent].mpComponent,
+                          "The component hasn't been registered!", CGS_ARTIST_CGSSERVERINTERFACEDIRTYSOCK_FILE, 830);
+            maComponents[leComponent].mConnApiCallback = lpfnCallback;
         }
 
         // The one ConnApi status-change listener outside the components (the players'

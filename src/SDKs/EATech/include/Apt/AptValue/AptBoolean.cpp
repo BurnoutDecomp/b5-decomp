@@ -9,11 +9,6 @@
 AptBoolean* AptBoolean::spBooleanFalse = 0;
 AptBoolean* AptBoolean::spBooleanTrue  = 0;
 
-bool AptBoolean::GetBool() const
-{
-    return mbValue;
-}
-
 // Create the two shared singletons -- called by AptValueInitialize (AptInit.cpp
 // @0x82B02800) after AptAllocatorInitialize wires gpNonGCPoolManager; the
 // null-pool guard keeps a pre-boot call inert (the singletons come up with the

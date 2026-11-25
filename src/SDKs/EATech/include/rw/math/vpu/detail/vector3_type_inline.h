@@ -6,6 +6,7 @@
 // their presence is not a claim that every swizzle/NaN/W-lane case is recovered.
 
 #include "SDKs/EATech/include/rw/math/vpu/vector3.h"
+#include "SDKs/EATech/include/rw/math/vpu/vector_intrinsic_operation.h"
 
 namespace rw
 {
@@ -162,11 +163,8 @@ inline void Vector3::SetZero()
 // =====================================================================================
 
 inline Vector3::Vector3(VecFloat::InParam x, VecFloat::InParam y, VecFloat::InParam z)
+    : mV(_asmCreateVectorAxis<VectorAxisX, VectorAxisY, VectorAxisZ>(x.mV, y.mV, z.mV))
 {
-    // mV(_asmCreateVectorAxis<X,Y,Z>(x.mV, y.mV, z.mV)): lane0<-x.X, lane1<-y.Y, lane2<-z.Z.
-    mV.v[0] = x.mV.v[VectorAxisX];
-    mV.v[1] = y.mV.v[VectorAxisY];
-    mV.v[2] = z.mV.v[VectorAxisZ];
 }
 
 inline Vector3::Vector3(VecFloatRefIndex::InParam x,

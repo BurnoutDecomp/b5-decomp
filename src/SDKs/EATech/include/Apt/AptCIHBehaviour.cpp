@@ -1914,7 +1914,7 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
                         // Pop the call result off the operand stack.
                         // x64 FIX (2026-07-05, the AptValueVector member-pun class):
                         // named-member pop instead of the console triple pun.
-                        if (gAptActionInterpreter.mnStackTop > 0)
+                        if (gAptActionInterpreter.mOperandStack.mnTop > 0)
                             gAptActionInterpreter.stackPop();
                     }
                 }

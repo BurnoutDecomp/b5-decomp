@@ -159,7 +159,7 @@ namespace rw
                 AsyncOp* lpAfter = 0;         // v5
                 u64 lu64NewEnd = 0;                 // v6
                 if (lpOp->mbIsReadOp)
-                    lu64NewEnd = mpDriver->QueryLocation(lpOp->mpStream->mpDriverKey) + lpOp->mu64Position;
+                    lu64NewEnd = mpDriver->QueryLocation(lpOp->mpFileHandle->mpFile) + lpOp->mu64Position;
 
                 for (AsyncOp* lpCur = mOpList.mpHead; lpCur; lpCur = lpCur->mpNext)
                 {
@@ -168,7 +168,7 @@ namespace rw
                             && gpFileSysManager->mbSortByPosition == 1
                             && lpOp->mbIsReadOp
                             && lpCur->mbIsReadOp
-                            && lu64NewEnd < mpDriver->QueryLocation(lpCur->mpStream->mpDriverKey) + lpCur->mu64Position))
+                            && lu64NewEnd < mpDriver->QueryLocation(lpCur->mpFileHandle->mpFile) + lpCur->mu64Position))
                     {
                         break;
                     }
@@ -216,7 +216,7 @@ namespace rw
 
                 if (lpOp->mbIsReadOp && gpFileSysManager->mbSortByPosition == 1)
                 {
-                    u64 lu64Location = mpDriver->QueryLocation(lpOp->mpStream->mpDriverKey);  // v5
+                    u64 lu64Location = mpDriver->QueryLocation(lpOp->mpFileHandle->mpFile);  // v5
                     u64 lu64Budget = mu64ReadBudget;                                          // v6
                     u64 lu64End = lu64Location + lpChosen->mu64Position;                     // v2
 
@@ -229,7 +229,7 @@ namespace rw
 
                         while (lpCur && lpCur->mbIsReadOp && lpCur->miPriority == lpChosen->miPriority)
                         {
-                            lu64CandEnd = mpDriver->QueryLocation(lpCur->mpStream->mpDriverKey) + lpCur->mu64Position;
+                            lu64CandEnd = mpDriver->QueryLocation(lpCur->mpFileHandle->mpFile) + lpCur->mu64Position;
                             if (mu64ReadBudget < lu64CandEnd)
                             {
                                 lbFound = true;
@@ -305,12 +305,12 @@ namespace rw
                         AsyncOp* lpServe = lpThis->CheckForOptimalReadOp(lpOp);  // v5
                         lpThis->mLock.Unlock();
 
-                        int liResult = lpServe->mpfnDoIo(lpServe);                // (*(v5+68))(v5)
-                        if (liResult)
+                        AsyncOp::OpStatus leStatus = lpServe->mpfnDoIo(lpServe);                // (*(v5+68))(v5)
+                        if (leStatus != AsyncOp::OPSTATUS_PENDING)
                         {
                             lpThis->mCompletionLock.Lock(EA::Thread::kTimeoutNone);
                             CompletionCallback lpfnComplete = lpServe->mpfnComplete; // v7 = *(v5+24)
-                            lpServe->miResult = liResult;                         // *(v5+4) = v6
+                            lpServe->mStatus = leStatus;                         // *(v5+4) = v6
                             ::MemoryBarrier();                                     // lwsync: publish before callback
                             lpfnComplete(lpServe);                                 // v7(v5)
                             lpThis->mCompletion.Signal(true);                      // Condition::Signal(a1+224, 1)
@@ -499,17 +499,17 @@ namespace rw
             // -----------------------------------------------------------------------------
             // Device::Wait
             //
-            // Under the completion lock: until the op has a result (miResult, published
+            // Under the completion lock: until the op has a result (mStatus, published
             // with an lwsync by the worker) or the absolute timeout has passed, sleep on the
             // completion condition. Returns the completion-lock Unlock result.
             // -----------------------------------------------------------------------------
-            int Device::Wait(AsyncOp* lpOp, const EA::Thread::ThreadTime& lTimeoutAbsolute)
+            int Device::Wait(const AsyncOp* lpOp, const EA::Thread::ThreadTime& lTimeoutAbsolute)
             {
                 mCompletionLock.Lock(EA::Thread::kTimeoutNone);
                 for (;;)
                 {
                     ::MemoryBarrier();                                  // lwsync
-                    if (lpOp->miResult != 0)
+                    if (lpOp->mStatus != AsyncOp::OPSTATUS_PENDING)
                         break;
                     if (!(EA::Thread::GetThreadTime() < lTimeoutAbsolute))
                         break;

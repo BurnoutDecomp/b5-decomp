@@ -70,16 +70,16 @@ namespace
     // The shared two-operand collapse: release the operands, push the result (AddRef).
     inline void CollapseTwo(AptActionInterpreter* pInterp, AptValue* pResult)
     {
-        int top = pInterp->mnStackTop;
+        int top = pInterp->mOperandStack.mnTop;
         if (top >= 2)
         {
-            pInterp->mpStack[top - 1]->Release();
-            pInterp->mpStack[top - 2]->Release();
+            pInterp->mOperandStack.mppItems[top - 1]->Release();
+            pInterp->mOperandStack.mppItems[top - 2]->Release();
             top -= 2;
-            pInterp->mnStackTop = top;
+            pInterp->mOperandStack.mnTop = top;
         }
-        pInterp->mpStack[top] = pResult;
-        pInterp->mnStackTop = top + 1;
+        pInterp->mOperandStack.mppItems[top] = pResult;
+        pInterp->mOperandStack.mnTop = top + 1;
         pResult->AddRef();
     }
 
@@ -142,8 +142,8 @@ namespace
 // applies the SWF-v7 undefined rule, then compares matching tags or numeric values.
 void AptActionInterpreter::_FunctionAptActionStrictEquals(AptActionInterpreter* pInterp, LocalContextT*)
 {
-    AptValue* pTop = ResolveCIHToUndefined(pInterp->mpStack[pInterp->mnStackTop - 1]);
-    AptValue* pUnder = ResolveCIHToUndefined(pInterp->mpStack[pInterp->mnStackTop - 2]);
+    AptValue* pTop = ResolveCIHToUndefined(pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1]);
+    AptValue* pUnder = ResolveCIHToUndefined(pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 2]);
 
     if (AptGetSwfVersion() == 7 && (!pTop->getIsDefined() || !pUnder->getIsDefined()))
     {
@@ -193,8 +193,8 @@ void AptActionInterpreter::_FunctionAptActionStrictEquals(AptActionInterpreter* 
 // ---------------------------------------------------------------------------
 void AptActionInterpreter::_FunctionAptActionEquals(AptActionInterpreter* pInterp, LocalContextT*)
 {
-    AptValue* pTop   = pInterp->mpStack[pInterp->mnStackTop - 1];
-    AptValue* pUnder = pInterp->mpStack[pInterp->mnStackTop - 2];
+    AptValue* pTop   = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
+    AptValue* pUnder = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 2];
 
     AptValue* pResult = gpUndefinedValue;
     if (ShouldCompute(pTop, pUnder))
@@ -219,8 +219,8 @@ void AptActionInterpreter::_FunctionAptActionEquals(AptActionInterpreter* pInter
 // ---------------------------------------------------------------------------
 void AptActionInterpreter::_FunctionAptActionLessThan(AptActionInterpreter* pInterp, LocalContextT*)
 {
-    AptValue* pTop   = pInterp->mpStack[pInterp->mnStackTop - 1];
-    AptValue* pUnder = pInterp->mpStack[pInterp->mnStackTop - 2];
+    AptValue* pTop   = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
+    AptValue* pUnder = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 2];
 
     AptValue* pResult = gpUndefinedValue;
     if (ShouldCompute(pTop, pUnder))
@@ -245,8 +245,8 @@ void AptActionInterpreter::_FunctionAptActionLessThan(AptActionInterpreter* pInt
 // ---------------------------------------------------------------------------
 void AptActionInterpreter::_FunctionAptActionGreater(AptActionInterpreter* pInterp, LocalContextT*)
 {
-    AptValue* pTop   = pInterp->mpStack[pInterp->mnStackTop - 1];
-    AptValue* pUnder = pInterp->mpStack[pInterp->mnStackTop - 2];
+    AptValue* pTop   = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
+    AptValue* pUnder = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 2];
 
     AptValue* pResult = gpUndefinedValue;
     if (ShouldCompute(pTop, pUnder))
@@ -281,8 +281,8 @@ void AptActionInterpreter::_FunctionAptActionGreater(AptActionInterpreter* pInte
 // ---------------------------------------------------------------------------
 void AptActionInterpreter::_FunctionAptActionLessThan2(AptActionInterpreter* pInterp, LocalContextT*)
 {
-    AptValue* pTop   = pInterp->mpStack[pInterp->mnStackTop - 1];   // v4
-    AptValue* pUnder = pInterp->mpStack[pInterp->mnStackTop - 2];   // v5
+    AptValue* pTop   = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];   // v4
+    AptValue* pUnder = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 2];   // v5
 
     AptValue* pResult = gpUndefinedValue;
     if (ShouldCompute(pTop, pUnder))
@@ -339,8 +339,8 @@ void AptActionInterpreter::_FunctionAptActionLessThan2(AptActionInterpreter* pIn
 // ---------------------------------------------------------------------------
 void AptActionInterpreter::_FunctionAptActionEquals2(AptActionInterpreter* pInterp, LocalContextT*)
 {
-    AptValue* pTop   = pInterp->mpStack[pInterp->mnStackTop - 1];   // v4
-    AptValue* pUnder = pInterp->mpStack[pInterp->mnStackTop - 2];   // v5
+    AptValue* pTop   = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];   // v4
+    AptValue* pUnder = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 2];   // v5
 
     // CIH -> undefined redirect (both operands).
     pTop   = ResolveCIHToUndefined(pTop);

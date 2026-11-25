@@ -5,7 +5,6 @@
 #include "SDKs/EATech/include/NFSMix/MixerAllocator.hpp" // g_pMixerAllocator (relocated InitSnapshots/DestroySnapshots)
 #include <cstring>                                        // std::memset (relocated InitSnapshots)
 #include "SDKs/EATech/include/NFSMix/NFSMixRecords.hpp"  // stMasterMixChProc / ...SharedData / ...Params
-#include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
 #include "rw/core/stdc/stdc.h"                            // rw::core::stdc::MemCopy
 
 // ===========================================================================
@@ -15,11 +14,8 @@
 //  status array (mpSnapshots). Each frame Update() ramps the winning snapshot's
 //  channel volumes into the bound NFS master-mix channel procs.
 //
-//  The X360 routes each range check through mpOwner's assert vtable (slot 4); as
-//  elsewhere in the NFS mix system (NFSMixMap::GetMasterMixChProc) that host-assert
-//  collapses to CGS_ASSERT with the verbatim rodata message. The two float consts
-//  the DSP loops use are flt_82147C24 == -1.0f (the "channel off" ramp value) and
-//  flt_82001CC0 == 0.0f (the ramp-done threshold).
+//  Range and type checks use IDynamicMixer::DMixAssert through the mixer owner.
+//  Snapshot timers use -1.0f for an inactive ramp and 0.0f for its completion.
 // ===========================================================================
 
 namespace Nicotine
@@ -32,7 +28,7 @@ SnapshotMixer* g_pSnapshotMixer = 0;
 // ---------------------------------------------------------------------------
 // Construct @0x82B46CE8
 // ---------------------------------------------------------------------------
-void SnapshotMixer::Construct(void* lpOwner)
+void SnapshotMixer::Construct(IDynamicMixer* lpOwner)
 {
     mpOwner        = lpOwner;   // +0x00
     meState        = 1;         // +0x08
@@ -42,8 +38,8 @@ void SnapshotMixer::Construct(void* lpOwner)
     miNumChannels  = 0;         // +0x14
     miNumSnapshots = 0;         // +0x18
     mbForceUpdate  = 0;         // +0x1C
-    mbOverride     = 0;         // +0x1D
     g_pSnapshotMixer = this;    // off_83250014
+    mbOverride     = 0;         // +0x1D
 }
 
 // ---------------------------------------------------------------------------
@@ -51,10 +47,10 @@ void SnapshotMixer::Construct(void* lpOwner)
 // ---------------------------------------------------------------------------
 SnapshotChannel* SnapshotMixer::GetChannel(int liIndex)
 {
-    CGS_ASSERT(liIndex < miNumChannels, "SnapshotMixer : Channel out of range\n");
-    if (miNumChannels <= 0)
-        return 0;
-    return &mpChannels[liIndex];
+    mpOwner->DMixAssert(liIndex < miNumChannels, "SnapshotMixer : Channel out of range\n");
+    if (miNumChannels > 0)
+        return &mpChannels[liIndex];
+    return 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -65,7 +61,7 @@ SnapshotChannel* SnapshotMixer::GetChannel(int liIndex)
 // ---------------------------------------------------------------------------
 SnapshotChannelData* SnapshotMixer::GetSnapshot(int liIndex)
 {
-    CGS_ASSERT(liIndex < miNumSnapshots, "SnapshotMixer : Snapshot out of range\n");
+    mpOwner->DMixAssert(liIndex < miNumSnapshots, "SnapshotMixer : Snapshot out of range\n");
 
     u8* lpData = reinterpret_cast<u8*>(mpSnapshotHdr) + 16;      // +0x10 (past the head)
     lpData += (12 + 8 * liIndex) * miNumChannels;               // descriptor table + idx*stride
@@ -77,7 +73,7 @@ SnapshotChannelData* SnapshotMixer::GetSnapshot(int liIndex)
 // ---------------------------------------------------------------------------
 int SnapshotMixer::GetSnapshotChannelId(int liChannelIdx)
 {
-    CGS_ASSERT(liChannelIdx < miNumChannels, "SnapshotMixer : Channel index out of range\n");
+    mpOwner->DMixAssert(liChannelIdx < miNumChannels, "SnapshotMixer : Channel index out of range\n");
     return static_cast<int>(mpSnapshotHdr->maChannels[liChannelIdx].mChannelId);
 }
 
@@ -108,11 +104,9 @@ SnapshotChannelData* SnapshotMixer::GetSnapshotChannel(int liSnapshotIdx, int li
 // ---------------------------------------------------------------------------
 bool SnapshotMixer::IsStatusActive(int liSnapshotIdx)
 {
-    if (meState != 2)
-        return false;
-    if (miNumSnapshots <= 0)
-        return false;
-    return (mpSnapshots[liSnapshotIdx].mFlags & 1) != 0;
+    if (meState == 2 && miNumSnapshots > 0 && (mpSnapshots[liSnapshotIdx].mFlags & 1))
+        return true;
+    return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -167,7 +161,7 @@ void SnapshotMixer::TurnOnSnapshot(int liSnapshotIdx)
 // ---------------------------------------------------------------------------
 void SnapshotMixer::SetSnapshot(int liSnapshotIdx, bool lbActive)
 {
-    CGS_ASSERT(mpSnapshotHdr->meType == 1,
+    mpOwner->DMixAssert(mpSnapshotHdr->meType == 1,
                "SnapshotMixer::SetSnapshot : Snapshot data is not active state type.\n");
 
     if (!mbOverride && meState == 2 && liSnapshotIdx < miNumSnapshots)
@@ -230,7 +224,7 @@ void SnapshotMixer::SetSnapshotOverride(bool lbOverride)
 // ---------------------------------------------------------------------------
 void SnapshotMixer::Recall(int liSnapshotIdx)
 {
-    CGS_ASSERT(mpSnapshotHdr->meType == 2,
+    mpOwner->DMixAssert(mpSnapshotHdr->meType == 2,
                "SnapshotMixer::Recall : Snapshot data is not recall type.\n");
 
     if (meState != 2 || liSnapshotIdx >= miNumSnapshots)
@@ -256,7 +250,7 @@ void SnapshotMixer::Recall(int liSnapshotIdx)
 // Timed recall @0x82B478B8: the supplied duration replaces the stored ramp.
 void SnapshotMixer::Recall(int liSnapshotIdx, float lfDuration)
 {
-    static_cast<IDynamicMixer*>(mpOwner)->DMixAssert(mpSnapshotHdr->meType == 2,
+    mpOwner->DMixAssert(mpSnapshotHdr->meType == 2,
         "SnapshotMixer::Recall : Snapshot data is not recall type.\n");
     if (meState != 2 || liSnapshotIdx >= miNumSnapshots)
         return;
@@ -658,42 +652,44 @@ namespace Nicotine {
     //   5 -> 1 - LUT[-trunc(ratio*511 - 511)]         (console: fmsubs flt_821478B0)
     //   7 -> curve(ratio, 5)^2                        (fmuls)
     //   9 -> ratio (raw)            default -> 0.0
-    // The [0,1] bounds check only feeds the console's IDynamicMixer vtbl+0x10 assert
-    // hook ("lfInput out of bounds. [0,1]") -- that virtual slot is un-modelled in
-    // IDynamicMixer.hpp (out of this TU's file set) and is side-effect-free on the
-    // shipped path, so it is documented rather than dispatched; the raw (unasserted)
-    // ratio indexes the LUT exactly as on the console.
-    double SnapshotVolumeCurve(double lfRatio, int liCurveType)
+    // ARTIST checks the input with IDynamicMixer::DMixAssert and uses the supplied
+    // ratio for the lookup.
+    f32 SnapshotVolumeCurve(f32 lfRatio, int liCurveType)
     {
+        const f32 lfOne = 1.0f;
+        const f32 lfZero = 0.0f;
+        const bool lbInBounds = lfRatio <= lfOne && lfRatio >= lfZero;
+        IDynamicMixer::GetInstance()->DMixAssert(lbInBounds, "lfInput out of bounds. [0,1]");
+
         switch (liCurveType)
         {
-            case 0: case 2: case 4: case 6: case 8:              // even = inverted odd twin
-                return 1.0 - SnapshotVolumeCurve(lfRatio, liCurveType + 1);
+            case 9:
+                return lfRatio;
             case 1:
             {
-                const s32 liIndex = static_cast<s32>(static_cast<f32>(lfRatio) * -511.0f);   // flt_820AD414 (fctiwz)
+                const s32 liIndex = static_cast<s32>(lfRatio * -511.0f);   // flt_820AD414 (fctiwz)
                 return KF_SnapshotVolumeCurve[-liIndex];         // base - 4*liIndex
             }
             case 3:
             {
-                const f32 lfUp = static_cast<f32>(SnapshotVolumeCurve(lfRatio, 1));
+                const f32 lfUp = SnapshotVolumeCurve(lfRatio, 1);
                 return lfUp * lfUp;                              // fmuls
             }
             case 5:
             {
-                const s32 liIndex = static_cast<s32>(
-                    static_cast<f32>(lfRatio) * 511.0f - 511.0f);   // flt_821478B0 (fmsubs; <= 0)
-                return 1.0f - KF_SnapshotVolumeCurve[-liIndex];  // fsubs 1.0 - LUT
+                const f32 lfScale = 511.0f;
+                const s32 liIndex = static_cast<s32>(lfRatio * lfScale - lfScale);
+                return lfOne - *(KF_SnapshotVolumeCurve - liIndex);
             }
             case 7:
             {
-                const f32 lfDown = static_cast<f32>(SnapshotVolumeCurve(lfRatio, 5));
+                const f32 lfDown = SnapshotVolumeCurve(lfRatio, 5);
                 return lfDown * lfDown;                          // fmuls
             }
-            case 9:
-                return lfRatio;                                  // identity (raw, unclamped)
+            case 0: case 2: case 4: case 6: case 8:
+                return lfOne - SnapshotVolumeCurve(lfRatio, liCurveType + 1);
             default:
-                return 0.0;                                      // flt_82001CC0
+                return lfZero;
         }
     }
 } // namespace Nicotine (relocated block)

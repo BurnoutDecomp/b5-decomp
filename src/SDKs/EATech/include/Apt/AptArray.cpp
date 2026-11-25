@@ -220,8 +220,8 @@ extern AptActionInterpreter gAptActionInterpreter;
 
 // The global native-method arg stack, defined in AptGlobals.cpp and published by
 // the interpreter's native-call dispatch (AptActionInterpreterInterpHelpers.cpp
-// saves/installs X360 off_8324E768 = gAptActionInterpreter.mpStack, dword_8324E760
-// = its mnStackTop around each native call). The i-th AS argument (i=0 = last pushed) is
+// saves/installs X360 off_8324E768 = gAptActionInterpreter.mOperandStack.mppItems, dword_8324E760
+// = its mOperandStack.mnTop around each native call). The i-th AS argument (i=0 = last pushed) is
 // gppAptNativeArgStack[gnAptNativeArgCount - 1 - i].
 extern AptValue** gppAptNativeArgStack;   // off_8324E768
 extern int        gnAptNativeArgCount;    // dword_8324E760
@@ -689,15 +689,15 @@ int AptArray::scriptFunctionSortFunc(AptValue* const* ppA, AptValue* const* ppB)
     // CleanupAfterExecution over the saved base).
     AptValue** const lppSavedRegs = AptScriptFunctionBase::PushStaticData();
 
-    gAptActionInterpreter.mpStack[gAptActionInterpreter.mnStackTop++] = pB;
+    gAptActionInterpreter.mOperandStack.mppItems[gAptActionInterpreter.mOperandStack.mnTop++] = pB;
     pB->AddRef();
-    gAptActionInterpreter.mpStack[gAptActionInterpreter.mnStackTop++] = pA;
+    gAptActionInterpreter.mOperandStack.mppItems[gAptActionInterpreter.mOperandStack.mnTop++] = pA;
     pA->AddRef();
 
     gAptActionInterpreter.callFunction(gpSortScriptContext, gpSortScriptFunction,
                                        2, 0, 0);
     const int nResult =
-        gAptActionInterpreter.mpStack[gAptActionInterpreter.mnStackTop - 1]->toInteger();
+        gAptActionInterpreter.mOperandStack.mppItems[gAptActionInterpreter.mOperandStack.mnTop - 1]->toInteger();
     gAptActionInterpreter.stackPop();
     gAptActionInterpreter.CleanupAfterExecution(lppSavedRegs);
     return nResult;

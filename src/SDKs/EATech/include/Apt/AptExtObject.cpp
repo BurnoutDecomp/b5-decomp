@@ -53,7 +53,7 @@
 // ---------------------------------------------------------------------------
 // The shared Apt action interpreter instance (X360 &dword_8324E760). It is the
 // `this` the X360 GetVariable/SetVariable pass to getVariable/setVariable, and the
-// object whose mnStackTop (dword_8324E760, +0) / mpStack (off_8324E768, +8) GetParam
+// object whose mOperandStack.mnTop (dword_8324E760, +0) / mOperandStack.mppItems (off_8324E768, +8) GetParam
 // reads. Defined in AptGlobals.cpp (&dword_8324E760); declared extern here.
 // ---------------------------------------------------------------------------
 extern AptActionInterpreter gAptActionInterpreter;          // &dword_8324E760
@@ -180,13 +180,13 @@ void AptExtObject::SetFunction(const char* pName, AptValue* pFunction)
 // ---------------------------------------------------------------------------
 // GetParam @0x82ADC270 -- the apt native-method argument fetch: the iIndex-th
 // ActionScript call argument off the interpreter operand stack. The console reads
-// mpStack[mnStackTop - iIndex - 1] (off_8324E768[dword_8324E760 - iIndex - 1]); the
+// mOperandStack.mppItems[mOperandStack.mnTop - iIndex - 1] (off_8324E768[dword_8324E760 - iIndex - 1]); the
 // value is returned only when it exists AND is defined (the `(bitfield >> 27) & 1`
 // test == big-endian bit 4 == mbIsDefined == getIsDefined()), else null.
 // ---------------------------------------------------------------------------
 AptValue* AptExtObject::GetParam(int iIndex)
 {
-    AptValue* pResult = gAptActionInterpreter.mpStack[gAptActionInterpreter.mnStackTop - iIndex - 1];
+    AptValue* pResult = gAptActionInterpreter.mOperandStack.mppItems[gAptActionInterpreter.mOperandStack.mnTop - iIndex - 1];
     if (!pResult || !pResult->getIsDefined())
         return 0;
     return pResult;

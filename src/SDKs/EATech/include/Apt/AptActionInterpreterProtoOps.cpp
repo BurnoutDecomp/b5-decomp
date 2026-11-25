@@ -64,8 +64,8 @@ namespace
 void AptActionInterpreter::_FunctionAptActionExtends(AptActionInterpreter* pInterp,
                                                      LocalContextT* /*pContext*/)
 {
-    AptValue* pSuper = pInterp->mpStack[pInterp->mnStackTop - 1];
-    AptValue* pSub   = pInterp->mpStack[pInterp->mnStackTop - 2];
+    AptValue* pSuper = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
+    AptValue* pSub   = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 2];
 
     if (pSuper->ContainsNativeHashVirtual() && IsScriptClass(pSub))
     {
@@ -92,8 +92,8 @@ void AptActionInterpreter::_FunctionAptActionExtends(AptActionInterpreter* pInte
 void AptActionInterpreter::_FunctionAptActionImplementsOp(AptActionInterpreter* pInterp,
                                                           LocalContextT* /*pContext*/)
 {
-    AptValue* pClass = pInterp->mpStack[pInterp->mnStackTop - 1];
-    const int nCount = pInterp->mpStack[pInterp->mnStackTop - 2]->toInteger();
+    AptValue* pClass = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
+    const int nCount = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 2]->toInteger();
 
     if (IsScriptClass(pClass)
         || (pClass->getVtblIndex() == AptVFT_NativeFunction && pClass->getIsDefined()))
@@ -101,7 +101,7 @@ void AptActionInterpreter::_FunctionAptActionImplementsOp(AptActionInterpreter* 
         AptArray* pInterfaces = new AptArray();
         for (int i = 0; i < nCount; ++i)
         {
-            AptValue* pIface = pInterp->mpStack[pInterp->mnStackTop - i - 3];
+            AptValue* pIface = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - i - 3];
             AptNativeHash* pIfaceHash = pIface->GetNativeHashVirtual();
             AptValue* pProto = pIfaceHash->GetPrototype();
             if (!pProto) { pProto = new AptPrototype(); pIfaceHash->SetPrototype(pProto); }
@@ -124,8 +124,8 @@ void AptActionInterpreter::_FunctionAptActionImplementsOp(AptActionInterpreter* 
 void AptActionInterpreter::_FunctionAptActionNewObject(AptActionInterpreter* pInterp,
                                                        LocalContextT* pContext)
 {
-    AptValue* pNameVal  = pInterp->mpStack[pInterp->mnStackTop - 1];   // class name (top)
-    AptValue* pCountVal = pInterp->mpStack[pInterp->mnStackTop - 2];   // arg count (under)
+    AptValue* pNameVal  = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];   // class name (top)
+    AptValue* pCountVal = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 2];   // arg count (under)
 
     EAStringC scratch;
     const EAStringC* pClassName = AptValue::Get_ToString(pNameVal, &scratch);
@@ -139,13 +139,13 @@ void AptActionInterpreter::_FunctionAptActionNewObject(AptActionInterpreter* pIn
 
     if (pObject)
     {
-        pInterp->mpStack[pInterp->mnStackTop++] = pObject;   // inlined stackPush
+        pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = pObject;   // inlined stackPush
         pObject->AddRef();                                   // the stack takes a ref
         pObject->Release();                                  // drop the construction ref
     }
     else
     {
-        pInterp->mpStack[pInterp->mnStackTop++] = gpUndefinedValue;
+        pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = gpUndefinedValue;
         gpUndefinedValue->AddRef();
     }
 }
@@ -160,7 +160,7 @@ void AptActionInterpreter::_FunctionAptActionNewObject(AptActionInterpreter* pIn
 void AptActionInterpreter::_FunctionAptActionInitObject(AptActionInterpreter* pInterp,
                                                         LocalContextT* pContext)
 {
-    const int nPairs = pInterp->mpStack[pInterp->mnStackTop - 1]->toInteger();
+    const int nPairs = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1]->toInteger();
     pInterp->stackPop();                                     // pop the pair count
 
         AptValue* pObject = pInterp->_createObject(   // real member @0x82B08088
@@ -176,8 +176,8 @@ void AptActionInterpreter::_FunctionAptActionInitObject(AptActionInterpreter* pI
         while (nPairLeft > 0)
         {
             // top-down: each pair is [value, name] with name above value.
-            AptValue* pNameVal = pInterp->mpStack[pInterp->mnStackTop - nFromTop - 2];
-            AptValue* pValue   = pInterp->mpStack[pInterp->mnStackTop - nFromTop - 1];
+            AptValue* pNameVal = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - nFromTop - 2];
+            AptValue* pValue   = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - nFromTop - 1];
 
             EAStringC scratch;
             const EAStringC* pName = AptValue::Get_ToString(pNameVal, &scratch);
@@ -188,14 +188,14 @@ void AptActionInterpreter::_FunctionAptActionInitObject(AptActionInterpreter* pI
         }
 
         pInterp->stackPop(2 * nPairs);                       // pop the consumed pairs
-        pInterp->mpStack[pInterp->mnStackTop++] = pObject;   // inlined stackPush
+        pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = pObject;   // inlined stackPush
         pObject->AddRef();
         pObject->Release();                                  // drop the construction ref
     }
     else
     {
         pInterp->stackSafePop(2 * nPairs);
-        pInterp->mpStack[pInterp->mnStackTop++] = gpUndefinedValue;
+        pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = gpUndefinedValue;
         gpUndefinedValue->AddRef();
     }
 }
@@ -246,7 +246,7 @@ void AptActionInterpreter::_FunctionAptActionDefineFunction(AptActionInterpreter
     else
     {
         // Anonymous function -> leave it on the operand stack.
-        pInterp->mpStack[pInterp->mnStackTop++] = pFunction;   // inlined stackPush
+        pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = pFunction;   // inlined stackPush
         pFunction->AddRef();
     }
 }
@@ -289,7 +289,7 @@ void AptActionInterpreter::_FunctionAptActionDefineFunction2(AptActionInterprete
     else
     {
         // Anonymous function -> leave it on the operand stack.
-        pInterp->mpStack[pInterp->mnStackTop++] = pFunction;   // inlined stackPush
+        pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = pFunction;   // inlined stackPush
         pFunction->AddRef();
     }
 }

@@ -478,8 +478,8 @@ extern u8  gAptAStickRight[];    // unk_8324E2D8 (player stride 16 bytes)
 // The interpreter VM singleton: the per-frame action / timer drains run their
 // action streams + function calls through the global AptActionInterpreter (X360
 // &dword_8324E760, DEFINED in AptGlobals.cpp; class homed in
-// AptActionInterpreter.cpp). Its operand stack lives at +0x00 (mnStackTop/
-// mnStackCapacity/mpStack) and its CIH/target stack at +0x24 (mnCIHStackTop/
+// AptActionInterpreter.cpp). Its operand stack lives at +0x00 (mOperandStack.mnTop/
+// mOperandStack.mnCapacity/mOperandStack.mppItems) and its CIH/target stack at +0x24 (mnCIHStackTop/
 // mnCIHStackCapacity/mpCIHStack) -- both AptValueVector-shaped {count,capacity,
 // array} triples, which the X360 pops via AptValueVector::pop(). The "current
 // event id" scratch field the drains stamp before a run is at +0x48 (mnInput ==
@@ -1717,13 +1717,13 @@ int AptAnimationTarget::RunActions()
                     lpTopCIH->Release();
                 --gAptActionInterpreter.mnCIHStackTop;
             }
-            if (gAptActionInterpreter.mnStackTop > 0)
+            if (gAptActionInterpreter.mOperandStack.mnTop > 0)
                 gAptActionInterpreter.stackPop();               // AptValue_::Pop (Release + drop)
             }   // (null-context guard)
         }
 
         // After a run leaves stray operands, drop the top one (x64: named-member pop).
-        if (gAptActionInterpreter.mnStackTop > 0)
+        if (gAptActionInterpreter.mOperandStack.mnTop > 0)
         {
             gAptActionInterpreter.stackPop();
         }
@@ -1850,8 +1850,8 @@ int AptAnimationTarget::TickIntervalTimers(int nDeltaMs)
             {
                 AptValue* lpParam =
                     lrTimer.mParams.mppItems[lrTimer.mParams.mnTop - liParam - 1];   // *(4*(top-i-1)+items)
-                gAptActionInterpreter.mpStack[gAptActionInterpreter.mnStackTop] = lpParam;
-                ++gAptActionInterpreter.mnStackTop;
+                gAptActionInterpreter.mOperandStack.mppItems[gAptActionInterpreter.mOperandStack.mnTop] = lpParam;
+                ++gAptActionInterpreter.mOperandStack.mnTop;
                 lpParam->AddRef();  // (**v23)(v23) vtbl[0] AddRef
             }
 
@@ -1869,7 +1869,7 @@ int AptAnimationTarget::TickIntervalTimers(int nDeltaMs)
             gAptActionInterpreter.CleanupAfterExecution(lpSavedHeap);
 
             // Pop every operand the call left on the stack.
-            gAptActionInterpreter.stackSafePop(gAptActionInterpreter.mnStackTop);  // Burnout_X360_Artist_01e3_0
+            gAptActionInterpreter.stackSafePop(gAptActionInterpreter.mOperandStack.mnTop);  // Burnout_X360_Artist_01e3_0
 
             // mr r3, r29 (lpBound) is set before the Release branch, so r3/result
             // carries the value pointer across the void Release (vtbl[1], +4).

@@ -77,7 +77,7 @@ extern AptCharacter* findCharacterInLibrary(AptCIH* pNode, EAStringC* pName, cha
 
 // ---------------------------------------------------------------------------
 // The global native-method arg stack (X360 off_8324E768 = gAptActionInterpreter.
-// mpStack, dword_8324E760 = its mnStackTop). Storage HOMED in AptGlobals.cpp; the
+// mOperandStack.mppItems, dword_8324E760 = its mOperandStack.mnTop). Storage HOMED in AptGlobals.cpp; the
 // VM native-call dispatch (AptActionInterpreterInterpHelpers.cpp) fills them around
 // each native call. The i-th AS argument (i=0 = last pushed) is
 // gppAptNativeArgStack[gnAptNativeArgCount - 1 - i].
@@ -254,7 +254,7 @@ AptValue* AptCIH::_gotoAndX(AptValue* pContext, int nArgCount, int bPlay)
         // operand-stack top through the NAMED interpreter members (the punned
         // vector view reads its item array from a garbage offset on x64).
         AptValue* const pArg =
-            gAptActionInterpreter.mpStack[gAptActionInterpreter.mnStackTop - 1];
+            gAptActionInterpreter.mOperandStack.mppItems[gAptActionInterpreter.mOperandStack.mnTop - 1];
 
         AptCharacterInst* const pInst = pNode->GetCharacterInst();   // +0x20
         if ((pInst->mnType) != 15)        // tag 15 -> no-op (x64 low-6-bit tag)
@@ -470,7 +470,7 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_removeTextField(AptValue* pContext
 // ---------------------------------------------------------------------------
 // The process-wide AS VM (storage HOMED in AptGlobals.cpp; the interpreter TUs are
 // built). The X360 passes its base address (&dword_8324E760 == the interpreter's
-// mnStackTop slot [c:0x00]) as the `this` to the clone/loadVariables behavioural
+// mOperandStack.mnTop slot [c:0x00]) as the `this` to the clone/loadVariables behavioural
 // entry points below; declared as the extern global so the calls keep the exact
 // shape. (The same singleton whose stacks back gppAptNativeArgStack /
 // gnAptNativeArgCount above.)

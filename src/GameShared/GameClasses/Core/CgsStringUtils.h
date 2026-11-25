@@ -1,5 +1,9 @@
 #pragma once
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
+
+#include <string.h>
 
 // Global legacy helper (all-caps symbol preserved for cross-build identity):
 // Lower-cases up to uMaxLen characters in place (DecFIGS CgsStringUtils.cpp:46).
@@ -10,8 +14,33 @@ namespace CgsCore
 
     extern void SPrintf(char* buffer, u32 len, const char* fmt, ...);
     extern void SnPrintf(char* buffer, u32 len, const char* fmt, ...);
-    extern void StrCpy(char* dest, u32 len, const char* src);
-    extern void StrCat(char* dest, u32 len, const char* src);
+#define CGS_ARTIST_STRING_UTILS_FILE "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h"
+
+    __forceinline void StrnCpy(char* lpcDest, const char* lpcSource, u32 luBytes)
+    {
+        CGS_ASSERT_STREAM_AT(strlen(lpcSource) < luBytes, "String too long: " << lpcSource,
+            CGS_ARTIST_STRING_UTILS_FILE, 55);
+        strncpy(lpcDest, lpcSource, luBytes);
+    }
+
+    __forceinline void StrCpy(char* lpcDest, u32 luBytes, const char* lpcSource)
+    {
+        CGS_ASSERT_STREAM_AT(strlen(lpcSource) < luBytes,
+            "String " << lpcSource << " is too long. Buffer size = " << luBytes
+                << ", string length = " << static_cast<u32>(strlen(lpcSource)) << "\n",
+            CGS_ARTIST_STRING_UTILS_FILE, 65);
+        strcpy(lpcDest, lpcSource);
+    }
+
+    __forceinline void StrCat(char* lpcDest, u32 luBytes, const char* lpcSource)
+    {
+        CGS_ASSERT_AT((strlen(lpcSource) + strlen(lpcDest)) < luBytes - 1,
+            "(strlen(lpcSource)+strlen(lpcDest))<luBytes - 1",
+            CGS_ARTIST_STRING_UTILS_FILE, 75);
+        strcat(lpcDest, lpcSource);
+    }
+
+#undef CGS_ARTIST_STRING_UTILS_FILE
 
 }
 

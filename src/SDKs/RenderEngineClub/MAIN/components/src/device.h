@@ -15,6 +15,7 @@ class BrnRendererModule;
 namespace renderengine
 {
     struct VertexDescriptorData;
+    struct ProgramBufferData;
     class PixelBuffer;
     extern u32 gDeviceFrameCounter83271624; // ARTIST 83271624
     struct ClearColorParameters { D3DVECTOR4 m_color; };
@@ -226,6 +227,7 @@ namespace renderengine
 
         // ARTIST 82B61F08: remove every texture binding of this resource.
         static void UnSetResource(D3DResource* lpResource);
+        static void UnSetResource(const ProgramBufferData* lpProgram);
 
     protected:
         // ARTIST 8240C404 updates m_parameterCopy.numVsyncs from Render.

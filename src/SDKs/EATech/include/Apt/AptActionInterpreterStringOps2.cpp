@@ -39,9 +39,9 @@ extern bool         isNaN(AptValue* pValue);
 void AptActionInterpreter::_FunctionAptActionSubString(AptActionInterpreter* pInterp,
                                                        LocalContextT* /*pContext*/)
 {
-    const int nLength = pInterp->mpStack[pInterp->mnStackTop - 1]->toInteger();
-    AptValue* pStartV = pInterp->mpStack[pInterp->mnStackTop - 2];
-    AptValue* pStrV   = pInterp->mpStack[pInterp->mnStackTop - 3];
+    const int nLength = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1]->toInteger();
+    AptValue* pStartV = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 2];
+    AptValue* pStrV   = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 3];
 
     int nStart = pStartV->toInteger() - 1;   // AS substring is 1-based
     if (nStart < 0)
@@ -57,7 +57,7 @@ void AptActionInterpreter::_FunctionAptActionSubString(AptActionInterpreter* pIn
     // nLength == 0 -> the empty string from Create("")
 
     pInterp->stackPop(3);
-    pInterp->mpStack[pInterp->mnStackTop++] = pResult;
+    pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = pResult;
     pResult->AddRef();
 }
 
@@ -67,7 +67,7 @@ void AptActionInterpreter::_FunctionAptActionSubString(AptActionInterpreter* pIn
 void AptActionInterpreter::_FunctionAptActionToNumber(AptActionInterpreter* pInterp,
                                                       LocalContextT* /*pContext*/)
 {
-    AptValue* pTop = pInterp->mpStack[pInterp->mnStackTop - 1];
+    AptValue* pTop = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
     const AptVirtualFunctionTable_Indices eType = pTop->getVtblIndex();
     if ((eType == AptVFT_Float && pTop->getIsDefined())
         || (eType == AptVFT_Integer && pTop->getIsDefined()))
@@ -86,6 +86,6 @@ void AptActionInterpreter::_FunctionAptActionToNumber(AptActionInterpreter* pInt
     }
 
     pInterp->stackPop();
-    pInterp->mpStack[pInterp->mnStackTop++] = pResult;
+    pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = pResult;
     pResult->AddRef();
 }

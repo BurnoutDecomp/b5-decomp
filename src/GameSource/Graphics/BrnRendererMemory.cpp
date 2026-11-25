@@ -131,11 +131,11 @@ renderengine::ProgramBufferData* CreateBlitProgram(rw::IResourceAllocator* alloc
     const void* microcode, u32 size, u32 shaderType)
 {
     renderengine::ProgramBufferParameters parameters;
-    parameters.muFunction = reinterpret_cast<u32>(microcode);
-    parameters.muShaderType = shaderType;
-    parameters.muReserved8 = size;
-    parameters.muMicrocodePart1 = 0;
-    parameters.muMicrocodePart3 = 0;
+    parameters.mpFunction = microcode;
+    parameters.miShaderType = shaderType;
+    parameters.muProgramSize = size;
+    parameters.mMicrocodeParts.cbCachedPartSize = 0;
+    parameters.mMicrocodeParts.cbPhysicalPartSize = 0;
     parameters.muConstantTableSize = 0;
     parameters.muNumVariables = 0;
     rw::ResourceDescriptor descriptor;

@@ -934,11 +934,11 @@ void BrnPostFxShader::Shader::Construct(rw::IResourceAllocator* lpAllocator,
                                        u8 luPs3RegisterCount)
 {
     renderengine::ProgramBufferParameters lVsParameters;
-    lVsParameters.muFunction = reinterpret_cast<u32>(lpVertexProgram);
-    lVsParameters.muShaderType = 0;
-    lVsParameters.muReserved8 = luVertexProgramSize;
-    lVsParameters.muMicrocodePart1 = 0;
-    lVsParameters.muMicrocodePart3 = 0;
+    lVsParameters.mpFunction = lpVertexProgram;
+    lVsParameters.miShaderType = 0;
+    lVsParameters.muProgramSize = luVertexProgramSize;
+    lVsParameters.mMicrocodeParts.cbCachedPartSize = 0;
+    lVsParameters.mMicrocodeParts.cbPhysicalPartSize = 0;
     lVsParameters.muConstantTableSize = 0;
     lVsParameters.muNumVariables = 0;
     rw::ResourceDescriptor lVsResDesc;
@@ -948,11 +948,11 @@ void BrnPostFxShader::Shader::Construct(rw::IResourceAllocator* lpAllocator,
     CGS_ASSERT(mpVertexProgram != 0, "NULL != mpVertexProgram");
 
     renderengine::ProgramBufferParameters lPsParameters;
-    lPsParameters.muFunction = reinterpret_cast<u32>(lpPixelProgram);
-    lPsParameters.muShaderType = 1;
-    lPsParameters.muReserved8 = luPixelProgramSize;
-    lPsParameters.muMicrocodePart1 = 0;
-    lPsParameters.muMicrocodePart3 = 0;
+    lPsParameters.mpFunction = lpPixelProgram;
+    lPsParameters.miShaderType = 1;
+    lPsParameters.muProgramSize = luPixelProgramSize;
+    lPsParameters.mMicrocodeParts.cbCachedPartSize = 0;
+    lPsParameters.mMicrocodeParts.cbPhysicalPartSize = 0;
     lPsParameters.muConstantTableSize = 0;
     lPsParameters.muNumVariables = 0;
     rw::ResourceDescriptor lPsResDesc;

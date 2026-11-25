@@ -101,7 +101,7 @@ namespace CgsNetwork
         // @ 0x8288C808 -- end the current create/join/quick-join action once the lobby
         // message carries a "SESS" tagfield; otherwise chain to the base.
         // lpauMsg points at the DirtySDK lobby message (msg[3]==error, msg[4]==pData).
-        virtual s32 ReceivedGameEvent(LobbyApiMsgT* lpMsg);
+        virtual void ReceivedGameEvent(LobbyApiMsgT* lpMsg);
 
         // ---- X360 queries ---------------------------------------------------------
         // @ 0x8288C880 -- resolve a player id to its XUID/host-address.

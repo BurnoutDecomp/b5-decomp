@@ -223,7 +223,7 @@ static unsigned char* _TagFieldSetupAppend(unsigned char* pRecord, s32 iReclen, 
 
 // A value did not fit: cut the record back to the start of the field being appended,
 // report it and fail.
-static s32 _TagFieldSetupTerm(unsigned char* pRecord, unsigned char* pAppend)
+static s32 _TagFieldSetupCancel(unsigned char* pRecord, unsigned char* pAppend)
 {
     while (pAppend != pRecord)
     {
@@ -241,6 +241,20 @@ static s32 _TagFieldSetupTerm(unsigned char* pRecord, unsigned char* pAppend)
     *pAppend = 0;
     return -1;
 }
+
+// DecFIGS lobbytagfield.c:432. The ARTIST setters inline this finalization.
+static inline s32 _TagFieldSetupTerm(char* pRecord, char* pAppend, const char* pName)
+{
+    char* pTerm = pAppend;
+    if ((g_divafter != 0) && (pName != NULL))
+    {
+        pTerm = pAppend + 1;
+        *pAppend = g_divider;
+    }
+    *pTerm = 0;
+    return (s32)(pTerm - pRecord);
+}
+
 
 // Parse up to iDigits decimal digits into *pValue (accumulating onto its current value).
 static const char* _ParseNumber(const char* pData, u32* pValue, s32 iDigits)
@@ -368,7 +382,7 @@ extern "C" s32 TagFieldMerge(char* pRecord_, s32 iReclen, const char* pMerge_)
     }
     if (*pMerge != 0)
     {
-        return _TagFieldSetupTerm(pRecord, pDst);
+        return _TagFieldSetupCancel(pRecord, pDst);
     }
     *pDst = 0;
     return 1;
@@ -516,7 +530,7 @@ extern "C" s32 TagFieldSetRaw(char* pRecord_, s32 iReclen, const char* pName, co
     {
         if (pAppend >= pRecord + iReclen - 2)
         {
-            return _TagFieldSetupTerm(pRecord, pAppend);
+            return _TagFieldSetupCancel(pRecord, pAppend);
         }
         uTerm ^= (*pData == '"') ? 1 : 0;
         *pAppend++ = *pData++;
@@ -715,7 +729,7 @@ extern "C" s32 TagFieldSetFlags(char* pRecord, s32 iReclen, const char* pName, s
         {
             if (pAppend >= pLimit)
             {
-                return _TagFieldSetupTerm(reinterpret_cast<unsigned char*>(pRecord), pAppend);
+                return _TagFieldSetupCancel(reinterpret_cast<unsigned char*>(pRecord), pAppend);
             }
             *pAppend++ = (unsigned char)*pFlags;
         }
@@ -934,7 +948,7 @@ extern "C" s32 TagFieldSetString(char* pRecord_, s32 iReclen, const char* pName,
 
     if (iRemain < g_divafter)
     {
-        return _TagFieldSetupTerm(pRecord, pAppend);
+        return _TagFieldSetupCancel(pRecord, pAppend);
     }
     if ((g_divafter != 0) && (pName != NULL))
     {
@@ -1083,12 +1097,7 @@ extern "C" s32 TagFieldSetBinary7(char* pRecord, s32 iReclen, const char* pName,
         *pAppend++ = (unsigned char)((uBuffer & 0x7F) | 0x80);
     }
 
-    if ((g_divafter != 0) && (pName != NULL))
-    {
-        *pAppend++ = (unsigned char)g_divider;
-    }
-    *pAppend = 0;
-    return (s32)(pAppend - reinterpret_cast<unsigned char*>(pRecord));
+    return _TagFieldSetupTerm(pRecord, reinterpret_cast<char*>(pAppend), pName);
 }
 
 extern "C" s32 TagFieldGetBinary(const char* pData_, void* pBuffer_, s32 iBuflen)
@@ -1222,7 +1231,7 @@ extern "C" s32 TagFieldSetStructure(char* pRecord, s32 iReclen, const char* pNam
         {
             if (pAppend + iWidth > pLength)
             {
-                return _TagFieldSetupTerm(reinterpret_cast<unsigned char*>(pRecord), pAppend);
+                return _TagFieldSetupCancel(reinterpret_cast<unsigned char*>(pRecord), pAppend);
             }
             pMarker = pAppend;
             if (uValue > 0xFFFF0000u)
@@ -1255,7 +1264,7 @@ extern "C" s32 TagFieldSetStructure(char* pRecord, s32 iReclen, const char* pNam
             {
                 if (pAppend + 3 > pLength)
                 {
-                    return _TagFieldSetupTerm(reinterpret_cast<unsigned char*>(pRecord), pAppend);
+                    return _TagFieldSetupCancel(reinterpret_cast<unsigned char*>(pRecord), pAppend);
                 }
                 if (char_encode[*pStruct] & 4)
                 {
@@ -1271,7 +1280,7 @@ extern "C" s32 TagFieldSetStructure(char* pRecord, s32 iReclen, const char* pNam
             pStruct += iCount - iIndex;
             if (pAppend + 1 > pLength)
             {
-                return _TagFieldSetupTerm(reinterpret_cast<unsigned char*>(pRecord), pAppend);
+                return _TagFieldSetupCancel(reinterpret_cast<unsigned char*>(pRecord), pAppend);
             }
             *pAppend++ = ',';
         }

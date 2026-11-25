@@ -193,7 +193,10 @@ public:
     static const char* UTF8_ReadCharacter(const char* const pBuffer, int32_t* const iCharacter);
     static bool        UTF8_IsValid(const int32_t iCharacter);
 
-    bool        IsEmpty() const;
+    bool        IsEmpty() const
+    {
+        return m_pData == reinterpret_cast<DebugDataC*>(&s_EmptyInternalData);
+    }
     const char* c_str() const;
     const char* ConstRawPtr() const;
     int         Size() const;
@@ -205,7 +208,7 @@ public:
     void Invalidate();
     void Validate();
     void Validate(const EAStringC& strText);
-    bool IsValid() const;
+    bool IsValid() const { return m_pData != 0; }
 
     uint16_t        GetHashValue() const;
     uint16_t        UpdateHashValue() const;

@@ -395,13 +395,13 @@ void TelemetryApiSetCallback(TelemetryApiRefT* pRef, s32 iType, TelemetryApiCall
     NetPrintfCode("telemetryapi: setcallback [0x%08x] type=%d callback=[0x%08x]\n", pRef, iType, pCallback);
     if (pRef != 0)
     {
-        if (iType >= 3)
-            NetPrintfCode("TelemetryApi: Unhandled telemtry callback type [%d]\n", iType);
-        else
+        if (iType < 3)
         {
             pRef->callbacks[iType].pCallback = pCallback;
             pRef->callbacks[iType].pUserData = pUserData;
         }
+        else
+            NetPrintfCode("TelemetryApi: Unhandled telemtry callback type [%d]\n", iType);
     }
 }
 

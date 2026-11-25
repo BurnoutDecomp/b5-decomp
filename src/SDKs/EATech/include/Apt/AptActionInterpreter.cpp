@@ -6,11 +6,11 @@
 //     stackSafePop    @0x7DF7F8    stackGetPop     @0x7DF7B4
 //     stackPopNoDec   @0x7DF7DC    stackPopAndPush @0x7FB288
 //
-// The interpreter's AptValue* evaluation stack: mpStack[0..mnStackTop). Pushes
+// The interpreter's AptValue* evaluation stack: mOperandStack.mppItems[0..mOperandStack.mnTop). Pushes
 // take a counted reference (AddRef), pops release it (Release) -- except the
 // *NoInc/*NoDec/GetPop variants, which transfer ownership instead of touching the
 // refcount. The console's `4 * top + base` byte addressing is reproduced here as
-// element indexing (mpStack[top]); on x64 AptValue* is 8 bytes, so the indexing
+// element indexing (mOperandStack.mppItems[top]); on x64 AptValue* is 8 bytes, so the indexing
 // stays correct without a pointer-width transcode.
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
@@ -35,10 +35,10 @@
 // ---------------------------------------------------------------------------
 void AptActionInterpreter::stackPop()
 {
-    if (mnStackTop > 0)
+    if (mOperandStack.mnTop > 0)
     {
-        mpStack[mnStackTop - 1]->Release();
-        --mnStackTop;
+        mOperandStack.mppItems[mOperandStack.mnTop - 1]->Release();
+        --mOperandStack.mnTop;
     }
 }
 
@@ -47,11 +47,11 @@ void AptActionInterpreter::stackPop()
 // ---------------------------------------------------------------------------
 void AptActionInterpreter::stackSafePop(int nCount)
 {
-    if (nCount > 0 && mnStackTop >= nCount)
+    if (nCount > 0 && mOperandStack.mnTop >= nCount)
     {
         for (int i = 1; i <= nCount; ++i)
-            mpStack[mnStackTop - i]->Release();
-        mnStackTop -= nCount;
+            mOperandStack.mppItems[mOperandStack.mnTop - i]->Release();
+        mOperandStack.mnTop -= nCount;
     }
 }
 
@@ -61,8 +61,8 @@ void AptActionInterpreter::stackSafePop(int nCount)
 // ---------------------------------------------------------------------------
 AptValue* AptActionInterpreter::stackGetPop()
 {
-    --mnStackTop;
-    return mpStack[mnStackTop];
+    --mOperandStack.mnTop;
+    return mOperandStack.mppItems[mOperandStack.mnTop];
 }
 
 // ---------------------------------------------------------------------------
@@ -72,14 +72,7 @@ AptValue* AptActionInterpreter::stackGetPop()
 // ---------------------------------------------------------------------------
 void AptActionInterpreter::stackPopAndPush(int nCount, AptValue* pValue)
 {
-    if (mnStackTop >= nCount)
-    {
-        pValue->AddRef();
-        for (int i = 1; i <= nCount; ++i)
-            mpStack[mnStackTop - i]->Release();
-        mpStack[mnStackTop - nCount] = pValue;
-        mnStackTop = mnStackTop - nCount + 1;
-    }
+    mOperandStack.PopAndPush(nCount, pValue);
 }
 
 // ---------------------------------------------------------------------------
@@ -115,7 +108,7 @@ void AptActionInterpreter::stackPushIndirect(AptValue* pValue)
 //
 // The console addresses each AptValue-stack slot by 32-bit byte math (4*top+base)
 // and indexes the interpreter's five {count,capacity,array} stacks by raw offsets;
-// reproduced here as typed element indexing (mpStack[mnStackTop-1]) -- identical on
+// reproduced here as typed element indexing (mOperandStack.mppItems[mOperandStack.mnTop-1]) -- identical on
 // x64 where AptValue* is 8 bytes -- and named-member access. The deallocation sizes
 // switch from the console's `4 * count` to `sizeof(AptValue*) * count` (the x64
 // pointer width), matching this struct's reconstruction.
@@ -139,8 +132,8 @@ void AptActionInterpreter::stackPushIndirect(AptValue* pValue)
 // dispatch handlers and the builtins reuse it; declared extern here too.
 extern AptValue* gpUndefinedValue;
 
-// The global native-method arg stack (X360 off_8324E768 = gAptActionInterpreter.mpStack,
-// dword_8324E760 = its mnStackTop; defined in AptGlobals.cpp, published per native call
+// The global native-method arg stack (X360 off_8324E768 = gAptActionInterpreter.mOperandStack.mppItems,
+// dword_8324E760 = its mOperandStack.mnTop; defined in AptGlobals.cpp, published per native call
 // by CallFunctionDispatch). The i-th AS argument (i=0 = last pushed) is
 // gppAptNativeArgStack[gnAptNativeArgCount-1-i].
 extern AptValue** gppAptNativeArgStack;   // off_8324E768
@@ -170,8 +163,8 @@ AptActionInterpreter::~AptActionInterpreter()
         gpAptOperandStackPool->Deallocate(mpCallStackC, sizeof(AptValue*) * mnCallStackC_Capacity);
     if (mpCallStackB)
         gpAptOperandStackPool->Deallocate(mpCallStackB, sizeof(AptValue*) * mnCallStackB_Capacity);
-    if (mpStack)
-        gpAptOperandStackPool->Deallocate(mpStack, sizeof(AptValue*) * mnStackCapacity);
+    if (mOperandStack.mppItems)
+        gpAptOperandStackPool->Deallocate(mOperandStack.mppItems, sizeof(AptValue*) * mOperandStack.mnCapacity);
 }
 
 // ---------------------------------------------------------------------------

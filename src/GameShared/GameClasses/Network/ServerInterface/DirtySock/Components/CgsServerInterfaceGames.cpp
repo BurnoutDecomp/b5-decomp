@@ -16,6 +16,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint / CgsDev::Message::gxMessageFilterFlags
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"      // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h" // CgsCore::SPrintf / SnPrintf / StrCat
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceEvents.h"
 #include <string.h>                                      // memcpy / strlen / strcmp
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX (CgsServerInterfaceGames.cpp).
@@ -51,6 +52,8 @@ extern "C"
     s32  TagFieldSetRaw(char* pRecord, s32 iRecLen, const char* pKey, const u8* pValue);
     s32  TagFieldSetEpoch(char* pRecord, s32 iRecLen, const char* pKey, s32 iEpoch);
 }
+
+#define CGS_ARTIST_SERVER_GAMES_FILE "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceGames.cpp"
 
 // Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceGames.cpp".
 
@@ -290,12 +293,12 @@ namespace CgsNetwork
 
     void ServerInterfaceGames::Destruct()
     {
-        miRequestCallbackID = -1;
+        miEventCallback     = -1;
         mpFoundGames        = 0;
         mpServerInterface   = 0;
         meCurrentAction     = E_ACTION_COUNT;
-        miEventCallback     = -1;
         miRespCallback      = -1;
+        miRequestCallbackID = -1;
         XMemSet(&mLastGameRecord, 0, KI_PLAYER_RECORD_SIZE);
         mpSearchSortCallback = 0;
         mpSearchSortUserData = 0;
@@ -305,9 +308,9 @@ namespace CgsNetwork
 
     bool ServerInterfaceGames::Prepare(ServerInterfaceDirtySock* lpServerInterface)
     {
-        CGS_ASSERT(miEventCallback == -1, "miEventCallback == -1");
-        CGS_ASSERT(miRespCallback == -1, "miRespCallback == -1");
-        CGS_ASSERT(mpFoundGames == 0, "!mpFoundGames");
+        CGS_ASSERT_AT(miEventCallback == -1, "miEventCallback == -1", CGS_ARTIST_SERVER_GAMES_FILE, 313);
+        CGS_ASSERT_AT(miRespCallback == -1, "miRespCallback == -1", CGS_ARTIST_SERVER_GAMES_FILE, 314);
+        CGS_ASSERT_AT(mpFoundGames == 0, "!mpFoundGames", CGS_ARTIST_SERVER_GAMES_FILE, 315);
 
         mpServerInterface = lpServerInterface;
         meCurrentAction   = E_ACTION_COUNT;
@@ -318,15 +321,13 @@ namespace CgsNetwork
                                               this);
         miRespCallback  = LobbyApiSetCallback(mpServerInterface->GetLobbyAPIRef(),
                                               KI_CB_CHANNEL_RESP,
-                                              0,
+                                              &RespCallback,
                                               this);
         AllocDisplayLists();
 
         // Register the per-game ConnAPI callback on the server interface and the
         // game-manager play-record callback.
-        CGS_ASSERT(mpServerInterface->IsGameComponentRegistered(),
-                   "The component hasn't been registered!");
-        mpServerInterface->SetConnApiGameCallback(&ServerInterfaceGames::ConnApiCallback);
+        mpServerInterface->SetConnApiComponentCallback(E_COMPONENTS_GAMES, &ServerInterfaceGames::ConnApiCallback);
         GameManagerSetCallback(mpServerInterface->GetGameManagerRef(),
                                &GameManagerCallback,
                                this);
@@ -362,14 +363,15 @@ namespace CgsNetwork
         return true;
     }
 
-    void* ServerInterfaceGames::FreeDisplayLists()
+    void ServerInterfaceGames::FreeDisplayLists()
     {
         if (mpFoundGames)
         {
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint << "********++++++++++\nFREEING FOUND GAMES\n********++++++++++\n";
             LobbyApiListFree(mpServerInterface->GetLobbyAPIRef(), KI_LIST_FOUND_GAMES, mpFoundGames);
             mpFoundGames = 0;
         }
-        return mpFoundGames;
     }
 
     // ===================================================================
@@ -392,10 +394,10 @@ namespace CgsNetwork
             miRequestCallbackID = -1;
     }
 
-    s32 ServerInterfaceGames::StartGameManagerAction(EAction leAction, LobbyApiCallbackT* lpfnCallback)
+    void ServerInterfaceGames::StartGameManagerAction(EAction leAction, LobbyApiCallbackT* lpfnCallback)
     {
         meCurrentAction = leAction;
-        StartActionCore(KAPC_ACTION_NAMES[leAction]);
+        ServerInterfaceComponent::StartActionCore(KAPC_ACTION_NAMES[leAction]);
 
         char* lpcBuffer = mpServerInterface->GetMessageBuffer();
         CGS_ASSERT(lpcBuffer != 0, "mpacMessageBuffer");
@@ -411,18 +413,18 @@ namespace CgsNetwork
             lMsg.code = KI_GM_REQ_NULL;
             lpfnCallback(mpServerInterface->GetLobbyAPIRef(), &lMsg, this);
         }
-        return liResult;
     }
 
     void ServerInterfaceGames::EndAction(s32 liError)
     {
         CGS_ASSERT(meCurrentAction != E_ACTION_COUNT, CGS_ASSERT_MESSAGE_AT(
             "meCurrentAction != E_ACTION_COUNT",
-            __FILE__, 1013 /* ARTIST 0x82877F88 */));
+            CGS_ARTIST_SERVER_GAMES_FILE, 1013 /* ARTIST 0x82877F88 */));
 
-        const DSErrorToServerInterfaceErrorTable& lrEntry = KA_DS_ERROR_TABLE_LOOKUP[meCurrentAction];
-        EServerInterfaceError leMapped = ConvertError(liError, lrEntry.mpMappingTable, lrEntry.miNumMappings);
-        EndActionCore(static_cast<int>(leMapped));
+        const EServerInterfaceError leMapped = ServerInterfaceComponent::ConvertError(
+            liError, KA_DS_ERROR_TABLE_LOOKUP[meCurrentAction].mpMappingTable,
+            KA_DS_ERROR_TABLE_LOOKUP[meCurrentAction].miNumMappings);
+        ServerInterfaceComponent::EndActionCore(leMapped);
 
         meCurrentAction     = E_ACTION_COUNT;
         miRequestCallbackID = -1;
@@ -468,7 +470,7 @@ namespace CgsNetwork
         lpSelf->EndAction(liError);
     }
 
-    s32 ServerInterfaceGames::ReceivedGameEvent(LobbyApiMsgT* lpMsg)
+    void ServerInterfaceGames::ReceivedGameEvent(LobbyApiMsgT* lpMsg)
     {
         ServerInterfaceGames* lpSelf = this;
         if (static_cast<u32>(lpSelf->meCurrentAction) < 3u)
@@ -478,11 +480,8 @@ namespace CgsNetwork
             if (liIdent == lpSelf->mLastGameRecord.iIdent)
             {
                 lpSelf->EndAction(lpMsg->code);
-                return lpMsg->code;
             }
-            return liIdent;
         }
-        return 0;
     }
 
     void ServerInterfaceGames::EventStatusCallback(LobbyApiRefT* /*lpLobbyApi*/, LobbyApiMsgT* lpMsg,
@@ -519,11 +518,11 @@ namespace CgsNetwork
         ServerInterfaceGames* lpSelf = static_cast<ServerInterfaceGames*>(lpUserData);
         switch (lpCBData->eType)
         {
-        case 0:
-        case 1:
-        case 2:
+        case GAMEMANAGER_CBTYPE_PRE_ADD:
+        case GAMEMANAGER_CBTYPE_POST_ADD:
+        case GAMEMANAGER_CBTYPE_PRE_DEL:
             return;
-        case 3:
+        case GAMEMANAGER_CBTYPE_POST_DEL:
             XMemSet(&lpSelf->mLastGameRecord, 0, KI_PLAYER_RECORD_SIZE);
             if (lpSelf->meCurrentAction == E_ACTION_LEAVE_GAME)
             {
@@ -531,17 +530,18 @@ namespace CgsNetwork
             }
             else
             {
-                RaiseServerInterfaceEvent(lpSelf->mpServerInterface, KI_EVT_DISCONNECTED, 0);
+                lpSelf->mpServerInterface->OnEvent(E_SERVER_INTERFACE_GAMES_EVENT_GAME_DELETED, 0);
+                ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "Game connection disconnected\n";
             }
             ConnApiControl(lpSelf->mpServerInterface->GetConnAPIRef(), KI_CONN_CTRL_DISCONNECT, 0, 0, "");
             return;
-        case 4:
+        case GAMEMANAGER_CBTYPE_PLAYINFO:
             lpSelf->ProcessGameManagerPlayRecord();
             return;
         default:
             CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
                 "Unknown GameManager event",
-                __FILE__, 764 /* ARTIST 0x82891514 */));
+                CGS_ARTIST_SERVER_GAMES_FILE, 764 /* ARTIST 0x82891514 */));
             return;
         }
     }
@@ -722,39 +722,37 @@ namespace CgsNetwork
         }
     }
 
-    void ServerInterfaceGames::SetGameServerConnectionType(s32 liConnectionType)
+    void ServerInterfaceGames::SetGameServerConnectionType(EGameServerConnectionType leConnectionType)
     {
-        CGS_ASSERT(mpServerInterface->GetGameManagerRef() != 0,
-                   "mpServerInterface->GetGameManagerRef()");
-        CGS_ASSERT(mpServerInterface->GetConnAPIRef() != 0,
-                   "mpServerInterface->GetConnAPIRef()");
+        CGS_ASSERT_AT(mpServerInterface->GetGameManagerRef() != 0,
+                      "mpServerInterface->GetGameManagerRef()", CGS_ARTIST_SERVER_GAMES_FILE, 2267);
+        CGS_ASSERT_AT(mpServerInterface->GetConnAPIRef() != 0,
+                      "mpServerInterface->GetConnAPIRef()", CGS_ARTIST_SERVER_GAMES_FILE, 2268);
 
-        CgsNetwork::DirtySock::GameManagerRefT* lpGm = mpServerInterface->GetGameManagerRef();
-        CgsNetwork::DirtySock::ConnApiRefT*     lpConn = mpServerInterface->GetConnAPIRef();
-        switch (liConnectionType)
+        switch (leConnectionType)
         {
         case E_GAME_SERVER_CONNECTION_TYPE_NONE:
-            GameManagerControl(lpGm, KI_GM_SELECT_HASSRV, 0, 0, 0);
-            ConnApiControl(lpConn, KI_CONN_CTRL_CONNTYPE, 3, 0, 0);
+            GameManagerControl(mpServerInterface->GetGameManagerRef(), KI_GM_SELECT_HASSRV, 0, 0, 0);
+            ConnApiControl(mpServerInterface->GetConnAPIRef(), KI_CONN_CTRL_CONNTYPE, 3, 0, 0);
             break;
         case E_GAME_SERVER_CONNECTION_TYPE_FALLBACK_BOTH:
-            GameManagerControl(lpGm, KI_GM_SELECT_HASSRV, 1, 0, 0);
-            ConnApiControl(lpConn, KI_CONN_CTRL_CONNTYPE, 3, 3, 0);
+            GameManagerControl(mpServerInterface->GetGameManagerRef(), KI_GM_SELECT_HASSRV, 1, 0, 0);
+            ConnApiControl(mpServerInterface->GetConnAPIRef(), KI_CONN_CTRL_CONNTYPE, 3, 3, 0);
             break;
         case E_GAME_SERVER_CONNECTION_TYPE_FALLBACK_VOIP_ONLY:
-            GameManagerControl(lpGm, KI_GM_SELECT_HASSRV, 1, 0, 0);
-            ConnApiControl(lpConn, KI_CONN_CTRL_CONNTYPE, 3, 2, 0);
+            GameManagerControl(mpServerInterface->GetGameManagerRef(), KI_GM_SELECT_HASSRV, 1, 0, 0);
+            ConnApiControl(mpServerInterface->GetConnAPIRef(), KI_CONN_CTRL_CONNTYPE, 3, 2, 0);
             break;
         case E_GAME_SERVER_CONNECTION_TYPE_FALLBACK_GAME_ONLY:
-            GameManagerControl(lpGm, KI_GM_SELECT_HASSRV, 1, 0, 0);
-            ConnApiControl(lpConn, KI_CONN_CTRL_CONNTYPE, 3, 1, 0);
+            GameManagerControl(mpServerInterface->GetGameManagerRef(), KI_GM_SELECT_HASSRV, 1, 0, 0);
+            ConnApiControl(mpServerInterface->GetConnAPIRef(), KI_CONN_CTRL_CONNTYPE, 3, 1, 0);
             break;
         case E_GAME_SERVER_CONNECTION_TYPE_NO_FALLBACK:
-            GameManagerControl(lpGm, KI_GM_SELECT_HASSRV, 1, 0, 0);
-            ConnApiControl(lpConn, KI_CONN_CTRL_CONNTYPE, 3, 0, 0);
+            GameManagerControl(mpServerInterface->GetGameManagerRef(), KI_GM_SELECT_HASSRV, 1, 0, 0);
+            ConnApiControl(mpServerInterface->GetConnAPIRef(), KI_CONN_CTRL_CONNTYPE, 3, 0, 0);
             break;
         default:
-            CGS_ASSERT(false, "Invalid game server connection type\n");
+            CGS_ASSERT_AT(false, "Invalid game server connection type\n", CGS_ARTIST_SERVER_GAMES_FILE, 2309);
             break;
         }
     }
@@ -888,24 +886,23 @@ namespace CgsNetwork
     // Play-record diffing
     // ===================================================================
 
-    void* ServerInterfaceGames::ProcessGameManagerPlayRecord()
+    void ServerInterfaceGames::ProcessGameManagerPlayRecord()
     {
         DirtySock::LobbyApiPlayT lNewRecord;
         memcpy(&lNewRecord, &mLastGameRecord, KI_PLAYER_RECORD_SIZE);
-        void* lpResult = reinterpret_cast<void*>(static_cast<intptr_t>(
-            GameManagerStatus(mpServerInterface->GetGameManagerRef(), KI_GM_SELECT_PLAYREC,
-                              &mLastGameRecord, KI_PLAYER_RECORD_SIZE)));
+        GameManagerStatus(mpServerInterface->GetGameManagerRef(), KI_GM_SELECT_PLAYREC,
+                          &mLastGameRecord, KI_PLAYER_RECORD_SIZE);
 
         if (mLastGameRecord.strName[0])
         {
             bool lbPlayersLeft = CheckForPlayerChange(&mLastGameRecord, &lNewRecord,
-                                                      static_cast<EServerInterfaceEvent>(10),
-                                                      static_cast<EServerInterfaceEvent>(13));
+                                                      E_SERVER_INTERFACE_GAMES_EVENT_PLAYER_ADDED,
+                                                      E_SERVER_INTERFACE_GAMES_EVENT_ADDED_TO_GAME);
             bool lbPlayersJoined = CheckForPlayerChange(&lNewRecord, &mLastGameRecord,
-                                                        static_cast<EServerInterfaceEvent>(11),
-                                                        static_cast<EServerInterfaceEvent>(12));
-            if (lbPlayersJoined || lbPlayersLeft)
-                RaiseServerInterfaceEvent(mpServerInterface, KI_EVT_PLAYERS_CHANGED, 0);
+                                                        E_SERVER_INTERFACE_GAMES_EVENT_PLAYER_REMOVED,
+                                                        E_SERVER_INTERFACE_GAMES_EVENT_REMOVED_FROM_GAME);
+            if (lbPlayersJoined | lbPlayersLeft)
+                mpServerInterface->OnEvent(E_SERVER_INTERFACE_GAMES_EVENT_PLAYER_LIST_CHANGED, 0);
 
             // Slots / privilege change -> push a latency-update control. asm sign-extends
             // bMaxsize (extsb) before comparing/subtracting.
@@ -923,20 +920,17 @@ namespace CgsNetwork
                 mLastGameRecord.uSysflags != lNewRecord.uSysflags ||
                 mLastGameRecord.uCustflags != lNewRecord.uCustflags)
             {
-                RaiseServerInterfaceEvent(mpServerInterface, KI_EVT_GAME_PARAMS_CHANGED, 0);
+                mpServerInterface->OnEvent(E_SERVER_INTERFACE_GAMES_EVENT_GAME_PARAMETERS_CHANGED, 0);
             }
 
-            lpResult = reinterpret_cast<void*>(static_cast<intptr_t>(
-                CheckForPlayerParameterChange(&lNewRecord, &mLastGameRecord) ? 1 : 0));
+            CheckForPlayerParameterChange(&lNewRecord, &mLastGameRecord);
 
             if (mLastGameRecord.iIdent != lNewRecord.iIdent &&
                 mLastGameRecord.iIdent && lNewRecord.iIdent)
             {
-                RaiseServerInterfaceEvent(mpServerInterface, KI_EVT_HOST_MIGRATED, 0);
-                lpResult = mpServerInterface;
+                mpServerInterface->OnEvent(E_SERVER_INTERFACE_GAMES_EVENT_GAME_ID_CHANGED, 0);
             }
         }
-        return lpResult;
     }
 
     bool ServerInterfaceGames::CheckForPlayerChange(DirtySock::LobbyApiPlayT* lpA, DirtySock::LobbyApiPlayT* lpB,
@@ -1021,7 +1015,7 @@ namespace CgsNetwork
         lpOut->SerialiseFromGame(&mLastGameRecord);
     }
 
-    s32 ServerInterfaceGames::GetHostPlayerID()
+    s32 ServerInterfaceGames::GetHostPlayerID() const
     {
         char lacSelf[8];
         for (s32 i = 0; i < mLastGameRecord.iCount; ++i)
@@ -1051,113 +1045,113 @@ namespace CgsNetwork
         return mLastGameRecord.iCount;
     }
 
-    void* ServerInterfaceGames::GetPlayerParametersByIndex(s32 liIndex,
-                                                           ServerInterfacePlayerParamsBase* lpOut)
+    void ServerInterfaceGames::GetPlayerParametersByIndex(s32 liIndex,
+                                                           ServerInterfacePlayerParamsBase* lpOut) const
     {
         CGS_ASSERT(lpOut != 0, CGS_ASSERT_MESSAGE_AT(
             "lpPlayerParams",
-            __FILE__, 1744 /* ARTIST 0x8288760C */));
+            CGS_ARTIST_SERVER_GAMES_FILE, 1744 /* ARTIST 0x8288760C */));
         CGS_ASSERT(IsLocalPlayerInGame(), CGS_ASSERT_MESSAGE_AT(
             "IsLocalPlayerInGame()",
-            __FILE__, 1745 /* ARTIST 0x82887640 */));
+            CGS_ARTIST_SERVER_GAMES_FILE, 1745 /* ARTIST 0x82887640 */));
         if (liIndex >= 0)
         {
             CGS_ASSERT(IsLocalPlayerInGame(), CGS_ASSERT_MESSAGE_AT(
                 "IsLocalPlayerInGame()",
-                __FILE__, 1726 /* ARTIST 0x82887674 */));
+                CGS_ARTIST_SERVER_GAMES_FILE, 1726 /* ARTIST 0x82887674 */));
         }
         CGS_ASSERT(liIndex >= 0 && liIndex < mLastGameRecord.iCount, CGS_ASSERT_MESSAGE_AT(
             "Invalid player index",
-            __FILE__, 1746 /* ARTIST 0x8288769C */));
-        lpOut->SerialiseFromPlayer(&mLastGameRecord.aOpponents[liIndex]); return lpOut;
+            CGS_ARTIST_SERVER_GAMES_FILE, 1746 /* ARTIST 0x8288769C */));
+        lpOut->SerialiseFromPlayer(&mLastGameRecord.aOpponents[liIndex]);
     }
 
-    void* ServerInterfaceGames::GetPlayerParametersByPlayerID(s32 liPlayerID,
-                                                             ServerInterfacePlayerParamsBase* lpOut)
+    void ServerInterfaceGames::GetPlayerParametersByPlayerID(s32 liPlayerID,
+                                                             ServerInterfacePlayerParamsBase* lpOut) const
     {
         CGS_ASSERT(lpOut != 0, CGS_ASSERT_MESSAGE_AT(
             "lpPlayerParams",
-            __FILE__, 1766 /* ARTIST 0x8288770C */));
+            CGS_ARTIST_SERVER_GAMES_FILE, 1766 /* ARTIST 0x8288770C */));
         CGS_ASSERT(IsLocalPlayerInGame(), CGS_ASSERT_MESSAGE_AT(
             "IsLocalPlayerInGame()",
-            __FILE__, 1767 /* ARTIST 0x82887740 */));
+            CGS_ARTIST_SERVER_GAMES_FILE, 1767 /* ARTIST 0x82887740 */));
         for (s32 i = 0; ; ++i)
         {
             CGS_ASSERT(IsLocalPlayerInGame(), CGS_ASSERT_MESSAGE_AT(
                 "IsLocalPlayerInGame()",
-                __FILE__, 1726 /* ARTIST 0x82887774 */));
-            if (i >= mLastGameRecord.iCount)
-                break;
-            if (mLastGameRecord.aOpponents[i].iIdent == liPlayerID)
+                CGS_ARTIST_SERVER_GAMES_FILE, 1726 /* ARTIST 0x82887774 */));
+            if (i < mLastGameRecord.iCount)
             {
-                lpOut->SerialiseFromPlayer(&mLastGameRecord.aOpponents[i]);
-                return lpOut;
+                if (mLastGameRecord.aOpponents[i].iIdent == liPlayerID)
+                {
+                    lpOut->SerialiseFromPlayer(&mLastGameRecord.aOpponents[i]);
+                    return;
+                }
+                continue;
             }
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
+                "This player is not in the game",
+                CGS_ARTIST_SERVER_GAMES_FILE, 1778 /* ARTIST 0x828877DC */));
+            return;
         }
-        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
-            "This player is not in the game",
-            __FILE__, 1778 /* ARTIST 0x828877DC */));
-        return 0;
     }
 
-    void* ServerInterfaceGames::GetPlayerParametersByPlayerName(const char* lpcName,
-                                                               ServerInterfacePlayerParamsBase* lpOut)
+    void ServerInterfaceGames::GetPlayerParametersByPlayerName(const char* lpcName,
+                                                               ServerInterfacePlayerParamsBase* lpOut) const
     {
         CGS_ASSERT(lpOut != 0, CGS_ASSERT_MESSAGE_AT(
             "lpPlayerParams",
-            __FILE__, 1796 /* ARTIST 0x8288782C */));
+            CGS_ARTIST_SERVER_GAMES_FILE, 1796 /* ARTIST 0x8288782C */));
         CGS_ASSERT(IsLocalPlayerInGame(), CGS_ASSERT_MESSAGE_AT(
             "IsLocalPlayerInGame()",
-            __FILE__, 1797 /* ARTIST 0x82887860 */));
+            CGS_ARTIST_SERVER_GAMES_FILE, 1797 /* ARTIST 0x82887860 */));
         for (s32 i = 0; ; ++i)
         {
             CGS_ASSERT(IsLocalPlayerInGame(), CGS_ASSERT_MESSAGE_AT(
                 "IsLocalPlayerInGame()",
-                __FILE__, 1726 /* ARTIST 0x82887894 */));
-            if (i >= mLastGameRecord.iCount)
-                break;
-            if (LobbyNameCmp(lpcName, mLastGameRecord.aOpponents[i].strPers) == 0)
+                CGS_ARTIST_SERVER_GAMES_FILE, 1726 /* ARTIST 0x82887894 */));
+            if (i < mLastGameRecord.iCount)
             {
-                lpOut->SerialiseFromPlayer(&mLastGameRecord.aOpponents[i]);
-                return lpOut;
+                if (LobbyNameCmp(lpcName, mLastGameRecord.aOpponents[i].strPers) == 0)
+                {
+                    lpOut->SerialiseFromPlayer(&mLastGameRecord.aOpponents[i]);
+                    return;
+                }
+                continue;
             }
+            CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
+                "This player is not in the game",
+                CGS_ARTIST_SERVER_GAMES_FILE, 1808 /* ARTIST 0x82887904 */));
+            return;
         }
-        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
-            "This player is not in the game",
-            __FILE__, 1808 /* ARTIST 0x82887904 */));
-        return 0;
     }
 
-    bool ServerInterfaceGames::IsLocalPlayerInGame()
+    inline void ServerInterfaceGames::GetLocalPlayerUserData(LobbyApiUserT* lpUser) const
     {
-        char lacSelf[576];
-        LobbyApiStatus(mpServerInterface->GetLobbyAPIRef(), KI_SELECT_USERINFO,
-                       lacSelf, KI_STATUS_BUF_SIZE);
-        if (mLastGameRecord.iCount <= 0)
-            return false;
+        LobbyApiStatus(mpServerInterface->GetLobbyAPIRef(), KI_SELECT_USERINFO, lpUser, sizeof(*lpUser));
+    }
+
+    bool ServerInterfaceGames::IsLocalPlayerInGame() const
+    {
+        LobbyApiUserT lLocalUser;
+        GetLocalPlayerUserData(&lLocalUser);
         for (s32 i = 0; i < mLastGameRecord.iCount; ++i)
         {
-            if (LobbyNameCmp(mLastGameRecord.aOpponents[i].strPers, lacSelf + 8) == 0)
+            if (LobbyNameCmp(mLastGameRecord.aOpponents[i].strPers, lLocalUser.name) == 0)
                 return true;
         }
         return false;
     }
 
-    bool ServerInterfaceGames::IsLocalPlayerHost()
+    bool ServerInterfaceGames::IsLocalPlayerHost() const
     {
-        char lacSelf[576];
-        LobbyApiStatus(mpServerInterface->GetLobbyAPIRef(), KI_SELECT_USERINFO,
-                       lacSelf, KI_STATUS_BUF_SIZE);
-        if (!IsLocalPlayerInGame())
-            return false;
-        s32 liHostID = GetHostPlayerID();
-        return *reinterpret_cast<s32*>(lacSelf) == liHostID;
+        LobbyApiUserT lLocalUser;
+        GetLocalPlayerUserData(&lLocalUser);
+        return IsLocalPlayerInGame() && lLocalUser.ident == GetHostPlayerID();
     }
 
-    bool ServerInterfaceGames::IsPlayerInGame(const char* lpcName)
+    bool ServerInterfaceGames::IsPlayerInGame(const char* lpcName) const
     {
-        if (mLastGameRecord.iCount <= 0)
-            return false;
         for (s32 i = 0; i < mLastGameRecord.iCount; ++i)
         {
             if (LobbyNameCmp(mLastGameRecord.aOpponents[i].strPers, lpcName) == 0)
@@ -1182,7 +1176,7 @@ namespace CgsNetwork
         return ((ConvertFlags(mLastGameRecord.uSysflags, E_CONVERSION_FROM_WIRE) >> 11) & 1) != 0;
     }
 
-    bool ServerInterfaceGames::IsGameServerGame()
+    bool ServerInterfaceGames::IsGameServerGame() const
     {
         if (!IsLocalPlayerInGame())
             return false;
@@ -1208,7 +1202,8 @@ namespace CgsNetwork
                     << "********++++++++++\nALLOCING FOUND GAMES\n********++++++++++\n";
             }
             mpFoundGames = LobbyApiListAlloc(mpServerInterface->GetLobbyAPIRef(), KI_LIST_FOUND_GAMES, NULL, NULL);
-            CGS_ASSERT(mpFoundGames != 0, "Failed to create found game list");
+            CGS_ASSERT_AT(mpFoundGames != 0, "Failed to create found game list",
+                          CGS_ARTIST_SERVER_GAMES_FILE, 467);
         }
     }
 
@@ -1350,10 +1345,9 @@ namespace CgsNetwork
     // global StrStream and raises component events through the interface's OnEvent slot.
     // ===================================================================
 
-    void DirtySockDebugLog(const char* /*lpcText*/)
+    void DirtySockDebugLog(const char* lpcText)
     {
-        // The X360 forwards to off_82F335C8 (the network debug StrStream). Cosmetic only;
-        // the sink lives in the development log subsystem (not reconstructed here).
+        ServerInterfaceDirtySock::mNetStreamLogChannelOutput << lpcText;
     }
 
     void RaiseServerInterfaceEvent(ServerInterfaceDirtySock* lpInterface, s32 liEvent, void* lpData)
@@ -1376,7 +1370,7 @@ namespace CgsNetwork
 void ServerInterfaceGames::ConnApiCallback(DirtySock::ConnApiCbInfoT* lpCbInfo,
                                            ServerInterfaceComponent* /*lpComponent*/)
 {
-    *CgsDev::Log::gpDebugPrint << "CgsNetwork::ServerInterfaceGames::ConnApiCallback" << ": eType "
+    ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "CgsNetwork::ServerInterfaceGames::ConnApiCallback" << ": eType "
                                << lpCbInfo->eType << " eOldStatus " << lpCbInfo->eOldStatus
                                << " eNewStatus " << lpCbInfo->eNewStatus << "\n";
 }

@@ -452,8 +452,8 @@ void AptActionInterpreter::loadVariables(AptValue* pScope, AptValue* pTarget, EA
 void AptActionInterpreter::EnumerateMembers(AptValue* pScope, AptValue* pTarget)
 {
     AptActionInterpreter* const pInterp = this;
-    // console: Variable = stack top (4 * *a1 + a1[2] - 4 -> mpStack[mnStackTop-1]).
-    AptValue* pVariable = pInterp->mpStack[pInterp->mnStackTop - 1];
+    // console: Variable = stack top (4 * *a1 + a1[2] - 4 -> mOperandStack.mppItems[mOperandStack.mnTop-1]).
+    AptValue* pVariable = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
 
     // console: a string-typed (tag 1) / boxed-string (tag 33) DEFINED top is a NAME;
     // resolve it to the variable it designates. A tag-1 name passes its own value+8
@@ -471,9 +471,9 @@ void AptActionInterpreter::EnumerateMembers(AptValue* pScope, AptValue* pTarget)
     }
 
     // console: replace the top with the null/undefined enumeration marker.
-    if (pInterp->mnStackTop > 0)
-        --pInterp->mnStackTop;
-    pInterp->mpStack[pInterp->mnStackTop++] = gpUndefinedValue;   // off_8324D814 (no AddRef -- a singleton)
+    if (pInterp->mOperandStack.mnTop > 0)
+        --pInterp->mOperandStack.mnTop;
+    pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = gpUndefinedValue;   // off_8324D814 (no AddRef -- a singleton)
 
     // console: walk the target's native-hash chain, pushing each enumerable key.
     AptNativeHash* pHash = pVariable->GetNativeHashVirtual();     // (*(*Variable+8))(Variable)
@@ -488,7 +488,7 @@ void AptActionInterpreter::EnumerateMembers(AptValue* pScope, AptValue* pTarget)
 
             AptString* const pStr = AptString::Create("");           // console AptString::Create(&unk_820046A7)
             *pStr->GetInternalString() = pItem->mKey;                // console EAStringC::operator=(v12+2, key)
-            pInterp->mpStack[pInterp->mnStackTop++] = pStr;          // inlined stackPush slot
+            pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = pStr;          // inlined stackPush slot
             pStr->AddRef();                                          // console (**v12)(v12)
         }
         // console: step to the next hash in the chain (the __proto__ link's hash).
@@ -568,7 +568,7 @@ int AptBuildPathName(AptActionInterpreter* /*pInterp*/,
 // pName, returning the inserted node. Member declared in AptCIH.h; body homed in
 // AptCIHBehaviour.cpp.
 
-// The process-wide AS VM (console dword_8324E760 == &gAptActionInterpreter.mnStackTop;
+// The process-wide AS VM (console dword_8324E760 == &gAptActionInterpreter.mOperandStack.mnTop;
 // defined in AptGlobals.cpp): the init-object member copy stores variables through it
 // (the console hard-codes &dword_8324E760 as the setVariable receiver).
 extern AptActionInterpreter gAptActionInterpreter;
@@ -675,7 +675,7 @@ AptValue* AptActionInterpreter::CallFunctionDispatch(AptValue* pScope, AptValue*
     AptActionInterpreter* const pInterp = this;
     // console: HIDWORD(v11) = *a1 - a4 -- the operand-stack depth this call must
     // unwind to if it aborts.
-    const int nBase = pInterp->mnStackTop - nArgs;
+    const int nBase = pInterp->mOperandStack.mnTop - nArgs;
 
     AptValue* pResult;
     if (pFunction && pFunction->isNativeFunction())   // tag 9, defined
@@ -683,16 +683,16 @@ AptValue* AptActionInterpreter::CallFunctionDispatch(AptValue* pScope, AptValue*
         // console: v15 = *(a1+64) (mnConstantPoolCount, saved across the native call).
         const uint32_t nSavedField40 = pInterp->mConstantPool.mnCount;
         // The console natives read their AS arguments straight off the LIVE interpreter
-        // object (dword_8324E760 == mnStackTop / off_8324E768 == mpStack). The repo's
+        // object (dword_8324E760 == mOperandStack.mnTop / off_8324E768 == mOperandStack.mppItems). The repo's
         // gnAptNativeArgCount / gppAptNativeArgStack globals mirror those two members
         // for the native bodies; publish this dispatch's view for the duration of the
         // call (saved/restored so a nested dispatch keeps the outer native coherent).
-        extern int        gnAptNativeArgCount;    // dword_8324E760 (== mnStackTop)
-        extern AptValue** gppAptNativeArgStack;   // off_8324E768   (== mpStack)
+        extern int        gnAptNativeArgCount;    // dword_8324E760 (== mOperandStack.mnTop)
+        extern AptValue** gppAptNativeArgStack;   // off_8324E768   (== mOperandStack.mppItems)
         const int nSavedArgCount        = gnAptNativeArgCount;
         AptValue** const pSavedArgStack = gppAptNativeArgStack;
-        gnAptNativeArgCount  = pInterp->mnStackTop;
-        gppAptNativeArgStack = pInterp->mpStack;
+        gnAptNativeArgCount  = pInterp->mOperandStack.mnTop;
+        gppAptNativeArgStack = pInterp->mOperandStack.mppItems;
         // console: v16 = (*(a3+32))(a2, a4) -- call the wrapped AptExtFunctionPtr.
         typedef AptValue* (*AptExtCall)(AptValue* pThis, int nArgCount);
         AptValue* const pRet = reinterpret_cast<AptExtCall>(
@@ -715,15 +715,15 @@ AptValue* AptActionInterpreter::CallFunctionDispatch(AptValue* pScope, AptValue*
     {
         // console LABEL_41: not callable -- pop the args, push the undefined singleton.
         pInterp->stackSafePop(nArgs);
-        pInterp->mpStack[pInterp->mnStackTop++] = gpUndefinedValue;   // *(4*(*a1)++ + ...) = off_8324D814
+        pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = gpUndefinedValue;   // *(4*(*a1)++ + ...) = off_8324D814
         pResult = gpUndefinedValue;
     }
 
     // console LABEL_42: when an abort fired during the call (mpAbortValue set) and the
     // stack grew past the pre-call base, collapse it back.
-    if (pInterp->mpAbortValue && pInterp->mnStackTop > nBase)
+    if (pInterp->mpAbortValue && pInterp->mOperandStack.mnTop > nBase)
     {
-        pInterp->stackSafePop(pInterp->mnStackTop - nBase);
+        pInterp->stackSafePop(pInterp->mOperandStack.mnTop - nBase);
         pResult = 0;   // console: result = the pop's return (the collapsed slot)
     }
     return pResult;
@@ -819,14 +819,14 @@ AptValue* AptActionInterpreter::ExecuteScriptFunction(AptValue* pScope, AptValue
             // Bind provided args (from the operand-stack top), pad the rest with `undefined` (0x82AE3DE0).
             const int nDeclared = pFunc->GetNumArguments();                              // vtbl 0x44
             int nBind = (nDeclared < nArgs) ? nDeclared : nArgs;                         // min(declared, provided)
-            if (nBind > pInterp->mnStackTop)                                             // clamp to available
+            if (nBind > pInterp->mOperandStack.mnTop)                                             // clamp to available
             {
-                nBind = pInterp->mnStackTop;
+                nBind = pInterp->mOperandStack.mnTop;
                 nArgs = nBind;                                                           // r25 = r28
             }
             int i = 0;
             for (; i < nBind; ++i)
-                pFunc->SetArgument(pInterp->mpStack[pInterp->mnStackTop - 1 - i], i);    // vtbl 0x58
+                pFunc->SetArgument(pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1 - i], i);    // vtbl 0x58
             for (; i < nDeclared; ++i)
                 pFunc->SetArgument(gpUndefinedValue, i);
             pInterp->stackSafePop(nArgs);                                               // drop the consumed args
@@ -865,7 +865,7 @@ AptValue* AptActionInterpreter::ExecuteScriptFunction(AptValue* pScope, AptValue
             --pInterp->mnCIHStackTop;                                                  // console AptValue::_pop over +0x24
             pInterp->mpCIHStack[pInterp->mnCIHStackTop]->Release();                    // Release the pushed scope
 
-            pResult = (pInterp->mnStackTop > 0) ? pInterp->mpStack[pInterp->mnStackTop - 1]
+            pResult = (pInterp->mOperandStack.mnTop > 0) ? pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1]
                                                 : gpUndefinedValue;
         }
         else
@@ -873,7 +873,7 @@ AptValue* AptActionInterpreter::ExecuteScriptFunction(AptValue* pScope, AptValue
             // Reduced path (0x82AE3F88): drop the args, push `undefined`, drop the function's dead
             // CIH binding (Release + reset to the pinned EmptyCIH).
             pInterp->stackSafePop(nArgs);
-            pInterp->mpStack[pInterp->mnStackTop++] = gpUndefinedValue;
+            pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = gpUndefinedValue;
             if (AptValue* const pFuncCIH = pFunc->GetCIH())
                 pFuncCIH->Release();                                                   // vtbl[1]
             pFunc->SetCIH(static_cast<AptValue*>(gpAptEmptyCIH));                      // mpCIH = EmptyCIH
@@ -891,7 +891,7 @@ AptValue* AptActionInterpreter::ExecuteScriptFunction(AptValue* pScope, AptValue
     // `undefined`) -- a faithful subset for an unrun script function. ---
     (void)pScope; (void)pNewTarget; (void)pConstructTarget;
     pInterp->stackSafePop(nArgs);
-    pInterp->mpStack[pInterp->mnStackTop++] = gpUndefinedValue;
+    pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = gpUndefinedValue;
     return gpUndefinedValue;
 }
 

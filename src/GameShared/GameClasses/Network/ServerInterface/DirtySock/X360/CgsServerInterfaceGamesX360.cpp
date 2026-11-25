@@ -365,17 +365,15 @@ namespace CgsNetwork
     // ReceivedGameEvent @ 0x8288C808 -- for create/join/quick-join (meCurrentAction <= 2)
     // end the action once the lobby message carries a "SESS" tagfield; otherwise chain
     // to the base.
-    s32 ServerInterfaceGamesX360::ReceivedGameEvent(LobbyApiMsgT* lpMsg)
+    void ServerInterfaceGamesX360::ReceivedGameEvent(LobbyApiMsgT* lpMsg)
     {
         if (static_cast<u32>(meCurrentAction) > 2u)
             return ServerInterfaceGames::ReceivedGameEvent(lpMsg);
 
         if (TagFieldFind(lpMsg->pData, "SESS") != 0)
         {
-            EndAction(lpMsg->code);   // base EndAction is void
-            return lpMsg->code;
+            EndAction(lpMsg->code);
         }
-        return 0;
     }
 
     // GetPlayerXUIDByID @ 0x8288C880 -- find the player with liPlayerID in the current

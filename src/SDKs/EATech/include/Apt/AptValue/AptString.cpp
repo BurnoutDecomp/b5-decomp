@@ -33,7 +33,7 @@
 // The global native-method argument stack -- the AS interpreter's native-call
 // dispatch (AptActionInterpreterInterpHelpers.cpp) publishes the call args here
 // before invoking the native (X360 globals dword_8324E760 = count = the shared
-// gAptActionInterpreter.mnStackTop, off_8324E768 = array = its mpStack). Defined
+// gAptActionInterpreter.mOperandStack.mnTop, off_8324E768 = array = its mOperandStack.mppItems). Defined
 // in AptGlobals.cpp. The i-th argument (i=0 = the last pushed) is
 // gppAptNativeArgStack[gnAptNativeArgCount-1-i].
 extern AptValue** gppAptNativeArgStack;   // off_8324E768

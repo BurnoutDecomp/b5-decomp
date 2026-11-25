@@ -14,6 +14,10 @@
 #include "GameShared/GameClasses/Sound/Playback/CgsContent.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
+
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsDataStructures.h"
 
 namespace CgsSound
 {
@@ -100,16 +104,17 @@ const IEntityFixer* IEntityFixer::GetFixer(Name aName)
 //
 // Return the resolved ContentClass this ContentType points at. Two debug guards:
 // mpContentClass must be non-null (CgsDataStructures.h:499) and fully resolved --
-// the low bit is the "stored as index in a pointer context" sentinel (:500). The
-// X360 second assert streams a dynamic Name-bearing message; under the house
-// CGS_ASSERT front-end it collapses to the leading static rodata fragment.
+// the low bit identifies an unresolved Name (:500). The diagnostic streams
+// that Name into the original message.
 // Called by Slot::Attach.
 // ============================================================================
 const ContentClass& ContentType::GetContentClass() const
 {
-    CGS_ASSERT(mpContentClass != 0, "mpContentClass");
-    CGS_ASSERT((reinterpret_cast<uintptr_t>(mpContentClass) & 1) == 0,
-               "This Data Structure is not resolved. (Name ");
+    CGS_ASSERT(mpContentClass, CGS_ASSERT_MESSAGE_AT("mpContentClass", CGS_ARTIST_FILE, 499));
+    CGS_ASSERT_STREAM_AT((reinterpret_cast<uintptr_t>(mpContentClass) & 1) == 0,
+        "This Data Structure is not resolved. (Name "
+            << Name(reinterpret_cast<uintptr_t>(mpContentClass)) << " found in a pointer context.)",
+        CGS_ARTIST_FILE, 500);
     return *mpContentClass;
 }
 

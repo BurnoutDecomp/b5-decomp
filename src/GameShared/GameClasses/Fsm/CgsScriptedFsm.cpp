@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Fsm/CgsScriptedFsm.h"
-#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\FSM/CgsScriptedFsm.cpp"
+#define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\fsm\\CgsScriptedFsm.cpp"
 #include "GameShared/GameClasses/Fsm/Resources/CgsLuaCodeResource.h"  // CgsResource::LuaCodeResource
 #include "GameShared/GameClasses/Fsm/CgsEvent.h"                       // CgsFsm::Event
 #include "GameShared/GameClasses/Fsm/CgsVariable.h"                    // CgsFsm::Variable
@@ -7,9 +7,8 @@
 #include "GameShared/GameClasses/Core/CgsID.h"                        // CgsIDCompress / CgsIDUnCompress
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"               // CgsCore::SPrintf
 #include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT (flagged assert substitute)
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"            // [DIAG] BRN_SCREEN_DIAG witness
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include <cstdio>                                                      // std::sscanf
-#include <cstdlib>                                                    // [DIAG] getenv
 
 // ===========================================================================
 //  CgsFsm::ScriptedFsm -- reconstructed from BURNOUT_X360_ARTIST.XEX. The transition
@@ -17,11 +16,15 @@
 //  Prepare brings the script up and enters the start state; SetState looks a state up by
 //  id in the concrete FSM's table (GetState/GetStateCount) and swaps it (OnLeave/OnEnter);
 //  SendEvent (next pass) marshals an event's variables into Lua then NextState->SetState.
-//  The X360 gpcMessageBuffer assert machinery is replaced by CGS_ASSERT per the project rule.
 // ===========================================================================
 
 namespace CgsFsm
 {
+
+const char* ScriptedFsm::KPC_SET_EVENT_VARIABLE_FUNCTION_NAME = "SetEventVariable";
+const char* ScriptedFsm::KPC_GET_STATE_NAME_FUNCTION_NAME = "GetStateName";
+const char* ScriptedFsm::KPC_GET_NEXT_STATES_FUNCTION_NAME = "GetNextStates";
+const char* ScriptedFsm::KPC_GET_CURRENT_STATE_INDEX_FUNCTION_NAME = "GetCurrentStateIndex";
 
 ScriptedFsm::ScriptedFsm() { Construct(); }
 
@@ -56,9 +59,11 @@ bool ScriptedFsm::Prepare(CgsResource::LuaCodeResource* lpLuaCodeResource,
 bool ScriptedFsm::Release()
 {
     if (mpCurrentState != 0)
+    {
         mpCurrentState->OnLeave();
-    mpCurrentState = 0;
-    CGS_ASSERT(mLuaState.IsLuaResourceValid(), "mLuaState.IsLuaResourceValid()");
+        mpCurrentState = 0;
+    }
+    CGS_ASSERT_AT(mLuaState.IsLuaResourceValid(), "mLuaState.IsLuaResourceValid()", CGS_ARTIST_FILE, 99);
     mLuaState.Release();
     return true;
 }
@@ -68,54 +73,39 @@ void ScriptedFsm::SetState(CgsID lStateId)
 {
     ++muSequenceNumber;
 
-    ScriptedState* lpTarget = 0;
-    const s32 liCount = GetStateCount();
-    for (s32 li = 0; li < liCount; ++li)
+    const s32 liStateCount = GetStateCount();
+    for (s32 li = 0; li < liStateCount; ++li)
     {
         ScriptedState* lpState = GetState(li);
-        if (lpState != 0 && lpState->GetId() == lStateId)
+        if (lpState->GetId() == lStateId)
         {
-            lpTarget = lpState;
-            break;
+            if (lpState != mpCurrentState)
+            {
+                if (mpCurrentState != 0)
+                    mpCurrentState->OnLeave();
+                mpCurrentState = lpState;
+                lpState->OnEnter();
+            }
+            return;
         }
     }
 
-    if (lpTarget == 0)
-    {
-        char lacId[KI_CGSID_STRING_LEN];
-        CgsIDUnCompress(lStateId, lacId);
-        // [DIAG] NOT IN THE X360 BINARY (BRN_SCREEN_DIAG=1). This arm is the
-        // "the script asked for a state nobody registered" case -- the FSM wants to
-        // open a menu that does not exist in the state pool. Named, because the
-        // assert text alone does not say WHICH.
-        CGS_ASSERT(false, "Could not find state with id");   // X360 appends the id (lacId)
-        return;
-    }
-
-    if (lpTarget == mpCurrentState)
-        return;                                              // already current
-
-    // [DIAG] NOT IN THE X360 BINARY (BRN_SCREEN_DIAG=1). The single choke point every
-    // scripted screen transition passes through, so ONE witness names every menu the
-    // game actually opens, in order. Used to prove menu coverage against the console's
-    // own FSM rather than inferring it from which files exist.
-
-    if (mpCurrentState != 0)
-        mpCurrentState->OnLeave();
-    mpCurrentState = lpTarget;
-    lpTarget->OnEnter();
+    char lacId[KI_CGSID_STRING_LEN];
+    CgsIDUnCompress(lStateId, lacId);
+    CGS_ASSERT_STREAM_AT(false, "Could not find state with id: " << lacId, CGS_ARTIST_FILE, 385);
 }
 
 // @ 0x828368A8 -- Lua indices name authored graph nodes, not C++ state-table slots.
 const ScriptedState* ScriptedFsm::GetStateByIndex(s32 liStateIndex)
 {
-    CGS_ASSERT(mLuaState.IsLuaResourceValid(), "mLuaState.IsLuaResourceValid()");
+    CGS_ASSERT_AT(mLuaState.IsLuaResourceValid(), "mLuaState.IsLuaResourceValid()", CGS_ARTIST_FILE, 220);
 
+    const ScriptedState* lpResult = 0;
     char lacStateIndex[128];
     CgsCore::SPrintf(lacStateIndex, 128, "%d", liStateIndex);
     const CgsID lStateIndexId = CgsIDCompress(lacStateIndex);
     char lacStateName[128];
-    mLuaState.GetString("GetStateName", lStateIndexId, lacStateName, 128);
+    mLuaState.GetString(KPC_GET_STATE_NAME_FUNCTION_NAME, lStateIndexId, lacStateName, 128);
     const CgsID lStateId = CgsIDCompress(lacStateName);
 
     const s32 liNumStates = GetStateCount();
@@ -123,16 +113,19 @@ const ScriptedState* ScriptedFsm::GetStateByIndex(s32 liStateIndex)
     {
         const ScriptedState* lpState = GetState(liState);
         if (lpState->GetId() == lStateId)
-            return lpState;
+        {
+            lpResult = lpState;
+            break;
+        }
     }
-    return 0;
+    return lpResult;
 }
 
 // @ 0x82836BA8 -- the script's numeric index for the current state.
 s32 ScriptedFsm::GetCurrentStateIndex()
 {
-    CGS_ASSERT(mLuaState.IsLuaResourceValid(), "mLuaState.IsLuaResourceValid()");
-    return mLuaState.GetInt("GetCurrentStateIndex", CgsIDCompress("0"));
+    CGS_ASSERT_AT(mLuaState.IsLuaResourceValid(), "mLuaState.IsLuaResourceValid()", CGS_ARTIST_FILE, 312);
+    return mLuaState.GetInt(KPC_GET_CURRENT_STATE_INDEX_FUNCTION_NAME, CgsIDCompress("0"));
 }
 
 // Base state-table accessors. The concrete FSM (CgsGui::StateMachine) overrides these to
@@ -140,19 +133,15 @@ s32 ScriptedFsm::GetCurrentStateIndex()
 ScriptedState* ScriptedFsm::GetState(s32 /*liIndex*/) { return 0; }
 s32            ScriptedFsm::GetStateCount()           { return 0; }
 
-// @ 0x82836790 -- push the event's variables into the Lua state via "SetEventVariable",
-// then run the scripted transition: NextState(event.id) -> the script's new current state.
+// Push event variables through the Lua setter before running the transition.
 void ScriptedFsm::SendEvent(const Event* lpEvent)
 {
-    CGS_ASSERT(lpEvent != 0, "lpEvent != NULL");
-    CGS_ASSERT(mLuaState.IsLuaResourceValid(), "mLuaState.IsLuaResourceValid()");
+    CGS_ASSERT_AT(lpEvent != 0, "lpEvent != NULL", CGS_ARTIST_FILE, 337);
+    CGS_ASSERT_AT(mLuaState.IsLuaResourceValid(), "mLuaState.IsLuaResourceValid()", CGS_ARTIST_FILE, 338);
 
-    const s32 liCount = lpEvent->GetVariableCount();
-    for (s32 li = 0; li < liCount; ++li)
+    for (s32 li = 0; li < lpEvent->GetVariableCount(); ++li)
     {
-        const Variable* lpVariable = lpEvent->GetVariable(li);
-        if (lpVariable != 0)
-            lpVariable->ToLua(&mLuaState, "SetEventVariable");
+        lpEvent->GetVariable(li)->ToLua(&mLuaState, KPC_SET_EVENT_VARIABLE_FUNCTION_NAME);
     }
 
     mLuaState.NextState(lpEvent->GetId());
@@ -176,7 +165,7 @@ void ScriptedFsm::GetNextStates(s32 liStateIndex,
     CgsCore::SPrintf(lacStateIndex, 128, "%d", liStateIndex);
     const CgsID lStateIndexId = CgsIDCompress(lacStateIndex);
     char lacNextStateIndices[128];
-    mLuaState.GetString("GetNextStates", lStateIndexId, lacNextStateIndices, 128);
+    mLuaState.GetString(KPC_GET_NEXT_STATES_FUNCTION_NAME, lStateIndexId, lacNextStateIndices, 128);
 
     s32 liOverflowScratch; // ARTIST sp+var_140 receives conversion 33, outside the 32-slot output.
     const s32 liParsedCount = std::sscanf(lacNextStateIndices,
@@ -216,13 +205,8 @@ void ScriptedFsm::GetNextStates(s32 liStateIndex,
         &liOverflowScratch);
     *lpiNumNextStates = liParsedCount;
 
-    if (liParsedCount > 32)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("Too many state transitions in FSM\n",
-            CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 296));
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT_STREAM_AT(*lpiNumNextStates <= 32, "Too many state transitions in FSM\n",
+                         CGS_ARTIST_FILE, 296);
 }
 
 } // namespace CgsFsm

@@ -93,11 +93,11 @@ namespace renderengine
 void CoronaRenderer::Initialize(rw::IResourceAllocator& lrAllocator)
 {
     ProgramBufferParameters lProgram;
-    lProgram.muFunction = reinterpret_cast<u32>(gaCoronaPixelProgram);
-    lProgram.muShaderType = 1;
-    lProgram.muReserved8 = sizeof(gaCoronaPixelProgram);
-    lProgram.muMicrocodePart1 = 0;
-    lProgram.muMicrocodePart3 = 0;
+    lProgram.mpFunction = gaCoronaPixelProgram;
+    lProgram.miShaderType = 1;
+    lProgram.muProgramSize = sizeof(gaCoronaPixelProgram);
+    lProgram.mMicrocodeParts.cbCachedPartSize = 0;
+    lProgram.mMicrocodeParts.cbPhysicalPartSize = 0;
     lProgram.muConstantTableSize = 0;
     lProgram.muNumVariables = 0;
     rw::ResourceDescriptor lDescriptor;
@@ -105,9 +105,9 @@ void CoronaRenderer::Initialize(rw::IResourceAllocator& lrAllocator)
     gsPixelProgramResource = lrAllocator.DoAllocate(lDescriptor, 0);
     s_pixelProgram = ProgramBuffer::Initialize(&gsPixelProgramResource, &lProgram);
 
-    lProgram.muFunction = reinterpret_cast<u32>(gaCoronaVertexProgram);
-    lProgram.muShaderType = 0;
-    lProgram.muReserved8 = sizeof(gaCoronaVertexProgram);
+    lProgram.mpFunction = gaCoronaVertexProgram;
+    lProgram.miShaderType = 0;
+    lProgram.muProgramSize = sizeof(gaCoronaVertexProgram);
     ProgramBuffer::GetResourceDescriptor(&lDescriptor, &lProgram);
     gsVertexProgramResource = lrAllocator.DoAllocate(lDescriptor, 0);
     s_vertexProgram = ProgramBuffer::Initialize(&gsVertexProgramResource, &lProgram);

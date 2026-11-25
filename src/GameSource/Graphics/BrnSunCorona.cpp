@@ -108,11 +108,11 @@ renderengine::ProgramBufferData* CreateProgram(rw::IResourceAllocator* lpAllocat
     const u32* lpBinary, u32 luType, u32 luSize)
 {
     renderengine::ProgramBufferParameters lParameters;
-    lParameters.muFunction = reinterpret_cast<u32>(lpBinary);
-    lParameters.muShaderType = luType;
-    lParameters.muReserved8 = luSize;
-    lParameters.muMicrocodePart1 = 0;
-    lParameters.muMicrocodePart3 = 0;
+    lParameters.mpFunction = lpBinary;
+    lParameters.miShaderType = luType;
+    lParameters.muProgramSize = luSize;
+    lParameters.mMicrocodeParts.cbCachedPartSize = 0;
+    lParameters.mMicrocodeParts.cbPhysicalPartSize = 0;
     lParameters.muConstantTableSize = 0;
     lParameters.muNumVariables = 0;
 

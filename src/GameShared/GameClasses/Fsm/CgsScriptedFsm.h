@@ -64,6 +64,12 @@ namespace CgsFsm
         // leaves it 0, so the seed is a store by the owner, not by this class.
         void SetSequenceNumber(u32 luSequenceNumber) { muSequenceNumber = luSequenceNumber; }
 
+    private:
+        static const char* KPC_SET_EVENT_VARIABLE_FUNCTION_NAME;
+        static const char* KPC_GET_STATE_NAME_FUNCTION_NAME;
+        static const char* KPC_GET_NEXT_STATES_FUNCTION_NAME;
+        static const char* KPC_GET_CURRENT_STATE_INDEX_FUNCTION_NAME;
+
     protected:
         CgsFsm::LuaState mLuaState;        // +0x08
         u32              muSequenceNumber; // +0x10

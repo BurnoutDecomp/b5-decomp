@@ -44,20 +44,6 @@
 // ---------------------------------------------------------------------------
 extern DOGMA_PoolManager* gpAptOperandStackPool;   // off_8324D808
 
-// ---------------------------------------------------------------------------
-// NOTE: PopAndPush takes a "value producer" -- in the X360 asm `a3` is an
-// object whose first virtual (vtbl[0]) is invoked with itself as the receiver
-// and yields the AptValue* to push. The producer is constructed by the caller
-// (an AptActionInterpreter helper); modelled here as a minimal polymorphic
-// interface so the indirect-call ORDER is preserved without fabricating the
-// concrete producer body (which is owned by the interpreter TUs).
-// ---------------------------------------------------------------------------
-class AptValueProducer
-{
-public:
-    virtual AptValue* Produce() = 0;
-};
-
 class AptValueVector
 {
 public:
@@ -80,10 +66,8 @@ public:
         return lvVec;
     }
 
-    // PopAndPush @ 0x82ADBAB8 -- if at least nCount values are live, produce a
-    // new value, Release the top nCount values, and replace them with the new
-    // one (net stack delta = 1 - nCount).
-    AptValue* PopAndPush(int32_t nCount, AptValueProducer* pProducer);
+    // Retain the replacement and release the top nCount operands.
+    void PopAndPush(int32_t nCount, AptValue* pValue);
 
     // SafePop @ 0x82ADBB58 -- Release and pop the top nCount values, but only
     // when nCount > 0 and at least nCount values are live.

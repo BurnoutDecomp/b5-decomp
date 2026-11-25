@@ -165,13 +165,13 @@ s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
     // / muNumVariables (param words [1],[4],[6],[8],[9]); the inline-microcode words [3],[5],[7] are
     // only consumed on the muFunction==0 path (not taken here) and are left untouched by the asm.
     renderengine::ProgramBufferParameters lVertexParams;
-    lVertexParams.muShaderType        = 0;
-    lVertexParams.muMicrocodePart1    = 0;
-    lVertexParams.muMicrocodePart3    = 0;
+    lVertexParams.miShaderType        = 0;
+    lVertexParams.mMicrocodeParts.cbCachedPartSize    = 0;
+    lVertexParams.mMicrocodeParts.cbPhysicalPartSize    = 0;
     lVertexParams.muConstantTableSize = 0;
     lVertexParams.muNumVariables      = 0;
-    lVertexParams.muFunction          = static_cast<u32>(reinterpret_cast<uintptr_t>(lpVertexProgramBinary));
-    lVertexParams.muReserved8         = luVertexProgramSize;
+    lVertexParams.mpFunction          = lpVertexProgramBinary;
+    lVertexParams.muProgramSize         = luVertexProgramSize;
 
     rw::ResourceDescriptor lVertexDescriptor;
     renderengine::ProgramBuffer::GetResourceDescriptor(&lVertexDescriptor, &lVertexParams);
@@ -185,13 +185,13 @@ s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
     // Same zeroed param words as the vertex case ([1],[4],[6],[8],[9]); muShaderType is set to 1
     // (the X360 stores li 1 into v17[1] after the GetResourceDescriptor stores -- the asm order).
     renderengine::ProgramBufferParameters lPixelParams;
-    lPixelParams.muMicrocodePart1    = 0;
-    lPixelParams.muMicrocodePart3    = 0;
+    lPixelParams.mMicrocodeParts.cbCachedPartSize    = 0;
+    lPixelParams.mMicrocodeParts.cbPhysicalPartSize    = 0;
     lPixelParams.muConstantTableSize = 0;
     lPixelParams.muNumVariables      = 0;
-    lPixelParams.muFunction          = static_cast<u32>(reinterpret_cast<uintptr_t>(lpPixelProgramBinary));
-    lPixelParams.muReserved8         = luPixelProgramSize;
-    lPixelParams.muShaderType        = 1;
+    lPixelParams.mpFunction          = lpPixelProgramBinary;
+    lPixelParams.muProgramSize         = luPixelProgramSize;
+    lPixelParams.miShaderType        = 1;
 
     rw::ResourceDescriptor lPixelDescriptor;
     renderengine::ProgramBuffer::GetResourceDescriptor(&lPixelDescriptor, &lPixelParams);

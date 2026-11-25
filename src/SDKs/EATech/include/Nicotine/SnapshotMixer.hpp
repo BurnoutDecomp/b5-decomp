@@ -25,6 +25,8 @@ class NFSMixMap;
 namespace Nicotine
 {
 
+class IDynamicMixer;
+
 // ---------------------------------------------------------------------------
 //  SnapshotStatus -- one entry of the mixer's runtime status array (mpSnapshots,
 //  stride 8). Each element tracks whether its snapshot is active and, when a
@@ -74,7 +76,7 @@ public:
 class SnapshotMixer : public MixerMemBase
 {
 public:
-    void Construct(void* lpOwner);                    // @0x82B46CE8
+    void Construct(IDynamicMixer* lpOwner);                    // @0x82B46CE8
     SnapshotChannel*     GetChannel(int liIndex);      // @0x82B47170 (bounds vs miNumChannels)
     SnapshotChannelData* GetSnapshot(int liIndex);     // @0x82B46EE0 (bounds vs miNumSnapshots)
     // @0x82B475B0 -- &(snapshot liSnapshotIdx's data) for the channel whose descriptor
@@ -100,7 +102,7 @@ public:
     void InitSnapshots(SnapshotHeader* lpHeader);    // @0x82B47350
     void DestroySnapshots();                         // tear down the snapshot/channel arrays
 
-    void*            mpOwner;        // +0x00  owner (has the assert vtable; Construct arg)
+    IDynamicMixer*   mpOwner;        // +0x00  owner (has the assert vtable; Construct arg)
     SnapshotHeader*  mpSnapshotHdr;  // +0x04
     int              meState;        // +0x08  1 = constructed, 2 = attached
     SnapshotChannel* mpChannels;     // +0x0c  per-channel ramps (stride 0x18)

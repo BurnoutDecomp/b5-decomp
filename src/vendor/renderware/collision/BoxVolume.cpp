@@ -328,20 +328,20 @@ RwBool BoxVolume::GetBBox(const Matrix44Affine* lpTransform, RwBool /*abTight*/,
 // ---------------------------------------------------------------------------
 Vector3 BoxVolume::GetBBoxDiag() const
 {
-    const __vector4 lOnes = __vspltisw(-1);
-    const __vector4 lSign = __vslw(lOnes, lOnes);
-    const __vector4 lX = __vandc(mTransform.xAxis.mV, lSign);
-    const __vector4 lY = __vandc(mTransform.yAxis.mV, lSign);
-    const __vector4 lZ = __vandc(mTransform.zAxis.mV, lSign);
-    const __vector4 lHx = __vspltw(__lvlx(&mBoxData.mfHx, 0), 0);
-    const __vector4 lHy = __vspltw(__lvlx(&mBoxData.mfHy, 0), 0);
-    const __vector4 lHz = __vspltw(__lvlx(&mBoxData.mfHz, 0), 0);
-    const __vector4 lRadius = __vspltw(__lvlx(&mfRadius, 0), 0);
-    __vector4 lExtent = __vmulfp(lY, lHy);
-    lExtent = __vmaddfp(lX, lHx, lExtent);
-    lExtent = __vmaddfp(lZ, lHz, lExtent);
-    lExtent = __vaddfp(lExtent, lRadius);
-    return Vector3(__vmulfp(lExtent, __vcfsx(__vspltisw(2), 0)));
+    using math::vpu::Abs;
+    using math::vpu::VecFloat;
+    const VecFloat halfY(mBoxData.mfHy);
+    const __vector4 row1 = Abs(mTransform.yAxis).mV;
+    __vector4 extent = __vmulfp(row1, halfY.mV);
+    const VecFloat halfX(mBoxData.mfHx);
+    const __vector4 row0 = Abs(mTransform.xAxis).mV;
+    extent = __vmaddfp(row0, halfX.mV, extent);
+    const VecFloat halfZ(mBoxData.mfHz);
+    const __vector4 row2 = Abs(mTransform.zAxis).mV;
+    extent = __vmaddfp(row2, halfZ.mV, extent);
+    const VecFloat radius(mfRadius);
+    const __vector4 two = __vcfsx(__vspltisw(2), 0);
+    return Vector3(__vmulfp(__vaddfp(extent, radius.mV), two));
 }
 
 // ---------------------------------------------------------------------------
@@ -404,20 +404,13 @@ RwBool SphereVolume::GetBBox(const Matrix44Affine* lpTransform, RwBool /*abTight
 }
 
 // ---------------------------------------------------------------------------
-// SphereVolume::GetBBoxDiag @ 0x82BA8580 -- 2 * radius on every axis.
-//
-//   vspltisw v0, 2 ; vcfsx v0, v0, 0        ; 2.0f
-//   lvlx/vspltw +0x50 -> radius             ; a SPLAT, so every lane is 2*radius
-//   vperm / vrlimi128                       ; a lane shuffle of an all-lanes-equal
-//                                           ; vector -- inert (the compiler's generic
-//                                           ; Vector3(s,s,s) construction)
-//   stvx128 v13, r0, r3
-// ---------------------------------------------------------------------------
+// SphereVolume::GetBBoxDiag @ 0x82BA8580.
 Vector3 SphereVolume::GetBBoxDiag() const
 {
-    const __vector4 lRadius = __vspltw(__lvlx(&mfRadius, 0), 0);
-    const __vector4 lTwo = __vcfsx(__vspltisw(2), 0);
-    return Vector3(__vmulfp(lTwo, lRadius));
+    const math::vpu::VecFloat radius(mfRadius);
+    const math::vpu::VectorIntrinsic two = __vcfsx(__vspltisw(2), 0);
+    const math::vpu::VecFloat diameter(__vmulfp(two, radius.mV));
+    return Vector3(diameter, diameter, diameter);
 }
 
 // ===========================================================================

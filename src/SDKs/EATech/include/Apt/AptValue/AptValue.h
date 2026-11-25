@@ -355,10 +355,8 @@ public:
 
     bool isScriptFunction() const
     {
-        return (getVtblIndex() == AptVFT_ScriptFunction1
-             || getVtblIndex() == AptVFT_ScriptFunction2
-             || getVtblIndex() == AptVFT_ScriptFunctionByteCodeBlock)
-            && getIsDefined();
+        const AptVirtualFunctionTable_Indices eType = getVtblIndex();
+        return eType >= AptVFT_ScriptFunction1 && eType <= AptVFT_ScriptFunctionByteCodeBlock && getIsDefined();
     }
 
     // CanCreateScriptObject @0x82AD84E0 -- can this value type be used as the base

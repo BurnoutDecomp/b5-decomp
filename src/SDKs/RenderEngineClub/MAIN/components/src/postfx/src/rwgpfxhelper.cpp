@@ -238,9 +238,9 @@ namespace postfx
     {
         if (!allocator) allocator = gpPfxHelper->GetAllocator();
         renderengine::ProgramBufferParameters params = {};
-        params.muFunction = reinterpret_cast<u32>(microcode);
-        params.muShaderType = type;
-        params.muReserved8 = size;
+        params.mpFunction = microcode;
+        params.miShaderType = type;
+        params.muProgramSize = size;
         rw::ResourceDescriptor descriptor;
         renderengine::ProgramBuffer::GetResourceDescriptor(&descriptor, &params);
         rw::Resource resource = AllocateResource(allocator, descriptor);

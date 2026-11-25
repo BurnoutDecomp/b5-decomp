@@ -1146,7 +1146,7 @@ AptCIH* AptDisplayList::mergeState(void** ppMergeInfo, AptNativeHash* pParentHas
 // DecFIGS DWARF where the X360 body is folded), homed here next to their callers.
 // ===========================================================================
 
-// The process-wide AS VM (console dword_8324E760 == &gAptActionInterpreter.mnStackTop),
+// The process-wide AS VM (console dword_8324E760 == &gAptActionInterpreter.mOperandStack.mnTop),
 // defined in AptGlobals.cpp: the class-member clone stores variables through it
 // (the console hard-codes &dword_8324E760 as the setVariable receiver).
 // Committed extern in the sibling AptCIHNativeFunctionHelper.cpp.
@@ -1452,7 +1452,7 @@ int AptCIH::AssociateInstToClass()
         if (pTopB) pTopB->Release();
         --gAptActionInterpreter.mnCallStackB_Count;
     }
-    if (gAptActionInterpreter.mnStackTop > 0)
+    if (gAptActionInterpreter.mOperandStack.mnTop > 0)
         gAptActionInterpreter.stackPop();   // the constructor's result
     AptScriptFunctionBase::PopStaticData(lppSavedRegs);
 

@@ -186,14 +186,14 @@ AptValue* AptObject::RegisterClassNative(AptValue* /*pContext*/, int nNumParams)
 {
     if (nNumParams == 2)
     {
-        AptValue* const pName = gAptActionInterpreter.mpStack[gAptActionInterpreter.mnStackTop - 1];
+        AptValue* const pName = gAptActionInterpreter.mOperandStack.mppItems[gAptActionInterpreter.mOperandStack.mnTop - 1];
         if (pName != 0 && pName->getIsDefined())
         {
             const int nNameType = static_cast<int>(pName->getVtblIndex());
             if (nNameType == AptVFT_StringValue || nNameType == AptVFT_StringObject)
             {
                 AptValue* const pClass =
-                    gAptActionInterpreter.mpStack[gAptActionInterpreter.mnStackTop - 2];
+                    gAptActionInterpreter.mOperandStack.mppItems[gAptActionInterpreter.mOperandStack.mnTop - 2];
 
                 if (gpAptClassRegistry == 0)
                 {

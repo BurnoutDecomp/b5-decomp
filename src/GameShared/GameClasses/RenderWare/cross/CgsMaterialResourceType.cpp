@@ -245,7 +245,7 @@ namespace CgsResource
 
                     u8* const lpList = reinterpret_cast<u8*>(*reinterpret_cast<u32*>(lpTech + luTechListOff));
                     *reinterpret_cast<u8*>(lpList + luOffset + 3)  = lHandle.mu8RegisterCount;
-                    *reinterpret_cast<u16*>(lpList + luOffset)     = lHandle.mu8RegisterSet;
+                    *reinterpret_cast<u16*>(lpList + luOffset)     = lHandle.mu8RegisterIndex;
                 }
                 else
                 {

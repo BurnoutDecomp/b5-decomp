@@ -1,31 +1,4 @@
-// ===========================================================================
-// EATech Apt -- AptValue value conversions + the c_string cast.
-//
-// DECOMPILED from the PS3 EXTERNAL ELF (the X360 ARTIST build inlined these, so
-// it has no standalone bodies):
-//     AptValue::c_string   @0x7E4E18   (full pseudocode)
-//     AptValue::toBool     @0x7EF024   (full pseudocode + asm)
-//     AptValue::toInteger  @0x7F2CF4   (asm; no pseudocode)
-//     AptValue::toFloat    @0x7E8FE4   (asm; no pseudocode)
-//
-// All four dispatch on the value type tag (meValueType, the low 7 bits of the
-// bitfield word -- here read endian-safely via getVtblIndex() rather than the
-// console's `*((_DWORD*)this + 1) & 0x7F`). They read the concrete payload for
-// bool/int/float values, parse the string for string values, and treat every
-// other value as truthy/1 unless it is the global `undefined` singleton.
-//
-// toBool is a verbatim decompile (the export gives its complete body). For
-// toInteger/toFloat the export TRUNCATES at the (IDA-flagged "invalid") jump
-// table, so the four per-case handler bodies past it are not in the dump; what IS
-// in the dump and kept verbatim is the structure -- the mbIsDefined guard, the
-// exact jump-table case->type mapping (only types 1/0x21/5/6/7 have handlers; all
-// else default) and the default body (`this != gpUndefinedValue ? 1 : 0`). The
-// per-case bodies are reconstructed from toBool's verbatim value access (the
-// payload offsets are identical across the three) and the standard primitive
-// conversion; each such spot is noted below.
-//
-// EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
-// ===========================================================================
+// The interpreter's native Boolean, integer and floating-point conversions.
 
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptInteger.h"
@@ -46,162 +19,121 @@
 #include <cstring>   // strcmp (the "_proto__" / "type" key compares)
 #include <cmath>     // fmodf (the float "integral?" test)
 #include <cstdlib>   // strtol
+#include <climits>
 
-// ---------------------------------------------------------------------------
-// The runtime symbols this TU reads, and their homes:
-//   gpUndefinedValue   -- the shared `undefined` value singleton (defined in
-//                         AptGlobals.cpp; built by AptValueInitialize, AptInit.cpp).
-//   AptGetSwfVersion() -- the active movie's SWF version (string->bool differs for
-//                         version 7); symbol _Z16AptGetSwfVersionv @0x7E29C0,
-//                         homed in AptLinker.cpp.
-//   Apt_atoff()        -- Apt's string->float parse; symbol _Z9Apt_atoffPKc
-//                         @0x7E2990, homed just below.
-// ---------------------------------------------------------------------------
 extern AptValue*    gpUndefinedValue;
-extern unsigned int AptGetSwfVersion();
-// Apt_atoff -- HOMED 2026-07-02 (retiring the return-0 stub). The PS3 body
-// @0x7E2990 (`_Z9Apt_atoffPKc`) is exactly `(float)_Stod(pStr, 0, 0)` -- the
-// CRT string->double parse (strtod semantics: leading whitespace, sign,
-// decimal/exponent, hex) rounded to single precision.
+extern int gnAptSwfVersion;
+// Keep one epilogue per conversion dispatch as in ARTIST.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
+// The native CRT parses floating-point text before converting it to float.
 float Apt_atoff(const char* pStr)
 {
-    return static_cast<float>(strtod(pStr, 0));
+    return static_cast<float>(atof(pStr));
 }
 
-// ---------------------------------------------------------------------------
-// c_string @0x7E4E18 -- as the AptString for a primitive string (type 1, the value
-// IS the AptString), else the boxed-string's linked AptString pointer.
-// ---------------------------------------------------------------------------
+// Unwrap a string operand after its type has been selected.
+static inline AptString* GetStringOperand(const AptValue* pValue)
+{
+    if (pValue->getVtblIndex() == AptVFT_StringValue)
+        return const_cast<AptString*>(static_cast<const AptString*>(pValue));
+    return static_cast<AptString*>(static_cast<const AptStringObject*>(pValue)->GetBoxedString());
+}
+
 AptString* AptValue::c_string() const
 {
-    if (getVtblIndex() == AptVFT_StringValue)
-        return reinterpret_cast<AptString*>(const_cast<AptValue*>(this));
-
-    // The console returns the linked AptString* the boxed-string value keeps at
-    // its type-specific slot (PS3/X360 +0x20 == AptStringObject::mpValue) -- read
-    // here through the named member (x64-correct). Every caller reaches this arm
-    // only for type 0x21 (the call sites all guard 1/0x21), so the typed downcast
-    // is the console's blind +0x20 read with the type made explicit; any other
-    // receiver yields null rather than a garbage slot.
-    if (getVtblIndex() == AptVFT_StringObject)
-        return reinterpret_cast<AptString*>(
-            static_cast<const AptStringObject*>(this)->GetBoxedString());
+    const AptVirtualFunctionTable_Indices eType = getVtblIndex();
+    if (eType == AptVFT_StringValue || eType == AptVFT_StringObject)
+        return GetStringOperand(this);
     return 0;
 }
 
-// ---------------------------------------------------------------------------
-// toBool @0x7EF024 -- verbatim decompile.
-// ---------------------------------------------------------------------------
+// SWF 7 uses string emptiness, while earlier versions test the numeric value.
 bool AptValue::toBool() const
 {
-    const AptVirtualFunctionTable_Indices eType = getVtblIndex();
-
-    if (eType == AptVFT_StringValue || eType == AptVFT_StringObject)
+    switch (getVtblIndex())
     {
-        AptString* pStr = c_string();
-        if (pStr)
+    case AptVFT_StringValue:
+    case AptVFT_StringObject:
+        if (gnAptSwfVersion == 7)
+            return !GetStringOperand(this)->GetInternalString()->IsEmpty();
+        else
         {
-            const EAStringC& s = *pStr->GetInternalString();
-
-            // SWF v7: empty string is false, any non-empty string is true.
-            if (AptGetSwfVersion() == 7)
-                return !s.IsEmpty();
-
-            // Otherwise numeric truthiness: a "0x.." literal parses as base-16 int,
-            // everything else as a float; non-zero -> true.
-            const char* buf = s.GetBuffer();
-            if (s.GetLength() > 2 && buf[0] == '0' && buf[1] == 'x')
-                return strtol(buf, 0, 16) != 0;
-            return Apt_atoff(buf) != 0.0f;
+            const EAStringC& rString = *GetStringOperand(this)->GetInternalString();
+            if (rString.GetInternalSize() > 2 && rString.GetBuffer()[0] == '0' && rString.GetBuffer()[1] == 'x')
+                return strtol(rString.GetBuffer(), 0, 16) != 0;
+            return Apt_atoff(GetStringOperand(this)->GetInternalString()->GetBuffer()) != 0.0f;
         }
-        // null-unwrap fall-through (non-1/0x21 receiver only): treat as object.
-    }
-
-    switch (eType)
-    {
-    case AptVFT_Boolean: return c_boolean()->GetBool();
-    case AptVFT_Float:   return c_float()->GetFloat() != 0.0f;
-    case AptVFT_Integer: return c_integer()->GetInt() != 0;
-    default:             return this != gpUndefinedValue;
+    case AptVFT_Boolean:
+        return c_boolean()->GetBool();
+    case AptVFT_Float:
+        return c_float()->GetFloat() != 0.0f;
+    case AptVFT_Integer:
+        return c_integer()->GetInt() != 0;
+    default:
+        return this != gpUndefinedValue;
     }
 }
 
-// ---------------------------------------------------------------------------
-// toInteger @0x7F2CF4 -- structure verbatim; per-case bodies reconstructed
-// (export truncates past the jump table -- see file header).
-// ---------------------------------------------------------------------------
 int AptValue::toInteger() const
 {
-    // Verbatim: an undefined value is 0 regardless of type.
     if (!getIsDefined())
         return 0;
 
-    const AptVirtualFunctionTable_Indices eType = getVtblIndex();
-
-    if (eType == AptVFT_StringValue || eType == AptVFT_StringObject)
+    switch (getVtblIndex())
     {
-        AptString* pStr = c_string();
-        if (pStr)
-        {
-            // String case body past the export's jump-table truncation --
-            // reconstructed from toBool's verbatim string parse, yielding the
-            // integer value (hex "0x.." -> base-16, else the numeric value).
-            const EAStringC& s = *pStr->GetInternalString();
-            const char* buf = s.GetBuffer();
-            if (s.GetLength() > 2 && buf[0] == '0' && buf[1] == 'x')
-                return static_cast<int>(strtol(buf, 0, 16));
-            return static_cast<int>(Apt_atoff(buf));
-        }
+    case AptVFT_StringObject:
+    case AptVFT_StringValue:
+    {
+        const EAStringC& rString = *GetStringOperand(this)->GetInternalString();
+        if (rString.GetInternalSize() > 2 && rString.GetBuffer()[0] == '0' && rString.GetBuffer()[1] == 'x')
+            return strtol(rString.GetBuffer(), 0, 16);
+        return atoi(rString.GetBuffer());
     }
-
-    switch (eType)
+    case AptVFT_Boolean:
+        return c_boolean()->GetBool();
+    case AptVFT_Integer:
+        return c_integer()->GetInt();
+    case AptVFT_Float:
     {
-    // Bodies past the truncation; the payload access matches toBool verbatim.
-    case AptVFT_Boolean: return c_boolean()->GetBool() ? 1 : 0;
-    case AptVFT_Float:   return static_cast<int>(c_float()->GetFloat());
-    case AptVFT_Integer: return c_integer()->GetInt();
-    // Verbatim default: 1 for any other (object-like) value, 0 only for undefined.
-    default:             return (this != gpUndefinedValue) ? 1 : 0;
+        const float fValue = c_float()->GetFloat();
+        if (fValue > static_cast<float>(INT_MAX))
+            return INT_MAX;
+        if (fValue < static_cast<float>(INT_MIN))
+            return INT_MIN;
+        return static_cast<int32_t>(fValue);
+    }
+    default:
+        return this != gpUndefinedValue;
     }
 }
 
-// ---------------------------------------------------------------------------
-// toFloat @0x7E8FE4 -- structure verbatim; per-case bodies reconstructed
-// (export truncates past the jump table -- see file header).
-// ---------------------------------------------------------------------------
 float AptValue::toFloat() const
 {
-    // Verbatim: an undefined value is 0.0 regardless of type.
     if (!getIsDefined())
         return 0.0f;
 
-    const AptVirtualFunctionTable_Indices eType = getVtblIndex();
-
-    if (eType == AptVFT_StringValue || eType == AptVFT_StringObject)
+    switch (getVtblIndex())
     {
-        AptString* pStr = c_string();
-        if (pStr)
-        {
-            // String case body past the export's jump-table truncation --
-            // reconstructed from toBool's verbatim string parse, yielding the float.
-            const EAStringC& s = *pStr->GetInternalString();
-            const char* buf = s.GetBuffer();
-            if (s.GetLength() > 2 && buf[0] == '0' && buf[1] == 'x')
-                return static_cast<float>(strtol(buf, 0, 16));
-            return Apt_atoff(buf);
-        }
-    }
-
-    switch (eType)
-    {
-    // Bodies past the truncation; the payload access matches toBool verbatim.
-    case AptVFT_Boolean: return c_boolean()->GetBool() ? 1.0f : 0.0f;
-    case AptVFT_Float:   return c_float()->GetFloat();
-    case AptVFT_Integer: return static_cast<float>(c_integer()->GetInt());
-    // Verbatim default: 1.0 for any other (object-like) value, 0.0 for undefined.
-    default:             return (this != gpUndefinedValue) ? 1.0f : 0.0f;
+    case AptVFT_StringValue:
+    case AptVFT_StringObject:
+        return Apt_atoff(GetStringOperand(this)->GetInternalString()->GetBuffer());
+    case AptVFT_Boolean:
+        return c_boolean()->GetBool() ? 1.0f : 0.0f;
+    case AptVFT_Integer:
+        return static_cast<float>(c_integer()->GetInt());
+    case AptVFT_Float:
+        return c_float()->GetFloat();
+    default:
+        return this != gpUndefinedValue ? 1.0f : 0.0f;
     }
 }
+
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // AptValue_toInteger removed -- it was a null-guarding forwarder to the real
 // member AptValue::toInteger() @0x7F2CF4 (defined above in this file). Its sole
@@ -256,7 +188,7 @@ void AptValue::toString(EAStringC* pOut) const
     {
         // X360 0x82AF8FC8: undefined render. dword_8324E530 is the active SWF
         // version (same global AptGetSwfVersion() reads); v7 spells "undefined".
-        if (AptGetSwfVersion() == 7)
+        if (gnAptSwfVersion == 7)
             *pOut = "undefined";   // console assigns the &dword_8324E6C8 "undefined" singleton (same text)
         else
             *pOut = "";            // X360: *a2 = &unk_82F72FF8 (the empty string)

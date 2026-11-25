@@ -77,7 +77,7 @@ const EAStringC* AptValue::Get_ToString(AptValue* pValue, EAStringC* pScratch)
 void AptActionInterpreter::_FunctionAptActionGetVariable(AptActionInterpreter* pInterp,
                                                          LocalContextT* pContext)
 {
-    AptValue* pNameValue = pInterp->mpStack[pInterp->mnStackTop - 1];   // TOS = the name
+    AptValue* pNameValue = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];   // TOS = the name
     if (!pNameValue->getIsDefined())
         return;
 
@@ -87,7 +87,7 @@ void AptActionInterpreter::_FunctionAptActionGetVariable(AptActionInterpreter* p
                                              pName, 1, 1, 0);
 
     pInterp->stackPop();                                  // pop the name
-    pInterp->mpStack[pInterp->mnStackTop++] = pResult;    // push the result (inlined stackPush)
+    pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = pResult;    // push the result (inlined stackPush)
     pResult->AddRef();
 }
 
@@ -108,8 +108,8 @@ void AptActionInterpreter::_FunctionAptActionGetVariable(AptActionInterpreter* p
 void AptActionInterpreter::_FunctionAptActionSetVariable(AptActionInterpreter* pInterp,
                                                          LocalContextT* pContext)
 {
-    AptValue* pNameValue = pInterp->mpStack[pInterp->mnStackTop - 2];   // under-top = the name
-    AptValue* pValue     = pInterp->mpStack[pInterp->mnStackTop - 1];   // top = the value to store
+    AptValue* pNameValue = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 2];   // under-top = the name
+    AptValue* pValue     = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];   // top = the value to store
 
     EAStringC name;
     const EAStringC* pName = AptValue::Get_ToString(pNameValue, &name);
@@ -119,7 +119,7 @@ void AptActionInterpreter::_FunctionAptActionSetVariable(AptActionInterpreter* p
     pInterp->stackPop(2);                                 // pop name + value
 
     // ARTIST 0x82B039E8 reads the deferred vector count before testing the stack.
-    if (gpValuesToRelease->GetNumValues() != 0 && pInterp->mnStackTop == 0)
+    if (gpValuesToRelease->GetNumValues() != 0 && pInterp->mOperandStack.mnTop == 0)
         gpValuesToRelease->ReleaseValues();
 }
 #if defined(_XBOX) && defined(_MSC_VER)

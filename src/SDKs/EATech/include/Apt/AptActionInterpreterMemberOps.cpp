@@ -73,8 +73,8 @@ namespace
 void AptActionInterpreter::_FunctionAptActionGetMember(AptActionInterpreter* pInterp,
                                                        LocalContextT* /*pContext*/)
 {
-    AptValue* pObject = pInterp->mpStack[pInterp->mnStackTop - 2];   // the object
-    AptValue* pKey    = pInterp->mpStack[pInterp->mnStackTop - 1];   // the member key
+    AptValue* pObject = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 2];   // the object
+    AptValue* pKey    = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];   // the member key
 
     if (pObject->getIsDefined() && pKey->getIsDefined())
     {
@@ -113,7 +113,7 @@ void AptActionInterpreter::_FunctionAptActionGetMember(AptActionInterpreter* pIn
 
     // Undefined object or key -> push `undefined`.
     pInterp->stackPop(2);
-    pInterp->mpStack[pInterp->mnStackTop++] = gpUndefinedValue;   // inlined stackPush
+    pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = gpUndefinedValue;   // inlined stackPush
     gpUndefinedValue->AddRef();
 }
 
@@ -124,9 +124,9 @@ void AptActionInterpreter::_FunctionAptActionGetMember(AptActionInterpreter* pIn
 void AptActionInterpreter::_FunctionAptActionSetMember(AptActionInterpreter* pInterp,
                                                        LocalContextT* pContext)
 {
-    AptValue* pObject = pInterp->mpStack[pInterp->mnStackTop - 3];   // the object
-    AptValue* pKey    = pInterp->mpStack[pInterp->mnStackTop - 2];   // the member key
-    AptValue* pValue  = pInterp->mpStack[pInterp->mnStackTop - 1];   // the value to store
+    AptValue* pObject = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 3];   // the object
+    AptValue* pKey    = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 2];   // the member key
+    AptValue* pValue  = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];   // the value to store
 
     bool bStored = false;
 
@@ -182,7 +182,7 @@ void AptActionInterpreter::_FunctionAptActionSetMember(AptActionInterpreter* pIn
     }
 
     pInterp->stackPop(3);                                 // pop object + key + value
-    if (pInterp->mnStackTop == 0)
+    if (pInterp->mOperandStack.mnTop == 0)
         AptFlushDeferredReleases();   // off_8324E51C drain (homed, AptGC.cpp)
 }
 
@@ -247,8 +247,8 @@ extern const EAStringC& gAptTypeName_Function;    // dword_8324E624 "function"
 void AptActionInterpreter::_FunctionAptActionGetProperty(AptActionInterpreter* pInterp,
                                                          LocalContextT* pContext)
 {
-    AptValue* pIndexValue = pInterp->mpStack[pInterp->mnStackTop - 1];   // TOS = property index
-    AptValue* pObjectOper = pInterp->mpStack[pInterp->mnStackTop - 2];   // under-top = the object
+    AptValue* pIndexValue = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];   // TOS = property index
+    AptValue* pObjectOper = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 2];   // under-top = the object
 
     AptValue* pObject = 0;
     pInterp->valueToObject(pContext->mpCIH, pContext->mpPendingReleaseValue,
@@ -261,13 +261,13 @@ void AptActionInterpreter::_FunctionAptActionGetProperty(AptActionInterpreter* p
         AptValue* pResult = pInterp->getVariable(pObject, pContext->mpPendingReleaseValue,
                                                  pName, 1, 1, 0);
         pInterp->stackPop(2);
-        pInterp->mpStack[pInterp->mnStackTop++] = pResult;   // inlined stackPush
+        pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = pResult;   // inlined stackPush
         pResult->AddRef();
     }
     else
     {
         pInterp->stackPop(2);
-        pInterp->mpStack[pInterp->mnStackTop++] = gpUndefinedValue;
+        pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = gpUndefinedValue;
         gpUndefinedValue->AddRef();
     }
 }
@@ -281,9 +281,9 @@ void AptActionInterpreter::_FunctionAptActionGetProperty(AptActionInterpreter* p
 void AptActionInterpreter::_FunctionAptActionSetProperty(AptActionInterpreter* pInterp,
                                                          LocalContextT* pContext)
 {
-    AptValue* pValue      = pInterp->mpStack[pInterp->mnStackTop - 1];   // TOS = the value to store
-    AptValue* pIndexValue = pInterp->mpStack[pInterp->mnStackTop - 2];   // under-top = property index
-    AptValue* pObjectOper = pInterp->mpStack[pInterp->mnStackTop - 3];   // the object
+    AptValue* pValue      = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];   // TOS = the value to store
+    AptValue* pIndexValue = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 2];   // under-top = property index
+    AptValue* pObjectOper = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 3];   // the object
 
     AptValue* pObject = 0;
     pInterp->valueToObject(pContext->mpCIH, pContext->mpPendingReleaseValue,
@@ -332,14 +332,14 @@ void AptActionInterpreter::_FunctionAptActionEnumerate2(AptActionInterpreter* pI
 void AptActionInterpreter::_FunctionAptActionCastOp(AptActionInterpreter* pInterp,
                                                     LocalContextT* /*pContext*/)
 {
-    if (pInterp->mnStackTop < 2)
+    if (pInterp->mOperandStack.mnTop < 2)
     {
-        pInterp->stackPopAndPush(pInterp->mnStackTop, gpUndefinedValue);
+        pInterp->stackPopAndPush(pInterp->mOperandStack.mnTop, gpUndefinedValue);
         return;
     }
 
-    AptValue* pObject = pInterp->mpStack[pInterp->mnStackTop - 1];   // TOS = the object to cast
-    AptValue* pClass  = pInterp->mpStack[pInterp->mnStackTop - 2];   // under-top = the class
+    AptValue* pObject = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];   // TOS = the object to cast
+    AptValue* pClass  = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 2];   // under-top = the class
 
     if (static_cast<unsigned char>(isObjectOfType(pObject, pClass)) != 0)
     {
@@ -350,21 +350,21 @@ void AptActionInterpreter::_FunctionAptActionCastOp(AptActionInterpreter* pInter
     pInterp->stackPop(2);
     // The no-match push stores the `undefined` singleton WITHOUT an AddRef
     // (faithful to the console: no refcount bump on this collapse path).
-    pInterp->mpStack[pInterp->mnStackTop++] = gpUndefinedValue;   // inlined stackPush
+    pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = gpUndefinedValue;   // inlined stackPush
 }
 
 // ARTIST 82AEA788 (0x54). Unlike CastOp, the class is on top.
 void AptActionInterpreter::_FunctionAptActionInstanceOf(AptActionInterpreter* pInterp, LocalContextT*)
 {
-    const int nStackTop = pInterp->mnStackTop;
+    const int nStackTop = pInterp->mOperandStack.mnTop;
     if (nStackTop < 2)
     {
         pInterp->stackPopAndPush(nStackTop, gpUndefinedValue);
         return;
     }
 
-    AptValue* pObject = pInterp->mpStack[nStackTop - 2];
-    AptValue* pClass = pInterp->mpStack[nStackTop - 1];
+    AptValue* pObject = pInterp->mOperandStack.mppItems[nStackTop - 2];
+    AptValue* pClass = pInterp->mOperandStack.mppItems[nStackTop - 1];
     const bool bMatches = static_cast<unsigned char>(isObjectOfType(pObject, pClass)) == 1;
     pInterp->stackPopAndPush(2, AptBoolean::Create(bMatches));
 }
@@ -380,7 +380,7 @@ void AptActionInterpreter::_FunctionAptActionInstanceOf(AptActionInterpreter* pI
 void AptActionInterpreter::_FunctionAptActionTypeOf(AptActionInterpreter* pInterp,
                                                     LocalContextT* /*pContext*/)
 {
-    AptValue* pTop = pInterp->mpStack[pInterp->mnStackTop - 1];   // TOS = the operand
+    AptValue* pTop = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];   // TOS = the operand
 
     AptString* pResult = AptString::Create("");   // console seed @0x820046A7 ("" -- overwritten below)
     const EAStringC* pTypeName = 0;
@@ -440,6 +440,6 @@ void AptActionInterpreter::_FunctionAptActionTypeOf(AptActionInterpreter* pInter
         *pResult->GetInternalString() = *pTypeName;   // copy the pooled type-name literal
 
     pInterp->stackPop();                                 // pop the operand
-    pInterp->mpStack[pInterp->mnStackTop++] = pResult;   // inlined stackPush
+    pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = pResult;   // inlined stackPush
     pResult->AddRef();
 }

@@ -1,16 +1,20 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
+#include "rw/core/debug/DebugCriticalSection.h"
 #include "rw/math/vpu/matrix44affine_operation.h"
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsIm3dRenderBuffer.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h"
 #include "rw/rwcore_structs.h"
 #if defined(_XBOX)
 #include <vectorintrinsics.h>
+#include <d3d9.h>
 #endif
 
 #include <cmath>
 #include <cstring>
+
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Development/DebugSystem/Render/CgsDebug3DImmediateRender.cpp"
 
 // CgsDev::Debug3DImmediateRender records world-space debug primitives into the
 // original Im3d command bank. BrnRendererModule dispatches that bank after world
@@ -249,31 +253,51 @@ namespace CgsDev
 
     void Debug3DImmediateRender::SetZTestEnable(ZTestEnable leEnable)
     {
-        if (meZTestEnable != leEnable)
+        if (leEnable != meZTestEnable)
         {
             DispatchVertices();
-            if (leEnable != E_ZTEST_OFF)
-                CGS_ASSERT(leEnable == E_ZTEST_ON, "leZTestEnable == E_ZTEST_ON");
+            const CgsGraphics::ImRendererBase::StateLibrary& lrStates = CgsGraphics::ImRendererBase::GetStateLibrary();
+            if (leEnable == E_ZTEST_OFF)
+            {
+                mpRenderBuffer->SetState(lrStates.mpDepthStencilState_ZBufferOff);
+            }
+            else
+            {
+                if (leEnable != E_ZTEST_ON)
+                {
+                    // ARTIST 82824504 takes the assertion mutex directly.
+                    Assert::gAssertMutex.Enter();
+                    Assert::FireAssert("leZTestEnable == E_ZTEST_ON", CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 1703));
+                    Assert::gAssertMutex.Leave();
+                }
+                mpRenderBuffer->SetState(lrStates.mpDepthStencilState_ZBufferOn);
+            }
             meZTestEnable = leEnable;
         }
     }
 
-    void Debug3DImmediateRender::SetDrawingMode(DrawingMode leMode)
+    inline void Debug3DImmediateRender::SetDrawingMode(DrawingMode leMode)
     {
         if (meDrawingMode != leMode)
         {
             DispatchVertices();
             meDrawingMode = leMode;
-            // ARTIST DrawLine stores 2, DrawSphere stores 3 (a line strip),
-            // and DrawSolidSphere stores 4. Native AddQuad expands to triangles.
-            mePrimitiveType = leMode == E_DRAWING_LINES ? 2
-                : leMode == E_DRAWING_TRISTRIP_LINES ? 3 : 4;
+            // ARTIST inlines this mapping in the draw entry points. The quad
+            // list consumes four vertices on Xenon (8281D478–8281D498).
+            switch (leMode)
+            {
+            case E_DRAWING_LINES: mePrimitiveType = D3DPT_LINELIST; break;
+            case E_DRAWING_QUADS: mePrimitiveType = D3DPT_QUADLIST; break;
+            case E_DRAWING_TRISTRIP_SOLID: mePrimitiveType = D3DPT_TRIANGLESTRIP; break;
+            case E_DRAWING_TRISTRIP_LINES: mePrimitiveType = D3DPT_LINESTRIP; break;
+            default: mePrimitiveType = D3DPT_TRIANGLELIST; break;
+            }
         }
     }
 
     void Debug3DImmediateRender::AddVertex(rw::math::vpu::Vector3 lPosition, rw::RGBA lColour)
     {
-        if (miIm3dVertsHead >= KI_VERTEX_BUFFER_SIZE)
+        if (miIm3dVertsHead >= KI_VERTEX_BUFFER_SIZE - 1)
             DispatchVertices();
 
         CgsGraphics::BasicColouredTexturedVertex& lrVertex = maIm3dVertsArray[miIm3dVertsHead++];
@@ -289,7 +313,7 @@ namespace CgsDev
     void Debug3DImmediateRender::AddLine(rw::math::vpu::Vector3 lA,
                                          rw::math::vpu::Vector3 lB, rw::RGBA lColour)
     {
-        if (miIm3dVertsHead > KI_VERTEX_BUFFER_SIZE - 2)
+        if (miIm3dVertsHead >= KI_VERTEX_BUFFER_SIZE - 2)
             DispatchVertices();
         AddVertex(lA, lColour);
         AddVertex(lB, lColour);
@@ -300,7 +324,7 @@ namespace CgsDev
                                              rw::math::vpu::Vector3 lC,
                                              rw::RGBA lColour)
     {
-        if (miIm3dVertsHead > KI_VERTEX_BUFFER_SIZE - 3)
+        if (miIm3dVertsHead >= KI_VERTEX_BUFFER_SIZE - 3)
             DispatchVertices();
         AddVertex(lA, lColour);
         AddVertex(lB, lColour);
@@ -313,8 +337,12 @@ namespace CgsDev
                                          rw::math::vpu::Vector3 lD,
                                          rw::RGBA lColour)
     {
-        AddTriangle(lA, lB, lC, lColour);
-        AddTriangle(lA, lC, lD, lColour);
+        if (miIm3dVertsHead >= KI_VERTEX_BUFFER_SIZE - 4)
+            DispatchVertices();
+        AddVertex(lA, lColour);
+        AddVertex(lB, lColour);
+        AddVertex(lC, lColour);
+        AddVertex(lD, lColour);
     }
 
     void Debug3DImmediateRender::DispatchVertices()
@@ -322,8 +350,12 @@ namespace CgsDev
         if (miIm3dVertsHead == 0) return;
         if (mpRenderBuffer)
         {
-            // ARTIST 8281B92C..8281B950 writes the default texture state, then
-            // both global depth states in this order, before the vertex-copy command.
+            // ARTIST 8281B92C–8281B950 applies the shared untextured state
+            // and both depth states before appending the vertex-copy command.
+            const CgsGraphics::ImRendererBase::StateLibrary& lrStates = CgsGraphics::ImRendererBase::GetStateLibrary();
+            mpRenderBuffer->SetState(lrStates.mpTextureState_Untextured);
+            mpRenderBuffer->SetState(lrStates.mpDepthStencilState_ZBufferOff);
+            mpRenderBuffer->SetState(lrStates.mpDepthStencilState_ZBufferOn);
             mpRenderBuffer->Render(static_cast<renderengine::PrimitiveType>(mePrimitiveType),
                 maIm3dVertsArray, static_cast<u32>(miIm3dVertsHead));
         }
@@ -386,9 +418,9 @@ namespace CgsDev
                                               rw::math::vpu::Vector3 lC,
                                               rw::RGBA lColour)
     {
-        // ARTIST 0x8281F090 is the direct triangle-list primitive. Wire triangles are the
-        // separate DrawHollowTriangle entry point.
-        DrawSolidTriangle(lA, lB, lC, lColour);
+        SetProjectionMode(E_PROJECTION_3D);
+        SetDrawingMode(E_DRAWING_TRIANGLES);
+        AddTriangle(lA, lB, lC, lColour);
     }
 
     void Debug3DImmediateRender::DrawBox(rw::math::vpu::Vector3 lMin,
@@ -587,31 +619,15 @@ namespace CgsDev
     void Debug3DImmediateRender::DrawSolidSphere(rw::math::vpu::Vector3 lCentre,
                                                  f32 lfRadius, rw::RGBA lColour)
     {
-        const s32 KI_SLICES = 12;
-        const s32 KI_STACKS = 6;
-        for (s32 y = 0; y < KI_STACKS; ++y)
-        {
-            const f32 lfLat0 = -KF_PI * 0.5f + KF_PI * static_cast<f32>(y) / KI_STACKS;
-            const f32 lfLat1 = -KF_PI * 0.5f + KF_PI * static_cast<f32>(y + 1) / KI_STACKS;
-            for (s32 x = 0; x < KI_SLICES; ++x)
-            {
-                const f32 lfLon0 = KF_TWO_PI * static_cast<f32>(x) / KI_SLICES;
-                const f32 lfLon1 = KF_TWO_PI * static_cast<f32>(x + 1) / KI_SLICES;
-                const Vector3 a = Add3(lCentre, Make3( std::cos(lfLat0) * std::cos(lfLon0) * lfRadius,
-                                                std::sin(lfLat0) * lfRadius,
-                                                std::cos(lfLat0) * std::sin(lfLon0) * lfRadius, 0.0f ));
-                const Vector3 b = Add3(lCentre, Make3( std::cos(lfLat0) * std::cos(lfLon1) * lfRadius,
-                                                std::sin(lfLat0) * lfRadius,
-                                                std::cos(lfLat0) * std::sin(lfLon1) * lfRadius, 0.0f ));
-                const Vector3 c = Add3(lCentre, Make3( std::cos(lfLat1) * std::cos(lfLon1) * lfRadius,
-                                                std::sin(lfLat1) * lfRadius,
-                                                std::cos(lfLat1) * std::sin(lfLon1) * lfRadius, 0.0f ));
-                const Vector3 d = Add3(lCentre, Make3( std::cos(lfLat1) * std::cos(lfLon0) * lfRadius,
-                                                std::sin(lfLat1) * lfRadius,
-                                                std::cos(lfLat1) * std::sin(lfLon0) * lfRadius, 0.0f ));
-                DrawSolidQuad(a, b, c, d, lColour);
-            }
-        }
+        // ARTIST 8281D9F0 submits the same 192 indexed vertices as DrawSphere
+        // with a triangle-strip topology.
+        SetProjectionMode(E_PROJECTION_3D);
+        SetDrawingMode(E_DRAWING_TRISTRIP_SOLID);
+        Vector3 laVertices[34];
+        GetSphereVertices(laVertices, lCentre, lfRadius);
+        for (s32 liIndex = 0; liIndex < 192; ++liIndex)
+            AddVertex(laVertices[maSphereIndices[liIndex]], lColour);
+        DispatchVertices();
     }
 
     void Debug3DImmediateRender::DrawArrow(rw::math::vpu::Vector3 lFrom,
@@ -802,3 +818,5 @@ namespace CgsDev
         AddLine(lFrom, lTo, lColour);
     }
 }
+
+#undef CGS_ARTIST_FILE

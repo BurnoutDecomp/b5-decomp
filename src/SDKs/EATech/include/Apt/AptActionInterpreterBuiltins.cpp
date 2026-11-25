@@ -26,7 +26,7 @@
 #include "types.hpp"   // uintptr_t
 
 // The global native-method arg stack (X360 off_8324E768 = gAptActionInterpreter.
-// mpStack, dword_8324E760 = its mnStackTop). Storage is defined in AptGlobals.cpp;
+// mOperandStack.mppItems, dword_8324E760 = its mOperandStack.mnTop). Storage is defined in AptGlobals.cpp;
 // the native-call dispatch (AptActionInterpreterInterpHelpers.cpp) publishes the
 // operand-stack window into the pair around each callback. The i-th AS argument
 // (i=0 = last pushed) is gppAptNativeArgStack[gnAptNativeArgCount - 1 - i].
@@ -253,7 +253,7 @@ AptValue* AptActionInterpreter::cbCallMethod_unescape(AptValue* /*pThis*/, int /
 void AptActionInterpreter::_FunctionAptActionAsciiToChar(AptActionInterpreter* pInterp,
                                                          LocalContextT* /*pContext*/)
 {
-    AptValue* pTop = pInterp->mpStack[pInterp->mnStackTop - 1];
+    AptValue* pTop = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
 
     AptValue* pResult;
     if (pTop->getIsDefined())
@@ -270,7 +270,7 @@ void AptActionInterpreter::_FunctionAptActionAsciiToChar(AptActionInterpreter* p
     }
 
     pInterp->stackPop();                                  // pop the operand (Release)
-    pInterp->mpStack[pInterp->mnStackTop++] = pResult;    // push the result
+    pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = pResult;    // push the result
     pResult->AddRef();
 }
 
@@ -327,8 +327,8 @@ void AptActionInterpreter::_FunctionAptActionGetUrl(AptActionInterpreter* pInter
 void AptActionInterpreter::_FunctionAptActionGetUrl2(AptActionInterpreter* pInterp,
                                                      LocalContextT* pContext)
 {
-    AptValue* pUrlValue    = pInterp->mpStack[pInterp->mnStackTop - 2];   // under-top = the url
-    AptValue* pTargetValue = pInterp->mpStack[pInterp->mnStackTop - 1];   // top = the target
+    AptValue* pUrlValue    = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 2];   // under-top = the url
+    AptValue* pTargetValue = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];   // top = the target
 
     EAStringC strTarget;   // v28 -- rendered lazily on the non-FSCommand paths
     EAStringC strUrl;      // v29 -- the url string form
@@ -408,15 +408,15 @@ void AptActionInterpreter::_FunctionAptActionTraceStart(AptActionInterpreter* pI
     const int32_t nInlineCount = *reinterpret_cast<const int32_t*>(pContext->mpProgramCounter);
 
     // Take the current top operand as the trace target, popping it if present.
-    AptValue* pTarget = pInterp->mpStack[pInterp->mnStackTop - 1];
-    if (pInterp->mnStackTop >= 1)
+    AptValue* pTarget = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
+    if (pInterp->mOperandStack.mnTop >= 1)
         pInterp->stackPop();
 
     // A `_global` target resolves through to the next operand below it.
     if (pTarget == static_cast<AptValue*>(gpAptGlobalFallback))
     {
-        pTarget = pInterp->mpStack[pInterp->mnStackTop - 1];
-        if (pInterp->mnStackTop >= 1)
+        pTarget = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
+        if (pInterp->mOperandStack.mnTop >= 1)
             pInterp->stackPop();
     }
 

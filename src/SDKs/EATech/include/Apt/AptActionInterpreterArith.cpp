@@ -63,8 +63,8 @@ namespace
 // ---------------------------------------------------------------------------
 void AptActionInterpreter::_FunctionAptActionAdd(AptActionInterpreter* pInterp, LocalContextT*)
 {
-    AptValue* pTop   = pInterp->mpStack[pInterp->mnStackTop - 1];
-    AptValue* pUnder = pInterp->mpStack[pInterp->mnStackTop - 2];
+    AptValue* pTop   = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
+    AptValue* pUnder = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 2];
 
     AptValue* pResult = gpUndefinedValue;
     if (ShouldCompute(pTop, pUnder))
@@ -75,16 +75,16 @@ void AptActionInterpreter::_FunctionAptActionAdd(AptActionInterpreter* pInterp, 
             pResult = AptFloat::Create(pTop->toFloat() + pUnder->toFloat());
     }
 
-    int top = pInterp->mnStackTop;
+    int top = pInterp->mOperandStack.mnTop;
     if (top >= 2)
     {
-        pInterp->mpStack[top - 1]->Release();
-        pInterp->mpStack[top - 2]->Release();
+        pInterp->mOperandStack.mppItems[top - 1]->Release();
+        pInterp->mOperandStack.mppItems[top - 2]->Release();
         top -= 2;
-        pInterp->mnStackTop = top;
+        pInterp->mOperandStack.mnTop = top;
     }
-    pInterp->mpStack[top] = pResult;
-    pInterp->mnStackTop = top + 1;
+    pInterp->mOperandStack.mppItems[top] = pResult;
+    pInterp->mOperandStack.mnTop = top + 1;
     pResult->AddRef();
 }
 
@@ -93,8 +93,8 @@ void AptActionInterpreter::_FunctionAptActionAdd(AptActionInterpreter* pInterp, 
 // ---------------------------------------------------------------------------
 void AptActionInterpreter::_FunctionAptActionSubtract(AptActionInterpreter* pInterp, LocalContextT*)
 {
-    AptValue* pTop   = pInterp->mpStack[pInterp->mnStackTop - 1];
-    AptValue* pUnder = pInterp->mpStack[pInterp->mnStackTop - 2];
+    AptValue* pTop   = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
+    AptValue* pUnder = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 2];
 
     AptValue* pResult = gpUndefinedValue;
     if (ShouldCompute(pTop, pUnder))
@@ -105,16 +105,16 @@ void AptActionInterpreter::_FunctionAptActionSubtract(AptActionInterpreter* pInt
             pResult = AptFloat::Create(pUnder->toFloat() - pTop->toFloat());
     }
 
-    int top = pInterp->mnStackTop;
+    int top = pInterp->mOperandStack.mnTop;
     if (top >= 2)
     {
-        pInterp->mpStack[top - 1]->Release();
-        pInterp->mpStack[top - 2]->Release();
+        pInterp->mOperandStack.mppItems[top - 1]->Release();
+        pInterp->mOperandStack.mppItems[top - 2]->Release();
         top -= 2;
-        pInterp->mnStackTop = top;
+        pInterp->mOperandStack.mnTop = top;
     }
-    pInterp->mpStack[top] = pResult;
-    pInterp->mnStackTop = top + 1;
+    pInterp->mOperandStack.mppItems[top] = pResult;
+    pInterp->mOperandStack.mnTop = top + 1;
     pResult->AddRef();
 }
 
@@ -123,8 +123,8 @@ void AptActionInterpreter::_FunctionAptActionSubtract(AptActionInterpreter* pInt
 // ---------------------------------------------------------------------------
 void AptActionInterpreter::_FunctionAptActionMultiply(AptActionInterpreter* pInterp, LocalContextT*)
 {
-    AptValue* pTop   = pInterp->mpStack[pInterp->mnStackTop - 1];
-    AptValue* pUnder = pInterp->mpStack[pInterp->mnStackTop - 2];
+    AptValue* pTop   = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
+    AptValue* pUnder = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 2];
 
     AptValue* pResult = gpUndefinedValue;
     if (ShouldCompute(pTop, pUnder))
@@ -135,16 +135,16 @@ void AptActionInterpreter::_FunctionAptActionMultiply(AptActionInterpreter* pInt
             pResult = AptFloat::Create(pTop->toFloat() * pUnder->toFloat());
     }
 
-    int top = pInterp->mnStackTop;
+    int top = pInterp->mOperandStack.mnTop;
     if (top >= 2)
     {
-        pInterp->mpStack[top - 1]->Release();
-        pInterp->mpStack[top - 2]->Release();
+        pInterp->mOperandStack.mppItems[top - 1]->Release();
+        pInterp->mOperandStack.mppItems[top - 2]->Release();
         top -= 2;
-        pInterp->mnStackTop = top;
+        pInterp->mOperandStack.mnTop = top;
     }
-    pInterp->mpStack[top] = pResult;
-    pInterp->mnStackTop = top + 1;
+    pInterp->mOperandStack.mppItems[top] = pResult;
+    pInterp->mOperandStack.mnTop = top + 1;
     pResult->AddRef();
 }
 
@@ -153,8 +153,8 @@ void AptActionInterpreter::_FunctionAptActionMultiply(AptActionInterpreter* pInt
 // ---------------------------------------------------------------------------
 void AptActionInterpreter::_FunctionAptActionDivide(AptActionInterpreter* pInterp, LocalContextT*)
 {
-    AptValue* pTop   = pInterp->mpStack[pInterp->mnStackTop - 1];
-    AptValue* pUnder = pInterp->mpStack[pInterp->mnStackTop - 2];
+    AptValue* pTop   = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
+    AptValue* pUnder = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 2];
 
     AptValue* pResult = gpUndefinedValue;
     if (ShouldCompute(pTop, pUnder))
@@ -166,16 +166,16 @@ void AptActionInterpreter::_FunctionAptActionDivide(AptActionInterpreter* pInter
         // else: divide by zero -> the gpUndefinedValue default.
     }
 
-    int top = pInterp->mnStackTop;
+    int top = pInterp->mOperandStack.mnTop;
     if (top >= 2)
     {
-        pInterp->mpStack[top - 1]->Release();
-        pInterp->mpStack[top - 2]->Release();
+        pInterp->mOperandStack.mppItems[top - 1]->Release();
+        pInterp->mOperandStack.mppItems[top - 2]->Release();
         top -= 2;
-        pInterp->mnStackTop = top;
+        pInterp->mOperandStack.mnTop = top;
     }
-    pInterp->mpStack[top] = pResult;
-    pInterp->mnStackTop = top + 1;
+    pInterp->mOperandStack.mppItems[top] = pResult;
+    pInterp->mOperandStack.mnTop = top + 1;
     pResult->AddRef();
 }
 
@@ -186,8 +186,8 @@ void AptActionInterpreter::_FunctionAptActionDivide(AptActionInterpreter* pInter
 // ---------------------------------------------------------------------------
 void AptActionInterpreter::_FunctionAptActionModulo(AptActionInterpreter* pInterp, LocalContextT*)
 {
-    AptValue* pTop   = pInterp->mpStack[pInterp->mnStackTop - 1];
-    AptValue* pUnder = pInterp->mpStack[pInterp->mnStackTop - 2];
+    AptValue* pTop   = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
+    AptValue* pUnder = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 2];
 
     AptValue* pResult = gpUndefinedValue;
     if (ShouldCompute(pTop, pUnder))
@@ -198,15 +198,15 @@ void AptActionInterpreter::_FunctionAptActionModulo(AptActionInterpreter* pInter
         // else: modulo by zero -> the gpUndefinedValue default.
     }
 
-    int top = pInterp->mnStackTop;
+    int top = pInterp->mOperandStack.mnTop;
     if (top >= 2)
     {
-        pInterp->mpStack[top - 1]->Release();
-        pInterp->mpStack[top - 2]->Release();
+        pInterp->mOperandStack.mppItems[top - 1]->Release();
+        pInterp->mOperandStack.mppItems[top - 2]->Release();
         top -= 2;
-        pInterp->mnStackTop = top;
+        pInterp->mOperandStack.mnTop = top;
     }
-    pInterp->mpStack[top] = pResult;
-    pInterp->mnStackTop = top + 1;
+    pInterp->mOperandStack.mppItems[top] = pResult;
+    pInterp->mOperandStack.mnTop = top + 1;
     pResult->AddRef();
 }

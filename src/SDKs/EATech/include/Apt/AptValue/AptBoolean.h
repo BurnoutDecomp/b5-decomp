@@ -32,7 +32,7 @@ public:
     static void* operator new[](size_t size)            { return AptNonGCAllocSaveSize(size); }
     static void  operator delete[](void* p)             { AptValueNoGC::VerifyAptValueNoGC(); AptNonGCFreeSavedSize(p); }
 
-    bool GetBool() const;
+    bool GetBool() const { return mbValue; }
     static AptBoolean* Create(const bool bValue)
     {
         return bValue ? spBooleanTrue : spBooleanFalse;

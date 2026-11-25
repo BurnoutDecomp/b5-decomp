@@ -1,5 +1,6 @@
 #include "GameShared/GameClasses/RenderWare/x360/materialstates/CgsRwShaderProgramBufferResourceTypeX360.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+#include <cstring>
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h"
 #include "rw/rwcore_structs.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceLoadBase.h"   // CgsResource::GetLoadBase
@@ -11,12 +12,14 @@
 //   GetSerialisedResourceDescriptor  0x828A9910
 //   ReBase                           0x828A8E90
 //
-// ReBase re-registers the compiled microcode with the GPU via the XDK entry points
-// XGRegisterVertexShader / XGRegisterPixelShader (declared extern "C" in programbuffer.h;
-// declared-not-defined honest externs for the PC compile-only build).
+// FixUp allocates GPU microcode storage. FixUp and ReBase both
+// register the shader through the XDK's XGRegister shader APIs.
 
 namespace CgsResource
 {
+    static const char KAC_ARTIST_SHADER_RESOURCE[] =
+        "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\renderware\\x360/materialstates/CgsRwShaderProgramBufferResourceTypeX360.cpp";
+
     // E_RESOURCETYPE_RW_SHADER_PROGRAM_BUFFER (see the header note).
     static const uint32_t KU_RW_SHADER_PROGRAM_BUFFER_RESOURCE_TYPE_ID = 0x12;
 
@@ -27,99 +30,55 @@ namespace CgsResource
 
     ResourceDescriptor RwShaderProgramBufferResourceType::GetSerialisedResourceDescriptor(const void* lpResource) const
     {
-        // Faithful to X360 0x828A9910. The runtime resource is a renderengine::ProgramBuffer
-        // block (ProgramBufferData header at +0x00). This sizes the *serialised* form: the
-        // microcode + the named-variable descriptor table + every interned name string.
-        const renderengine::ProgramBufferData* lpData =
-            static_cast<const renderengine::ProgramBufferData*>(lpResource);
-
-        // Seed the accumulator: slot0 = {0x20, 0x10}, slots 1..4 = identity {0, 1}.
+        const renderengine::ProgramBufferData* lpData = static_cast<const renderengine::ProgramBufferData*>(lpResource);
         ResourceDescriptor lDescriptor;
-        lDescriptor.m_baseResourceDescriptors[0].m_size      = 0x20;
-        lDescriptor.m_baseResourceDescriptors[0].m_alignment = 0x10;
-        for (u32 luIndex = 1; luIndex < 5; ++luIndex)
-        {
-            lDescriptor.m_baseResourceDescriptors[luIndex].m_size      = 0;
-            lDescriptor.m_baseResourceDescriptors[luIndex].m_alignment = 1;
-        }
+        lDescriptor.m_baseResourceDescriptors[0] = rw::BaseResourceDescriptor(0x20, 0x10);
+        const renderengine::ProgramVariableDescriptor* lpVariable = lpData->GetVariableDescriptors();
+        for (u32 luIndex = 0; luIndex < lpData->mu16NumVariables; ++luIndex, ++lpVariable)
+            lDescriptor += rw::ResourceDescriptor(static_cast<u32>(std::strlen(lpVariable->mpcName.Get())) + 1, 1);
 
-        // Each ProgramVariableDescriptor (8-byte stride) at ProgramBufferData + microcodeSize + 0x14
-        // carries a (post-fixup) name pointer at +0x00; accumulate {strlen(name)+1, 1} per name.
-        const renderengine::ProgramVariableDescriptor* lpVariable =
-            reinterpret_cast<const renderengine::ProgramVariableDescriptor*>(
-                reinterpret_cast<const u8*>(lpData) + lpData->muMicrocodeSize + 0x14);
-        const u32 luNumVariables = lpData->mu16NumVariables;
-        for (u32 luIndex = 0; luIndex < luNumVariables; ++luIndex, ++lpVariable)
-        {
-            const char* lpName = reinterpret_cast<const char*>(lpVariable->muNameOffset);
-            u32 luLength = 0;
-            while (lpName[luLength] != '\0')
-                ++luLength;
-
-            ResourceDescriptor lNameEntry;
-            lNameEntry.m_baseResourceDescriptors[0].m_size      = luLength + 1;
-            lNameEntry.m_baseResourceDescriptors[0].m_alignment = 1;
-            for (u32 luSlot = 1; luSlot < 5; ++luSlot)
-            {
-                lNameEntry.m_baseResourceDescriptors[luSlot].m_size      = 0;
-                lNameEntry.m_baseResourceDescriptors[luSlot].m_alignment = 1;
-            }
-            lDescriptor += lNameEntry;
-        }
-
-        // Accumulate the descriptor table + microcode block: {numVariables*8 + microcodeSize, 0x10}.
-        ResourceDescriptor lBodyEntry;
-        lBodyEntry.m_baseResourceDescriptors[0].m_size      = (luNumVariables << 3) + lpData->muMicrocodeSize;
-        lBodyEntry.m_baseResourceDescriptors[0].m_alignment = 0x10;
-        for (u32 luSlot = 1; luSlot < 5; ++luSlot)
-        {
-            lBodyEntry.m_baseResourceDescriptors[luSlot].m_size      = 0;
-            lBodyEntry.m_baseResourceDescriptors[luSlot].m_alignment = 1;
-        }
-        lDescriptor += lBodyEntry;
-
-        // slot2 (the physical microcode part) is written directly: {microcodePart3, 0x20}.
-        lDescriptor.m_baseResourceDescriptors[2].m_size      = lpData->muMicrocodePart3;
-        lDescriptor.m_baseResourceDescriptors[2].m_alignment = 0x20;
+        lDescriptor += rw::ResourceDescriptor(lpData->muMicrocodeSize
+            + sizeof(renderengine::ProgramVariableDescriptor) * lpData->mu16NumVariables, 16);
+        lDescriptor.m_baseResourceDescriptors[2] = rw::BaseResourceDescriptor(lpData->muPhysicalSize, D3DSHADER_ALIGNMENT);
         return lDescriptor;
     }
 
-    // Faithful to X360 0x828A8D70. The streamed program buffer's named-variable table stores
-    // each name as a FILE-RELATIVE offset and its physical (GPU) microcode part as a
-    // secondary-segment-relative offset; FixUp turns both into real addresses, then hands the
-    // microcode to the GPU.
-    //
-    //   *(a2+16) += a3[2]                       muPhysicalPart += m_baseResources[2]
-    //   v7 = a2 + *(a2+8) + 20                  descriptor table = data + microcodeSize + 0x14
-    //   for (i < *(a2+4)) { *v7 += *a3; v7 += 2 }   muNameOffset += m_baseResources[0]
-    //                                              (v7 is _DWORD*, += 2 == the 8-byte stride)
-    //   then XPhysicalAlloc(microcodePart3) + memcpy + XGRegister{Vertex,Pixel}Shader(data+0x14)
-    //
-    // The rw::Resource segment mapping is the committed one (SmallResource::ConvertToRWResource
-    // maps small[1] -> rw[2]): m_baseResources[0] is MAIN memory, [2] the GRAPHICS/secondary
-    // block.
+    // ARTIST 828A8D70 resolves the serialized pointers, then gives the native
+    // shader a separate GPU allocation with the XDK's required alignment.
     void RwShaderProgramBufferResourceType::FixUp(void* lpResource, const rw::Resource& lrResource) const
     {
         renderengine::ProgramBufferData* lpData = static_cast<renderengine::ProgramBufferData*>(lpResource);
+        const uintptr_t luSecondaryBase = reinterpret_cast<uintptr_t>(lrResource.m_baseResources[2]);
+        const u32 luMainBase = CgsResource::GetLoadBase(lrResource);
+        renderengine::ProgramVariableDescriptor* lpVariable = lpData->GetVariableDescriptors();
+        lpData->mpPhysicalPart.muSlot += luSecondaryBase;
+        for (u32 luIndex = 0; luIndex < lpData->mu16NumVariables; ++luIndex, ++lpVariable)
+            lpVariable->mpcName.muSlot += luMainBase;
 
-        const u32 luMainBase      = CgsResource::GetLoadBase(lrResource);
-        const u32 luSecondaryBase =
-            static_cast<u32>(reinterpret_cast<uintptr_t>(lrResource.m_baseResources[2]));
-
-        lpData->muPhysicalPart += luSecondaryBase;
-
-        renderengine::ProgramVariableDescriptor* lpVariable =
-            reinterpret_cast<renderengine::ProgramVariableDescriptor*>(
-                reinterpret_cast<u8*>(lpData) + lpData->muMicrocodeSize + 0x14);
-        const u32 luNumVariables = lpData->mu16NumVariables;
-        for (u32 luIndex = 0; luIndex < luNumVariables; ++luIndex, ++lpVariable)
-            lpVariable->muNameOffset += luMainBase;
-
+        if (lpData->miShaderType == 0)
+        {
+            void* lpPhysical = XPhysicalAlloc(lpData->muPhysicalSize, MAXULONG_PTR, D3DSHADER_ALIGNMENT,
+                PAGE_READWRITE | PAGE_WRITECOMBINE);
+            std::memcpy(lpPhysical, lpData->mpPhysicalPart.Get(), lpData->muPhysicalSize);
+            lpData->mpPhysicalPart.muSlot = reinterpret_cast<uintptr_t>(lpPhysical);
+            XGRegisterVertexShader(reinterpret_cast<D3DVertexShader*>(lpData + 1), lpPhysical);
+        }
+        else
+        {
+            CGS_ASSERT(lpData->miShaderType == 1,
+                CGS_ASSERT_MESSAGE_AT("lpProgramBuffer->m_type == renderengine::ProgramBuffer::TYPE_PIXEL",
+                    KAC_ARTIST_SHADER_RESOURCE, 291));
+            void* lpPhysical = XPhysicalAlloc(lpData->muPhysicalSize, MAXULONG_PTR, D3DSHADER_ALIGNMENT,
+                PAGE_READWRITE | PAGE_WRITECOMBINE);
+            std::memcpy(lpPhysical, lpData->mpPhysicalPart.Get(), lpData->muPhysicalSize);
+            lpData->mpPhysicalPart.muSlot = reinterpret_cast<uintptr_t>(lpPhysical);
+            XGRegisterPixelShader(reinterpret_cast<D3DPixelShader*>(lpData + 1), lpPhysical);
+        }
     }
 
     // Faithful to X360 0x828A8D00: the exact inverse of FixUp (the X360 body opens with a
     // STUB() placeholder for the un-registration leg, then de-relocates every name offset by
-    // m_baseResources[0] and muPhysicalPart by m_baseResources[2]).
+    // m_baseResources[0] and mpPhysicalPart.muSlot by m_baseResources[2]).
     void RwShaderProgramBufferResourceType::FixDown(void* lpResource, const rw::Resource& lrResource) const
     {
         renderengine::ProgramBufferData* lpData = static_cast<renderengine::ProgramBufferData*>(lpResource);
@@ -133,46 +92,33 @@ namespace CgsResource
                 reinterpret_cast<u8*>(lpData) + lpData->muMicrocodeSize + 0x14);
         const u32 luNumVariables = lpData->mu16NumVariables;
         for (u32 luIndex = 0; luIndex < luNumVariables; ++luIndex, ++lpVariable)
-            lpVariable->muNameOffset -= luMainBase;
+            lpVariable->mpcName.muSlot -= luMainBase;
 
-        lpData->muPhysicalPart -= luSecondaryBase;
+        lpData->mpPhysicalPart.muSlot -= luSecondaryBase;
     }
 
     void RwShaderProgramBufferResourceType::ReBase(void* lpResource, rw::Resource& lrSource, rw::Resource& lrDest,
                                                    ResourceDescriptor& /*lrSize*/, s32 liMemType) const
     {
-        // Faithful to X360 0x828A8E90. Only the main-memory pass (memType 0) rebases the block;
-        // any other pass is a no-op here.
         if (liMemType != 0)
             return;
 
         renderengine::ProgramBufferData* lpData = static_cast<renderengine::ProgramBufferData*>(lpResource);
+        renderengine::ProgramVariableDescriptor* lpVariable = lpData->GetVariableDescriptors();
+        const u32 luDelta = CgsResource::GetLoadBase(lrDest) - CgsResource::GetLoadBase(lrSource);
+        for (u32 luIndex = 0; luIndex < lpData->mu16NumVariables; ++luIndex, ++lpVariable)
+            lpVariable->mpcName.muSlot = luDelta + lpVariable->mpcName.muSlot;
 
-        // Delta between the destination and source main-memory bases; added to every variable
-        // name offset so the interned-name pointers survive the move.
-        const s32 liDelta = reinterpret_cast<s32>(lrDest.m_baseResources[0])
-                          - reinterpret_cast<s32>(lrSource.m_baseResources[0]);
-
-        renderengine::ProgramVariableDescriptor* lpVariable =
-            reinterpret_cast<renderengine::ProgramVariableDescriptor*>(
-                reinterpret_cast<u8*>(lpData) + lpData->muMicrocodeSize + 0x14);
-        const u32 luNumVariables = lpData->mu16NumVariables;
-        for (u32 luIndex = 0; luIndex < luNumVariables; ++luIndex, ++lpVariable)
-            lpVariable->muNameOffset += liDelta;
-
-        // Re-register the shader with the GPU at its new home: vertex when shaderType == 0,
-        // otherwise pixel (only TYPE_PIXEL == 1 is expected for the non-vertex case).
-        if (lpData->muShaderType == 0)
+        if (lpData->miShaderType == 0)
         {
-            XGRegisterVertexShader(reinterpret_cast<D3DVertexShader*>(reinterpret_cast<u8*>(lpData) + 0x14),
-                                   reinterpret_cast<void*>(lpData->muPhysicalPart));
+            XGRegisterVertexShader(reinterpret_cast<D3DVertexShader*>(lpData + 1), lpData->mpPhysicalPart.Get());
         }
         else
         {
-            CGS_ASSERT(lpData->muShaderType == 1,
-                       "lpProgramBuffer->m_type == renderengine::ProgramBuffer::TYPE_PIXEL");
-            XGRegisterPixelShader(reinterpret_cast<D3DPixelShader*>(reinterpret_cast<u8*>(lpData) + 0x14),
-                                  reinterpret_cast<void*>(lpData->muPhysicalPart));
+            CGS_ASSERT(lpData->miShaderType == 1,
+                CGS_ASSERT_MESSAGE_AT("lpProgramBuffer->m_type == renderengine::ProgramBuffer::TYPE_PIXEL",
+                    KAC_ARTIST_SHADER_RESOURCE, 374));
+            XGRegisterPixelShader(reinterpret_cast<D3DPixelShader*>(lpData + 1), lpData->mpPhysicalPart.Get());
         }
     }
 }

@@ -37,7 +37,7 @@ void AptActionInterpreter::_FunctionAptActionPushZeroSetVar(AptActionInterpreter
                                                             LocalContextT* pContext)
 {
     AptInteger* pZero = AptInteger::Create(0);
-    pInterp->mpStack[pInterp->mnStackTop++] = pZero;   // inlined stackPush
+    pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = pZero;   // inlined stackPush
     pZero->AddRef();
     _FunctionAptActionSetVariable(pInterp, pContext);
 }
@@ -48,7 +48,7 @@ void AptActionInterpreter::_FunctionAptActionPushZeroSetVar(AptActionInterpreter
 void AptActionInterpreter::_FunctionAptActionStringLength(AptActionInterpreter* pInterp,
                                                           LocalContextT* /*pContext*/)
 {
-    AptValue* pTop = pInterp->mpStack[pInterp->mnStackTop - 1];
+    AptValue* pTop = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
     EAStringC scratch;
     const EAStringC* pStr = AptValue::Get_ToString(pTop, &scratch);
     AptInteger* pLength = AptInteger::Create(pStr->GetLength());
@@ -67,13 +67,13 @@ void AptActionInterpreter::_FunctionAptActionStringLength(AptActionInterpreter* 
 void AptActionInterpreter::_FunctionAptActionStringAdd(AptActionInterpreter* pInterp,
                                                        LocalContextT* /*pContext*/)
 {
-    AptValue* pSecond = pInterp->mpStack[pInterp->mnStackTop - 1];   // top
-    AptValue* pFirst  = pInterp->mpStack[pInterp->mnStackTop - 2];   // under
+    AptValue* pSecond = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];   // top
+    AptValue* pFirst  = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 2];   // under
     AptString* pResult = AptString::Create("");
     pFirst->Append_ToString(pResult->GetInternalString());    // Append_ToString @0x82AF9668 (AptValueConvert.cpp)
     pSecond->Append_ToString(pResult->GetInternalString());
     pInterp->stackPop(2);
-    pInterp->mpStack[pInterp->mnStackTop++] = pResult;
+    pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = pResult;
     pResult->AddRef();
 }
 #if defined(_XBOX) && defined(_MSC_VER)
@@ -91,7 +91,7 @@ void AptActionInterpreter::_FunctionAptActionStringAdd(AptActionInterpreter* pIn
 void AptActionInterpreter::_FunctionAptActionRandom(AptActionInterpreter* pInterp,
                                                     LocalContextT* /*pContext*/)
 {
-    AptValue* pTop = pInterp->mpStack[pInterp->mnStackTop - 1];
+    AptValue* pTop = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
     // ARTIST 0x82AE9C38 traps on a zero divisor. The native operand is unsigned.
     unsigned int nResult;
     if (!pTop->getIsDefined())
@@ -105,7 +105,7 @@ void AptActionInterpreter::_FunctionAptActionRandom(AptActionInterpreter* pInter
     }
     AptInteger* pResult = AptInteger::Create(nResult);
     pInterp->stackPop();
-    pInterp->mpStack[pInterp->mnStackTop++] = pResult;
+    pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = pResult;
     pResult->AddRef();
 }
 
@@ -117,14 +117,14 @@ void AptActionInterpreter::_FunctionAptActionRandom(AptActionInterpreter* pInter
 void AptActionInterpreter::_FunctionAptActionInitArray(AptActionInterpreter* pInterp,
                                                        LocalContextT* /*pContext*/)
 {
-    const int nCount = pInterp->mpStack[pInterp->mnStackTop - 1]->toInteger();
+    const int nCount = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1]->toInteger();
     pInterp->stackPop();                               // pop the count
 
     AptArray* pArray = new AptArray();
     pArray->AddRef();
     for (int i = 0; i < nCount; ++i)
-        pArray->set(i, pInterp->mpStack[pInterp->mnStackTop - i - 1]);
+        pArray->set(i, pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - i - 1]);
 
     pInterp->stackSafePop(nCount);                     // pop the consumed elements
-    pInterp->mpStack[pInterp->mnStackTop++] = pArray;  // push (creation AddRef carries)
+    pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = pArray;  // push (creation AddRef carries)
 }

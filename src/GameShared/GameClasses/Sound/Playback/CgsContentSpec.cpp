@@ -15,6 +15,8 @@
 #include "GameShared/GameClasses/Sound/Playback/CgsDataStructures.h" // ContentType::GetContentClass etc.
 
 #include <cstring>
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 
 namespace CgsSound
 {
@@ -24,14 +26,11 @@ namespace Playback
 // @ 0x826927C8. Return the resolved ContentType this spec points at.
 const ContentType& ContentSpec::GetContentType() const
 {
-    CGS_ASSERT(mpContentType, "mpContentType");
-
-    // The X360 tests the low tag bit of the pointer; when set the entity is still an
-    // unresolved on-disk offset, not a live pointer. The streamed Name in the second
-    // assert folds to the joined literal text under the house CGS_ASSERT front-end.
-    CGS_ASSERT((reinterpret_cast<uintptr_t>(mpContentType) & 1u) == 0u,
-               "This Data Structure is not resolved. (Name  found in a pointer context.)");
-
+    CGS_ASSERT(mpContentType, CGS_ASSERT_MESSAGE_AT("mpContentType", CGS_ARTIST_FILE, 1824));
+    CGS_ASSERT_STREAM_AT((reinterpret_cast<uintptr_t>(mpContentType) & 1) == 0,
+        "This Data Structure is not resolved. (Name "
+            << Name(reinterpret_cast<uintptr_t>(mpContentType)) << " found in a pointer context.)",
+        CGS_ARTIST_FILE, 1825);
     return *mpContentType;
 }
 

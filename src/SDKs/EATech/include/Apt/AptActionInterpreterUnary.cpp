@@ -40,15 +40,15 @@ namespace
     // Release the single operand, push the result (AddRef) -- the unary collapse.
     inline void CollapseOne(AptActionInterpreter* pInterp, AptValue* pResult)
     {
-        int top = pInterp->mnStackTop;
+        int top = pInterp->mOperandStack.mnTop;
         if (top > 0)
         {
-            pInterp->mpStack[top - 1]->Release();
+            pInterp->mOperandStack.mppItems[top - 1]->Release();
             --top;
-            pInterp->mnStackTop = top;
+            pInterp->mOperandStack.mnTop = top;
         }
-        pInterp->mpStack[top] = pResult;
-        pInterp->mnStackTop = top + 1;
+        pInterp->mOperandStack.mppItems[top] = pResult;
+        pInterp->mOperandStack.mnTop = top + 1;
         pResult->AddRef();
     }
 }
@@ -58,7 +58,7 @@ namespace
 // ---------------------------------------------------------------------------
 void AptActionInterpreter::_FunctionAptActionIncrement(AptActionInterpreter* pInterp, LocalContextT*)
 {
-    AptValue* pTop = pInterp->mpStack[pInterp->mnStackTop - 1];
+    AptValue* pTop = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
 
     AptValue* pResult = gpUndefinedValue;
     if (ShouldComputeUnary(pTop))
@@ -76,7 +76,7 @@ void AptActionInterpreter::_FunctionAptActionIncrement(AptActionInterpreter* pIn
 // ---------------------------------------------------------------------------
 void AptActionInterpreter::_FunctionAptActionDecrement(AptActionInterpreter* pInterp, LocalContextT*)
 {
-    AptValue* pTop = pInterp->mpStack[pInterp->mnStackTop - 1];
+    AptValue* pTop = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
 
     AptValue* pResult = gpUndefinedValue;
     if (ShouldComputeUnary(pTop))
@@ -94,7 +94,7 @@ void AptActionInterpreter::_FunctionAptActionDecrement(AptActionInterpreter* pIn
 // ---------------------------------------------------------------------------
 void AptActionInterpreter::_FunctionAptActionToInteger(AptActionInterpreter* pInterp, LocalContextT*)
 {
-    AptValue* pTop = pInterp->mpStack[pInterp->mnStackTop - 1];
+    AptValue* pTop = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
 
     AptValue* pResult = gpUndefinedValue;
     if (ShouldComputeUnary(pTop))

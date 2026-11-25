@@ -38,9 +38,9 @@ namespace rw { namespace graphics { namespace postfx {
     renderengine::ProgramBufferData* Tint::InitializePixelProgram(rw::IResourceAllocator* allocator)
     {
         renderengine::ProgramBufferParameters params = {};
-        params.muFunction = reinterpret_cast<u32>(kTintPixelProgram);
-        params.muShaderType = 1;
-        params.muReserved8 = sizeof(kTintPixelProgram);
+        params.mpFunction = kTintPixelProgram;
+        params.miShaderType = 1;
+        params.muProgramSize = sizeof(kTintPixelProgram);
         rw::ResourceDescriptor descriptor;
         renderengine::ProgramBuffer::GetResourceDescriptor(&descriptor, &params);
         gTintPixelProgramResource = allocator->DoAllocate(descriptor, 0);

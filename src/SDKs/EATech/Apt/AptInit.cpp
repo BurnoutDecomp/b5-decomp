@@ -1015,7 +1015,7 @@ int AptUpdateInitialize(unsigned int* a1, char a2)
 // AptActionInterpreter::shutdown @0x82AE15A0 -- the folded interpreter teardown (see
 // the additive AptActionInterpreter.h declaration). The X360 linker COMDAT-folded it
 // into AptValueVector::shutdown @0x82AE15A0 (byte-identical body); the interpreter's
-// leading operand-stack vector (mnStackTop/mnStackCapacity/mpStack == the AptValueVector
+// leading operand-stack vector (mOperandStack.mnTop/mOperandStack.mnCapacity/mOperandStack.mppItems == the AptValueVector
 // {mnTop,mnCapacity,mppItems} at +0/+4/+8) IS that vector, so the call frees the
 // operand-stack array and zeros the three fields, in the console's store order (items
 // free, capacity, top, items). Reconstructed store-for-store from AptValueVector::
@@ -1024,11 +1024,11 @@ int AptUpdateInitialize(unsigned int* a1, char a2)
 // ===========================================================================
 void AptActionInterpreter::shutdown()
 {
-    if (mpStack != 0)
-        gpAptOperandStackPool->Deallocate(mpStack, sizeof(AptValue*) * mnStackCapacity);
-    mnStackCapacity = 0;
-    mnStackTop      = 0;
-    mpStack         = 0;
+    if (mOperandStack.mppItems != 0)
+        gpAptOperandStackPool->Deallocate(mOperandStack.mppItems, sizeof(AptValue*) * mOperandStack.mnCapacity);
+    mOperandStack.mnCapacity = 0;
+    mOperandStack.mnTop      = 0;
+    mOperandStack.mppItems         = 0;
 }
 
 // ARTIST unk_8324E71C: shared native-global extension-object lock.

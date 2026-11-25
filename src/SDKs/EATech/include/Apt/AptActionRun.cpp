@@ -74,7 +74,7 @@ const unsigned char* AptActionInterpreter::runStream(
     // Reserve a fresh operand-stack base for this run (nested runs save/restore it).
     const int  nSavedBase = mnStackBase;
     const bool bRun       = (mpAbortValue == 0);
-    mnStackBase = mnStackTop;
+    mnStackBase = mOperandStack.mnTop;
 
     bool bRanOffEnd = false;
     int  nLastOpcode = -1;   // console v12 (r30, init -1): the last DISPATCHED opcode
@@ -123,24 +123,24 @@ const unsigned char* AptActionInterpreter::runStream(
     // (the SendAptEvent undefined-name cascade). The abort exit skips it (LABEL_15).
     if (bRanOffEnd || (bRun && !mpAbortValue && !bTopLevel && nLastOpcode == 0))
     {
-        mpStack[mnStackTop] = gpUndefinedValue;
-        ++mnStackTop;
+        mOperandStack.mppItems[mOperandStack.mnTop] = gpUndefinedValue;
+        ++mOperandStack.mnTop;
         gpUndefinedValue->AddRef();
     }
 
     // Unwind the operands left above the run's base. A top-level (unbounded) run
     // releases all of them; a bounded sub-stream leaves its top value as the result.
     const int nFloor = bTopLevel ? mnStackBase : (mnStackBase + 1);
-    while (mnStackTop > nFloor)
+    while (mOperandStack.mnTop > nFloor)
     {
         // Null-guarded: the console never leaves a raw null on the operand stack
         // (its miss paths push the `undefined` singleton), but a not-yet-complete
         // x64 handler path can (e.g. a raw getVariable-result push) -- skip it
         // rather than AV in Release. FLAG hardening; observably identical on
         // valid streams.
-        if (mpStack[mnStackTop - 1])
-            mpStack[mnStackTop - 1]->Release();
-        --mnStackTop;
+        if (mOperandStack.mppItems[mOperandStack.mnTop - 1])
+            mOperandStack.mppItems[mOperandStack.mnTop - 1]->Release();
+        --mOperandStack.mnTop;
     }
 
     mnStackBase = nSavedBase;
@@ -160,7 +160,7 @@ const unsigned char* AptActionInterpreter::runStream(
     // (`!*a1 || *a1 == 1 && *a1[2] == off_8324D814`, then the count-guarded
     // ReleaseValues(off_8324E51C)). AptFlushDeferredReleases (AptGC.cpp, over the
     // real gValuesToRelease) is empty-vector safe, subsuming the count guard.
-    if (mnStackTop == 0 || (mnStackTop == 1 && mpStack[0] == gpUndefinedValue))
+    if (mOperandStack.mnTop == 0 || (mOperandStack.mnTop == 1 && mOperandStack.mppItems[0] == gpUndefinedValue))
         AptFlushDeferredReleases();
 
     return ctx.mpProgramCounter;

@@ -82,9 +82,7 @@ namespace
         // Push the call arguments (console loops i = numArgs-1 .. 0, AddRef'ing each).
         for (int liArg = liNumArgs - 1; liArg >= 0; --liArg)
         {
-            gAptActionInterpreter.mpStack[gAptActionInterpreter.mnStackTop] = lppArgs[liArg];
-            ++gAptActionInterpreter.mnStackTop;
-            lppArgs[liArg]->AddRef();
+            gAptActionInterpreter.stackPush(lppArgs[liArg]);
         }
 
         // Resolve the named method on the object, run it through a fresh register frame.

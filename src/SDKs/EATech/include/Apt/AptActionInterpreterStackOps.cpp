@@ -72,7 +72,7 @@ extern AptValue* gpUndefinedValue;   // off_8324D814 (AptGlobals.cpp; wired at A
 // ---------------------------------------------------------------------------
 void AptActionInterpreter::_FunctionAptActionPop(AptActionInterpreter* pInterp, LocalContextT*)
 {
-    const int nDepth = pInterp->mnStackTop;
+    const int nDepth = pInterp->mOperandStack.mnTop;
     if (nDepth > pInterp->mnStackBase)
         pInterp->stackPop();
     if (nDepth == 1 && gpValuesToRelease->GetNumValues() != 0)
@@ -84,7 +84,7 @@ void AptActionInterpreter::_FunctionAptActionPop(AptActionInterpreter* pInterp, 
 // ---------------------------------------------------------------------------
 void AptActionInterpreter::_FunctionAptActionPushDuplicate(AptActionInterpreter* pInterp, LocalContextT*)
 {
-    pInterp->stackPush(pInterp->mpStack[pInterp->mnStackTop - 1]);
+    pInterp->stackPush(pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1]);
 }
 
 // ---------------------------------------------------------------------------
@@ -95,8 +95,8 @@ void AptActionInterpreter::_FunctionAptActionPushDuplicate(AptActionInterpreter*
 // ---------------------------------------------------------------------------
 void AptActionInterpreter::_FunctionAptActionStackSwap(AptActionInterpreter* pInterp, LocalContextT*)
 {
-    AptValue* pTop = pInterp->mpStack[pInterp->mnStackTop - 1];
-    AptValue* pSecond = pInterp->mpStack[pInterp->mnStackTop - 2];
+    AptValue* pTop = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
+    AptValue* pSecond = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 2];
     pInterp->stackPopNoDec();
     pInterp->stackPopNoDec();
     pInterp->stackPushNoInc(pTop);
@@ -341,7 +341,7 @@ void AptActionInterpreter::_FunctionAptActionPushStringGetMember(AptActionInterp
     AptString* pStr = AptString::Create("");                // console AptString::Create(&unk_820046A7) ("")
     *pStr->GetInternalString() = EAStringC(*reinterpret_cast<const char* const*>(pAligned));
 
-    pInterp->mpStack[pInterp->mnStackTop++] = pStr;         // inlined stackPush (store + advance)
+    pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = pStr;         // inlined stackPush (store + advance)
     pStr->AddRef();
 
     _FunctionAptActionGetMember(pInterp, pCtx);
@@ -370,7 +370,7 @@ void AptActionInterpreter::_FunctionAptActionPushStringGetVar(AptActionInterpret
     AptValue* pResult = pInterp->getVariable(pCtx->mpCIH, pCtx->mpPendingReleaseValue,
                                              &name, 1, 1, 0);
 
-    pInterp->mpStack[pInterp->mnStackTop++] = pResult;      // inlined stackPush (store + advance)
+    pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = pResult;      // inlined stackPush (store + advance)
     pResult->AddRef();
 }
 
@@ -389,7 +389,7 @@ void AptActionInterpreter::_FunctionAptActionPushStringSetMember(AptActionInterp
     AptString* pStr = AptString::Create("");                // console AptString::Create(&unk_820046A7) ("")
     *pStr->GetInternalString() = EAStringC(*reinterpret_cast<const char* const*>(pAligned));
 
-    pInterp->mpStack[pInterp->mnStackTop++] = pStr;         // inlined stackPush (store + advance)
+    pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = pStr;         // inlined stackPush (store + advance)
     pStr->AddRef();
 
     _FunctionAptActionSetMember(pInterp, pCtx);
@@ -415,7 +415,7 @@ void AptActionInterpreter::_FunctionAptActionPushString(AptActionInterpreter* pI
     AptString* pStr = AptString::Create("");                // console AptString::Create(&unk_820046A7) ("")
     *pStr->GetInternalString() = EAStringC(*reinterpret_cast<const char* const*>(pAligned));
 
-    pInterp->mpStack[pInterp->mnStackTop++] = pStr;         // inlined stackPush (store + advance)
+    pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = pStr;         // inlined stackPush (store + advance)
     pStr->AddRef();
 }
 
@@ -434,7 +434,7 @@ void AptActionInterpreter::_FunctionAptActionPushStringSetVar(AptActionInterpret
     AptString* pStr = AptString::Create("");                // console AptString::Create(&unk_820046A7) ("")
     *pStr->GetInternalString() = EAStringC(*reinterpret_cast<const char* const*>(pAligned));
 
-    pInterp->mpStack[pInterp->mnStackTop++] = pStr;         // inlined stackPush (store + advance)
+    pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = pStr;         // inlined stackPush (store + advance)
     pStr->AddRef();
 
     _FunctionAptActionSetVariable(pInterp, pCtx);
@@ -486,8 +486,8 @@ void AptActionInterpreter::_FunctionAptActionStringDictByteGetVar(AptActionInter
 //     GotoLabel      @0x82B0C598 (0x8C) -- jump to the inline frame label
 //
 // The console addresses the operand stack by 32-bit byte math (4*top+base); here
-// it is typed element indexing (mpStack[mnStackTop-1]), identical on x64 where
-// AptValue* is 8 bytes. mpStack[mnStackTop-N] is the console's *(4*(top-N)+base).
+// it is typed element indexing (mOperandStack.mppItems[mOperandStack.mnTop-1]), identical on x64 where
+// AptValue* is 8 bytes. mOperandStack.mppItems[mOperandStack.mnTop-N] is the console's *(4*(top-N)+base).
 //
 // Cross-TU helpers -- every deferred-subsystem shim of this family is retired;
 // each is a real reconstructed body in its single home TU:
@@ -563,8 +563,8 @@ void AptActionInterpreter::initialize(const AptInitParmsT& rParms)
 {
     // ARTIST uses each loaded capacity for both the slot count and its allocation.
     const int32_t nStackSize = rParms.iStackSize;
-    mnStackCapacity = nStackSize;
-    mpStack = static_cast<AptValue**>(gpAptOperandStackPool->Allocate(sizeof(AptValue*) * nStackSize));
+    mOperandStack.mnCapacity = nStackSize;
+    mOperandStack.mppItems = static_cast<AptValue**>(gpAptOperandStackPool->Allocate(sizeof(AptValue*) * nStackSize));
 
     const int32_t nCallStackBSize = rParms.iCallStackDepth;
     mnCallStackB_Capacity = nCallStackBSize;
@@ -599,8 +599,8 @@ void AptActionInterpreter::initialize(const AptInitParmsT& rParms)
 void AptActionInterpreter::_FunctionAptActionCallFunction(AptActionInterpreter* pInterp,
                                                           LocalContextT* pContext)
 {
-    AptValue* const pCountValue = pInterp->mpStack[pInterp->mnStackTop - 2];
-    AptValue*       pFunction   = pInterp->mpStack[pInterp->mnStackTop - 1];
+    AptValue* const pCountValue = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 2];
+    AptValue*       pFunction   = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
 
     EAStringC scratch;                                      // console v19 (&unk_82F72FF8 seed)
     const int nArgs = pCountValue->toInteger();
@@ -700,9 +700,9 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
                                                        LocalContextT* pContext)
 {
     // ---- operand fetch (console v5/v6/v7; stack indices top-3/top-1/top-2) ----
-    AptValue* const pCountValue = pInterp->mpStack[pInterp->mnStackTop - 3];   // v5 (r16)
-    AptValue*       pObject     = pInterp->mpStack[pInterp->mnStackTop - 1];   // v6 (r30)
-    AptValue*       pMethodName = pInterp->mpStack[pInterp->mnStackTop - 2];   // v7 (r27)
+    AptValue* const pCountValue = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 3];   // v5 (r16)
+    AptValue*       pObject     = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];   // v6 (r30)
+    AptValue*       pMethodName = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 2];   // v7 (r27)
 
     int       nArgs       = pCountValue->toInteger();   // v8/v9/v25
     EAStringC** pNameSlot  = 0;                    // v10 (r23): method-name slot
@@ -749,7 +749,7 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
     if (!pMethodName->getIsDefined())
     {
         pInterp->stackPop(nArgs + 3);                          // console Burnout_X360_Artist_01e3_0 == stackPop(int) (member)
-        pInterp->mpStack[pInterp->mnStackTop++] = gpUndefinedValue;   // push off_8324D814
+        pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = gpUndefinedValue;   // push off_8324D814
         // (no AddRef: the console stores the singleton without taking a ref here)
         return;   // -> the shared LABEL_140 string-scratch teardown (RAII below)
     }
@@ -814,11 +814,11 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
     // ---- pop the object operand + drop the name/count slots (console Pop; then the
     //      top-- / top-- pair that drops the name + count without releasing) ----
     pInterp->stackPop();                                       // console AptValue>::Pop (the NAME slot, top)
-    if (pInterp->mnStackTop > 0)
+    if (pInterp->mOperandStack.mnTop > 0)
     {
-        --pInterp->mnStackTop;
-        if (pInterp->mnStackTop > 0)
-            --pInterp->mnStackTop;
+        --pInterp->mOperandStack.mnTop;
+        if (pInterp->mOperandStack.mnTop > 0)
+            --pInterp->mOperandStack.mnTop;
     }
 
     // ---- apply()/call() argument spread -----------------------------------
@@ -846,7 +846,7 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
             }
             else
             {
-                AptValue* const pFirst = pInterp->mpStack[pInterp->mnStackTop - 1];   // console v33
+                AptValue* const pFirst = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];   // console v33
                 pMethodName = (pFirst && pFirst->getIsDefined()) ? pFirst : gpUndefinedValue;
                 pInterp->stackPop();
                 --nArgs;
@@ -856,10 +856,10 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
         {
             // apply(): the explicit `this` is under the args array; re-read arg count.
             pMethodName = pCountValue;   // console v7 = v5
-            nArgs = pInterp->mpStack[pInterp->mnStackTop - 1]->toInteger();   // console v9 = toInteger(top)
+            nArgs = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1]->toInteger();   // console v9 = toInteger(top)
             if (nArgs > 1)
             {
-                AptValue* const pUnder = pInterp->mpStack[pInterp->mnStackTop - 2];   // console v31
+                AptValue* const pUnder = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 2];   // console v31
                 if (pUnder && pUnder->getIsDefined())
                     pMethodName = pUnder;
                 pInterp->stackPop();
@@ -871,7 +871,7 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
         // apply(): flatten the trailing array argument's elements onto the stack.
         if (_stricmp(pResolvedName->GetBuffer(), "apply") == 0)
         {
-            AptValue* const pTopArg = pInterp->mpStack[pInterp->mnStackTop - 1];   // console v34
+            AptValue* const pTopArg = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];   // console v34
             if (pTopArg->getVtblIndex() == AptVFT_Array && pTopArg->getIsDefined())
             {
                 pInterp->stackPop();
@@ -886,7 +886,7 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
                         AptValue* pElem = (nIdx < pArray->mnLength)   // console v37 < v34[10]
                                         ? pArray->mpArray[nIdx]       // console *(v34[8] + v38)
                                         : gpUndefinedValue;
-                        pInterp->mpStack[pInterp->mnStackTop++] = pElem;   // inlined stackPush
+                        pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = pElem;   // inlined stackPush
                         pElem->AddRef();                                   // console (**v39)(v39)
                         --nIdx;
                     } while (nIdx >= 0);
@@ -1071,14 +1071,14 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
 
     // pop()/shift() leave their removed element on the stack as the call result; the
     // console releases it when the method value is a frame-stack (tag 14) "apply".
-    AptValue* const pResult = pInterp->mpStack[pInterp->mnStackTop - 1];
+    AptValue* const pResult = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
     if (pResult != gpUndefinedValue)
     {
         if (pMethodName->getVtblIndex() == AptVFT_Array && pMethodName->getIsDefined()
             && (_stricmp(pResolvedName->GetBuffer(), "pop") == 0
                 || _stricmp(pResolvedName->GetBuffer(), "shift") == 0))
         {
-            pInterp->mpStack[pInterp->mnStackTop - 1]->Release();   // console (*(*v67+4))(v67)
+            pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1]->Release();   // console (*(*v67+4))(v67)
         }
     }
 
@@ -1101,9 +1101,9 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
 void AptActionInterpreter::_FunctionAptActionNewMethod(AptActionInterpreter* pInterp,
                                                        LocalContextT* pContext)
 {
-    AptValue* pNameValue = pInterp->mpStack[pInterp->mnStackTop - 1];
-    AptValue* pConstructor = pInterp->mpStack[pInterp->mnStackTop - 2];
-    AptValue* pCountValue = pInterp->mpStack[pInterp->mnStackTop - 3];
+    AptValue* pNameValue = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
+    AptValue* pConstructor = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 2];
+    AptValue* pCountValue = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 3];
 
     EAStringC scratch;
     const EAStringC* pName = AptValue::Get_ToString(pNameValue, &scratch);
@@ -1136,7 +1136,7 @@ void AptActionInterpreter::_FunctionAptActionNewMethod(AptActionInterpreter* pIn
 void AptActionInterpreter::_FunctionAptActionCallFrame(AptActionInterpreter* pInterp,
                                                        LocalContextT* pContext)
 {
-    AptValue* const pTop = pInterp->mpStack[pInterp->mnStackTop - 1];
+    AptValue* const pTop = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
     int nFrame = -1;                                       // console v4
 
     const AptVirtualFunctionTable_Indices eType = pTop->getVtblIndex();
@@ -1231,7 +1231,7 @@ void AptActionInterpreter::_FunctionAptActionGotoFrame2(AptActionInterpreter* pI
         (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 3u) & ~static_cast<uintptr_t>(3u));
     pContext->mpProgramCounter = reinterpret_cast<const unsigned char*>(pPlayFlag + 1);
 
-    AptValue* const pTop = pInterp->mpStack[pInterp->mnStackTop - 1];   // console v8
+    AptValue* const pTop = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];   // console v8
 
     // Pick the target node (console v4): the current-target slot (a2[2]=v5) first,
     // else the run scope (a2[1]=mpCIH), each only when it is a clip / CIHNone.
@@ -1302,7 +1302,7 @@ void AptActionInterpreter::_FunctionAptActionGotoFrame2(AptActionInterpreter* pI
 // build the matching built-in instance from the nArgs operands already on the stack,
 // link it to the class prototype (lazily creating one), copy the class's implemented
 // interfaces, and -- when bConstruct -- run the constructor body. The console reads
-// operands as mpStack[mnStackTop - k - 1] (== stackAt(k)).
+// operands as mOperandStack.mppItems[mOperandStack.mnTop - k - 1] (== stackAt(k)).
 //
 // The leaf object constructions the console inlined verbatim (the AptValueWithHash
 // base + the concrete vtable + the per-type ctor) are expressed here through the

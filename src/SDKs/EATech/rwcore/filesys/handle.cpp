@@ -48,7 +48,7 @@ namespace rw
                 , mpDevice(lpDevice)
                 , mpDriver(lpDevice->GetDriver())
                 , mu64Size(0)
-                , mu64Reserved20(0)
+                , mu64Position(0)
             {
                 if (lpcPath[0] == '.' && (lpcPath[1] == '/' || lpcPath[1] == '\\'))
                     lpcPath += 2;

@@ -39,7 +39,7 @@
 void AptActionInterpreter::_FunctionAptActionTrace(AptActionInterpreter* pInterp,
                                                    LocalContextT* /*pContext*/)
 {
-    AptValue* pTop = pInterp->mpStack[pInterp->mnStackTop - 1];
+    AptValue* pTop = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
     EAStringC scratch;
     const EAStringC* pStr = AptValue::Get_ToString(pTop, &scratch);
     gAptFuncs.pfnDebugPrint("AptTrace: %s\n", pStr->GetBuffer());
@@ -53,7 +53,7 @@ void AptActionInterpreter::_FunctionAptActionTrace(AptActionInterpreter* pInterp
 void AptActionInterpreter::_FunctionAptActionThrow(AptActionInterpreter* pInterp,
                                                    LocalContextT* /*pContext*/)
 {
-    AptValue* pValue = pInterp->mpStack[pInterp->mnStackTop - 1];
+    AptValue* pValue = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
     pValue->AddRef();
     pInterp->mpAbortValue = pValue;   // runStream observes a non-null abort value and unwinds
     pInterp->stackPop();
@@ -71,7 +71,7 @@ void AptActionInterpreter::_FunctionAptActionThrow(AptActionInterpreter* pInterp
 void AptActionInterpreter::_FunctionAptActionToString(AptActionInterpreter* pInterp,
                                                       LocalContextT* /*pContext*/)
 {
-    AptValue* pTop = pInterp->mpStack[pInterp->mnStackTop - 1];
+    AptValue* pTop = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
     if (!pTop->isString())
     {
         AptString* pStr = AptString::Create();
@@ -115,7 +115,7 @@ namespace
         const uint8_t nDictByte = *pContext->mpProgramCounter;
         ++pContext->mpProgramCounter;                       // advance past the byte
         AptValue* pValue = pInterp->mConstantPool.mppEntries[nDictByte];
-        pInterp->mpStack[pInterp->mnStackTop++] = pValue;   // inlined stackPush
+        pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = pValue;   // inlined stackPush
         pValue->AddRef();
     }
 }
@@ -128,7 +128,7 @@ void AptActionInterpreter::_FunctionAptActionCallFuncSetVar(AptActionInterpreter
 {
     _FunctionAptActionCallFunction(pInterp, pContext);
     _FunctionAptActionSetVariable(pInterp, pContext);
-    if (gpValuesToRelease->GetNumValues() != 0 && pInterp->mnStackTop == 0)
+    if (gpValuesToRelease->GetNumValues() != 0 && pInterp->mOperandStack.mnTop == 0)
         gpValuesToRelease->ReleaseValues();
 }
 
@@ -140,7 +140,7 @@ void AptActionInterpreter::_FunctionAptActionCallMethodPop(AptActionInterpreter*
 {
     _FunctionAptActionCallMethod(pInterp, pContext);
     pInterp->stackPop();                  // console AptValue>::Pop -- drop the call result
-    if (gpValuesToRelease->GetNumValues() != 0 && pInterp->mnStackTop == 0)
+    if (gpValuesToRelease->GetNumValues() != 0 && pInterp->mOperandStack.mnTop == 0)
         gpValuesToRelease->ReleaseValues();
 }
 
@@ -154,7 +154,7 @@ void AptActionInterpreter::_FunctionAptActionCallFuncAndPop(AptActionInterpreter
 {
     _FunctionAptActionCallFunction(pInterp, pContext);
     pInterp->stackPop();                  // drop the call result (Release)
-    if (gpValuesToRelease->GetNumValues() != 0 && pInterp->mnStackTop == 0)
+    if (gpValuesToRelease->GetNumValues() != 0 && pInterp->mOperandStack.mnTop == 0)
         gpValuesToRelease->ReleaseValues();
 }
 
@@ -169,7 +169,7 @@ void AptActionInterpreter::_FunctionAptActionDictCallFuncPop(AptActionInterprete
     PushDictRegister(pInterp, pContext);
     _FunctionAptActionCallFunction(pInterp, pContext);
     pInterp->stackPop();
-    if (gpValuesToRelease->GetNumValues() != 0 && pInterp->mnStackTop == 0)
+    if (gpValuesToRelease->GetNumValues() != 0 && pInterp->mOperandStack.mnTop == 0)
         gpValuesToRelease->ReleaseValues();
 }
 
@@ -195,7 +195,7 @@ void AptActionInterpreter::_FunctionAptActionWith(AptActionInterpreter* pInterp,
     const unsigned char* pBlockEnd = *reinterpret_cast<const unsigned char* const*>(pAligned);
     pContext->mpProgramCounter = pAligned + 4;
 
-    AptValue* pTarget = pInterp->mpStack[pInterp->mnStackTop - 1];
+    AptValue* pTarget = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
     if (pTarget->getIsDefined())
     {
         AptValue* pObject;
@@ -221,7 +221,7 @@ void AptActionInterpreter::_FunctionAptActionCallMethodSetVar(AptActionInterpret
 {
     _FunctionAptActionCallMethod(pInterp, pContext);
     _FunctionAptActionSetVariable(pInterp, pContext);
-    if (gpValuesToRelease->GetNumValues() != 0 && pInterp->mnStackTop == 0)
+    if (gpValuesToRelease->GetNumValues() != 0 && pInterp->mOperandStack.mnTop == 0)
         gpValuesToRelease->ReleaseValues();
 }
 
@@ -235,7 +235,7 @@ void AptActionInterpreter::_FunctionAptActionDictCallFuncSetVar(AptActionInterpr
     PushDictRegister(pInterp, pContext);
     _FunctionAptActionCallFunction(pInterp, pContext);
     _FunctionAptActionSetVariable(pInterp, pContext);
-    if (gpValuesToRelease->GetNumValues() != 0 && pInterp->mnStackTop == 0)
+    if (gpValuesToRelease->GetNumValues() != 0 && pInterp->mOperandStack.mnTop == 0)
         gpValuesToRelease->ReleaseValues();
 }
 
@@ -249,7 +249,7 @@ void AptActionInterpreter::_FunctionAptActionDictCallMethodPop(AptActionInterpre
     PushDictRegister(pInterp, pContext);
     _FunctionAptActionCallMethod(pInterp, pContext);
     pInterp->stackPop();                  // console AptValue>::Pop -- drop the call result
-    if (gpValuesToRelease->GetNumValues() != 0 && pInterp->mnStackTop == 0)
+    if (gpValuesToRelease->GetNumValues() != 0 && pInterp->mOperandStack.mnTop == 0)
         gpValuesToRelease->ReleaseValues();
 }
 
@@ -263,7 +263,7 @@ void AptActionInterpreter::_FunctionAptActionDictCallMethodSetVar(AptActionInter
     PushDictRegister(pInterp, pContext);
     _FunctionAptActionCallMethod(pInterp, pContext);
     _FunctionAptActionSetVariable(pInterp, pContext);
-    if (gpValuesToRelease->GetNumValues() != 0 && pInterp->mnStackTop == 0)
+    if (gpValuesToRelease->GetNumValues() != 0 && pInterp->mOperandStack.mnTop == 0)
         gpValuesToRelease->ReleaseValues();
 }
 
@@ -315,7 +315,7 @@ namespace
 void AptActionInterpreter::_FunctionAptActionTry(AptActionInterpreter* pInterp,
                                                  LocalContextT* pContext)
 {
-    const int nEntryStackTop = pInterp->mnStackTop;   // console v4 = *a1 (unwind target)
+    const int nEntryStackTop = pInterp->mOperandStack.mnTop;   // console v4 = *a1 (unwind target)
 
     // ARTIST aligns to four bytes and advances past the 20-byte header and streams.
     AptTryRecordT* const pRecord = reinterpret_cast<AptTryRecordT*>(
@@ -390,6 +390,6 @@ void AptActionInterpreter::_FunctionAptActionTry(AptActionInterpreter* pInterp,
     }
 
     // unwind any operands the sub-streams left above the try's entry top.
-    if (pInterp->mnStackTop > nEntryStackTop)
-        pInterp->stackPop(pInterp->mnStackTop - nEntryStackTop);   // stack collapse to entry level (member; retired the AptApt_PopValues no-op shim)
+    if (pInterp->mOperandStack.mnTop > nEntryStackTop)
+        pInterp->stackPop(pInterp->mOperandStack.mnTop - nEntryStackTop);   // stack collapse to entry level (member; retired the AptApt_PopValues no-op shim)
 }

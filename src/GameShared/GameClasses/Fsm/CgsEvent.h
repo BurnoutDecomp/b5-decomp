@@ -2,6 +2,7 @@
 #define CGS_FSM_EVENT_H
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Core/CgsID.h"   // CgsID
 
 // CgsFsm::Event - an event delivered to a CgsFsm::ScriptedFsm. Carries an id (which Lua
@@ -9,6 +10,8 @@
 // into the Lua state before the transition. Reconstructed from the DecFIGS DWARF (CgsEvent.h);
 // the layout (variables[16] @ +0x00, id @ +0x40, count @ +0x48) matches the X360
 // ScriptedFsm::SendEvent asm.
+
+#define CGS_ARTIST_EVENT_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\fsm\\CgsEvent.h"
 
 namespace CgsFsm
 {
@@ -22,7 +25,13 @@ namespace CgsFsm
         CgsID GetId() const { return mId; }
         void  AddVariable(const Variable* lpVariable);
         s32   GetVariableCount() const { return miVariableCount; }
-        const Variable* GetVariable(s32 liIndex) const { return maVariables[liIndex]; }
+        const Variable* GetVariable(s32 liVariableIndex) const
+        {
+            CGS_ASSERT_AT(liVariableIndex >= 0 && liVariableIndex < miVariableCount,
+                          "liVariableIndex >=0 && liVariableIndex < miVariableCount",
+                          CGS_ARTIST_EVENT_FILE, 146);
+            return maVariables[liVariableIndex];
+        }
 
     private:
         const Variable* maVariables[KI_MAX_VARIABLE_COUNT];  // +0x00 (16 ptrs = 0x40 bytes)
@@ -30,5 +39,7 @@ namespace CgsFsm
         s32             miVariableCount;                     // +0x48
     };
 }
+
+#undef CGS_ARTIST_EVENT_FILE
 
 #endif // CGS_FSM_EVENT_H

@@ -2,6 +2,7 @@
 #define RENDERENGINE_PROGRAMBUFFER_H
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Graphics/CgsSerialisedPtr.h"
 #include <xtl.h>
 #include <xgraphics.h>
 #include "rw/rwcore_structs.h"  // rw::BaseResourceDescriptors<5>
@@ -26,40 +27,47 @@ namespace renderengine
 
     struct ProgramVariableDescriptor
     {
-        u32 muNameOffset;     // +0x00 name string offset (post-fixup: char*)
-        u8  mu8RegisterSet;   // +0x04
-        u8  mu8RegisterIndex; // +0x05
-        u8  mu8RegisterCount; // +0x06
-        u8  mu8Pad7;          // +0x07
+        CgsGraphics::Ptr32<const char> mpcName;
+        u8 mu8RegisterIndex;
+        u8 mu8RegisterSet;
+        u8 mu8RegisterCount;
+        u8 mu8Padding;
     };
 
-    // The 4-byte shader-constant handle GetVariableHandleByName fills (post-fx effects store one
-    // per named constant they look up).
     struct ProgramBufferData
     {
-        u32 muShaderType;     // +0x00 != 0 -> pixel, == 0 -> vertex
-        u16 mu16NumVariables; // +0x04
-        u16 mu16Pad6;         // +0x06
-        u32 muMicrocodeSize;  // +0x08
-        u32 muMicrocodePart3; // +0x0C
-        u32 muPhysicalPart;   // +0x10
-        // +0x14: microcode header bytes, then the ProgramVariableDescriptor[] + interned names.
+        s32 miShaderType;
+        u16 mu16NumVariables;
+        u16 mu16Pad6;
+        u32 muMicrocodeSize;
+        u32 muPhysicalSize;
+        CgsGraphics::Ptr32<u8> mpPhysicalPart;
+
+        ProgramVariableDescriptor* GetVariableDescriptors()
+        {
+            return reinterpret_cast<ProgramVariableDescriptor*>(reinterpret_cast<u8*>(this + 1) + muMicrocodeSize);
+        }
+        const ProgramVariableDescriptor* GetVariableDescriptors() const
+        {
+            return reinterpret_cast<const ProgramVariableDescriptor*>(reinterpret_cast<const u8*>(this + 1) + muMicrocodeSize);
+        }
     };
 
     struct ProgramBufferParameters
     {
-        u32 muFunction;          // +0x00
-        u32 muShaderType;        // +0x04
-        u32 muReserved8;         // +0x08
-        u32 muMicrocodePart0;    // +0x0C  inline parts (used when muFunction == 0)
-        u32 muMicrocodePart1;    // +0x10  (microcode size)
-        u32 muMicrocodePart2;    // +0x14
-        u32 muMicrocodePart3;    // +0x18
-        u32 muConstantTableSrc;  // +0x1C
-        u32 muConstantTableSize; // +0x20
-        u32 muNumVariables;      // +0x24
+        const void* mpFunction;
+        s32 miShaderType;
+        u32 muProgramSize;
+        ProgramMicrocodeParts mMicrocodeParts;
+        const void* mpConstantTable;
+        u32 muConstantTableSize;
+        u32 muNumVariables;
     };
 
+    CGS_STATIC_ASSERT((sizeof(ProgramBufferData) == 0x14), "ARTIST program buffer header");
+    CGS_STATIC_ASSERT((sizeof(ProgramBufferParameters) == 0x28), "ARTIST program buffer parameters");
+    CGS_STATIC_ASSERT((offsetof(ProgramBufferParameters, mMicrocodeParts) == 0x0C), "ARTIST inline microcode parts");
+    CGS_STATIC_ASSERT((offsetof(ProgramBufferParameters, mpConstantTable) == 0x1C), "ARTIST prebuilt constant table");
     CGS_STATIC_ASSERT((sizeof(ProgramVariableDescriptor) == 8), "ProgramVariableDescriptor must be 8 bytes");
     CGS_STATIC_ASSERT((sizeof(ProgramMicrocodeParts) == 16), "ProgramMicrocodeParts must be 16 bytes");
 
@@ -68,7 +76,7 @@ namespace renderengine
     public:
         static rw::BaseResourceDescriptors<5>* GetResourceDescriptor(rw::BaseResourceDescriptors<5>* lpDescriptor,
                                                                      const ProgramBufferParameters* lpParams);
-        static u32  GetVariableHandleByName(const ProgramBufferData* lpData, const u8* lpName,
+        static bool GetVariableHandleByName(const ProgramBufferData* lpData, const u8* lpName,
                                             ProgramVariableHandle* lpHandle);
         static ProgramBufferData* Initialize(rw::Resource* lpResource, const ProgramBufferParameters* lpParams);
         static void Release(ProgramBufferData* lpData);

@@ -31,8 +31,8 @@ extern AptValue* gpUndefinedValue;   // off_8324D814 (AptGlobals.cpp; wired at A
 void AptActionInterpreter::_FunctionAptActionDefineLocal(AptActionInterpreter* pInterp,
                                                          LocalContextT* pContext)
 {
-    AptValue* pValue = pInterp->mpStack[pInterp->mnStackTop - 1];
-    AptValue* pName  = pInterp->mpStack[pInterp->mnStackTop - 2];
+    AptValue* pValue = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
+    AptValue* pName  = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 2];
 
     EAStringC scratch;
     const EAStringC* pKey = AptValue::Get_ToString(pName, &scratch);
@@ -51,7 +51,7 @@ void AptActionInterpreter::_FunctionAptActionDefineLocal(AptActionInterpreter* p
 void AptActionInterpreter::_FunctionAptActionDefineLocal2(AptActionInterpreter* pInterp,
                                                           LocalContextT* pContext)
 {
-    AptValue* pName = pInterp->mpStack[pInterp->mnStackTop - 1];
+    AptValue* pName = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
 
     EAStringC scratch;
     const EAStringC* pKey = AptValue::Get_ToString(pName, &scratch);

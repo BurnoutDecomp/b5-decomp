@@ -48,8 +48,8 @@ namespace
 void AptActionInterpreter::_FunctionAptActionStringEquals(AptActionInterpreter* pInterp,
                                                           LocalContextT* /*pContext*/)
 {
-    AptValue* pTop   = pInterp->mpStack[pInterp->mnStackTop - 1];
-    AptValue* pUnder = pInterp->mpStack[pInterp->mnStackTop - 2];
+    AptValue* pTop   = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
+    AptValue* pUnder = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 2];
 
     AptValue* pResult = 0;
     if (AptGetSwfVersion() == 7)
@@ -71,7 +71,7 @@ void AptActionInterpreter::_FunctionAptActionStringEquals(AptActionInterpreter* 
     }
 
     pInterp->stackPop(2);
-    pInterp->mpStack[pInterp->mnStackTop++] = pResult;
+    pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = pResult;
     pResult->AddRef();
 }
 
@@ -82,8 +82,8 @@ void AptActionInterpreter::_FunctionAptActionStringEquals(AptActionInterpreter* 
 void AptActionInterpreter::_FunctionAptActionAdd2(AptActionInterpreter* pInterp,
                                                   LocalContextT* /*pContext*/)
 {
-    AptValue* pTop   = pInterp->mpStack[pInterp->mnStackTop - 1];
-    AptValue* pUnder = pInterp->mpStack[pInterp->mnStackTop - 2];
+    AptValue* pTop   = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
+    AptValue* pUnder = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 2];
 
     AptValue* pResult;
     if (IsDefinedString(pTop) || IsDefinedString(pUnder))
@@ -129,6 +129,6 @@ void AptActionInterpreter::_FunctionAptActionAdd2(AptActionInterpreter* pInterp,
         }
     }
 
-    pInterp->mpStack[pInterp->mnStackTop++] = pResult;
+    pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = pResult;
     pResult->AddRef();
 }

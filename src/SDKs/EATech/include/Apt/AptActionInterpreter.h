@@ -18,7 +18,7 @@
 // resolve re-parse (_parseStream). See the Apt audit for the VM-reconnection worklist.
 //
 // The console indexes the stacks with byte math (4 * top + base); here it is typed
-// element indexing (mpStack[top]), which is the same on x64 where the pointers are
+// element indexing (mOperandStack.mppItems[top]), which is the same on x64 where the pointers are
 // 8 bytes. Because the interpreter is a runtime object (not serialised), the struct
 // is reconstructed x64-native (8-byte pointers) -- the console's 32-bit field
 // offsets (noted [c:0xNN]) therefore differ from this struct's; access is by name.
@@ -27,6 +27,7 @@
 // ===========================================================================
 
 #include "types.hpp"
+#include "SDKs/EATech/include/Apt/AptValue/AptValueVector.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"   // AptValue::AddRef/Release
 #include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h"  // mpCurrentFunction + SavedExecutionState
 
@@ -128,29 +129,29 @@ public:
     // ARTIST emits this helper inline in the Push0 through PushDWord opcodes.
     void stackPush(AptValue* pValue)
     {
-        mpStack[mnStackTop] = pValue;
-        ++mnStackTop;
+        mOperandStack.mppItems[mOperandStack.mnTop] = pValue;
+        ++mOperandStack.mnTop;
         pValue->AddRef();
     }
     // Push without taking a reference (the caller's ref transfers to the stack).
     void stackPushNoInc(AptValue* pValue)
     {
-        mpStack[mnStackTop] = pValue;
-        ++mnStackTop;
+        mOperandStack.mppItems[mOperandStack.mnTop] = pValue;
+        ++mOperandStack.mnTop;
     }
 
     // Pop the top value, Release the stack's ref, and return it (the returned
     // pointer has already been Release()'d -- callers use it before it can die,
     // matching the console). Returns null on an empty stack.
     void       stackPop();                            // @0x7F3248 (x64 QEAAXXZ: void)
-    // Pop nCount values, releasing each (no-op unless mnStackTop >= nCount).
+    // Pop nCount values, releasing each (no-op unless mOperandStack.mnTop >= nCount).
     void stackPop(int nCount)
     {
-        if (mnStackTop >= nCount)
+        if (mOperandStack.mnTop >= nCount)
         {
             for (int i = 1; i <= nCount; ++i)
-                mpStack[mnStackTop - i]->Release();
-            mnStackTop -= nCount;
+                mOperandStack.mppItems[mOperandStack.mnTop - i]->Release();
+            mOperandStack.mnTop -= nCount;
         }
     }
     // As stackPop(nCount) but with the extra nCount>0 guard (bounds-safe form).
@@ -162,8 +163,8 @@ public:
     // Lower the top slot without releasing the value (its ref is kept elsewhere).
     void stackPopNoDec()
     {
-        if (mnStackTop > 0)
-            --mnStackTop;
+        if (mOperandStack.mnTop > 0)
+            --mOperandStack.mnTop;
     }
 
     // Replace the top nCount operands with a single value (AddRef the new value,
@@ -178,7 +179,7 @@ public:
     // _FunctionAptActionCallMethod), so no per-stack pop shim is needed.
 
     // stackAt @0x82ADC060 -- the operand nDepth slots below the top (0 = top).
-    AptValue*  stackAt(int nDepth) const { return mpStack[mnStackTop - nDepth - 1]; }
+    AptValue*  stackAt(int nDepth) const { return mOperandStack.mppItems[mOperandStack.mnTop - nDepth - 1]; }
 
     // ---- abort / thrown value (the AS Throw/try-catch abort latch) --------
     // The interpreter aborts the current run when mpAbortValue is set (Throw 0x2A
@@ -208,7 +209,7 @@ public:
 
     // shutdown @0x82AE15A0 -- the interpreter teardown AptUpdateShutdown calls. The X360
     // linker COMDAT-folded it into AptValueVector::shutdown (byte-identical body): the
-    // interpreter's leading operand-stack vector (mnStackTop/mnStackCapacity/mpStack @
+    // interpreter's leading operand-stack vector (mOperandStack.mnTop/mOperandStack.mnCapacity/mOperandStack.mppItems @
     // +0/+4/+8 == the AptValueVector {mnTop,mnCapacity,mppItems} shape) IS that vector, so
     // shutdown frees the operand-stack array and zeros the three fields. Additive
     // declaration mirroring initialize; body reconstructed store-for-store (in AptInit.cpp,
@@ -651,9 +652,7 @@ public:
     // (#2/#3/#5 -- the AVM1 call/return, with-scope and try stacks, in some order)
     // are named generically pending confirmation.
 
-    int        mnStackTop;        // [c:0x00] operand-stack count / next-free index
-    int        mnStackCapacity;   // [c:0x04] iStackSize
-    AptValue** mpStack;           // [c:0x08] operand-stack array
+    AptValueVector mOperandStack;    // ARTIST +0x00, count/capacity/items
 
     int        mnCallStackB_Count;    // [c:0x0C] call-depth stack #2 (role TBD)
     int        mnCallStackB_Capacity; // [c:0x10] iCallStackDepth
@@ -694,5 +693,7 @@ public:
     // complete-class offsetof context).
     static void _AssertLayout()
     {
+        CGS_STATIC_ASSERT((offsetof(AptActionInterpreter, mOperandStack) == 0x00), "ARTIST operand stack");
+        CGS_STATIC_ASSERT((offsetof(AptActionInterpreter, mnCallStackB_Count) == 0x0C), "ARTIST call stack");
     }
 };

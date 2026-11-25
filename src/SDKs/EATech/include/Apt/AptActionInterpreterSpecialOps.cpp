@@ -64,7 +64,7 @@ void AptActionInterpreter::_FunctionAptActionPushThis(AptActionInterpreter* pInt
 {
     AptString* pStr = AptString::Create("");          // console seed @0x820046A7 ("" -- overwritten below)
     *pStr->GetInternalString() = StringPool::saConstant[StringPool::KU_NAME_THIS];
-    pInterp->mpStack[pInterp->mnStackTop++] = pStr;    // inlined stackPush
+    pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = pStr;    // inlined stackPush
     pStr->AddRef();
 }
 
@@ -76,7 +76,7 @@ void AptActionInterpreter::_FunctionAptActionPushGlobal(AptActionInterpreter* pI
 {
     AptString* pStr = AptString::Create("");          // console seed @0x820046A7 ("" -- overwritten below)
     *pStr->GetInternalString() = StringPool::saConstant[StringPool::KU_NAME_GLOBAL];
-    pInterp->mpStack[pInterp->mnStackTop++] = pStr;
+    pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = pStr;
     pStr->AddRef();
 }
 
@@ -88,7 +88,7 @@ void AptActionInterpreter::_FunctionAptActionPushThisVariable(AptActionInterpret
 {
     AptValue* pResult = pInterp->getVariable(pContext->mpCIH, pContext->mpPendingReleaseValue,
                                              &StringPool::saConstant[StringPool::KU_NAME_THIS], 1, 1, 0);
-    pInterp->mpStack[pInterp->mnStackTop++] = pResult;
+    pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = pResult;
     pResult->AddRef();
 }
 
@@ -98,7 +98,7 @@ void AptActionInterpreter::_FunctionAptActionPushThisVariable(AptActionInterpret
 void AptActionInterpreter::_FunctionAptActionPushGlobalVariable(AptActionInterpreter* pInterp,
                                                                 LocalContextT* /*pContext*/)
 {
-    pInterp->mpStack[pInterp->mnStackTop++] = gpAptGlobalFallback;
+    pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = gpAptGlobalFallback;
     gpAptGlobalFallback->AddRef();
 }
 
@@ -109,7 +109,7 @@ void AptActionInterpreter::_FunctionAptActionGetTimer(AptActionInterpreter* pInt
                                                       LocalContextT* /*pContext*/)
 {
     AptInteger* pVal = AptInteger::Create(static_cast<int32_t>(gAptInputRecorderTag));   // dword_8324D820
-    pInterp->mpStack[pInterp->mnStackTop++] = pVal;
+    pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = pVal;
     pVal->AddRef();
 }
 
@@ -123,7 +123,7 @@ void AptActionInterpreter::_FunctionAptActionStoreRegister(AptActionInterpreter*
     const int32_t* pRegIndex = reinterpret_cast<const int32_t*>(
         (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 3u) & ~static_cast<uintptr_t>(3u));   // ARTIST: align to 4
     pContext->mpProgramCounter = reinterpret_cast<const unsigned char*>(pRegIndex + 1);
-    AptScriptFunctionBase::SetRegisterValue(*pRegIndex, pInterp->mpStack[pInterp->mnStackTop - 1]);
+    AptScriptFunctionBase::SetRegisterValue(*pRegIndex, pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1]);
 }
 
 // ---------------------------------------------------------------------------
@@ -264,8 +264,8 @@ void AptActionInterpreter::_FunctionAptActionGotoFrame(AptActionInterpreter* pIn
     }
 
     // Flush the AptGC deferred-release vector once the operand stack has drained
-    // (console: off_8324E51C->count != 0 && mnStackTop == 0).
-    if (pInterp->mnStackTop == 0)
+    // (console: off_8324E51C->count != 0 && mOperandStack.mnTop == 0).
+    if (pInterp->mOperandStack.mnTop == 0)
         AptFlushDeferredReleases();   // off_8324E51C drain (homed, AptGC.cpp)
 }
 
@@ -356,9 +356,9 @@ void AptActionInterpreter::_FunctionAptActionStop(AptActionInterpreter* /*pInter
 void AptActionInterpreter::_FunctionAptActionCloneSprite(AptActionInterpreter* pInterp,
                                                          LocalContextT* pContext)
 {
-    AptValue* const pNameValue   = pInterp->mpStack[pInterp->mnStackTop - 2];
-    AptValue* const pParentValue = pInterp->mpStack[pInterp->mnStackTop - 3];
-    const int       nDepth       = pInterp->mpStack[pInterp->mnStackTop - 1]->toInteger();
+    AptValue* const pNameValue   = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 2];
+    AptValue* const pParentValue = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 3];
+    const int       nDepth       = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1]->toInteger();
 
     // AptActionInterpreter::_doCloneSprite (the AS duplicateMovieClip core; homed in
     // AptActionInterpreterInterpHelpers.cpp). Canonical signature (interpreter, AptCIH*
@@ -379,7 +379,7 @@ void AptActionInterpreter::_FunctionAptActionCloneSprite(AptActionInterpreter* p
 void AptActionInterpreter::_FunctionAptActionRemoveSprite(AptActionInterpreter* pInterp,
                                                           LocalContextT* pContext)
 {
-    AptValue* const pTop = pInterp->mpStack[pInterp->mnStackTop - 1];
+    AptValue* const pTop = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
     if (pTop->getIsDefined())
     {
         AptValue* pResolved = 0;
@@ -418,7 +418,7 @@ void AptActionInterpreter::_FunctionAptActionRemoveSprite(AptActionInterpreter* 
 void AptActionInterpreter::_FunctionAptActionStartDragMovie(AptActionInterpreter* pInterp,
                                                             LocalContextT* pContext)
 {
-    AptValue* pTarget = pInterp->mpStack[pInterp->mnStackTop - 1];   // console Variable (top)
+    AptValue* pTarget = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];   // console Variable (top)
 
     // A string-typed name (raw type 1 / boxed 33) is resolved through the path context.
     if (pTarget->isString())
@@ -452,7 +452,7 @@ void AptActionInterpreter::_FunctionAptActionStartDragMovie(AptActionInterpreter
 
     // "lockcenter" (top-2): when it is NOT an integer, drag relative to the grab point
     // -- the cursor->clip offset is (mouse - clip-translate).
-    if (!pInterp->mpStack[pInterp->mnStackTop - 2]->isInteger())
+    if (!pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 2]->isInteger())
     {
         // The drag target's clip translate (console @0x82B03A20: value+0x20 char
         // inst -> +4 render item -> +8 position matrix, null -> &flt_8324E2B0
@@ -466,13 +466,13 @@ void AptActionInterpreter::_FunctionAptActionStartDragMovie(AptActionInterpreter
 
     // "constrain" (top-3): an integer enables the constrain rect, read from the four
     // bound operands (top-4 = left .. top-7 = bottom, per the console's slot order).
-    if (pInterp->mpStack[pInterp->mnStackTop - 3]->isInteger())
+    if (pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 3]->isInteger())
     {
         nPopCount = 7;
-        pDrag->mConstrainB = pInterp->mpStack[pInterp->mnStackTop - 4]->toFloat();
-        pDrag->mConstrainR = pInterp->mpStack[pInterp->mnStackTop - 5]->toFloat();
-        pDrag->mConstrainT = pInterp->mpStack[pInterp->mnStackTop - 6]->toFloat();
-        pDrag->mConstrainL = pInterp->mpStack[pInterp->mnStackTop - 7]->toFloat();
+        pDrag->mConstrainB = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 4]->toFloat();
+        pDrag->mConstrainR = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 5]->toFloat();
+        pDrag->mConstrainT = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 6]->toFloat();
+        pDrag->mConstrainL = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 7]->toFloat();
     }
 
     pInterp->stackSafePop(nPopCount);   // console Burnout_X360_Artist_01e3_0(this, v8)
@@ -551,7 +551,7 @@ void AptActionInterpreter::_FunctionAptActionSetTarget(AptActionInterpreter* pIn
 void AptActionInterpreter::_FunctionAptActionSetTarget2(AptActionInterpreter* pInterp,
                                                         LocalContextT* pContext)
 {
-    AptValue* const pTop = pInterp->mpStack[pInterp->mnStackTop - 1];
+    AptValue* const pTop = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
     EAStringC scratch;
     const EAStringC* const pPath = AptValue::Get_ToString(pTop, &scratch);
 
@@ -583,7 +583,7 @@ void AptActionInterpreter::_FunctionAptActionSetTarget2(AptActionInterpreter* pI
 void AptActionInterpreter::_FunctionAptActionTargetPath(AptActionInterpreter* pInterp,
                                                         LocalContextT* pContext)
 {
-    AptValue* const pTop = pInterp->mpStack[pInterp->mnStackTop - 1];
+    AptValue* const pTop = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
 
     AptValue* pResolved = 0;
     pInterp->valueToObject(pContext->mpCIH, pContext->mpPendingReleaseValue,
@@ -604,14 +604,14 @@ void AptActionInterpreter::_FunctionAptActionTargetPath(AptActionInterpreter* pI
         AptString* pStr = AptString::Create("");    // console seed @0x820046A7 ("" -- overwritten below)
         *pStr->GetInternalString() = scratch;
         pInterp->stackPop();
-        pInterp->mpStack[pInterp->mnStackTop++] = pStr;   // inlined stackPush
+        pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = pStr;   // inlined stackPush
         pStr->AddRef();
     }
     else
     {
         // not an object -> push `undefined`.
         pInterp->stackPop();
-        pInterp->mpStack[pInterp->mnStackTop++] = gpUndefinedValue;   // console off_8324D814
+        pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop++] = gpUndefinedValue;   // console off_8324D814
         gpUndefinedValue->AddRef();
     }
 }

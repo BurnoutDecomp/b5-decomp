@@ -372,18 +372,12 @@ void AptNativeHash::Unset__Proto__()
 // bucket, or null if the table is empty/unallocated.
 AptHashItem* AptNativeHash::GetFirstItem() const
 {
-    AptHashItem* tab = mpTable;
-    if (tab == 0)
+    if (IsEmpty())
         return 0;
-    const int cap = mnCapacity;
-    if (cap <= 0)
-        return 0;
-
-    for (int i = 0; i < cap; ++i)
+    for (int i = 0; i < mnCapacity; ++i)
     {
-        AptHashItem* item = &tab[i];
-        if (item->mKey.m_pData != 0 && !item->mKey.IsEmpty())
-            return item;
+        if (mpTable[i].mKey.IsValid() && !mpTable[i].mKey.IsEmpty())
+            return &mpTable[i];
     }
     return 0;
 }
@@ -392,19 +386,14 @@ AptHashItem* AptNativeHash::GetFirstItem() const
 // null when the end of the table is reached.
 AptHashItem* AptNativeHash::GetNextItem(const AptHashItem* pCurrent) const
 {
-    AptHashItem* tab = mpTable;
-    if (tab == 0)
+    if (IsEmpty())
         return 0;
 
-    AptHashItem* item = const_cast<AptHashItem*>(pCurrent) + 1;
-    AptHashItem* end  = &tab[mnCapacity];
-    if (item >= end)
-        return 0;
-
-    for (; item < end; ++item)
+    AptHashItem* pItem = const_cast<AptHashItem*>(pCurrent);
+    while (++pItem < &mpTable[mnCapacity])
     {
-        if (item->mKey.m_pData != 0 && !item->mKey.IsEmpty())
-            return item;
+        if (pItem->mKey.IsValid() && !pItem->mKey.IsEmpty())
+            return pItem;
     }
     return 0;
 }

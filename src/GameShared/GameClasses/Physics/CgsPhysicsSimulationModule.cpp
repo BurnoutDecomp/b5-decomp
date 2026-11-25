@@ -860,8 +860,8 @@ namespace CgsPhysics
     void PhysicsSimulationModule::Destruct()
     {
         mNeedFreeze.UnSetAll();                    // std 0 x4 at +0x47E8
-        mDone.UnSetAll();                          // std 0 x4 at +0x4808
         mSeen.UnSetAll();                          // std 0 x4 at +0x4828
+        mDone.UnSetAll();                          // std 0 x4 at +0x4808
         miNumRigidBodies = 0;                      // stw r11(=0), 0x4848(r3)
         miNumDrives      = 0;                      // stw r11(=0), 0x484C(r3)
         miNumJoints      = 0;                      // stw r11(=0), 0x4850(r3)

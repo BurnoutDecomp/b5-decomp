@@ -175,12 +175,12 @@ void Im3dSkyDome::SetConstants(Vector3Plus lViewPositionAndSkyScale,
     {
         const renderengine::SamplerState* const lpSamplerState = mpCloudsSamplerState;
 
-        const u32 luDensitySampler = maStateHandles[9].mu8RegisterSet;
+        const u32 luDensitySampler = maStateHandles[9].mu8RegisterIndex;
         shadow::Device::SetState(lpSamplerState, luDensitySampler);
         shadow::Device::SetResource(const_cast<void*>(static_cast<const void*>(lpLayer0Density)),
                                     luDensitySampler);
 
-        const u32 luLightSampler = maStateHandles[10].mu8RegisterSet;
+        const u32 luLightSampler = maStateHandles[10].mu8RegisterIndex;
         shadow::Device::SetState(lpSamplerState, luLightSampler);
         shadow::Device::SetResource(const_cast<void*>(static_cast<const void*>(lpLayer0Lighting)),
                                     luLightSampler);
