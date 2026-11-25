@@ -204,6 +204,10 @@ CMassiveClientCore* CMassiveClientCore::Initialize(const SMassiveClientInit* pIn
     return spInstance;
 }
 
+// ARTIST 0x82BCCAD4 and 0x82BCCB00 both call the CRT.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma function(strlen)
+#endif
 int CMassiveClientCore::IsInitStructValid(const SMassiveClientInit* pInit)
 {
     int lnError;
@@ -227,6 +231,10 @@ int CMassiveClientCore::IsInitStructValid(const SMassiveClientInit* pInit)
     }
     return lnError == 0;
 }
+
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma intrinsic(strlen)
+#endif
 
 void CMassiveClientCore::SetCustomMemoryFunctions(TMassiveMallocFn pfnMalloc, TMassiveFreeFn pfnFree)
 {
@@ -537,7 +545,7 @@ int CMassiveClientCore::EnterZone(const char* pcZoneName)
         return 0;
     }
 
-    if (!IsValidString(pcZoneName))
+    if (!spInstance->IsValidString(pcZoneName))
     {
         spInstance->SetLastError(-300, "");
         spInstance->SetValid(0);
@@ -585,7 +593,7 @@ int CMassiveClientCore::ExitZone(const char* pcZoneName)
         return 0;
     }
 
-    if (!IsValidString(pcZoneName))
+    if (!spInstance->IsValidString(pcZoneName))
     {
         spInstance->SetLastError(-300, "");
         spInstance->mCriticalSection.Exit("CMassiveClientCore::ExitZone");
@@ -1099,7 +1107,7 @@ int CMassiveClientCore::MPSessionJoin(const char* pcGuid)
         return 0;
     }
 
-    if (!IsValidString(pcGuid))
+    if (!spInstance->IsValidString(pcGuid))
     {
         spInstance->SetLastError(-194, "");
         spInstance->mCriticalSection.Exit("CMassiveClientCore::MPSessionJoin");

@@ -16,6 +16,9 @@
 // file is DecFIGS + 3 up to OpenReadStreamInternal, whose ARTIST body is four lines longer (the
 // patch-manager remap, PS3 has none), and DecFIGS + 7 after it. Each definition sits on its DWARF
 // line plus that offset; the functions with no line in the DWARF follow the last one.
+#define CGS_FILE_SYSTEM_ARTIST_HEADER "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsFileSystem.h"
+#define CGS_FILE_SYSTEM_ARTIST_SOURCE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsFileSystem.cpp"
+
 namespace CgsFileSystem
 {
 
@@ -248,7 +251,7 @@ namespace CgsFileSystem
         }
         for (u32 lu = 0; lu < KU_MAX_READ_STREAMS; ++lu)
         {
-            if (GetEffectiveStreamStatus(&maReadStreams[lu]) == StreamDeviceDiskRead::E_STATUS_CLOSED) continue;
+            if (maReadStreams[lu].GetStatus() == StreamDeviceDiskRead::E_STATUS_CLOSED) continue;
             maReadStreams[lu].Close();
             lbClosed = false;
         }
@@ -327,7 +330,25 @@ namespace CgsFileSystem
 
 
 
-    // ARTIST828E8A88: only the sixteen file records are destructed here.
+    // The original system unity compiles the file reset with its filesystem caller.
+#define CGS_FILE_ARTIST_SOURCE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsFile.cpp"
+    void File::Destruct()
+    {
+        FileFutexHelper lGuard(mFutex);
+        mpHandle = 0;
+        muCacheId = 0xffffffffu;
+        CGS_ASSERT_AT(static_cast<FileState>(meFileAccess) == E_FILESTATE_CLOSED,
+            "static_cast< CgsFileSystem::FileState >(meFileAccess) == E_FILESTATE_CLOSED",
+            CGS_FILE_ARTIST_SOURCE, 107);
+        meFileAccess = E_FILEACCESS_CLOSED;
+        meFileState = E_FILESTATE_CLOSED;
+        mpcFileName = 0;
+        muSeekPosition = 0;
+        muPendingOperationCount = 0;
+    }
+#undef CGS_FILE_ARTIST_SOURCE
+
+    // ARTIST 828E8A88 destructs the sixteen file records here.
     void FileSystem::Destruct()
     {
         for (u32 lu = 0; lu < KU_MAXNOOFFILES; ++lu) maFiles[lu].Destruct();
@@ -452,7 +473,8 @@ namespace CgsFileSystem
 
         if (itter == KU_MAXNOOFFILES)
         {
-            CGS_ASSERT(false, "No more files available to open.\n");
+            CGS_ASSERT_AT(false, "No more files available to open.\n",
+                CGS_FILE_SYSTEM_ARTIST_SOURCE, 455);
             return -1;
         }
 
@@ -478,7 +500,8 @@ namespace CgsFileSystem
     // ARTIST @0x828F07F8. The native bounds assertion is non-terminal; execution then indexes maFiles.
     bool FileSystem::ReadInternal(u32 luFileID, void* lpOutputBuffer, u64 luFilePosition, u64 luSizeToRead)
     {
-        CGS_ASSERT_STREAM(luFileID < KU_MAXNOOFFILES, "Invalid file id\n");
+        CGS_ASSERT_STREAM_AT(luFileID < KU_MAXNOOFFILES, "Invalid file id\n",
+            CGS_FILE_SYSTEM_ARTIST_SOURCE, 481);
         maFiles[luFileID].Read(lpOutputBuffer, luFilePosition, luSizeToRead);
         return true;
     }
@@ -497,7 +520,8 @@ namespace CgsFileSystem
     // ARTIST @0x828E8B50. As above, keep the assertion non-terminal and return the native constant 1.
     bool FileSystem::WriteInternal(u32 luFileID, const void* lpInputBuffer, u64 luFilePosition, u64 luSizeToWrite)
     {
-        CGS_ASSERT_STREAM(luFileID < KU_MAXNOOFFILES, "Invalid file id\n");
+        CGS_ASSERT_STREAM_AT(luFileID < KU_MAXNOOFFILES, "Invalid file id\n",
+            CGS_FILE_SYSTEM_ARTIST_SOURCE, 500);
         maFiles[luFileID].Write(lpInputBuffer, luFilePosition, luSizeToWrite);
         return true;
     }
@@ -517,7 +541,8 @@ namespace CgsFileSystem
     // ARTIST @0x828F08C8.
     bool FileSystem::CloseInternal(u32 luFileID)
     {
-        CGS_ASSERT_STREAM(luFileID < KU_MAXNOOFFILES, "Invalid file id\n");
+        CGS_ASSERT_STREAM_AT(luFileID < KU_MAXNOOFFILES, "Invalid file id\n",
+            CGS_FILE_SYSTEM_ARTIST_SOURCE, 520);
         maFiles[luFileID].Close();
         return true;
     }
@@ -575,14 +600,15 @@ namespace CgsFileSystem
     {
         ReadStream lNewStream;
 
-        CGS_ASSERT_STREAM(muNumUsedReadStreams < KU_MAX_READ_STREAMS, "Out of read streams\n");
+        CGS_ASSERT_STREAM_AT(muNumUsedReadStreams < KU_MAX_READ_STREAMS, "Out of read streams\n",
+            CGS_FILE_SYSTEM_ARTIST_SOURCE, 578);
 
         lNewStream.Construct(0);
         char lacFileName[256];
         const bool lbRemapped = mPatchManager.RemapFilename(lpcFileName, lacFileName, sizeof(lacFileName));
         for (u32 i = 0; i < KU_MAX_READ_STREAMS; ++i)
         {
-            if (GetEffectiveStreamStatus(&maReadStreams[i]) != StreamDeviceDiskRead::E_STATUS_CLOSED)
+            if (maReadStreams[i].GetStatus() != StreamDeviceDiskRead::E_STATUS_CLOSED)
             {
                 continue;
             }
@@ -605,7 +631,8 @@ namespace CgsFileSystem
 
 
 
-        CGS_ASSERT_STREAM(lNewStream.IsValid(), "Failed to set device on stream\n");
+        CGS_ASSERT_STREAM_AT(lNewStream.IsValid(), "Failed to set device on stream\n",
+            CGS_FILE_SYSTEM_ARTIST_SOURCE, 608);
         return lNewStream;
     }
 
@@ -660,7 +687,8 @@ namespace CgsFileSystem
     // ARTIST @0x828E8C20 (unnamed in the ledger).
     bool FileSystem::RegisterMemFileInternal(const char* lpcFileName, void* lpData, u64 luSize)
     {
-        CGS_ASSERT_STREAM(mpMemFileSystem != 0, "No memory file system\n");
+        CGS_ASSERT_STREAM_AT(mpMemFileSystem != 0, "No memory file system\n",
+            CGS_FILE_SYSTEM_ARTIST_SOURCE, 663);
         return mpMemFileSystem->RegisterMemFile(lpcFileName, lpData, luSize);
     }
 
@@ -678,7 +706,8 @@ namespace CgsFileSystem
     // ARTIST @0x828E8CE0.
     bool FileSystem::UnregisterMemFileInternal(const char* lpcFileName)
     {
-        CGS_ASSERT_STREAM(mpMemFileSystem != 0, "No memory file system\n");
+        CGS_ASSERT_STREAM_AT(mpMemFileSystem != 0, "No memory file system\n",
+            CGS_FILE_SYSTEM_ARTIST_SOURCE, 681);
         return mpMemFileSystem->UnregisterMemFile(lpcFileName);
     }
 
@@ -702,46 +731,35 @@ namespace CgsFileSystem
         return lbResult;
     }
 
-    // @0x8264AE28.
     FileState FileSystem::GetStatus(u32 luFileId)
     {
-        CGS_ASSERT(luFileId < KU_MAXNOOFFILES, "Invalid file id");
+        CGS_ASSERT_STREAM_AT(luFileId < KU_MAXNOOFFILES, "Invalid file id\n",
+            CGS_FILE_SYSTEM_ARTIST_HEADER, 581);
         return maFiles[luFileId].GetStatus();
     }
 
-    // @0x828D6860. The X360 asm computes (stream - &maReadStreams[0]) / sizeof(stream) via the
-    // 1440-byte stride; in human C++ that is plain pointer subtraction over the array.
-    u32 FileSystem::GetReadStreamIndex(ReadStream lStream) const
+    s32 FileSystem::GetReadStreamIndex(ReadStream lStream) const
     {
-        const u32 luIndex =
-            static_cast<u32>(lStream.mpStreamDevice - &maReadStreams[0]);
-        CGS_ASSERT(luIndex < KU_MAX_READ_STREAMS, "Index out of range");
-        return luIndex;
+        const s32 liIndex = lStream.mpStreamDevice - maReadStreams;
+        CGS_ASSERT_STREAM_AT(liIndex >= 0 && liIndex < static_cast<s32>(KU_MAX_READ_STREAMS),
+            "Index " << liIndex << " out of range\n", CGS_FILE_SYSTEM_ARTIST_HEADER, 730);
+        return liIndex;
     }
 
-    // Shared effective-status read (X360 asm in Is{Open,Closed}): any outstanding operation
-    // collapses the reported status to E_STATUS_PENDING.
-    StreamDeviceDiskRead::EReadStreamStatus
-        FileSystem::GetEffectiveStreamStatus(const StreamDeviceDiskRead* lpStream)
-    {
-        return lpStream->GetStatus();
-    }
-
-    // @0x828D6650. Receives the ReadStream by value (= the StreamDeviceDiskRead*).
     bool FileSystem::IsReadStreamOpen(ReadStream lStream)
     {
-        CGS_ASSERT(lStream.mpStreamDevice != 0, "No device found");
-        return GetEffectiveStreamStatus(lStream.mpStreamDevice) ==
-               StreamDeviceDiskRead::E_STATUS_OPEN;
+        StreamDeviceDiskRead* lpDevice = lStream.mpStreamDevice;
+        CGS_ASSERT_STREAM_AT(lpDevice != 0, "No device found\n", CGS_FILE_SYSTEM_ARTIST_HEADER, 653);
+        return lpDevice->GetStatus() == StreamDeviceDiskRead::E_STATUS_OPEN;
     }
 
-    // @0x828D6708. Receives the slot index; resolves it to the stream engine, then tests CLOSED.
     bool FileSystem::IsReadStreamClosed(s32 liIndex)
     {
-        CGS_ASSERT(static_cast<u32>(liIndex) < KU_MAX_READ_STREAMS, "Index out of range");
-        const StreamDeviceDiskRead* lpStream = &maReadStreams[liIndex];
-        CGS_ASSERT(lpStream != 0, "No device found");
-        return GetEffectiveStreamStatus(lpStream) == StreamDeviceDiskRead::E_STATUS_CLOSED;
+        CGS_ASSERT_STREAM_AT(liIndex >= 0 && liIndex < static_cast<s32>(KU_MAX_READ_STREAMS),
+            "Index " << liIndex << " out of range\n", CGS_FILE_SYSTEM_ARTIST_HEADER, 710);
+        StreamDeviceDiskRead* lpDevice = &maReadStreams[liIndex];
+        CGS_ASSERT_STREAM_AT(lpDevice != 0, "No device found\n", CGS_FILE_SYSTEM_ARTIST_HEADER, 712);
+        return lpDevice->GetStatus() == StreamDeviceDiskRead::E_STATUS_CLOSED;
     }
 
     void FileSystem::AssertNativeLayout()
@@ -759,3 +777,6 @@ namespace CgsFileSystem
         CGS_STATIC_ASSERT(sizeof(FileSystem) == 50408, "ARTIST filesystem size");
     }
 }
+
+#undef CGS_FILE_SYSTEM_ARTIST_SOURCE
+#undef CGS_FILE_SYSTEM_ARTIST_HEADER

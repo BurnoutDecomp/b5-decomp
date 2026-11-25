@@ -94,14 +94,22 @@ CMassiveBaseObject::~CMassiveBaseObject()
 //
 // A name is valid iff non-null and non-empty. Returns the X360 boolean.
 // ---------------------------------------------------------------------------
+// ARTIST 0x82BCEE30 calls the CRT strlen rather than its intrinsic expansion.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma function(strlen)
+#endif
 int CMassiveBaseObject::IsValidString(const char* pcStr)
 {
-    if (!pcStr)
-        return 0;
-    if (std::strlen(pcStr) == 0)   // v2 = strlen; if (!v2) return 0
-        return 0;
-    return 1;
+    bool lbValid;
+    if (pcStr && std::strlen(pcStr) >= 1)
+        lbValid = true;
+    else
+        lbValid = false;
+    return lbValid;
 }
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma intrinsic(strlen)
+#endif
 
 // ---------------------------------------------------------------------------
 // CMassiveBaseObject::SetLastError @ 0x82BCEE58
@@ -181,14 +189,14 @@ int CMassiveList::Append(CMassiveListNode* pNode)
     if (!pNode)                       // if (!a2) return 0;
         return 0;
 
-    if (mpHead)                       // if (*a1)
+    if (!mpHead)
     {
-        mpTail->mpNext = pNode;       // **(a1 + 4) = a2  (tail->mpNext = node)
-        pNode->mpPrev  = mpTail;      // *(a2 + 4) = *(a1 + 4)  (node->mpPrev = tail)
+        mpHead = pNode;
     }
     else
     {
-        mpHead = pNode;               // *a1 = a2
+        mpTail->mpNext = pNode;
+        pNode->mpPrev = mpTail;
     }
 
     int lnCount = mnCount;            // v3 = *(a1 + 12)

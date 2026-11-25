@@ -403,6 +403,7 @@ namespace CgsNetwork
 
     private:
         friend class ServerInterfaceServerInfo;
+        friend class ServerInterfaceGames;
 
         // The client-config query expands the same checked accessor as its standalone callers.
         char* GetCheckedMessageBuffer() const

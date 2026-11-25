@@ -891,8 +891,19 @@ bool ConnApiUpdateVoipClient(ConnApiRefT* ref, ConnApiClientT* client,
     return client->VoipInfo.eStatus != 5;
 }
 
-void ConnApiRemoveClientEntry(ConnApiRefT* ref, ConnApiClientT* client,
-                              s32 clientIndex)
+// DecFIGS connapi.c:468. ARTIST inlines this lookup at 82B152E0 and 82B144DC.
+// Keep those call sites inline under the native size optimization.
+__forceinline s32 _ConnApiFindClientByName(ConnApiClientListT* pClientList, const char* pClientName)
+{
+    for (s32 iClient = 0; iClient < pClientList->iNumClients; ++iClient)
+    {
+        if (std::strcmp(pClientList->Clients[iClient].UserInfo.strName, pClientName) == 0)
+            return iClient;
+    }
+    return -1;
+}
+
+void _ConnApiRemoveClient(ConnApiRefT* ref, ConnApiClientT* client, s32 clientIndex)
 {
     const s32 oldGameStatus = client->GameInfo.eStatus;
     const s32 oldVoipStatus = client->VoipInfo.eStatus;
@@ -903,10 +914,10 @@ void ConnApiRemoveClientEntry(ConnApiRefT* ref, ConnApiClientT* client,
     {
         if (ref->uConnFlags & 1)
             _ConnApiUpdateCallback(ref, clientIndex, 0, oldGameStatus,
-                          client->GameInfo.eStatus);
+                                   client->GameInfo.eStatus);
         if (ref->uConnFlags & 2)
             _ConnApiUpdateCallback(ref, clientIndex, 1, oldVoipStatus,
-                          client->VoipInfo.eStatus);
+                                   client->VoipInfo.eStatus);
     }
 
     if (ref->pVoipRef)
@@ -915,38 +926,28 @@ void ConnApiRemoveClientEntry(ConnApiRefT* ref, ConnApiClientT* client,
         const s32 numClients = ref->ClientList.iNumClients;
         if (clientIndex != numClients - 1)
         {
-            std::memmove(client, client + 1,
-                         sizeof(*client) * (numClients - clientIndex - 1));
+            const s32 iNumMoveClients = numClients - clientIndex - 1;
+            std::memmove(client, client + 1, sizeof(*client) * iNumMoveClients);
         }
-        for (s32 i = 0; i < numClients - 1; ++i)
+        for (s32 i = 0; i < ref->ClientList.iNumClients - 1; ++i)
             ref->ClientList.Clients[i].iVoipConnId = static_cast<s16>(i);
     }
 
     --ref->ClientList.iNumClients;
-    ref->iSelf = -1;
-    for (s32 i = 0; i < ref->ClientList.iNumClients; ++i)
-    {
-        if (std::strcmp(ref->ClientList.Clients[i].UserInfo.strName,
-                        ref->strSelfName) == 0)
-        {
-            ref->iSelf = i;
-            break;
-        }
-    }
+    ref->iSelf = _ConnApiFindClientByName(&ref->ClientList, ref->strSelfName);
 }
 
-void ConnApiUpdateRemoval(ConnApiRefT* ref)
+// DecFIGS connapi.c:1744. ARTIST inlines the removal pass at 82B15398 and 82B160F4.
+__forceinline void _ConnApiUpdateRemoval(ConnApiRefT* ref)
 {
-    s32 i = 0;
-    while (i < ref->ClientList.iNumClients)
+    for (s32 i = 0; i < ref->ClientList.iNumClients; ++i)
     {
         ConnApiClientT* client = &ref->ClientList.Clients[i];
         if (client->uFlags & 1)
         {
-            ConnApiRemoveClientEntry(ref, client, i);
+            _ConnApiRemoveClient(ref, client, i);
             --i;
         }
-        ++i;
     }
 }
 
@@ -1150,16 +1151,7 @@ extern "C" void ConnApiRemoveClient(ConnApiRefT* ref, const char* clientName,
 {
     if (clientName)
     {
-        clientIndex = -1;
-        for (s32 i = 0; i < ref->ClientList.iNumClients; ++i)
-        {
-            if (std::strcmp(ref->ClientList.Clients[i].UserInfo.strName,
-                            clientName) == 0)
-            {
-                clientIndex = i;
-                break;
-            }
-        }
+        clientIndex = _ConnApiFindClientByName(&ref->ClientList, clientName);
         if (clientIndex < 0)
         {
             NetPrintfCode("connapi: can't find client '%s' in list to remove them\n",
@@ -1175,7 +1167,7 @@ extern "C" void ConnApiRemoveClient(ConnApiRefT* ref, const char* clientName,
 
     ref->ClientList.Clients[clientIndex].uFlags |= 1;
     if (!ref->bInCallback)
-        ConnApiUpdateRemoval(ref);
+        _ConnApiUpdateRemoval(ref);
 }
 
 extern "C" void ConnApiStart(ConnApiRefT* ref, s32)
@@ -1233,5 +1225,5 @@ extern "C" void ConnApiUpdate(ConnApiRefT* ref)
         _ConnApiUpdateCallback(ref, 0, 2, 3, 5);
         ref->eState = 0;
     }
-    ConnApiUpdateRemoval(ref);
+    _ConnApiUpdateRemoval(ref);
 }

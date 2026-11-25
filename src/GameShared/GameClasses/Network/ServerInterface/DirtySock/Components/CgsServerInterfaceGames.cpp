@@ -561,13 +561,12 @@ namespace CgsNetwork
     // Actions
     // ===================================================================
 
-    void ServerInterfaceGames::CreateGame(ServerInterfaceGameParamsBase* lpGameParams,
-                                          ServerInterfacePlayerParamsBase* lpPlayerParams)
+    void ServerInterfaceGames::CreateGame(const ServerInterfaceGameParamsBase* lpGameParams,
+                                          const ServerInterfacePlayerParamsBase* lpPlayerParams)
     {
-        DirtySockDebugLog("DirtySock: CreateGame\n");
+        ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "DirtySock: CreateGame\n";
 
-        char* lpcBuffer = mpServerInterface->GetMessageBuffer();
-        CGS_ASSERT(lpcBuffer != 0, "mpacMessageBuffer");
+        char* lpcBuffer = mpServerInterface->GetCheckedMessageBuffer();
 
         lpGameParams->SerialiseToString(lpcBuffer, KI_MESSAGE_BUFFER_LEN);
         lpPlayerParams->SerialiseToString(lpcBuffer, KI_MESSAGE_BUFFER_LEN);
@@ -575,7 +574,7 @@ namespace CgsNetwork
         // Game-server games append the ping-region preference list to the request.
         if (GameManagerStatus(mpServerInterface->GetGameManagerRef(), KI_GM_SELECT_HASSRV, 0, 0) == 1)
         {
-            char lacRegions[368];
+            char lacRegions[250];
             lacRegions[0] = 0;
 
             ServerInterfacePingRegions* lpPingRegions =
@@ -589,15 +588,15 @@ namespace CgsNetwork
                     {
                         char lacValue[6];
                         s32 liPing = lpPingRegions->GetPingValue(i);
-                        if (liPing <= -1)
-                            CgsCore::SnPrintf(lacValue, 6, "9999");
+                        if (liPing > -1)
+                            CgsCore::SnPrintf(lacValue, sizeof(lacValue), "%d", liPing);
                         else
-                            CgsCore::SnPrintf(lacValue, 6, "%d", liPing);
-                        CgsCore::StrCat(lacRegions, 0xF9, lacValue);
+                            CgsCore::SnPrintf(lacValue, sizeof(lacValue), "9999");
+                        CgsCore::StrCat(lacRegions, sizeof(lacRegions), lacValue);
                         if (i < liCount - 1)
-                            CgsCore::StrCat(lacRegions, 0xF9, ",");
+                            CgsCore::StrCat(lacRegions, sizeof(lacRegions), ",");
                     }
-                    lacRegions[249] = 0;
+                    lacRegions[sizeof(lacRegions) - 1] = 0;
                     TagFieldSetRaw(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "REGIONS",
                                    reinterpret_cast<const u8*>(lacRegions));
                 }
@@ -607,13 +606,12 @@ namespace CgsNetwork
         StartGameManagerAction(E_ACTION_CREATE_GAME, &OnlyFinishOnErrorCallback);
     }
 
-    void ServerInterfaceGames::JoinGame(ServerInterfaceGameParamsBase* lpGameParams,
-                                        ServerInterfacePlayerParamsBase* lpPlayerParams)
+    void ServerInterfaceGames::JoinGame(const ServerInterfaceGameParamsBase* lpGameParams,
+                                        const ServerInterfacePlayerParamsBase* lpPlayerParams)
     {
-        DirtySockDebugLog("DirtySock: JoinGame\n");
+        ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "DirtySock: JoinGame\n";
 
-        char* lpcBuffer = mpServerInterface->GetMessageBuffer();
-        CGS_ASSERT(lpcBuffer != 0, "mpacMessageBuffer");
+        char* lpcBuffer = mpServerInterface->GetCheckedMessageBuffer();
 
         lpGameParams->SerialiseToString(lpcBuffer, KI_MESSAGE_BUFFER_LEN);
         lpPlayerParams->SerialiseToString(lpcBuffer, KI_MESSAGE_BUFFER_LEN);
@@ -621,13 +619,12 @@ namespace CgsNetwork
         StartGameManagerAction(E_ACTION_JOIN_GAME, &OnlyFinishOnErrorCallback);
     }
 
-    void ServerInterfaceGames::QuickJoinGame(ServerInterfaceQuickJoinParamsBase* lpQuickJoinParams,
-                                             ServerInterfacePlayerParamsBase* lpPlayerParams)
+    void ServerInterfaceGames::QuickJoinGame(const ServerInterfaceQuickJoinParamsBase* lpQuickJoinParams,
+                                             const ServerInterfacePlayerParamsBase* lpPlayerParams)
     {
-        DirtySockDebugLog("DirtySock: QuickJoinGame\n");
+        ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "DirtySock: QuickJoinGame\n";
 
-        char* lpcBuffer = mpServerInterface->GetMessageBuffer();
-        CGS_ASSERT(lpcBuffer != 0, "mpacMessageBuffer");
+        char* lpcBuffer = mpServerInterface->GetCheckedMessageBuffer();
 
         TagFieldSetString(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "MODE", 0);
         lpQuickJoinParams->SerialiseToString(lpcBuffer, KI_MESSAGE_BUFFER_LEN);
@@ -654,12 +651,11 @@ namespace CgsNetwork
 
     void ServerInterfaceGames::CancelSearchForGames()
     {
-        DirtySockDebugLog("DirtySock: CancelSearchForGames \n");
+        ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "DirtySock: CancelSearchForGames \n";
         if (meCurrentAction == E_ACTION_CANCEL_SEARCH_FOR_GAMES)
             return;
 
-        char* lpcBuffer = mpServerInterface->GetMessageBuffer();
-        CGS_ASSERT(lpcBuffer != 0, "mpacMessageBuffer");
+        char* lpcBuffer = mpServerInterface->GetCheckedMessageBuffer();
 
         lpcBuffer[0] = 0;
         TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "CANCEL", 1);
@@ -771,29 +767,27 @@ namespace CgsNetwork
 
     void ServerInterfaceGames::SendGameResult(const ServerInterfaceGameResultsBase* lpGameResults)
     {
-        DirtySockDebugLog("DirtySockLobby: SendGameResult");
+        ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "DirtySockLobby: SendGameResult";
 
-        char lacSelf[576];
+        LobbyApiUserT lUser;
         LobbyApiStatus(mpServerInterface->GetLobbyAPIRef(), KI_SELECT_USERINFO,
-                       lacSelf, KI_STATUS_BUF_SIZE);
+                       &lUser, sizeof(lUser));
 
-        char* lpcBuffer = mpServerInterface->GetMessageBuffer();
-        CGS_ASSERT(lpcBuffer != 0, "mpacMessageBuffer");
-        CGS_ASSERT(IsLocalPlayerInGame(), "IsLocalPlayerInGame()");
+        char* lpcBuffer = mpServerInterface->GetCheckedMessageBuffer();
+        CGS_ASSERT_AT(IsLocalPlayerInGame(), "IsLocalPlayerInGame()", CGS_ARTIST_SERVER_GAMES_FILE, 2038);
 
         // When the game has a server-auth string, it must be present.
-        if (((mLastGameRecord.uSysflags >> 18) & 1) != 0)
+        const bool lbHasServerAuth = ((mLastGameRecord.uSysflags >> 18) & 1) != 0;
+        if (lbHasServerAuth)
         {
-            CGS_ASSERT(::strlen(mLastGameRecord.strAuth) > 0,
-                       "strlen( mLastGameRecord.strAuth ) > 0");
+            CGS_ASSERT_AT(::strlen(mLastGameRecord.strAuth) > 0,
+                          "strlen( mLastGameRecord.strAuth ) > 0", CGS_ARTIST_SERVER_GAMES_FILE, 2043);
         }
 
         lpcBuffer[0] = 0;
         TagFieldSetEpoch(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "WHEN",
                          static_cast<s32>(mLastGameRecord.uWhen));
-        // REPT is the reporting (local) player's persona name -- lacSelf+8, same offset
-        // IsLocalPlayerInGame reads for its own LobbyNameCmp against the self-status buffer.
-        TagFieldSetString(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "REPT", lacSelf + 8);
+        TagFieldSetString(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "REPT", lUser.name);
         TagFieldSetString(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "AUTH", mLastGameRecord.strAuth);
         TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "VENUE", 0);
         TagFieldSetString(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "SKU", mpServerInterface->GetSKU());
@@ -811,9 +805,7 @@ namespace CgsNetwork
         }
 
         lpGameResults->SerialiseToString(lpcBuffer, KI_MESSAGE_BUFFER_LEN);
-        DirtySockDebugLog("Uploading: ");
-        DirtySockDebugLog(lpcBuffer);
-        DirtySockDebugLog("\n");
+        ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "Uploading: " << lpcBuffer << "\n";
 
         StartAction(E_ACTION_SEND_RESULTS, &DefaultCallback);
     }
@@ -1017,16 +1009,16 @@ namespace CgsNetwork
 
     s32 ServerInterfaceGames::GetHostPlayerID() const
     {
-        char lacSelf[8];
-        for (s32 i = 0; i < mLastGameRecord.iCount; ++i)
+        s32 liPlayerIndex = 0;
+        for (; liPlayerIndex < mLastGameRecord.iCount; ++liPlayerIndex)
         {
-            if (LobbyNameCmp(mLastGameRecord.strHost, mLastGameRecord.aOpponents[i].strPers) == 0)
-                return mLastGameRecord.aOpponents[i].iIdent;
+            if (LobbyNameCmp(mLastGameRecord.strHost, mLastGameRecord.aOpponents[liPlayerIndex].strPers) == 0)
+            {
+                return mLastGameRecord.aOpponents[liPlayerIndex].iIdent;
+            }
         }
-        (void)lacSelf;
-        CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(
-            "Host not found!",
-            __FILE__, 1490 /* ARTIST 0x8287837C */));
+        CGS_ASSERT_AT(liPlayerIndex >= 0 && liPlayerIndex < mLastGameRecord.iCount,
+                      "Host not found!", CGS_ARTIST_SERVER_GAMES_FILE, 1490);
         return -1;
     }
 

@@ -84,12 +84,12 @@ namespace CgsNetwork
         virtual void Resume();
 
         // ---- Action overrides (add the XNCONTEXT* / XNRANK matchmaking tagfields) --
-        void CreateGame(ServerInterfaceGameParamsBase* lpGameParams,
-                        ServerInterfacePlayerParamsBase* lpPlayerParams);  // 0x8288C178
-        void JoinGame(ServerInterfaceGameParamsBase* lpGameParams,
-                      ServerInterfacePlayerParamsBase* lpPlayerParams);    // 0x8288C268
-        void QuickJoinGame(ServerInterfaceQuickJoinParamsBase* lpQuickJoinParams,
-                           ServerInterfacePlayerParamsBase* lpPlayerParams); // 0x8288C300
+        void CreateGame(const ServerInterfaceGameParamsBase* lpGameParams,
+                        const ServerInterfacePlayerParamsBase* lpPlayerParams);  // 0x8288C178
+        void JoinGame(const ServerInterfaceGameParamsBase* lpGameParams,
+                      const ServerInterfacePlayerParamsBase* lpPlayerParams);    // 0x8288C268
+        void QuickJoinGame(const ServerInterfaceQuickJoinParamsBase* lpQuickJoinParams,
+                           const ServerInterfacePlayerParamsBase* lpPlayerParams); // 0x8288C300
         void SearchForGames(ServerInterfaceGameSearchParamsBase* lpSearchParams); // 0x8288C460
         void UpdateGameParameters(ServerInterfaceGameParamsBase* lpGameParams);   // 0x8288C770
         virtual void EndGame(const ServerInterfaceEndGameDataBase* lpEndGameData);

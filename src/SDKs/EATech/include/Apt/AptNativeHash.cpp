@@ -107,47 +107,54 @@ void AptNativeHash::SetAt(int32_t nIndex, AptValue* pValue)
 // HashFindKey @0x82ADA188 -- locate key's bucket (or null), bounded +/-8 probe.
 AptHashItem* AptNativeHash::HashFindKey(const EAStringC& key) const
 {
-    const int cap  = mnCapacity;
-    const int home = key.GetHashValue() & (cap - 1);
+    const uint32_t home = key.m_pData->m_uHash & (mnCapacity - 1);
+    if (!mpTable[home].mKey.IsValid())
+        return 0;
+    if (!mpTable[home].mKey.IsEmpty() && mpTable[home].mKey.EqualNoCaseHash(key))
+        return &mpTable[home];
 
-    AptHashItem* homeItem = &mpTable[home];
-    if (homeItem->mKey.m_pData == 0)
-        return 0;                                   // unused home -> absent
-    if (!homeItem->mKey.IsEmpty() && homeItem->mKey.EqualNoCaseHash(key))
-        return homeItem;
-
-    int lo = home - 8;
-    int hi;
-    if (home - 8 < 0)
+    const int nProbes = 8;
+    int nFirst = home - nProbes;
+    int nLast;
+    if (nFirst < 0)
     {
-        lo = 0;
-        hi = (cap <= 16) ? (cap - 1) : 16;
+        nFirst = 0;
+        nLast = 2 * nProbes;
+        if (nLast >= mnCapacity)
+            nLast = mnCapacity - 1;
     }
     else
     {
-        hi = home + 8;
-        if (home + 8 > cap - 1)
+        nLast = home + nProbes;
+        if (nLast > mnCapacity - 1)
         {
-            hi = cap - 1;
-            lo = (cap - 17 < 0) ? 0 : (cap - 17);
+            nLast = mnCapacity - 1;
+            nFirst = nLast - 2 * nProbes;
+            if (nFirst < 0)
+                nFirst = 0;
         }
     }
 
-    for (int idx = home + 1; idx <= hi; ++idx)
+    int iBucket = home;
+    int nRemaining = nLast - home;
+    while (nRemaining--)
     {
-        AptHashItem* item = &mpTable[idx];
-        if (item->mKey.m_pData == 0)
+        ++iBucket;
+        if (!mpTable[iBucket].mKey.IsValid())
             return 0;
-        if (!item->mKey.IsEmpty() && item->mKey.EqualNoCaseHash(key))
-            return item;
+        if (!mpTable[iBucket].mKey.IsEmpty() && mpTable[iBucket].mKey.EqualNoCaseHash(key))
+            return &mpTable[iBucket];
     }
-    for (int idx = home - 1; idx >= lo; --idx)
+
+    iBucket = home;
+    nRemaining = home - nFirst;
+    while (nRemaining--)
     {
-        AptHashItem* item = &mpTable[idx];
-        if (item->mKey.m_pData == 0)
-            break;
-        if (!item->mKey.IsEmpty() && item->mKey.EqualNoCaseHash(key))
-            return item;
+        --iBucket;
+        if (!mpTable[iBucket].mKey.IsValid())
+            return 0;
+        if (!mpTable[iBucket].mKey.IsEmpty() && mpTable[iBucket].mKey.EqualNoCaseHash(key))
+            return &mpTable[iBucket];
     }
     return 0;
 }
@@ -248,27 +255,22 @@ void AptNativeHash::Expand()
     AptNativeHash bigger(2 * mnCapacity);
     bigger.FirstAllocation();
 
-    const int    oldCap = mnCapacity;
-    AptHashItem* oldTab = mpTable;
-    for (int i = 0; i < oldCap; ++i)
+    for (int i = 0; i < mnCapacity; ++i)
     {
-        AptHashItem* e = &oldTab[i];
-        if (e->mKey.m_pData != 0 && !e->mKey.IsEmpty())
-            bigger.HashSet(e->mKey, e->mpValue);
+        EAStringC* pKey = &mpTable[i].mKey;
+        if (!pKey->IsValid() || pKey->IsEmpty())
+            continue;
+        AptValue* pValue = mpTable[i].mpValue;
+        bigger.HashSet(*pKey, pValue);
     }
 
-    // Swap the new table into `this`; give `bigger` the old table so its teardown
-    // releases the duplicated keys/values and frees the old block.
-    AptHashItem* newTab = bigger.mpTable;
-    const int    newCap = bigger.mnCapacity;
-    bigger.mnCapacity = oldCap;
-    bigger.mpTable    = oldTab;
-    mnCapacity        = newCap;
-    mpTable           = newTab;
-    bigger.DestroyGCPointers();                           // frees oldTab; nulls bigger.mpTable
-    // The X360 issues a second DestroyGCPointers when the swapped-out table was
-    // non-null; the first call has already nulled bigger.mpTable, so the guarded
-    // repeat is a no-op (and bigger's destructor at scope end likewise no-ops).
+    AptHashItem* pOldTable = mpTable;
+    mpTable = bigger.mpTable;
+    bigger.mpTable = pOldTable;
+    const int nNewCapacity = bigger.mnCapacity;
+    bigger.mnCapacity = mnCapacity;
+    mnCapacity = nNewCapacity;
+    bigger.DestroyGCPointers();
 }
 
 // Set @0x82AF4B08 -- public store, routing the magic keys to the fast-slots. A
@@ -437,90 +439,46 @@ void AptNativeHash::UpdateObjectMethods(const AptValue* pContext,
 // collector's registration callback, attributed to pOwner.
 void AptNativeHash::RegisterReferences(const AptValue* pOwner)
 {
-    // The callback is installed at Apt bring-up (AptInit.cpp: AptValue::
-    // sReferenceRegistrationCb = &AptGC::sReferenceRegistrationCb, reproducing
-    // the console's .data-initialised slot dword_8324E4E8); null-guarded so the
-    // walk is inert before that bring-up.
-    if (!AptValue::sReferenceRegistrationCb)
-        return;
-
     if (mp__Proto__)
-        AptValue::sReferenceRegistrationCb(pOwner, &mp__Proto__, "__proto__", 0);
+        AptValue::sReferenceRegistrationCb(pOwner, &mp__Proto__, StringPool::saConstant[0].GetBuffer(), 0);
     if (mpPrototype)
-        AptValue::sReferenceRegistrationCb(pOwner, &mpPrototype, "prototype", 0);
+        AptValue::sReferenceRegistrationCb(pOwner, &mpPrototype, StringPool::saConstant[StringPool::KU_NAME_PROTOTYPE].GetBuffer(), 0);
 
-    if (mpTable)
+    if (!mpTable)
+        return;
+    for (int i = 0; i < mnCapacity; ++i)
     {
-        for (int i = 0; i < mnCapacity; ++i)
-        {
-            AptHashItem* e = &mpTable[i];
-            if (e->mpValue)
-                AptValue::sReferenceRegistrationCb(pOwner, &e->mpValue, e->mKey.c_str(), 0);
-        }
+        if (mpTable[i].mpValue)
+            AptValue::sReferenceRegistrationCb(pOwner, &mpTable[i].mpValue, mpTable[i].mKey.GetBuffer(), 0);
     }
 }
 
-// DestroyGCPointers @0x82AEB458 -- clear the proto slots, then release every live
-// bucket's value/key and free the table.
-//
-// ⭐ 2026-08-29 (main-menu wave): THE TABLE POINTER AND THE CAPACITY ARE RE-READ EVERY
-// TIME, because the console re-reads them and this body is re-entrant through the
-// Release() below. The X360 asm is explicit about it and it is not an artifact:
-//
-//     loc_82AEB49C:  lwz  r11, 4(r31)      ; mpTable      <- reloaded at the top of
-//                    add  r11, r30, r11    ;                 EVERY iteration
-//                    lwz  r10, 4(r11)      ; e->mpValue
-//                    ... bctrl              ; e->mpValue->Release()
-//                    lwz  r11, 4(r31)      ; mpTable      <- reloaded AFTER the call
-//                    stw  r28, 4(r11)      ; e->mpValue = 0
-//     loc_82AEB4D0:  lwz  r29, 4(r31)      ; mpTable      <- reloaded again for the key
-//                    ...
-//                    lwz  r11, 0(r31)      ; mnCapacity   <- reloaded for the loop test
-//                    cmpw r27, r11 ; blt loc_82AEB49C
-//     loc_82AEB500:  lwz  r10, 0(r31)      ; mnCapacity   <- reloaded for the free size
-//                    lwz  r4, 4(r31)       ; mpTable      <- reloaded for the free
-//
-// The previous body cached `tab` and `cap` once. That is safe only if nothing inside
-// Release() can touch THIS hash -- and it can: Release() on a bucket's AptValue runs the
-// full ForceDelete composite (PreDestroy / DestroyGCPointers / deleting destructor), which
-// re-enters the Apt teardown graph and can reach this same hash again (a re-entrant
-// DestroyGCPointers empties it and frees mpTable, and Set/Expand can replace it). With the
-// pointer cached, the rest of the loop then walks a block the pool has already handed back
-// out, reading recycled bytes as `AptValue*` and calling through the DOGMA free-list link
-// that now sits in word 0 -- which is exactly the map-screen exit AV measured this wave:
-// EXECUTING 0x18000000 from AptNativeHash::DestroyGCPointers+0x6C (`call [rax+8]` ==
-// mpValue->Release()), with the "value" and its "vtable" both pointing back into the Apt
-// pool. Re-reading follows the live table the way the console does.
-//
+// ARTIST 0x82AEB458 reloads the table and capacity after releasing values.
+// Release can reenter the Apt object graph.
 void AptNativeHash::DestroyGCPointers()
 {
     UnsetPrototype();
     Unset__Proto__();
+    if (!mpTable)
+        return;
 
-    if (mpTable)
+    mnEventHandlerMask = 0;
+    for (int i = 0; i < mnCapacity; ++i)
     {
-        mnEventHandlerMask = 0;
-        for (int i = 0; i < mnCapacity; ++i)      // mnCapacity re-read per iteration
+        if (mpTable[i].mpValue)
         {
-            if (mpTable == 0)
-                break;
-            if (mpTable[i].mpValue)
-            {
-                mpTable[i].mpValue->Release();
-                mpTable[i].mpValue = 0;     // console: reload mpTable, then store
-            }
-            if (mpTable[i].mKey.m_pData)          // real key or tombstone
-            {
-                EAStringC::DecreaseInternalRefCount(mpTable[i].mKey.m_pData);   // guards the tombstone
-                mpTable[i].mKey.m_pData = 0;
-            }
+            mpTable[i].mpValue->Release();
+            mpTable[i].mpValue = 0;
         }
-        if (mpTable)
+        if (mpTable[i].mKey.IsValid())
         {
-            gpNonGCPoolManager->Deallocate(mpTable, sizeof(AptHashItem) * mnCapacity);
-            mpTable = 0;
+            EAStringC& key = mpTable[i].mKey;
+            EAStringC::DecreaseInternalRefCount(key.m_pData);
+            key.m_pData = 0;
         }
     }
+    gpNonGCPoolManager->Deallocate(mpTable, sizeof(AptHashItem) * mnCapacity);
+    mpTable = 0;
 }
 
 // ClearData @0x82AEB620 -- empty the table (release values/keys), free the bucket
@@ -528,28 +486,34 @@ void AptNativeHash::DestroyGCPointers()
 // the table walk only touches buckets whose key slot is occupied/tombstoned.
 void AptNativeHash::ClearData()
 {
-    if (mpPrototype) { mpPrototype->Release(); mpPrototype = 0; }
-    if (mp__Proto__) { mp__Proto__->Release(); mp__Proto__ = 0; }
-
-    AptHashItem* tab = mpTable;
-    if (tab)
+    if (mpPrototype)
     {
-        const int cap = mnCapacity;
-        for (int i = 0; i < cap; ++i)
+        mpPrototype->Release();
+        mpPrototype = 0;
+    }
+    if (mp__Proto__)
+    {
+        mp__Proto__->Release();
+        mp__Proto__ = 0;
+    }
+
+    if (mpTable)
+    {
+        for (int i = 0; i < mnCapacity; ++i)
         {
-            AptHashItem* e = &tab[i];
-            if (e->mKey.m_pData)                          // occupied or tombstone
+            if (mpTable[i].mKey.IsValid())
             {
-                if (e->mpValue)
+                if (mpTable[i].mpValue)
                 {
-                    e->mpValue->Release();
-                    e->mpValue = 0;
+                    mpTable[i].mpValue->Release();
+                    mpTable[i].mpValue = 0;
                 }
-                EAStringC::DecreaseInternalRefCount(e->mKey.m_pData);
-                e->mKey.m_pData = 0;
+                EAStringC& key = mpTable[i].mKey;
+                EAStringC::DecreaseInternalRefCount(key.m_pData);
+                key.m_pData = 0;
             }
         }
-        gpNonGCPoolManager->Deallocate(tab, sizeof(AptHashItem) * cap);
+        gpNonGCPoolManager->Deallocate(mpTable, sizeof(AptHashItem) * mnCapacity);
         mpTable = 0;
     }
     mnEventHandlerMask = 0;
@@ -559,25 +523,31 @@ void AptNativeHash::ClearData()
 // free it / null mpTable); the table is left allocated but empty for reuse.
 void AptNativeHash::ClearDataNoDelete()
 {
-    if (mpPrototype) { mpPrototype->Release(); mpPrototype = 0; }
-    if (mp__Proto__) { mp__Proto__->Release(); mp__Proto__ = 0; }
-
-    AptHashItem* tab = mpTable;
-    if (tab)
+    if (mpPrototype)
     {
-        const int cap = mnCapacity;
-        for (int i = 0; i < cap; ++i)
+        mpPrototype->Release();
+        mpPrototype = 0;
+    }
+    if (mp__Proto__)
+    {
+        mp__Proto__->Release();
+        mp__Proto__ = 0;
+    }
+
+    if (mpTable)
+    {
+        for (int i = 0; i < mnCapacity; ++i)
         {
-            AptHashItem* e = &tab[i];
-            if (e->mKey.m_pData)                          // occupied or tombstone
+            if (mpTable[i].mKey.IsValid())
             {
-                if (e->mpValue)
+                if (mpTable[i].mpValue)
                 {
-                    e->mpValue->Release();
-                    e->mpValue = 0;
+                    mpTable[i].mpValue->Release();
+                    mpTable[i].mpValue = 0;
                 }
-                EAStringC::DecreaseInternalRefCount(e->mKey.m_pData);
-                e->mKey.m_pData = 0;
+                EAStringC& key = mpTable[i].mKey;
+                EAStringC::DecreaseInternalRefCount(key.m_pData);
+                key.m_pData = 0;
             }
         }
     }

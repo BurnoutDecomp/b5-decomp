@@ -5,14 +5,15 @@
 
 namespace rw { namespace audio { namespace core
 {
+    // This six-word record precedes the cosine, sine and bit-reversal tables.
     struct FFTState
     {
         s32 miSizeLog2;
         s32 miTwiddleCount;
         s32 miTransformSize;
-        u32 muCosOffset;
-        u32 muSinOffset;
-        u32 muPermutationOffset;
+        s32 muCosOffset;
+        s32 muSinOffset;
+        s32 muPermutationOffset;
     };
 
     CGS_STATIC_ASSERT(sizeof(FFTState) == 0x18, "ARTIST FFT context header");
@@ -25,34 +26,47 @@ namespace rw { namespace audio { namespace core
 
     extern "C" System* off_83271928;
 
+#if defined(_XBOX) && defined(_MSC_VER)
+// The original rwAudio common object uses the smaller instruction form here.
+#pragma optimize("s", on)
+#endif
+
     // ARTIST 0x82B6D550
-    s32 FFT_Alloc(s32 sizeLog2, bool flag, DataDescriptor* pAllocation)
+    s32 FFT_Alloc(s32 sizeLog2, bool isComplex, DataDescriptor* allocation)
     {
-        const s32 log2 = flag ? sizeLog2 : sizeLog2 - 1;
-        const s32 count = 1 << log2;
-        const s32 twiddles = (count >> 1) + 1;
-        const u32 tableBytes = twiddles * sizeof(f32);
-        const u32 bytes = sizeof(FFTState) + 2 * tableBytes + (count + 2) * sizeof(u32);
+        if (!isComplex)
+            --sizeLog2;
+
+        const int length = 1 << sizeLog2;
+        const int tableLength = (static_cast<u32>(length) >> 1) + 1;
+        const u32 bytes = (length + 2 * tableLength + 2) * sizeof(f32) + sizeof(FFTState);
 
         FFTState* state = static_cast<FFTState*>(
             off_83271928->mpAllocator->Alloc(bytes, "FFT instance", 1, 128, 0));
-        if (state)
+        if (!state)
         {
-            state->miSizeLog2 = log2;
-            state->miTwiddleCount = twiddles;
-            state->miTransformSize = count;
-            state->muCosOffset = sizeof(FFTState);
-            state->muSinOffset = state->muCosOffset + tableBytes;
-            state->muPermutationOffset = state->muSinOffset + tableBytes;
-            pAllocation->size = bytes;
+            allocation->size = 0;
+            allocation->pData = 0;
+            return -1;
         }
-        else
-        {
-            pAllocation->size = 0;
-        }
-        pAllocation->pData = state;
-        return state ? 0 : -1;
+        state->miSizeLog2 = sizeLog2;
+        state->miTwiddleCount = tableLength;
+        state->miTransformSize = length;
+        int offset = sizeof(FFTState);
+        const s32 tableBytes = tableLength * static_cast<s32>(sizeof(f32));
+        state->muCosOffset = offset;
+        offset += tableBytes;
+        state->muSinOffset = offset;
+        offset += tableBytes;
+        state->muPermutationOffset = offset;
+        allocation->size = bytes;
+        allocation->pData = state;
+        return 0;
     }
+
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", off)
+#endif
 
     // ARTIST 0x82B68888
     s32 FFT_Init(void* pContext)

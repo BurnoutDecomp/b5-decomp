@@ -176,9 +176,9 @@ public:
     // the vftable pointer back to off_82184854 first).
     virtual ~CMassiveBaseObject();
 
-    // @ 0x82BCEE18. Static helper: a name is valid iff it is non-null and not the
+    // @ 0x82BCEE18. String validator: a name is valid iff it is non-null and not the
     // empty string. Returns the X360 boolean (0 / 1).
-    static int IsValidString(const char* pcStr);
+    int IsValidString(const char* pcStr);
 
     // @ 0x82BCEE58. Records the last-error code. Variadic in the X360 (it is a
     // printf-style setter), but this leaf path only stores the code: mnLastError

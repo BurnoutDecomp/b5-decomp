@@ -81,7 +81,7 @@ namespace CgsFileSystem
         FileState GetStatus(u32 luFileId);
 
         // @0x828D6860. Index of `lStream` within maReadStreams (0..KU_MAX_READ_STREAMS-1).
-        u32 GetReadStreamIndex(ReadStream lStream) const;
+        s32 GetReadStreamIndex(ReadStream lStream) const;
 
         // @0x828D6650. True when the stream is OPEN (collapsing outstanding ops to PENDING first).
         bool IsReadStreamOpen(ReadStream lStream);
@@ -116,12 +116,6 @@ namespace CgsFileSystem
         static EA::Thread::AtomicInt32 mReleasing;
         static void AssertNativeLayout();
         static bool RWDiskErrorHandler(s32 liIndex);
-
-        // Shared effective-status read used by Is{Open,Closed}: the raw stream status, except that
-        // any outstanding operation collapses it to E_STATUS_PENDING (the X360 asm: v=PENDING; if
-        // pendingCount<=0 v=meStatus).
-        static StreamDeviceDiskRead::EReadStreamStatus
-            GetEffectiveStreamStatus(const StreamDeviceDiskRead* lpStream);
 
         // ---- DWARF CgsFileSystem.h:308/317 (private) ----
         // The actual file I/O primitives, called under mFileSystemFutex by FileHandle::Read/Write.

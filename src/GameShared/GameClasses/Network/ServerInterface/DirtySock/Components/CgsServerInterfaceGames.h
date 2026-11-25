@@ -129,12 +129,12 @@ namespace CgsNetwork
         // are virtual: the X360 leaf ServerInterfaceGamesX360 (0x8288C178 / 0x8288C268 /
         // 0x8288C300 / 0x8288C460 / 0x8288C770) genuinely overrides these vtable slots and
         // chains back to Base::X after seeding the Xbox LIVE search contexts.
-        virtual void CreateGame(ServerInterfaceGameParamsBase* lpGameParams,
-                        ServerInterfacePlayerParamsBase* lpPlayerParams);
-        virtual void JoinGame(ServerInterfaceGameParamsBase* lpGameParams,
-                      ServerInterfacePlayerParamsBase* lpPlayerParams);
-        virtual void QuickJoinGame(ServerInterfaceQuickJoinParamsBase* lpQuickJoinParams,
-                           ServerInterfacePlayerParamsBase* lpPlayerParams);
+        virtual void CreateGame(const ServerInterfaceGameParamsBase* lpGameParams,
+                        const ServerInterfacePlayerParamsBase* lpPlayerParams);
+        virtual void JoinGame(const ServerInterfaceGameParamsBase* lpGameParams,
+                      const ServerInterfacePlayerParamsBase* lpPlayerParams);
+        virtual void QuickJoinGame(const ServerInterfaceQuickJoinParamsBase* lpQuickJoinParams,
+                           const ServerInterfacePlayerParamsBase* lpPlayerParams);
         virtual void SearchForGames(ServerInterfaceGameSearchParamsBase* lpSearchParams);
         void CancelSearchForGames();
         virtual void UpdateGameParameters(ServerInterfaceGameParamsBase* lpGameParams);

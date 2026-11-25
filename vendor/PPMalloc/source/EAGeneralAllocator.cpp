@@ -383,36 +383,39 @@ bool GeneralAllocator::AddCore(void* pCore, size_t nSize, bool bShouldFree, bool
     unsigned int (*pCoreFreeFunction)(GeneralAllocator*, void*, unsigned int, void*), void* pContext) // 82B4F800
 {
     PPMAutoMutex lock(mpMutex);
-    Chunk* pChunk;
-    bool bNewTop;
     if (pCore)
     {
-        if (nSize < 64) return false;
-        if (nSize % mnPageSize) nSize &= ~(mnPageSize - 1);
-        if (nSize & 15) nSize &= ~15u;
-        CoreBlock* pBlock = static_cast<CoreBlock*>(pCore);
-        pBlock->mnSize = nSize;
-        pBlock->mnReservedSize = nSize;
-        pBlock->mbShouldFree = bShouldFree;
-        pBlock->mbShouldFreeOnShutdown = bShouldFree;
-        pBlock->mbShouldTrim = bShouldTrim;
-        pBlock->mpCoreFreeFunction = pCoreFreeFunction;
-        pBlock->mpCore = reinterpret_cast<char*>(AlignUp(reinterpret_cast<size_t>(pBlock) + sizeof(CoreBlock), 8));
-        pBlock->mbMMappedMemory = false;
-        pBlock->mpCoreFreeFunctionContext = pContext;
-        LinkCoreBlock(pBlock, &mHeadCoreBlock);
-        pChunk = MakeChunkFromCore(pBlock->mpCore, reinterpret_cast<char*>(pBlock) + nSize - pBlock->mpCore, 1);
-        bNewTop = mpTopChunk != GetInitialTopChunk();
+        if (nSize >= 64)
+        {
+            if (nSize % mnPageSize) nSize &= ~(mnPageSize - 1);
+            if (nSize & 15) nSize &= ~15u;
+            CoreBlock* pBlock = static_cast<CoreBlock*>(pCore);
+            pBlock->mnSize = nSize;
+            pBlock->mnReservedSize = nSize;
+            pBlock->mbShouldFree = bShouldFree;
+            pBlock->mbShouldFreeOnShutdown = bShouldFree;
+            pBlock->mbShouldTrim = bShouldTrim;
+            pBlock->mpCoreFreeFunction = pCoreFreeFunction;
+            pBlock->mpCore = reinterpret_cast<char*>(AlignUp(reinterpret_cast<size_t>(pBlock) + sizeof(CoreBlock), 8));
+            pBlock->mbMMappedMemory = false;
+            pBlock->mpCoreFreeFunctionContext = pContext;
+            LinkCoreBlock(pBlock, &mHeadCoreBlock);
+            Chunk* pChunk = MakeChunkFromCore(pBlock->mpCore,
+                reinterpret_cast<char*>(pBlock) + nSize - pBlock->mpCore, 1);
+            SetNewTopChunk(pChunk, mpTopChunk != GetInitialTopChunk());
+            return true;
+        }
     }
-    else
+    else if (nSize)
     {
-        if (!nSize) return false;
-        pChunk = AddCoreInternal(AlignUp(nSize, mnPageSize));
-        if (!pChunk) return false;
-        bNewTop = true;
+        Chunk* pChunk = AddCoreInternal(AlignUp(nSize, mnPageSize));
+        if (pChunk)
+        {
+            SetNewTopChunk(pChunk, true);
+            return true;
+        }
     }
-    SetNewTopChunk(pChunk, bNewTop);
-    return true;
+    return false;
 }
 
 void* GeneralAllocator::MMapAllocInternal(size_t nSize, size_t* pSize) // 82B4DE98
@@ -554,16 +557,20 @@ GeneralAllocator::Chunk* GeneralAllocator::FindAndSetNewTopChunk() // 82B4D878
         Chunk* pFence = reinterpret_cast<Chunk*>(reinterpret_cast<char*>(pBlock) + pBlock->mnSize - 16);
         for (Chunk* pChunk = reinterpret_cast<Chunk*>(pBlock->mpCore); pChunk < pFence; )
         {
-            unsigned int nSize = GetChunkSize(pChunk);
-            Chunk* pNext = GetChunkAtOffset(pChunk, nSize);
-            if (!(pNext->mnSize & 1))
+            Chunk* const pNext = GetChunkAtOffset(pChunk, GetChunkSize(pChunk));
+            if (!GetChunkIsInUse(pChunk))
             {
+                const unsigned int nSize = GetChunkSize(pChunk);
                 if (nSize > 0x2000 || pNext == pFence)
                 {
                     pBest = pChunk;
                     goto found;
                 }
-                if (nSize > nLargest) { pBest = pChunk; nLargest = nSize; }
+                if (nSize > nLargest)
+                {
+                    pBest = pChunk;
+                    nLargest = nSize;
+                }
             }
             pChunk = pNext;
         }
@@ -690,59 +697,63 @@ void GeneralAllocator::Free(void* pData) // 82B4FC08
 }
 void GeneralAllocator::ClearFastBins() // 82B4FC70
 {
-    if (!mnMaxFastBinChunkSize)
+    if (mnMaxFastBinChunkSize)
     {
-        Init(0, 0, true, false, 0, 0);
-        return;
-    }
-    const unsigned int nLast = (mnMaxFastBinChunkSize >> 3) - 2;
-    for (unsigned int i = 0; i <= nLast; ++i)
-    {
-        Chunk* pChunk = mpFastBinArray[i];
-        if (!pChunk) continue;
-        mpFastBinArray[i] = 0;
+        Chunk** const ppLast = mpFastBinArray + ((mnMaxFastBinChunkSize >> 3) - 2);
+        Chunk* const pUnsorted = GetUnsortedBin();
+        Chunk** ppBin = mpFastBinArray;
         do
         {
-            Chunk* pNextFast = pChunk->mpNextChunk;
-            pChunk->mnSize &= 0x7ffffffb;
-            unsigned int nSize = GetChunkSize(pChunk);
-            Chunk* pNext = GetChunkAtOffset(pChunk, nSize);
-            unsigned int nNextSize = GetChunkSize(pNext);
-            if (!(pChunk->mnSize & 1))
+            Chunk* pChunk = *ppBin;
+            if (pChunk)
             {
-                nSize += pChunk->mnPriorSize;
-                pChunk = GetChunkAtOffset(pChunk, -static_cast<int>(pChunk->mnPriorSize));
-                pChunk->mnSize = nSize | 1;
-                pNext->mnPriorSize = nSize;
-                UnlinkChunk(pChunk);
+                *ppBin = 0;
+                do
+                {
+                    Chunk* pNextFast = pChunk->mpNextChunk;
+                    pChunk->mnSize &= 0x7ffffffb;
+                    unsigned int nSize = GetChunkSize(pChunk);
+                    Chunk* pNext = GetChunkAtOffset(pChunk, nSize);
+                    unsigned int nNextSize = GetChunkSize(pNext);
+                    if (!(pChunk->mnSize & 1))
+                    {
+                        nSize += pChunk->mnPriorSize;
+                        pChunk = GetChunkAtOffset(pChunk, -static_cast<int>(pChunk->mnPriorSize));
+                        pChunk->mnSize = nSize | 1;
+                        pNext->mnPriorSize = nSize;
+                        UnlinkChunk(pChunk);
+                    }
+                    if (GetChunkAtOffset(pNext, nNextSize)->mnSize & 1)
+                    {
+                        pNext->mnPriorSize = nSize;
+                        pNext->mnSize &= ~1u;
+                    }
+                    else
+                    {
+                        nSize += nNextSize;
+                        UnlinkChunk(pNext);
+                        pChunk->mnSize = nSize | 1;
+                        GetChunkAtOffset(pChunk, nSize)->mnPriorSize = nSize;
+                    }
+                    if (pChunk == mpTopChunk || pNext == mpTopChunk)
+                    {
+                        mpTopChunk = pChunk;
+                        pChunk->mpNextChunk = pChunk;
+                        pChunk->mpPrevChunk = pChunk;
+                        pChunk->mnSize = nSize | 1;
+                        GetChunkAtOffset(pChunk, nSize)->mnPriorSize = nSize;
+                        AdjustHighFence();
+                    }
+                    else
+                        LinkChunk(pChunk, pUnsorted, pUnsorted->mpNextChunk);
+                    pChunk = pNextFast;
+                } while (pChunk);
             }
-            if (GetChunkAtOffset(pNext, nNextSize)->mnSize & 1)
-            {
-                pNext->mnPriorSize = nSize;
-                pNext->mnSize &= ~1u;
-            }
-            else
-            {
-                nSize += nNextSize;
-                UnlinkChunk(pNext);
-                pChunk->mnSize = nSize | 1;
-                GetChunkAtOffset(pChunk, nSize)->mnPriorSize = nSize;
-            }
-            if (pChunk == mpTopChunk || pNext == mpTopChunk)
-            {
-                mpTopChunk = pChunk;
-                pChunk->mpNextChunk = pChunk;
-                pChunk->mpPrevChunk = pChunk;
-                pChunk->mnSize = nSize | 1;
-                GetChunkAtOffset(pChunk, nSize)->mnPriorSize = nSize;
-                AdjustHighFence();
-            }
-            else
-                LinkChunk(pChunk, GetUnsortedBin(), GetUnsortedBin()->mpNextChunk);
-            pChunk = pNextFast;
-        } while (pChunk);
+        } while (ppBin++ != ppLast);
+        mnMaxFastBinChunkSize &= ~1u;
     }
-    mnMaxFastBinChunkSize &= ~1u;
+    else
+        Init(0, 0, true, false, 0, 0);
 }
 
 bool GeneralAllocator::Shutdown() // 82B500F8

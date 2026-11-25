@@ -160,10 +160,27 @@ CombFilter::CombFilter()
 // the asm's loc_82B64C94 vs fall-through split. Returns the final state (fmr f1, f0);
 // the caller latches it into CombFilter::mfState.
 // -------------------------------------------------------------------------------------
-f32 CombFilterFunc(s32 count, f32 g1, f32 g2, f32 g3, f32 g4, f32 state,
+#if defined(_XBOX) && defined(_MSC_VER)
+// The original rwAudio common object uses the smaller instruction form here.
+#pragma optimize("s", on)
+#endif
+
+f32 CombFilterFunc(s32 count, f32 g1, f32 g2, f32 g3, f32 g4, f32 previousState,
                    f32 *base, f32 *work, f32 *accum, f32 *feedforward, IFilter::FilterOutputMode mode)
 {
-    if (mode)
+    f32 state = previousState;
+    if (mode == 0)
+    {
+        for (s32 n = 0; n < count; ++n)
+        {
+            const f32 tap = work[n + 1];
+            const f32 out = (base[n] - state * g1) - tap * g2; // fnmsubs pair
+            accum[n] = out;
+            feedforward[n] = (work[n] * g3 + work[n + 1]) * g4; // fmuls (overwrite)
+            state = accum[n];                                             // lfs reload
+        }
+    }
+    else
     {
         for (s32 n = 0; n < count; ++n)
         {
@@ -173,18 +190,12 @@ f32 CombFilterFunc(s32 count, f32 g1, f32 g2, f32 g3, f32 g4, f32 state,
             state = accum[n];                                             // lfsx reload
         }
     }
-    else
-    {
-        for (s32 n = 0; n < count; ++n)
-        {
-            const f32 out = (base[n] - state * g1) - work[n + 1] * g2; // fnmsubs pair
-            accum[n] = out;
-            feedforward[n] = (work[n] * g3 + work[n + 1]) * g4; // fmuls (overwrite)
-            state = accum[n];                                             // lfs reload
-        }
-    }
     return state;
 }
+
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", off)
+#endif
 
 // -------------------------------------------------------------------------------------
 // CombFilter::CombFilterApplyFunc @0x82B64D00

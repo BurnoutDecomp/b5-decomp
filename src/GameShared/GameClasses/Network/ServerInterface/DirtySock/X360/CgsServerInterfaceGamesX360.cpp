@@ -145,8 +145,8 @@ namespace CgsNetwork
 
     // CreateGame @ 0x8288C178 -- seed the Xbox LIVE search contexts (XUserSetContext)
     // and the ConnApi 'slot' public/private slot counts, then chain to the base.
-    void ServerInterfaceGamesX360::CreateGame(ServerInterfaceGameParamsBase* lpGameParams,
-                                              ServerInterfacePlayerParamsBase* lpPlayerParams)
+    void ServerInterfaceGamesX360::CreateGame(const ServerInterfaceGameParamsBase* lpGameParams,
+                                              const ServerInterfacePlayerParamsBase* lpPlayerParams)
     {
         char* lpcBuffer = GetServerInterface()->GetMessageBuffer();
         CGS_ASSERT(lpcBuffer != 0, "mpacMessageBuffer");
@@ -154,8 +154,8 @@ namespace CgsNetwork
 
         // On X360 the concrete game-params object is the committed leaf that carries
         // the LIVE matchmaking context array (maRankedContexts) + counters.
-        ServerInterfaceGameParamsX360* lpX360 =
-            static_cast<ServerInterfaceGameParamsX360*>(lpGameParams);
+        const ServerInterfaceGameParamsX360* lpX360 =
+            static_cast<const ServerInterfaceGameParamsX360*>(lpGameParams);
 
         CGS_ASSERT(lpX360->GetContextCount() < KI_MAX_SEARCH_PARAMS,
                    "lpGameParams->miNumSearchContexts < KI_MAX_SEARCH_PARAMS");
@@ -177,15 +177,15 @@ namespace CgsNetwork
 
     // JoinGame @ 0x8288C268 -- assert the search-context count, then chain to the base
     // (no XUserSetContext loop, unlike CreateGame).
-    void ServerInterfaceGamesX360::JoinGame(ServerInterfaceGameParamsBase* lpGameParams,
-                                            ServerInterfacePlayerParamsBase* lpPlayerParams)
+    void ServerInterfaceGamesX360::JoinGame(const ServerInterfaceGameParamsBase* lpGameParams,
+                                            const ServerInterfacePlayerParamsBase* lpPlayerParams)
     {
         char* lpcBuffer = GetServerInterface()->GetMessageBuffer();
         CGS_ASSERT(lpcBuffer != 0, "mpacMessageBuffer");
         lpcBuffer[0] = 0;
 
-        ServerInterfaceGameParamsX360* lpX360 =
-            static_cast<ServerInterfaceGameParamsX360*>(lpGameParams);
+        const ServerInterfaceGameParamsX360* lpX360 =
+            static_cast<const ServerInterfaceGameParamsX360*>(lpGameParams);
         CGS_ASSERT(lpX360->GetContextCount() < KI_MAX_SEARCH_PARAMS,
                    "lpGameParams->miNumSearchContexts < KI_MAX_SEARCH_PARAMS");
 
@@ -194,14 +194,14 @@ namespace CgsNetwork
 
     // QuickJoinGame @ 0x8288C300 -- emit the Xbox LIVE search contexts into the outgoing
     // lobby record before chaining to the shared QuickJoinGame.
-    void ServerInterfaceGamesX360::QuickJoinGame(ServerInterfaceQuickJoinParamsBase* lpQuickJoinParams,
-                                                 ServerInterfacePlayerParamsBase* lpPlayerParams)
+    void ServerInterfaceGamesX360::QuickJoinGame(const ServerInterfaceQuickJoinParamsBase* lpQuickJoinParams,
+                                                 const ServerInterfacePlayerParamsBase* lpPlayerParams)
     {
         char* lpcBuffer = mpServerInterface->GetMessageBuffer();
         CGS_ASSERT(lpcBuffer != 0, "mpacMessageBuffer");
 
-        ServerInterfaceQuickJoinParamsX360* lpParams =
-            static_cast<ServerInterfaceQuickJoinParamsX360*>(lpQuickJoinParams);
+        const ServerInterfaceQuickJoinParamsX360* lpParams =
+            static_cast<const ServerInterfaceQuickJoinParamsX360*>(lpQuickJoinParams);
         const s32 liNumContexts = static_cast<s32>(lpParams->muX360Field_9C); // +0x9C
 
         *lpcBuffer = 0;

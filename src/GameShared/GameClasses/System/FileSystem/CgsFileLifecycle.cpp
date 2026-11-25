@@ -77,14 +77,4 @@ namespace CgsFileSystem
         mpcFileName = 0; meFileState = E_FILESTATE_CLOSED;
         muSeekPosition = 0; muPendingOperationCount = 0;
     }
-    void File::Destruct()
-    {
-        FileFutexHelper lGuard(mFutex);
-        mpHandle = 0; muCacheId = 0xffffffffu;
-        CGS_ASSERT(static_cast<FileState>(meFileAccess) == E_FILESTATE_CLOSED,
-                   "static_cast< CgsFileSystem::FileState >(meFileAccess) == E_FILESTATE_CLOSED");
-        meFileAccess = E_FILEACCESS_CLOSED;
-        mpcFileName = 0; meFileState = E_FILESTATE_CLOSED;
-        muSeekPosition = 0; muPendingOperationCount = 0;
-    }
 }
