@@ -22,7 +22,7 @@ Target::Parameters::Parameters()
 
 RenderTarget::Parameters::Parameters()
     : mpAllocator(0), mu32Width(0), mu32Height(0), mu32NumMipMaps(1),
-      mColourMode(1), mDepthStencilMode(1), mbUseDepthStencilAsTexture(false),
+      mColourMode(eRenderTarget_CREATE), mDepthStencilMode(eRenderTarget_CREATE), mbUseDepthStencilAsTexture(false),
       mu8NumSections(1), mpProvidedDepthStencilTarget(0)
 {
     for (u32 i = 0; i < 4; ++i) mapProvidedColourTarget[i] = 0;
@@ -155,18 +155,15 @@ renderengine::TextureState* RenderTarget::GetDepthTextureState()
 // ARTIST 823F9250.
 void RenderTarget::Begin(u32 section)
 {
-    const renderengine::RenderTargetState* state = muColourMode == 2
+    const renderengine::RenderTargetState* state = muColourMode == eRenderTarget_USE_DEVICE_FOR_WRITE
         ? renderengine::Device::GetDefaultRenderTargetState() : (&mpSection0State)[section];
     shadow::Device::SetState(state);
-    D3DVIEWPORTF9 viewport;
-    viewport.X = 0.0f; viewport.Y = 0.0f;
-    viewport.Width = static_cast<float>(muWidth);
-    viewport.Height = static_cast<float>(muHeight);
-    viewport.MinZ = 0.0f; viewport.MaxZ = 1.0f; viewport.Flags = 0;
+    renderengine::ViewportParameters viewport;
+    viewport.SetRectangle(0, 0, muWidth, muHeight);
     D3DDevice_SetViewportF(gpD3DDevice, &viewport);
-    RECT scissor;
-    scissor.left = 0; scissor.top = 0;
-    scissor.right = muWidth; scissor.bottom = muHeight;
+
+    renderengine::ScissorRectParameters scissor;
+    scissor.SetRectangle(0, 0, muWidth, muHeight);
     D3DDevice_SetScissorRect(gpD3DDevice, &scissor);
 }
 
@@ -187,33 +184,33 @@ void RenderTarget::Resolve(bool resolveDepth, bool resolveColour)
 void RenderTarget::CreateStates(const Parameters& parameters)
 {
     mu8NumSections = parameters.mu8NumSections;
-    if (muColourMode == 1 || (muColourMode == 0 && muDepthStencilMode != 0))
+    if (muColourMode == eRenderTarget_CREATE || (muColourMode == eRenderTarget_NONE && muDepthStencilMode != eRenderTarget_NONE))
     {
         renderengine::RenderTargetState::Parameters state;
         for (u32 i = 0; i < 5; ++i) state.targets[i] = 0;
-        if (muColourMode == 1) state.targets[0] = maColourTargets[0].mpPixelBuffer;
-        if (muDepthStencilMode == 1 || muDepthStencilMode == 4)
+        if (muColourMode == eRenderTarget_CREATE) state.targets[0] = maColourTargets[0].mpPixelBuffer;
+        if (muDepthStencilMode == eRenderTarget_CREATE || muDepthStencilMode == eRenderTarget_USE_PROVIDED)
             state.targets[4] = mDepthTarget.mpPixelBuffer;
-        else if (muDepthStencilMode == 2)
+        else if (muDepthStencilMode == eRenderTarget_USE_DEVICE_FOR_WRITE)
             state.targets[4] = &renderengine::gOriginalDepthStencilBuffer;
         const rw::ResourceDescriptor descriptor = renderengine::RenderTargetState::GetResourceDescriptor(state);
         const rw::Resource resource = mpAllocator->DoAllocate(descriptor, 0);
         mpSection0State = renderengine::RenderTargetState::Initialize(resource, state);
-        if (muColourMode == 0 && parameters.mu8NumSections > 1)
+        if (muColourMode == eRenderTarget_NONE && parameters.mu8NumSections > 1)
         {
             CGS_ASSERT(parameters.maColourTargetParams[0].mTextureType != renderengine::Texture::TYPE_CUBE,
                        "params.GetColorTargetParameters(0).GetTextureType() != Texture::TYPE_CUBE");
-            CGS_ASSERT(muDepthStencilMode != 2, "m_depthStencilMode != eRenderTarget_USE_DEVICE_FOR_WRITE");
+            CGS_ASSERT(muDepthStencilMode != eRenderTarget_USE_DEVICE_FOR_WRITE, "m_depthStencilMode != eRenderTarget_USE_DEVICE_FOR_WRITE");
         }
     }
-    if (!parameters.mbUseDepthStencilAsTexture || muDepthStencilMode == 4)
+    if (!parameters.mbUseDepthStencilAsTexture || muDepthStencilMode == eRenderTarget_USE_PROVIDED)
     {
         mDepthTarget.mpTextureState = 0;
         return;
     }
     renderengine::TextureState::Parameters state;
     state.mpTexture = mDepthTarget.mpHiZTexture ? mDepthTarget.mpHiZTexture : mDepthTarget.mpTexture;
-    if (muColourMode == 0 && muDepthStencilMode != 0)
+    if (muColourMode == eRenderTarget_NONE && muDepthStencilMode != eRenderTarget_NONE)
     {
         state.mbWhiteBorder = 1;
         state.muAddressU = 6;
@@ -258,11 +255,11 @@ RenderTarget::RenderTarget(const Parameters& parameters)
     target.mu32Width = parameters.mu32Width;
     target.mu32Height = parameters.mu32Height;
     target.mu8NumSections = parameters.mu8NumSections;
-    if (muColourMode == 1)
+    if (muColourMode == eRenderTarget_CREATE)
         maColourTargets[0].CreateColor(target);
-    else if (muColourMode == 2)
+    else if (muColourMode == eRenderTarget_USE_DEVICE_FOR_WRITE)
         maColourTargets[0].mpPixelBuffer = &renderengine::gOriginalColorBuffer;
-    if (muDepthStencilMode == 1)
+    if (muDepthStencilMode == eRenderTarget_CREATE)
     {
         target = parameters.mDepthStencilParams;
         target.mpAllocator = mpAllocator;
@@ -272,7 +269,7 @@ RenderTarget::RenderTarget(const Parameters& parameters)
         target.mu8NumSections = parameters.mu8NumSections;
         mDepthTarget.CreateDepth(target);
     }
-    else if (muDepthStencilMode == 4)
+    else if (muDepthStencilMode == eRenderTarget_USE_PROVIDED)
     {
         mDepthTarget = *parameters.mpProvidedDepthStencilTarget;
         mDepthTarget.mbIsShared = true;

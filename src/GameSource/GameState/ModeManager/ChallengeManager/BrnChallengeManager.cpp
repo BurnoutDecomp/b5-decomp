@@ -234,8 +234,8 @@ bool ChallengeManager::ReceivedSuccessUpdatesFromAllPlayers()
 {
     CGS_ASSERT(mpCurrentChallenge != 0, CGS_ASSERT_MESSAGE_AT("mpCurrentChallenge", CGS_ARTIST_FILE, 5159));
 
-    s32 liNumUpdatesReceived = (mabReceivedSuccessUpdates[0] != 0) ? 1 : 0;
-    for (s32 liPlayer = 1; liPlayer < KI_MAX_CHALLENGE_PLAYERS; ++liPlayer)
+    s32 liNumUpdatesReceived = 0;
+    for (s32 liPlayer = 0; liPlayer < KI_MAX_CHALLENGE_PLAYERS; ++liPlayer)
     {
         if (mabReceivedSuccessUpdates[liPlayer])
         {
@@ -243,11 +243,10 @@ bool ChallengeManager::ReceivedSuccessUpdatesFromAllPlayers()
         }
     }
 
-    const s32 liNumPlayers = mpCurrentChallenge->GetNumPlayers();
-    CGS_ASSERT(liNumUpdatesReceived <= liNumPlayers,
+    CGS_ASSERT(liNumUpdatesReceived <= mpCurrentChallenge->GetNumPlayers(),
                CGS_ASSERT_MESSAGE_AT("liNumUpdatesReceived <= mpCurrentChallenge->GetNumPlayers()", CGS_ARTIST_FILE, 5170));
 
-    return liNumPlayers == liNumUpdatesReceived;
+    return liNumUpdatesReceived == mpCurrentChallenge->GetNumPlayers();
 }
 
 // ----------------------------------------------------------------------------
@@ -1335,25 +1334,23 @@ bool ChallengeManager::CheckForModifiers(
     CGS_ASSERT(lpAction, CGS_ASSERT_MESSAGE_AT("lpAction", CGS_ARTIST_FILE, 2818));                                        // X360 line 2818
     CGS_ASSERT(lpActiveRaceCarOutputInterface, CGS_ASSERT_MESSAGE_AT("lpActiveRaceCarOutputInterface", CGS_ARTIST_FILE, 2819)); // X360 line 2819
 
-    bool lbResult;
-    if (lpAction->GetModifier())                                             // X360 lbz +2 (mxModifier) non-zero
+    if (!lpAction->GetModifier())
     {
-        const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface::RaceCarState* lpRaceCarState =
-            lpActiveRaceCarOutputInterface->GetPlayerRaceCarState();         // X360 sub_82310240 (ICF)
-        CGS_ASSERT(lpRaceCarState, CGS_ASSERT_MESSAGE_AT("lpRaceCarState", CGS_ARTIST_FILE, 2832));                        // X360 line 2832
+        return true;
+    }
 
-        lbResult = true;
-        if ((lpAction->GetModifier() & BrnResource::ChallengeListEntryAction::KX_MODIFIER_IN_AIR) ==
-            BrnResource::ChallengeListEntryAction::KX_MODIFIER_IN_AIR)       // X360 rlwinm 0,28,28 (& 8) == 8
-        {
-            lbResult = (lpRaceCarState->mfGas != 0.0f);                      // X360 lfs +0x404 (mfGas) != 0.0
-        }
-    }
-    else
+    const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface::RaceCarState* lpRaceCarState =
+        lpActiveRaceCarOutputInterface->GetPlayerRaceCarState();
+    CGS_ASSERT(lpRaceCarState, CGS_ASSERT_MESSAGE_AT("lpRaceCarState", CGS_ARTIST_FILE, 2832));
+
+    bool lbMeetingModifiers = true;
+    if ((lpAction->GetModifier() & BrnResource::ChallengeListEntryAction::KX_MODIFIER_IN_AIR) ==
+        BrnResource::ChallengeListEntryAction::KX_MODIFIER_IN_AIR &&
+        lpRaceCarState->mfTimeInAir == 0.0f) // ARTIST 0x82316784 reads RaceCarState +0x404.
     {
-        lbResult = true;
+        lbMeetingModifiers = false;
     }
-    return lbResult;
+    return lbMeetingModifiers;
 }
 
 // ----------------------------------------------------------------------------
@@ -4184,9 +4181,9 @@ bool ChallengeManager::UpdateArbitrationSuccess(s32 liActionIndex, TGameActionQu
     if (lpAction->GetCombineAction() == BrnResource::ChallengeListEntryAction::E_COMBINE_ACTION_COUNT)  // lbz +0x03 == 5
     {
         lbChallengeComplete = true;
+        s32 liAction = 0;
         if (mpCurrentChallenge->GetNumActions() != 0)   // lbz +0xD4
         {
-            s32 liAction = 0;
             do
             {
                 for (::EActiveRaceCarIndex lePlayer = ::E_ACTIVE_RACE_CAR_INDEX_0;
@@ -4212,7 +4209,7 @@ bool ChallengeManager::UpdateArbitrationSuccess(s32 liActionIndex, TGameActionQu
     }
     else
     {
-        lbChallengeComplete = (mpCurrentChallenge->GetNumActions() - 1 == liActionIndex);
+        lbChallengeComplete = (liActionIndex == mpCurrentChallenge->GetNumActions() - 1);
     }
 
     if (lbChallengeComplete)
@@ -4248,22 +4245,15 @@ bool ChallengeManager::UpdateArbitrationSuccess(s32 liActionIndex, TGameActionQu
             // Advance the arbitration index, clamped to the last action; drag the current
             // challenge action along with it when it has fallen behind (X360 stores the raw
             // index to +0xE14 first, then re-stores the clamped one).
-            s32 liNextActionIndex = liActionIndex + 1;
-            miCurrentArbitrationIndex = liNextActionIndex;                            // stw +0xE14 (raw)
-            const s32 liLastActionIndex = mpCurrentChallenge->GetNumActions() - 1;    // lbz +0xD4; -1
-            if (liNextActionIndex >= liLastActionIndex)
-            {
-                liNextActionIndex = liLastActionIndex;
-            }
-            miCurrentArbitrationIndex = liNextActionIndex;                            // stw +0xE14 (clamped)
+            const BrnResource::ChallengeListEntry* lpChallenge = mpCurrentChallenge;
+            miCurrentArbitrationIndex = liActionIndex + 1;
+            miCurrentArbitrationIndex = rw::math::fpu::Min(miCurrentArbitrationIndex,
+                                                          lpChallenge->GetNumActions() - 1);
 
-            if (liNextActionIndex > miCurrentChallengeAction)                         // lwz +0xE10; cmpw
+            if (miCurrentArbitrationIndex > miCurrentChallengeAction)
             {
-                if (liNextActionIndex >= liLastActionIndex)
-                {
-                    liNextActionIndex = liLastActionIndex;
-                }
-                miCurrentChallengeAction = liNextActionIndex;                         // stw +0xE10
+                miCurrentChallengeAction = rw::math::fpu::Min(miCurrentArbitrationIndex,
+                                                              lpChallenge->GetNumActions() - 1);
             }
         }
     }

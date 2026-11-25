@@ -57,7 +57,7 @@ public:
     void                       AddListResource(CgsResource::ResourcePtr<ChallengeListResource>& lrResource);
     // :95  RECONSTRUCTED (X360-inlined; replaces the return-0 gate that lived in
     // BrnFriendsListLinkGates.cpp until this wave made the table real).
-    s32                        GetChallengeCount() const;
+    s32                        GetChallengeCount() const { return miCount; }
 
     // ---- declared-only (each reconstructed in its own TU) ----
     const ChallengeListEntry*  GetChallengeData(s32 liIndex) const;                  // :98

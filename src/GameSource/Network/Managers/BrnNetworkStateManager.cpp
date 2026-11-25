@@ -4133,22 +4133,29 @@ namespace BrnNetwork
                 "mpNetworkModule->GetGameStateToNetworkInterface()",
                 CGS_ARTIST_FILE, 3756 /* ARTIST 0x8256EDA0 */));
 
-            if (!GsmIO::IsOnlineFreeBurnLobby(mpNetworkModule->GetGameStateToNetworkInterface()->GetCurrentGameMode()))
+            const GsmIO::EGameModeType leGameMode =
+                mpNetworkModule->GetGameStateToNetworkInterface()->GetCurrentGameMode();
+            // ARTIST 0x8256EDB8-0x8256EDD8 preserves the car in the lobby and online showtime.
+            const bool lbInOnlineLobby = leGameMode == GsmIO::E_MODE_ONLINE_FREE_BURN_LOBBY
+                || leGameMode == GsmIO::E_MODE_ONLINE_SHOWTIME;
+            if (!lbInOnlineLobby)
             {
                 GsmIO::ChangePlayerCarEvent lChangeCarEvent;
                 lChangeCarEvent.mCarModelId         = mpNetworkManager->GetFreeBurnCarID();
                 lChangeCarEvent.mWheelModelId       = mpNetworkManager->GetFreeBurnWheelID();
                 lChangeCarEvent.mbResetPlayerCamera = false;
                 lChangeCarEvent.mbKeepResetSection  = true;
-                mpNetworkModule->GetGameEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lChangeCarEvent),
-                                                               GsmIO::E_EVENT_CHANGE_PLAYER_CAR,
-                                                               static_cast<s32>(sizeof(lChangeCarEvent)));
+                GsmIO::GameEventQueue* lpGameEventQueue = mpNetworkModule->GetGameEventQueue();
+                lpGameEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lChangeCarEvent),
+                                           GsmIO::E_EVENT_CHANGE_PLAYER_CAR,
+                                           static_cast<s32>(sizeof(lChangeCarEvent)));
             }
 
             lPostGameProcessingFinished.mbIsStillInGame = false;
         }
 
-        mpNetworkModule->GetNetworkEventQueue()->AddEvent(
+        BrnNetworkModuleIO::NetworkEventQueue* lpNetworkEventQueue = mpNetworkModule->GetNetworkEventQueue();
+        lpNetworkEventQueue->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lPostGameProcessingFinished),
             lPostGameProcessingFinished.GetEventType(), static_cast<s32>(sizeof(lPostGameProcessingFinished)));
         mpNetworkModule->ClearCachedNetworkPlayerIDsAtGameEnd();

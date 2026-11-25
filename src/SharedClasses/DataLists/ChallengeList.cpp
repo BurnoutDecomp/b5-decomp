@@ -262,19 +262,6 @@ void ChallengeList::AddListResource( CgsResource::ResourcePtr<ChallengeListResou
     }
 }
 
-// ChallengeList::GetChallengeCount -- X360-INLINED everywhere (it has no ledger row of its
-// own; every caller open-codes the `lwz` of miCount, e.g. the loop bound GetChallengeIndex
-// @0x82326168 re-reads each iteration). Declared at ChallengeList.h:95.
-//
-// ⭐ REPLACES the return-0 [[silent-drop-stub]] that lived in BrnFriendsListLinkGates.cpp
-// (deleted in the same change). That gate's own DELETE-WHEN said "Land the body with that
-// mount" -- this wave is that mount: GameDataModule Prepare stage 10 now fills the table, so
-// answering 0 would no longer be "no challenges exist", it would be a lie about 458 of them.
-s32 ChallengeList::GetChallengeCount() const
-{
-    return miCount;
-}
-
 // The X360 ChallengeList consumer and DLCDebugComponent::OnActivate share the same
 // DLCFeatureAvailability block. Content-bought types 1 and 2 select feature slots 0 and 1.
 // Keep this reader on that owner so the registered enable flags and pack mask stay connected.

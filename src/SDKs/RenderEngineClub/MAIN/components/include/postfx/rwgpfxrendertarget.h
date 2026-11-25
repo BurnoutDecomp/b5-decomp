@@ -201,8 +201,8 @@ namespace postfx
             u32                mu32Width;                      // +0x004
             u32                mu32Height;                     // +0x008
             u32                mu32NumMipMaps;                 // +0x00C
-            u32                mColourMode;                    // +0x010  RenderTargetMode
-            u32                mDepthStencilMode;              // +0x014  RenderTargetMode
+            RenderTargetMode                mColourMode;                    // +0x010  RenderTargetMode
+            RenderTargetMode                mDepthStencilMode;              // +0x014  RenderTargetMode
             bool               mbUseDepthStencilAsTexture;     // +0x018
             u8                 mu8NumSections;                 // +0x019
             Target::Parameters maColourTargetParams[4];        // +0x01C  (stride 0x48)
@@ -219,8 +219,8 @@ namespace postfx
             void SetWidth(u32 lu32Width)                           { mu32Width = lu32Width; }
             void SetHeight(u32 lu32Height)                         { mu32Height = lu32Height; }
             void SetNumMipMaps(u32 lu32NumMipMaps)                 { mu32NumMipMaps = lu32NumMipMaps; }
-            void SetColorMode(RenderTargetMode lMode)              { mColourMode = static_cast<u32>(lMode); }
-            void SetDepthStencilMode(RenderTargetMode lMode)       { mDepthStencilMode = static_cast<u32>(lMode); }
+            void SetColorMode(RenderTargetMode lMode)              { mColourMode = lMode; }
+            void SetDepthStencilMode(RenderTargetMode lMode)       { mDepthStencilMode = lMode; }
             void SetUseDepthStencilAsTexture(bool lbUse)           { mbUseDepthStencilAsTexture = lbUse; }
             void SetNumSections(u32 lu32NumSections)               { mu8NumSections = static_cast<u8>(lu32NumSections); }
 
@@ -278,8 +278,8 @@ namespace postfx
         u32                              muWidth;              // +0x04
         u32                              muHeight;             // +0x08
         u32                              muReserved0C;         // +0x0C
-        u32                              muColourMode;         // +0x10  RenderTargetMode
-        u32                              muDepthStencilMode;   // +0x14  RenderTargetMode
+        RenderTargetMode                              muColourMode;         // +0x10  RenderTargetMode
+        RenderTargetMode                              muDepthStencilMode;   // +0x14  RenderTargetMode
         u8                               mu8HasColour;         // +0x18: use depth/stencil as texture
         u8                               mu8NumSections;        // +0x19
         renderengine::RenderTargetState* mpSection0State;      // +0x1C  CreateStates' section-0 state

@@ -8834,25 +8834,20 @@ void ModeManager::HandleNewHostEvent(
     }
 
     // The runner is the one blue-team car. The post-increment carries the in-loop range assert.
-    ::EActiveRaceCarIndex leRunnerIndex = ::E_ACTIVE_RACE_CAR_INDEX_0;
-    for (; leRunnerIndex < ::E_ACTIVE_RACE_CAR_INDEX_COUNT; leRunnerIndex++)
+    for (::EActiveRaceCarIndex leRunnerIndex = ::E_ACTIVE_RACE_CAR_INDEX_0;
+         leRunnerIndex < ::E_ACTIVE_RACE_CAR_INDEX_COUNT; leRunnerIndex++)
     {
         const CarData* lpCarData = mScoringSystem.GetCarData(leRunnerIndex);
         if (lpCarData != NULL && lpCarData->GetTeam() == GameStateModuleIO::E_PLAYER_TEAM_BLUE_TEAM)
         {
+            if (leRunnerIndex != ::E_ACTIVE_RACE_CAR_INDEX_INVALID &&
+                mScoringSystem.GetPlayerDisconnected(leRunnerIndex))
+            {
+                mOnlineBurningHomeRun.PickNewBurningHomeRunRunner(lpActiveRaceCarOutput,
+                                                                  lpOutputBuffer->GetGameActionQueue());
+            }
             break;
         }
-    }
-    if (leRunnerIndex >= ::E_ACTIVE_RACE_CAR_INDEX_COUNT)
-    {
-        return;
-    }
-
-    if (leRunnerIndex != ::E_ACTIVE_RACE_CAR_INDEX_INVALID &&
-        mScoringSystem.GetPlayerDisconnected(leRunnerIndex))
-    {
-        mOnlineBurningHomeRun.PickNewBurningHomeRunRunner(lpActiveRaceCarOutput,
-                                                          lpOutputBuffer->GetGameActionQueue());
     }
 }
 

@@ -67,6 +67,44 @@ namespace renderengine
         ProgramVariableHandle m_handle;
     };
 
+    // DecFIGS device.h:585/:671 supplies the renderer parameter API.
+    // ARTIST RenderTarget::Begin 0x823F92B8?0x823F9328 passes these native
+    // floating viewport and rectangle layouts to the D3D calls.
+    struct ViewportParameters : D3DVIEWPORTF9
+    {
+        ViewportParameters()
+        {
+            MinZ = 0.0f;
+            MaxZ = 1.0f;
+            Flags = 0;
+            SetRectangle(0, 0, 0, 0);
+        }
+
+        void SetRectangle(u32 luX, u32 luY, u32 luWidth, u32 luHeight)
+        {
+            X = static_cast<f32>(luX);
+            Y = static_cast<f32>(luY);
+            Width = static_cast<f32>(luWidth);
+            Height = static_cast<f32>(luHeight);
+        }
+    };
+
+    struct ScissorRectParameters : RECT
+    {
+        ScissorRectParameters() { SetRectangle(0, 0, 0, 0); }
+
+        void SetRectangle(u32 luX, u32 luY, u32 luWidth, u32 luHeight)
+        {
+            left = luX;
+            top = luY;
+            right = luX + luWidth;
+            bottom = luY + luHeight;
+        }
+    };
+
+    CGS_STATIC_ASSERT((sizeof(ViewportParameters) == 0x1C), "ARTIST viewport parameter size");
+    CGS_STATIC_ASSERT((sizeof(ScissorRectParameters) == 0x10), "ARTIST scissor parameter size");
+
     class Device
     {
     public:

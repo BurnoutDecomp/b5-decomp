@@ -61,7 +61,7 @@ namespace CgsSystem
         s32  GetDifferenceInSeconds(const DateAndTime& lDateAndTime) const; // 0x828E12E0
 
         // --- inlined-only in the X360 build; declared from DWARF, bodied for linkage ---
-        void SetLocal(bool lbIsLocal);
+        void SetLocal(bool lbIsLocal) { mbIsLocal = lbIsLocal; }
         void Clear();
         bool IsLocal() const;
         bool IsZero() const;

@@ -4,23 +4,10 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (range-guarded operator++)
 
-// SOURCE LINES. The two enums sit on their DWARF lines (EActiveRaceCarIndex h:26,
-// EGlobalRaceCarIndex h:43), and each one's post-increment is written on a single line
-// right after it (h:39, h:84): DecFIGS gives each operator and its leOldEnumIndex local
-// the one line of an enum-operator macro expansion (LegacySrc CgsGuiModule.h:260 shows the
-// same expansion on one line), so every inlined copy's range assert carries that line.
-// ARTIST: operator++(EActiveRaceCarIndex&,int) @0x821F1DB8 and its inlined copies fire
-// "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT" with li r5,0x27 (39), e.g.
-// PlayerPositionTableComponent::FillOutInActiveRaceCarOrder @0x82421B54; the global one
-// fires with li r5,0x54 (84), e.g. ModeManager::ResetNextLandmarks @0x82328550. The guard
-// is non-fatal: the saved old value is returned even on a failed guard. Only the
-// X360-attested post-increments are written (the macro's pre-increment, decrement and
-// Start/EndEnumStage siblings have no X360 ledger row).
-
-
-
-
-
+// ARTIST's postfix index guards return the old index after a failed assert.
+// Matching builds preserve the original filename and lines at 0x821F1DF4
+// and 0x8232855C, including copies inlined into player and mode handling.
+#define KAC_BURNOUT_CONSTANTS_ARTIST_FILE "..\\..\\..\\GameSource\\BurnoutConstants.h"
 
 // Slot index of an active race car (the local player + rivals), or INVALID.
 enum EActiveRaceCarIndex : s32
@@ -36,7 +23,15 @@ enum EActiveRaceCarIndex : s32
     E_ACTIVE_RACE_CAR_INDEX_7       = 7,
     E_ACTIVE_RACE_CAR_INDEX_COUNT   = 8
 };
-inline EActiveRaceCarIndex operator++(EActiveRaceCarIndex& leEnumIndex, int) { const EActiveRaceCarIndex leOldEnumIndex = leEnumIndex; leEnumIndex = static_cast<EActiveRaceCarIndex>(static_cast<s32>(leEnumIndex) + 1); CGS_ASSERT(leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT, "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT"); return leOldEnumIndex; }
+inline EActiveRaceCarIndex operator++(EActiveRaceCarIndex& leEnumIndex, int)
+{
+    const EActiveRaceCarIndex leOldEnumIndex = leEnumIndex;
+    leEnumIndex = static_cast<EActiveRaceCarIndex>(static_cast<s32>(leEnumIndex) + 1);
+    CGS_ASSERT_AT(leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                  "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT",
+                  KAC_BURNOUT_CONSTANTS_ARTIST_FILE, 39);
+    return leOldEnumIndex;
+}
 
 // Global slot index of a race car across all modes (the player + up to 34 rivals/traffic
 // racers tracked by the global output interface), or INVALID. DWARF: 0..34, COUNT = 35.
@@ -81,7 +76,17 @@ enum EGlobalRaceCarIndex : s32
     E_GLOBAL_RACE_CAR_INDEX_COUNT   = 35
 };
 
-inline EGlobalRaceCarIndex operator++(EGlobalRaceCarIndex& leEnumIndex, int) { const EGlobalRaceCarIndex leOldEnumIndex = leEnumIndex; leEnumIndex = static_cast<EGlobalRaceCarIndex>(static_cast<s32>(leEnumIndex) + 1); CGS_ASSERT(leEnumIndex <= E_GLOBAL_RACE_CAR_INDEX_COUNT, "leEnumIndex <= E_GLOBAL_RACE_CAR_INDEX_COUNT"); return leOldEnumIndex; }
+inline EGlobalRaceCarIndex operator++(EGlobalRaceCarIndex& leEnumIndex, int)
+{
+    const EGlobalRaceCarIndex leOldEnumIndex = leEnumIndex;
+    leEnumIndex = static_cast<EGlobalRaceCarIndex>(static_cast<s32>(leEnumIndex) + 1);
+    CGS_ASSERT_AT(leEnumIndex <= E_GLOBAL_RACE_CAR_INDEX_COUNT,
+                  "leEnumIndex <= E_GLOBAL_RACE_CAR_INDEX_COUNT",
+                  KAC_BURNOUT_CONSTANTS_ARTIST_FILE, 84);
+    return leOldEnumIndex;
+}
+
+#undef KAC_BURNOUT_CONSTANTS_ARTIST_FILE
 
 namespace BrnGameState
 {

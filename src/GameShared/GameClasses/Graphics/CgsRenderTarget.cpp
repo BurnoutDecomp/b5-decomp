@@ -242,15 +242,12 @@ void CgsRenderTarget::SetRenderTargetState(u32 luSection)
     const renderengine::RenderTargetState* state = mpRenderTarget->mpSection0State;
     if (!state) state = renderengine::Device::GetDefaultRenderTargetState();
     shadow::Device::SetState(state);
-    D3DVIEWPORTF9 viewport;
-    viewport.X = 0.0f; viewport.Y = 0.0f;
-    viewport.Width = static_cast<f32>(mu32MaxWidth);
-    viewport.Height = static_cast<f32>(mu32MaxHeight);
-    viewport.MinZ = 0.0f; viewport.MaxZ = 1.0f; viewport.Flags = 0;
+    renderengine::ViewportParameters viewport;
+    viewport.SetRectangle(0, 0, mu32MaxWidth, mu32MaxHeight);
     D3DDevice_SetViewportF(gpD3DDevice, &viewport);
-    RECT scissor;
-    scissor.left = 0; scissor.top = 0;
-    scissor.right = mu32MaxWidth; scissor.bottom = mu32MaxHeight;
+
+    renderengine::ScissorRectParameters scissor;
+    scissor.SetRectangle(0, 0, mu32MaxWidth, mu32MaxHeight);
     D3DDevice_SetScissorRect(gpD3DDevice, &scissor);
 }
 

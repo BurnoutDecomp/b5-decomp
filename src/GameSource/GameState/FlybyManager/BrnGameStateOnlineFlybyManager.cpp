@@ -336,12 +336,13 @@ void OnlineFlybyManager::CalculateNewOrOngoingRivalryRating(FlybyManager::RivalR
 
     // The relationship's +112 word (miCurrentScoreForPlayersPointOfView) decides "new" (level ->
     // +9) vs "ongoing" (someone ahead -> +8).
-    if (lpRelationship->IsCurrentRelationshipEqual())
-        lpRating->miRivalWeighting += KI_WEIGHTING_NEW_RELATIONSHIP;
-    else
+    if (!lpRelationship->IsCurrentRelationshipEqual())
         lpRating->miRivalWeighting += KI_WEIGHTING_LIVE_RELATIONSHIP;
+    else
+        lpRating->miRivalWeighting += KI_WEIGHTING_NEW_RELATIONSHIP;
 
     CgsSystem::DateAndTime lNow;
+    lNow.SetLocal(false); // ARTIST 0x823580B4 sets UTC before Update.
     lNow.Update();
 
     CGS_ASSERT(lpRelationship->Validate(), CGS_ASSERT_MESSAGE_AT("lpRelationship->Validate()", CGS_ARTIST_FILE, 557));

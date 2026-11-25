@@ -207,11 +207,6 @@ namespace CgsSystem
 
     // --- inlined-only in the X360 build (no standalone address); behaviour from DWARF ---
 
-    void DateAndTime::SetLocal(bool lbIsLocal)
-    {
-        mbIsLocal = lbIsLocal;
-    }
-
     void DateAndTime::Clear()
     {
         mFileTime.muLowDateTime  = 0;

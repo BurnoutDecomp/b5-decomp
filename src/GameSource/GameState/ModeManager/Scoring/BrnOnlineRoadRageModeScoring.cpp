@@ -103,7 +103,8 @@ void OnlineRoadRageModeScoring::WriteDataToOutput(GameStateModuleIO::OnlineScori
 void OnlineRoadRageModeScoring::InitialisePlayerArrayData(RedTeamSortData* lpaRedRows,
                                                           BlueTeamSortData* lpaBlueRows)
 {
-    for (s32 leEnumIndex = 0; leEnumIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++leEnumIndex)
+    for (EActiveRaceCarIndex leEnumIndex = E_ACTIVE_RACE_CAR_INDEX_0;
+         leEnumIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT; leEnumIndex++)
     {
         BlueTeamSortData& lBlue = lpaBlueRows[leEnumIndex];
         lBlue.mfDistanceToFinish = 0.0f;
@@ -115,8 +116,6 @@ void OnlineRoadRageModeScoring::InitialisePlayerArrayData(RedTeamSortData* lpaRe
         lRed.mNetworkPlayerID  = -1;
         lRed.miEliminations    = 0;
 
-        CGS_ASSERT(leEnumIndex + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   CGS_ASSERT_MESSAGE_AT("leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE_BURNOUTCONSTANTS, 39));
     }
 }
 

@@ -78,20 +78,6 @@ CgsID ChallengeListEntryAction::GetRoadID( uint8_t lu8Index ) const
     return maLocationData[ lu8Index ].mRoadID;
 }
 
-// GetTargetValue @ 0x8230EE98  (DWARF: int32_t GetTargetValue(int32_t) const,
-// ChallengeListEntry.h:179)  lwzx == 32-bit read at 0x34+4*index.
-int32_t ChallengeListEntryAction::GetTargetValue( int32_t liTargetIndex ) const
-{
-    CGS_ASSERT( liTargetIndex >= 0,
-        CGS_ASSERT_MESSAGE_AT("liTargetIndex >= 0", KAC_ARTIST_ASSERT_FILE, 694 /* ARTIST 0x8230EEC4 */));
-    CGS_ASSERT( liTargetIndex < KI_MAX_TARGETS_PER_CHALLENGE_ACTION,
-        CGS_ASSERT_MESSAGE_AT(
-            "liTargetIndex < KI_MAX_TARGETS_PER_CHALLENGE_ACTION",
-            KAC_ARTIST_ASSERT_FILE, 695 /* ARTIST 0x8230EEE8 */));
-
-    return maiTargetValue[ liTargetIndex ];
-}
-
 // GetTimeLimit @ 0x8231BD80  (DWARF: f32 GetTimeLimit() const, ChallengeListEntry.h:169)
 // lfs 0x40 == mfTimeLimit.
 f32 ChallengeListEntryAction::GetTimeLimit() const

@@ -601,6 +601,20 @@ inline bool ChallengeListEntryAction::HasTimeLimit() const
     return mfTimeLimit > 0.0f;
 }
 
+// GetTargetValue @ 0x8230EE98  (DWARF: int32_t GetTargetValue(int32_t) const,
+// ChallengeListEntry.h:179)  lwzx == 32-bit read at 0x34+4*index.
+inline int32_t ChallengeListEntryAction::GetTargetValue( int32_t liTargetIndex ) const
+{
+    CGS_ASSERT( liTargetIndex >= 0,
+        CGS_ASSERT_MESSAGE_AT("liTargetIndex >= 0", CGS_ARTIST_CHALLENGELISTENTRY_FILE, 694 /* ARTIST 0x8230EEC4 */));
+    CGS_ASSERT( liTargetIndex < KI_MAX_TARGETS_PER_CHALLENGE_ACTION,
+        CGS_ASSERT_MESSAGE_AT(
+            "liTargetIndex < KI_MAX_TARGETS_PER_CHALLENGE_ACTION",
+            CGS_ARTIST_CHALLENGELISTENTRY_FILE, 695 /* ARTIST 0x8230EEE8 */));
+
+    return maiTargetValue[ liTargetIndex ];
+}
+
 } // namespace BrnResource
 
 #undef CGS_ARTIST_CHALLENGELISTENTRY_FILE
