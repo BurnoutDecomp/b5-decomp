@@ -59,44 +59,27 @@ namespace
         }
     };
 
-    // The blend-state factor word the asm splats across all four channels (0x07060706); a single
-    // packed RGBA blend-factor descriptor word the X360 GPU consumes.
-    const u32 KU_BLEND_FACTOR_WORD = 0x07060706u;
 }
 
 // ---------------------------------------------------------------------------------------------------
 // CgsGraphics::ImRendererBase::ConstructNoAlphaTestBlendState  @ 0x827ED200
-// Build the "no alpha test" blend state: the standard premultiplied blend with alpha-test disabled
-// (the asm differs from the no-blend-no-alpha-test build only by maState[10] = 30 and the leading
-// custom-blend-factor flag = 1).
+// Enable source-alpha blending with alpha testing disabled.
 // ---------------------------------------------------------------------------------------------------
 const BlendState* ImRendererBase::ConstructNoAlphaTestBlendState(rw::IResourceAllocator* lpAllocator)
 {
-    renderengine::BlendStateParameters lParameters;
-
-    lParameters.maBlendFactor[0] = KU_BLEND_FACTOR_WORD;
-    lParameters.maBlendFactor[1] = KU_BLEND_FACTOR_WORD;
-    lParameters.maBlendFactor[2] = KU_BLEND_FACTOR_WORD;
-    lParameters.maBlendFactor[3] = KU_BLEND_FACTOR_WORD;
-    lParameters.muState15 = 7;          // v5[4]
-    lParameters.muState4  = 15;         // v5[5]
-    lParameters.muState5  = 15;         // v5[6]
-    lParameters.muState6  = 15;         // v5[7]
-    lParameters.muState7  = 15;         // v5[8]
-    lParameters.muState8  = 135;        // v5[9]  (0x87)
-    lParameters.muState17 = 30;         // v5[10] (0x1E)
-    lParameters.muState9  = 0xFFFFFFFFu;// v5[11] (-1)
-    lParameters.mbHasCustomBlendFactors = 1;  // v6
-    lParameters.mbState10 = 0;
-    lParameters.mbState11 = 0;
-    lParameters.mbState12 = 0;
-    lParameters.mbState13 = 0;
-    lParameters.mbState14 = 0;
-    lParameters.mbState16 = 0;
+    renderengine::BlendState::Parameters lParameters;
+    lParameters.SetBlendEnable(true);
+    const renderengine::RenderTargetState::TargetID target = renderengine::RenderTargetState::TARGETID_COLOR0;
+    lParameters.SetSource(target, D3DBLEND_SRCALPHA);
+    lParameters.SetDestination(target, D3DBLEND_INVSRCALPHA);
+    lParameters.SetOperation(target, D3DBLENDOP_ADD);
+    lParameters.SetAlphaTestEnable(false);
+    lParameters.SetAlphaTestFunction(D3DCMP_ALWAYS);
+    lParameters.SetAlphaTestReference(30);
 
     const rw::ResourceDescriptor descriptor =
         renderengine::BlendState::GetResourceDescriptor(lParameters);
-    const rw::Resource resource = lpAllocator->DoAllocate(descriptor, 0);
+    const rw::Resource resource = lpAllocator->Allocate(descriptor, 0);
     return renderengine::BlendState::Initialize(resource, lParameters);
 }
 
@@ -106,31 +89,14 @@ const BlendState* ImRendererBase::ConstructNoAlphaTestBlendState(rw::IResourceAl
 // ---------------------------------------------------------------------------------------------------
 const BlendState* ImRendererBase::ConstructNoBlendNoAlphaTestBlendState(rw::IResourceAllocator* lpAllocator)
 {
-    renderengine::BlendStateParameters lParameters;
-
-    lParameters.maBlendFactor[0] = KU_BLEND_FACTOR_WORD;
-    lParameters.maBlendFactor[1] = KU_BLEND_FACTOR_WORD;
-    lParameters.maBlendFactor[2] = KU_BLEND_FACTOR_WORD;
-    lParameters.maBlendFactor[3] = KU_BLEND_FACTOR_WORD;
-    lParameters.muState15 = 7;          // v5[4]
-    lParameters.muState4  = 15;         // v5[5]
-    lParameters.muState5  = 15;         // v5[6]
-    lParameters.muState6  = 15;         // v5[7]
-    lParameters.muState7  = 15;         // v5[8]
-    lParameters.muState8  = 135;        // v5[9]  (0x87)
-    lParameters.muState17 = 0;          // v5[10]
-    lParameters.muState9  = 0xFFFFFFFFu;// v5[11] (-1)
-    lParameters.mbHasCustomBlendFactors = 0;  // v6
-    lParameters.mbState10 = 0;
-    lParameters.mbState11 = 0;
-    lParameters.mbState12 = 0;
-    lParameters.mbState13 = 0;
-    lParameters.mbState14 = 0;
-    lParameters.mbState16 = 0;
+    renderengine::BlendState::Parameters lParameters;
+    lParameters.SetBlendEnable(false);
+    lParameters.SetAlphaTestEnable(false);
+    lParameters.SetAlphaTestFunction(D3DCMP_ALWAYS);
 
     const rw::ResourceDescriptor descriptor =
         renderengine::BlendState::GetResourceDescriptor(lParameters);
-    const rw::Resource resource = lpAllocator->DoAllocate(descriptor, 0);
+    const rw::Resource resource = lpAllocator->Allocate(descriptor, 0);
     return renderengine::BlendState::Initialize(resource, lParameters);
 }
 
@@ -172,13 +138,12 @@ const DepthStencilState* ImRendererBase::ConstructDepthStencilState(
     renderengine::DepthStencilState::Function leFunction)
 {
     renderengine::DepthStencilState::Parameters lParameters;
-
-    lParameters.mbDepthTestEnable = lbDepthTestEnable;
-    lParameters.mbDepthWriteEnable = lbDepthWriteEnable;
-    lParameters.muFunction = leFunction;
+    lParameters.SetDepthWriteEnable(lbDepthWriteEnable);
+    lParameters.SetDepthFunction(leFunction);
+    lParameters.SetDepthEnable(lbDepthTestEnable);
 
     const rw::Resource resource = lpAllocator->Allocate(
-        renderengine::DepthStencilState::GetResourceDescriptor(lParameters), NULL);
+        renderengine::DepthStencilState::GetResourceDescriptor(lParameters), 0);
     return renderengine::DepthStencilState::Initialize(resource, lParameters);
 }
 

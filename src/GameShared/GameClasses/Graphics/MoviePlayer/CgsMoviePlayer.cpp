@@ -225,7 +225,7 @@ namespace CgsGraphics
         switch (mePlayerState)
         {
         case E_RW_MOVIE_PLAYER_NULL:
-            return true;
+            break;
 
         case E_RW_MOVIE_PLAYER_CONSTRUCTED:
         case E_RW_MOVIE_PLAYER_OPENING_FILE:
@@ -247,23 +247,23 @@ namespace CgsGraphics
             mePlayerState = E_RW_MOVIE_PLAYER_CLOSING_FILE;
             // Fall through to poll for closure.
         case E_RW_MOVIE_PLAYER_CLOSING_FILE:
+        {
             if (mMovieStream.GetStatus() != CgsFileSystem::StreamDeviceDiskRead::E_STATUS_CLOSED)
                 return false;
             ReleaseResources();
+            const bool lbReleased = mePlayerState == E_RW_MOVIE_PLAYER_NULL;
             mpRwAllocator = 0;
-            CGS_ASSERT(mePlayerState == E_RW_MOVIE_PLAYER_NULL,
-                       "mePlayerState == E_RW_MOVIE_PLAYER_NULL");
-            return true;
+            CGS_ASSERT_AT(lbReleased, "mePlayerState == E_RW_MOVIE_PLAYER_NULL",
+                CGS_ARTIST_MOVIE_PLAYER_CPP_FILE, 359);
+            break;
+        }
 
         default:
-            CgsDev::Assert::BeginAssert();
-            CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer,
-                                      CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lMessage << "Unhandled state " << static_cast<s32>(mePlayerState) << "\n";
-            CgsDev::Assert::FireAssert(lMessage.GetBuffer(), __FILE__, __LINE__);
-            CgsDev::Assert::EndAssert();
+            CGS_ASSERT_STREAM_AT(false, "Unhandled state " << static_cast<s32>(mePlayerState) << "\n",
+                CGS_ARTIST_MOVIE_PLAYER_CPP_FILE, 370);
             return false;
         }
+        return true;
     }
 
     // ARTIST 0x827EEFB0

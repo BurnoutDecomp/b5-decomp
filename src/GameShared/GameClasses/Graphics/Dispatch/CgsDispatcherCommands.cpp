@@ -354,12 +354,12 @@ Vector4** AddShaderTechniqueConstantsToDispatchBin(DispatchBin* lpBin,
                                                    bool lbZOnly)
 {
     const ShaderTechnique& shader = *lpTechnique->mpShaderTechnique;
-    const ShaderConstantsExternal& objectVertex = shader.mExternalObjectVertexShaderConstants;
     const ShaderConstantsExternal& globalVertex = shader.mExternalGlobalVertexShaderConstants;
+    const ShaderConstantsExternal& objectVertex = shader.mExternalObjectVertexShaderConstants;
     const ShaderConstantsExternal& objectPixel = shader.mExternalObjectPixelShaderConstants;
     const ShaderConstantsExternal& globalPixel = shader.mExternalGlobalPixelShaderConstants;
     const bool lbIncludePixel = !lbZOnly;
-    u32 count = objectVertex.GetNumConstantInstances() + globalVertex.GetNumConstantInstances();
+    u32 count = globalVertex.GetNumConstantInstances() + objectVertex.GetNumConstantInstances();
     if (lbIncludePixel)
     {
         const u32 pixelCount = globalPixel.GetNumConstantInstances() + objectPixel.GetNumConstantInstances();
@@ -431,10 +431,10 @@ bool DrawRenderable::AddToBin(const Renderable* lpRenderable, DispatchFrame* lpF
     trailer->mpLastRenderableMesh = lpRenderable->mppMeshes[lpRenderable->mu16NumMeshes - 1];
 
     mShaderConstantTable.AddDirtyConstantsToDispatchBin(lpAllocatedHeaderSpace);
+    lpCmd->SetupCommandWord(E_DRAWRENDERABLE, luNumConstantsRequired);
     lpCmd->muWords[2] = reinterpret_cast<u32>(lpRenderable);
     lpCmd->muWords[3] = reinterpret_cast<u32>(trailer);
     const u32 luLists = (static_cast<u32>(li8OpaqueList) << 8) | static_cast<u32>(li8TransparentList);
-    lpCmd->SetupCommandWord(E_DRAWRENDERABLE, luNumConstantsRequired);
     lpCmd->muWords[1] = (((luLists << 8) | lu8Technique) << 8) | lbFrustumTest;
     return true;
 }

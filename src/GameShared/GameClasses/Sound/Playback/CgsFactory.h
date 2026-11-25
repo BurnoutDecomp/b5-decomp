@@ -59,8 +59,8 @@ public:
     // name + environment, and register with the environment (assert success).
     Factory(Name aName, Environment& arEnvironment);
 
-    // @ 0x826AD3C8 (DWARF h:85). Assert a zero refcount at teardown.
-    virtual ~Factory();
+    // CgsFactory.h:85. Object performs the refcount check at teardown.
+    virtual ~Factory() {}
 
     // @ 0x826AD450 (DWARF h:317). Tear the factory down and hand its carve back
     // through the owning environment's allocator. Bodied in CgsFactory.cpp.

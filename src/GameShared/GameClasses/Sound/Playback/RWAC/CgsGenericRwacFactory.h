@@ -111,6 +111,7 @@ public:
     // registration pass (the 25 RegisterPlugInRunTime calls + the standard
     // decoder set; see the .cpp).
     GenericRwacFactory(Environment& arEnvironment, const GenericRwacFactorySpec& akrSpec);
+    virtual ~GenericRwacFactory();
 
     // The nested registry (console +0x401C), by name -- the GetRwacFactoryRegistry
     // accessor (CgsSoundPlaybackModule.h:99) reads it off the generic Factory*.

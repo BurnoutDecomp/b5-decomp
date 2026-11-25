@@ -412,10 +412,9 @@ bool EAStringC::EqualNoCaseHash(const EAStringC& strText) const
 }
 
 // ---------------------------------------------------------------------------
-// Memory bring-up.  PS3 External 0x7DEB84 / 0x7DEB90.
+// Clear the memory callbacks.
 // ---------------------------------------------------------------------------
-void EAStringC::MemInitialize(AptUserFunctions* const callbacks) { sAptCallbacks = callbacks; }
-void EAStringC::MemUninitialize()                                { sAptCallbacks = 0; }
+void EAStringC::MemUninitialize() { sAptCallbacks = 0; }
 
 // ===========================================================================
 // Text-manipulation suite (the Apt-driven path: substring / search / append /

@@ -35,24 +35,20 @@ struct AptCIH;             // SDKs/EATech/include/Apt/AptCIH.h (the movie-clip s
 struct AptCharacterInst;   // SDKs/EATech/include/Apt/AptCharacterInst.h
 class EAStringC;          // SDKs/EATech/include/Apt/AptString/EAString.h (path/name buffers)
 
-// Runtime-only AptActionInterpreter init parameters -- the block initialize() reads.
-// The host (AptUpdateInitialize) hands the console-layout parameter block through
-// unchanged, so it is deliberately modelled by its console field offsets. DEFINED
-// here (was a TU-local struct in AptActionInterpreterStackOps.cpp; promoted to the
-// header so the GUI Apt host -- BrnGuiAptRuntime.cpp -- can construct one to call
-// AptActionInterpreter::initialize, the X360 AptUpdateInitialize's job). Layout is
-// byte-identical to the prior local definition (console offsets 0x20/0x24/0x40).
+// Apt.h SDK initialization parameters. The observed fields retain their ARTIST
+// offsets within the complete 68-byte parameter block.
 struct AptInitParmsT
 {
-    uint8_t  mPad00[0x20];
-    int32_t  iStackSize;        // [c:0x20] the operand-stack capacity
-    int32_t  iCallStackDepth;   // [c:0x24] the four call-depth stacks' capacity
-    uint8_t  mPad28[0x30 - 0x28];
-    int32_t  iRegisterCount;    // [c:0x30] the AS register-block slot capacity (the
-                                //   X360 InitializeStaticData @0x82AE26C0 reads
-                                //   *(parms+48); default config word[12] == 128)
+    uint8_t  mPad00[0x18];
+    int32_t  iMaxNewMovieClipsPerFrame;
+    uint8_t  mPad1C[4];
+    int32_t  iStackSize;
+    int32_t  iCallStackDepth;
+    int32_t  iDeferedVectorSize;
+    int32_t  iStringPoolSize;
+    int32_t  iRegisterCount;
     uint8_t  mPad34[0x40 - 0x34];
-    uint8_t  mbSkipTraceBytecodes; // [c:0x40] -> mbSkipTraceBytecodes
+    uint8_t  mbSkipTraceBytecodes;
 };
 
 class AptActionInterpreter

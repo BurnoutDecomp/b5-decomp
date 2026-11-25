@@ -937,22 +937,25 @@ namespace CgsResource
     }
 
     // 828FE0F8: unconditional deletion (the caller already owns the lifetime decision).
-    void Pool::DeleteEntry(s16 liIndex)
+    void Pool::DeleteEntry(s16 liEntryIndex)
     {
-        CGS_ASSERT(mbIsValid, "Pool is not valid\n");
-        Entry* lpEntry = &mpResourceEntries[liIndex];
-        mHashTable.RemoveEntry(lpEntry->mID);
-        FreeMemoryForResource(lpEntry);
-        FreeResourceEntry(liIndex);
+        CGS_ASSERT_STREAM_AT(mbIsValid, "Pool is not valid\n", CGS_ARTIST_POOL_FILE, 1339);
+        if (_miPoolDeleteHashEntryPerfMon > -1)
+            CgsDev::PerfMonCpu::StartMonitor(_miPoolDeleteHashEntryPerfMon);
+        mHashTable.RemoveEntry(mpResourceEntries[liEntryIndex].mID);
+        if (_miPoolDeleteHashEntryPerfMon > -1)
+            CgsDev::PerfMonCpu::StopMonitor(_miPoolDeleteHashEntryPerfMon);
+        FreeMemoryForResource(&mpResourceEntries[liEntryIndex]);
+        FreeResourceEntry(liEntryIndex);
     }
 
     // 828FE1F0: live updates re-resolve only fully loaded resources.
     void Pool::ResolveAllResources()
     {
-        CGS_ASSERT(mbIsValid, "Pool is not valid\n");
-        for (u32 i = 0; i < muMaxResources; ++i)
-            if (mpx8ResourceStatuses[i] & 2)
-                ResolveImportsForEntry(i);
+        CGS_ASSERT_STREAM_AT(mbIsValid, "Pool is not valid\n", CGS_ARTIST_POOL_FILE, 1583);
+        for (u16 luUsedIndex = 0; luUsedIndex < muMaxResources; ++luUsedIndex)
+            if (mpx8ResourceStatuses[luUsedIndex] & 2u)
+                ResolveImportsForEntry(luUsedIndex);
     }
 
     // 828FEE68: keep the entry and its intrusive pointer ring during live replacement.
@@ -1369,40 +1372,62 @@ namespace CgsResource
 
     // ARTIST 828ED298 / 828ED3F8: change only imports that participate in the
     // current scratch batch. Already loaded unrelated imports remain untouched.
+    inline BundleV2::ImportEntry* Pool::GetResourceEntryImports(u16 luIndex)
+    {
+        Entry& lrEntry = mpResourceEntries[luIndex];
+        return reinterpret_cast<BundleV2::ImportEntry*>(
+            reinterpret_cast<uintptr_t>(lrEntry.mPtr.mResourceMemory.m_baseResources[E_MEMTYPE_MAINMEMORY])
+            + lrEntry.muImportTableOffset);
+    }
+
     void Pool::ResolveAllTempScratchResources()
     {
-        CGS_ASSERT(mbIsValid, "Pool is not valid\n");
-        for (u32 lu = 0; lu < muMaxResources; ++lu)
+        CGS_ASSERT_STREAM_AT(mbIsValid, "Pool is not valid\n", CGS_ARTIST_POOL_FILE, 1616);
+        for (u16 luUsedIndex = 0; luUsedIndex < muMaxResources; ++luUsedIndex)
         {
-            if ((mpx8ResourceStatuses[lu] & 2u) == 0 || mpiResourceImportCounts[lu] <= 0)
+            if ((mpx8ResourceStatuses[luUsedIndex] & 2u) == 0 || GetEntryImportCount(luUsedIndex) <= 0)
                 continue;
-            Entry& lrEntry = mpResourceEntries[lu];
-            const BundleV2::ImportEntry* lpImports = reinterpret_cast<const BundleV2::ImportEntry*>(
-                reinterpret_cast<uintptr_t>(lrEntry.mPtr.mResourceMemory.m_baseResources[0]) + lrEntry.muImportTableOffset);
-            if (lpImports == 0)
+
+            BundleV2::ImportEntry* lpImport = GetResourceEntryImports(luUsedIndex);
+            if (!lpImport)
                 continue;
-            for (s32 liImport = 0; liImport < mpiResourceImportCounts[lu]; ++liImport)
+            const s32 liNumImports = GetEntryImportCount(luUsedIndex);
+            for (s32 liImportIndex = 0; liImportIndex < liNumImports; ++liImportIndex, ++lpImport)
             {
-                void* lpTarget = mpCurrentScratchPool->GetTempAddress(lpImports[liImport].mResourceId);
+                void* lpImportAddress = mpCurrentScratchPool->GetTempAddress(lpImport->mResourceId);
+                if (lpImportAddress)
+                {
+                    void** lpResolve = reinterpret_cast<void**>(
+                        reinterpret_cast<uintptr_t>(mpResourceEntries[luUsedIndex].mPtr.mResourceMemory.m_baseResources[E_MEMTYPE_MAINMEMORY])
+                        + lpImport->muOffset);
+                    *lpResolve = lpImportAddress;
+                }
             }
         }
     }
 
     void Pool::ResolveAllDestScratchResources()
     {
-        CGS_ASSERT(mbIsValid, "Pool is not valid\n");
-        for (u32 lu = 0; lu < muMaxResources; ++lu)
+        CGS_ASSERT_STREAM_AT(mbIsValid, "Pool is not valid\n", CGS_ARTIST_POOL_FILE, 1670);
+        for (u16 luUsedIndex = 0; luUsedIndex < muMaxResources; ++luUsedIndex)
         {
-            if ((mpx8ResourceStatuses[lu] & 2u) == 0 || mpiResourceImportCounts[lu] <= 0)
+            if ((mpx8ResourceStatuses[luUsedIndex] & 2u) == 0 || GetEntryImportCount(luUsedIndex) <= 0)
                 continue;
-            Entry& lrEntry = mpResourceEntries[lu];
-            const BundleV2::ImportEntry* lpImports = reinterpret_cast<const BundleV2::ImportEntry*>(
-                reinterpret_cast<uintptr_t>(lrEntry.mPtr.mResourceMemory.m_baseResources[0]) + lrEntry.muImportTableOffset);
-            if (lpImports == 0)
+
+            BundleV2::ImportEntry* lpImport = GetResourceEntryImports(luUsedIndex);
+            if (!lpImport)
                 continue;
-            for (s32 liImport = 0; liImport < mpiResourceImportCounts[lu]; ++liImport)
+            const s32 liNumImports = GetEntryImportCount(luUsedIndex);
+            for (s32 liImportIndex = 0; liImportIndex < liNumImports; ++liImportIndex, ++lpImport)
             {
-                void* lpTarget = mpCurrentScratchPool->GetDestAddress(lpImports[liImport].mResourceId);
+                void* lpImportAddress = mpCurrentScratchPool->GetDestAddress(lpImport->mResourceId);
+                if (lpImportAddress)
+                {
+                    void** lpResolve = reinterpret_cast<void**>(
+                        reinterpret_cast<uintptr_t>(mpResourceEntries[luUsedIndex].mPtr.mResourceMemory.m_baseResources[E_MEMTYPE_MAINMEMORY])
+                        + lpImport->muOffset);
+                    *lpResolve = lpImportAddress;
+                }
             }
         }
     }

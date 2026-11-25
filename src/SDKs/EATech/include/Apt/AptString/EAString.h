@@ -207,7 +207,7 @@ public:
     int         Size() const;
     void        Reserve(int32_t iSize);
 
-    static void MemInitialize(AptUserFunctions* const callbacks);
+    static void MemInitialize(AptUserFunctions* const callbacks) { sAptCallbacks = callbacks; }
     static void MemUninitialize();
 
     void Invalidate();

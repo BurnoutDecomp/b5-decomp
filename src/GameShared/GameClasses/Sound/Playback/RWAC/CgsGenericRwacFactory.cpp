@@ -18,7 +18,8 @@
 // ============================================================================
 
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h"
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gxMessageFilterFlags debug stream
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "GameShared/GameClasses/Development/MessageSystem/CgsMessage.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // DoUpdate monitor
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacContent.h"
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacVoice.h"
@@ -315,6 +316,13 @@ GenericRwacFactory::GenericRwacFactory(Environment& arEnvironment,
         lpDecoderRegistry->RegisterStandardRunTimeDecoders();
         lpDecoderRegistry->RegisterDecoder(rw::audio::core::Pcm16BigDec::GetDecoderDesc());
     }   // ~RwacLock == System::Unlock (the console tail)
+}
+
+GenericRwacFactory::~GenericRwacFactory()
+{
+    using namespace CgsDev::Message;
+    if ((gxMessageFilterFlags & KX_FILTER_GLOBAL) != 0)
+        *CgsDev::Log::gpDebugPrint << "GenericRwacFactory::~GenericRwacFactory()\n";
 }
 
 void GenericRwacFactory::AddRegistry(Registry& arRegistry)

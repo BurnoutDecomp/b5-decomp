@@ -237,36 +237,36 @@ int Semaphore::Wait(const u32* pTimeoutAbsolute)
 // ARTIST 0x82B42B70. Publish permits and, where needed, wake kernel waiters.
 int Semaphore::Post(int iCount)
 {
-    volatile long* const lpCount = reinterpret_cast<volatile long*>(&mSemaphoreData.mnCount);
-    if (iCount <= 0)
-        return mSemaphoreData.mnCount;
-
-    if (mSemaphoreData.mbIntraProcess)
+    if (iCount > 0)
     {
-        MemoryBarrier();
-        if (mSemaphoreData.mnCancelCount > 0 && mSemaphoreData.mnCount < 0)
+        if (mSemaphoreData.mbIntraProcess)
         {
-            const long lCancelled = _InterlockedExchange(
-                reinterpret_cast<volatile long*>(&mSemaphoreData.mnCancelCount), 0);
-            mSemaphoreData.UpdateCancelCount(lCancelled);
+            MemoryBarrier();
+            if (mSemaphoreData.mnCancelCount > 0 && mSemaphoreData.mnCount < 0)
+            {
+                const long lCancelled = _InterlockedExchange(
+                    reinterpret_cast<volatile long*>(&mSemaphoreData.mnCancelCount), 0);
+                mSemaphoreData.UpdateCancelCount(lCancelled);
+            }
+
+            const long lPrevious = _InterlockedExchangeAdd(
+                reinterpret_cast<volatile long*>(&mSemaphoreData.mnCount), iCount);
+            if (lPrevious < 0)
+            {
+                const long lWaiting = -lPrevious;
+                const long lWake = iCount < lWaiting ? iCount : lWaiting;
+                ::ReleaseSemaphore(mSemaphoreData.mhSemaphore, lWake, 0);
+            }
+            return GetCount();
         }
 
-        const long lPrevious = _InterlockedExchangeAdd(lpCount, iCount);
-        if (lPrevious < 0)
+        volatile long* const lpCount = reinterpret_cast<volatile long*>(&mSemaphoreData.mnCount);
+        _InterlockedExchangeAdd(lpCount, iCount);
+        if (!::ReleaseSemaphore(mSemaphoreData.mhSemaphore, iCount, 0))
         {
-            const long lWaiting = -lPrevious;
-            const long lWake = iCount < lWaiting ? iCount : lWaiting;
-            ::ReleaseSemaphore(mSemaphoreData.mhSemaphore, lWake, 0);
+            _InterlockedExchangeAdd(lpCount, -iCount);
+            return -1;
         }
-        const long lResult = mSemaphoreData.mnCount;
-        return lResult > 0 ? static_cast<int>(lResult) : 0;
-    }
-
-    _InterlockedExchangeAdd(lpCount, iCount);
-    if (!::ReleaseSemaphore(mSemaphoreData.mhSemaphore, iCount, 0))
-    {
-        _InterlockedExchangeAdd(lpCount, -iCount);
-        return -1;
     }
     return mSemaphoreData.mnCount;
 }

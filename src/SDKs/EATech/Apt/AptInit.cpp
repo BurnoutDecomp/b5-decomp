@@ -97,10 +97,8 @@
 // X360 symbol; access is by name.
 // ===========================================================================
 
-// The 68-byte shared config block (unk_82F733B8) -- AptUpdateInitialize fills it,
-// AptCommonInitialize + AptActionInterpreter::initialize read it. 17 dwords so
-// byte[64] (the interpreter's skip-trace flag at config +0x40) is addressable.
-unsigned int gAptCommonConfig[17] = { 0 };   // unk_82F733B8
+// ARTIST 0x82F733B8. Shared 68-byte Apt initialization parameters.
+AptInitParmsT gAptCommonConfig = { 0 };
 
 // The simulation thread id (pointer-sized EA::Thread::ThreadId). External: the AptValue
 // ctor compares it against the current thread. The RENDER id is owned by AptGlobals.cpp
@@ -130,9 +128,6 @@ namespace
 
     // ---- config-derived flag byte (byte_8324E393) --------------------------
     unsigned char gbAptUpdateFlag393 = 0;   // byte_8324E393
-
-    // ---- dword_8324E4F0 (the common-init gAptFuncs self-registration slot) -
-    void* gpAptCommonFuncsSlot = 0;   // dword_8324E4F0
 
     EA::Thread::Mutex& AptUpdateRenderMutex()
     {
@@ -313,50 +308,20 @@ int AptSetSimulationThreadID(int /*a1*/)
     return static_cast<int>(reinterpret_cast<intptr_t>(id));
 }
 
-// ===========================================================================
-// AptCommonInitialize @0x82AE91F0 -- the once-only shared static-data init.
-//
-// X360: interrupt-masked TAS set of dword_8324E6E0 (==1); AptAnimationTarget::
-// SetupStaticData(pConfig); dword_8324E4F0 = &dword_8324E818 (the gAptFuncs pointer
-// self-registration slot); StringPool::Initialize(pConfig[+0x2C]); mem =
-// pool->Allocate(12); if (mem) off_8324E51C = AptValueVector(mem, pConfig[+0x28]).
-//
-// The Hex-Rays "SetupStaticData(a1,a2,a3,a4,a5)" is spurious (leftover register
-// signature); the asm passes ONLY r3 = pConfig. SetupStaticData reads its count from
-// pConfig[+0x18] (word[6]); the homed SetupStaticData takes that count directly.
-// ===========================================================================
-void* AptCommonInitialize(void* pConfig)
+// ARTIST 0x82AE91F0. Initialize the shared animation and string data, then
+// construct the deferred-release vector in the shared DOGMA pool.
+// ARTIST uses one epilogue for both outcomes of the allocation.
+#pragma optimize("s", on)
+void AptCommonInitialize(const AptInitParmsT* pConfig)
 {
-    // X360 reservation-lock set of dword_8324E6E0 before shared table setup.
     _InterlockedExchange(&gbAptCommonInitDone, 1);
+    AptAnimationTarget::SetupStaticData(*pConfig);
+    EAStringC::MemInitialize(&gAptFuncs);
+    StringPool::Initialize(pConfig->iStringPoolSize);
 
-    unsigned int* lpCfg = static_cast<unsigned int*>(pConfig);
-
-    // AptAnimationTarget::SetupStaticData(pConfig) -- count == pConfig word[6] (+0x18).
-    AptAnimationTarget::SetupStaticData(static_cast<int>(lpCfg[6]));
-
-    // dword_8324E4F0 = &gAptFuncs (dword_8324E818): the common-init self-registers
-    // the host user-function table pointer.
-    gpAptCommonFuncsSlot = &gAptFuncs;
-
-    // StringPool::Initialize(pConfig word[11] == +0x2C): the string-pool bucket count.
-    StringPool::Initialize(static_cast<int>(lpCfg[11]));
-
-    // off_8324E51C = AptValueVector(pool->Allocate(12), pConfig word[10] == +0x28).
-    // (The console's 12-byte alloc is the AptValueVector {cap,top,items} header; on x64
-    //  that header is sizeof(AptValueVector) -- allocate that. The ctor then allocates
-    //  the item array from the operand-stack pool.)
-    void* lpVecMem = gpAptPseudoDataPool->Allocate(sizeof(AptValueVector));   // console 12; x64 sizeof
-    if (lpVecMem != 0)
-    {
-        AptValueVector* lpVec = static_cast<AptValueVector*>(lpVecMem);
-        *lpVec = AptValueVector::ConstructAptValueVector(static_cast<int>(lpCfg[10]));
-        gpValuesToRelease = lpVec;
-        return lpVec;
-    }
-    gpValuesToRelease = 0;
-    return 0;
+    gpValuesToRelease = new AptValueVector(pConfig->iDeferedVectorSize);
 }
+#pragma optimize("", on)
 
 // ===========================================================================
 // AptValueInitialize @0x82B02800 -- the AS value-singleton bootstrap (wired IN FULL).
@@ -388,11 +353,9 @@ extern void*     gpAptRenderingContext;       // dword_8324E2AC (defined in AptG
 extern AptValue* gpAptExternObject;           // off_8324E2CC  ("")
 extern AptValue* gpAptKeyObject;              // off_8324E2A8  ("")
 // (gpAptGlobalFallback off_8324E380 is declared by AptGlobal.h, included above)
-extern AptValue* gpAptGlobalExtensionObject;  // off_8324E37C  ("")
 extern AptValue* gpAptStringObject;           // off_8324D82C  ("")
 extern AptValue* gpObjRegistrationFunc;       // off_8324D748  (the Object.registerClass native fn)
 extern AptValue* gpAptFunctionPrototypeRoot;  // dword_8324E4EC (the builtin prototype root)
-extern AptValue* gpAptNoneValue;              // off_8324D814 (AptGlobals.cpp SECOND view of the `undefined` slot)
 extern AptValue* gpAptRootTargetMC;           // dword_8324D830 (the root-prototype mirror store)
 extern AptValue* gpAptDestroyedClipValue;     // dword_8324D818 (the MovieClip-prototype pin)
 extern AptValue* gpAptCurrentTargetMC;        // dword_8324D818 (SECOND view of the same console slot)
@@ -414,7 +377,6 @@ int AptValueInitialize()
 {
     if (gpUndefinedValue == 0)
         gpUndefinedValue = new AptNone();   // pooled operator new (gpNonGCPoolManager)
-    gpAptNoneValue = gpUndefinedValue;      // off_8324D814: AptGlobals.cpp's second view of
                                             // the SAME console slot (one object, two names)
 
     AptBoolean::Initialize();
@@ -465,15 +427,10 @@ int AptValueInitialize()
     }
 
     // off_8324E37C -- the _global extension object (+AddRef).
-    if (gpAptGlobalExtensionObject == 0)
+    if (!gpAptNativeGlobals)
     {
-        AptGlobalExtensionObject* const pExt = new AptGlobalExtensionObject();
-        gpAptGlobalExtensionObject = pExt;
-        gpAptGlobalExtensionObject->AddRef();
-        // off_8324E37C aliases: AptGlobal::objectMemberLookup consults the same
-        // console address through the AptValueWithHash*-typed gpAptNativeGlobals
-        // (AptGlobal.cpp) -- keep the two views pointing at the ONE object.
-        gpAptNativeGlobals = pExt;
+        gpAptNativeGlobals = new AptGlobalExtensionObject();
+        gpAptNativeGlobals->AddRef();
     }
 
     // off_8324D82C -- the shared empty AptString (Create(&unk_820046A7) == Create("")),
@@ -654,40 +611,15 @@ int AptValueInitialize()
     return 0;
 }
 
-// ===========================================================================
-// AptValueShutdownRemaining @0x82AE3170 -- release the `undefined` singleton, tear
-// down the boolean/lookup/register/character-helper static pools, then release the
-// extern-interface singleton (the counterpart of the corresponding AptValueInitialize
-// bring-up steps).
-//
-// X360 (store-for-store): off_8324D814->ForceDelete() [vtbl +0x2C]; AptBoolean::
-// Shutdown(); AptLookup::Shutdown(); AptRegister::Shutdown(); AptCharacterHelper::
-// Shutdown(); return off_8324E2CC->ForceDelete() [vtbl +0x2C]. The r3 the four static
-// Shutdowns thread through is dead register plumbing (each is void).
-//
-// AptBoolean::Shutdown is `protected` in AptBoolean.h (AptLookup/AptRegister/
-// AptCharacterHelper::Shutdown are public); AptBoolean.h now grants this function an
-// additive `friend int ::AptValueShutdownRemaining();`, symmetric to the existing
-// AptValueInitialize friend, so the protected call is legal. The console tail-returns
-// the second ForceDelete's r3; ForceDelete is `virtual void`, so the int return is a
-// dead leftover -- 0 on the vendor path (matching AptValueShutdown's treatment).
-// ===========================================================================
-int AptValueShutdownRemaining()
+// ARTIST 0x82AE3170. Release the value singletons and their static pools.
+void AptValueShutdownRemaining()
 {
-    // off_8324D814 -- the shared `undefined` (AptNone) singleton: virtual ForceDelete
-    // (vtbl +0x2C) runs its PreDestroy/DestroyGCPointers + `delete this` back to the pool.
     gpUndefinedValue->ForceDelete();
-
-    // Tear down the four value-pool statics (each frees + clears its pinned pool/pair).
-    AptBoolean::Shutdown();          // the true/false singleton pair (befriended)
-    AptLookup::Shutdown();           // the slot-indexed lookup pool
-    AptRegister::Shutdown();         // the AS register file
-    AptCharacterHelper::Shutdown();  // the default text/movie character templates
-
-    // off_8324E2CC -- the extern-interface singleton: ForceDelete (vtbl +0x2C). The
-    // console tail-returns its r3; the virtual is void here, so 0 (the vendor result).
+    AptBoolean::Shutdown();
+    AptLookup::Shutdown();
+    AptRegister::Shutdown();
+    AptCharacterHelper::Shutdown();
     gpAptExternObject->ForceDelete();
-    return 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -757,7 +689,7 @@ int AptCommonShutdown()
     AptFloat::ClearPool();
     StringPool::ClearTemporaryPool();
 
-    gpAptCommonFuncsSlot = 0;
+    EAStringC::sAptCallbacks = 0;
     _InterlockedExchange(&gbAptCommonInitDone, 0);
     return 0;
 }
@@ -782,7 +714,7 @@ void* AptRenderInitialize(int /*a1*/)
     AptUpdateRenderMutex().Lock();
 
     if (!gbAptCommonInitDone)
-        AptCommonInitialize(&gAptCommonConfig[0]);
+        AptCommonInitialize(&gAptCommonConfig);
 
     intptr_t liTop = AptMath::ClipStackInit(128);    // x64: pointer-width (the AptMath.h clip-stack widening)
     gbAptRenderInitDone = 1;                          // dword_8324E510 = 1
@@ -887,7 +819,7 @@ int AptUpdateInitialize(unsigned int* a1, char a2)
     unsigned int* lpParams = a1 ? a1 : lauDefault;
 
     // memcpy(&unk_82F733B8, params, 68).
-    std::memcpy(&gAptCommonConfig[0], lpParams, 68);
+    std::memcpy(&gAptCommonConfig, lpParams, sizeof(gAptCommonConfig));
 
     // dword_82F733E8 (config +0x30, word 12) -- the AS register count. The console
     // reads the config slot in place (AptRegister::Initialize / InitializeStaticData
@@ -923,27 +855,12 @@ int AptUpdateInitialize(unsigned int* a1, char a2)
 
     // if (!dword_8324E6E0) AptCommonInitialize(&unk_82F733B8).
     if (!gbAptCommonInitDone)
-        AptCommonInitialize(&gAptCommonConfig[0]);
+        AptCommonInitialize(&gAptCommonConfig);
 
-    // if (params[14] && (m = Allocate(12))) off_8324E528 = AptValueVector(m, params[14]).
-    if (lpParams[14] != 0)
-    {
-        void* lpVecMem = gpAptPseudoDataPool->Allocate(sizeof(AptValueVector));   // console 12; x64 sizeof
-        if (lpVecMem != 0)
-        {
-            AptValueVector* lpVec = static_cast<AptValueVector*>(lpVecMem);
-            *lpVec = AptValueVector::ConstructAptValueVector(static_cast<int>(lpParams[14]));
-            gpAptZombieVector = lpVec;
-        }
-        else
-        {
-            gpAptZombieVector = 0;
-        }
-    }
+    if (lpParams[14])
+        gpAptZombieVector = new AptValueVector(static_cast<int>(lpParams[14]));
     else
-    {
         gpAptZombieVector = 0;
-    }
 
     // AptValueInitialize() -- the full AS value-singleton bootstrap (its body above).
     AptValueInitialize();
@@ -1043,12 +960,11 @@ void AptValueShutdown()
         gpAptClassRegistry = 0;
     }
 
-    while (_InterlockedCompareExchange(&gAptGlobalExtensionLock, 1, 0) != 0) {}
-    gpAptGlobalExtensionObject->DestroyGCPointers();
-    gpAptGlobalExtensionObject->Release();
-    gpAptGlobalExtensionObject = 0;
-    gpAptNativeGlobals = 0; // second C++ view of the same ARTIST slot8324E37C
-    _InterlockedExchange(&gAptGlobalExtensionLock, 0);
+    AptLockNativeGlobals();
+    gpAptNativeGlobals->DestroyGCPointers();
+    gpAptNativeGlobals->Release();
+    gpAptNativeGlobals = 0;
+    AptUnlockNativeGlobals();
 
     gpAptGlobalFallback->DestroyGCPointers();
     gpAptGlobalFallback->Release();

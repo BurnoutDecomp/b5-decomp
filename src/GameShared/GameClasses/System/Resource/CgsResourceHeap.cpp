@@ -1574,7 +1574,7 @@ namespace CgsResource
             if (lpNode->GetData()->IsFree() && lpNode->GetData()->GetSize() >= luSize
                 && lpNode->GetData()->Contains(lpcAddress))
                 return lpNode;
-        for (HeapEntryNode* lpNode = mUsedNodes.GetHead(); lpNode != 0 && lpNode != lpStartNode; lpNode = mUsedNodes.GetNext(lpNode))
+        for (HeapEntryNode* lpNode = mUsedNodes.GetHead(); lpNode != lpStartNode && lpNode != 0; lpNode = mUsedNodes.GetNext(lpNode))
             if (lpNode->GetData()->IsFree() && lpNode->GetData()->GetSize() >= luSize
                 && lpNode->GetData()->Contains(lpcAddress))
                 return lpNode;

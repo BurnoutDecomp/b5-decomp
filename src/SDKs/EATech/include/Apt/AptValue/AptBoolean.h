@@ -14,7 +14,7 @@
 #include "SDKs/EATech/Apt/DogmaAllocator.h"              // DOGMA_PoolManager::Allocate/Deallocate
 
 int AptValueInitialize();          // AptInit.cpp @0x82B02800 -- the designated singleton bootstrap
-int AptValueShutdownRemaining();   // AptInit.cpp @0x82AE3170 -- the teardown counterpart
+void AptValueShutdownRemaining();   // AptInit.cpp @0x82AE3170 -- the teardown counterpart
 
 class AptBoolean : public AptValueNoGC
 {
@@ -24,7 +24,7 @@ class AptBoolean : public AptValueNoGC
     // ...and AptValueShutdownRemaining @0x82AE3170 is the sole external caller of the
     // protected Shutdown (the teardown mirror of Initialize) -- additive friend grant,
     // symmetric to the Initialize one above.
-    friend int ::AptValueShutdownRemaining();
+    friend void ::AptValueShutdownRemaining();
 
 public:
     static void* operator new(size_t size)              { return gpNonGCPoolManager->Allocate(size); }

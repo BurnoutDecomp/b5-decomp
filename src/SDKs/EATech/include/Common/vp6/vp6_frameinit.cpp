@@ -28,13 +28,21 @@ void VP6_DeleteFragmentInfo(PB_INSTANCE* pbi)
         duck_freeAlign(pbi->Coeffs);
     pbi->Coeffs = 0;
 
-    for (int liPlane = 0; liPlane < 3; ++liPlane)
-    {
-        if (pbi->AboveBlockContextsAlloc[liPlane])
-            duck_free(pbi->AboveBlockContextsAlloc[liPlane]);
-        pbi->AboveBlockContextsAlloc[liPlane] = 0;
-        pbi->AboveBlockContexts[liPlane] = 0;
-    }
+    // ARTIST 82B589E8..82B58A40 releases the Y, U and V backing blocks in order.
+    if (pbi->AboveBlockContextsAlloc[0])
+        duck_free(pbi->AboveBlockContextsAlloc[0]);
+    pbi->AboveBlockContextsAlloc[0] = 0;
+    pbi->AboveBlockContexts[0] = 0;
+
+    if (pbi->AboveBlockContextsAlloc[1])
+        duck_free(pbi->AboveBlockContextsAlloc[1]);
+    pbi->AboveBlockContextsAlloc[1] = 0;
+    pbi->AboveBlockContexts[1] = 0;
+
+    if (pbi->AboveBlockContextsAlloc[2])
+        duck_free(pbi->AboveBlockContextsAlloc[2]);
+    pbi->AboveBlockContextsAlloc[2] = 0;
+    pbi->AboveBlockContexts[2] = 0;
 
     if (pbi->MbMotionVectorsAlloc)
         duck_free(pbi->MbMotionVectorsAlloc);

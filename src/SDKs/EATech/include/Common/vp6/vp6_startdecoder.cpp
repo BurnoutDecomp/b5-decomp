@@ -203,25 +203,23 @@ int VP6_DecodeFrameToYUV_JOB(xPB_INST pbi, char* VideoBufferPtr, unsigned int By
     lpDecodeJob->Clear();
     lpCallbackJob->Clear();
 
-    VP6_DECODE_JOB_DATA* lpDecodeData = &pbi->DecodeJobData[liPair];
-    lpDecodeData->pbi = pbi;
-    lpDecodeData->VideoBuffer = VideoBufferPtr;
-    lpDecodeData->ByteCount = ByteCount;
-    lpDecodeData->FrameNumber = FrameNumber;
+    pbi->DecodeJobData[liPair].pbi = pbi;
+    pbi->DecodeJobData[liPair].VideoBuffer = VideoBufferPtr;
+    pbi->DecodeJobData[liPair].ByteCount = ByteCount;
+    pbi->DecodeJobData[liPair].FrameNumber = FrameNumber;
 
-    VP6_CALLBACK_JOB_DATA* lpCallbackData = &pbi->CallbackJobData[liPair];
-    lpCallbackData->pbi = pbi;
-    lpCallbackData->FrameNumber = FrameNumber;
-    lpCallbackData->Callback = Callback;
-    lpCallbackData->Context = Context;
-    lpCallbackData->Param0 = Param0;
-    lpCallbackData->Param1 = Param1;
+    pbi->CallbackJobData[liPair].pbi = pbi;
+    pbi->CallbackJobData[liPair].FrameNumber = FrameNumber;
+    pbi->CallbackJobData[liPair].Callback = Callback;
+    pbi->CallbackJobData[liPair].Context = Context;
+    pbi->CallbackJobData[liPair].Param0 = Param0;
+    pbi->CallbackJobData[liPair].Param1 = Param1;
 
-    lpDecodeJob->SetData(lpDecodeData, sizeof(VP6_DECODE_JOB_DATA));
+    lpDecodeJob->SetData(&pbi->DecodeJobData[liPair], sizeof(VP6_DECODE_JOB_DATA));
     lpDecodeJob->SetCode(EA::Jobs::JOB_ENVIRONMENT_LOCAL, reinterpret_cast<const void*>(&XenonDecodeJob), 0);
     lpDecodeJob->GetEntryPoint().SetAffinity(static_cast<EA::Jobs::JobAffinity>(pbi->JobAffinity));
 
-    lpCallbackJob->SetData(lpCallbackData, sizeof(VP6_CALLBACK_JOB_DATA));
+    lpCallbackJob->SetData(&pbi->CallbackJobData[liPair], sizeof(VP6_CALLBACK_JOB_DATA));
     lpCallbackJob->SetCode(EA::Jobs::JOB_ENVIRONMENT_LOCAL, reinterpret_cast<const void*>(&DecodeCallBackJob), 0);
     lpCallbackJob->SetAllowSleepOn(true);
     lpCallbackJob->DependsOn(*lpDecodeJob, EA::Jobs::Event::EVENT_WHEN_JOB_END);

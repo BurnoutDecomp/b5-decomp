@@ -5,22 +5,8 @@
 
 namespace rw { namespace audio { namespace core { class PlugIn; } } }
 
-// ============================================================================
-// CgsSubmixVoice.h  (MINIMAL home for the SubmixVoice destructor TU).
-//
-//   CgsSound::Playback::SubmixVoice::`vector deleting destructor'  @ 0x826C7EF8
-//
-// The X360 compiler-synthesised deleting destructor installs the SubmixVoice vtable,
-// runs the Voice base dtor, then (on flag&1) frees. mpSubmix is a trivially-
-// destructible raw PlugIn pointer, so the source ~SubmixVoice() body is empty.
-//
-// (2026-08-25, audio-faithfulness wave 4): the former TU-local minimal Object +
-// Voice rivals are RETIRED -- the base chain comes from the REAL homes (the wave-3
-// Object fold made CgsVoice.h's Content/Object graph the single definition), so
-// SubmixVoice derives the real Voice below. Modelled BY NAME from DWARF
-// CgsSubmixVoice.h:44/59/78 (host-width FLAG: pointer/refcount members widen; no
-// absolute-offset static_assert).
-// ============================================================================
+// ARTIST inlines the SubmixVoice base lifetime into MasterVoice and retains
+// the compiler-generated SubmixVoice deleting destructor for its vtable.
 
 #include "GameShared/GameClasses/Sound/Playback/CgsVoice.h"   // the REAL Voice (: public Object)
 
@@ -38,8 +24,9 @@ extern const Name K_DefaultSendName;
 struct SubmixVoice : public Voice
 {
     SubmixVoice(size_t auClientSize, Factory& arFactory,
-                const VoiceSpec& arVoiceSpec, u32 au32Ident);
-    virtual ~SubmixVoice();
+                const VoiceSpec& arVoiceSpec, u32 au32Ident)
+        : Voice(auClientSize, arFactory, arVoiceSpec, au32Ident), mpSubmix(0) {}
+    virtual ~SubmixVoice() {}
 
     rw::audio::core::PlugIn* GetSubmix() const { return mpSubmix; }
     rw::audio::core::PlugIn** GetSubmixAddress() { return &mpSubmix; }

@@ -34,6 +34,7 @@
 #include <cstddef>   // offsetof (_AssertLayout)
 #include "types.hpp"
 
+#include "SDKs/EATech/include/Apt/AptDefine.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
 #include "SDKs/EATech/Apt/DogmaAllocator.h"   // DOGMA_PoolManager
 
@@ -48,13 +49,9 @@ class AptValueVector
 {
 public:
 
-    // ADDITIVE GROW (FLAGGED, non-breaking): an explicit construct-with-capacity
-    // factory mirroring the X360 ctor @ 0x82AE1548 (IDA `AptValue>`):
-    //   mnTop=0; mnCapacity=nCap; mppItems=0; mppItems=Allocate(pool, 4*nCap).
-    // Provided as a static initialiser (NOT a real constructor) so AptValueVector
-    // stays an aggregate -- existing default-constructed uses keep working. Inline
-    // (header-only) so embedding owners (AptIntervalTimer::mParams, capacity 6)
-    // need no extra link symbol. No layout change.
+    AptValueVector() {}
+
+    // Construct the interpreter's operand stack.
     static AptValueVector ConstructWithCapacity(int32_t nCapacity)
     {
         AptValueVector lvVec;
@@ -120,11 +117,18 @@ public:
     // Each (B) body restates this so the byte stores match the X360 verbatim.
     // -----------------------------------------------------------------------
 
-    // ctor @0x82AE32F0 (`AptValueVector::AptValueVector`) -- capacity at +0,
-    // top=0 at +4, allocate 4*capacity slots into +8. Provided as a static
-    // factory (keeps the aggregate) like ConstructWithCapacity, but with the
-    // family-(B) field assignment.
-    static AptValueVector ConstructAptValueVector(int32_t nCapacity);
+    // ARTIST 0x82AE32F0. Construct the deferred-release vector.
+    explicit AptValueVector(int32_t nCapacity);
+
+    static void* operator new(size_t size)
+    {
+        return gpNonGCPoolManager->Allocate(size);
+    }
+
+    static void operator delete(void* memory, size_t size)
+    {
+        gpNonGCPoolManager->Deallocate(memory, size);
+    }
 
     // GetAt @0x82ADBFD0 -- mppItems[nIndex] (no bounds check; raw indexed load).
     // x64 signature parity: non-const (the x64 export's GetAt @0x140838220 takes a

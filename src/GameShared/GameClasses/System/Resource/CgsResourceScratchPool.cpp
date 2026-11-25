@@ -4,6 +4,8 @@
 #include <cstdlib>
 #include "types.hpp"
 
+#define CGS_ARTIST_SCRATCH_POOL_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceScratchPool.cpp"
+
 namespace CgsResource
 {
     namespace
@@ -146,43 +148,46 @@ namespace CgsResource
     // ARTIST 828E3398. Build the gather list first, then arm the stream.
     void ScratchPool::BeginDistribution(s32 liMemType)
     {
-        CGS_ASSERT(meUpdateStage == E_UPDATESTAGE_IDLE, "Can not begin distribution during none-idle stage\n");
+        CGS_ASSERT_STREAM_AT(meUpdateStage == E_UPDATESTAGE_IDLE, "Can not begin distribution during none-idle stage\n",
+                             CGS_ARTIST_SCRATCH_POOL_FILE, 316);
         miCurrentMemType = liMemType;
         BuildGatherDistributionList();
-        CGS_ASSERT(mpDistributionEntries != 0, "Distribution entries are NULL\n");
-        u8* lpBase = static_cast<u8*>(maResourceAllocators[miCurrentMemType].GetStartAddress());
-        if (lpBase == 0)
-        {
-            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lMessage(lacMessage, sizeof(lacMessage));
-            lMessage << "Linear allocator is NULL for memtype " << miCurrentMemType << "\n";
-            CGS_ASSERT(false, lacMessage);
-        }
-        mGatherStream.Execute(mpDistributionEntries, muNumEntries, lpBase);
+        CGS_ASSERT_STREAM_AT(mpDistributionEntries != 0, "Distribution entries are NULL\n",
+                             CGS_ARTIST_SCRATCH_POOL_FILE, 322);
+        CGS_ASSERT_STREAM_AT(maResourceAllocators[miCurrentMemType].GetStartAddress() != 0,
+            "Linear allocator is NULL for memtype " << miCurrentMemType << "\n", CGS_ARTIST_SCRATCH_POOL_FILE, 323);
+        mGatherStream.Execute(mpDistributionEntries, muNumEntries,
+            static_cast<u8*>(maResourceAllocators[miCurrentMemType].GetStartAddress()), miCurrentMemType);
         meUpdateStage = E_UPDATESTAGE_GATHERING;
     }
 
-    // ARTIST 828E3568: scatter is armed only once the entire gather completes.
+    // ARTIST 828E3568. Scatter is armed once the entire gather completes.
     bool ScratchPool::UpdateGather()
     {
-        CGS_ASSERT(meUpdateStage == E_UPDATESTAGE_GATHERING, "Can not call UpdateGather unless in gather stage\n");
-        if (!mGatherStream.Update())
-            return false;
-        BuildScatterDistributionList();
-        mScatterStream.Execute(mpDistributionEntries, muNumEntries,
-            static_cast<u8*>(maResourceAllocators[miCurrentMemType].GetStartAddress()));
-        meUpdateStage = E_UPDATESTAGE_SCATTERING;
-        return true;
+        CGS_ASSERT_STREAM_AT(meUpdateStage == E_UPDATESTAGE_GATHERING, "Can not call UpdateGather unless in gather stage\n",
+                             CGS_ARTIST_SCRATCH_POOL_FILE, 342);
+        if (mGatherStream.Update())
+        {
+            BuildScatterDistributionList();
+            mScatterStream.Execute(mpDistributionEntries, muNumEntries,
+                static_cast<u8*>(maResourceAllocators[miCurrentMemType].GetStartAddress()), miCurrentMemType);
+            meUpdateStage = E_UPDATESTAGE_SCATTERING;
+            return true;
+        }
+        return false;
     }
 
     // ARTIST 828D8DE0.
     bool ScratchPool::UpdateScatter()
     {
-        CGS_ASSERT(meUpdateStage == E_UPDATESTAGE_SCATTERING, "Can not call UpdateScatter unless in scatter stage\n");
-        if (!mScatterStream.Update())
-            return false;
-        meUpdateStage = E_UPDATESTAGE_IDLE;
-        return true;
+        CGS_ASSERT_STREAM_AT(meUpdateStage == E_UPDATESTAGE_SCATTERING, "Can not call UpdateScatter unless in scatter stage\n",
+                             CGS_ARTIST_SCRATCH_POOL_FILE, 370);
+        if (mScatterStream.Update())
+        {
+            meUpdateStage = E_UPDATESTAGE_IDLE;
+            return true;
+        }
+        return false;
     }
 
     // ARTIST 828D8EA8. The list uses byte offsets into this memory type's
@@ -235,3 +240,5 @@ namespace CgsResource
         return 0;
     }
 }
+
+#undef CGS_ARTIST_SCRATCH_POOL_FILE

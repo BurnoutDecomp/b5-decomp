@@ -140,26 +140,17 @@ bool AptAnimationTarget::PushNewInst(void* pNode)
     return true;
 }
 
-// SetupStaticData @0x82AE41F0 -- allocate the shared static tables, sized to the
-// max-new-movie-clips count. (The X360 reads the count from its params struct at
-// +0x18; taken here as the explicit count so no opaque param layout is needed.)
-void AptAnimationTarget::SetupStaticData(int nMaxNewMovieClips)
+// ARTIST 0x82AE41F0. Allocate the shared tables using the configured frame limit.
+void AptAnimationTarget::SetupStaticData(const AptInitParmsT& rParms)
 {
-    spStaticBlock = gpAptPseudoDataPool->Allocate(80);
+    spStaticBlock = gpNonGCPoolManager->Allocate(80);
     memset(spStaticBlock, 0, 80);
 
-    snMaxNewMovieClips   = nMaxNewMovieClips;
-    // x64 native-8 stride (settled; Phase-0 widening rule): both tables hold POINTERS (AptValue*/AptCIH*), which the
-    // runtime indexes as pointer-width entries (`AptValue** [i]` / `void** [i]`). The console
-    // pointer is 4 bytes, so it allocated 4*count; on x64 the pointer is 8 bytes, so the table
-    // must be sizeof(void*)*count -- else the 8-byte per-instance writes in instantiateCharacter/
-    // AddToDisplayList overrun the (half-size) table into adjacent pool memory (which corrupted
-    // the root CIH). Widened to the native pointer stride to match the indexed writes.
-    spNewInsts           = gpAptPseudoDataPool->Allocate(sizeof(void*) * nMaxNewMovieClips);
-    spDelayedReleaseList = gpAptPseudoDataPool->Allocate(sizeof(void*) * nMaxNewMovieClips);
-    memset(spDelayedReleaseList, 0, sizeof(void*) * nMaxNewMovieClips);
-
-    snNewInstSize            = 0;
+    snMaxNewMovieClips = rParms.iMaxNewMovieClipsPerFrame;
+    spNewInsts = gpNonGCPoolManager->Allocate(sizeof(void*) * rParms.iMaxNewMovieClipsPerFrame);
+    spDelayedReleaseList = gpNonGCPoolManager->Allocate(sizeof(void*) * rParms.iMaxNewMovieClipsPerFrame);
+    memset(spDelayedReleaseList, 0, sizeof(void*) * rParms.iMaxNewMovieClipsPerFrame);
+    snNewInstSize = 0;
     snDelayedReleaseListSize = 0;
 }
 
@@ -255,7 +246,7 @@ void AptAnimationTarget::ProcessInputs()
 
 // The None/undefined sentinel value the input-event slots + interval-timer
 // "no explicit context" fields are seeded to (X360 off_8324D814). Shared, GC-owned.
-extern AptValue* gpAptNoneValue;   // off_8324D814
+extern AptValue* gpUndefinedValue;   // off_8324D814
 
 // ---------------------------------------------------------------------------
 // The AptAnimationTargetSet ctor/dtor helpers. The two inline listener/input
@@ -574,10 +565,10 @@ AptAnimationTarget::AptAnimationTarget(const AptAnimationTargetParams* pParams)
     mpInputMask         = 0;                               // *a1 = 0
 
     // Seed the four input-event object slots to the None sentinel (a1[15/12/13/14]).
-    mpDragMC             = gpAptNoneValue;   // +0x3C (a1[15])
-    mpOnPressObject      = gpAptNoneValue;   // +0x30 (a1[12])
-    mpOnRollOverObject   = gpAptNoneValue;   // +0x34 (a1[13])
-    mpTopMostSprite = gpAptNoneValue;        // +0x38 (a1[14]; XB1: TopMostSprite)
+    mpDragMC             = gpUndefinedValue;   // +0x3C (a1[15])
+    mpOnPressObject      = gpUndefinedValue;   // +0x30 (a1[12])
+    mpOnRollOverObject   = gpUndefinedValue;   // +0x34 (a1[13])
+    mpTopMostSprite = gpUndefinedValue;        // +0x38 (a1[14]; XB1: TopMostSprite)
 }
 
 // ---------------------------------------------------------------------------
@@ -1088,9 +1079,9 @@ void* AptAnimationTarget::RemoveCIHReferences()
             // None sentinel (unless it already holds it).
             if (lpParam != *lppSlot)
             {
-                if (gpAptNoneValue != *lppSlot)
+                if (gpUndefinedValue != *lppSlot)
                 {
-                    *lppSlot = gpAptNoneValue;
+                    *lppSlot = gpUndefinedValue;
                 }
             }
         }
@@ -1843,7 +1834,7 @@ int AptAnimationTarget::TickIntervalTimers(int nDeltaMs)
         {
             // The call "this": the timer's explicit context (mpContext) unless it is the
             // None sentinel, in which case the bound char-inst value stands in.
-            if (lrTimer.mpContext != gpAptNoneValue)            // v12[4] != off_8324D814
+            if (lrTimer.mpContext != gpUndefinedValue)            // v12[4] != off_8324D814
             {
                 lpBound = lrTimer.mpContext;                    // v17 = v12[4]
             }

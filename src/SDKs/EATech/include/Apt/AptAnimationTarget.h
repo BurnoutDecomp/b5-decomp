@@ -49,6 +49,7 @@
 class AptValue;           // GC value (slots / input-event objects held as AptValue*)
 class AptActionQueueC;    // +0x0C -- the deferred-action queue (AptActionQueue.h; held by ptr)
 struct AptActionBlock;
+struct AptInitParmsT;
 
 // ---------------------------------------------------------------------------
 // AptAnimationTargetSet -- one of the two inline 8-byte (console) "set" sub-objects
@@ -262,7 +263,7 @@ struct AptAnimationTarget
     void PreDestroy();
 
     // ---- class-static data layer (shared tables; bodies in AptAnimationTarget.cpp) ----
-    static void  SetupStaticData(int nMaxNewMovieClips);  // @0x82AE41F0
+    static void  SetupStaticData(const AptInitParmsT& rParms);  // @0x82AE41F0
     static void  CleanupStaticData();                     // @0x82AE42A8
     static int   GetXMousePos();                          // @0x82AD5F98
     static int   GetYMousePos();                          // @0x82AD5FA8

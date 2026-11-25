@@ -2,6 +2,7 @@
 #define CGS_SOUND_PLAYBACK_RWAC_CGSGENERICRWACVOICE_H
 
 #include "types.hpp"
+#include "rw/audio/core/Voice.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
@@ -51,7 +52,11 @@ struct GenericRwacVoice
     rw::audio::core::PlugIn* GetSendPlugin(uint32_t lu32Index);
     GenericRwacFactory& GetRwacFactory();
 
-    f32 GetCpuTicks() const;
+    f32 GetCpuTicks()
+    {
+        return mpVoice ? static_cast<f32>(static_cast<u32>(mpVoice->miLastFrameCpuTicks))
+                       : 0.0f;
+    }
     void Update(rw::audio::core::System* apSystem, Voice& arVoice);
 
     bool ConnectSend(u32 au32Index, SubmixVoice* apSubmix);

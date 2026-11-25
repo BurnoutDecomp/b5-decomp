@@ -9,15 +9,15 @@ const BlendState* ImRendererBase::ConstructBlendState(rw::IResourceAllocator* al
     renderengine::BlendState::Operation operation)
 {
     renderengine::BlendState::Parameters parameters;
-    parameters.maBlendFactor[0] =
-        (static_cast<u32>(source) & 0x1Fu)
-        | ((32u * (((8u * static_cast<u32>(destination)) & 0x7F8u)
-            | (static_cast<u32>(operation) & 0xFFFFF807u))) & 0xFFE0u)
-        | 0x07060000u;
-    parameters.mbHasCustomBlendFactors = 1;
+    const renderengine::RenderTargetState::TargetID target = renderengine::RenderTargetState::TARGETID_COLOR0;
+    parameters.SetOperation(target, operation);
+    parameters.SetDestination(target, destination);
+    parameters.SetSource(target, source);
+    parameters.SetBlendEnable(true);
+
     const rw::ResourceDescriptor descriptor =
         renderengine::BlendState::GetResourceDescriptor(parameters);
-    const rw::Resource resource = allocator->DoAllocate(descriptor, 0);
+    const rw::Resource resource = allocator->Allocate(descriptor, 0);
     return renderengine::BlendState::Initialize(resource, parameters);
 }
 }

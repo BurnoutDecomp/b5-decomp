@@ -59,7 +59,6 @@ class  AptValueVector;
 // ===========================================================================
 AptValue* gpUndefinedValue            = 0;   // off_8324D814 (the shared AS `undefined`)
 AptCIH*   gpAptEmptyCIH               = 0;   // dword_8324D700 (the pinned "EmptyCIH" AptCIHNone placeholder)
-AptValue* gpAptNoneValue              = 0;   // off_8324D814 (the AS `null`/none)
 AptValue* gpUndefinedCIH              = 0;   // the undefined-CIH sentinel (AptInit)
 AptValue* gpAptDestroyedClipValue     = 0;   // dword_8324D818
 AptValue* gpAptCurrentTargetMC        = 0;   // dword_8324D818
@@ -72,12 +71,7 @@ AptValue* gpAptFunctionPrototypeRoot  = 0;   // dword_8324E4EC
 AptValue* gpAptKeyObject              = 0;   // off_8324E2A8 (Key)
 AptValue* gpAptStringObject           = 0;   // off_8324D82C (String)
 AptValue* gpAptExternObject           = 0;   // off_8324E2CC (extern)
-AptValue* gpAptGlobalExtensionObject  = 0;   // off_8324E37C (the _global extension object)
 void*     gpAptRenderingContext       = 0;   // dword_8324E2AC (the shared AptRenderingContext; opaque view)
-// (gpGlobalGlobalObject / gpGlobalExtensionObject RETIRED 2026-07-05: they duplicated
-// off_8324E380 / off_8324E37C under second never-assigned names, so findChild's global
-// arms silently looked up empty objects. Every reader now binds gpAptGlobalFallback /
-// gpAptGlobalExtensionObject above -- the pair AptValueInitialize actually builds.)
 AptValue* gpObjRegistrationFunc       = 0;   // the Object-registration native fn
 // The AS global-function singletons AptCIH::objectMemberLookup returns for the
 // setInterval/clearInterval/isNaN/unescape/escape/Boolean member names. Created

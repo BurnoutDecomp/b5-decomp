@@ -31,7 +31,7 @@
 
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
 #include "SDKs/EATech/include/Apt/AptNativeHash.h"
-#include "SDKs/EATech/include/Apt/AptObject.h"   // AptValueWithHash (the live _global symbol type)
+#include "SDKs/EATech/include/Apt/AptGlobal.h"   // Native and fallback hashes
 #include "SDKs/EATech/include/Apt/AptPrototype.h"
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"
 #include "SDKs/EATech/Apt/AptObjectIndex.h"
@@ -51,20 +51,6 @@ AptValue* AptResolveSpecialName(int nObjectTypeId, AptValue* pScope,
 // The AS interpreter the special-name arms read their current-target / CIH-call
 // stacks from (console &dword_8324E760).
 extern AptActionInterpreter gAptActionInterpreter;
-
-// The AS _global object (off_8324E380) and the global-extension object (off_8324E37C)
-// whose native hashes back the global-scope variable lookup. These are the SAME console
-// globals AptValueInitialize builds (AptGlobal / AptGlobalExtensionObject singletons) --
-// verified against the X360 findChild @0x82B01298 asm (it reads exactly off_8324E37C +
-// off_8324E380). The old duplicate never-assigned gpGlobal* pair is retired.
-// gpAptGlobalFallback binds the LIVE AptValueWithHash* symbol (AptGlobal.cpp's
-// canonical storage, assigned by AptValueInitialize) -- the AptValue*-typed
-// duplicate in AptGlobals.cpp was NEVER assigned (the 2026-07-05 "classes stored
-// but never found" bug: _global stores landed in the live object while this TU
-// looked up a dead null). gpAptGlobalExtensionObject stays the AptValue* flavor
-// (that one IS the live extension-object symbol AptInit assigns).
-extern AptValueWithHash* gpAptGlobalFallback;  // off_8324E380 (_global; LIVE symbol)
-extern AptValue* gpAptGlobalExtensionObject;   // off_8324E37C (the _global extension object)
 
 // ---------------------------------------------------------------------------
 // The special-name target singletons the resolver hands back directly. Each is a
@@ -115,7 +101,7 @@ AptValue* AptValue::findChild(const EAStringC* pName, AptValue* pTarget)
     // were temporarily gated 2026-07-05 while the FADE_IN-window AVs they exposed
     // were fixed -- the x64 AptValueVector pun in the CallMethod cleanup pops + the
     // null method-name slot + runStream's snapshot-restoring CIH pop; live again.)
-    if (AptValue* pFound = LookupInObject(gpAptGlobalExtensionObject, *pName))
+    if (AptValue* pFound = LookupInObject(gpAptNativeGlobals, *pName))
         return pFound;
     if (this != gpAptGlobalFallback)
     {

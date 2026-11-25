@@ -75,12 +75,6 @@ bool GenericRwacVoice::CreateVoiceInstance(
     return true;
 }
 
-f32 GenericRwacVoice::GetCpuTicks() const
-{
-    return mpVoice ? static_cast<f32>(static_cast<u32>(mpVoice->miLastFrameCpuTicks))
-                   : 0.0f;
-}
-
 void GenericRwacVoice::AddParameterMap(u8 au8ParameterIndex, u8 au8PluginOffset,
                                        u8 au8Attribute, u8 au8Direction)
 {

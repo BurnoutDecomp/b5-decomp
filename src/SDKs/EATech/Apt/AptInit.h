@@ -20,15 +20,9 @@
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
 
-// ---------------------------------------------------------------------------
-// The shared 68-byte Apt configuration block (X360 unk_82F733B8). AptUpdate-
-// Initialize memcpy's the AptUpdateParams into it; AptCommonInitialize + the AS
-// interpreter read their capacity/thread config out of it. Modelled as a raw
-// dword array (the console reads it by byte offset); access is by word index.
-// The AptInitParmsT reinterpret (AptActionInterpreter::initialize) aliases the
-// SAME storage (iStackSize@word[8], iCallStackDepth@word[9], skipTrace@byte[64]).
-// ---------------------------------------------------------------------------
-extern unsigned int gAptCommonConfig[17];   // unk_82F733B8 (68 bytes + the trailing byte[64])
+// ARTIST 0x82F733B8. Shared configuration copied by AptUpdateInitialize.
+struct AptInitParmsT;
+extern AptInitParmsT gAptCommonConfig;
 
 // AptAllocatorInitialize @0x82ADD118 -- StaticInitialize the GC value-type sizes, then
 // construct the shared non-GC (DOGMA) pool (off_8324D808) + the GC value pool
@@ -49,12 +43,8 @@ void* AptAllocatorInitialize(int nGcMain, int nGcOvf, int nDogmaMain, int nDogma
 int AptSetSimulationThreadID(int a1);
 int AptSetRenderThreadID(int a1);
 
-// AptCommonInitialize @0x82AE91F0 -- the once-only shared static-data init (guarded
-// by dword_8324E6E0): set up the animation-director static tables, the string pool,
-// and the shared deferred-release AptValueVector. `pConfig` is the config block
-// (== &gAptCommonConfig); it reads word[6] (max-new-movie-clips), word[10] (the
-// deferred-vector capacity) and word[11] (the string-pool size) out of it.
-void* AptCommonInitialize(void* pConfig);
+// ARTIST 0x82AE91F0. Initialize the shared animation and string data.
+void AptCommonInitialize(const AptInitParmsT* pConfig);
 
 // AptValueInitialize @0x82B02800 -- build the process-wide AS value singletons
 // (none/undefined, the boolean/lookup/register tables, the empty CIH, the rendering

@@ -8,7 +8,7 @@
 //     Shutdown    @ 0x82AE14F0   shutdown @ 0x82AE15A0
 //
 // Family (B) -- the real `AptValueVector::*` symbols (capacity@+0, top@+4):
-//     ctor (ConstructAptValueVector) @ 0x82AE32F0   GetAt   @ 0x82ADBFD0
+//     ctor @ 0x82AE32F0   GetAt   @ 0x82ADBFD0
 //     SetAt          @ 0x82ADBFE0                    RemoveAt@ 0x82ADBFF0
 //     ReleaseValues  @ 0x82ADCF60
 //   (GetNumValues @0x82AD5228 / IsVectorFull @0x82ADC130 are inline in the .h.)
@@ -130,27 +130,12 @@ void AptValueVector::shutdown()
 }
 
 // ---------------------------------------------------------------------------
-// AptValueVector::ConstructAptValueVector  (ctor @0x82AE32F0)
-//
-// asm:
-//   r31=this r11=nCapacity
-//   *(+0) = nCapacity            // family-(B) capacity -> mnTop member (+0)
-//   *(+4) = 0                    // family-(B) top      -> mnCapacity member (+4)
-//   *(+8) = Allocate(pool, 4*nCapacity)
-// Family-(B) layout (capacity@+0, top@+4) -- the OPPOSITE of the
-// `AptValue>` operand-stack class; see the AptValueVector.h collision note.
-// Allocation order matches the binary: store capacity, store top=0, then the
-// allocated pointer (the X360 zeroes +8 first then overwrites; the visible
-// result is the allocated pointer, reproduced directly).
-// ---------------------------------------------------------------------------
-AptValueVector AptValueVector::ConstructAptValueVector(int32_t nCapacity)
+// ARTIST 0x82AE32F0. Deferred vectors store capacity at +0 and count at +4.
+AptValueVector::AptValueVector(int32_t nCapacity)
+    : mnTop(nCapacity), mnCapacity(0)
 {
-    AptValueVector lvVec;
-    lvVec.mnTop      = nCapacity;   // [c:+0x00] family-(B) capacity
-    lvVec.mnCapacity = 0;           // [c:+0x04] family-(B) live top
-    lvVec.mppItems   = static_cast<AptValue**>(
-        gpAptOperandStackPool->Allocate(sizeof(AptValue*) * nCapacity));   // [c:+0x08] (X360: 4*nCapacity for 4-byte ptrs; x64 needs 8-byte slots)
-    return lvVec;
+    mppItems = static_cast<AptValue**>(
+        gpNonGCPoolManager->Allocate(sizeof(AptValue*) * nCapacity));
 }
 
 // ---------------------------------------------------------------------------

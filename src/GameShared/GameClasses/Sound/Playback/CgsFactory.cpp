@@ -32,14 +32,6 @@ Factory::Factory(Name aName, Environment& arEnvironment)
             "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsFactory.h", 251 /* ARTIST 0x826AD398 */));
 }
 
-// @ 0x826AD3C8. The scalar-deleting thunk reinstalls the Object base vtable, asserts
-// a zero refcount (Object's own destructor, CgsObject.h:104), then frees on
-// (flag & 1). ~Factory itself has nothing to tear down: the only assert in the thunk
-// is the inlined base one, at the base's own header line.
-Factory::~Factory()
-{
-}
-
 // @ 0x826AD4D0. The Hex-Rays view shows an "arg-less bool virtual at vtable slot 3";
 // the DWARF vtable order ([0] dtor, [1] DoDispose, [2] DoCreateVoice,
 // [3] DoCreateContent, [4] DoUpdate) names slot 3: this is the subclass hook

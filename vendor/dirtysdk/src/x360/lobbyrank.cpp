@@ -297,42 +297,75 @@ extern "C" const char* LobbyRankData(LobbyRankT* r, s32 column, s32 row, char* o
 // ARTIST 82B263F8: one allocation holds the 0x60-byte ranker and four lists.
 struct RankAllocation { LobbyRankT ranker; LobbyRankListT lists[4]; };
 typedef char RankAllocationSize[(sizeof(RankAllocation)==0x2b0)?1:-1];
-extern "C" LobbyRankT* LobbyRankCreate(LobbyApiRefT* lobby, s32 cache)
+typedef char RankAllocationListOffset[(offsetof(RankAllocation,lists)==0x60)?1:-1];
+extern "C" LobbyRankT* LobbyRankCreate(LobbyApiRefT* pLobby, s32 iCache)
 {
- (void)cache;
- s32 group = DirtyMemGroupQuery();
- RankAllocation* allocation = static_cast<RankAllocation*>(DirtyMemAlloc(sizeof(RankAllocation), 1819438699, group));
- if (!allocation || !lobby) return 0;
- LobbyRankT* r = &allocation->ranker;
- r->iMemGroup=group; r->pLobby=lobby; r->pLocalize=0; r->pCallback=0;
- r->uListCount=4; r->eStatus=0; r->eDownloadStatus=0; r->pCategories=0;
- r->uCategoryCount=0; r->uCategoryIndex=0; r->uIndexIndex=0; r->uVariationIndex=0;
- r->iId=0; r->iLastCallbackId=0; r->iLastError=0; r->pLists=allocation->lists;
- r->strView[0]=0; r->strView[1]=0; r->strView[2]=0; r->strView[3]=0;
- r->strView[4]=0; r->strView[5]=0; r->strView[6]=0; r->strView[7]=0;
- r->strView[8]=0; r->strView[9]=0; r->strView[10]=0;
- memset(r->pLists, 0, r->uListCount * sizeof(LobbyRankListT));
- for (u32 i=0; i<r->uListCount; ++i) {
-  LobbyRankListT& list=r->pLists[i]; list.pRanker=r;
-  list.uCategoryIndex=(u16)-1; list.uIndexIndex=(u16)-1; list.uVariationIndex=(u16)-1;
-  list.uListIndex=(u16)-1; list.iOffset=-1; list.iRows=-1; list.iBuddyCount=-1;
- }
- r->pSymTab=0; r->iSymCount=0;
- return r;
+    (void)iCache;
+    const s32 iMemGroup = DirtyMemGroupQuery();
+    RankAllocation* pAllocation = static_cast<RankAllocation*>(
+        DirtyMemAlloc(sizeof(RankAllocation), 1819438699, iMemGroup));
+    if (!pAllocation || !pLobby)
+    {
+        return 0;
+    }
+    LobbyRankT* pRanker = &pAllocation->ranker;
+    LobbyRankListT* pLists = pAllocation->lists;
+    pRanker->iMemGroup = iMemGroup;
+    pRanker->pLobby = pLobby;
+    pRanker->pLocalize = 0;
+    pRanker->pCallback = 0;
+    pRanker->uListCount = 4;
+    pRanker->eStatus = 0;
+    pRanker->eDownloadStatus = 0;
+    pRanker->pCategories = 0;
+    pRanker->uCategoryCount = 0;
+    pRanker->uCategoryIndex = 0;
+    pRanker->uIndexIndex = 0;
+    pRanker->uVariationIndex = 0;
+    pRanker->iId = 0;
+    pRanker->iLastCallbackId = 0;
+    pRanker->iLastError = 0;
+    pRanker->pLists = pLists;
+    // ARTIST 82B26488 through 82B26494 clears exactly the 11-byte view.
+    memset(pRanker->strView, 0, sizeof(pRanker->strView));
+    memset(pLists, 0, pRanker->uListCount * sizeof(*pLists));
+
+    for (u32 i = 0; i != pRanker->uListCount; ++i)
+    {
+        LobbyRankListT* pList = &pLists[i];
+        pList->pRanker = pRanker;
+        pList->uListIndex = 0xffff;
+        pList->uCategoryIndex = 0xffff;
+        pList->uIndexIndex = 0xffff;
+        pList->uVariationIndex = 0xffff;
+        pList->iOffset = -1;
+        pList->iRows = -1;
+        pList->iBuddyCount = -1;
+    }
+    pRanker->pSymTab = 0;
+    pRanker->iSymCount = 0;
+    return pRanker;
 }
 
 #include "dirtylib.h"
-static void RankDispListCb(LobbyApiRefT*, LobbyApiMsgT*, void* user)
+// DecFIGS lobbyrank.c:486 declares the display-list callback and its unsigned row count.
+static void _LobbyRankDispListCb(LobbyApiRefT*, LobbyApiMsgT*, void* pUserData)
 {
- LobbyRankListT* list = static_cast<LobbyRankListT*>(user);
- LobbyRankT* r = list->pRanker;
- if (DispListCount(list->pList) == list->uExpectedRowCount) {
-  list->iId = -1;
-  if (r->pCallback) {
-   LobbyApiMsgT msg; msg.kind=0x6c697374; msg.code=0; msg.pData=0;
-   r->pCallback(r, &msg, r->pUserData);
-  }
- }
+    LobbyRankListT* pList = static_cast<LobbyRankListT*>(pUserData);
+    LobbyRankT* pRanker = pList->pRanker;
+    const u32 uUserCount = static_cast<u32>(DispListCount(pList->pList));
+    if (uUserCount == pList->uExpectedRowCount)
+    {
+        pList->iId = -1;
+        if (pRanker->pCallback)
+        {
+            LobbyApiMsgT Msg;
+            Msg.kind = 0x6c697374;
+            Msg.code = 0;
+            Msg.pData = 0;
+            pRanker->pCallback(pRanker, &Msg, pRanker->pUserData);
+        }
+    }
 }
 // DecFIGS lobbyrank.c:526 and the ARTIST request callback at 82B26FDC.
 static void _LobbyRankSnapCb(LobbyApiRefT* lobby, LobbyApiMsgT* msg, void* user)
@@ -361,7 +394,7 @@ static void _LobbyRankSnapCb(LobbyApiRefT* lobby, LobbyApiMsgT* msg, void* user)
    list.uFixedColumnCount=TagFieldGetNumber(TagFieldFind(msg->pData,"FC"),0);
    if (list.pList) { LobbyApiListFree(lobby,channel,list.pList); list.pList=0; }
    DirtyMemGroupEnter(r->iMemGroup);
-   list.pList=LobbyApiListAlloc(lobby,channel,RankDispListCb,&list);
+   list.pList=LobbyApiListAlloc(lobby,channel,_LobbyRankDispListCb,&list);
    DirtyMemGroupLeave();
    if (!list.pList) r->iLastError=-7;
    else {

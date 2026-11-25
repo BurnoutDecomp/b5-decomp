@@ -264,8 +264,8 @@ void Voice::SetParameter(s32 liParameterIndex, f32 lfValue, const u32* lpParamNa
 //   Defining the class destructor out-of-line emits exactly that: the mVoiceHandle
 //   member destructor runs the Release, the vtable store and the operator-delete tail
 //   are the compiler's scalar-deleting-destructor synthesis (host delete stands in
-//   for the custom-allocator tail). Mirrors committed CgsAemsPlayerVoiceDtor.cpp /
-//   CgsSubmixVoiceDtor.cpp.
+//   for the custom-allocator tail). See CgsAemsPlayerVoiceDtor.cpp and the
+//   inline SubmixVoice lifetime.
 //
 //   NOTE: this is DISTINCT from Voice::Destruct() (@0x826C4E38) -- Destruct asserts
 //   the voice exists + is not playing and writes the Playback state byte (+0x11=2);

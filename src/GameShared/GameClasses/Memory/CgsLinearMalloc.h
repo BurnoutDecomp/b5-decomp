@@ -26,7 +26,7 @@ namespace CgsMemory
         size_t GetFreeMemory() const;
         size_t GetUsage() const;       // 0x82866D40 - bytes consumed (bump pointer - region start)
         size_t GetSize() const;       // ARTIST 0x82866D50; asserts the allocator is created
-        void* GetStartAddress() const; // borrowed region start, independent of mpAlloc
+        void* GetStartAddress() const { return reinterpret_cast<void*>(mnStartAddress); }
 
     private:
         static RwMemoryFunctions mCachedMemoryFuncs;

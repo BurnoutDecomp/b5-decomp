@@ -146,10 +146,10 @@ namespace CgsMemory
         return mnNextAddress - mnStartAddress;
     }
 
-    void* LinearMalloc::GetStartAddress() const
-    {
-        return reinterpret_cast<void*>(mnStartAddress);
-    }
+
+
+
+
 
     void LinearMalloc::StartRWAllocation()
     {
