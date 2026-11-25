@@ -577,10 +577,9 @@ namespace BrnGameState
                    leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
                    CGS_ASSERT_MESSAGE_AT("leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0 && leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", CGS_ARTIST_FILE, 252));
 
-        CarData* lpCar = GetCarData(leRaceCarIndex);
-        if (lpCar)
+        if (GetCarData(leRaceCarIndex))
         {
-            lpCar->GetScoreData()->SetOnlineStuntScore(liScore);
+            GetCarData(leRaceCarIndex)->GetScoreData()->SetOnlineStuntScore(liScore);
         }
     }
 

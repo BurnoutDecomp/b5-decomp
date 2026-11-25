@@ -1,6 +1,8 @@
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
 #include "GameShared/GameClasses/Graphics/CgsBlendStateFactory.h"
 
+#include "SDKs/RenderEngineClub/MAIN/components/src/texture.h"
+
 #include <cstddef>
 #include "types.hpp"
 
@@ -57,23 +59,8 @@ namespace shadow
     };
     static VertexProgramStateData sVertexProgramStateData;
     static rw::Resource sVertexProgramStateResource;
-    bool Device::mbVertexProgramStateDirty = false;
+    Device::StateBlockShadow Device::m_Shadow = {};
 
-    const void* Device::mpStreamArray = 0;
-    const void* Device::mpIndexStreamArray = 0;
-    const renderengine::VertexDescriptorData* Device::mpVertexDescriptor = 0;
-
-    const renderengine::ProgramBufferData* Device::mpVertexProgramShadow = 0;
-    const renderengine::ProgramBufferData* Device::mpPixelProgramShadow = 0;
-    const renderengine::BlendMaterialState* Device::mpBlendState = 0;   // dword_83010964
-
-    const renderengine::TextureState* Device::mapTextureState[KU_MAX_TEXTURE_STATES] = {};   // dword_83010968
-    void* Device::mapSamplerState[KU_MAX_TEXTURE_STATES] = {};
-    void* Device::mapSamplerTexture[KU_MAX_TEXTURE_STATES] = {};
-
-    const renderengine::DepthStencilState* Device::mpDepthStencilState = 0;  // dword_83010A28
-    const renderengine::RasterizerState*   Device::mpRasterizerState   = 0;  // dword_83010A2C
-    const renderengine::RenderTargetState* Device::mpRenderTargetState = 0;
     bool Device::mbForceStencilWrite = false;
     u32 Device::muStencilValueToWrite = 0;
     bool Device::mbRasteriserStateLocked = false;
@@ -86,8 +73,8 @@ namespace shadow
     // Nothing in the reconstructed set opens that window yet, so it reads false throughout.
     bool Device::mbDepthStencilStateLocked = false;
     // mpLastBlendState / mpLastDepthStencilState / mpLastRasterizerState are GONE: they were a second
-    // host home for dword_83010964 / dword_83010A28 / dword_83010A2C, which mpBlendState /
-    // mpDepthStencilState / mpRasterizerState above already own. Their comment went with them; it
+    // host home for dword_83010964 / dword_83010A28 / dword_83010A2C, which m_Shadow.m_pBlendState /
+    // m_Shadow.m_pDepthStencilState / m_Shadow.m_pRasterizerState above already own. Their comment went with them; it
     // said the slots "live on the per-dispatch context", and they do not -- DispatchAllMeshes
     // @0x827F2718 reaches them as 0xD8 / 0x14 / 0xDC off r27, and r27 IS off_83010950
     // (`addi r11, r11, off_83010950@l` @0x827F2754 -> `stw r11, var_140(r1)` @0x827F2760 ->
@@ -151,7 +138,7 @@ namespace shadow
 
     void Device::SetVertexProgramInternal()
     {
-        mbVertexProgramStateDirty = true;
+        m_Shadow.mbVertexProgramStateDirty = true;
     }
 
     void Device::DrawIndexedMultipleStreams_Custom(
@@ -167,37 +154,37 @@ namespace shadow
     // @0x82276970: clear the whole shadow cache.
     void Device::ResetShadowing()
     {
-        mpStreamArray = 0;
-        mpIndexStreamArray = 0;
-        mpVertexDescriptor = 0;
-        mpVertexProgramShadow = 0;
+        m_Shadow.m_pMesh = 0;
+        m_Shadow.m_pMeshState = 0;
+        m_Shadow.m_pVertexDescriptor = 0;
+        m_Shadow.m_pVertexProgramBuffer = 0;
         // dword_83010960 is reset to -1 (the "no pixel program bound" sentinel).
-        mpPixelProgramShadow = reinterpret_cast<const renderengine::ProgramBufferData*>(
+        m_Shadow.m_pPixelProgramBuffer = reinterpret_cast<const renderengine::ProgramBufferData*>(
             static_cast<uintptr_t>(~0u));
-        mpBlendState = 0;
+        m_Shadow.m_pBlendState = 0;
 
         for (u32 luSampler = 0; luSampler < KU_MAX_TEXTURE_STATES; ++luSampler)
         {
-            mapTextureState[luSampler] = 0;
-            mapSamplerState[luSampler] = 0;
-            mapSamplerTexture[luSampler] = 0;
+            m_Shadow.m_apTextureStates[luSampler] = 0;
+            m_Shadow.m_apSamplerStates[luSampler] = 0;
+            m_Shadow.m_apTextures[luSampler] = 0;
         }
 
-        mpDepthStencilState = 0;
-        mpRasterizerState = 0;
-        mpRenderTargetState = 0;
-        mbVertexProgramStateDirty = true;
+        m_Shadow.m_pDepthStencilState = 0;
+        m_Shadow.m_pRasterizerState = 0;
+        m_Shadow.m_pRenderTargetState = 0;
+        m_Shadow.mbVertexProgramStateDirty = true;
     }
 
     // @0x82276BA0: bind a vertex program through the shadow.
     bool Device::SetVertexProgram(const renderengine::ProgramBufferData* lpVertexProgram)
     {
-        if (mpVertexProgramShadow == lpVertexProgram)
+        if (m_Shadow.m_pVertexProgramBuffer == lpVertexProgram)
         {
             return false;
         }
         SetVertexProgramInternal();
-        mpVertexProgramShadow = lpVertexProgram;
+        m_Shadow.m_pVertexProgramBuffer = lpVertexProgram;
         return true;
     }
 
@@ -206,7 +193,7 @@ namespace shadow
     // ProgramBufferData fields); the binder passes &that, or null when no program is bound.
     bool Device::SetPixelProgram(const renderengine::ProgramBufferData* lpPixelProgram)
     {
-        if (mpPixelProgramShadow == lpPixelProgram)
+        if (m_Shadow.m_pPixelProgramBuffer == lpPixelProgram)
         {
             return false;
         }
@@ -217,7 +204,7 @@ namespace shadow
             lpShader = const_cast<u8*>(reinterpret_cast<const u8*>(lpPixelProgram)) + 0x14;
         }
         D3DDevice_SetPixelShader(gpD3DDevice, static_cast<D3DPixelShader*>(lpShader));
-        mpPixelProgramShadow = lpPixelProgram;
+        m_Shadow.m_pPixelProgramBuffer = lpPixelProgram;
         return true;
     }
 
@@ -225,11 +212,11 @@ namespace shadow
     // byte_83010A34, written inline by the immediate-mode renderers).
     bool Device::SetVertexDescriptor(const renderengine::VertexDescriptorData* lpVertexDescriptor)
     {
-        if (mpVertexDescriptor == lpVertexDescriptor)
+        if (m_Shadow.m_pVertexDescriptor == lpVertexDescriptor)
         {
             return false;
         }
-        mpVertexDescriptor = lpVertexDescriptor;
+        m_Shadow.m_pVertexDescriptor = lpVertexDescriptor;
         SetVertexProgramInternal();
         return true;
     }
@@ -239,13 +226,13 @@ namespace shadow
     {
         CGS_ASSERT(luSamplerId < KU_MAX_TEXTURE_STATES, "luSamplerId < MaxTextureStates");
 
-        void* const lpPrevious = mapSamplerState[luSamplerId];
+        const renderengine::SamplerState* const lpPrevious = m_Shadow.m_apSamplerStates[luSamplerId];
         if (lpPrevious != lpState)
         {
             // X360 passes (lpPrevious == 0) as the "no previous state" flag to the sub-setter.
             ApplyNativeSamplerState(lpState, luSamplerId, lpPrevious == 0);
-            mapSamplerState[luSamplerId] = const_cast<renderengine::SamplerState*>(lpState);
-            mapTextureState[luSamplerId] = 0;   // a bare-sampler bind invalidates the whole-unit key
+            m_Shadow.m_apSamplerStates[luSamplerId] = lpState;
+            m_Shadow.m_apTextureStates[luSamplerId] = 0;   // a bare-sampler bind invalidates the whole-unit key
         }
     }
 
@@ -255,22 +242,22 @@ namespace shadow
         CGS_ASSERT(luSamplerId < KU_MAX_TEXTURE_STATES, "luSamplerId < MaxTextureStates");
 
         void* lpResult = lpTexture;
-        if (mapSamplerTexture[luSamplerId] != lpTexture)
+        if (m_Shadow.m_apTextures[luSamplerId] != lpTexture)
         {
             // The bind flag is (1<<63) >> (luSamplerId + 32), taken as its low 32 bits: for sampler
             // 0 this is 0x80000000 (the Xenon "set sampler N" mask).
             const u32 luFlags =
                 static_cast<u32>((1ull << 63) >> (luSamplerId + 32));
             D3DDevice_SetTexture(gpD3DDevice, luSamplerId, static_cast<D3DBaseTexture*>(lpTexture), luFlags);
-            mapSamplerTexture[luSamplerId] = lpTexture;
-            mapTextureState[luSamplerId] = 0;   // a bare-texture bind invalidates the whole-unit key
+            m_Shadow.m_apTextures[luSamplerId] = static_cast<const renderengine::Texture*>(lpTexture);
+            m_Shadow.m_apTextureStates[luSamplerId] = 0;   // a bare-texture bind invalidates the whole-unit key
             lpResult = lpTexture;
         }
         return lpResult;
     }
 
     // @0x8227D158: bind a whole TextureState (its 32-byte sampler block + the raster it samples)
-    // at one unit through the shadow. Keyed on the whole-unit shadow mapTextureState (dword_83010968):
+    // at one unit through the shadow. Keyed on the whole-unit shadow m_Shadow.m_apTextureStates (dword_83010968):
     //   * HIT  (`lwz r11, dword_83010968[a2]; cmplw r11, r3; bne`): the object is already the bound
     //     one, so nothing is applied -- the console only re-asserts that the TEXTURE shadow still
     //     holds this object's raster (shadowingdevice.h:918, string verbatim below). That assert is
@@ -286,22 +273,22 @@ namespace shadow
     // No unit-range assert here (0x8227D158 has none; the two bare binders do) -- faithful.
     void Device::SetState(const renderengine::TextureState* lpState, u32 luSamplerId)
     {
-        const renderengine::TextureState* const lpPrevious = mapTextureState[luSamplerId];
+        const renderengine::TextureState* const lpPrevious = m_Shadow.m_apTextureStates[luSamplerId];
         if (lpPrevious == lpState)
         {
-            CGS_ASSERT(mapSamplerTexture[luSamplerId] == static_cast<void*>(lpState->mpRaster),
+            CGS_ASSERT(m_Shadow.m_apTextures[luSamplerId] == lpState->mpRaster,
                        "m_Shadow.m_apTextures[id] == textureState->NativeGetTexture()");   // shadowingdevice.h:918
         }
         else
         {
-            void* const lpTexture = static_cast<void*>(lpState->mpRaster);              // lwz r27, 0x20(r3)
+            renderengine::Texture* const lpTexture = lpState->mpRaster;              // lwz r27, 0x20(r3)
             ApplyNativeSamplerState(lpState, luSamplerId, lpPrevious == 0);
             const u32 luFlags =
                 static_cast<u32>((1ull << 63) >> (luSamplerId + 32));                   // li r10,1 / srd r6,r10,r9
             D3DDevice_SetTexture(gpD3DDevice, luSamplerId, static_cast<D3DBaseTexture*>(lpTexture), luFlags);         // bl D3DDevice_SetTexture
-            mapTextureState[luSamplerId]   = lpState;                                    // stw r31, dword_83010968[r30]
-            mapSamplerState[luSamplerId]   = const_cast<renderengine::TextureState*>(lpState);                                   // stw r31, dword_830109A8[r30]
-            mapSamplerTexture[luSamplerId] = lpTexture;                                  // stw r27, dword_830109E8[r30]
+            m_Shadow.m_apTextureStates[luSamplerId]   = lpState;                                    // stw r31, dword_83010968[r30]
+            m_Shadow.m_apSamplerStates[luSamplerId]   = lpState;                                   // stw r31, dword_830109A8[r30]
+            m_Shadow.m_apTextures[luSamplerId] = static_cast<const renderengine::Texture*>(lpTexture);                                  // stw r27, dword_830109E8[r30]
         }
     }
 
@@ -312,53 +299,53 @@ namespace shadow
     {
         if (luSamplerId >= KU_MAX_TEXTURE_STATES)
             return 0;
-        return mapSamplerTexture[luSamplerId];
+        return const_cast<renderengine::Texture*>(m_Shadow.m_apTextures[luSamplerId]);
     }
 
     void Device::SetSamplerTextureShadow(u32 luSamplerId, void* lpTexture)
     {
         if (luSamplerId >= KU_MAX_TEXTURE_STATES)
             return;
-        mapSamplerTexture[luSamplerId] = lpTexture;   // stw r31, dword_830109E8(r30)
-        mapTextureState[luSamplerId]   = 0;           // stw r11(=0), dword_83010968(r30)
+        m_Shadow.m_apTextures[luSamplerId] = static_cast<const renderengine::Texture*>(lpTexture);   // stw r31, dword_830109E8(r30)
+        m_Shadow.m_apTextureStates[luSamplerId]   = 0;           // stw r11(=0), dword_83010968(r30)
     }
 
     // @0x827E7A10: rebind the dirty vertex-program state + the active stream sources to D3D.
     void Device::FlushVertexProgramState()
     {
 
-        if (mbVertexProgramStateDirty)
+        if (m_Shadow.mbVertexProgramStateDirty)
         {
             renderengine::VertexProgramState* lpState =
-                GetVertexProgramState(mpVertexProgramShadow, mpVertexDescriptor);
+                GetVertexProgramState(m_Shadow.m_pVertexProgramBuffer, m_Shadow.m_pVertexDescriptor);
             CGS_ASSERT(lpState != 0, "lVertexProgramState != NULL");
 
             D3DDevice_SetVertexShader(gpD3DDevice, lpState->GetD3DVertexShader());
             renderengine::gpCurrentVertexProgramState = lpState;
-            D3DDevice_SetVertexDeclaration(gpD3DDevice, mpVertexDescriptor->mpDeclaration);
-            mbVertexProgramStateDirty = false;
+            D3DDevice_SetVertexDeclaration(gpD3DDevice, m_Shadow.m_pVertexDescriptor->mpDeclaration);
+            m_Shadow.mbVertexProgramStateDirty = false;
         }
 
         // Build a per-stream stride scratch table from the active vertex descriptor: each element
         // maps its descriptor stream-stride into the slot of its (asserted < 8) D3D stream.
         u32 lauStreamStride[8];
 
-        if (mpStreamArray != 0)
+        if (m_Shadow.m_pMesh != 0)
         {
             for (u32 i = 0; i < 8; ++i)
             {
                 lauStreamStride[i] = 0;
             }
 
-            const u32 luElementCount = mpVertexDescriptor->muElementCount;
+            const u32 luElementCount = m_Shadow.m_pVertexDescriptor->muElementCount;
             for (u32 luElement = 0; luElement < luElementCount; ++luElement)
             {
-                const u16 luStream = mpVertexDescriptor->maElements[luElement].muStream;
+                const u16 luStream = m_Shadow.m_pVertexDescriptor->maElements[luElement].muStream;
                 CGS_ASSERT(luStream < 8, "lpElement->stream < 8");
-                lauStreamStride[luStream] = mpVertexDescriptor->GetElementStrides()[luElement];
+                lauStreamStride[luStream] = m_Shadow.m_pVertexDescriptor->GetElementStrides()[luElement];
             }
 
-            const RenderableMesh* lpStreams = static_cast<const RenderableMesh*>(mpStreamArray);
+            const RenderableMesh* lpStreams = m_Shadow.m_pMesh;
             const u32 luStreamCount = lpStreams->mu8NumVertexBuffers;
             u32 luOffsetInBytes = 0;
             for (u32 luStream = 0; luStream < luStreamCount; ++luStream)
@@ -370,23 +357,23 @@ namespace shadow
                 luOffsetInBytes += luStride;
             }
         }
-        else if (mpIndexStreamArray != 0)
+        else if (m_Shadow.m_pMeshState != 0)
         {
             for (u32 i = 0; i < 8; ++i)
             {
                 lauStreamStride[i] = 0;
             }
 
-            const u32 luElementCount = mpVertexDescriptor->muElementCount;
+            const u32 luElementCount = m_Shadow.m_pVertexDescriptor->muElementCount;
             for (u32 luElement = 0; luElement < luElementCount; ++luElement)
             {
-                const u16 luStream = mpVertexDescriptor->maElements[luElement].muStream;
+                const u16 luStream = m_Shadow.m_pVertexDescriptor->maElements[luElement].muStream;
                 CGS_ASSERT(luStream < 8, "lpElement->stream < 8");
-                lauStreamStride[luStream] = mpVertexDescriptor->GetElementStrides()[luElement];
+                lauStreamStride[luStream] = m_Shadow.m_pVertexDescriptor->GetElementStrides()[luElement];
             }
 
             const renderengine::MeshHelper* lpStreams =
-                static_cast<const renderengine::MeshHelper*>(mpIndexStreamArray);
+                m_Shadow.m_pMeshState;
             const u32 luStreamCount = lpStreams->GetNumVertexBuffers();
             u32 luOffsetInBytes = 0;
             for (u32 luStream = 0; luStream < luStreamCount; ++luStream)
@@ -408,7 +395,7 @@ namespace shadow
         CGS_ASSERT(luStencilValueToWrite <= 255, "luStencilValueToWrite <= 255");
         muStencilValueToWrite = luStencilValueToWrite;
         mbForceStencilWrite = true;
-        mpDepthStencilState = 0;   // dword_83010A28 = 0 @0x823F32D4
+        m_Shadow.m_pDepthStencilState = 0;   // dword_83010A28 = 0 @0x823F32D4
         return lpResult;
     }
 
@@ -417,7 +404,7 @@ namespace shadow
     {
         CGS_ASSERT(mbForceStencilWrite, "mbForceStencilWrite");
         mbForceStencilWrite = false;
-        mpDepthStencilState = 0;   // dword_83010A28 = 0
+        m_Shadow.m_pDepthStencilState = 0;   // dword_83010A28 = 0
         return 0;
     }
 
@@ -445,7 +432,7 @@ namespace shadow
     // in the header for the export-set census that establishes the inlining.
     //
     // NOTHING ELSE IS DONE, and the omission is the asm's: unlike BeginForceStencilWrite, neither
-    // body nulls mpDepthStencilState. Locking is not a state change -- it is a promise that the
+    // body nulls m_Shadow.m_pDepthStencilState. Locking is not a state change -- it is a promise that the
     // state on the device is the one the caller just applied and must not be replaced -- so
     // invalidating the shadow here would force a redundant rebind on the next unlocked setter.
     void* Device::LockDepthStencilState()
@@ -704,12 +691,12 @@ namespace shadow
     // 0x20 bit -- so r4 is 1 iff the cache was null. Not arithmetic.
     void Device::SetState(const renderengine::DepthStencilState* lpState)
     {
-        if (!mbDepthStencilStateLocked && mpDepthStencilState != lpState)
+        if (!mbDepthStencilStateLocked && m_Shadow.m_pDepthStencilState != lpState)
         {
-            const bool lbWasUnset = (mpDepthStencilState == 0);
+            const bool lbWasUnset = (m_Shadow.m_pDepthStencilState == 0);
             Xbox2SetDepthStencilStateLowLevelShadowed(
                 const_cast<renderengine::DepthStencilState*>(lpState), lbWasUnset);
-            mpDepthStencilState = lpState;
+            m_Shadow.m_pDepthStencilState = lpState;
         }
     }
 
@@ -735,12 +722,12 @@ namespace shadow
     // gate an unnamed byte; see the blend overload.
     void Device::SetState(const renderengine::RasterizerState* lpState)
     {
-        if (!mbRasteriserStateLocked && mpRasterizerState != lpState)
+        if (!mbRasteriserStateLocked && m_Shadow.m_pRasterizerState != lpState)
         {
-            const bool lbWasUnset = (mpRasterizerState == 0);
+            const bool lbWasUnset = (m_Shadow.m_pRasterizerState == 0);
             Xbox2SetRasterizerStateLowLevelShadowed(
                 const_cast<renderengine::RasterizerState*>(lpState), lbWasUnset);
-            mpRasterizerState = lpState;
+            m_Shadow.m_pRasterizerState = lpState;
         }
     }
 
@@ -782,12 +769,12 @@ namespace shadow
     //
     void Device::SetState(const renderengine::BlendMaterialState* lpState)
     {
-        if (!mbBlendStateLocked && mpBlendState != lpState)
+        if (!mbBlendStateLocked && m_Shadow.m_pBlendState != lpState)
         {
-            const bool lbWasUnset = (mpBlendState == 0);
+            const bool lbWasUnset = (m_Shadow.m_pBlendState == 0);
             Xbox2SetStateLowLevelShadowed(
                 const_cast<renderengine::BlendMaterialState*>(lpState), lbWasUnset);
-            mpBlendState = lpState;
+            m_Shadow.m_pBlendState = lpState;
         }
     }
 
@@ -810,10 +797,10 @@ namespace shadow
     //
     void Device::ResetProgramShadows()
     {
-        mpVertexProgramShadow = 0;
-        mpPixelProgramShadow  = reinterpret_cast<const renderengine::ProgramBufferData*>(
+        m_Shadow.m_pVertexProgramBuffer = 0;
+        m_Shadow.m_pPixelProgramBuffer  = reinterpret_cast<const renderengine::ProgramBufferData*>(
             static_cast<uintptr_t>(~0u));
-        mpRasterizerState   = 0;
+        m_Shadow.m_pRasterizerState   = 0;
     }
 
     // =====================================================================================

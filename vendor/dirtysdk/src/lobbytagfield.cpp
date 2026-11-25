@@ -550,7 +550,8 @@ extern "C" s32 TagFieldGetRaw(const char* pData, char* pBuffer, s32 iBuflen, con
     else
     {
         pPtr = reinterpret_cast<const unsigned char*>(pData);
-        for (iLen = 1, uTerm = '!'; (iLen < iBuflen) && (*pPtr >= uTerm); ++iLen)
+        uTerm = '!';
+        for (iLen = 1; (iLen < iBuflen) && (*pPtr >= uTerm); ++iLen)
         {
             uTerm ^= (*pPtr == '"') ? 1 : 0;
             *pBuffer++ = (char)*pPtr++;

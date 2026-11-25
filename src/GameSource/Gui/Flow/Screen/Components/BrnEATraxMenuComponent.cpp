@@ -132,16 +132,22 @@ namespace BrnGui
     void EATraxMenuComponent::Initialize(const GuiEventAudioTraxUpdate::EATraxArrayType* lpTraxEnabledInFreeBurn,
                                          const GuiEventAudioTraxUpdate::EATraxArrayType* lpTraxEnabledInEvents)
     {
+        mEATraxEnabledInFreeBurnBitfield.Construct();
         mEATraxEnabledInFreeBurnBitfield = *lpTraxEnabledInFreeBurn;
-        mEATraxEnabledInEventsBitfield   = *lpTraxEnabledInEvents;
+        mEATraxEnabledInEventsBitfield.Construct();
+        mEATraxEnabledInEventsBitfield = *lpTraxEnabledInEvents;
 
+        const s32 liTotalNumberTracks = mEATraxHelper.GetNumSongs();
         mCurrentHighlightedIndex = 0;
-        mCurrentTopIndex         = 0;
-        mTotalNumberTracks       = mEATraxHelper.GetNumSongs();
+        mCurrentTopIndex = 0;
+        mTotalNumberTracks = liTotalNumberTracks;
 
         CGS_ASSERT(mTotalNumberTracks <= KI_MAX_TRAX_IN_GAME,
-                   "mTotalNumberTracks <= KI_MAX_TRAX_IN_GAME");
-        CGS_ASSERT(mTotalNumberTracks > 0, "mTotalNumberTracks > 0");
+            CGS_ASSERT_MESSAGE_AT("mTotalNumberTracks <= KI_MAX_TRAX_IN_GAME",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnEATraxMenuComponent.cpp", 209));
+        CGS_ASSERT(mTotalNumberTracks > 0,
+            CGS_ASSERT_MESSAGE_AT("mTotalNumberTracks > 0",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnEATraxMenuComponent.cpp", 210));
 
         mCurrentHighlightedIndex = 0;   // the console stores it a second time
         BuildStringIDs();

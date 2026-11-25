@@ -103,11 +103,11 @@ namespace BrnGui
     // The X360 sites load a MID-TABLE pointer for the "hide" transitions
     // (off_82F266F0 == &[1] "invisible", off_82F266F8 == &[1] "backup",
     // off_82F26700 == &[1] "invisible"); reconstruct as table[1] indexing.
-    const char* const OnlineGameRoomPlayerInfo::KAPC_ANIMATION_STATES[2] =
+    const char* OnlineGameRoomPlayerInfo::KAPC_ANIMATION_STATES[2] =
     { "visible", "invisible" };
-    const char* const OnlineGameRoomPlayerInfo::KAPC_PAUSE_BUTTON_PROMPT_ANIMATION_STATES[2] =
+    const char* OnlineGameRoomPlayerInfo::KAPC_PAUSE_BUTTON_PROMPT_ANIMATION_STATES[2] =
     { "return", "backup" };
-    const char* const OnlineGameRoomPlayerInfo::KAPC_PLAYERS_BUTTON_PROMPT_ANIMATION_STATES[2] =
+    const char* OnlineGameRoomPlayerInfo::KAPC_PLAYERS_BUTTON_PROMPT_ANIMATION_STATES[2] =
     { "visible", "invisible" };
 
     // ---- string-id tables (X360 @0x82F26704..0x82F26788, dumped as one window so
@@ -2103,7 +2103,7 @@ namespace BrnGui
         lapcOptionStrings[2] = KAC_SUBMIT_FEEBDACK_STRING_ID;
         lapcOptionStrings[3] = KAC_KICK_PLAYER_STRING_ID;
 
-        if (mpGuiCache->GetOnlinePlayerInfoByIndex(mPlayerNameComponent.miHighlightedIndex)->mbMarkedMan)
+        if (mpGuiCache->GetOnlinePlayerInfoByIndex(mPlayerNameComponent.GetHighlightedIndex())->mbMarkedMan)
         {
             lapcOptionStrings[0] = KAC_UNMARK_PLAYER_STRING_ID;
         }
@@ -2134,7 +2134,7 @@ namespace BrnGui
 
         for (; liOption < KI_MAX_DISPLAYABLE_OPTIONS; ++liOption)
         {
-            mOptionComponent.DisableSelectable(liOption);   // component slot 9
+            mOptionComponent.Disable(liOption);
         }
 
         mOptionComponent.SetIds(lau64OptionIds);
@@ -4768,10 +4768,13 @@ namespace BrnGui
     // back to the cache.
     void OnlineGameRoomPlayerInfo::UnloadPauseResources()
     {
-        mpStateInterface->PlayAptMovie("", KI_APT_MOVIE_LEVEL);
+        CgsGui::GuiEventPlayAptMovie lMovie;
+        lMovie.mpacMovieName = "";
+        lMovie.miLevelNum = KI_APT_MOVIE_LEVEL;
+        mpStateInterface->OutputViewState(lMovie);
 
         // X360 BrnOnlineGameRoomPlayerInfo.cpp:4203.
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", KAC_BRN_ONLINE_GAME_ROOM_PLAYER_INFO_ASSERT_FILE, 4203);
 
         if (mpGuiCache != 0)
         {
@@ -4785,10 +4788,13 @@ namespace BrnGui
     // tuples back to the cache.
     void OnlineGameRoomPlayerInfo::UnloadSettingsResources()
     {
-        mpStateInterface->PlayAptMovie("", KI_APT_MOVIE_LEVEL);
+        CgsGui::GuiEventPlayAptMovie lMovie;
+        lMovie.mpacMovieName = "";
+        lMovie.miLevelNum = KI_APT_MOVIE_LEVEL;
+        mpStateInterface->OutputViewState(lMovie);
 
         // X360 BrnOnlineGameRoomPlayerInfo.cpp:4224.
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", KAC_BRN_ONLINE_GAME_ROOM_PLAYER_INFO_ASSERT_FILE, 4224);
 
         if (mpGuiCache != 0)
         {

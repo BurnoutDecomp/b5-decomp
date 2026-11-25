@@ -631,10 +631,7 @@ void Vehicle::UpdateEffects(f32 lfTimeDelta, s32 liBulbWarmthDelta, CgsNumeric::
         {
             bool lbHeadlightsFlashed = AreHeadlightsFlashed();
 
-            // PatternGenerator carries no state; the console passes luPattern in r3 with no
-            // `this`, and this tree models the stepper as a member of the empty struct.
-            PatternGenerator lPatternGenerator;
-            const bool lbPatternPlaying = lPatternGenerator.UpdateHeadlightFlash(
+            const bool lbPatternPlaying = PatternGenerator::UpdateHeadlightFlash(
                 muHeadlightFlashPattern, lfTimeDelta, &mfHeadlightTimeToFlash,
                 &muHeadlightFlashState, &lbHeadlightsFlashed);
 

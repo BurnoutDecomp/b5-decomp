@@ -45,13 +45,6 @@ namespace BrnWorld
 
     namespace
     {
-        // The three seeds, read out of the decrypted ARTIST image at the addresses the asm
-        // names (file_off = 0x3000 + vaddr - 0x82000000, big-endian) -- NOT inferred from the
-        // pseudocode's printed decimals.
-        const f32 KF_MODE_START_QUARTER_BAR    = 0.25f;   // flt_82003F40 (0x3E800000)
-        const f32 KF_MODE_START_ONLINE_HIGH_BAR = 0.9f;   // flt_82005450 (0x3F666666)
-        const f32 KF_MODE_START_ONLINE_HALF_BAR = 0.5f;   // flt_820147FC (0x3F000000)
-
         template <typename Payload>
         void AddBoostEvent(RaceCarEntityModuleIO::GameEventQueue* lpQueue,
                            const Payload& lrPayload, s32 liEventId)
@@ -240,7 +233,7 @@ void BoostStrategy::OnModeStart(BrnGameState::GameStateModuleIO::EGameModeType l
     case BrnGameState::GameStateModuleIO::E_MODE_ROAD_RAGE:
     case BrnGameState::GameStateModuleIO::E_MODE_STUNT_ATTACK:
     case BrnGameState::GameStateModuleIO::E_MODE_MARKED_MAN:
-        AddBoost(mfMaxBoost * KF_MODE_START_QUARTER_BAR);
+        AddBoost(mfMaxBoost * 0.25f);
         break;
 
     // jumptable 822A5FE4 case 5 -- asm 0x822A6040.
@@ -252,8 +245,14 @@ void BoostStrategy::OnModeStart(BrnGameState::GameStateModuleIO::EGameModeType l
     case BrnGameState::GameStateModuleIO::E_MODE_ONLINE_RACE:
     case BrnGameState::GameStateModuleIO::E_MODE_ONLINE_ROAD_RAGE:
     case BrnGameState::GameStateModuleIO::E_MODE_ONLINE_BURNING_HOME_RUN:
-        mfBoostAmount = lbFlag ? (mfMaxBoost * KF_MODE_START_ONLINE_HIGH_BAR)
-                               : (mfMaxBoost * KF_MODE_START_ONLINE_HALF_BAR);
+        if (lbFlag)
+        {
+            mfBoostAmount = mfMaxBoost * 0.9f;
+        }
+        else
+        {
+            mfBoostAmount = mfMaxBoost * 0.5f;
+        }
         break;
 
     // jumptable 822A5FE4 cases 1,2,4,6,9,12 (the empty slot at 0x822A6088), plus every

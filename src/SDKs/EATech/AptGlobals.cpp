@@ -43,7 +43,7 @@
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"       // AptActionInterpreter (VM singletons)
 #include "SDKs/EATech/include/Apt/AptValue/AptGCReleaseVector.h"// AptGCReleaseVector (gValuesToRelease)
 #include "SDKs/EATech/include/Apt/AptRenderManagerQueue.h"      // AptRenderManagerQueue (gAptRenderManagerQueue)
-#include "SDKs/EATech/Apt/AptValueGCPoolManager.h"              // byte_82144A18[AptVFT_NumVFTs] (section 10)
+#include "SDKs/EATech/Apt/AptValueGCPoolManager.h"              // AptValueSizesByVType[AptVFT_NumVFTs] (section 10)
 
 // --- pointer-only targets: forward declarations (exact struct/class tags) ---
 class  AptValue;
@@ -306,12 +306,14 @@ extern const int gAptListenerEventDescriptorCount = 0;                          
 
 // ===========================================================================
 // 10. The per-VFT object-size table the GC pool's StaticInitialize scans
-//     (X360 byte_82144A18[AptVFT_NumVFTs]).  Zeroed STORAGE only: the contents
-//     are FILLED by AptValueGC_PoolManager::StaticInitialize from sizeof() of the
-//     reconstructed x64 classes (the console .rdata bytes are RECOVERED -- the
-//     0x82144A18 dump -- and recorded per entry there as the 32-bit cross-check).
-// ===========================================================================
-uint8_t byte_82144A18[AptVFT_NumVFTs] = {};   // 0x82144A18 (filled at StaticInitialize)
+//     (ARTIST 0x82144A18). The table is static data scanned by the allocator.
+extern const uint8_t AptValueSizesByVType[AptVFT_NumVFTs] = {
+    0x00, 0x04, 0x00, 0x08, 0x0c, 0x0c, 0x0c, 0x0c,
+    0x0c, 0x24, 0x20, 0x08, 0x28, 0x20, 0x2c, 0x20,
+    0x20, 0x20, 0x24, 0x20, 0x20, 0x20, 0x20, 0x20,
+    0x20, 0x20, 0x20, 0x20, 0x40, 0x10, 0x20, 0x20,
+    0x28, 0x24, 0x34, 0x34, 0x44, 0x28
+};
 
 // ===========================================================================
 // 11. Analog-input tables (X360 .data / rodata; the input layer fills them each

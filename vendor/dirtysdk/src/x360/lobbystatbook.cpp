@@ -13,6 +13,7 @@
 
 // ARTIST 0x82B1AFE8; provider belongs to the LobbyApi lane.
 extern "C" LobbyApiUserT* LobbyApiGetUserInfo(LobbyApiRefT*, const char*);
+extern "C" char* ds_strnzcpy(char*, const char*, s32);
 
 // DirtySDK 5.5.3 lobbystatbook.c: private declaration shape from DecFIGS;
 // ARTIST accessors confirm eStatus, iError, pRowDescs and the two u16 counts.
@@ -293,8 +294,7 @@ s32 LobbyStatbookFetchView(LobbyStatbookT* pStatbook, const u8* pView)
     pStatbook->iError = 0;
     pStatbook->uRowCount = 0;
     pStatbook->eDownloadStatus = LOBBYSTATBOOK_DOWNLOAD_STATUS_VIEW;
-    std::strncpy(pStatbook->strViewName, reinterpret_cast<const char*>(pView), sizeof(pStatbook->strViewName));
-    pStatbook->strViewName[sizeof(pStatbook->strViewName) - 1] = 0;
+    ds_strnzcpy(pStatbook->strViewName, reinterpret_cast<const char*>(pView), sizeof(pStatbook->strViewName));
     std::memset(pStatbook->pSlots, 0, pStatbook->uSlotCount * sizeof(LobbyStatbookSlotT));
     LobbyApiRequestCB(pStatbook->pLobby, 0x73766977, strRequest, _LobbyStatbookViewCb, pStatbook);
     return 0;

@@ -455,7 +455,7 @@ void ImRendererBase::SetState(const DepthStencilState* p, u32 luStencilRef)
     D3DDevice_SetRenderState_HiStencilWriteEnable(d, p->muHiStencilWriteEnable);
     D3DDevice_SetRenderState_HiStencilFunc(d, p->muHiStencilFunc);
     D3DDevice_SetRenderState_HiStencilRef(d, p->muHiStencilRef);
-    shadow::Device::mpDepthStencilState = 0;
+    shadow::Device::m_Shadow.m_pDepthStencilState = 0;
 }
 
 // ARTIST827DB5D8 and 823A6118 share the existing shadow state homes.

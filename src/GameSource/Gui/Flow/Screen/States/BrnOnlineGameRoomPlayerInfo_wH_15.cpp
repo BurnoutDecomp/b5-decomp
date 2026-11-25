@@ -18,11 +18,6 @@
 //     payload view below indexes a real array and the host stride is whatever the host
 //     record is;
 //   * the +448 count offset is that array's end, i.e. the payload view's next member;
-//   * the AddEvent record size 20 for the {8,18,12,"",3} play-apt-movie record is not
-//     written here at all -- the record carries a pointer, so its host size differs.
-//     The X360 emitted it inline; the faithful de-inlined form is the real method
-//     CgsGui::StateInterface::PlayAptMovie(name, level), which owns that sizeof
-//     (same de-inlining the committed siblings wH_01 / wH_07 / BrnCarSelectMain_wG_01 use).
 //
 // HEADER-CLASH NOTE (spec's idiom section; BrnInGame.cpp precedent): the lobby
 // player-list event's typed home is BrnGuiDemangledEventTypes.h, which HARD-COLLIDES
@@ -36,11 +31,13 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsModule::Event
-#include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface::PlayAptMovie
+#include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // GuiEventPlayAptMovie, StateInterface
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache::UnloadResources
 #include "GameSource/Gui/Flow/Screen/Components/BrnGuiNetworkPlayerStats.h" // GuiNetworkPlayerStats::Destruct
 #include "GameSource/Gui/Flow/Screen/Components/BrnGuiNetworkRouteInfo.h"   // GuiNetworkRouteInfo::Destruct
 #include "GameSource/Network/SharedIO/BrnNetworkModuleOnlineLobbyPlayerStatusInterface.h" // LobbyPlayerStatusData
+
+static const char KAC_ARTIST_FILE[] = "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineGameRoomPlayerInfo.cpp";
 
 namespace BrnGui
 {
@@ -141,16 +138,20 @@ namespace BrnGui
         mPlayerStatsDisplay.Destruct();
         mRouteInfoDisplay.Destruct();
 
-        mpStateInterface->PlayAptMovie("", KI_APT_MOVIE_LEVEL);
+        CgsGui::GuiEventPlayAptMovie lMovie;
+        lMovie.mpacMovieName = "";
+        lMovie.miLevelNum = KI_APT_MOVIE_LEVEL;
+        mpStateInterface->OutputViewState(lMovie);
 
         // X360 BrnOnlineGameRoomPlayerInfo.cpp:4135.
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache",
+                      KAC_ARTIST_FILE, 4135);
 
         // Re-read (not the asserted copy): the X360 reloads the member and re-tests it.
         if (mpGuiCache != 0)
         {
             mpGuiCache->UnloadResources(maLobbyResourceTuplesToLoad,
-                                        static_cast<u32>(miNumLobbyResourcesToLoad));
+                                        sizeof(maLobbyResourceTuplesToLoad) / sizeof(maLobbyResourceTuplesToLoad[0]));
         }
     }
 
@@ -160,10 +161,14 @@ namespace BrnGui
     // and this screen unloads it because the map page IS the base class.
     void OnlineGameRoomPlayerInfo::UnloadMapResources()
     {
-        mpStateInterface->PlayAptMovie("", KI_APT_MOVIE_LEVEL);
+        CgsGui::GuiEventPlayAptMovie lMovie;
+        lMovie.mpacMovieName = "";
+        lMovie.miLevelNum = KI_APT_MOVIE_LEVEL;
+        mpStateInterface->OutputViewState(lMovie);
 
         // X360 BrnOnlineGameRoomPlayerInfo.cpp:4182.
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache",
+                      KAC_ARTIST_FILE, 4182);
 
         if (mpGuiCache != 0)
         {

@@ -26,7 +26,6 @@ namespace BrnParticle
     // Page + budget stamped on every particle monitor
     // (r4 = 0x14, the loaded f32 flt_820049E0 = 100.0).
     static const CgsDev::PerfMonCpuPage KE_PARTICLE_MONITOR_PAGE = CgsDev::E_PMP_20;
-    static const f32 KF_PARTICLE_MONITOR_BUDGET = 100.0f;
 
     s32 ParticleCpuMonitors::AddMonitor(const char* lpcName, const char* lpcPrefix)
     {
@@ -41,7 +40,7 @@ namespace BrnParticle
         return CgsDev::PerfMonCpu::AddMonitor(lacName,
                                               KE_PARTICLE_MONITOR_PAGE,
                                               false,                          // minimum
-                                              KF_PARTICLE_MONITOR_BUDGET,
+                                              100.0f,
                                               false);                         // scaled
     }
 

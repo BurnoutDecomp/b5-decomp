@@ -36,7 +36,8 @@ namespace BrnTraffic
         //   lpbUpdatedHeadlightOff out  whether the headlight is OFF this step
         // Returns true while the pattern is still running (a positive duration remains for the
         // current state), false once the pattern has reached a terminator (<= 0) or run out of states.
-        bool UpdateHeadlightFlash(u32 luPattern, f32 lfTimeDelta, f32* lpfUpdatedTime,
+        // ARTIST 0x82756EC0 passes luPattern in r3 without an instance.
+        static bool UpdateHeadlightFlash(u32 luPattern, f32 lfTimeDelta, f32* lpfUpdatedTime,
                                   u8* lpuUpdatedState, bool* lpbUpdatedHeadlightOff);
     };
 }

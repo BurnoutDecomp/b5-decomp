@@ -23,6 +23,7 @@ namespace renderengine
     class  RasterizerState;
     class BlendState; typedef BlendState BlendMaterialState;
     class SamplerState;
+    class  Texture;
     class  TextureState;      // pc/gcm/renderengine/renderstates.h -- the whole-unit bind (SetState overload)
 }
 
@@ -68,7 +69,7 @@ namespace shadow
         static bool SetPixelProgram(const renderengine::ProgramBufferData* lpPixelProgram);
 
         // Bind the active vertex descriptor through the shadow cache. The X360 writes
-        // off_83010958 (this class's mpVertexDescriptor) and sets byte_83010A34 -- the
+        // off_83010958 (this class's m_Shadow.m_pVertexDescriptor) and sets byte_83010A34 -- the
         // immediate-mode renderers do it inline, which is why no standalone symbol
         // survives; FlushVertexProgramState is the sole consumer and dereferences the
         // pointer, so a path that binds a program without also binding its descriptor is
@@ -83,7 +84,7 @@ namespace shadow
 
         // Bind a WHOLE TextureState (sampler block + its raster) at one unit through the shadow
         // cache (X360 0x8227D158; the DecFIGS DWARF names it SetState(const TextureState*, u32),
-        // shadowingdevice.h:918 is its one assert). Keyed on mapTextureState[unit]: a hit only
+        // shadowingdevice.h:918 is its one assert). Keyed on m_Shadow.m_apTextureStates[unit]: a hit only
         // re-asserts that the texture shadow still agrees; a miss applies the sampler block, sets
         // the raster, and writes ALL THREE per-unit shadows. Callers: BrnPostFxShader::Render
         // (the 3D tint volume + scene depth), BrnPostFxBloom, BrnSunCorona, Im3dBlend, the corona
@@ -94,21 +95,21 @@ namespace shadow
         // StateBlockShadow::m_pMeshState transition over the existing two homes.
         static void SetState(const renderengine::MeshHelper* lpMeshState)
         {
-            if (mpIndexStreamArray != lpMeshState)
+            if (m_Shadow.m_pMeshState != lpMeshState)
             {
                 lpMeshState->Dispatch<renderengine::Device>(0);
-                mpIndexStreamArray = lpMeshState;
-                mpStreamArray = 0;
+                m_Shadow.m_pMeshState = lpMeshState;
+                m_Shadow.m_pMesh = 0;
             }
         }
 
         // ARTIST 823F9284..92A4; StateBlockShadow::m_pRenderTargetState.
         static void SetState(const renderengine::RenderTargetState* lpState)
         {
-            if (mpRenderTargetState != lpState)
+            if (m_Shadow.m_pRenderTargetState != lpState)
             {
                 renderengine::Device::SetState(lpState);
-                mpRenderTargetState = lpState;
+                m_Shadow.m_pRenderTargetState = lpState;
             }
         }
 
@@ -119,8 +120,8 @@ namespace shadow
         //       0x82289744  lwz r11, dword_830109E8(r30)   ; the CACHE TEST
         //       0x82289748  cmplw cr6, r11, r31            ; ... against the texture it resolved
         //       0x82289768  bl   D3DDevice_SetTexture      ; on a miss, bind unit 0 directly
-        //       0x82289770  stw  r31, dword_830109E8(r30)  ; mapSamplerTexture[0] = the texture
-        //       0x82289774  stw  r11(=0), dword_83010968(r30) ; mapTextureState[0]  = NULL
+        //       0x82289770  stw  r31, dword_830109E8(r30)  ; m_Shadow.m_apTextures[0] = the texture
+        //       0x82289774  stw  r11(=0), dword_83010968(r30) ; m_Shadow.m_apTextureStates[0]  = NULL
         // On the host those two arrays are private statics of this class, so without this pair
         // that body has to keep a PRIVATE COPY of the cache -- and a private copy of shared state
         // is only correct until something else binds the same unit between two of its draws.
@@ -130,9 +131,9 @@ namespace shadow
         // sampled the DEPTH BUFFER -- a hard-edged block carrying the car's own silhouette, with
         // nothing in any log.
         static void* GetSamplerTextureShadow(u32 luSamplerId);
-        // The console's PAIR of stores, together: mapSamplerTexture[unit] = lpTexture and
-        // mapTextureState[unit] = NULL (binding half of a unit invalidates the whole-unit key --
-        // see the mapTextureState banner below). Call it immediately after a direct
+        // The console's PAIR of stores, together: m_Shadow.m_apTextures[unit] = lpTexture and
+        // m_Shadow.m_apTextureStates[unit] = NULL (binding half of a unit invalidates the whole-unit key --
+        // see the m_Shadow.m_apTextureStates banner below). Call it immediately after a direct
         // D3DDevice_SetTexture, exactly where SetMaterial's two `stw`s are.
         static void  SetSamplerTextureShadow(u32 luSamplerId, void* lpTexture);
 
@@ -226,55 +227,35 @@ namespace shadow
         static void ResetProgramShadows();
 
     private:
-        // The vertex-program-state dirty flag (X360 byte_83010A34): ResetShadowing sets it,
-        // SetVertexProgramInternal sets it, FlushVertexProgramState consumes & clears it.
-        static bool mbVertexProgramStateDirty;
+        // DecFIGS shadowingdevice.h:657–672/771. ARTIST ResetShadowing
+        // at 0x82276970 accesses the one thirteen-member block at 0x83010950.
+        struct StateBlockShadow
+        {
+            const RenderableMesh* m_pMesh;
+            const renderengine::MeshHelper* m_pMeshState;
+            const renderengine::VertexDescriptorData* m_pVertexDescriptor;
+            const renderengine::ProgramBufferData* m_pVertexProgramBuffer;
+            const renderengine::ProgramBufferData* m_pPixelProgramBuffer;
+            const renderengine::BlendState* m_pBlendState;
+            const renderengine::TextureState* m_apTextureStates[KU_MAX_TEXTURE_STATES];
+            const renderengine::SamplerState* m_apSamplerStates[KU_MAX_TEXTURE_STATES];
+            const renderengine::Texture* m_apTextures[KU_MAX_TEXTURE_STATES];
+            const renderengine::DepthStencilState* m_pDepthStencilState;
+            const renderengine::RasterizerState* m_pRasterizerState;
+            const renderengine::RenderTargetState* m_pRenderTargetState;
+            bool mbVertexProgramStateDirty;
+        };
 
-        // --- Bound geometry sources (X360 off_83010950 block) -------------------------------
-        // mpStreamArray / mpIndexStreamArray are the two alternative stream-layout descriptors the
-        // flush walks (the first non-null one wins); mpVertexDescriptor is the active vertex
-        // descriptor used to map element streams to D3D stream slots.
-        static const void* mpStreamArray;        // off_83010950: StateBlockShadow::m_pMesh
-        static const void* mpIndexStreamArray;   // off_83010954: StateBlockShadow::m_pMeshState
-        static const renderengine::VertexDescriptorData* mpVertexDescriptor; // off_83010958
+        CGS_STATIC_ASSERT((sizeof(StateBlockShadow) == 0xE8), "ARTIST state shadow size");
+        CGS_STATIC_ASSERT((offsetof(StateBlockShadow, m_apTextureStates) == 0x18), "ARTIST texture-state cache");
+        CGS_STATIC_ASSERT((offsetof(StateBlockShadow, m_apSamplerStates) == 0x58), "ARTIST sampler-state cache");
+        CGS_STATIC_ASSERT((offsetof(StateBlockShadow, m_apTextures) == 0x98), "ARTIST texture cache");
+        CGS_STATIC_ASSERT((offsetof(StateBlockShadow, m_pDepthStencilState) == 0xD8), "ARTIST depth shadow");
+        CGS_STATIC_ASSERT((offsetof(StateBlockShadow, m_pRenderTargetState) == 0xE0), "ARTIST render-target shadow");
+        CGS_STATIC_ASSERT((offsetof(StateBlockShadow, mbVertexProgramStateDirty) == 0xE4), "ARTIST dirty flag");
 
-        // --- Program shadows (X360 dword_8301095C / dword_83010960) -------------------------
-        static const renderengine::ProgramBufferData* mpVertexProgramShadow; // dword_8301095C
-        static const renderengine::ProgramBufferData* mpPixelProgramShadow;  // dword_83010960 (init -1)
-        // dword_83010964 == StateBlockShadow::m_pBlendState (DWARF source shadowingdevice.h:665).
-        // RENAMED AND RETYPED from `u32 muUnused64` -- it was never unused: the blend third of the
-        // render-state triple (SetState @0x82276A68) compares and stores it, and so does the
-        // immediate-mode setter ImRendererBase::SetState @0x82276D08 (`lwz r11, (dword_83010964 -
-        // 0x83010950)(r31)` @0x82276D68 / `stw r30, ...` @0x82276D88). The address is fixed by walking
-        // StateBlockShadow's thirteen DWARF members from the block base off_83010950: they land on
-        // 950/954/958/95C/960/964, 968..9A4, 9A8..9E4, 9E8..A24, A28, A2C, A30, A34 -- thirteen for
-        // thirteen.
-        static const renderengine::BlendMaterialState* mpBlendState;   // dword_83010964
+        static StateBlockShadow m_Shadow;
 
-        // --- Per-sampler caches (X360 16-entry arrays) --------------------------------------
-        // RENAMED AND RETYPED from `u32 mauSamplerDirty` (2026-08-14). dword_83010968 is not a dirty
-        // flag: it is the WHOLE-TextureState shadow (DWARF StateBlockShadow::m_apTextureStates), a
-        // pointer per unit. SetState(const TextureState*, u32) @0x8227D158 compares the incoming
-        // object against it (`lwz r11, dword_83010968[a2]; cmplw r11, r3`) and stores it on a miss;
-        // the bare-sampler binder @0x822769E0 and the bare-texture binder @0x82276C70 both write it
-        // to ZERO -- binding half of a unit invalidates the whole-unit key, which is exactly why a
-        // flag reading "looked right": every writer this tree had was a writer of zero. On the host
-        // a u32 cannot hold the pointer the console stores, so the type follows the console.
-        static const renderengine::TextureState* mapTextureState[KU_MAX_TEXTURE_STATES]; // dword_83010968
-        static void* mapSamplerState[KU_MAX_TEXTURE_STATES]; // dword_830109A8
-        static void* mapSamplerTexture[KU_MAX_TEXTURE_STATES];// dword_830109E8
-
-        // --- Force-stencil / lock window state ----------------------------------------------
-        // dword_83010A28 / dword_83010A2C == StateBlockShadow::m_pDepthStencilState /
-        // m_pRasterizerState (DWARF source shadowingdevice.h:669 / :670), renamed and retyped from
-        // `u32 muMisc28` / `muMisc2C`. Zeroing them IS the triple's invalidation, which is why
-        // ResetShadowing @0x82276970 (`stw r10(=0), (dword_83010A28 - 0x83010950)(r11)` @0x822769C8 /
-        // ...A2C @0x822769CC) and the force-stencil window (@0x823F32D4) write them -- and why the
-        // frame bracket's triple has to compare against THESE and not a parallel copy.
-        static const renderengine::DepthStencilState* mpDepthStencilState;  // dword_83010A28
-        static const renderengine::RasterizerState*   mpRasterizerState;    // dword_83010A2C
-        // ARTIST Target::Begin is the reader; ResetShadowing clears this home.
-        static const renderengine::RenderTargetState* mpRenderTargetState; // dword_83010A30
         static bool mbForceStencilWrite;          // byte_83010906
         static u32 muStencilValueToWrite;         // dword_83010908
         static bool mbRasteriserStateLocked;      // mbRasteriserStateLocked
@@ -304,7 +285,7 @@ namespace shadow
 
         // (mpLastBlendState / mpLastDepthStencilState / mpLastRasterizerState DELETED.)
         // They were a SECOND host home for dword_83010964 / dword_83010A28 / dword_83010A2C, which
-        // mpBlendState / mpDepthStencilState / mpRasterizerState above already own. The comment that
+        // m_Shadow.m_pBlendState / m_Shadow.m_pDepthStencilState / m_Shadow.m_pRasterizerState above already own. The comment that
         // stood here -- "DispatchAllMeshes v64[5] / v64[54] / v64[55] ... the per-dispatch context" --
         // was also wrong: in DispatchAllMeshes @0x827F2718 those slots are reached as 0xD8 / 0x14 /
         // 0xDC off r27, and r27 IS off_83010950 (`addi r11, r11, off_83010950@l` @0x827F2754 ->

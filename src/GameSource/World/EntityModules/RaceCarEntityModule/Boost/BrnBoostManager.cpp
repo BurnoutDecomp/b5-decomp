@@ -32,7 +32,7 @@ bool BoostManager::Prepare()
 
     mpBoostStrategy = &mBoostBurnout5;
     meBoostStrategy = E_BOOSTSTRATEGY_BURNOUT5;
-    mBoostBurnout5.Prepare();
+    mpBoostStrategy->Prepare();
     mpBoostStrategy->SetBoostEarningEnabled(mbBoostEarningEnabled);
     mbBoostEarningEnabled = false;
     return true;

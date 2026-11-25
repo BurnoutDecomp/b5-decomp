@@ -748,9 +748,9 @@ namespace BrnNetwork
     {
         BrnNetworkModuleIO::NetworkOutScoreboardHeadingList lHeadingList;
         lHeadingList.miLength                = 0;
+        lHeadingList.mb807                   = false;
         lHeadingList.meHeadingType           = BrnNetworkModuleIO::E_HEADING_CATEGORY;
         lHeadingList.mbIsPerRoad             = false;
-        lHeadingList.mb807                   = false;
 
         for (s32 liCategoryCounter = 0;
              liCategoryCounter < mpRankings->GetNumberOfCategories();
@@ -775,9 +775,9 @@ namespace BrnNetwork
     {
         BrnNetworkModuleIO::NetworkOutScoreboardHeadingList lHeadingList;
         lHeadingList.miLength                = 0;
+        lHeadingList.mb807                   = false;
         lHeadingList.meHeadingType           = BrnNetworkModuleIO::E_HEADING_INDEX;
         lHeadingList.mbIsPerRoad             = false;
-        lHeadingList.mb807                   = false;
 
         for (s32 liIndexCounter = 0;
              liIndexCounter < mpRankings->GetNumberOfIndexes(liCategory);

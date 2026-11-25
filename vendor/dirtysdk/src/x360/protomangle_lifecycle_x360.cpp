@@ -144,6 +144,11 @@ namespace
     }
 }
 
+// The wait helper and destroy path use the same format strings in ARTIST at
+// 82F7C690 and 82F7C6CC.
+static const char kBlockingOnAsync[] = "protomanglexenon: blocking on async op %d for up to %dms\n";
+static const char kBlockedOnAsync[] = "protomanglexenon: blocked %d mSec\n";
+
 // r3 and r5 are DirtyAddrT pointers; r4/r6 are retained API inputs but unused here.
 extern "C" ProtoMangleRefT* ProtoMangleCreate(const char* pCreate, s32, const char* pSelf, const char*)
 {
@@ -168,14 +173,14 @@ extern "C" void ProtoMangleDestroy(ProtoMangleRefT* ref)
     NetPrintfCode("protomanglexenon: shutting down\n");
     if (ref->eState != 0 && ref->eState != 17)
     {
-        NetPrintfCode("protomanglexenon: blocking on async op %d for up to %dms\n", ref->eState, 5000);
+        NetPrintfCode(kBlockingOnAsync, ref->eState, 5000);
         const u32 deadline = NetTick() + 5000;
         while (ref->eState != 0 && ref->eState != 17 && static_cast<s32>(deadline - NetTick()) > 0)
         {
             ProtoMangleUpdate(ref);
             NetConnSleep(1);
         }
-        NetPrintfCode("protomanglexenon: blocked %d mSec\n", NetTick() + 5000 - deadline);
+        NetPrintfCode(kBlockedOnAsync, NetTick() + 5000 - deadline);
     }
     if (ref->hNotify) CloseHandle(ref->hNotify);
     if (ref->pArbitrationResults) DirtyMemFree(ref->pArbitrationResults, 0x706d676c, ref->iMemGroup);
@@ -336,14 +341,14 @@ namespace
         if (ref->eState && ref->eState != 17)
         {
             if (!timeout) timeout = ref->iTimeout;
-            NetPrintfCode("protomanglexenon: blocking on async op %d for up to %dms\n", ref->eState, timeout);
+            NetPrintfCode(kBlockingOnAsync, ref->eState, timeout);
             const u32 deadline = NetTick() + timeout;
             while (ref->eState && ref->eState != 17 && static_cast<s32>(deadline - NetTick()) > 0)
             {
                 ProtoMangleUpdate(ref);
                 NetConnSleep(1);
             }
-            NetPrintfCode("protomanglexenon: blocked %d mSec\n", NetTick() + timeout - deadline);
+            NetPrintfCode(kBlockedOnAsync, NetTick() + timeout - deadline);
         }
     }
 

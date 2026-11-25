@@ -939,31 +939,25 @@ void StuntManager::CheckForTrophyUnlocks(GameStateModuleIO::OnStuntElementComple
         // FLAG: the trophy ids (2/3/1) are the X360 li-immediates; the trophy-id enumerator names are
         // not recovered.
         s32 liTrophyId;
-        const u32 luType = static_cast<u32>(lpAction->meStuntElementType);
-        if (luType == 0)            // JUMP
+        switch (static_cast<u32>(lpAction->meStuntElementType))
         {
+        case E_STUNT_ELEMENT_TYPE_JUMP:
             liTrophyId = 2;
-        }
-        else if (luType == 1)       // SMASH
-        {
+            break;
+        case E_STUNT_ELEMENT_TYPE_SMASH:
             liTrophyId = 3;
-        }
-        else
-        {
-            if (luType >= 3)
-            {
-                CgsDev::Assert::BeginAssert();
-                CgsDev::Assert::FireAssert(
-                    "I dont know what this stunt type is! Someone has added a new one without thinking about the trophies! What scum!\n",
-                    CGS_ASSERT_LOCATION(KAC_FILE, 795));
-                CgsDev::Assert::EndAssert();
-                // X360 0x8239941C..0x82399428: the unknown-type arm still runs the special-car
-                // check (`lwz r3, 0x5E8(r29) ; bl CheckForSpecialCarUnlocks`) and then returns,
-                // skipping OnTrophyUnlock -- there is no trophy id to award.
-                mpProgressionManager->CheckForSpecialCarUnlocks();
-                return;
-            }
-            liTrophyId = 1;         // BILLBOARD
+            break;
+        case E_STUNT_ELEMENT_TYPE_BILLBOARD:
+            liTrophyId = 1;
+            break;
+        default:
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "I dont know what this stunt type is! Someone has added a new one without thinking about the trophies! What scum!\n",
+                CGS_ASSERT_LOCATION(KAC_FILE, 795));
+            CgsDev::Assert::EndAssert();
+            mpProgressionManager->CheckForSpecialCarUnlocks();
+            return;
         }
 
         // The console's two calls, in the console's order. X360 0x82399440..0x8239944C:

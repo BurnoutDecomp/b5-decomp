@@ -16,7 +16,7 @@
 #include "SDKs/EATech/Apt/AptValueGCPoolManager.h"
 
 // ---- the reconstructed AptValue class set (per-VFT size-table generation:
-//      StaticInitialize fills byte_82144A18 from sizeof() -- see the note there) ----
+//      GC code uses the shared Apt value declarations) ----
 #include "SDKs/EATech/include/Apt/AptValue/AptString.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptNone.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptRegister.h"
@@ -141,38 +141,15 @@ AptValueGC_PoolManager::AptValueGC_PoolManager(size_t mainPoolSizeBytes,
 }
 
 // ---------------------------------------------------------------------------
-// ARTIST's per-value-type allocation strides at 0x82144A18. Type 29
-// uses its own dynamic size during traversal; the table still participates in
-// the minimum and maximum scan.
-// ---------------------------------------------------------------------------
-namespace
-{
-    void PopulateVFTObjectSizeTable()
-    {
-        // ARTIST 0x82144A18: byte strides indexed by Apt value type.
-        static const uint8_t kNativeSizes[] = {
-            0x00, 0x04, 0x00, 0x08, 0x0c, 0x0c, 0x0c, 0x0c,
-            0x0c, 0x24, 0x20, 0x08, 0x28, 0x20, 0x2c, 0x20,
-            0x20, 0x20, 0x24, 0x20, 0x20, 0x20, 0x20, 0x20,
-            0x20, 0x20, 0x20, 0x20, 0x40, 0x10, 0x20, 0x20,
-            0x28, 0x24, 0x34, 0x34, 0x44, 0x28
-        };
-        CGS_STATIC_ASSERT(sizeof(kNativeSizes) == AptVFT_NumVFTs, "X360 Apt value size table");
-        for (int i = 0; i < AptVFT_NumVFTs; ++i)
-            byte_82144A18[i] = kNativeSizes[i];
-    }
-
-}
-
-// ---------------------------------------------------------------------------
 // StaticInitialize @ 0x82ADB7E0: configure the native size-word offset and
 // scan the original 38-entry value-size table for pool limits.
 // ---------------------------------------------------------------------------
+// The XDK size path reproduces the compact min/max scan at 0x82ADB7E0.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 void AptValueGC_PoolManager::StaticInitialize()
 {
-    // Materialize the original table before the scan.
-    PopulateVFTObjectSizeTable();
-
     gAptValueGCStoreSizeFlag = 0;
     gAptValueGCSizeOffset = 4;   // ARTIST byte_8324D804
 
@@ -180,7 +157,7 @@ void AptValueGC_PoolManager::StaticInitialize()
     uint32_t nMin = 1000000;
     for (int i = 1; i < AptVFT_NumVFTs; ++i)
     {
-        uint32_t nSize = byte_82144A18[i];
+        uint32_t nSize = AptValueSizesByVType[i];
         if (nSize > nMax)
             nMax = nSize;
         if (nSize < nMin)
@@ -190,6 +167,10 @@ void AptValueGC_PoolManager::StaticInitialize()
     gAptValueGCMaxItemSize = nMax;
     gAptValueGCMinItemSize = (uint8_t)nMin;
 }
+
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // ---------------------------------------------------------------------------
 // AllocateAptValueGC
@@ -214,16 +195,21 @@ void* AptValueGC_PoolManager::AllocateAptValueGC(size_t nAllocatedSize)
 //
 // r31 = pItem. DOGMA Deallocate; on success clear the MemItem allocated flag.
 // ---------------------------------------------------------------------------
-bool AptValueGC_PoolManager::DeallocateAptValueGC(void* pItem, size_t nAllocatedSize)
+// ARTIST 0x82AE57F0 uses a record-form test of the native free result.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+void AptValueGC_PoolManager::DeallocateAptValueGC(void* pItem, size_t nAllocatedSize)
 {
-    bool bFreed = Deallocate(pItem, nAllocatedSize);
-    if (bFreed)
+    if (Deallocate(pItem, nAllocatedSize))
     {
-        reinterpret_cast<AptValueGC_MemItem*>(pItem)
-            ->SetIsAllocated(gAptValueGCSizeOffset, false);
+        static_cast<AptValueGC_MemItem*>(pItem)->SetIsAllocated(gAptValueGCSizeOffset, false);
     }
-    return bFreed;
 }
+
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // ---------------------------------------------------------------------------
 // GetFirstAptValue @ 0x82AE0DF8
@@ -287,7 +273,7 @@ AptValue* AptValueGC_PoolManager::GetNextAptValue(AptValue* pCurrent)
 
     // Step past pCurrent: an ALLOCATED item's word at the size offset is the live
     // AptValue bitfield (not a size) -- both binaries step it by the per-type size
-    // table (X360 0x82AE0BE0 byte_82144A18[type]; x64 sub_1408394C0
+    // table (X360 0x82AE0BE0 AptValueSizesByVType[type]; x64 sub_1408394C0
     // byte_140C13B48[type]), with type 29 == AptVFT_Extension reading its dynamic
     // size at item qword +3 (x64 *(a2+24)). Only a FREE item steps by its size word.
     const uint32_t* pItem;
@@ -298,7 +284,7 @@ AptValue* AptValueGC_PoolManager::GetNextAptValue(AptValue* pCurrent)
         const uintptr_t nStep = (nType == AptVFT_Extension)
             ? *reinterpret_cast<const uintptr_t*>(
                   reinterpret_cast<const uint8_t*>(pCur) + 3 * sizeof(void*))
-            : byte_82144A18[nType];
+            : AptValueSizesByVType[nType];
         pItem = reinterpret_cast<const uint32_t*>(
             reinterpret_cast<const uint8_t*>(pCur) + nStep);
     }

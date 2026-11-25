@@ -11,11 +11,13 @@ typedef struct _AptValueGC_MemItem
     union {
         struct {
             struct _AptValueGC_MemItem * pNextItem;
-            uintptr_t nSizeWord;   // size | allocated-flag (bit 31)
+            uintptr_t bIsAllocated : 1;
+            uintptr_t nSize : 31;
             struct _AptValueGC_MemItem * pPrevItem;
         }Type1;
         struct {
-            uintptr_t nSizeWord;   // size | allocated-flag (bit 31)
+            uintptr_t bIsAllocated : 1;
+            uintptr_t nSize : 31;
             struct _AptValueGC_MemItem * pNextItem;
             struct _AptValueGC_MemItem * pPrevItem;
         }Type2;
@@ -24,28 +26,22 @@ typedef struct _AptValueGC_MemItem
     bool IsAllocated(uint32_t nSizeOffset)
     {
         if(nSizeOffset == sizeof(void*))
-            return (Type1.nSizeWord & 0x80000000u) != 0;
+            return Type1.bIsAllocated != 0;
         else if(nSizeOffset == 0)
-            return (Type2.nSizeWord & 0x80000000u) != 0;
+            return Type2.bIsAllocated != 0;
         else
             return false;
     }
 
-    void SetIsAllocated(uint32_t nSizeOffset, bool newValue)
-    {
-        if(nSizeOffset == sizeof(void*))
-            Type1.nSizeWord = (Type1.nSizeWord & 0x7fffffffu) | (newValue ? 0x80000000u : 0u);
-        else if(nSizeOffset == 0)
-            Type2.nSizeWord = (Type2.nSizeWord & 0x7fffffffu) | (newValue ? 0x80000000u : 0u);
-    }
+    void SetIsAllocated(uint32_t nSizeOffset, bool newValue);
 
     // ARTIST GetSize clears the allocation bit without shifting.
     uintptr_t GetSize(uint32_t nSizeOffset)
     {
         if(nSizeOffset == sizeof(void*))
-            return Type1.nSizeWord & 0x7fffffffu;
+            return Type1.nSize;
         else if(nSizeOffset == 0)
-            return Type2.nSizeWord & 0x7fffffffu;
+            return Type2.nSize;
         else
             return 0;
     }
@@ -54,6 +50,8 @@ typedef struct _AptValueGC_MemItem
     static void _AssertLayout()
     {
         CGS_STATIC_ASSERT(sizeof(void*) == 4, "X360 Apt GC requires 32-bit pointers");
-        CGS_STATIC_ASSERT(offsetof(_AptValueGC_MemItem, Type1.nSizeWord) == 4, "X360 size word offset");
+        CGS_STATIC_ASSERT(sizeof(_AptValueGC_MemItem) == 12, "ARTIST pool item layout");
+        CGS_STATIC_ASSERT(offsetof(_AptValueGC_MemItem, Type1.pPrevItem) == 8, "ARTIST Type1 previous item");
+        CGS_STATIC_ASSERT(offsetof(_AptValueGC_MemItem, Type2.pNextItem) == 4, "ARTIST Type2 next item");
     }
 }AptValueGC_MemItem;

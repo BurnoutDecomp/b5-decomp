@@ -442,7 +442,9 @@ void AIDebugComponent::DrawDirectDestinationVector(CgsDev::Debug3DImmediateRende
 // ARTIST82796A08: preserve each original flag and per-draw call in console order.
 void AIDebugComponent::RenderWorld(CgsDev::Debug3DImmediateRender* lpDisplay)
 {
-    CGS_ASSERT(mpAIModule != 0, "mpAIModule != NULL");
+    static const char KAC_ARTIST_ASSERT_FILE[] =
+        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/BrnAIDebugComponent.cpp";
+    CGS_ASSERT_AT(mpAIModule != 0, "mpAIModule != NULL", KAC_ARTIST_ASSERT_FILE, 283);
     if (mbDrawAllDriverData)
     {
         mbDrawRacingLines = true;
@@ -451,11 +453,11 @@ void AIDebugComponent::RenderWorld(CgsDev::Debug3DImmediateRender* lpDisplay)
         mbDrawControlData = true;
     }
     if (mbDrawAICarStatesOnCar) DrawAIStatesOnCar(lpDisplay);
-    if (mbDrawHNGMap && mpAIModule->maAIDrivers[0].mbIsActive &&
-        mpAIModule->maAIDrivers[0].mbIsRacingLineInitialised)
+    if (mbDrawHNGMap)
     {
         AIDriver& lrDriver = mpAIModule->maAIDrivers[0];
-        lrDriver.mRacingLineGenerator.RenderHardNoGoMap(&lrDriver.mRacingLine);
+        if (lrDriver.mbIsActive && lrDriver.mbIsRacingLineInitialised)
+            lrDriver.mRacingLineGenerator.RenderHardNoGoMap(&lrDriver.mRacingLine);
     }
     if (mbDrawAICarRoute) DrawAICarRoute(lpDisplay);
     if (mbDrawCurrentSection) DrawAICarSection(lpDisplay);

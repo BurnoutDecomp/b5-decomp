@@ -270,11 +270,14 @@ extern "C" s32 ProtoAriesConnect(ProtoAriesRefT* ref, const char* host, u32 addr
     if (ref->haveWallet)
     {
         u8 secret[32], ticket[52];
-        if (CryptStp1OpenWallet(ref->wallet, secret, ticket) <= 0) ref->haveWallet = 0;
-        else
+        if (CryptStp1OpenWallet(ref->wallet, secret, ticket) > 0)
         {
             ProtoAriesSend(ref, 0x3f746963, 0, reinterpret_cast<const char*>(ticket), 52);
             CryptStp1UseSecret(&ref->crypt, secret);
+        }
+        else
+        {
+            ref->haveWallet = 0;
         }
     }
     return 0;

@@ -296,9 +296,10 @@ namespace BrnGui
         static const char* const KAP_CONNECTION_TYPE_STATE_ID[3];   // {direct, gameserver, invisible}
 
         // Animation state pairs (DWARF cpp:194..206; X360 @0x82F266EC.. -- dumped).
-        static const char* const KAPC_ANIMATION_STATES[2];                       // {visible, invisible}
-        static const char* const KAPC_PAUSE_BUTTON_PROMPT_ANIMATION_STATES[2];   // {return, backup}
-        static const char* const KAPC_PLAYERS_BUTTON_PROMPT_ANIMATION_STATES[2]; // {visible, invisible}
+        // DecFIGS cpp:194/200/206 give writable pointer arrays, as loaded from ARTIST 0x82F266EC.
+        static const char* KAPC_ANIMATION_STATES[2];                       // {visible, invisible}
+        static const char* KAPC_PAUSE_BUTTON_PROMPT_ANIMATION_STATES[2];   // {return, backup}
+        static const char* KAPC_PLAYERS_BUTTON_PROMPT_ANIMATION_STATES[2]; // {visible, invisible}
 
         // String-id tables (DWARF cpp:234..303; X360 @0x82F26704.. -- dumped).
         static const char* const KAPC_CHALLENGE_TOGGLE_ITEM_STRING_IDS[7];  // {"2".."8"} @0x82F26704

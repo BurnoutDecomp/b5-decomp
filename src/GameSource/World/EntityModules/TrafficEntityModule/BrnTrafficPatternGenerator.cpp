@@ -10,7 +10,7 @@
 //
 // Reconstructed store-for-store from the X360 asm (0x82751C58). The X360 inlines the
 // per-argument debug guards (Begin/Fire/EndAssert triples); they are reproduced as house
-// CGS_ASSERTs. The baked assert file/line are discarded per project convention.
+// CGS_ASSERT_AT retains the game file and line in native matching builds.
 // ============================================================================
 
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficPatternGenerator.h"
@@ -19,6 +19,10 @@
 
 namespace BrnTraffic
 {
+
+static const char* const KPC_ARTIST_ASSERT_FILE =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+    "../World/EntityModules/TrafficEntityModule/BrnTrafficPatternGenerator.cpp";
 
 // DWARF BrnTrafficPatternGenerator.cpp:26 -- the per-pattern state count (table width).
 static const u32 KU_MAX_STATES_IN_PATTERN = 9;
@@ -29,9 +33,9 @@ static const u32 KU_MAX_STATES_IN_PATTERN = 9;
 // blink rhythm for one EHeadlightFlash pattern.
 static const f32 KAF_HEADLIGHTFLASH_TIMES[PatternGenerator::E_HEADLIGHTFLASH_COUNT][KU_MAX_STATES_IN_PATTERN] =
 {
-    { 0.05f,  0.3f,  0.1f,  0.2f,  0.04f, 0.25f, 0.05f, -1.0f, -1.0f },
-    { 0.075f, 0.2f,  0.1f,  0.2f,  0.08f, 0.15f, 0.09f,  0.2f,  0.07f },
-    { 0.06f,  0.75f, 0.08f, 0.25f, 0.08f, 0.25f, 0.08f, -1.0f, -1.0f },
+    { 0.15f, 0.3f,  0.13f, 0.25f, 0.14f, 0.25f, 0.18f, -1.0f, -1.0f },
+    { 0.12f, 0.2f,  0.1f,  0.2f,  0.09f, 0.16f, 0.21f,  0.2f,  0.18f },
+    { 0.16f, 0.75f, 0.22f, 0.25f, 0.16f, 0.32f, 0.13f, -1.0f, -1.0f },
 };
 
 // @ 0x82751C58
@@ -39,19 +43,19 @@ bool PatternGenerator::UpdateHeadlightFlash(u32 luPattern, f32 lfTimeDelta, f32*
                                             u8* lpuUpdatedState, bool* lpbUpdatedHeadlightOff)
 {
     // luPattern >= 0 is vacuous for an unsigned; the X360 emits only the upper-bound guard.
-    CGS_ASSERT(luPattern < PatternGenerator::E_HEADLIGHTFLASH_COUNT, "luPattern < E_HEADLIGHTFLASH_COUNT");
-    CGS_ASSERT(lfTimeDelta > 0.0f, "lfTimeDelta > 0.0f");
-    CGS_ASSERT(lpfUpdatedTime != 0, "lpfUpdatedTime");
-    CGS_ASSERT(*lpfUpdatedTime >= 0.0f, "*lpfUpdatedTime >= 0.0f");
-    CGS_ASSERT(lpuUpdatedState != 0, "lpuUpdatedState");
-    CGS_ASSERT(*lpuUpdatedState <= KU_MAX_STATES_IN_PATTERN, "*lpuUpdatedState <= KU_MAX_STATES_IN_PATTERN");
-    CGS_ASSERT(lpbUpdatedHeadlightOff != 0, "lpbUpdatedHeadlightOff");
+    CGS_ASSERT_AT(luPattern < PatternGenerator::E_HEADLIGHTFLASH_COUNT, "luPattern < E_HEADLIGHTFLASH_COUNT", KPC_ARTIST_ASSERT_FILE, 62);
+    CGS_ASSERT_AT(lfTimeDelta > 0.0f, "lfTimeDelta > 0.0f", KPC_ARTIST_ASSERT_FILE, 63);
+    CGS_ASSERT_AT(lpfUpdatedTime != 0, "lpfUpdatedTime", KPC_ARTIST_ASSERT_FILE, 64);
+    CGS_ASSERT_AT(*lpfUpdatedTime >= 0.0f, "*lpfUpdatedTime >= 0.0f", KPC_ARTIST_ASSERT_FILE, 65);
+    CGS_ASSERT_AT(lpuUpdatedState != 0, "lpuUpdatedState", KPC_ARTIST_ASSERT_FILE, 66);
+    CGS_ASSERT_AT(*lpuUpdatedState <= KU_MAX_STATES_IN_PATTERN, "*lpuUpdatedState <= KU_MAX_STATES_IN_PATTERN", KPC_ARTIST_ASSERT_FILE, 67);
+    CGS_ASSERT_AT(lpbUpdatedHeadlightOff != 0, "lpbUpdatedHeadlightOff", KPC_ARTIST_ASSERT_FILE, 68);
 
     u32 luState = *lpuUpdatedState;
     f32 lfTime  = *lpfUpdatedTime;
 
     f32 lfTimeForState = KAF_HEADLIGHTFLASH_TIMES[luPattern][luState];
-    CGS_ASSERT(lfTimeForState != 0.0f, "lfTimeForState != 0.0f");
+    CGS_ASSERT_AT(lfTimeForState != 0.0f, "lfTimeForState != 0.0f", KPC_ARTIST_ASSERT_FILE, 74);
 
     if (lfTimeForState > 0.0f && luState < KU_MAX_STATES_IN_PATTERN)
     {
@@ -61,7 +65,7 @@ bool PatternGenerator::UpdateHeadlightFlash(u32 luPattern, f32 lfTimeDelta, f32*
             lfTime -= lfTimeForState;
             ++luState;
             lfTimeForState = KAF_HEADLIGHTFLASH_TIMES[luPattern][luState];
-            CGS_ASSERT(lfTimeForState != 0.0f, "lfTimeForState != 0.0f");
+            CGS_ASSERT_AT(lfTimeForState != 0.0f, "lfTimeForState != 0.0f", KPC_ARTIST_ASSERT_FILE, 86);
         }
     }
 
