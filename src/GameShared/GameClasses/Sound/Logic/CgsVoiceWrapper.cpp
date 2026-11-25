@@ -68,7 +68,7 @@ void VoiceWrapper::Play(u32 au32OptionalPlayParam)
 void VoiceWrapper::Stop()
 {
     mbPlay = false;
-    if (meUpdateStage == E_UPDATE_STAGE_PLAYING && mVoice.GetVoiceObject())
+    if (meUpdateStage == E_UPDATE_STAGE_PLAYING && mVoice.IsCreated())
     {
         mVoice.Stop();
         meUpdateStage = E_UPDATE_STAGE_FINISHED;

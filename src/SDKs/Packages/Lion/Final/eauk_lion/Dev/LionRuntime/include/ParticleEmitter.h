@@ -63,11 +63,11 @@
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleBucket.h"  // cParticleBucket
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/ext-include/GameStructs/cTime.h"
 
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionBindings.h"
 #include "rw/math/vpu/types.h"   // the lane-register spellings ParticleBuildData's DWARF uses
 
 class  cParticleDescriptor;
 struct cParticleBehaviour;
-struct cLionBindings;   // LionBindings.h (sibling home) -- Bind() attaches one to this emitter
 // RenderedParticle.h (sibling home). Reference-only here -- ParticleBuild's output record --
 // so a forward declaration is enough and the full layout is not dragged into every includer.
 struct RenderedParticle;
@@ -217,9 +217,13 @@ public:
     const cParticleBehaviour* GetCurrentBehaviour() const { return mpCurrentBehaviour; }
 
     // Bind arBindings onto this emitter: store the binding pointer and back-link the
-    // binding's emitter (cLionBindings::SetEmitter). Called (inlined) by
-    // cLionParticleEffectManager::BindingsAttach. Bodied in ParticleEmitter.cpp.
-    void Bind(cLionBindings& arBindings);
+    // binding's emitter (cLionBindings::SetEmitter). ARTIST inlines both stores in
+    // cLionParticleEffectManager::BindingsAttach at 0x82914580.
+    void Bind(cLionBindings& arBindings)
+    {
+        mpBindings = &arBindings;
+        arBindings.SetEmitter(this);
+    }
 
     // Detach apBucket from this emitter's bucket list. Called by
     // cParticleBucketManager::Free as it recycles a bucket back to the pool. Bodied in

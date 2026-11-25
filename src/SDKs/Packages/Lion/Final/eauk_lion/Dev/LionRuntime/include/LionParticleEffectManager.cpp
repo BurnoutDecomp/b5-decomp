@@ -9,13 +9,9 @@
 //
 // The binding attach/remove pair walks the effect's descriptor chain and drives the
 // cParticleEmitterManager singleton (dword_831238E8, reached through Instance()):
-// attach registers an emitter per descriptor then binds it (the X360 folds the
-// emitter's Bind() -- mpBindings store + cLionBindings::SetEmitter -- inline; it is
-// re-outlined here as the Bind() call the original source made), while remove calls
-// the manager's UnRegister(descriptor, bindings, bindBase) form. Both are external to
-// this TU (declared in ParticleEmitterManager.h / ParticleEmitter.h, linked from
-// their own TUs). CreateBehaviour carves the node from the effect manager's tagged
-// allocator with the LINE(6)->FILE(5)->NAME(1) TagValuePair chain the X360 stamps.
+// Attach registers and binds an emitter for each top-level descriptor. Remove
+// calls the same manager's UnRegister(descriptor, bindings, bindBase) form.
+// CreateBehaviour allocates a node with the console's line, file, and name tags.
 // ============================================================================
 
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionParticleEffectManager.h"
@@ -83,23 +79,21 @@ void cLionParticleEffectManager::BindingsAttach(const cLionParticleEffect* apEff
         return;
     }
 
-    // Walk the effect's descriptor chain; register + bind an emitter for each
-    // descriptor that is not flagged as a sub/child descriptor.
-    for (cParticleDescriptor* lpDes = apEffect->GetDescriptors(); lpDes != 0;
-         lpDes = lpDes->GetNextDescriptor())
+    cParticleDescriptor* lpDes = apEffect->GetDescriptors();
+    if (lpDes)
     {
-        if ((lpDes->mFlags & KU_DESC_FLAG_SKIP_AUTO_EMITTER) != 0)
+        cParticleEmitterManager& emitterManager = cParticleEmitterManager::Instance();
+        do
         {
-            continue;
+            if ((lpDes->mFlags & KU_DESC_FLAG_SKIP_AUTO_EMITTER) == 0)
+            {
+                cParticleEmitter* lpEmitter = emitterManager.Register(lpDes);
+                if (lpEmitter)
+                    lpEmitter->Bind(arBindings);
+            }
+            lpDes = lpDes->GetNextDescriptor();
         }
-
-        cParticleEmitter* lpEmitter = cParticleEmitterManager::Instance().Register(lpDes);
-        if (lpEmitter != 0)
-        {
-            // X360 folds cParticleEmitter::Bind inline (emitter->mpBindings = &bindings;
-            // bindings.SetEmitter(emitter)); re-outlined here as the Bind() call.
-            lpEmitter->Bind(arBindings);
-        }
+        while (lpDes);
     }
 }
 
@@ -113,11 +107,16 @@ void cLionParticleEffectManager::BindingsRemove(const cLionParticleEffect* apEff
         return;
     }
 
-    // Unregister the emitter bound to every descriptor of the effect.
-    for (cParticleDescriptor* lpDes = apEffect->GetDescriptors(); lpDes != 0;
-         lpDes = lpDes->GetNextDescriptor())
+    cParticleDescriptor* lpDes = apEffect->GetDescriptors();
+    if (lpDes)
     {
-        cParticleEmitterManager::Instance().UnRegister(*lpDes, arBindings, apBindBase);
+        cParticleEmitterManager& emitterManager = cParticleEmitterManager::Instance();
+        do
+        {
+            emitterManager.UnRegister(*lpDes, arBindings, apBindBase);
+            lpDes = lpDes->GetNextDescriptor();
+        }
+        while (lpDes);
     }
 }
 
@@ -139,19 +138,12 @@ void cLionParticleEffectManager::BindingsRemove(const cLionParticleEffect* apEff
 // type contains a pointer it is wider than 12 bytes here; re-derive the size from the type the
 // day something carves out of this pool.
 //
-// A file-scope object, NOT a function-local static: no guard word sits beside it on the console.
+// The trivial local static is zero-initialized at ARTIST 0x83123798.
 // ------------------------------------------------------------------------------------------------
 namespace
 {
-    cLionParticleEffectManager gLionParticleEffectManagerSingleton;   // X360 off_83123798
-
     // X360 `li r5, 0xC` in cParticleSystem::AppInit. See the warning above.
     const u32 KU_CONSOLE_EFFECT_MANAGER_ITEM_SIZE = 12;
-}
-
-cLionParticleEffectManager& cLionParticleEffectManager::Instance()
-{
-    return gLionParticleEffectManagerSingleton;
 }
 
 void cLionParticleEffectManager::AppInit(EA::Allocator::ITaggedAllocator* apAllocator, u32 auCount)

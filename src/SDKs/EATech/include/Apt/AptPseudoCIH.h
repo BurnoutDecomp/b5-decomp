@@ -18,7 +18,7 @@
 //  LAYOUT (20 bytes, dword offsets reproduced from the ctor/dtor stores):
 //      +0x00  mpSource     source character-info record (ctor arg a2)
 //      +0x04  mpPseudoData AptPseudoData_t* snapshot (pool-allocated) or null
-//      +0x08  mpContext    caller context (ctor arg a4)
+//      +0x08  mnDepth      signed placement depth (ctor arg a4)
 //      +0x0C  mpNext       list link (zeroed by ctor)
 //      +0x10  mpPrev       list link (zeroed by ctor)
 //
@@ -26,6 +26,8 @@
 //  (gpAptPseudoDataPool == X360 off_8324D808, the same pool the other Apt
 //  display-list nodes use) and freed back to it by the dtor.
 // =====================================================================
+
+#include <cstddef>
 
 #include "types.hpp"
 
@@ -66,20 +68,37 @@ struct AptPseudoCIH_t
     // ---- layout (20 bytes; offsets verified against the X360 ctor/dtor) ----
     AptCharacterInfo_t* mpSource;      // [0x00] source char-info record (ctor a2)
     AptPseudoData_t*    mpPseudoData;  // [0x04] pool-allocated snapshot, or null
-    void*               mpContext;     // [0x08] caller context (ctor a4)
-    void*               mpNext;        // [0x0C] display-list link (ctor-zeroed)
-    void*               mpPrev;        // [0x10] display-list link (ctor-zeroed)
+    s32                 mnDepth;       // [0x08] signed placement depth
+    AptPseudoCIH_t*     mpNext;        // [0x0C] display-list link (ctor-zeroed)
+    AptPseudoCIH_t*     mpPrev;        // [0x10] display-list link (ctor-zeroed)
 
-    // ctor @ 0x82AE47C0. Stores the source/context, and -- iff the source is a
+    AptPseudoCIH_t* GetDisplayListNext() { return mpNext; }
+    AptPseudoCIH_t* GetDisplayListPrevious() { return mpPrev; }
+    void SetDisplayListNext(AptPseudoCIH_t* lpNext) { mpNext = lpNext; }
+    void SetDisplayListPrevious(AptPseudoCIH_t* lpPrev) { mpPrev = lpPrev; }
+
+    // ctor @ 0x82AE47C0. Stores the source and depth, and -- iff the source is a
     // placeable display object (tag == 3) -- pool-allocates and constructs an
     // AptPseudoData_t snapshot from it. li16CharacterId / lpData feed the
     // snapshot. Returns *this in the X360 fastcall convention.
     AptPseudoCIH_t(AptCharacterInfo_t* lpSource,
                    s16                 li16CharacterId,
-                   void*               lpContext,
+                   s32                 liDepth,
                    void*               lpData);
 
     // dtor @ 0x82AE5AA0. Zeroes the source/link slots, and if a snapshot exists
     // clears its first three dwords and frees it back to the pool.
     ~AptPseudoCIH_t();
+
+    // The ARTIST node-delete paths return the sized block to its DOGMA pool.
+    static void operator delete(void* lpNode, size_t luSize)
+    {
+        gpAptPseudoDataPool->Deallocate(lpNode, luSize);
+    }
 };
+
+// ARTIST 0x82AEB02C–0x82AEB050 directly uses these doubly-linked node offsets.
+CGS_STATIC_ASSERT(sizeof(AptPseudoCIH_t) == 0x14, "ARTIST AptPseudoCIH_t size");
+CGS_STATIC_ASSERT(offsetof(AptPseudoCIH_t, mnDepth) == 0x08, "ARTIST AptPseudoCIH_t depth");
+CGS_STATIC_ASSERT(offsetof(AptPseudoCIH_t, mpNext) == 0x0C, "ARTIST AptPseudoCIH_t next");
+CGS_STATIC_ASSERT(offsetof(AptPseudoCIH_t, mpPrev) == 0x10, "ARTIST AptPseudoCIH_t previous");

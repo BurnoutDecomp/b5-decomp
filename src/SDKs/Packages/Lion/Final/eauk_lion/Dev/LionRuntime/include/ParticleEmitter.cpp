@@ -814,28 +814,6 @@ void cParticleEmitter::DeInit()
 }
 
 // ================================================================================================
-// cParticleEmitter::Bind  (DWARF ParticleEmitter.h:158)
-//
-// NO STANDALONE X360 BODY -- fully inlined at its only call site, cLionParticleEffectManager::
-// BindingsAttach @0x82914530, where it is the two stores that follow a successful Register:
-//
-//     82914580  stw  r29, 0x1FC(r3)      ; emitter->mpBindings = &bindings
-//     82914584  stw  r3,  0x64(r29)      ; bindings.m_p_emitter = emitter
-//
-// Re-outlined onto the owning class rather than left as two offset pokes in the manager (the
-// DWARF names the method, and the same pair appears again inside cParticleEmitterManager::
-// UnRegister(descriptor,...) @0x82914764 on its re-bind path).
-//
-// Reached through cLionEffectManager::EffectCreate -> BindingsAttach on the first effect the
-// game starts.
-// ================================================================================================
-void cParticleEmitter::Bind(cLionBindings& arBindings)
-{
-    mpBindings = &arBindings;
-    arBindings.SetEmitter(this);
-}
-
-// ================================================================================================
 // cParticleEmitter::BucketRemove  @0x82909790      (DWARF ParticleEmitter.h:149)
 //
 // AN EXPORT-SET HOLE: IDA names it in cParticleBucketManager::Free's xrefs_to but emits no

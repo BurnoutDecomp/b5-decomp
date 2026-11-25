@@ -160,6 +160,8 @@ public:
     // teardown. Exposes mVoiceHandle.GetObject() BY NAME; matches the raw load and
     // adds no layout or behaviour. No own X360 address (inlined at the call sites).
     Playback::Voice* GetVoiceObject() const { return mVoiceHandle.GetObject(); }
+    // DecFIGS CgsVoice.h:645. A voice is created once its playback handle is set.
+    bool IsCreated() const { return mVoiceHandle; }
 
 private:
     // +0x04. Owning handle to the reference-counted playback voice. Read as *(a1+4)

@@ -162,24 +162,22 @@ namespace CgsSceneManager
                                                    Interval* lpMinIntervalOut,
                                                    Interval* lpMaxIntervalOut)
     {
-        CGS_ASSERT(lpMinIntervalOut != NULL, "lpMinIntervalOut != NULL");
-        CGS_ASSERT(lpMaxIntervalOut != NULL, "lpMaxIntervalOut != NULL");
+        CGS_ASSERT(lpMinIntervalOut != NULL, CGS_ASSERT_MESSAGE_AT("lpMinIntervalOut != NULL", KAC_ARTIST_ASSERT_FILE, 318));
+        CGS_ASSERT(lpMaxIntervalOut != NULL, CGS_ASSERT_MESSAGE_AT("lpMaxIntervalOut != NULL", KAC_ARTIST_ASSERT_FILE, 319));
 
-        ObjectToIntervalMap& lrMap = mpaObjectToIntervalMap[luObjectIndex];
-
-        u16 luRemoveInterval = lrMap.GetIntervalIndex(KI_MIN_INDEX);
+        u16 luRemoveInterval = mpaObjectToIntervalMap[luObjectIndex].GetIntervalIndex(KI_MIN_INDEX);
         CGS_ASSERT(mpaIntervals[luRemoveInterval].mu16ObjectIndex == luObjectIndex,
-                   "mpaIntervals[luRemoveInterval].GetObjectIndex() == luObjectIndex");
+                   CGS_ASSERT_MESSAGE_AT("mpaIntervals[luRemoveInterval].GetObjectIndex() == luObjectIndex", KAC_ARTIST_ASSERT_FILE, 323));
         *lpMinIntervalOut = mpaIntervals[luRemoveInterval];
         RemoveInterval(luRemoveInterval);
 
-        luRemoveInterval = lrMap.GetIntervalIndex(KI_MAX_INDEX);
+        luRemoveInterval = mpaObjectToIntervalMap[luObjectIndex].GetIntervalIndex(KI_MAX_INDEX);
         CGS_ASSERT(mpaIntervals[luRemoveInterval].mu16ObjectIndex == luObjectIndex,
-                   "mpaIntervals[luRemoveInterval].GetObjectIndex() == luObjectIndex");
+                   CGS_ASSERT_MESSAGE_AT("mpaIntervals[luRemoveInterval].GetObjectIndex() == luObjectIndex", KAC_ARTIST_ASSERT_FILE, 331));
         *lpMaxIntervalOut = mpaIntervals[luRemoveInterval];
         RemoveInterval(luRemoveInterval);
 
-        lrMap.Construct();
+        mpaObjectToIntervalMap[luObjectIndex].Construct();
     }
 
     // CgsIntervalList.cpp:356 @ 0x828B4F10
@@ -223,12 +221,15 @@ namespace CgsSceneManager
     // each live slot, patch the owning object's [role] slot index to that slot's array index.
     void IntervalList::RepairMappings()
     {
-        for (u32 luCurrentInterval = 0; luCurrentInterval < muNumIntervals; ++luCurrentInterval)
+        // The signed loop index is declared in DecFIGS at line 684. ARTIST uses
+        // cmpwi/cmpw against the interval count at 0x828AB3F0 and 0x828AB43C.
+        for (s32 liCurrentInterval = 0; liCurrentInterval < static_cast<s32>(muNumIntervals); ++liCurrentInterval)
         {
-            const Interval& lrInterval = mpaIntervals[luCurrentInterval];
+            const Interval& lrInterval = mpaIntervals[liCurrentInterval];
             const u8 luMinMax = (lrInterval.mu16Flags == 1) ? KI_MAX_INDEX : KI_MIN_INDEX;
-            mpaObjectToIntervalMap[lrInterval.mu16ObjectIndex].SetIntervalIndex(
-                luMinMax, static_cast<u16>(luCurrentInterval));
+            const s32 liCurrentObjectIndex = lrInterval.mu16ObjectIndex;
+            mpaObjectToIntervalMap[liCurrentObjectIndex].SetIntervalIndex(
+                luMinMax, static_cast<u16>(liCurrentInterval));
         }
     }
 

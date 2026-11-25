@@ -131,39 +131,38 @@ cLionEffectInstance* cLionEffectManager::EffectCreate(cLionEffectDefinition* apD
                                                       cParticleTrigger* apTrigger,
                                                       u32 auWorldIndex)
 {
-    if (apDefinition == 0)
-        return 0;
+    cLionEffectInstance* lpInstance = 0;
+    if (apDefinition)
+    {
+        ++mEffectCount;
+        lpInstance = static_cast<cLionEffectInstance*>(mAllocator.Alloc());
+        if (lpInstance)
+        {
+            lpInstance->Init();                     // mFlags = 0; mBindings.Init()
 
-    ++mEffectCount;
+            cLionBindings& lrBindings = lpInstance->GetBindings();
+            lrBindings.SetpLocator(apLocator);
+            lrBindings.SetpScaler(apScaler);
+            lrBindings.SetpTrigger(apTrigger);
+            lrBindings.SetWorldIndex(auWorldIndex);
 
-    cLionEffectInstance* lpInstance = static_cast<cLionEffectInstance*>(mAllocator.Alloc());
-    if (lpInstance == 0)
-        return 0;
+            lpInstance->SetpEffectDefinition(apDefinition);
 
-    lpInstance->Init();                     // mFlags = 0; mBindings.Init()
+            // The line that actually starts the effect: cLionParticleEffectManager::BindingsAttach
+            // registers ONE EMITTER per top-level descriptor of the definition's cLionParticleEffect
+            // and binds each to these bindings. Nothing else in the runtime creates an emitter.
+            cLionParticleEffectManager::Instance().BindingsAttach(apDefinition->GetParticles(),
+                                                                 lrBindings);
 
-    cLionBindings& lrBindings = lpInstance->GetBindings();
-    lrBindings.SetpLocator(apLocator);
-    lrBindings.SetpScaler(apScaler);
-    lrBindings.SetpTrigger(apTrigger);
-    lrBindings.SetWorldIndex(auWorldIndex);
+            // Push these bindings onto the definition's binding chain.
+            lrBindings.SetNextBinding(apDefinition->mpBindings.Get());
+            apDefinition->mpBindings.Set(&lrBindings);
 
-    lpInstance->SetpEffectDefinition(apDefinition);
-
-    // The line that actually starts the effect: cLionParticleEffectManager::BindingsAttach
-    // registers ONE EMITTER per top-level descriptor of the definition's cLionParticleEffect
-    // and binds each to these bindings. Nothing else in the runtime creates an emitter.
-    cLionParticleEffectManager::Instance().BindingsAttach(apDefinition->GetParticles(),
-                                                         lrBindings);
-
-    // Push these bindings onto the definition's binding chain.
-    lrBindings.SetNextBinding(apDefinition->mpBindings.Get());
-    apDefinition->mpBindings.Set(&lrBindings);
-
-    // Push the instance onto the manager's live-instance chain.
-    lpInstance->SetpNext(mpEffects);
-    mpEffects = lpInstance;
-
+            // Push the instance onto the manager's live-instance chain.
+            lpInstance->SetpNext(mpEffects);
+            mpEffects = lpInstance;
+        }
+    }
     return lpInstance;
 }
 

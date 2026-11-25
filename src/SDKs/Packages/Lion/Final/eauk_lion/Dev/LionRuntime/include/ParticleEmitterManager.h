@@ -54,8 +54,12 @@ public:
     // The manager singleton (DecFIGS DWARF ParticleEmitterManager.h:44). The X360 build
     // reaches its static storage (dword_831238E8) directly at the call sites that
     // register/unregister effect bindings; Instance() is the accessor that resolves to it.
-    // Body lives in the manager's own TU; declared here so callers compile against it.
-    static cParticleEmitterManager& Instance();
+    static cParticleEmitterManager& Instance()
+    {
+        // DecFIGS Lion_Unity.cpp records this local static from ParticleEmitterManager.h:46.
+        static cParticleEmitterManager m_instance;
+        return m_instance;
+    }
     // App lifetime: allocate the emitter array through the tagged allocator, Init every
     // emitter, thread the free list, and clear the used list. X360 @0x82913470.
     void AppInit(EA::Allocator::ITaggedAllocator* apAllocator, u32 aEmitterCount);

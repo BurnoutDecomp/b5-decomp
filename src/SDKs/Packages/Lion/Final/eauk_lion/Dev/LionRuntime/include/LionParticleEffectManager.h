@@ -51,7 +51,12 @@ public:
     // The manager singleton (DWARF LionParticleEffectManager.h:42). The X360 build reaches its
     // storage (off_83123798) directly -- cParticleEmitter::Init @0x82913228 passes that literal
     // to CreateBehaviour, and cParticleSystem::AppInit @0x82913810 initialises the object there.
-    static cLionParticleEffectManager& Instance();
+    static cLionParticleEffectManager& Instance()
+    {
+        // Lion_Unity.cpp DWARF inlines this local static from LionParticleEffectManager.h:44.
+        static cLionParticleEffectManager m_instance;
+        return m_instance;
+    }
 
     // App lifetime (DWARF h:49). NO STANDALONE X360 BODY -- inlined into
     // cParticleSystem::AppInit @0x82913810 (four operations on this object: mpAllocator = a2,

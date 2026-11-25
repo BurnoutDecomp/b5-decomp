@@ -102,12 +102,6 @@ u32 BurstAccumulator::Update(f32 lfBurstSize, f32 lfTime, CgsNumeric::Random& lr
 
 namespace
 {
-    // BurstAccumulator::Construct(+0x160, 8.0, 150.0, 1.0) -- the world-grinding burst
-    // shape, three immediates in ActiveRaceCarData::Construct @0x82287E08.
-    const f32 KF_WORLD_GRINDING_MIN_BURST_SIZE = 8.0f;
-    const f32 KF_WORLD_GRINDING_MAX_BURST_SIZE = 150.0f;
-    const f32 KF_WORLD_GRINDING_BURST_TIMEOUT  = 1.0f;
-
     // The FXBOOSTPOINT tag range ExtractTags harvests (E_TAGPOINT_FXBOOSTPOINT1..4).
     inline bool IsBoostPointTag(BrnPhysics::Deformation::ETagPointType leType)
     {
@@ -133,7 +127,9 @@ void ActiveRaceCarData::Construct()
     mID    = 0;
     mFlags = 0;
 
-    mBoostMachine.OnConstruct();
+    // ARTIST 0x82287E24 dispatches OnConstruct through the embedded machine pointer.
+    BoostStateMachine* lpBoostMachine = &mBoostMachine;
+    lpBoostMachine->OnConstruct();
 
     for (u32 luWheel = 0; luWheel < KU_NUM_WHEELS; ++luWheel)
     {
@@ -142,14 +138,14 @@ void ActiveRaceCarData::Construct()
     }
 
     // JumpStateMachine's Construct, inlined: +0x108 mTime = 0.0 then +0x104 mState = 0.
-    mJumpMachine.mTime  = 0.0f;
-    mJumpMachine.mState = EffectsStateAllOff;
+    JumpStateMachine& lrJumpMachine = mJumpMachine;
+    lrJumpMachine.mTime  = 0.0f;
+    lrJumpMachine.mState = EffectsStateAllOff;
     mfGroundPositionY = 0.0f;
     mJumpEffectHandle = BrnParticle::LionEffect::KU_HANDLE_INVALID;
 
-    mBurstAccumulatorWorldGrinding.Construct(KF_WORLD_GRINDING_MIN_BURST_SIZE,
-                                             KF_WORLD_GRINDING_MAX_BURST_SIZE,
-                                             KF_WORLD_GRINDING_BURST_TIMEOUT);
+    // ARTIST 0x82287EA4-0x82287EB4 loads the timeout, maximum, and minimum burst sizes.
+    mBurstAccumulatorWorldGrinding.Construct(8.0f, 150.0f, 1.0f);
 }
 
 // ---- Reset @ 0x8229B618 ----------------------------------------------------

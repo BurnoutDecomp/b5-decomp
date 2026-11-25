@@ -133,28 +133,11 @@ namespace Native
     // ------------------------------------------------------------------------
     void BrnDebrisArray::ClearAllBuckets()
     {
-        if ( mpBuckets )
+        while ( mpBuckets )
         {
-            do
-            {
-                FXBucketBase*    lpBucket  = mpBuckets;
-                FXBucketManager* lpManager = mpBucketManager;
-
-                mpBuckets = static_cast<DebrisBucket*>( lpBucket->mpNextBucket );
-
-                if ( lpBucket->mpPreviousBucket )
-                    lpBucket->mpPreviousBucket->mpNextBucket = lpBucket->mpNextBucket;
-                if ( lpBucket->mpNextBucket )
-                    lpBucket->mpNextBucket->mpPreviousBucket = lpBucket->mpPreviousBucket;
-
-                lpBucket->mpNextBucket = lpManager->mpFreeList;
-                if ( lpManager->mpFreeList )
-                    lpManager->mpFreeList->mpPreviousBucket = lpBucket;
-                lpManager->mpFreeList      = lpBucket;
-                lpBucket->mpPreviousBucket = 0;
-                ++lpManager->muNumFreeBuckets;
-            }
-            while ( mpBuckets );
+            DebrisBucket* lpBucket = mpBuckets;
+            mpBuckets = static_cast<DebrisBucket*>(lpBucket->mpNextBucket);
+            mpBucketManager->FreeBucket(lpBucket);
         }
 
         muNumBuckets = 0;

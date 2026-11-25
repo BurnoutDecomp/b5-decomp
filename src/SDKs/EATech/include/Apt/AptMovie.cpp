@@ -263,7 +263,7 @@ void AptMovie::DoTemporaryFrameControls(AptPseudoDisplayList* list, int frameNum
             AptPlaceObjectBody_t* body = place->GetBody();
             AptPseudoCIH_t* previous;
             AptPseudoCIH_t* existing;
-            list->FindInst(reinterpret_cast<void*>(body->mi32Depth), &previous, &existing);
+            list->FindInst(body->mi32Depth, &previous, &existing);
             AptCharacter* character = 0;
             if (body->mi32CharacterId != -1)
             {
@@ -282,14 +282,14 @@ void AptMovie::DoTemporaryFrameControls(AptPseudoDisplayList* list, int frameNum
             else
             {
                 void* memory = gpAptPseudoDataPool->Allocate(sizeof(AptPseudoCIH_t));
-                AptPseudoCIH_t* node = memory ? ::new (memory) AptPseudoCIH_t(reinterpret_cast<AptCharacterInfo_t*>(place), static_cast<s16>(frameNumber), reinterpret_cast<void*>(body->mi32Depth), character) : 0;
+                AptPseudoCIH_t* node = memory ? ::new (memory) AptPseudoCIH_t(reinterpret_cast<AptCharacterInfo_t*>(place), static_cast<s16>(frameNumber), body->mi32Depth, character) : 0;
                 list->Insert(node);
             }
         }
         else if (command->mnTag == 4)
         {
             void* memory = gpAptPseudoDataPool->Allocate(sizeof(AptPseudoCIH_t));
-            AptPseudoCIH_t* node = memory ? ::new (memory) AptPseudoCIH_t(reinterpret_cast<AptCharacterInfo_t*>(command), static_cast<s16>(frameNumber), reinterpret_cast<void*>(reinterpret_cast<AptTimelineWord*>(command)->mnValue), 0) : 0;
+            AptPseudoCIH_t* node = memory ? ::new (memory) AptPseudoCIH_t(reinterpret_cast<AptCharacterInfo_t*>(command), static_cast<s16>(frameNumber), reinterpret_cast<AptTimelineWord*>(command)->mnValue, 0) : 0;
             list->Insert(node);
         }
     }

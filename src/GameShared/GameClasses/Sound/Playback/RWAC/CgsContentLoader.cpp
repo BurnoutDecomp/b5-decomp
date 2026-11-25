@@ -55,7 +55,7 @@ namespace Playback
             return false;
         }
 
-        CGS_ASSERT(arContent.mpLoadService, CGS_ASSERT_MESSAGE_AT("lContent.GetLoadService()", KAC_CONTENT_LOADER_FILE, 52));
+        CGS_ASSERT(arContent.GetLoadService(), CGS_ASSERT_MESSAGE_AT("lContent.GetLoadService()", KAC_CONTENT_LOADER_FILE, 52));
 
         // ARTIST 0x826DCC88: the fresh-load call is the fall-through (bne to the restart).
         if (!mpLoadData)

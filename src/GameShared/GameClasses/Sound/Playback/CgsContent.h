@@ -193,6 +193,9 @@ namespace Playback
             mpLoadService = lpLoadService;
         }
 
+        // DecFIGS CgsContent.h:165. ARTIST 0x826DCC48 reads the typed service at +0x14.
+        IContentLoadService* GetLoadService() { return mpLoadService; }
+
         // @ 0x82680BA8 (bodied in CgsObject.cpp, phase B4). The base per-frame
         // tick the environment's UpdateContent drives: re-issue DoLoad when the
         // load count dropped to zero, virtual DoUpdate(dt), then commit the

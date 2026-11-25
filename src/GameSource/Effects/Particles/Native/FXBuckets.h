@@ -179,5 +179,21 @@ namespace BrnParticle
             --muNumFreeBuckets;
             return static_cast<TBucket*>( lpAllocatedBucket );
         }
+
+        // FXBuckets.h:409 (DecFIGS). ARTIST ClearAllBuckets inlines this at 0x8227E3F0.
+        void FreeBucket(FXBucketBase* lpBucket)
+        {
+            if (lpBucket->mpPreviousBucket)
+                lpBucket->mpPreviousBucket->mpNextBucket = lpBucket->mpNextBucket;
+            if (lpBucket->mpNextBucket)
+                lpBucket->mpNextBucket->mpPreviousBucket = lpBucket->mpPreviousBucket;
+
+            lpBucket->mpNextBucket = mpFreeList;
+            if (mpFreeList)
+                mpFreeList->mpPreviousBucket = lpBucket;
+            mpFreeList = lpBucket;
+            lpBucket->mpPreviousBucket = 0;
+            ++muNumFreeBuckets;
+        }
     };
 }

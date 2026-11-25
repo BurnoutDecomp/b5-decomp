@@ -84,7 +84,7 @@ namespace Logic
         const ContentHandle& GetContent() const { return mContentHandle; }
 
         // CgsContent.h:213. Created == the handle owns a content object.
-        bool IsCreated() const { return mContentHandle.GetObject() != 0; }
+        bool IsCreated() const { return mContentHandle; }
 
         bool IsLoaded() const;
 

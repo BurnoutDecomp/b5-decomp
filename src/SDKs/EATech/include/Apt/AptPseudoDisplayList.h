@@ -7,8 +7,8 @@
 // interpreting a movie's temporary-frame place/remove commands (AptMovie::
 // DoTemporaryFrameControls, AptCIH::jumpToFrame). Each entry is an
 // AptPseudoCIH_t node (the 20-byte pseudo character-instance header already
-// homed in AptPseudoCIH.h); the list keeps them ordered by the node's context
-// key and pool-allocates/frees them through the shared Apt DOGMA pool.
+// homed in AptPseudoCIH.h); the list keeps them ordered by its signed
+// placement depth and pool-allocates/frees them through the shared Apt DOGMA pool.
 //
 // NO reference/DWARF exists. SHAPE is reconstructed STRICTLY from the X360
 // ARTIST.XEX pseudocode/asm of the five owned methods plus the FindInst callee:
@@ -66,9 +66,9 @@ public:
     // head node (only its successors are real entries).
     void ClearList();
 
-    // Insert @ 0x82AEE4D0 -- find the insertion slot for lpNode by its context
-    // key (lpNode->mpContext, read at node+0x08), evicting any existing entry
-    // with the same key (Remove), then splice lpNode after the predecessor that
+    // Insert @ 0x82AEE4D0 -- find the insertion slot for lpNode by its signed
+    // depth (lpNode->mnDepth, read at node+0x08), evicting any existing entry
+    // at the same depth (Remove), then splice lpNode after the predecessor that
     // FindInst returns.
     void Insert(AptPseudoCIH_t* lpNode);
 
@@ -77,10 +77,9 @@ public:
     // block back to the pool.
     void Remove(AptPseudoCIH_t* lpNode);
 
-    // FindInst @ 0x82AD99A0 -- the ordered-position finder (owned by another TU;
-    // declared so Insert links). Given a context key, fills *ppPred with the node
-    // to insert after and *ppExisting with any node already holding that key.
-    void FindInst(void* lpKey, AptPseudoCIH_t** ppPred, AptPseudoCIH_t** ppExisting);
+    // FindInst @ 0x82AD99A0 -- find the existing node and splice predecessor
+    // for the signed placement depth.
+    void FindInst(s32 liDepth, AptPseudoCIH_t** ppPred, AptPseudoCIH_t** ppExisting);
 
     AptPseudoCIH_t* mpHead;    // +0x00 zeroed sentinel/head node
     void*           mpOwner;   // +0x04 owning context (ctor arg)

@@ -79,6 +79,8 @@ namespace Native
         // returns exactly one site, AcquireTexture's own read at 0x8227E500, and x360rd reads
         // both words as 0. It is a .bss handle that stays null (static storage: zero-initialised).
         CgsResource::SafeResourceHandle<renderengine::Texture> gsDefaultTexture;
+        const char K_SIMPLE_PARTICLE_ASSERT_FILE[] =
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Effects/Particles/Native/BrnSimpleParticleRenderer.cpp";
     }
 
     // gBrnParticleBankSize @0x82CDAEF8 (13 x {type, regular, crash}, read with x360rd.py). Every
@@ -132,8 +134,7 @@ namespace Native
         CGS_ASSERT(mpaParticles != 0,
             CGS_ASSERT_MESSAGE_AT(
                 "mpaParticles",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-                "../Effects/Particles/Native/BrnSimpleParticleRenderer.cpp", 293 /* ARTIST 0x8227ADA4 */));   // BrnSimpleParticleRenderer.cpp:293
+                K_SIMPLE_PARTICLE_ASSERT_FILE, 293 /* ARTIST 0x8227ADA4 */));   // BrnSimpleParticleRenderer.cpp:293
         return luConsoleSize;
     }
 
@@ -161,12 +162,13 @@ namespace Native
     void BrnSimpleParticleArray::Construct(CgsMemory::HeapMalloc* lpHeapMalloc,
                                            ENativeParticleType leParticleType)
     {
-        CGS_ASSERT(lpHeapMalloc != 0, CGS_ASSERT_MESSAGE_AT("lpHeapMalloc != NULL", __FILE__, 930));   // :930
+        CGS_ASSERT(lpHeapMalloc != 0, CGS_ASSERT_MESSAGE_AT("lpHeapMalloc != NULL", K_SIMPLE_PARTICLE_ASSERT_FILE, 930));   // :930
         CGS_ASSERT((leParticleType >= 0) && (leParticleType < eParticleArray_Max),
-                   CGS_ASSERT_MESSAGE_AT("( leParticleType >= 0 ) && ( leParticleType < AttribSys::Enums::NativeParticleType::eParticleArray_Max )", __FILE__, 931)); // :931
+                   CGS_ASSERT_MESSAGE_AT("( leParticleType >= 0 ) && ( leParticleType < AttribSys::Enums::NativeParticleType::eParticleArray_Max )", K_SIMPLE_PARTICLE_ASSERT_FILE, 931)); // :931
 
-        mpStandardParams = &maStandardParams[leParticleType];       // `stw ..., 0x24(r?)` (&unk_82FABA80 + 128*type)
-        maTextures[leParticleType] = gsDefaultTexture;               // both words zeroed (0x8228C618)
+        CgsResource::SafeResourceHandle<renderengine::Texture>& lrTexture = maTextures[leParticleType];
+        mpStandardParams = &maStandardParams[leParticleType];
+        lrTexture.Clear(); // ARTIST 0x8228C648 and 0x8228C64C clear both handle fields.
 
         // The table walk: find this type's row, construct both banks from it. The console's
         // loop compares against the 0x9C (13 * 12) byte bound; a row that is never found skips
@@ -174,7 +176,7 @@ namespace Native
         u32 luLoop = 0;
         for (; luLoop < eParticleArray_Max; ++luLoop)
         {
-            if (gBrnParticleBankSize[luLoop].meParticleType == leParticleType)
+            if (leParticleType == gBrnParticleBankSize[luLoop].meParticleType)
             {
                 mBankRegular.Construct(lpHeapMalloc, gBrnParticleBankSize[luLoop].muRegularBankSize);
                 mBankCrash.Construct(lpHeapMalloc, gBrnParticleBankSize[luLoop].muCrashBankSize);
@@ -182,7 +184,7 @@ namespace Native
             }
         }
         CGS_ASSERT(luLoop < eParticleArray_Max,
-                   CGS_ASSERT_MESSAGE_AT("Cannot find Particle Bank Size for enum type.  Have they changed ?", __FILE__, 954));   // :954
+                   CGS_ASSERT_MESSAGE_AT("Cannot find Particle Bank Size for enum type.  Have they changed ?", K_SIMPLE_PARTICLE_ASSERT_FILE, 954));   // :954
 
         Initialize();
     }

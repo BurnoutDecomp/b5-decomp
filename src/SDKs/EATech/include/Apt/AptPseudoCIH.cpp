@@ -15,9 +15,9 @@
 //      AptPseudoCIH_t::~AptPseudoCIH_t  @ 0x82AE5AA0
 //  X360 asm is authoritative. See AptPseudoCIH.h for the member layout.
 //
-//  The X360 ctor (registers r3=this, r4=source, r5=charId, r6=context,
+//  The X360 ctor (registers r3=this, r4=source, r5=charId, r6=depth,
 //  r7=data) does, store-for-store:
-//      *(this+8) = context;                     // stw r6, 8(r30)
+//      *(this+8) = depth;                     // stw r6, 8(r30)
 //      *this     = source;                      // stw r31(source), 0(r30)
 //      if (source && *source == 3) {            // cmpwi *source, 3
 //          v9 = Allocate(off_8324D808, 0x1C);   // 28-byte AptPseudoData_t
@@ -53,10 +53,10 @@
 // ctor @ 0x82AE47C0
 AptPseudoCIH_t::AptPseudoCIH_t(AptCharacterInfo_t* lpSource,
                                s16                 li16CharacterId,
-                               void*               lpContext,
+                               s32                 liDepth,
                                void*               lpData)
 {
-    mpContext = lpContext;   // *(this+8) = a4
+    mnDepth   = liDepth;     // *(this+8) = a4
     mpSource  = lpSource;    // *this     = a2
 
     if (lpSource && lpSource->GetTypeTag() == AptCharacterInfo_t::KU_TypePlaceableDisplayObject)
