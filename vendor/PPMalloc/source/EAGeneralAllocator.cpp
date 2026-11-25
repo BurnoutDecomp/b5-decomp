@@ -1792,47 +1792,62 @@ bool GeneralAllocator::ReportHeap(bool (*pReportFunction)(const BlockInfo*, void
 GeneralAllocator::DataType GeneralAllocator::GetDataPreview(const void* pData, size_t nDataSize,
     char* pBuffer, wchar_t* pBufferW, size_t nBufferLength) const // 82B4DA38
 {
-    if (nBufferLength >= 5)
+    if (nBufferLength < 5)
     {
-        unsigned int nCount = (nBufferLength - 2) >> 2;
-        if (nCount > nDataSize) nCount = nDataSize;
-        const char* pDigits = "0123456789abcdef";
+        if (nBufferLength)
+        {
+            if (pBuffer) *pBuffer = 0;
+            if (pBufferW) *pBufferW = 0;
+        }
+        return kDataTypeBinary;
+    }
+
+    unsigned int nCount = (nBufferLength - 2) >> 2;
+    // ARTIST 0x82B4DA98 stores the sixteen digits in the local array.
+    const char acDigits[16] = {
+        '0', '1', '2', '3', '4', '5', '6', '7',
+        '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'
+    };
+    if (nCount > nDataSize) nCount = nDataSize;
+    if (pBuffer)
+    {
+        memset(pBuffer, 32, nBufferLength);
+        pBuffer[nBufferLength - 1] = 0;
+    }
+    if (pBufferW)
+    {
+        memset(pBufferW, 32, nBufferLength * 2);
+        pBufferW[nBufferLength - 1] = 0;
+    }
+    if (pBuffer) pBuffer[3 * nCount - 1] = 9;
+    if (pBufferW) pBufferW[3 * nCount - 1] = 9;
+    const unsigned char* pBytes = static_cast<const unsigned char*>(pData);
+    const signed char* pChars = static_cast<const signed char*>(pData);
+    for (unsigned int i = 0; i < nCount; ++i)
+    {
+        // ARTIST 0x82B4DBB0 uses the unsigned high nibble and masks the signed low nibble.
+        const char cHigh = acDigits[pBytes[i] >> 4];
+        const char cLow = acDigits[pChars[i] & 15];
         if (pBuffer)
         {
-            memset(pBuffer, 32, nBufferLength);
-            pBuffer[nBufferLength - 1] = 0;
+            pBuffer[3 * i] = cHigh;
+            pBuffer[3 * i + 1] = cLow;
+            const signed char nChar = pChars[i];
+            if (nChar < 32 || nChar >= 127 || nChar == '"' || nChar == 39)
+                pBuffer[3 * nCount + i] = '.';
+            else
+                pBuffer[3 * nCount + i] = nChar;
         }
         if (pBufferW)
         {
-            memset(pBufferW, 32, nBufferLength * 2);
-            pBufferW[nBufferLength - 1] = 0;
+            pBufferW[3 * i] = cHigh;
+            pBufferW[3 * i + 1] = cLow;
+            const signed char nChar = pChars[i];
+            if (nChar < 32 || nChar == '"' || nChar == 39)
+                pBufferW[3 * nCount + i] = '.';
+            else
+                pBufferW[3 * nCount + i] = nChar;
         }
-        if (pBuffer) pBuffer[3 * nCount - 1] = 9;
-        if (pBufferW) pBufferW[3 * nCount - 1] = 9;
-        for (unsigned int i = 0; i != nCount; ++i)
-        {
-            const unsigned char nByte = static_cast<const unsigned char*>(pData)[i];
-            const signed char nChar = static_cast<signed char>(nByte);
-            const char cHigh = pDigits[nByte >> 4];
-            const char cLow = pDigits[nByte & 15];
-            if (pBuffer)
-            {
-                pBuffer[3 * i] = cHigh;
-                pBuffer[3 * i + 1] = cLow;
-                pBuffer[3 * nCount + i] = nChar < 32 || nChar >= 127 || nChar == 34 || nChar == 39 ? '.' : nChar;
-            }
-            if (pBufferW)
-            {
-                pBufferW[3 * i] = cHigh;
-                pBufferW[3 * i + 1] = cLow;
-                pBufferW[3 * nCount + i] = nChar < 32 || nChar == 34 || nChar == 39 ? '.' : nChar;
-            }
-        }
-    }
-    else if (nBufferLength)
-    {
-        if (pBuffer) *pBuffer = 0;
-        if (pBufferW) *pBufferW = 0;
     }
     return kDataTypeBinary;
 }

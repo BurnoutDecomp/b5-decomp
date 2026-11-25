@@ -1,5 +1,7 @@
 #include "GameShared/GameClasses/SceneManager/CgsAABBoxBuilder.h"
 
+#include <string.h>
+
 #include "vendor/renderware/collision/AABBox.hpp"
 #include "vendor/renderware/collision/GPInstance.hpp"
 
@@ -83,48 +85,29 @@ void AABBoxBuilder::CreateFromTriangle(rw::collision::AABBox* lpBBox,
 void AABBoxBuilder::CreateFromBox(rw::collision::AABBox* lpBBox,
                                   const rw::collision::GPInstance* lpVolume)
 {
-    // One-shot build of the probe rows (asm order kept: flag first, rows
-    // second -- stw dword_83270FB0 @0x82B57E3C precedes the stvx128 stores).
+    using rw::math::vpu::Vector3;
     if ((guProbeDirectionsOnce & 1u) == 0u)
     {
         guProbeDirectionsOnce |= 1u;
-
-        // flt_82001C98 = 1.0f, flt_82001CC0 = 0.0f (float-pool immediates).
-        gaProbeDirections[0].mV.x = 1.0f;   // unk_83270F80 + 0x00: (1,0,0,0)
-        gaProbeDirections[0].mV.y = 0.0f;
-        gaProbeDirections[0].mV.z = 0.0f;
-        gaProbeDirections[0].mV.w = 0.0f;
-
-        gaProbeDirections[1].mV.x = 0.0f;   // unk_83270F80 + 0x10: (0,1,0,0)
-        gaProbeDirections[1].mV.y = 1.0f;
-        gaProbeDirections[1].mV.z = 0.0f;
-        gaProbeDirections[1].mV.w = 0.0f;
-
-        gaProbeDirections[2].mV.x = 0.0f;   // unk_83270F80 + 0x20: (0,0,1,0)
-        gaProbeDirections[2].mV.y = 0.0f;
-        gaProbeDirections[2].mV.z = 1.0f;
-        gaProbeDirections[2].mV.w = 0.0f;
+        // ARTIST 0x82B57E58..68 clears the spare words of the three probe rows.
+        Vector3 axisX;
+        axisX.Set(1.0f, 0.0f, 0.0f);
+        memset(&axisX.mV.u[3], 0, sizeof(u32));
+        gaProbeDirections[0] = axisX;
+        Vector3 axisY;
+        axisY.Set(0.0f, 1.0f, 0.0f);
+        memset(&axisY.mV.u[3], 0, sizeof(u32));
+        gaProbeDirections[1] = axisY;
+        Vector3 axisZ;
+        axisZ.Set(0.0f, 0.0f, 1.0f);
+        memset(&axisZ.mV.u[3], 0, sizeof(u32));
+        gaProbeDirections[2] = axisZ;
     }
 
-    // `lwz r11, 0xAC(r3)` / bctrl -- the instance's cached batched-interval
-    // callback (GPInstance::VolumeMethods::mGetIntervals, console +0xAC):
-    // one projection interval per probe direction, Interval stride 0x30.
     rw::collision::Interval laIntervals[3];
     (lpVolume->*(lpVolume->mMethods.mGetIntervals))(gaProbeDirections, 3u, laIntervals);
-
-    // min row @ bbox+0x00: vperm(unk_82CDA350)(i0.min, i1.min) then
-    // vrlimi128 ...,2,0 inserts z from i2.min. Interval bounds are broadcast
-    // VecFloats, so each pick below reads that interval's scalar.
-    lpBBox->mMin.mV.v[0] = laIntervals[0].min.mV.x;
-    lpBBox->mMin.mV.v[1] = laIntervals[1].min.mV.y;
-    lpBBox->mMin.mV.v[2] = laIntervals[2].min.mV.z;
-    lpBBox->mMin.mV.v[3] = laIntervals[0].min.mV.x;
-
-    // max row @ bbox+0x10: same shuffle over the interval maxima.
-    lpBBox->mMax.mV.v[0] = laIntervals[0].max.mV.x;
-    lpBBox->mMax.mV.v[1] = laIntervals[1].max.mV.y;
-    lpBBox->mMax.mV.v[2] = laIntervals[2].max.mV.z;
-    lpBBox->mMax.mV.v[3] = laIntervals[0].max.mV.x;
+    lpBBox->mMin = Vector3(laIntervals[0].min, laIntervals[1].min, laIntervals[2].min);
+    lpBBox->mMax = Vector3(laIntervals[0].max, laIntervals[1].max, laIntervals[2].max);
 }
 
 // ===========================================================================

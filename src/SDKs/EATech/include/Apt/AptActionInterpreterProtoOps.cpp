@@ -219,8 +219,7 @@ void AptActionInterpreter::_FunctionAptActionDefineFunction(AptActionInterpreter
         pByteCode->maByteCode + pByteCode->mnByteCodeSize;
 
     // ARTIST stores the count then the table pointer in the native record.
-    pByteCode->mnConstantPoolCount = static_cast<int32_t>(pInterp->mConstantPool.mnCount);
-    pByteCode->mppConstantPool = pInterp->mConstantPool.mppEntries;
+    pByteCode->mConstantPool = pInterp->mConstantPool;
 
     EAStringC name(pByteCode->mpName);   // console InitFromBuffer(&v10, mpName)
 
@@ -268,8 +267,7 @@ void AptActionInterpreter::_FunctionAptActionDefineFunction2(AptActionInterprete
         pByteCode->maByteCode + pByteCode->mnBodyLength;
 
     // ARTIST stores the count then the table pointer.
-    pByteCode->mnConstantPoolCount = static_cast<int32_t>(pInterp->mConstantPool.mnCount);
-    pByteCode->mppConstantPool = pInterp->mConstantPool.mppEntries;
+    pByteCode->mConstantPool = pInterp->mConstantPool;
 
     // x64 FIX (2026-07-05): sizeof, not the console's 52 -- see the v1 handler note.
     void* pMem = AptScriptFunction2::operator new(sizeof(AptScriptFunction2));

@@ -509,9 +509,7 @@ void AptActionInterpreter::_FunctionAptActionStringDictByteGetVar(AptActionInter
 
 // AptResolveTargetContext @0x82B02F80 -- resolve pName into (*ppOutContext,
 // *pOutLeaf) under (pScope, pTarget). Body in AptActionInterpreterInterpHelpers.cpp.
-extern void AptResolveTargetContext(AptValue* pScope, AptValue* pTarget,
-                                           const EAStringC* pName,
-                                           AptValue** ppOutContext, EAStringC* pOutLeaf);
+
 
 // AptLabelToFrame -- the frame index a label resolves to under pNode's timeline
 // (the node's clip movie's label hash, X360 @0x82B0C618 chain: charInst -> render
@@ -623,8 +621,8 @@ void AptActionInterpreter::_FunctionAptActionCallFunction(AptActionInterpreter* 
     {
         const EAStringC* const pName = AptValue::Get_ToString(pFunction, &scratch);
 
-        AptResolveTargetContext(pContext->mpCIH, pContext->mpPendingReleaseValue,
-                                       pName, &pResolvedScope, &scratch);
+        AptActionInterpreter::getContext(pContext->mpCIH, pContext->mpPendingReleaseValue,
+                                       pName, &pResolvedScope, scratch);
         // console getVariable(this, resolvedContext, target, &leafName, 1, 1, 0).
         pFunction = pInterp->getVariable(pResolvedScope, pContext->mpPendingReleaseValue,
                                          &scratch, 1, 1, 0);
@@ -1133,45 +1131,38 @@ void AptActionInterpreter::_FunctionAptActionNewMethod(AptActionInterpreter* pIn
 // gives the frame index directly (an integer). The top operand is popped; on a
 // valid frame index the run scope's frame actions for that frame are run.
 // ---------------------------------------------------------------------------
-void AptActionInterpreter::_FunctionAptActionCallFrame(AptActionInterpreter* pInterp,
-                                                       LocalContextT* pContext)
+void AptActionInterpreter::_FunctionAptActionCallFrame(AptActionInterpreter* pInterp, LocalContextT* pContext)
 {
-    AptValue* const pTop = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];
-    int nFrame = -1;                                       // console v4
-
-    const AptVirtualFunctionTable_Indices eType = pTop->getVtblIndex();
-    if ((eType == AptVFT_StringValue || eType == AptVFT_StringObject) && pTop->getIsDefined())
+    AptValue* pFrame = pInterp->stackAt(0);
+    int nFrame = -1;
+    const AptVirtualFunctionTable_Indices eType = pFrame->getVtblIndex();
+    const bool bString = (eType == AptVFT_StringValue || eType == AptVFT_StringObject)
+                      && pFrame->getIsDefined();
+    if (bString)
     {
-        // a string label -> resolve the path context, then the node's label hash.
-        // Get_ToString inlines the console's raw/boxed name extraction (v9+8 / *(v5+32)+8).
-        EAStringC scratch;                                 // console v14 (&unk_82F72FF8 seed)
-        const EAStringC* const pName = AptValue::Get_ToString(pTop, &scratch);
-
-        AptValue* pResolved = 0;                     // console v15
-        AptResolveTargetContext(pContext->mpCIH, pContext->mpPendingReleaseValue,
-                                       pName, &pResolved, &scratch);
-        // console: AptNativeHash::Lookup(resolved's frame-label hash, &scratch) -> toInteger
-        if (pResolved)
-            nFrame = AptLabelToFrame(static_cast<AptCIH*>(pResolved), &scratch);
+        AptValue* pLabelContext;
+        EAStringC lName;
+        AptString* pString = eType == AptVFT_StringValue
+            ? static_cast<AptString*>(pFrame)
+            : static_cast<AptString*>(static_cast<AptStringObject*>(pFrame)->GetBoxedString());
+        AptActionInterpreter::getContext(pContext->mpCIH, pContext->mpPendingReleaseValue,
+                                         pString->GetInternalString(), &pLabelContext, lName);
+        const AptCharacterSprite* pCharacter = static_cast<const AptCharacterSprite*>(
+            static_cast<AptCIH*>(pLabelContext)->GetCharacterInst()->mpRenderItem->mpCharacter);
+        nFrame = pCharacter->mMovie.labelToFrame(&lName);
     }
-    else if (eType == AptVFT_Integer && pTop->getIsDefined())
+    else if (pFrame->isInteger())
     {
-        nFrame = pTop->toInteger();
+        nFrame = pFrame->toInteger();
     }
 
-    pInterp->stackPop();                                   // console AptValue>::Pop
-
+    pInterp->stackPop();
     if (nFrame != -1)
     {
-        // Console: runFrameActions(<node->charInst->renderItem->character + movie body>,
-        // node, nFrame) -- the bound clip's embedded AptMovie (the same char+movie-off
-        // chain AptGetClipMovie models), run against the node.
-        AptCIH* const pNode = pContext->mpCIH;
-        AptCharacter* const pCharacter =
-            pNode->GetCharacterInst()->mpRenderItem->mpCharacter;
-        const AptMovie* const pMovie = reinterpret_cast<const AptMovie*>(
-            reinterpret_cast<const char*>(pCharacter) + KU_AptEmbeddedMovieOff);
-        pMovie->runFrameActions(pNode, nFrame);
+        AptCIH* pNode = pContext->mpCIH;
+        const AptCharacterSprite* pCharacter = static_cast<const AptCharacterSprite*>(
+            pNode->GetCharacterInst()->mpRenderItem->mpCharacter);
+        pCharacter->mMovie.runFrameActions(pNode, nFrame);
     }
 }
 
@@ -1182,36 +1173,39 @@ void AptActionInterpreter::_FunctionAptActionCallFrame(AptActionInterpreter* pIn
 // node's frame-label hash; a valid index seeks the play-head and clears the
 // "playing" bit. The inline string is a 4-byte (4-byte-aligned) operand.
 // ---------------------------------------------------------------------------
-void AptActionInterpreter::_FunctionAptActionGotoLabel(AptActionInterpreter* /*pInterp*/,
-                                                       LocalContextT* pContext)
+namespace
 {
-    // Native four-aligned string pointer; advance the PC by four.
-    const unsigned char* const pAligned = reinterpret_cast<const unsigned char*>(
+    struct AptAction_GotoLabel
+    {
+        const char* mpLabel;
+    };
+
+    struct AptAction_GotoFrame2
+    {
+        int32_t bPlay;
+    };
+}
+
+void AptActionInterpreter::_FunctionAptActionGotoLabel(AptActionInterpreter*, LocalContextT* pContext)
+{
+    const AptAction_GotoLabel* pOperand = reinterpret_cast<const AptAction_GotoLabel*>(
         (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 3u) & ~static_cast<uintptr_t>(3u));
-    const char* const szLabel = *reinterpret_cast<const char* const*>(pAligned);
-    pContext->mpProgramCounter = pAligned + 4;
+    pContext->mpProgramCounter = reinterpret_cast<const unsigned char*>(pOperand + 1);
+    EAStringC lLabel(pOperand->mpLabel);
 
-    EAStringC label(szLabel);   // console EAStringC::InitFromBuffer scratch (RAII Decrease)
+    AptCIH* pNode;
+    if (pContext->mpPendingReleaseValue && pContext->mpPendingReleaseValue->isCIH())
+        pNode = static_cast<AptCIH*>(pContext->mpPendingReleaseValue);
+    else
+        pNode = pContext->mpCIH;
 
-    // Pick the target node: the current-target slot when it is a clip / CIHNone,
-    // otherwise the run scope.
-    AptCIH* pNode = pContext->mpCIH;
-    if (pContext->mpPendingReleaseValue)
+    const AptCharacterSprite* pCharacter = static_cast<const AptCharacterSprite*>(
+        pNode->GetCharacterInst()->mpRenderItem->mpCharacter);
+    const int nFrame = pCharacter->mMovie.labelToFrame(&lLabel) + 1;
+    if (nFrame - 1 >= 0)
     {
-        const AptVirtualFunctionTable_Indices eTgt =
-            pContext->mpPendingReleaseValue->getVtblIndex();
-        if ((eTgt == AptVFT_CharacterInstHandle && pContext->mpPendingReleaseValue->getIsDefined())
-            || eTgt == AptVFT_CIHNone)
-            pNode = static_cast<AptCIH*>(pContext->mpPendingReleaseValue);
-    }
-
-    const int nFrame = AptLabelToFrame(pNode, &label);   // homed in AptCIHNativeFunctionHelper.cpp
-    if (nFrame >= 0)
-    {
-        pNode->jumpToFrame(nFrame);                             // real member (play-head seek)
-        // clear the "playing" bit on the node's sprite instance (bIsPlaying, x64 bit 25;
-        // console form *(node+0x20)+0x14 &= ~0x40).
-        static_cast<AptCharacterSpriteInstBase*>(pNode->GetCharacterInst())->mbIsPlaying = 0;
+        pNode->jumpToFrame(nFrame - 1);
+        pNode->SetIsPlaying(false);
     }
 }
 
@@ -1223,74 +1217,50 @@ void AptActionInterpreter::_FunctionAptActionGotoLabel(AptActionInterpreter* /*p
 // index seeks the play-head; the "playing" bit is then set/cleared from the inline
 // play flag (the 4-byte-aligned operand), and a play -> dirty the node.
 // ---------------------------------------------------------------------------
-void AptActionInterpreter::_FunctionAptActionGotoFrame2(AptActionInterpreter* pInterp,
-                                                        LocalContextT* pContext)
+void AptActionInterpreter::_FunctionAptActionGotoFrame2(AptActionInterpreter* pInterp, LocalContextT* pContext)
 {
-    // ARTIST: align to 4; the inline 4-byte word is the "start playing" flag.
-    const uint32_t* const pPlayFlag = reinterpret_cast<const uint32_t*>(
+    const AptAction_GotoFrame2* pOperand = reinterpret_cast<const AptAction_GotoFrame2*>(
         (reinterpret_cast<uintptr_t>(pContext->mpProgramCounter) + 3u) & ~static_cast<uintptr_t>(3u));
-    pContext->mpProgramCounter = reinterpret_cast<const unsigned char*>(pPlayFlag + 1);
+    pContext->mpProgramCounter = reinterpret_cast<const unsigned char*>(pOperand + 1);
 
-    AptValue* const pTop = pInterp->mOperandStack.mppItems[pInterp->mOperandStack.mnTop - 1];   // console v8
+    AptValue* pFrame = pInterp->stackAt(0);
+    AptCIH* pNode = 0;
+    if (pContext->mpPendingReleaseValue && pContext->mpPendingReleaseValue->isCIH())
+        pNode = static_cast<AptCIH*>(pContext->mpPendingReleaseValue);
+    else if (pContext->mpCIH->isCIH())
+        pNode = pContext->mpCIH;
 
-    // Pick the target node (console v4): the current-target slot (a2[2]=v5) first,
-    // else the run scope (a2[1]=mpCIH), each only when it is a clip / CIHNone.
-    AptCIH* pNode = 0;                               // console v4
-    AptValue* const pTarget = pContext->mpPendingReleaseValue;   // console v5 = a2[2]
-    if (pTarget)
+    int nFrame = -1;
+    const AptVirtualFunctionTable_Indices eType = pFrame->getVtblIndex();
+    const bool bString = (eType == AptVFT_StringValue || eType == AptVFT_StringObject)
+                      && pFrame->getIsDefined();
+    if (bString)
     {
-        const AptVirtualFunctionTable_Indices eTgt = pTarget->getVtblIndex();
-        if ((eTgt == AptVFT_CharacterInstHandle && pTarget->getIsDefined()) || eTgt == AptVFT_CIHNone)
-            pNode = static_cast<AptCIH*>(pTarget);
-    }
-    if (!pNode)
-    {
-        AptCIH* const pScope = pContext->mpCIH;            // console a2[1]
-        const AptVirtualFunctionTable_Indices eScope = pScope->getVtblIndex();
-        if ((eScope == AptVFT_CharacterInstHandle && pScope->getIsDefined())
-            || eScope == AptVFT_CIHNone)
-            pNode = pScope;
-    }
-
-    // Resolve the destination off the top operand.
-    int nFrame = -1;                                       // console v16
-    const AptVirtualFunctionTable_Indices eType = pTop->getVtblIndex();
-    if ((eType == AptVFT_StringValue || eType == AptVFT_StringObject) && pTop->getIsDefined())
-    {
-        // Get_ToString inlines the console's raw/boxed name extraction (v8+8 / *(v8+32)+8).
-        EAStringC scratch;                                 // console v30 (&unk_82F72FF8 seed)
-        const EAStringC* const pName = AptValue::Get_ToString(pTop, &scratch);
-
-        AptValue* pResolved = 0;                     // console v31
-        AptResolveTargetContext(pContext->mpCIH, pTarget, pName,
-                                       &pResolved, &scratch);
-        if (pResolved)
+        AptValue* pLabelContext;
+        EAStringC lName;
+        AptString* pString = eType == AptVFT_StringValue
+            ? static_cast<AptString*>(pFrame)
+            : static_cast<AptString*>(static_cast<AptStringObject*>(pFrame)->GetBoxedString());
+        AptActionInterpreter::getContext(pContext->mpCIH, pContext->mpPendingReleaseValue,
+                                         pString->GetInternalString(), &pLabelContext, lName);
+        if (pLabelContext->isCIH() && static_cast<AptCIH*>(pLabelContext)->IsSpriteInstBase())
         {
-            const AptVirtualFunctionTable_Indices eRes = pResolved->getVtblIndex();
-            // console: a clip / CIHNone resolved node -> look up the label in its hash
-            if ((eRes == AptVFT_CharacterInstHandle && pResolved->getIsDefined())
-                || eRes == AptVFT_CIHNone)
-                nFrame = AptLabelToFrame(static_cast<AptCIH*>(pResolved), &scratch);
+            const AptCharacterSprite* pCharacter = static_cast<const AptCharacterSprite*>(
+                static_cast<AptCIH*>(pLabelContext)->GetCharacterInst()->mpRenderItem->mpCharacter);
+            nFrame = pCharacter->mMovie.labelToFrame(&lName);
         }
     }
-    else if (eType == AptVFT_Integer && pTop->getIsDefined())
+    else if (pFrame->isInteger())
     {
-        nFrame = pTop->toInteger();
+        nFrame = pFrame->toInteger();
     }
 
-    if (nFrame != -1 && pNode)
+    if (nFrame != -1)
     {
-        pNode->jumpToFrame(nFrame);                        // real member (play-head seek)
-        const bool bPlay = (*pPlayFlag != 0);              // console: cntlzw test of the inline word
-        AptCharacterSpriteInstBase* const pSprite =
-            static_cast<AptCharacterSpriteInstBase*>(pNode->GetCharacterInst());
-        // set/clear bit 6 (0x40, "playing") from the play flag.
-        pSprite->mbIsPlaying = bPlay;
-        if (bPlay)
-            pNode->SetDirtyState(true, true);              // real member (dirty latch)
+        pNode->jumpToFrame(nFrame);
+        pNode->SetIsPlaying(pOperand->bPlay != 0);
     }
-
-    pInterp->stackPop();   // console AptValue>::Pop(a1) -- drop the destination operand
+    pInterp->stackPop();
 }
 
 // ===========================================================================

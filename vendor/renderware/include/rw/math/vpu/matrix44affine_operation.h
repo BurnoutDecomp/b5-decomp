@@ -122,6 +122,28 @@ namespace vpu
         return lvResult;
     }
 
+    // DecFIGS matrix44affine_operation_platform_inline.h:17,20 specifies
+    // Vector3 first. The ARTIST kernels keep the full fused vector rows.
+    inline Vector3 TransformVector(Vector3::InParam vector, Matrix44Affine::InParam matrix)
+    {
+        const VectorIntrinsic x = __vspltw(vector.mV, 0);
+        const VectorIntrinsic y = __vspltw(vector.mV, 1);
+        const VectorIntrinsic z = __vspltw(vector.mV, 2);
+        VectorIntrinsic result = __vmulfp(x, matrix.xAxis.mV);
+        result = __vmaddfp(y, matrix.yAxis.mV, result);
+        return Vector3(__vmaddfp(z, matrix.zAxis.mV, result));
+    }
+
+    inline Vector3 TransformPoint(Vector3::InParam point, Matrix44Affine::InParam matrix)
+    {
+        const VectorIntrinsic x = __vspltw(point.mV, 0);
+        const VectorIntrinsic y = __vspltw(point.mV, 1);
+        const VectorIntrinsic z = __vspltw(point.mV, 2);
+        VectorIntrinsic result = __vmaddfp(x, matrix.xAxis.mV, matrix.wAxis.mV);
+        result = __vmaddfp(y, matrix.yAxis.mV, result);
+        return Vector3(__vmaddfp(z, matrix.zAxis.mV, result));
+    }
+
     // -- composition --------------------------------------------------------------------
 
     // Mult(m, b) / operator*(m, b): the affine matrix product `m * b` (row-major). Each

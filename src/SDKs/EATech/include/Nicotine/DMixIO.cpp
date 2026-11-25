@@ -20,13 +20,11 @@ namespace Nicotine
 // ctor @ 0x82B448B0
 //   result[2] = 0; *result = &vtable; result[3] = 0;
 DMixIO::DMixIO()
-    : m_ID(0)        // (X360 does not write +0x04 here; left at construction default)
-    , m_pDMixInputBlock(0)   // result[2] @ +0x08
+    : m_pDMixInputBlock(0)   // result[2] @ +0x08
     , m_pDMixOutputBlock(0)  // result[3] @ +0x0C
 {
     // vptr (+0x00) is installed by the compiler-generated prologue (the X360
     // ctor's `*result = &off_8214780C`), reproduced here by the virtual dtor.
-    (void)m_ID;
 }
 
 // SetDMixInput @ 0x82B448D0
@@ -148,7 +146,7 @@ int DMixIO::GetInstanceNum()
 
 // IsSFXObj @ 0x82B449E8
 //   (*(a1+4) & 0xE0000000) == 0x40000000  -> top-3-bit class tag == 0b010.
-int DMixIO::IsSFXObj()
+bool DMixIO::IsSFXObj()
 {
     return (m_ID & 0xE0000000u) == 0x40000000u;
 }

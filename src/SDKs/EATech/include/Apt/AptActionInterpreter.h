@@ -112,11 +112,11 @@ public:
     AptValue* getVariable(AptValue* pScope, AptValue* pTarget, const EAStringC* pName,
                           int nAllowSelf, int nSearchScopeChain, int nDirect);
 
-    // getContext @0x8194CC -- parse a variable PATH (slash/dot syntax) into its
-    // (context object, leaf name) and return the context kind. The 115-line path
-    // parser is homed in AptActionInterpreterContext.cpp.
-    int getContext(AptValue* pScope, AptValue* pTarget, const EAStringC* pPath,
-                   AptValue** ppOutContext, EAStringC* pOutName);
+    // Resolve the lookup context and copy the name after the final path delimiter.
+    static bool getContext(AptValue* pScope, AptValue* pTarget, const EAStringC* pPath,
+                           AptValue** ppOutContext, EAStringC& rOutName);
+    static bool getContext(AptValue* pScope, AptValue* pTarget, const EAStringC* pPath,
+                           AptValue** ppOutContext, char* pNameBuffer);
 
     // setVariable @0x82B03048 -- getVariable's write side: resolve the path
     // (getContext), then the object member set, the scope chain, or the context's

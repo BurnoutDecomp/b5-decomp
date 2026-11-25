@@ -39,35 +39,49 @@ namespace Logic
 // the mix-map endpoint and attach it to the matching live logic effect.
 bool DynamicMixer::ConnectDMixIO(Nicotine::DMixIO* apDMixIO)
 {
-    CGS_ASSERT(apDMixIO != 0, "lpDMixIO");
-    const int liStateId = apDMixIO->GetStateID();
+    const s32 liStateId = apDMixIO->GetStateID();
+    Environment* lpEnvironment = mpEnvironment;
     CGS_ASSERT(liStateId < KI_MAX_NUMBER_OF_STATES,
-               "liStateManId < KI_MAX_NUMBER_OF_STATES");
-
-    StateManager* lpManager = mpEnvironment->GetStateManager(liStateId);
-    const int liInstance = apDMixIO->GetInstanceNum();
-    const int liEffectId = apDMixIO->GetSFX_ID();
-    if (!lpManager)
-    {
+        CGS_ASSERT_MESSAGE_AT("liStateManId < KI_MAX_NUMBER_OF_STATES",
+            "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/CgsEnvironment.cpp", 481));
+    StateManager* const lpManager = lpEnvironment->mapStateManagers[liStateId];
+    if (lpManager == 0)
         return false;
-    }
 
-    State* lpState = lpManager->GetHeadState();
+    const s32 liInstance = apDMixIO->GetInstanceNum();
+    State* lpState = mpEnvironment->GetStateManager(apDMixIO->GetStateID())->GetHeadState();
     while (lpState && lpState->GetInstanceID() != liInstance)
         lpState = lpState->GetNextState();
     if (!lpState)
-    {
         return false;
-    }
 
-    EffectBase* lpEffect = apDMixIO->IsSFXObj()
-        ? lpState->GetHeadEffectObject() : lpState->GetHeadEffectControl();
-    while (lpEffect && lpEffect->GetEffectID() != liEffectId)
-        lpEffect = lpEffect->mpNextEffectBase;
-    if (!lpEffect)
+    EffectBase* lpEffect;
+    if (apDMixIO->IsSFXObj())
     {
-        return false;
+        const s32 liEffectId = apDMixIO->GetSFX_ID();
+        EffectObject* lpObject = static_cast<EffectObject*>(lpState->GetHeadEffectObject());
+        if (!lpObject)
+            return false;
+        do
+        {
+            if (lpObject->GetEffectID() == liEffectId)
+                break;
+            lpObject = static_cast<EffectObject*>(lpObject->mpNextEffectBase);
+        } while (lpObject);
+        if (!lpObject)
+            return false;
+        lpEffect = lpObject;
     }
+    else
+    {
+        const s32 liEffectId = apDMixIO->GetSFX_ID();
+        EffectControl* lpControl = static_cast<EffectControl*>(lpState->GetHeadEffectControl());
+        while (lpControl && lpControl->GetEffectID() != liEffectId)
+            lpControl = static_cast<EffectControl*>(lpControl->mpNextEffectBase);
+        lpEffect = lpControl;
+    }
+    if (!lpEffect)
+        return false;
 
     lpEffect->SetDMixIOPtr(apDMixIO);
     return true;
@@ -106,8 +120,10 @@ void DynamicMixer::DMixAssert(bool abCondition, const char* apFormat, ...)
     const int liCopied = ::vsnprintf(lacText, sizeof(lacText), apFormat, lArgs);
     va_end(lArgs);
     CGS_ASSERT(liCopied < static_cast<int>(sizeof(lacText)),
-               "lNumBytesCopied<(int32_t)luBytes");
-    CGS_ASSERT(false, lacText);
+        CGS_ASSERT_MESSAGE_AT("lNumBytesCopied<(int32_t)luBytes",
+            "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 96));
+    CGS_ASSERT(false, CGS_ASSERT_MESSAGE_AT(lacText,
+        "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/CgsEnvironment.cpp", 608));
 }
 
 } // namespace Logic

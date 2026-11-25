@@ -37,14 +37,27 @@ namespace CgsNetwork
         NetworkPlayerID mSendingPlayerID;   // +0x20
         NetworkPlayerID mRecvingPlayerID;   // +0x24
 
-        // Inlined at every call site on the console: both ids to the sentinel, then the base's
-        // field reset.
-        void            Construct()
+        void Construct()
+        {
+            ResetPlayerIDs();
+            Message::Construct();
+        }
+
+        // PlayerManager::SetGameID resets the entire buffered signal in place.
+        void ResetMessageAndPlayerIDs()
+        {
+            ResetPlayerIDs();
+            ResetMessageFields();
+        }
+
+    private:
+        void ResetPlayerIDs()
         {
             mSendingPlayerID = KI_INVALID_PLAYER_ID;
             mRecvingPlayerID = KI_INVALID_PLAYER_ID;
-            Message::Construct();
         }
+
+    public:
         // Inlined at every call site on the console: range assert, then the word store.
         void            SetSendingPlayerID(NetworkPlayerID lSendingPlayerID)
         {

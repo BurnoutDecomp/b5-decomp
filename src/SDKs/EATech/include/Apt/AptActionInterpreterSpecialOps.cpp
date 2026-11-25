@@ -195,9 +195,7 @@ extern AptValue* gpUndefinedValue;
 // The path-context resolver (console sub_82B02F80, the same one CallFunction uses):
 // parse pName into (*ppOutContext, *pOutLeaf) under (pScope, pTarget). Homed in
 // AptActionInterpreterInterpHelpers.cpp; shared with the StackOps call opcodes.
-extern void AptResolveTargetContext(AptValue* pScope, AptValue* pTarget,
-                                           const EAStringC* pName,
-                                           AptValue** ppOutContext, EAStringC* pOutLeaf);
+
 
 // ---------------------------------------------------------------------------
 // The drag-state record: StartDragMovie writes the active drag target + its
@@ -432,8 +430,8 @@ void AptActionInterpreter::_FunctionAptActionStartDragMovie(AptActionInterpreter
             : static_cast<AptString*>(static_cast<AptStringObject*>(pTarget)->GetBoxedString())
                   ->GetInternalString();   // tag-33 box (console *(Variable+32) then +8)
 
-        AptResolveTargetContext(pContext->mpCIH, pContext->mpPendingReleaseValue,
-                                       pName, &pResolvedContext, &leafName);   // sub_82B02F80 (homed, InterpHelpers.cpp)
+        AptActionInterpreter::getContext(pContext->mpCIH, pContext->mpPendingReleaseValue,
+                                       pName, &pResolvedContext, leafName);   // sub_82B02F80 (homed, InterpHelpers.cpp)
         pTarget = pInterp->getVariable(pResolvedContext, pContext->mpPendingReleaseValue,
                                        &leafName, 1, 1, 0);
     }

@@ -26,6 +26,7 @@
 // ===================================================================================
 
 #include "types.hpp"
+#include <cstring>
 #include "GameShared/GameClasses/Network/CgsNetworkConstants.h"   // CgsNetwork::EServerType
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h"   // CgsNetwork::ServerInterfaceDirtySock (mpServerInterface's real type)
 
@@ -90,10 +91,7 @@ namespace CgsNetwork
             muMnglVoipPort       = 0;
             meGameConnectionType = 0;
             meVoipConnectionType = 0;
-            for (s32 liIndex = 0; liIndex < static_cast<s32>(sizeof(maReserved30)); ++liIndex)
-            {
-                maReserved30[liIndex] = 0;
-            }
+            std::memset(maReserved30, 0, sizeof(maReserved30));
         }
     };
 

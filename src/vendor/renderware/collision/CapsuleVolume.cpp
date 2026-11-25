@@ -1,4 +1,5 @@
 #include "vendor/renderware/collision/CapsuleVolume.hpp"
+#include "rw/math/vpu/matrix44affine_operation.h"
 
 #include "vendor/renderware/collision/GPInstance.hpp"   // GPInstance (CreateGPInstance)
 
@@ -253,28 +254,27 @@ RwBool CapsuleVolume::GetMaximumFeature(RwBool /*abCcw*/, const Vector3& /*arDir
 // ---------------------------------------------------------------------------
 RwBool CapsuleVolume::GetBBox(const Matrix44Affine* lpTransform, RwBool /*abTight*/, AABBox& arResult) const
 {
-    __vector4 axis = mTransform.zAxis.mV;
-    __vector4 centre = mTransform.wAxis.mV;
+    using math::vpu::Abs;
+    using math::vpu::TransformPoint;
+    using math::vpu::TransformVector;
+    using math::vpu::VecFloat;
+    Vector3 axis;
+    Vector3 centre;
     if (lpTransform)
     {
-        const __vector4 tx = lpTransform->xAxis.mV;
-        const __vector4 ty = lpTransform->yAxis.mV;
-        const __vector4 tz = lpTransform->zAxis.mV;
-        const __vector4 tw = lpTransform->wAxis.mV;
-        __vector4 a = __vmulfp(__vspltw(axis, 0), tx);
-        __vector4 c = __vmaddfp(__vspltw(centre, 0), tx, tw);
-        a = __vmaddfp(__vspltw(axis, 1), ty, a);
-        c = __vmaddfp(__vspltw(centre, 1), ty, c);
-        axis = __vmaddfp(__vspltw(axis, 2), tz, a);
-        centre = __vmaddfp(__vspltw(centre, 2), tz, c);
+        axis = TransformVector(mTransform.zAxis, *lpTransform);
+        centre = TransformPoint(mTransform.wAxis, *lpTransform);
     }
-    const __vector4 ones = __vspltisw(-1);
-    const __vector4 sign = __vslw(ones, ones);
-    const __vector4 height = __vspltw(__lvlx(&mCapsuleData.mfHalfHeight, 0), 0);
-    const __vector4 radius = __vspltw(__lvlx(&mfRadius, 0), 0);
-    const __vector4 extent = __vmaddfp(__vandc(axis, sign), height, radius);
-    arResult.mMin.mV = __vsubfp(centre, extent);
-    arResult.mMax.mV = __vaddfp(centre, extent);
+    else
+    {
+        axis = mTransform.zAxis;
+        centre = mTransform.wAxis;
+    }
+    const VecFloat radius(mfRadius);
+    const VecFloat height(mCapsuleData.mfHalfHeight);
+    const __vector4 extent = __vmaddfp(Abs(axis).mV, height.mV, radius.mV);
+    arResult.mMin = Vector3(__vsubfp(centre.mV, extent));
+    arResult.mMax = Vector3(__vaddfp(centre.mV, extent));
     return 1;
 }
 

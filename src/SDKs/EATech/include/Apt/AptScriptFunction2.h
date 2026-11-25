@@ -58,7 +58,7 @@ class AptValue;
 // ---------------------------------------------------------------------------
 struct AptScriptFunction2Arg
 {
-    int32_t mnRegister;                // ARTIST +0x00
+    uint32_t mnRegister;                // ARTIST +0x00
     const char* mpName;                // +0x04
 };
 
@@ -73,7 +73,7 @@ struct AptScriptFunction2Arg
 // This differs from the DefineFunction (v1) AptScriptFunction1ByteCode: v2 carries
 // the preload-flags word + the register-parameter table pointer (mpArgTable) and a
 // separate body length, where v1 has a plain argument-name array and the bytecode
-// size inline. The constant-pool fields (mppConstantPool / mnConstantPoolCount) are
+// size inline. The embedded constant pool is
 // patched in place by the interpreter when the DefineFunction2 action runs (from
 // the interpreter's two constant-pool registers).
 // ---------------------------------------------------------------------------
@@ -86,11 +86,11 @@ struct AptScriptFunction2ByteCode
     uint16_t muPreloadFlags;           // +0x0A
     AptScriptFunction2Arg* mpArgTable; // +0x0C, eight-byte entries
     uint32_t mnBodyLength;             // +0x10
-    int32_t mnConstantPoolCount;       // +0x14
-    AptValue** mppConstantPool;      // +0x18
+    AptConstantPool mConstantPool;   // +0x14
     uint8_t maByteCode[1];             // +0x1C
 };
 CGS_STATIC_ASSERT((sizeof(AptScriptFunction2Arg) == 8), "ARTIST function argument");
+CGS_STATIC_ASSERT((offsetof(AptScriptFunction2ByteCode, mConstantPool) == 0x14), "ARTIST function dictionary");
 CGS_STATIC_ASSERT((offsetof(AptScriptFunction2ByteCode, maByteCode) == 0x1C), "ARTIST function2 record");
 
 // DefineFunction2 register-preload flag bits (SetupBeforeExecution masks against

@@ -124,10 +124,7 @@ namespace CgsNetwork
     // DecFIGS CgsMessage.cpp:355 and ARTIST 82870B90.
     void Message::Construct()
     {
-        mu8GameID = KU8_INVALID_GAME_ID;
-        mi8Type = static_cast<s8>(-1);
-        mx8Flags = 0;
-        mu16Frame = KU16_INVALID_FRAME;
+        ResetMessageFields();
     }
 
     // ---- GetVectorFromAngles @ 0x82870D78 --------------------------------------

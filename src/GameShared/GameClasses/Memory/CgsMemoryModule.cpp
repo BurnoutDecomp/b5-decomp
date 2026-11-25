@@ -5,6 +5,7 @@
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "rw/rwcore_general_alloc.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"
 #include <cstring>
 #include "rw/rwcore_structs.h"                        // rw::Resource / ResourceDescriptor / IResourceAllocator_vtbl
 #define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\CgsMemoryModule.cpp"
@@ -66,22 +67,6 @@ namespace CgsMemory
         }
     }
 
-    namespace
-    {
-        __forceinline void FireRootBankAssert(const char* lpcMessage, int liLine)
-        {
-            CgsDev::Assert::BeginAssert();
-            {
-                CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer,
-                                           CgsDev::Assert::giMessageBufferSize);
-                lMessage << lpcMessage;
-            }
-            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, liLine));
-            CgsDev::Assert::EndAssert();
-        }
-    }
-
     // ARTIST 0x8286AF68. Root blocks come directly from the module's free list.
     void MemoryModule::CreateRootBank()
     {
@@ -91,30 +76,30 @@ namespace CgsMemory
         lrRoot.SetAllowFragmentation(true);
         lrRoot.SetIsLeaf(false);
 
-        const char* lpcName = "ROOT";
-        char* lpcDst = mppcNames[0];
-        s32 li = 0;
-        for (; lpcName[li] != 0; ++li)
-            lpcDst[li] = lpcName[li];
-        lpcDst[li] = 0;
+        CgsCore::StrCpy(mppcNames[0], MemoryBank::KI_NAME_SIZE, "ROOT");
         mpu8IdMap[0] = 0;
 
         for (s32 lt = 0; lt < MemoryBank::KI_NUM_TYPES; ++lt)
         {
             const RootResourceSet& lrRegion = maRootSets[lt];
-            if (lrRegion.muNumBlocks == 0xFFFFu)
-                FireRootBankAssert("ERROR: Can not have more than 65534 blocks in a bank\n", 975);
-            if (lrRegion.muNumBlocks != 0 && lrRegion.muDataSize % lrRegion.muNumBlocks != 0)
-                FireRootBankAssert("ERROR: Data size must be divisble by num blocks\n", 976);
+            CGS_ASSERT_STREAM_AT(lrRegion.muNumBlocks < 0xFFFFu,
+                "ERROR: Can not have more than 65534 blocks in a bank\n",
+                CGS_ARTIST_FILE, 975);
+            CGS_ASSERT_STREAM_AT(lrRegion.muNumBlocks == 0 || lrRegion.muDataSize % lrRegion.muNumBlocks == 0,
+                "ERROR: Data size must be divisble by num blocks\n",
+                CGS_ARTIST_FILE, 976);
 
             const u32 luBlockSizeBytes = lrRegion.muNumBlocks != 0
                 ? lrRegion.muDataSize / lrRegion.muNumBlocks : 0;
-            if ((luBlockSizeBytes & 0x3FFu) != 0)
-                FireRootBankAssert("ERROR: Block size must be a multiple of 1024 bytes\n", 989);
-            if ((luBlockSizeBytes & 0xFFF00000u) > 0x4000000u)
-                FireRootBankAssert("ERROR: A single block can't be bigger than 64mb - you doin something very wrong!!!\n", 990);
-            if (lrRegion.muNumBlocks != 0 && lrRegion.muDataSize % lrRegion.muNumBlocks != 0)
-                FireRootBankAssert("Root bank size is not divisble by number of blocks\n", 991);
+            CGS_ASSERT_STREAM_AT((luBlockSizeBytes & 0x3FFu) == 0,
+                "ERROR: Block size must be a multiple of 1024 bytes\n",
+                CGS_ARTIST_FILE, 989);
+            CGS_ASSERT_STREAM_AT((luBlockSizeBytes & 0xFFF00000u) <= 0x4000000u,
+                "ERROR: A single block can't be bigger than 64mb - you doin something very wrong!!!\n",
+                CGS_ARTIST_FILE, 990);
+            CGS_ASSERT_STREAM_AT(lrRegion.muNumBlocks == 0 || lrRegion.muDataSize % lrRegion.muNumBlocks == 0,
+                "Root bank size is not divisble by number of blocks\n",
+                CGS_ARTIST_FILE, 991);
 
             lrRoot.SetNumBlocks(lt, lrRegion.muNumBlocks);
             lrRoot.SetBlockSize(lt, static_cast<u16>(luBlockSizeBytes >> 10));
@@ -126,11 +111,14 @@ namespace CgsMemory
                 if (!AllocateBlocks(lrRegion.muNumBlocks, 0, static_cast<u16>(lt), false,
                                     &luFirstBlock, &luLastBlock))
                 {
-                    FireRootBankAssert("Failed to allocate blocks for root bank\n", 1007);
+                    CGS_ASSERT_STREAM_AT(false, "Failed to allocate blocks for root bank\n",
+                        CGS_ARTIST_FILE, 1007);
+
                     return;
                 }
-                if (lrRegion.mpDataStart == 0)
-                    FireRootBankAssert("NULL pointer found for none-zero-length bank section\n", 1011);
+                CGS_ASSERT_STREAM_AT(lrRegion.mpDataStart != 0,
+                    "NULL pointer found for none-zero-length bank section\n",
+                    CGS_ARTIST_FILE, 1011);
                 lrRoot.SetFirstBlock(lt, luFirstBlock);
                 lrRoot.SetLastBlock(lt, luLastBlock);
                 lrRoot.SetData(lt, lrRegion.mpDataStart);

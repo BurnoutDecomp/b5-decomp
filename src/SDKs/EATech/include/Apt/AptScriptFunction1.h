@@ -66,10 +66,10 @@ struct AptScriptFunction1ByteCode
     int32_t mnNumArguments;           // +0x04
     const char** mppArgumentNames;     // +0x08, four-byte entries
     uint32_t mnByteCodeSize;           // +0x0C
-    int32_t mnConstantPoolCount;       // +0x10
-    AptValue** mppConstantPool;      // +0x14
+    AptConstantPool mConstantPool;   // +0x10
     uint8_t maByteCode[1];             // +0x18
 };
+CGS_STATIC_ASSERT((offsetof(AptScriptFunction1ByteCode, mConstantPool) == 0x10), "ARTIST function dictionary");
 CGS_STATIC_ASSERT((offsetof(AptScriptFunction1ByteCode, maByteCode) == 0x18), "ARTIST function record");
 
 class AptScriptFunction1 : public AptScriptFunctionBase

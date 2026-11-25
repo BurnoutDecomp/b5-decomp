@@ -104,7 +104,7 @@ struct DMixIO
     // GetInstanceNum @ 0x82B449D8: bits [20:16] (5-bit instance index).
     int GetInstanceNum();
     // IsSFXObj @ 0x82B449E8: top 3 bits == 0b010 (object-class tag == SFX).
-    int IsSFXObj();
+    bool IsSFXObj();
 
     // NFSMixMap's connection pass uses the packed word as one canonical DMix
     // identity. These are the ARTIST GetDMixID/SetDMixID one-word accessors.

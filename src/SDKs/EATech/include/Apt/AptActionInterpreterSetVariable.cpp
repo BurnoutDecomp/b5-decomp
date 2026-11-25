@@ -49,7 +49,7 @@ int AptActionInterpreter::setVariable(AptValue* pScope, AptValue* pTarget,
     else
     {
         AptValue* pOutContext = 0;
-        getContext(pScope, pTarget, pName, &pOutContext, &name);
+        getContext(pScope, pTarget, pName, &pOutContext, name);
         pContext = pOutContext;
     }
 

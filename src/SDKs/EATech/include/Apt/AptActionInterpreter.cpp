@@ -247,9 +247,7 @@ void AptActionInterpreter::getName2(AptValue* pValue, EAStringC* pOut)
 // An empty name resolves to pScope unchanged. The path-context parser is the single
 // sub_82B02F80 recon (AptResolveTargetContext, AptActionInterpreterInterpHelpers.cpp).
 // ---------------------------------------------------------------------------
-extern void AptResolveTargetContext(AptValue* pScope, AptValue* pTarget,
-                                    const EAStringC* pName,
-                                    AptValue** ppOutContext, EAStringC* pOutLeaf);   // sub_82B02F80
+   // sub_82B02F80
 
 AptValue* AptActionInterpreter::getObject(AptValue* pScope, AptValue* pTarget, const EAStringC* pName)
 {
@@ -261,7 +259,7 @@ AptValue* AptActionInterpreter::getObject(AptValue* pScope, AptValue* pTarget, c
     // console sub_82B02F80(a1=scope, a2=target, a3=name, a4=&ctx, a5=&leaf): the parser
     // is a pure (scope, target) resolver -- the X360 reaches it with r3 == the SCOPE
     // value (it collapses scope == the implicit `this`), so pass pScope, not `this`.
-    AptResolveTargetContext(pScope, pTarget, pName, &pContext, &leaf);
+    getContext(pScope, pTarget, pName, &pContext, leaf);
 
     AptValue* pResult = 0;
     if (pContext)

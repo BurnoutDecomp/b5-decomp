@@ -18,14 +18,28 @@ namespace renderengine
         {
             Parameters()
             {
-                muAddressU = muAddressV = muAddressW = 0;
-                muMagFilter = muMinFilter = 0; muMipFilter = 2;
-                muMagFilterZ = muMinFilterZ = 0; muMinMipLevel = 13;
-                muMaxMipLevel = 0; muMaxAnisotropy = 1;
-                mfMipLodBias = mfAnisotropyBias = 0.0f;
-                miHGradientExpBias = miVGradientExpBias = 0; muTrilinearThreshold = 0;
-                mbWhiteBorder = mbSeparateZFilterEnable = mbWhiteBorderW = 0;
-                mbPointBorderEnable = mbUnidentified44 = 1; mpTexture = 0;
+                muAddressU = 0;
+                muAddressV = 0;
+                muAddressW = 0;
+                muMagFilter = 0;
+                muMinFilter = 0;
+                muMipFilter = 2;
+                muMagFilterZ = 0;
+                muMinFilterZ = 0;
+                muMinMipLevel = 13;
+                muMaxMipLevel = 0;
+                muMaxAnisotropy = 1;
+                mfMipLodBias = 0.0f;
+                mfAnisotropyBias = 0.0f;
+                miHGradientExpBias = 0;
+                miVGradientExpBias = 0;
+                muTrilinearThreshold = 0;
+                mbWhiteBorder = 0;
+                mbSeparateZFilterEnable = 0;
+                mbWhiteBorderW = 0;
+                mbPointBorderEnable = 1;
+                mbUnidentified44 = 1;
+                mpTexture = 0;
             }
             Texture* mpTexture;
         };

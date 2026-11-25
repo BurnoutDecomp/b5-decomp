@@ -18,15 +18,20 @@
 static const char KAC_ARTIST_ASSERT_FILE[] =
     "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\movieplayer\\CgsMovieVideoRenderer.h";
 
+#define CGS_ARTIST_MOVIE_RENDERER_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\MoviePlayer/CgsMovieVideoRenderer.cpp"
+
 namespace CgsGraphics
 {
     MovieVideoRenderer::TextureInfoType::TextureInfoType()
-        : mpTexture(0), mpTextureState(0), mpPixelData(0) {}
+        : mTextureResource(0), mpTexture(0), mTextureStateResource(0), mpTextureState(0) {}
 
     MovieVideoRenderer::MovieVideoRenderer()
         : mpParentMoviePlayer(0), mpAllocator(0), mpReleaseFunc(0),
           mpReleaseFuncContext(0), muWidth(0), muHeight(0), muTextureIndex(0),
-          mJob(0), miMoviePlayerPM1(-1), miMoviePlayerPM2(-1) {}
+          mJob(0)
+    {
+        miMoviePlayerPM1 = miMoviePlayerPM2 = -1;
+    }
 
     MovieVideoRenderer::~MovieVideoRenderer()
     {
@@ -39,7 +44,7 @@ namespace CgsGraphics
                 // ARTIST assertion at 0x827EAAEC.
                 CGS_ASSERT(lrTexture.mpTextureState != 0, CGS_ASSERT_MESSAGE_AT(
                     "maTextureInfoTypes[i].mpTextureState",
-                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\MoviePlayer/CgsMovieVideoRenderer.cpp", 144));
+                    CGS_ARTIST_MOVIE_RENDERER_CPP_FILE, 144));
             }
         }
     }
@@ -81,8 +86,6 @@ namespace CgsGraphics
     void MovieVideoRenderer::CreateOutputTexture(TextureInfoType* lpTextureTypeInfo,
                                                  u32 luWidth, u32 luHeight)
     {
-        const char* const lpcFile =
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\MoviePlayer/CgsMovieVideoRenderer.cpp";
         renderengine::Texture2D::Parameters lTextureParameters;
         lTextureParameters.muFlags = 0;
         lTextureParameters.muWidth = luWidth;
@@ -92,13 +95,14 @@ namespace CgsGraphics
 
         const rw::ResourceDescriptor lTextureDescriptor =
             renderengine::Texture2D::GetResourceDescriptor(lTextureParameters);
-        lpTextureTypeInfo->mTextureResource =
+        const rw::Resource lTextureResource =
             mpParentMoviePlayer->mpRwAllocator->DoAllocate(lTextureDescriptor, 0);
+        lpTextureTypeInfo->mTextureResource = lTextureResource;
         if (!lpTextureTypeInfo->mTextureResource.m_baseResources[2])
         {
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert("lpTextureTypeInfo->mTextureResource.GetPhysicalMemoryResource()",
-                                       CGS_ASSERT_LOCATION(lpcFile, 566));
+                                       CGS_ASSERT_LOCATION(CGS_ARTIST_MOVIE_RENDERER_CPP_FILE, 566));
             CgsDev::Assert::EndAssert();
         }
 
@@ -110,21 +114,22 @@ namespace CgsGraphics
             CgsDev::Assert::BeginAssert();
             CgsDev::Assert::FireAssert(
                 "lpTextureTypeInfo->mpTexture->Lock(rw::graphics::core::Texture2D::LOCK_WRITE, 0, lLockedTexture)",
-                CGS_ASSERT_LOCATION(lpcFile, 579));
+                CGS_ASSERT_LOCATION(CGS_ARTIST_MOVIE_RENDERER_CPP_FILE, 579));
             CgsDev::Assert::EndAssert();
         }
         lpTextureTypeInfo->mpPixelData = static_cast<u32*>(lLockedTexture.mpPixelData);
 
         renderengine::TextureState::Parameters lStateParameters;
-        lStateParameters.muAddressU = D3DTADDRESS_CLAMP;
-        lStateParameters.muAddressV = D3DTADDRESS_CLAMP;
         lStateParameters.muMagFilter = D3DTEXF_LINEAR;
         lStateParameters.muMinFilter = D3DTEXF_LINEAR;
+        lStateParameters.muAddressU = D3DTADDRESS_CLAMP;
+        lStateParameters.muAddressV = D3DTADDRESS_CLAMP;
         lStateParameters.mpTexture = lpTextureTypeInfo->mpTexture;
         const rw::ResourceDescriptor lStateDescriptor =
             renderengine::TextureState::GetResourceDescriptor(lStateParameters);
-        lpTextureTypeInfo->mTextureStateResource =
+        const rw::Resource lTextureStateResource =
             mpParentMoviePlayer->mpRwAllocator->DoAllocate(lStateDescriptor, 0);
+        lpTextureTypeInfo->mTextureStateResource = lTextureStateResource;
         lpTextureTypeInfo->mpTextureState =
             renderengine::TextureState::Initialize(lpTextureTypeInfo->mTextureStateResource, lStateParameters);
     }
@@ -247,7 +252,7 @@ namespace CgsGraphics
 
     float MovieVideoRenderer::GetPositionY()
     {
-        CGS_ASSERT(false, "false"); // ARTIST 827EAC78.
+        CGS_ASSERT_AT(false, "false", KAC_ARTIST_ASSERT_FILE, 113);
         return 0.0f;
     }
     // @ 0x827EAC30. Position-X query is unsupported: asserts-false and returns 0.
@@ -345,3 +350,5 @@ namespace CgsGraphics
         return lpRenderer;
     }
 }
+
+#undef CGS_ARTIST_MOVIE_RENDERER_CPP_FILE

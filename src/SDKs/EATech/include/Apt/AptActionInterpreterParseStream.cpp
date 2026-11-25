@@ -106,7 +106,7 @@ void AptActionInterpreter::_parseStream(unsigned char* stream, uintptr_t base,
             Relocate(r->mpName, base, unresolve);
             if (!unresolve) Relocate(r->mppArgumentNames, base, false);
             for (int32_t i = 0; i < r->mnNumArguments; ++i) Relocate(r->mppArgumentNames[i], base, unresolve);
-            if (unresolve) { Relocate(r->mppArgumentNames, base, true); r->mnConstantPoolCount = static_cast<int32_t>(0x98765432u); r->mppConstantPool = reinterpret_cast<AptValue**>(0x12345678u); }
+            if (unresolve) { Relocate(r->mppArgumentNames, base, true); r->mConstantPool.mnCount = static_cast<int32_t>(0x98765432u); r->mConstantPool.mppEntries = reinterpret_cast<AptValue**>(0x12345678u); }
             break;
         }
         case 0x8E:
@@ -116,7 +116,7 @@ void AptActionInterpreter::_parseStream(unsigned char* stream, uintptr_t base,
             Relocate(r->mpName, base, unresolve);
             if (!unresolve) Relocate(r->mpArgTable, base, false);
             for (int32_t i = 0; i < r->mnNumArguments; ++i) Relocate(r->mpArgTable[i].mpName, base, unresolve);
-            if (unresolve) { Relocate(r->mpArgTable, base, true); r->mnConstantPoolCount = static_cast<int32_t>(0x98765432u); r->mppConstantPool = reinterpret_cast<AptValue**>(0x12345678u); }
+            if (unresolve) { Relocate(r->mpArgTable, base, true); r->mConstantPool.mnCount = static_cast<int32_t>(0x98765432u); r->mConstantPool.mppEntries = reinterpret_cast<AptValue**>(0x12345678u); }
             break;
         }
         case 0x88: case 0x96:

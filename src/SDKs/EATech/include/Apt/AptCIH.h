@@ -271,9 +271,9 @@ struct AptCIH : public AptValueGC
     {
         AptCharacterSpriteInstBase* const pSpriteInst =
             static_cast<AptCharacterSpriteInstBase*>(mpCharacterInst);
-        pSpriteInst->mbIsPlaying = bPlaying;
-        if (bPlaying)
-            SetDirtyState(true, true);
+        pSpriteInst->mbIsPlaying = bPlaying ? 1 : 0;
+        if (bPlaying == true)
+            SetDirtyState(bPlaying, true);
     }
     void             SetEventHandler(int nEventMask);   // @0x82AD5B48 (OR into the hash event mask)
     void             RemoveEventHandler(int32_t nMask); // @0x82AD5B70 (clear hash event bits)

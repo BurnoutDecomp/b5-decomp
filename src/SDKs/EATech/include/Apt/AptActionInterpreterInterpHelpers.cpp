@@ -71,58 +71,6 @@ AptNativeHash* AptActionInterpreter::GetNodeFrameContextHash(AptValue* pContext)
 extern AptValue* gpUndefinedValue;   // off_8324D814 (AptValueConvert.cpp)
 
 // ---------------------------------------------------------------------------
-// AptResolveTargetContext @0x82B02F80 -- resolve pName into (*ppOutContext,
-// *pOutLeaf) under (pScope, pTarget). When the name is a plain identifier (no path
-// separator: no byte < '0' and no ':') AND there is no explicit target, the scope
-// IS the context and the whole name IS the leaf -- copy it through and return. Any
-// path syntax (or an explicit target) routes to the full getContext path parser,
-// whose leaf-name out-param is copied into pOutLeaf. The console returns the context
-// kind (int); the callers ignore it, so the shim is void.
-// ---------------------------------------------------------------------------
-void AptResolveTargetContext(AptValue* pScope, AptValue* pTarget,
-                                    const EAStringC* pName,
-                                    AptValue** ppOutContext, EAStringC* pOutLeaf)
-{
-    // console: v8 = *a3 + 8 (the name's char buffer); scan for a path separator.
-    const char* pCh = pName->GetBuffer();      // console (*(_DWORD*)a3 + 8)
-    char        bPlain = 1;                     // console v9 = 1
-    int         nCh    = static_cast<signed char>(*pCh);  // console extsb. of *r11
-    if (nCh)                                    // non-empty name
-    {
-        // console: while ( v11 >= 0x30 && v11 != 0x3A ) advance; a byte below '0'
-        // (0x30) or a ':' (0x3A) marks a path -> not a plain name.
-        while (nCh >= '0' && nCh != ':')
-        {
-            nCh = static_cast<signed char>(*++pCh);
-            if (!nCh)
-                goto done_scan;                 // console goto LABEL_7
-        }
-        bPlain = 0;                             // console v9 = 0
-    }
-done_scan:
-
-    if (!bPlain || pTarget)                     // console: !v9 || a2
-    {
-        // The path (or the targeted case) -> the full context parser. getContext is a
-        // pure (scope, target) resolver -- it touches no interpreter member -- so the
-        // console reaches it with this == the scope value (asm: r3 = scope on the call,
-        // not the interpreter); the cpp member call mirrors that exactly.
-        EAStringC ctxLeaf;                      // console v14 (InitFromBuffer scratch)
-        // console: AptActionInterpreter::getContext(pScope, pTarget, pName, ppOut, &leaf).
-        reinterpret_cast<AptActionInterpreter*>(pScope)->getContext(
-            pScope, pTarget, pName, ppOutContext, &ctxLeaf);
-        *pOutLeaf = ctxLeaf;                    // console EAStringC::operator= (then the
-                                               // scratch's DecreaseInternalRefCount on dtor)
-    }
-    else
-    {
-        // A plain identifier with no target: the scope is the context, the name the leaf.
-        *pOutLeaf      = *pName;                // console EAStringC::operator=(a5, a3)
-        *ppOutContext  = pScope;               // console *a4 = a1
-    }
-}
-
-// ---------------------------------------------------------------------------
 // AptInterp_HasMember @0x82AE4058 -- does pValue (or, for object/CIH-typed values,
 // its prototype) hold a member keyed by *pNameSlot? A Prototype-typed (tag 20)
 // defined value is probed directly; an Object (19) / CharacterInstHandle (12) /

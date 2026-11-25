@@ -332,12 +332,12 @@ RwBool TriangleVolume::GetBBox(const Matrix44Affine* lpTransform, RwBool /*abTig
 math::vpu::Vector3 TriangleVolume::GetBBoxDiag() const
 {
     const __vector4 p0 = mTransform.xAxis.mV;
-    const __vector4 p1 = mTransform.yAxis.mV;
     const __vector4 p2 = mTransform.zAxis.mV;
+    const __vector4 p1 = mTransform.yAxis.mV;
     const __vector4 low = __vminfp(p0, __vminfp(p1, p2));
     const __vector4 high = __vmaxfp(p0, __vmaxfp(p1, p2));
-    const __vector4 radius = __vspltw(__lvlx(&mfRadius, 0), 0);
-    return Vector3(__vsubfp(__vaddfp(high, radius), __vsubfp(low, radius)));
+    const math::vpu::VecFloat radius(mfRadius);
+    return Vector3(__vsubfp(__vaddfp(high, radius.mV), __vsubfp(low, radius.mV)));
 }
 
 // ---------------------------------------------------------------------------

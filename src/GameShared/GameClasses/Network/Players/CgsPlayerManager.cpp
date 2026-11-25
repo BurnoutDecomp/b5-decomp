@@ -17,6 +17,7 @@ PlayerManager::PlayerManager()
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include "types.hpp"   // intptr_t
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 
 // CgsNetwork::PlayerManager -- the registry lifecycle (Construct / Prepare / Release /
 // Destruct), the per-frame Update / PostUpdate / SendMessages pumps, the round edges, the
@@ -87,11 +88,11 @@ void PlayerManager::Construct(PlayerManagerConstructParams* lpConstructParams)
 
     for (s32 liAck = 0; liAck < KI_MAX_ACKS_TO_BUFFER; ++liAck)
     {
-        maAckMessage[liAck].Construct();
+        maAckMessage[liAck].ResetMessageAndPlayerIDs();
     }
     for (s32 liNack = 0; liNack < KI_MAX_NACKS_TO_BUFFER; ++liNack)
     {
-        maNackMessage[liNack].Construct();
+        maNackMessage[liNack].ResetMessageAndPlayerIDs();
     }
 
     mReliableMessageManager.Construct();
@@ -161,14 +162,15 @@ void PlayerManager::Destruct()
 // on the first call.
 bool PlayerManager::Prepare(PlayerManagerPrepareParams* lpPrepareParams)
 {
-    CGS_ASSERT(miNumActivePlayers == 0, "miNumActivePlayers == 0");
+    CGS_ASSERT_AT(miNumActivePlayers == 0, "miNumActivePlayers == 0", CGS_ARTIST_FILE, 225);
 
     switch (mePrepareState)
     {
     case E_CONSTRUCTED:
     case E_RELEASED:
-        CGS_ASSERT(miNumActivePlayers == 0, "miNumActivePlayers == 0");
-        CGS_ASSERT(miNumInactivePlayers == KI_MAX_PLAYERS, "miNumInactivePlayers == KI_MAX_PLAYERS");
+        CGS_ASSERT_AT(miNumActivePlayers == 0, "miNumActivePlayers == 0", CGS_ARTIST_FILE, 232);
+        CGS_ASSERT_AT(miNumInactivePlayers == KI_MAX_PLAYERS,
+                      "miNumInactivePlayers == KI_MAX_PLAYERS", CGS_ARTIST_FILE, 233);
 
         mpNetworkAdapter                 = lpPrepareParams->mpNetworkAdapter;
         mu8GameID                        = KU8_INVALID_GAME_ID;
@@ -178,9 +180,10 @@ bool PlayerManager::Prepare(PlayerManagerPrepareParams* lpPrepareParams)
         mLocalPlayerID                   = K_INVALID_PLAYER_ID;
         mpTimeManager                    = lpPrepareParams->mpTimeManager;
 
-        CGS_ASSERT(meLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ ||
-                       meLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ,
-                   "meLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ || meLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ");
+        CGS_ASSERT_AT(meLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ ||
+                          meLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ,
+                      "meLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ || meLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ",
+                      CGS_ARTIST_FILE, 247);
 
         mpNetworkAdapter->mpMessageSentCallbackFunction =
             reinterpret_cast<void*>(&MessageSentCallbackFunction);
@@ -218,8 +221,8 @@ bool PlayerManager::Prepare(PlayerManagerPrepareParams* lpPrepareParams)
         break;
 
     default:
-        // The console streams mePrepareState between these two literals.
-        CGS_ASSERT(false, "PlayerManager: unknown prepare state \n");
+        CGS_ASSERT_STREAM_AT(false, "PlayerManager: unknown prepare state " << static_cast<s32>(mePrepareState) << "\n",
+                             CGS_ARTIST_FILE, 304);
         break;
     }
 
@@ -440,7 +443,7 @@ void PlayerManager::SetGameID(s32 liGameID)
         {
             maAckMessage[liIndex].SetMessageInvalid();
         }
-        maAckMessage[liIndex].Construct();
+        maAckMessage[liIndex].ResetMessageAndPlayerIDs();
         maAckMessage[liIndex].SetGameID(0);
     }
 
@@ -450,7 +453,7 @@ void PlayerManager::SetGameID(s32 liGameID)
         {
             maAckMessage[liIndex].SetMessageInvalid();
         }
-        maNackMessage[liIndex].Construct();
+        maNackMessage[liIndex].ResetMessageAndPlayerIDs();
         maNackMessage[liIndex].SetGameID(0);
     }
 }

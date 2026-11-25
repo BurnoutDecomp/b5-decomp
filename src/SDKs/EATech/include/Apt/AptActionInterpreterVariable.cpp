@@ -83,7 +83,7 @@ AptValue* AptActionInterpreter::getVariable(AptValue* pScope, AptValue* pTarget,
     }
     else
     {
-        nKind = getContext(pScope, pTarget, pName, &pContext, &ctxName);   // homed path parser (AptActionInterpreterContext.cpp)
+        nKind = getContext(pScope, pTarget, pName, &pContext, ctxName);   // homed path parser (AptActionInterpreterContext.cpp)
         pLeaf = &ctxName;
     }
 

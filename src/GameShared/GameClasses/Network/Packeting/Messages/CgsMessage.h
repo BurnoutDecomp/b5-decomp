@@ -162,6 +162,14 @@ namespace CgsNetwork
         // A plain four-float aggregate does not use that native register ABI.
         static void GetAnglesFromVector(__vector4 lVector,
                                         f32* lpfAngleAOut, f32* lpfAngleBOut, f32* lpfMagnitudeOut);
+        // ARTIST inlines the base reset for signal construction and player message teardown.
+        void ResetMessageFields()
+        {
+            mu8GameID = KU8_INVALID_GAME_ID;
+            mi8Type = -1;
+            mx8Flags = 0;
+            mu16Frame = KU16_INVALID_FRAME;
+        }
     };
 
     // Console layout, checked on a 32-bit build (the vptr is the +0x00 word).

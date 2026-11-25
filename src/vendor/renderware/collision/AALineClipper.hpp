@@ -20,7 +20,17 @@ struct AALineClipper
         const __vector4 seed=__vmaddfp(__vmaxfp(__vandc(start.mV,mask),__vandc(end.mV,mask)),eps,padding.mV);
         Init(start,end,rw::math::vpu::Vector3(seed),box);
     }
-    AALineClipper(rw::math::vpu::Vector3 start, rw::math::vpu::Vector3 end, const AABBox& box);
+    // DecFIGS aalineclipper.h:177 and ARTIST 0x82BAE3C8.
+    AALineClipper(rw::math::vpu::Vector3 start, rw::math::vpu::Vector3 end, const AABBox& box)
+    {
+        using math::vpu::Abs;
+        using math::vpu::Max;
+        using math::vpu::VecFloat;
+        using math::vpu::Vector3;
+        const Vector3 maximum = Max(Abs(start), Abs(end));
+        const VecFloat epsilon(1.0e-6f);
+        Init(start, end, Vector3(__vmulfp(maximum.mV, epsilon.mV)), box);
+    }
     void Init(rw::math::vpu::Vector3 start, rw::math::vpu::Vector3 end, rw::math::vpu::Vector3 padding, const AABBox& box);
 };
 

@@ -72,13 +72,20 @@ namespace Jobs
 
         // job.h:51  -- reset the job to its default (empty) state. X360 0x82BCA110.
         void Clear();
-        // job.h:81  -- point the job's entry at code (forwards to mEntryPoint.SetCode).
-        void SetCode(JobEnvironment leEnvironment, const void* lpvCode, int liSize);
-        // job.h:83  -- name the job (forwards to mEntryPoint.SetName).
-        void SetName(const char* lpcName);
-        // job.h:173 -- select whether the loaded job code may be recycled (forwards to
-        // mEntryPoint.SetCodeRecycle). Declaration-only; body lives in the vendor job TU.
-        void SetCodeRecycle(EntryPoint::CodeRecycle leRecycle);
+        // ARTIST callers such as CollisionBatch::SetupJob at 82810508 call
+        // EntryPoint on the embedded object directly.
+        void SetCode(JobEnvironment leEnvironment, const void* lpvCode, int liSize)
+        {
+            mEntryPoint.SetCode(leEnvironment, lpvCode, liSize);
+        }
+        void SetName(const char* lpcName)
+        {
+            mEntryPoint.SetName(lpcName);
+        }
+        void SetCodeRecycle(EntryPoint::CodeRecycle leRecycle)
+        {
+            mEntryPoint.SetCodeRecycle(leRecycle);
+        }
         // job.h:99  -- attach the job's data block (X360 0x82BC9978 stores it in mParams).
         void SetData(void* lpvData, size_t luSize);
         // job.h/182 -- forward to the entry point's SleepOn permission.

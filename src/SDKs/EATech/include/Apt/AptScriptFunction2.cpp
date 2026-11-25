@@ -116,14 +116,11 @@ void* AptScriptFunction2::GetByteCodeBase() const
 
 // ---------------------------------------------------------------------------
 // GetConstantPool @ 0x82AF1490 -- the constant-pool string table + its entry count.
-// (The X360 returns the {entries, count} pair through a hidden result pointer.)
+// (The X360 returns the {count, entries} pair through a hidden result pointer.)
 // ---------------------------------------------------------------------------
 AptConstantPool AptScriptFunction2::GetConstantPool() const
 {
-    AptConstantPool pool;
-    pool.mppEntries = mpByteCode->mppConstantPool;
-    pool.mnCount    = mpByteCode->mnConstantPoolCount;
-    return pool;
+    return mpByteCode->mConstantPool;
 }
 
 // ---------------------------------------------------------------------------
@@ -139,19 +136,18 @@ AptConstantPool AptScriptFunction2::GetConstantPool() const
 // ---------------------------------------------------------------------------
 void AptScriptFunction2::SetArgument(AptValue* pValue, int32_t nArgIndex)
 {
-    const AptScriptFunction2Arg& arg = mpByteCode->mpArgTable[nArgIndex];
-
-    if (arg.mnRegister)
+    const uint32_t nRegister = mpByteCode->mpArgTable[nArgIndex].mnRegister;
+    if (nRegister != 0)
     {
-        AptScriptFunctionBase::SetRegisterValue(arg.mnRegister, pValue);
+        SetRegisterValue(nRegister, pValue);
         return;
     }
 
-    if (!AptScriptFunctionBase::spFrameStack)
+    if (!spFrameStack)
         CreateFrameStack();
 
-    EAStringC key(arg.mpName);
-    AptScriptFunctionBase::spFrameStack->Set(key, pValue);
+    EAStringC key(mpByteCode->mpArgTable[nArgIndex].mpName);
+    spFrameStack->Set(key, pValue);
 }
 
 // ---------------------------------------------------------------------------

@@ -31,10 +31,10 @@
 //   Release, ResetAllMessages, SendMessages, UnRegisterMessageType,
 //   UnregisterAllMessages, Update, PlayerMenuData::Clear.
 //
-// The verbose "NETWORK PERFORMANCE WARNING" / "Failed to find ..." diagnostics the X360
-// streamed through its inline message-stream (off_82F335C8 / the assert buffer) are
-// de-inlined here into idiomatic `*CgsDev::Log::gpDebugPrint << ...` log lines (the
-// project's debug-print front-end) -- same observable side effect, no raw stream vtable.
+// The message lookups build their diagnostics in the engine's assert buffer.
+// The send pump reports its performance warnings through the debug log.
+//
+// Both paths use the existing stream and assertion interfaces.
 // =====================================================================================
 
 namespace CgsNetwork
@@ -114,15 +114,12 @@ void NetworkPlayer::Construct(CgsNetworkPlayerConstructParams* lpConstructParams
 {
     CGS_ASSERT(lpConstructParams, CGS_ASSERT_MESSAGE_AT(
         "lpConstructParams",
-        __FILE__, 159 /* ARTIST 0x82872328 */));
+        CGS_ARTIST_FILE, 159 /* ARTIST 0x82872328 */));
 
-    mPlayerID        = KI_INVALID_PLAYER_ID;          // +0x08 = -1
-    mpNetworkAdapter = 0;                        // +0x04 = 0
-
-    CGS_ASSERT(lpConstructParams->mpPlayerManager, CGS_ASSERT_MESSAGE_AT(
-        "mpPlayerManager",
-        __FILE__, 164 /* ARTIST 0x82872364 */));
-    mpPlayerManager  = lpConstructParams->mpPlayerManager;   // +0x0C
+    mpNetworkAdapter = 0;
+    mPlayerID = KI_INVALID_PLAYER_ID;
+    mpPlayerManager = lpConstructParams->mpPlayerManager;
+    CGS_ASSERT_AT(mpPlayerManager, "mpPlayerManager", CGS_ARTIST_FILE, 164);
 
     // mConnectionData: no link, the address sentinels and a zeroed tail.
     mConnectionData.Clear();
@@ -134,8 +131,8 @@ void NetworkPlayer::Construct(CgsNetworkPlayerConstructParams* lpConstructParams
         maRecvMessageData[liSlot].Construct();
     }
 
-    miNumberMessagesRegistered = 0;    // +0xB90
-    macName[0]                 = '\0'; // +0xB98
+    macName[0] = '\0';
+    miNumberMessagesRegistered = 0;
     mbNetworkPlayerPaused      = false;// +0xBA9
 
     meLocalConsoleFrameRate    = static_cast<CgsSystem::EFrameRate>(-1);   // +0xC40 = -1
@@ -143,10 +140,10 @@ void NetworkPlayer::Construct(CgsNetworkPlayerConstructParams* lpConstructParams
 
     // Stamp the four embedded ping messages with the Message invalid sentinels
     // (mu8GameID=0xFF, mx8Flags=0, mi8Type=-1, mu16Frame=0xFFFF).
-    mPingMessageSend.Construct();
-    mPingMessageRecv.Construct();
-    mPingReplyMessageSend.Construct();
-    mPingReplyMessageRecv.Construct();
+    mPingMessageSend.ResetMessageFields();
+    mPingMessageRecv.ResetMessageFields();
+    mPingReplyMessageSend.ResetMessageFields();
+    mPingReplyMessageRecv.ResetMessageFields();
 
     mfPingToReplyTo = 0.0f;   // +0x1C = 0.0
 }
@@ -182,9 +179,11 @@ Message* NetworkPlayer::GetRegisteredSendMessage(s32 leType)
             return maSendMessageData[liIndex].mpMsg;
     }
 
-    *CgsDev::Log::gpDebugPrint << "Failed to find registered message type "
-                               << CgsDev::E_PRINTMODE_HEXONCE << leType << "\n";
-    CGS_ASSERT(false, "Failed to find registered message type");
+    CgsDev::Assert::BeginAssert();
+    CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+    (lStream << "Failed to find registered message type ").PrintSignedInteger(leType) << "\n";
+    CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 1001));
+    CgsDev::Assert::EndAssert();
     return 0;
 }
 
@@ -199,9 +198,11 @@ Message* NetworkPlayer::GetRegisteredRecvMessage(s32 leType)
             return maRecvMessageData[liIndex].mpMsg;
     }
 
-    *CgsDev::Log::gpDebugPrint << "Failed to find registered message type "
-                               << CgsDev::E_PRINTMODE_HEXONCE << leType << "\n";
-    CGS_ASSERT(false, "Failed to find registered message type");
+    CgsDev::Assert::BeginAssert();
+    CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+    (lStream << "Failed to find registered message type ").PrintSignedInteger(leType) << "\n";
+    CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 1031));
+    CgsDev::Assert::EndAssert();
     return 0;
 }
 
@@ -314,10 +315,9 @@ void NetworkPlayer::UnregisterAllMessages()
 {
     for (s32 liIndex = 0; liIndex < miNumberMessagesRegistered; ++liIndex)
     {
-        // The asm releases the RECV slot's message object here (+1408 from the send base
-        // == the recv slot's mpMsg), then resets the send slot.
+        // Clear the receive object before removing the registration.
         if (Message* lpRecvMsg = maRecvMessageData[liIndex].mpMsg)
-            lpRecvMsg->Construct();
+            lpRecvMsg->ResetMessageFields();
 
         maSendMessageData[liIndex].Construct();
         maRecvMessageData[liIndex].Construct();
@@ -333,14 +333,12 @@ void NetworkPlayer::ResetAllMessages()
 {
     for (s32 liIndex = 0; liIndex < miNumberMessagesRegistered; ++liIndex)
     {
-        Message* lpSendMsg = maSendMessageData[liIndex].mpMsg;
-        CGS_ASSERT(lpSendMsg, CGS_ASSERT_MESSAGE_AT(
-            "maSendMessageData[i].mpMsg",
-            __FILE__, 1052 /* ARTIST 0x82872F24 */));
-        lpSendMsg->Construct();
+        CGS_ASSERT_AT(maSendMessageData[liIndex].mpMsg,
+                      "maSendMessageData[i].mpMsg", CGS_ARTIST_FILE, 1052);
+        maSendMessageData[liIndex].mpMsg->ResetMessageFields();
 
         if (Message* lpRecvMsg = maRecvMessageData[liIndex].mpMsg)
-            lpRecvMsg->Construct();
+            lpRecvMsg->ResetMessageFields();
     }
 }
 

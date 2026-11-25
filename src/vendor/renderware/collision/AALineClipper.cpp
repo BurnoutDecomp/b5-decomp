@@ -26,13 +26,4 @@ void AALineClipper::Init(rw::math::vpu::Vector3 start, rw::math::vpu::Vector3 en
     m_padding.mV=__vaddfp(padding.mV,extra);
 }
 
-AALineClipper::AALineClipper(rw::math::vpu::Vector3 start, rw::math::vpu::Vector3 end, const AABBox& box)
-{
-    const __vector4 all=__vspltisw(-1), mask=__vslw(all,all);
-    const f32 epsilon=1.0e-6f;
-    const __vector4 eps={epsilon,epsilon,epsilon,epsilon};
-    const __vector4 seed=__vmulfp(__vmaxfp(__vandc(start.mV,mask),__vandc(end.mV,mask)),eps);
-    Init(start,end,rw::math::vpu::Vector3(seed),box);
-}
-
 } }

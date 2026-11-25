@@ -20,6 +20,9 @@
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
 
+#include "SDKs/EATech/include/Apt/AptCharacter.h"
+#include "SDKs/EATech/include/Apt/AptNativeHash.h"
+#include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
 #include "types.hpp"
 #include "SDKs/EATech/include/Apt/AptActionBlock.h"
 
@@ -54,8 +57,13 @@ struct AptMovie
     AptMovieFrame* mpFrames;       // [1]
     AptNativeHash* mpLabelHash;    // [2] -- label name -> frame index (AptInteger)
 
-    // @0x7F936C -- the frame index for a label, or -1.
-    int labelToFrame(const EAStringC* pLabel) const;
+    int labelToFrame(const EAStringC* pLabel) const
+    {
+        if (!pLabel)
+            return -1;
+        AptValue* pValue = mpLabelHash->Lookup(*pLabel);
+        return pValue ? pValue->toInteger() : -1;
+    }
 
     // ---- the timeline driver / relocate pass (X360 ARTIST.XEX) -------------
     // The methods that drive the clip's display list + run its frame actions, and
@@ -93,6 +101,9 @@ struct AptMovie
     void unresolve(int nBase, int32_t* pValueCount);
 };
 
-// AptValue_toInteger removed -- it was a forwarder to the real member
-// AptValue::toInteger() (declared in AptValue.h). labelToFrame now calls that
-// member directly on the label-hash's stored frame-index values.
+// Sprite records append the movie after the native character header.
+struct AptCharacterSprite : public AptCharacter
+{
+    AptMovie mMovie;
+};
+CGS_STATIC_ASSERT((offsetof(AptCharacterSprite, mMovie) == 0x10), "ARTIST sprite movie");

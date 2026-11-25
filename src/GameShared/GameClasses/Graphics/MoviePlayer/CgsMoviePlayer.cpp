@@ -41,6 +41,7 @@ namespace CgsGraphics
     }
     // ARTIST 0x827DD390. The stream, allocator and resource records initialize themselves.
     MoviePlayer::MoviePlayer()
+        : mRwVideoRendererResource(0), mRwVideoRenderableOperationsResource(0)
     {
     }
 
@@ -203,14 +204,9 @@ namespace CgsGraphics
     // ARTIST 0x827EF200
     void MoviePlayer::ReleaseResources()
     {
-        rw::Resource lStreamResource;
-        lStreamResource.m_baseResources[0] = mpMoviePlayerBuffer;
         mePlayerState = E_RW_MOVIE_PLAYER_NULL;
-        mpRwAllocator->Free(lStreamResource);
-
-        rw::Resource lChunkResource;
-        lChunkResource.m_baseResources[0] = mChunkBuffer.mpcBuffer;
-        mpRwAllocator->Free(lChunkResource);
+        mpRwAllocator->FreeMemoryResource(mpMoviePlayerBuffer);
+        mpRwAllocator->FreeMemoryResource(mChunkBuffer.mpcBuffer);
 
         vp6::SetAllocator(0);
         if (mpRwVideoRenderer)
@@ -557,10 +553,9 @@ namespace CgsGraphics
 
             ++miCurrentFrame;
 
-            mChunkBuffer.muCurrentChunk = 0;
-            mChunkBuffer.muCurrentChunkRead = 0;
-            mChunkBuffer.muChunkBufferPos = 0;
-            memset(mChunkBuffer.mpcBuffer, 0, mChunkBuffer.miBufferSize);
+            ResetChunkSet();
+            mbDecodingFrame = false;
+            return;
         }
 
         mbDecodingFrame = false;

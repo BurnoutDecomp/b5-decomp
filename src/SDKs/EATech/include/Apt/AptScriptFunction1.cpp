@@ -148,14 +148,11 @@ int32_t AptScriptFunction1::GetByteCodeSize() const
 
 // ---------------------------------------------------------------------------
 // GetConstantPool @ 0x82AF1380 -- the constant-pool string table + its entry count.
-// (The X360 returns the {entries, count} pair through a hidden result pointer.)
+// (The X360 returns the {count, entries} pair through a hidden result pointer.)
 // ---------------------------------------------------------------------------
 AptConstantPool AptScriptFunction1::GetConstantPool() const
 {
-    AptConstantPool pool;
-    pool.mppEntries = mpByteCode->mppConstantPool;
-    pool.mnCount    = mpByteCode->mnConstantPoolCount;
-    return pool;
+    return mpByteCode->mConstantPool;
 }
 
 // ---------------------------------------------------------------------------

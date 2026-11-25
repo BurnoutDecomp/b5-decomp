@@ -40,17 +40,6 @@
 
 #include <new>   // placement new (the pool-allocated AptPseudoCIH_t nodes)
 
-int AptMovie::labelToFrame(const EAStringC* pLabel) const
-{
-    if (pLabel && mpLabelHash)
-    {
-        AptValue* pValue = mpLabelHash->Lookup(*pLabel);
-        if (pValue)
-            return pValue->toInteger();
-    }
-    return -1;
-}
-
 // ===========================================================================
 // The timeline driver / relocate methods.   DECOMPILED FAITHFULLY from the X360
 // ARTIST.XEX (the authoritative spine for this TU; there is no reference/DWARF for it).

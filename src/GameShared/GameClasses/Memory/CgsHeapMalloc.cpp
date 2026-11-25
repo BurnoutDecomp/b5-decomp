@@ -1,5 +1,9 @@
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"
-#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
+
+#define CGS_ARTIST_HEAP_MALLOC_FILE \
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\CgsHeapMalloc.cpp"
 
 // CgsMemory::HeapMalloc - the engine's general-purpose heap. A thin wrapper over an embedded
 // EA::Allocator::GeneralAllocator (vendor/PPMalloc): Construct initialises the allocator over the
@@ -8,7 +12,6 @@
 // fixed-memory-budget semantics.)
 //
 // HeapMallocCoreAllocator is the EA::Allocator::ICoreAllocator front-end onto a HeapMalloc.
-// Asserts pass __FILE__; ARTIST's reads "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\CgsHeapMalloc.cpp".
 
 namespace CgsMemory
 {
@@ -21,9 +24,9 @@ namespace CgsMemory
     void HeapMalloc::Construct(void* lpBuffer, s32 lnBufferSize)
     {
         CGS_ASSERT(lpBuffer,
-            CGS_ASSERT_MESSAGE_AT("lpBuffer", __FILE__, 52 /* ARTIST 0x828666B0 */));           // CgsHeapMalloc.cpp:52
+            CGS_ASSERT_MESSAGE_AT("lpBuffer", CGS_ARTIST_HEAP_MALLOC_FILE, 52 /* ARTIST 0x828666B0 */));           // CgsHeapMalloc.cpp:52
         CGS_ASSERT(lnBufferSize > 0,
-            CGS_ASSERT_MESSAGE_AT("lnBufferSize>0", __FILE__, 53 /* ARTIST 0x828666D4 */)); // CgsHeapMalloc.cpp:53
+            CGS_ASSERT_MESSAGE_AT("lnBufferSize>0", CGS_ARTIST_HEAP_MALLOC_FILE, 53 /* ARTIST 0x828666D4 */)); // CgsHeapMalloc.cpp:53
 
         mpBuffer     = lpBuffer;
         mnBufferSize = lnBufferSize;
@@ -74,13 +77,11 @@ namespace CgsMemory
         return mAllocator.Calloc(static_cast<size_t>(lnCount), static_cast<size_t>(lnSize), 0);
     }
 
-    // The per-allocation trace sink the X360 PrintAllocations hands to TraceAllocatedMemory.
-    // X360 passed sub_828667B8 (UNIDENTIFIED in the export - its body is not recovered).
-    // [FLAG] best-effort stand-in: a no-op sink so the trace walk has a valid callback. The
-    // original almost certainly forwarded the formatted record to a CgsDev::Message debug stream
-    // (CgsHeapMalloc.cpp:176 TraceFunc, using namespace CgsDev::Message); not fabricated here.
-    static void TraceFunc(const char* /*lpcRecord*/, void* /*lpContext*/)
+    // ARTIST 0x828667B8, called by the heap allocation trace.
+    static void TraceFunc(const char* lpcRecord, void*)
     {
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << lpcRecord << "\n";
     }
 
     // @ 0x82866848 - GeneralAllocator::TraceAllocatedMemory(callback, 0, 0, 0): walk the live
@@ -121,23 +122,43 @@ namespace CgsMemory
     {
     }
 
-    // CgsHeapMalloc.cpp:247 - ICoreAllocator::Alloc -> HeapMalloc::Malloc, default alignment.
-    // The debug name / flags are ignored by the underlying engine.
-    void* HeapMallocCoreAllocator::Alloc(size_t lnSize, const char* /*lpcName*/, unsigned int /*luFlags*/)
+    // CgsHeapMalloc.cpp:247.
+    void* HeapMallocCoreAllocator::Alloc(size_t lnSize, const char*, unsigned int)
     {
-        return mAllocator.Malloc(static_cast<s32>(lnSize), HeapMalloc::KI_DEFAULT_ALIGNMENT);
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "Alloc: " << lnSize << "bytes\n";
+
+        void* lpMemory = mAllocator.GetAllocator()->MallocAligned(
+            lnSize, HeapMalloc::KI_DEFAULT_ALIGNMENT, 0, 0);
+        CGS_ASSERT_STREAM_AT(lpMemory, "Allocation of: " << lnSize << "bytes failed\n",
+            CGS_ARTIST_HEAP_MALLOC_FILE, 251);
+        return lpMemory;
     }
 
-    // CgsHeapMalloc.cpp:263 - ICoreAllocator::Alloc (aligned) -> HeapMalloc::Malloc.
-    void* HeapMallocCoreAllocator::Alloc(size_t lnSize, const char* /*lpcName*/, unsigned int /*luFlags*/,
-                                         unsigned int luAlignment, unsigned int /*luAlignmentOffset*/)
+    // CgsHeapMalloc.cpp:263.
+    void* HeapMallocCoreAllocator::Alloc(size_t lnSize, const char*, unsigned int,
+                                         unsigned int luAlignment, unsigned int luAlignmentOffset)
     {
-        return mAllocator.Malloc(static_cast<s32>(lnSize), static_cast<s32>(luAlignment));
+        CGS_ASSERT_STREAM_AT(luAlignmentOffset == 0,
+            "Don't currently support offseted alignments in heap malloc interface\n",
+            CGS_ARTIST_HEAP_MALLOC_FILE, 265);
+
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "Alloc aligned: " << lnSize << "bytes at " << luAlignment << " alignment\n";
+
+        void* lpMemory = mAllocator.GetAllocator()->MallocAligned(lnSize, luAlignment, 0, 0);
+        CGS_ASSERT_STREAM_AT(lpMemory, "Allocation aligned of " << lnSize << "bytes at "
+            << luAlignment << " alignment failed\n", CGS_ARTIST_HEAP_MALLOC_FILE, 268);
+        return lpMemory;
     }
 
-    // CgsHeapMalloc.cpp:280 - ICoreAllocator::Free -> HeapMalloc::Free (size is unused by the engine).
-    void HeapMallocCoreAllocator::Free(void* lpBlock, size_t /*lnSize*/)
+    // CgsHeapMalloc.cpp:280.
+    void HeapMallocCoreAllocator::Free(void* lpBlock, size_t lnSize)
     {
-        mAllocator.Free(lpBlock);
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "Free " << lnSize << "bytes\n";
+        mAllocator.GetAllocator()->Free(lpBlock);
     }
 }
+
+#undef CGS_ARTIST_HEAP_MALLOC_FILE
