@@ -255,12 +255,12 @@ public:
         return getVtblIndex() == AptVFT_Extern && getIsDefined();
     }
 
-    // x64 ?isCIH@AptValue@@QEBA_N_N@Z @0x1400C1540: ONLY type 12 (CharacterInstHandle)
-    // gated on (bUndefOK || defined). The earlier CIHNone(37) second clause does not
-    // exist in the x64 body -- callers that accept CIHNone test it themselves.
+    // ARTIST 0x82ADA320–0x82ADA344 accepts defined handles and CIHNone.
     bool isCIH(bool bUndefOK = false) const
     {
-        return getVtblIndex() == AptVFT_CharacterInstHandle && (bUndefOK || getIsDefined());
+        const AptVirtualFunctionTable_Indices eType = getVtblIndex();
+        return (eType == AptVFT_CharacterInstHandle && (bUndefOK || getIsDefined()))
+            || eType == AptVFT_CIHNone;
     }
 
     bool isSound() const

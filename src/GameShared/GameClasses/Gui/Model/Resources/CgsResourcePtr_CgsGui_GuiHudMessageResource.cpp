@@ -1,5 +1,5 @@
+#define CGS_RESOURCE_PTR_MATCH_RELATIVE_ASSERTS // ARTIST 0x8267A448 references 0x82007258.
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
-
 // Per-instantiation TU for CgsResource::ResourcePtr<CgsGui::GuiHudMessageResource>
 // (the "CgsGui::GuiHudMessageResource>" templated-instance ledger id). The body IS the
 // generic non-const accessor inline in CgsResourcePtr.h; this .cpp only forces the

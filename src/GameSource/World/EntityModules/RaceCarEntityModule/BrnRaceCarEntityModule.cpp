@@ -1,3 +1,4 @@
+#define CGS_RESOURCE_PTR_MATCH_ABSOLUTE_ASSERTS // ARTIST 0x822C9A48 references 0x8201AE48.
 #ifdef AddMonitor
 #undef AddMonitor
 #endif
@@ -49,7 +50,6 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"        // CGS_ASSERT
 #include "SharedClasses/Progression/BrnTrainingTypes.h"   // BrnProgression::ETrainingType
-
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModuleIO.h" // OutputBuffer_Prepare
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"                    // CgsResource::ResourceHandle
 #include "GameShared/GameClasses/System/Resource/CgsSmallResource.h"                     // CgsResource::SmallResource

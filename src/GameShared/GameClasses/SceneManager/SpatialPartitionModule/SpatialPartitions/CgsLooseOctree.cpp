@@ -1471,13 +1471,13 @@ namespace CgsSceneManager
 
         if (lrNode.muSubTreeEntityCount >= 4 || lrNode.muFirstChildIndex != KU_INVALID_NODE)
         {
-            const u32 luInside = NodeInsideFrustum(&lrNode, *lpParams->mpFrustum);
-            if (luInside == 1)
+            const IntersectionResult leResult = NodeInsideFrustum(&lrNode, lpParams->mpFrustum);
+            if (leResult == E_INTERSECTIONRESULT_INSIDE)
             {
                 TrivialAcceptRecursive(lu16NodeIndex, lpParams);
                 return;
             }
-            if (luInside != 2)
+            if (leResult == E_INTERSECTIONRESULT_OUTSIDE)
             {
                 return;
             }
@@ -1617,58 +1617,49 @@ namespace CgsSceneManager
     }
 
     // ===========================================================================
-    // NodeInsideFrustum @ 0x828BDAC0
-    //
-    // Classify the node's loose box against the frustum: 1 = fully inside, 2 =
-    // intersecting, 0 = fully outside. The box is mPosition +/- { HalfSize, HalfHeight,
-    // HalfSize } (CalcNodeCorners); a plane rejects the whole box when its farthest
-    // corner is still outside, and the box is fully inside when every plane's NEAREST
-    // corner is inside.
-    // ===========================================================================
-    u32 LooseOctree::NodeInsideFrustum(const LooseOctreeNode* lpNode,
-                                       const CgsGeometric::Frustum& lrFrustum) const
+    // ARTIST 0x828BDAC0 tests the eight corners against each of the six planes.
+    // One separating plane rejects the node. A second pass checks full containment.
+    IntersectionResult LooseOctree::NodeInsideFrustum(LooseOctreeNode* lpNode,
+                                                      const CgsGeometric::Frustum* lpFrustum) const
     {
-        const f32 lfCx = lpNode->mPosition.mV.x;
-        const f32 lfCy = lpNode->mPosition.mV.y;
-        const f32 lfCz = lpNode->mPosition.mV.z;
-        const f32 lfEx = lpNode->GetHalfSize();
-        const f32 lfEy = lpNode->GetHalfHeight();
-        const f32 lfEz = lpNode->GetHalfSize();
+        Vector3 laCorners[8];
+        CalcNodeCorners(lpNode, laCorners);
 
-        bool lbFullyInside = true;
-
-        for (u32 luBatch = 0; luBatch < 2; ++luBatch)
+        for (s32 liPlane = 0; liPlane < 6; ++liPlane)
         {
-            const Vector4& lrNx = lrFrustum.maSwizzledPlanes[luBatch * 4 + 0];
-            const Vector4& lrNy = lrFrustum.maSwizzledPlanes[luBatch * 4 + 1];
-            const Vector4& lrNz = lrFrustum.maSwizzledPlanes[luBatch * 4 + 2];
-            const Vector4& lrD  = lrFrustum.maSwizzledPlanes[luBatch * 4 + 3];
-
-            const f32 laNx[4] = { lrNx.mV.x, lrNx.mV.y, lrNx.mV.z, lrNx.mV.w };
-            const f32 laNy[4] = { lrNy.mV.x, lrNy.mV.y, lrNy.mV.z, lrNy.mV.w };
-            const f32 laNz[4] = { lrNz.mV.x, lrNz.mV.y, lrNz.mV.z, lrNz.mV.w };
-            const f32 laD [4] = { lrD.mV.x,  lrD.mV.y,  lrD.mV.z,  lrD.mV.w  };
-
-            for (u32 luLane = 0; luLane < 4; ++luLane)
+            bool lbSeparatingAxis = true;
+            CGS_ALIGN(16) const rw::collision::Plane lPlane =
+                lpFrustum->GetPlane(static_cast<CgsGeometric::Frustum::PlaneId>(liPlane));
+            const f32 lfDistance = lPlane.w;
+            const __vector4 lvNormal = __lvx(&lPlane, 0);
+            for (s32 liCorner = 0; liCorner < 8; ++liCorner)
             {
-                const f32 lfCentre = laNx[luLane] * lfCx + laNy[luLane] * lfCy
-                                   + laNz[luLane] * lfCz - laD[luLane];
-                const f32 lfExtent = std::fabs(laNx[luLane]) * lfEx
-                                   + std::fabs(laNy[luLane]) * lfEy
-                                   + std::fabs(laNz[luLane]) * lfEz;
+                const VecFloat lfProjection(__vmsum3fp(lvNormal, laCorners[liCorner].mV));
+                if (lfDistance < lfProjection.GetFloat())
+                {
+                    lbSeparatingAxis = false;
+                    break;
+                }
+            }
+            if (lbSeparatingAxis)
+                return E_INTERSECTIONRESULT_OUTSIDE;
+        }
 
-                if (lfCentre - lfExtent > 0.0f)
-                {
-                    return 0;   // the whole box is on the outside half-space of this plane
-                }
-                if (lfCentre + lfExtent > 0.0f)
-                {
-                    lbFullyInside = false;
-                }
+        for (s32 liPlane = 0; liPlane < 6; ++liPlane)
+        {
+            CGS_ALIGN(16) const rw::collision::Plane lPlane =
+                lpFrustum->GetPlane(static_cast<CgsGeometric::Frustum::PlaneId>(liPlane));
+            const f32 lfDistance = lPlane.w;
+            const __vector4 lvNormal = __lvx(&lPlane, 0);
+            for (s32 liCorner = 0; liCorner < 8; ++liCorner)
+            {
+                const VecFloat lfProjection(__vmsum3fp(lvNormal, laCorners[liCorner].mV));
+                if (!(lfDistance < lfProjection.GetFloat()))
+                    return E_INTERSECTIONRESULT_PARTIAL;
             }
         }
 
-        return lbFullyInside ? 1u : 2u;
+        return E_INTERSECTIONRESULT_INSIDE;
     }
 
     // ===========================================================================

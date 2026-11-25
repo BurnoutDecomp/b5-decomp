@@ -1,3 +1,4 @@
+#define CGS_RESOURCE_PTR_MATCH_ABSOLUTE_ASSERTS // ARTIST 0x822C9F68 references 0x8201AE48.
 // Bodies for the streaming-PVS debug component, reconstructed from BURNOUT_X360_ARTIST.XEX:
 //   PVSDebugComponent::Construct               @ 0x827B2108   (bodied here)
 //   PVSDebugComponent::RenderHUD               @ 0x827CEAD8   (bodied here)
@@ -5,7 +6,6 @@
 //   PVSDebugComponent::OnActivate              @ 0x827B2178
 //   PVSDebugComponent::RenderPVS               @ 0x827C6E58
 //   PVSDebugComponent::RenderPvsCentrePosition @ 0x827BFB08
-
 #include "GameSource/World/DebugComponents/BrnPVSDebugComponent.h"
 
 #include "GameSource/Game/BrnGameModule.hpp"                                                   // BrnGame::sbShowStreamStallMessage

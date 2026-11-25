@@ -5,6 +5,7 @@
 #include "GameShared/GameClasses/Graphics/CgsSerialisedPtr.h"   // Ptr32<T> (the 32-bit slot)
 
 #include <cstddef>
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // renderengine::Texture -- the sampled texture type (forward-declared; pointer-only use).
 namespace renderengine { class Texture; }
@@ -60,7 +61,13 @@ namespace CgsGraphics
 
     public:
         // GetMaterial @ 0x827E6720: bounds-checked technique-table accessor.
-        MaterialTechnique* GetMaterial(u32 luIndex) const;
+        MaterialTechnique* GetMaterial(u32 luIndex) const
+        {
+            CGS_ASSERT(luIndex < mu8NumMaterials,
+                CGS_ASSERT_MESSAGE_AT("Material technique index out of range.",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\CgsMaterialAssembly.h", 174));
+            return mappMaterials[luIndex];
+        }
 
         u32 GetNameHash() const { return muNameHash; }
         u8  GetLength() const   { return mu8NumMaterials; }

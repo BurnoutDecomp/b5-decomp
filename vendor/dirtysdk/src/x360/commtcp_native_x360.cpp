@@ -12,7 +12,7 @@
 #include <string.h>
 struct CommTCPRef {
     CommRef common;
-    CommTCPRef* link; SocketT* socket; sockaddr peeraddr;
+    CommTCPRef* link; SocketT* socket; sockaddr_in peeraddr;
     s32 state; u32 connident;
     s32 rcvoff, rcvwid, rcvlen, rcvinp, rcvout; char* rcvbuf; u32 rcvseq;
     s32 sndoff, sndwid, sndlen, sndinp, sndout; char* sndbuf; u32 sndseq;
@@ -22,6 +22,9 @@ struct CommTCPRef {
 struct CommTCPPacket { u32 when; s16 len; char data[1]; };
 CGS_STATIC_ASSERT((sizeof(CommRef)==124), "CommRef size");
 CGS_STATIC_ASSERT((sizeof(CommTCPRef)==544), "CommTCPRef size");
+// The private XDK IPv4 address occupies the original ARTIST slot.
+CGS_STATIC_ASSERT(sizeof(sockaddr_in) == 16, "CommTCP IPv4 address size");
+CGS_STATIC_ASSERT(offsetof(CommTCPRef, peeraddr) == 132, "CommTCP peer address");
 CGS_STATIC_ASSERT((offsetof(CommTCPRef,state)==148), "CommTCP state");
 CGS_STATIC_ASSERT((offsetof(CommTCPRef,rcvbuf)==176), "CommTCP receive buffer");
 CGS_STATIC_ASSERT((offsetof(CommTCPRef,sndbuf)==204), "CommTCP send buffer");
@@ -163,29 +166,50 @@ extern "C" s32 CommTCPRecv(CommRef* common,void* data,s32 length,u32* tick)
     if (result>=0) ref->rcvout=(ref->rcvwid+ref->rcvout)%ref->rcvlen;
     return result;
 }
+// ARTIST 82B3C9A4 through 82B3C9B4 initialize the IPv4 port, family,
+// address and padding separately before calling SockaddrInParse.
+static void CommTCPInitAddress(sockaddr_in& addr)
+{
+    addr.sin_port = 0;
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = 0;
+    const u32 zero = 0;
+    memcpy(addr.sin_zero, &zero, sizeof(zero));
+    memcpy(addr.sin_zero + sizeof(zero), &zero, sizeof(zero));
+}
 static void CommTCPResetTransfer(CommTCPRef* ref)
 {
-    ref->sndinp=ref->sndout=ref->rcvinp=ref->rcvout=ref->rcvoff=0;
+    ref->sndinp = 0;
+    ref->sndout = 0;
+    ref->rcvinp = 0;
+    ref->rcvout = 0;
+    ref->rcvoff = 0;
     ref->sndoff=-1; ref->sendtick=NetTick()-5000;
 }
 extern "C" s32 CommTCPListen(CommRef* common,const char* text)
 {
     CommTCPRef* ref=Tcp(common); if (ref->state!=1 || ref->socket) return -2;
-    sockaddr addr; memset(&addr,0,sizeof(addr)); addr.sa_family=2;
-    if (!(SockaddrInParse(&addr,text)&2)) return -3;
+    sockaddr_in addr;
+    CommTCPInitAddress(addr);
+    if (!(SockaddrInParse(reinterpret_cast<sockaddr*>(&addr), text) & 2)) return -3;
     CommTCPResetTransfer(ref); ref->socket=SocketOpen(2,1,0); common->sockptr=ref->socket;
     if (!ref->socket) return -4;
-    if (SocketBind(ref->socket,&addr,16)<0) { SocketClose(ref->socket); ref->socket=0; common->sockptr=0; return -5; }
+    if (SocketBind(ref->socket,reinterpret_cast<const sockaddr*>(&addr),16)<0) { SocketClose(ref->socket); ref->socket=0; common->sockptr=0; return -5; }
     SocketListen(ref->socket,5); SocketCallback(ref->socket,2,100,ref,CommTCPEvent); ref->state=3; return 0;
 }
 extern "C" s32 CommTCPConnect(CommRef* common,const char* text)
 {
     CommTCPRef* ref=Tcp(common); if (ref->state!=1 || ref->socket) return -2;
-    memset(&ref->peeraddr,0,sizeof(ref->peeraddr)); ref->peeraddr.sa_family=2;
-    if (SockaddrInParse(&ref->peeraddr,text)!=3) return -3;
+    ref->peeraddr.sin_port = 0;
+    ref->peeraddr.sin_family = AF_INET;
+    ref->peeraddr.sin_addr.s_addr = 0;
+    const u32 clearWord = 0;
+    memcpy(ref->peeraddr.sin_zero, &clearWord, sizeof(clearWord));
+    memcpy(ref->peeraddr.sin_zero + sizeof(clearWord), &clearWord, sizeof(clearWord));
+    if (SockaddrInParse(reinterpret_cast<sockaddr*>(&ref->peeraddr),text)!=3) return -3;
     CommTCPResetTransfer(ref); ref->socket=SocketOpen(2,1,0); common->sockptr=ref->socket;
     if (!ref->socket) return -4;
-    SocketConnect(ref->socket,&ref->peeraddr,16); SocketCallback(ref->socket,2,100,ref,CommTCPEvent); ref->state=2; return 0;
+    SocketConnect(ref->socket,reinterpret_cast<const sockaddr*>(&ref->peeraddr),16); SocketCallback(ref->socket,2,100,ref,CommTCPEvent); ref->state=2; return 0;
 }
 extern "C" CommTCPRef* CommTCPConstruct(s32,s32,s32);
 static CommRef* CommTCPConstructForCommRef(s32 width,s32 input,s32 output)

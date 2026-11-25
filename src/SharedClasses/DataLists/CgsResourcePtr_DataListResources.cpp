@@ -1,5 +1,5 @@
+#define CGS_RESOURCE_PTR_MATCH_RELATIVE_ASSERTS // ARTIST 0x826790C0 references 0x82007258.
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
-
 // Per-instantiation TU for the DataLists resource-list smart pointers
 // (CgsResource::ResourcePtr<T> for the Challenge / Vehicle / Wheel list resource
 // element types). The generic accessor bodies are inline in CgsResourcePtr.h; this

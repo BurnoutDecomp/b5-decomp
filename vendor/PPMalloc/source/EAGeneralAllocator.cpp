@@ -117,13 +117,9 @@ GeneralAllocator::GeneralAllocator(void* pInitialCore, size_t nInitialCoreSize,
     mnMMapThreshold = 0;
     mbMMapTopDown = false;
     memset(&mHeadMMapChunk, 0, sizeof(mHeadMMapChunk));
+    mnMaxMallocFailureCount = 256;
     mpMallocFailureFunction = 0;
     mpMallocFailureFunctionContext = 0;
-    mnMaxMallocFailureCount = 256;
-    mpAssertionFailureFunction = AssertionFailureFunctionDefault;
-    mpAssertionFailureFunctionContext = this;
-    mpTraceFunction = TraceFunctionDefault;
-    mpTraceFunctionContext = this;
     mnTrimThreshold = 0;
     mnTopPad = 0;
     mpInitialTopChunk = 0;
@@ -140,6 +136,10 @@ GeneralAllocator::GeneralAllocator(void* pInitialCore, size_t nInitialCoreSize,
     mnFillUnusedCore = 0xfe;
     mpName = 0;
     mNotifyInitState = 0;
+    mpAssertionFailureFunction = AssertionFailureFunctionDefault;
+    mpAssertionFailureFunctionContext = this;
+    mpTraceFunction = TraceFunctionDefault;
+    mpTraceFunctionContext = this;
     Init(pInitialCore, nInitialCoreSize, bShouldFreeInitialCore, bShouldTrim,
          pCoreFreeFunction, pCoreFreeFunctionContext);
 }
@@ -280,10 +280,20 @@ GeneralAllocator::Chunk* GeneralAllocator::GetInitialTopChunk() const
 }
 GeneralAllocator::Chunk* GeneralAllocator::GetUnsortedBin() const { return GetInitialTopChunk(); }
 unsigned int GeneralAllocator::GetChunkSize(const Chunk* pChunk) { return pChunk->mnSize & 0x7ffffff8; }
+int GeneralAllocator::GetChunkIsMMapped(const Chunk* pChunk)
+{
+    return pChunk->mnSize & 2;
+}
+
 GeneralAllocator::Chunk* GeneralAllocator::GetChunkAtOffset(const Chunk* pChunk, int nOffset)
 {
     return reinterpret_cast<Chunk*>(reinterpret_cast<char*>(const_cast<Chunk*>(pChunk)) + nOffset);
 }
+int GeneralAllocator::GetChunkIsInUse(const Chunk* pChunk)
+{
+    return GetChunkAtOffset(pChunk, GetChunkSize(pChunk))->mnSize & 1;
+}
+
 GeneralAllocator::Chunk* GeneralAllocator::GetChunkPtrFromDataPtr(const void* pData)
 {
     return reinterpret_cast<Chunk*>(static_cast<char*>(const_cast<void*>(pData)) - 8);
@@ -479,15 +489,16 @@ GeneralAllocator::Chunk* GeneralAllocator::ExtendCoreInternal(size_t nMinSize) /
 }
 bool GeneralAllocator::FreeCore(CoreBlock* pCoreBlock, bool bShouldFreeCoreBlock) // 82B4DE28
 {
+    bool bResult = false;
     if (pCoreBlock->mbShouldFree || (bShouldFreeCoreBlock && pCoreBlock->mbShouldFreeOnShutdown))
     {
         if (pCoreBlock->mpCoreFreeFunction)
             pCoreBlock->mpCoreFreeFunction(this, pCoreBlock, pCoreBlock->mnSize, pCoreBlock->mpCoreFreeFunctionContext);
         else
             free(pCoreBlock);
-        return true;
+        bResult = true;
     }
-    return false;
+    return bResult;
 }
 void* GeneralAllocator::MMapMalloc(size_t nSize) // 82B4F1E8
 {
@@ -1254,8 +1265,8 @@ size_t GeneralAllocator::GetUsableSize(const void* pData) const // 82B4EE48
     GeneralAllocator* pThis = const_cast<GeneralAllocator*>(this);
     const Chunk* pChunk = pThis->GetChunkPtrFromDataPtr(pData);
     const unsigned int nChunkSize = pThis->GetChunkSize(pChunk);
-    if (pChunk->mnSize & 2) return nChunkSize - 8;
-    if (pThis->GetChunkAtOffset(pChunk, nChunkSize)->mnSize & 1) return nChunkSize - 4;
+    if (pThis->GetChunkIsMMapped(pChunk)) return nChunkSize - 8;
+    if (pThis->GetChunkIsInUse(pChunk)) return nChunkSize - 4;
     return 0;
 }
 size_t GeneralAllocator::GetLargestFreeBlock(bool bClearCache) // 82B4FE28
@@ -1524,9 +1535,9 @@ int GeneralAllocator::ChunkMatchesBlockType(const Chunk* pChunk, int nFlags) // 
     if ((nFlags & 6) == 6) return 1;
     const unsigned int nSize = pChunk->mnSize & 0x7ffffff8;
     const Chunk* pNext = reinterpret_cast<const Chunk*>(reinterpret_cast<const char*>(pChunk) + nSize);
-    const bool bInUse = (pNext->mnSize & 1) && !(pChunk->mnSize & 0x80000000);
-    if (nFlags & 2) return bInUse;
-    if (nFlags & 4) return !bInUse;
+    const int nInUse = (pNext->mnSize & 1) && !(pChunk->mnSize & 0x80000000);
+    if (nFlags & 2) return nInUse;
+    if (nFlags & 4) return !nInUse;
     return 0;
 }
 void GeneralAllocator::GetBlockInfoForChunk(const Chunk* pChunk, BlockInfo* pInfo, const void* pCore) const // 82B4F2C8

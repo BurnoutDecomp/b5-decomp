@@ -1,3 +1,4 @@
+#define CGS_RESOURCE_PTR_MATCH_RELATIVE_ASSERTS // ARTIST 0x823690C0 references 0x82007258.
 #include "GameSource/GameState/Progression/BrnProgressionDebugComponent.h"
 #define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionDebugComponent.cpp"
 #include "GameSource/GameState/Progression/BrnProgressionManager.h"
@@ -31,7 +32,6 @@
 #define CGS_ARTIST_FILE_BRNPROFILE "..\\..\\..\\GameSource\\GameState/Progression/BrnProfile.h"
 #include <float.h>
 #include <limits>
-
 namespace BrnProgression
 {
     namespace

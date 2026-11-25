@@ -9,6 +9,7 @@
 // renderers are declared here. Other Frustum members remain separate TUs.
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "BrnCommonTypes.h"  // Vector4 (16-byte SIMD lane)
 #include "vendor/renderware/collision/Plane.hpp"  // rw::collision::Plane (VectorToPlane return)
 #include "GameShared/GameClasses/Geometric/Primitives/CgsSphere.h"  // CgsGeometric::Sphere (IsSphereInFrustum arg)
@@ -51,6 +52,14 @@ namespace CgsGeometric
         // Bodies are reconstructed in CgsFrustum.cpp from the X360 call/data flow.
         void DebugRender() const;
         void DebugRenderCustomPlanes() const;
+
+        rw::collision::Plane GetPlane(PlaneId lePlaneId) const
+        {
+            CGS_ASSERT_AT(lePlaneId >= PlaneLeft && lePlaneId <= PlaneNear,
+                          "lePlaneId >= PlaneLeft && lePlaneId <= PlaneNear",
+                          "..\\..\\..\\GameShared\\GameClasses\\Geometric/Primitives/CgsFrustum.h", 320);
+            return GetPlaneByIndex(static_cast<u32>(lePlaneId));
+        }
 
         // GetPlaneByIndex @ 0x8274EFE8 (CgsFrustum.h:242 assert) -- gather the
         // plane at luPlaneIndex out of the swizzled SoA lanes into an AoS vector

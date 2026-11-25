@@ -75,6 +75,15 @@ struct DispatchCommand
     u32 GetCommandID() const { return (muWords[0] >> KU_SIZE_BITS) & 0x7Fu; }
     // word0 & 0x00FFFFFF  (PPC: lwz; clrlwi r,r,8)
     u32 GetPacketLength() const { return muWords[0] & 0x00FFFFFFu; }
+
+    u32* GetCustomSection() { return muWords + 4; }
+    const u32* GetCustomSection() const { return muWords + 4; }
+
+protected:
+    void SetupCommandWord(u32 luCommand, u32 luNumQwords)
+    {
+        muWords[0] = (luCommand << KU_SIZE_BITS) | luNumQwords;
+    }
 };
 
 // A packet is just the leading command of a sequence; aliased in the engine.

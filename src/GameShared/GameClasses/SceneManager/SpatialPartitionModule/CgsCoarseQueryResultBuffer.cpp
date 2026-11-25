@@ -21,4 +21,5 @@ template void       CgsSceneManager::CoarseQueryResultBuffer<16384>::EndResultsB
 template bool       CgsSceneManager::CoarseQueryResultBuffer<16384>::PushResult(u16);
 template bool       CgsSceneManager::CoarseQueryResultBuffer<16384>::PushResults(const u16*, u32);
 template s32        CgsSceneManager::CoarseQueryResultBuffer<16384>::GetNumResultsWritten() const;
+template s32        CgsSceneManager::CoarseQueryResultBuffer<16384>::GetNumResultsAttempted() const;
 template const u16* CgsSceneManager::CoarseQueryResultBuffer<16384>::GetBatchByOffset(u32, u32*, u32*) const;

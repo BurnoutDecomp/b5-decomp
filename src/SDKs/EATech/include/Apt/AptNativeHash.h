@@ -110,11 +110,11 @@ struct AptNativeHash
 
     // ---- packed AS event-handler bitmask ------------------------------------
     int32_t HasEventHandler(int32_t nMask) const;         // @0x82AD5200
-    void    SetEventHandler(int32_t nMask);               // @0x82AD51E0
-    void    RemoveEventHandler(int32_t nMask);            // @0x82AD51F0
+    void    SetEventHandler(int32_t nMask) { mnEventHandlerMask |= nMask; }
+    void    RemoveEventHandler(int32_t nMask) { mnEventHandlerMask &= ~nMask; }
     // Maintain the event-handler mask from a member name being set/cleared.
-    void    UpdateObjectMethods(const AptValue* pKeyValue, const EAStringC* pKeyName,
-                                bool bRemoving);           // @0x82ADA2F8
+    void    UpdateObjectMethods(const AptValue* pContext, const EAStringC* pKeyName,
+                                int bRemoving);            // @0x82ADA2F8
 
     // Release every held value/key + free the table (the dtor + the
     // AptValueWithHash teardown call this). @0x82AEB458

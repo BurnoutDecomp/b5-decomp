@@ -1,6 +1,6 @@
+#define CGS_RESOURCE_PTR_MATCH_ABSOLUTE_ASSERTS // ARTIST 0x828EA4C0 references 0x8201AE48.
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceIdList.h"   // complete CgsResource::ResourceIdList
-
 // Per-instantiation TU for CgsResource::ResourcePtr<CgsResource::ResourceIdList>
 // (ledger id: class:CgsResource::ResourceIdList>).
 //

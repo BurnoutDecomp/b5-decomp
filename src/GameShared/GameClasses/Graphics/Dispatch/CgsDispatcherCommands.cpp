@@ -116,13 +116,6 @@ namespace
         return reinterpret_cast<u32*>(
             reinterpret_cast<u8*>(lpBinBase) + (static_cast<u32>(luRecord) & 0xFFFFFu) * 16u);
     }
-
-    // Count and index bytes, aligned native pointer array, then quad-word padding.
-    inline u32 DirtyBlockQwords(u32 count)
-    {
-        return (((count + 4u) & ~3u) + sizeof(Vector4*) * count + 15u) >> 4;
-    }
-
 }
 
 // AddShaderTechniqueConstantsToDispatchBin @ 0x827F9FB8 (CgsDispatcherCommands.cpp:709).
@@ -308,12 +301,16 @@ Vector4** AddShaderTechniqueConstantsToDispatchBin(DispatchBin* lpBin,
 {
     const ShaderTechnique& shader = *lpTechnique->mpShaderTechnique;
     const ShaderConstantsExternal& objectVertex = shader.mExternalObjectVertexShaderConstants;
-    const ShaderConstantsExternal& objectPixel = shader.mExternalObjectPixelShaderConstants;
     const ShaderConstantsExternal& globalVertex = shader.mExternalGlobalVertexShaderConstants;
+    const ShaderConstantsExternal& objectPixel = shader.mExternalObjectPixelShaderConstants;
     const ShaderConstantsExternal& globalPixel = shader.mExternalGlobalPixelShaderConstants;
-    u32 count = objectVertex.muNumConstantsInstances + globalVertex.muNumConstantsInstances;
-    if (!lbZOnly)
-        count += objectPixel.muNumConstantsInstances + globalPixel.muNumConstantsInstances;
+    const bool lbIncludePixel = !lbZOnly;
+    u32 count = objectVertex.GetNumConstantInstances() + globalVertex.GetNumConstantInstances();
+    if (lbIncludePixel)
+    {
+        const u32 pixelCount = globalPixel.GetNumConstantInstances() + objectPixel.GetNumConstantInstances();
+        count = pixelCount + count;
+    }
 
     const u32 quadWords = (sizeof(Vector4*) * count + 15u) >> 4;
     Vector4** const lppScratch = static_cast<Vector4**>(lpBin->BeginAllocateMemory(quadWords));
@@ -322,10 +319,10 @@ Vector4** AddShaderTechniqueConstantsToDispatchBin(DispatchBin* lpBin,
     Vector4** cursor = lppScratch;
     Vector4* end = reinterpret_cast<Vector4*>(lppScratch) + quadWords;
     end = objectVertex.AddToDispatchBinFromStatePointers(lpContext, end, cursor);
-    if (!lbZOnly)
+    if (lbIncludePixel)
         end = objectPixel.AddToDispatchBinFromStatePointers(lpContext, end, cursor);
     end = globalVertex.AddToDispatchBinFromStatePointers(lpContext, end, cursor);
-    if (!lbZOnly)
+    if (lbIncludePixel)
         end = globalPixel.AddToDispatchBinFromStatePointers(lpContext, end, cursor);
 
     lpBin->EndAllocateMemory(static_cast<u32>(end - reinterpret_cast<Vector4*>(lppScratch)));
@@ -351,109 +348,111 @@ Vector4** AddShaderTechniqueConstantsToDispatchBin(DispatchBin* lpBin,
 // =============================================================================
 bool DrawRenderable::AddToBin(const Renderable* lpRenderable, DispatchFrame* lpFrame,
                               bool lbMarkAllConstantsDirty, s8 li8OpaqueList, s8 li8TransparentList,
-                              u8 lu8FrustumEnable, u8 lu8Technique, bool lbZOnly,
+                              bool lbFrustumTest, u8 lu8Technique, bool lbZOnly,
                               u8 lu8PreZList, u8 lu8PreZTechnique,
                               s32 liInstanceCount, u8 lu8ExcludeMeshBits)
 {
     AssertDispatcher(lpRenderable != 0, "Adding null renderable pointer to bin", 875);
     AssertDispatcher(lpFrame != 0, "Trying to use a NULL dispatch frame", 876);
 
-    // Refresh the dirty list to "every used constant" when requested.
-    u8 lu8DirtyCount;
     if (lbMarkAllConstantsDirty)
-    {
-        const u8 lu8Used = mShaderConstantTable.mu8NumUsedConstants;
-        for (u32 lu = 0; lu < lu8Used; ++lu)
-            mShaderConstantTable.mau8DirtyConstants[lu] = static_cast<u8>(lu);
-        mShaderConstantTable.mu8NumDirtyConstants = lu8Used;
-        lu8DirtyCount = lu8Used;
-    }
-    else
-    {
-        lu8DirtyCount = mShaderConstantTable.mu8NumDirtyConstants;
-    }
+        mShaderConstantTable.SetAllConstantsDirty();
 
-    // Native dirty-constant block length in quad-words.
-    const u16 lu16DirtyQw = static_cast<u16>(DirtyBlockQwords(lu8DirtyCount));
+    const u16 lu16NumQwForDirtyHeaders = mShaderConstantTable.GetNumQWForDirtyHeaders();
+    const u32 luNumQwForDispatchThreadInfo = (sizeof(DrawRenderableDispatchThreadInfo) + 15) / 16;
+    const u32 luNumConstantsRequired = lu16NumQwForDirtyHeaders + luNumQwForDispatchThreadInfo;
+    DrawRenderable* lpCmd = static_cast<DrawRenderable*>(
+        lpFrame->GetBin().AllocateCommand(luNumConstantsRequired + 16));
+    AssertDispatcher(lpCmd != 0, "lpCmd", 899);
 
-    // Reserve the trailer and sixteen quad-words of dirty-block headroom.
-    DispatchBin& lrBin = lpFrame->GetBin();
-    u32* lpCommand = reinterpret_cast<u32*>(
-        lrBin.AllocateCommand(lu16DirtyQw + 17u));
-    AssertDispatcher(lpCommand != 0, "lpCmd", 899);
-
-    __dcbz128(128, lpCommand);
+    __dcbz128(128, lpCmd);
+    Vector4* const lpAllocatedHeaderSpace = reinterpret_cast<Vector4*>(lpCmd->GetCustomSection());
     DrawRenderableDispatchThreadInfo* const trailer =
-        reinterpret_cast<DrawRenderableDispatchThreadInfo*>(lpCommand + 4 * (lu16DirtyQw + 1u));
+        reinterpret_cast<DrawRenderableDispatchThreadInfo*>(lpAllocatedHeaderSpace + lu16NumQwForDirtyHeaders);
     trailer->mbRenderZOnly = lbZOnly;
+    trailer->mu8PreZTechniqueIndex = lu8PreZTechnique;
     trailer->mu8PreZList = lu8PreZList;
     trailer->mi8InstanceCount = static_cast<s8>(liInstanceCount);
-    trailer->mu8PreZTechniqueIndex = lu8PreZTechnique;
     trailer->mu8ExcludeMeshBits = lu8ExcludeMeshBits;
     trailer->mpLastRenderableMesh = lpRenderable->mppMeshes[lpRenderable->mu16NumMeshes - 1];
 
-    mShaderConstantTable.AddDirtyConstantsToDispatchBin(reinterpret_cast<Vector4*>(lpCommand + 4));
-    lpCommand[2] = reinterpret_cast<u32>(lpRenderable);
-    lpCommand[3] = reinterpret_cast<u32>(trailer);
-    lpCommand[0] = (lu16DirtyQw + 1u) | (DispatchCommand::E_DRAWRENDERABLE << DispatchCommand::KU_SIZE_BITS);
-    // X360 @0x827FA264..0x827FA294: r11 = (extsb(arg4) << 8) | extsb(arg5);
-    //                                 insrwi arg7, r11, 24, 0;  insrwi arg6, arg7, 24, 0
-    // i.e. arg4<<24 | arg5<<16 | arg7<<8 | arg6.
-    lpCommand[1] = (static_cast<u32>(static_cast<u8>(li8OpaqueList)) << 24)
-                 | (static_cast<u32>(static_cast<u8>(li8TransparentList)) << 16)
-                 | (static_cast<u32>(lu8Technique) << 8)
-                 | lu8FrustumEnable;
+    mShaderConstantTable.AddDirtyConstantsToDispatchBin(lpAllocatedHeaderSpace);
+    lpCmd->muWords[2] = reinterpret_cast<u32>(lpRenderable);
+    lpCmd->muWords[3] = reinterpret_cast<u32>(trailer);
+    const u32 luLists = (static_cast<u32>(li8OpaqueList) << 8) | static_cast<u32>(li8TransparentList);
+    lpCmd->SetupCommandWord(E_DRAWRENDERABLE, luNumConstantsRequired);
+    lpCmd->muWords[1] = (((luLists << 8) | lu8Technique) << 8) | lbFrustumTest;
     return true;
 }
 
-// ARTIST 827FA2A0 and 827FA4B0. Both headers carry the original two
-// native pointers. The Z-only command has no extra payload.
-static bool AddMeshCommandToBin(const RenderableMesh* mesh, DispatchBin* bin,
-    DispatchObjectContext* context, u8 techniqueIndex, u8 instanceCount, bool zOnly)
+inline u32 GetDispatchBinExternalTextureStateInQuadWords(u32 luNumExternalSamplers)
 {
-    const s32 line = zOnly ? 2462 : 1835;
-    AssertDispatcher(mesh != 0, "Adding null mesh pointer to bin", line);
-    AssertDispatcher(bin != 0, "Trying to fill null bin", line + 1);
-    const MaterialAssembly* assembly = mesh->mpMaterialAssembly;
-    AssertDispatcher(assembly != 0, "lpMesh->mpMaterialAssembly", line + 2);
-    AssertDispatcher(techniqueIndex < assembly->GetLength(),
-        "lu8TechniqueIndex < lpMesh->mpMaterialAssembly->GetLength()", line + 3);
-    const MaterialTechnique* technique = assembly->GetMaterial(techniqueIndex);
-    AssertDispatcher(technique != 0, "Null material technique on mesh", zOnly ? 2468 : 1843);
+    const u32 luIndexTableBytes = (sizeof(u32) * luNumExternalSamplers + 15) & ~15u;
+    return (luIndexTableBytes + 48 * luNumExternalSamplers) / sizeof(Vector4);
+}
 
-    Vector4** const constants =
-        AddShaderTechniqueConstantsToDispatchBin(bin, context, technique, assembly, zOnly);
-    AssertDispatcher(constants != 0, "lpMemoryForShaderConstantPointers != NULL", zOnly ? 2491 : 1854);
-    u32 payloadQuadWords = 0;
-    if (!zOnly)
-    {
-        const s32 samplerCount = technique->mi8NumExternalSamplers;
-        payloadQuadWords = static_cast<u32>(((4 * samplerCount + 15) & ~15) + 48 * samplerCount) >> 4;
-    }
+// ARTIST 827FA2A0 and 827FA4B0.
+bool DrawRenderableMesh::AddToBin(const RenderableMesh* lpMesh, DispatchBin* lpBin,
+    DispatchObjectContext* lpDispatchObjectContext, u8 lu8TechniqueIndex, u8 lu8InstanceCount,
+    const DrawRenderableDispatchThreadInfo*)
+{
+    AssertDispatcher(lpMesh != 0, "Adding null mesh pointer to bin", 1835);
+    AssertDispatcher(lpBin != 0, "Trying to fill null bin", 1836);
+    AssertDispatcher(lpMesh->mpMaterialAssembly != 0, "lpMesh->mpMaterialAssembly", 1837);
+    CGS_ASSERT(lu8TechniqueIndex < lpMesh->mpMaterialAssembly->GetLength(),
+        CGS_ASSERT_MESSAGE_AT("lu8TechniqueIndex < lpMesh->mpMaterialAssembly->GetLength()",
+            kDispatcherSource, 1838));
+    const MaterialTechnique* lpMaterialTechnique = lpMesh->mpMaterialAssembly->GetMaterial(lu8TechniqueIndex);
+    AssertDispatcher(lpMaterialTechnique != 0, "Null material technique on mesh", 1843);
 
-    DispatchCommand* const command = bin->AllocateCommand(payloadQuadWords);
-    AssertDispatcher(command != 0, "lpCmd != NULL", zOnly ? 2494 : 1860);
-    const u32 id = zOnly ? DispatchCommand::E_DRAWRENDERABLEMESHZONLY : DispatchCommand::E_DRAWRENDERABLEMESH;
-    command->muWords[0] = payloadQuadWords | (id << DispatchCommand::KU_SIZE_BITS);
-    AssertDispatcher(constants != 0, "lpMemoryForShaderConstantPointers != NULL", zOnly ? 2507 : 2028);
-    command->muWords[2] = reinterpret_cast<u32>(mesh);
-    command->muWords[3] = reinterpret_cast<u32>(constants);
-    command->muWords[1] = (static_cast<u32>(instanceCount) << 8) | techniqueIndex;
+    Vector4** lpMemoryForShaderConstantPointers = AddShaderTechniqueConstantsToDispatchBin(
+        lpBin, lpDispatchObjectContext, lpMaterialTechnique, lpMesh->mpMaterialAssembly, false);
+    AssertDispatcher(lpMemoryForShaderConstantPointers != 0,
+        "lpMemoryForShaderConstantPointers != NULL", 1854);
+
+    const u32 lNumExternalSamplers = lpMaterialTechnique->mi8NumExternalSamplers;
+    const u32 luSizeOfExternalTextureStateQuadWords =
+        GetDispatchBinExternalTextureStateInQuadWords(lNumExternalSamplers);
+    DrawRenderableMesh* lpCmd = static_cast<DrawRenderableMesh*>(lpBin->AllocateCommand(luSizeOfExternalTextureStateQuadWords));
+    AssertDispatcher(lpCmd != 0, "lpCmd != NULL", 1860);
+    lpCmd->SetupCommandWord(E_DRAWRENDERABLEMESH, luSizeOfExternalTextureStateQuadWords);
+    AssertDispatcher(lpMemoryForShaderConstantPointers != 0,
+        "lpMemoryForShaderConstantPointers != NULL", 2028);
+    const u32 lu32TechniqueAndInstanceCount = (static_cast<u32>(lu8InstanceCount) << 8) | lu8TechniqueIndex;
+    lpCmd->muWords[2] = reinterpret_cast<u32>(lpMesh);
+    lpCmd->muWords[3] = reinterpret_cast<u32>(lpMemoryForShaderConstantPointers);
+    lpCmd->muWords[1] = lu32TechniqueAndInstanceCount;
     return true;
 }
 
-__declspec(noinline) bool DrawRenderableMesh::AddToBin(const RenderableMesh* mesh, DispatchBin* bin,
-    DispatchObjectContext* context, u8 techniqueIndex, u8 instanceCount,
+bool DrawRenderableMeshZOnly::AddToBin(const RenderableMesh* lpMesh, DispatchBin* lpBin,
+    DispatchObjectContext* lpDispatchObjectContext, u8 lu8TechniqueIndex, u8 lu8InstanceCount,
     const DrawRenderableDispatchThreadInfo*)
 {
-    return AddMeshCommandToBin(mesh, bin, context, techniqueIndex, instanceCount, false);
-}
+    AssertDispatcher(lpMesh != 0, "Adding null mesh pointer to bin", 2462);
+    AssertDispatcher(lpBin != 0, "Trying to fill null bin", 2463);
+    AssertDispatcher(lpMesh->mpMaterialAssembly != 0, "lpMesh->mpMaterialAssembly", 2464);
+    CGS_ASSERT(lu8TechniqueIndex < lpMesh->mpMaterialAssembly->GetLength(),
+        CGS_ASSERT_MESSAGE_AT("lu8TechniqueIndex < lpMesh->mpMaterialAssembly->GetLength()",
+            kDispatcherSource, 2465));
+    const MaterialTechnique* lpMaterialTechnique = lpMesh->mpMaterialAssembly->GetMaterial(lu8TechniqueIndex);
+    AssertDispatcher(lpMaterialTechnique != 0, "Null material technique on mesh", 2468);
 
-__declspec(noinline) bool DrawRenderableMeshZOnly::AddToBin(const RenderableMesh* mesh, DispatchBin* bin,
-    DispatchObjectContext* context, u8 techniqueIndex, u8 instanceCount,
-    const DrawRenderableDispatchThreadInfo*)
-{
-    return AddMeshCommandToBin(mesh, bin, context, techniqueIndex, instanceCount, true);
+    Vector4** lpMemoryForShaderConstantPointers = AddShaderTechniqueConstantsToDispatchBin(
+        lpBin, lpDispatchObjectContext, lpMaterialTechnique, lpMesh->mpMaterialAssembly, true);
+    AssertDispatcher(lpMemoryForShaderConstantPointers != 0,
+        "lpMemoryForShaderConstantPointers != NULL", 2491);
+
+    DrawRenderableMeshZOnly* lpCmd = static_cast<DrawRenderableMeshZOnly*>(lpBin->AllocateCommand(0));
+    AssertDispatcher(lpCmd != 0, "lpCmd != NULL", 2494);
+    lpCmd->SetupCommandWord(E_DRAWRENDERABLEMESHZONLY, 0);
+    AssertDispatcher(lpMemoryForShaderConstantPointers != 0,
+        "lpMemoryForShaderConstantPointers != NULL", 2507);
+    const u32 lu32TechniqueAndInstanceCount = (static_cast<u32>(lu8InstanceCount) << 8) | lu8TechniqueIndex;
+    lpCmd->muWords[2] = reinterpret_cast<u32>(lpMesh);
+    lpCmd->muWords[3] = reinterpret_cast<u32>(lpMemoryForShaderConstantPointers);
+    lpCmd->muWords[1] = lu32TechniqueAndInstanceCount;
+    return true;
 }
 
 namespace

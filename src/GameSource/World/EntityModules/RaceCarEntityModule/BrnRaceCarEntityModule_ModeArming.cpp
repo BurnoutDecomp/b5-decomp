@@ -1,3 +1,4 @@
+#define CGS_RESOURCE_PTR_MATCH_ABSOLUTE_ASSERTS // ARTIST 0x822C9A48 references 0x8201AE48.
 // ============================================================================
 // BrnWorld::RaceCarEntityModule -- THE GAME-MODE ARMING SLICE.
 //
@@ -40,7 +41,6 @@
 #include "SharedClasses/Graphics/BrnGlobalColourPalette.h"                // GlobalColourPalette (the colour assert)
 namespace BrnWorld
 {
-
 // --------------------------------------------------------------------------------------------
 // [stuntrace start-grid wave 2026-08-27] The three literals SetupOpponents / SetUpPlayerCarForMode
 // carry, all X360-attested at their use sites rather than named constants in the console source.

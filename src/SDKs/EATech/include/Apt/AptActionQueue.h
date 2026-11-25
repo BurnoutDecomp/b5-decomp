@@ -156,10 +156,8 @@ public:
                                s32 iReturnReg, s32 iArgCount);
 
     // @ 0x82ADF2A0 -- remove the first live action queued for a given CIH context
-    // (matching action slots whose mpCIH == pContext, excluding the current
-    // item), Releasing its CIH and closing the gap with a memmove. Returns the
-    // context (X360 fastcall return value).
-    AptValue* RemoveActionFor(AptValue* pContext);
+    // The executing action remains queued until it finishes.
+    void RemoveActionFor(AptCIH* pCIH);
 
     // @ 0x82AD97B0 -- GC mark walk: register every held AptValue pointer with the
     // collector so the queued actions/functions survive a collection.
@@ -171,14 +169,31 @@ public:
 
     // @ 0x82AD5E68 -- the slot one position before `pSlot`, wrapping to the last
     // slot when stepping below mpBegin.
-    AptAnimationPoolData* DecrementDequeLocation(AptAnimationPoolData* pSlot);
+    AptAnimationPoolData* DecrementDequeLocation(AptAnimationPoolData* pSlot)
+    {
+        AptAnimationPoolData* lpPrev = pSlot - 1;
+        if (lpPrev < mpBegin)
+        {
+            lpPrev = mpBegin + mnCapacity - 1;
+        }
+        return lpPrev;
+    }
 
     // @ 0x82ADC5E0 -- the slot one position after `pSlot`, wrapping to mpBegin
     // when stepping past the last slot.
-    AptAnimationPoolData* GetNextItem(AptAnimationPoolData* pSlot);
+    AptAnimationPoolData* GetNextItem(AptAnimationPoolData* pSlot)
+    {
+        AptAnimationPoolData* lpNext = pSlot + 1;
+        if (lpNext == mpBegin + mnCapacity)
+            lpNext = mpBegin;
+        return lpNext;
+    }
 
     // @ 0x82AD5E08 -- true iff `pSlot` is exactly the back of the queue.
-    bool IsLastItem(AptAnimationPoolData* pSlot) const;
+    bool IsLastItem(AptAnimationPoolData* pSlot) const
+    {
+        return pSlot == mpBack;
+    }
 
     // @ 0x82AD5E20 -- true iff `pSlot` is at or past the back, accounting for ring
     // wrap-around (front > back).

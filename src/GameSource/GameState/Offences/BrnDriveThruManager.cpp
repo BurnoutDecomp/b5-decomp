@@ -1,8 +1,8 @@
+#define CGS_RESOURCE_PTR_MATCH_ABSOLUTE_ASSERTS // ARTIST 0x822C9A48 references 0x8201AE48.
 #include "GameSource/GameState/Offences/BrnDriveThruManager.h"
 #define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Offences/BrnDriveThruManager.cpp"
 #include <cstddef>   // offsetof (layout asserts)
 #include <cstring>   // memset/memcpy (opaque action payloads)
-
 #include "rw/math/vpu/vector3_operation.h"                          // rw::math::vpu::operator- (discovery delta)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                   // CgsDev::Assert::Begin/Fire/EndAssert

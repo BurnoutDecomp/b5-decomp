@@ -58,27 +58,26 @@ namespace CgsDev
     // ARTIST rotates the CR6 all-true bit from bit 7 to bit 0 before each test.
     bool Debug2DImmediateRender::Is2DPointOnScreen(Vector2 lv2Point) const
     {
-        const __vector4 lvZero = __vspltisw(0);
-        __vector4 lvExtent = lvZero;
-        lvExtent.x = mfVirtualScreenWidth;
-        lvExtent.y = mfVirtualScreenHeight;
+        Vector2 lZero;
+        lZero.SetZero();
+        const Vector2 lScreen = GetVirtualScreenSize();
         const __vector4 lvX = __vspltw(lv2Point.mV, 0);
 
         unsigned int luCondition = 0;
-        __vcmpgefpR(lvX, __vspltw(lvZero, 0), &luCondition);
+        __vcmpgefpR(lvX, __vspltw(lZero.mV, 0), &luCondition);
         if ((_rotl(luCondition, 25) & 1u) != 0)
         {
             const __vector4 lvY = __vspltw(lv2Point.mV, 1);
             luCondition = 0;
-            __vcmpgefpR(lvY, __vspltw(lvZero, 1), &luCondition);
+            __vcmpgefpR(lvY, __vspltw(lZero.mV, 1), &luCondition);
             if ((_rotl(luCondition, 25) & 1u) != 0)
             {
                 luCondition = 0;
-                __vcmpgefpR(__vspltw(lvExtent, 0), lvX, &luCondition);
+                __vcmpgefpR(__vspltw(lScreen.mV, 0), lvX, &luCondition);
                 if ((_rotl(luCondition, 25) & 1u) != 0)
                 {
                     luCondition = 0;
-                    __vcmpgefpR(__vspltw(lvExtent, 1), lvY, &luCondition);
+                    __vcmpgefpR(__vspltw(lScreen.mV, 1), lvY, &luCondition);
                     if ((_rotl(luCondition, 25) & 1u) != 0)
                         return true;
                 }
@@ -168,9 +167,7 @@ namespace CgsDev
 
         Vector2 lv2ScreenMin;
         lv2ScreenMin.SetZero();
-        Vector2 lv2ScreenMax = lv2ScreenMin;
-        lv2ScreenMax.mV.x = mfVirtualScreenWidth;
-        lv2ScreenMax.mV.y = mfVirtualScreenHeight;
+        const Vector2 lv2ScreenMax = GetVirtualScreenSize();
         lv2Upper.mV = __vaddfp(lv2Minimum.mV, lv2Upper.mV);
         return Do2DBoxesIntersect(lv2ScreenMin, lv2ScreenMax, lv2Minimum, lv2Upper);
     }
@@ -243,7 +240,8 @@ namespace CgsDev
 
     void Debug2DImmediateRender::DispatchVertices()
     {
-        if (miIm2dVertsHead > 0)
+        // ARTIST 8281B6F4 tests the signed short for a nonzero vertex count.
+        if (miIm2dVertsHead != 0)
         {
             if (mpRenderBuffer)
             {

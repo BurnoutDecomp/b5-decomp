@@ -51,18 +51,17 @@ extern const int32_t gAptMemberIndexToEventBit[];   // X360 dword_82143BA8
 // table + slots + event mask.
 // ---------------------------------------------------------------------------
 AptNativeHash::AptNativeHash(int32_t nCapacity)
+    : mnCapacity(nCapacity)
+    , mpTable(0)
+    , mp__Proto__(0)
+    , mpPrototype(0)
+    , mnEventHandlerMask(0)
 {
-    mnCapacity         = nCapacity;
-    mpTable            = 0;
-    mp__Proto__        = 0;
-    mpPrototype        = 0;
-    mnEventHandlerMask = 0;
-
-    if (((nCapacity - 1) & nCapacity) != 0)   // not already a power of two
+    if ((mnCapacity & (mnCapacity - 1)) != 0)
     {
         int32_t nRounded = 1;
-        for (nRounded = 1; nRounded < nCapacity; nRounded *= 2)
-            ;
+        while (nRounded < mnCapacity)
+            nRounded <<= 1;
         mnCapacity = nRounded;
     }
 }
@@ -79,9 +78,8 @@ AptNativeHash::~AptNativeHash()
 // FirstAllocation @0x82AE5190 -- allocate + zero the bucket array.
 void AptNativeHash::FirstAllocation()
 {
-    const size_t nBytes = sizeof(AptHashItem) * mnCapacity;
-    mpTable = static_cast<AptHashItem*>(gpNonGCPoolManager->Allocate(nBytes));
-    memset(mpTable, 0, nBytes);
+    mpTable = static_cast<AptHashItem*>(gpNonGCPoolManager->Allocate(mnCapacity * sizeof(AptHashItem)));
+    memset(mpTable, 0, mnCapacity * sizeof(AptHashItem));
 }
 
 bool AptNativeHash::IsEmpty() const { return mpTable == 0; }   // @0x82AD51D0
@@ -417,41 +415,12 @@ int32_t AptNativeHash::HasEventHandler(int32_t nMask) const   // @0x82AD5200
     return mnEventHandlerMask & nMask;
 }
 
-void AptNativeHash::SetEventHandler(int32_t nMask)            // @0x82AD51E0
+// UpdateObjectMethods @0x82ADA2F8 updates the named listener bit for an
+// ordinary object. Character handles maintain their event mask separately.
+void AptNativeHash::UpdateObjectMethods(const AptValue* pContext,
+                                        const EAStringC* pKeyName, int bRemoving)
 {
-    mnEventHandlerMask |= nMask;
-}
-
-void AptNativeHash::RemoveEventHandler(int32_t nMask)        // @0x82AD51F0
-{
-    mnEventHandlerMask &= ~nMask;
-}
-
-// UpdateObjectMethods @0x82ADA2F8 -- when an AS member named by pKeyValue is set
-// (bRemoving=false) or cleared (bRemoving=true), fold/unfold the corresponding
-// event-handler bit into the mask. Member kinds that are themselves dynamic
-// callbacks (a CharacterInstHandle value carrying the bound-method flag, or a
-// CIHNone value) are skipped: the mask only tracks the recognised on<Event>
-// handler names. The member name is resolved through the sprite-member gperf
-// index; only resolved indices >= 200 map to event bits via the .rdata table.
-//   a2 (pKeyValue) -- the AptValue being assigned; its low-7 type bits and one
-//                     packed flag bit gate the early-out.
-//   a3 (pKeyName)  -- the EAStringC member name (the X360 reads its m_pData, then
-//                     the char buffer at +8 / the size at +2 -- GetBuffer/GetLength).
-void AptNativeHash::UpdateObjectMethods(const AptValue* pKeyValue,
-                                        const EAStringC* pKeyName, bool bRemoving)
-{
-    // Skip when the value being assigned is itself a (bound) script-function
-    // member -- the X360 tests the value-type index and one packed value flag:
-    //     (type == 12 && mbIsDefined) || type == 37
-    // Type 12 == AptVFT_CharacterInstHandle, 37 == AptVFT_CIHNone (the enum is
-    // shared with X360). The X360 `extrwi r11,r11,1,4` reads the 1-bit field at
-    // bit 27 of the packed value word == AptValue::mValueBitfield.mbIsDefined
-    // (getIsDefined()): a CharacterInstHandle only counts as a bound method when
-    // it is a defined value; CIHNone is always skipped.
-    const AptVirtualFunctionTable_Indices eType = pKeyValue->getVtblIndex();
-    if ((eType == AptVFT_CharacterInstHandle && pKeyValue->getIsDefined())
-        || eType == AptVFT_CIHNone)
+    if (pContext->isCIH())
         return;
 
     // Resolve the member name (key string) through the sprite-member gperf index.
@@ -469,9 +438,9 @@ void AptNativeHash::UpdateObjectMethods(const AptValue* pKeyValue,
         return;
 
     if (bRemoving)
-        mnEventHandlerMask &= ~nEventBit;
+        RemoveEventHandler(nEventBit);
     else
-        mnEventHandlerMask |= nEventBit;
+        SetEventHandler(nEventBit);
 }
 
 // RegisterReferences @0x82ADA3C0 -- the GC mark walk: hand every held AptValue

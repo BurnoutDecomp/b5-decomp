@@ -1,6 +1,6 @@
+#define CGS_RESOURCE_PTR_MATCH_ABSOLUTE_ASSERTS // ARTIST 0x822C9F68 references 0x8201AE48.
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
 #include "GameShared/GameClasses/SceneManager/Zones/ZoneList.h"   // complete CgsSceneManager::ZoneList
-
 // Per-instantiation TU for CgsResource::ResourcePtr<CgsSceneManager::ZoneList>.
 // Bodies are the generic inline accessors in CgsResourcePtr.h; this .cpp only forces
 // the out-of-line emission of the two operator-> symbols the X360 ARTIST build

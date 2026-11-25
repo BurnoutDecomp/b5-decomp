@@ -750,44 +750,34 @@ int AptAnimationTarget::RemoveTimerFunctions(AptCIH* pContext)
 //   Tick + release every entry on the shared "new instance" table (CIHs created this
 //   frame), then clear the table. Static: operates entirely on the module statics.
 // ---------------------------------------------------------------------------
+// ARTIST records the sprite or custom-control predicate at 0x82B0C940.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 void AptAnimationTarget::TickNewInsts()
 {
-    AptValue** lpInsts = static_cast<AptValue**>(spNewInsts);   // off_8324E544
-    for (int liIndex = 0; liIndex < snNewInstSize; ++liIndex)   // dword_8324E548
+    // Tick and Release can change the table. ARTIST reloads it at 0x82B0C958 and 0x82B0C97C.
+    for (int liIndex = 0; liIndex < snNewInstSize; ++liIndex)
     {
-        AptCIH* lpCIH = reinterpret_cast<AptCIH*>(lpInsts[liIndex]);
-        if (lpCIH == 0)
-        {
+        if (!static_cast<AptCIH**>(spNewInsts)[liIndex])
             continue;
-        }
 
-        // Tick the node only when it is a sprite(5) / custom-control(16) character
-        // instance still at the "freshly created" depth sentinel (-1). Named members
-        // (2026-07-01; were the console raw offsets +0x20/+8/+16 applied to the x64
-        // objects -- garbage reads): CIH word[8] == mpCharacterInst, charInst word[2]
-        // == mTypeFlags, charInst word[4] == mnCreateDepth.
-        AptCharacterInst* lpCharInst = lpCIH->mpCharacterInst;
-        if (lpCharInst == 0)
-        {
-            continue;   // no bound instance: nothing to tick (guard for the x64 gate)
-        }
-        const int liTypeTag = static_cast<int>(lpCharInst->GetTypeTag());
-        if ((liTypeTag == 5 || liTypeTag == 16)
-            && static_cast<AptCharacterSpriteInstBase*>(lpCharInst)->mnGotoFrame == -1)
-        {
-            lpCIH->tick();                                     // AptCIH::tick
-            lpInsts = static_cast<AptValue**>(spNewInsts);     // reload (tick may realloc)
-        }
+        AptCIH* pCIH = static_cast<AptCIH**>(spNewInsts)[liIndex];
+        AptCharacterInst* pInst = pCIH->GetCharacterInst();
+        const int nType = pInst->GetTypeTag();
+        const bool bTicksOnCreation = nType == 5 || nType == 16;
+        if (bTicksOnCreation && static_cast<AptCharacterSpriteInstBase*>(pInst)->mnGotoFrame == -1)
+            pCIH->tick();
 
-        if (lpInsts[liIndex] != 0)
-        {
-            lpInsts[liIndex]->Release();                       // (*(*v9 + 4))(v9)
-            lpInsts = static_cast<AptValue**>(spNewInsts);
-        }
-        lpInsts[liIndex] = 0;
+        if (static_cast<AptCIH**>(spNewInsts)[liIndex])
+            static_cast<AptCIH**>(spNewInsts)[liIndex]->Release();
+        static_cast<AptCIH**>(spNewInsts)[liIndex] = 0;
     }
     snNewInstSize = 0;
 }
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // ---------------------------------------------------------------------------
 // CleanRemList @ 0x82AEAB08

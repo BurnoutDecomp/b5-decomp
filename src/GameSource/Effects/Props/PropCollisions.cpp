@@ -1,3 +1,4 @@
+#define CGS_RESOURCE_PTR_MATCH_RELATIVE_ASSERTS // ARTIST 0x82286740 references 0x82007258.
 // ============================================================================
 // GameSource/Effects/Props/PropCollisions.cpp
 //
@@ -16,7 +17,6 @@
 // console refines vrsqrtefp twice (RefinedRsqrt) and has no zero guard. CreateEffect is unchanged: it matches
 // 0x822936F0 word for word.
 // ============================================================================
-
 #include "GameSource/Effects/Props/PropCollisions.h"
 #include "GameSource/Effects/Particles/ParticleModule.h"                        // BrnParticle::ParticleModule, LionEffect
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"        // BrnPhysics::Vehicle::RaceCarState

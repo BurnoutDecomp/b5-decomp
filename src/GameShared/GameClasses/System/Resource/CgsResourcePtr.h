@@ -523,12 +523,12 @@ namespace CgsResource
     }
 
 
-
-
     // ARTIST used two source spellings for this header. A translation unit
-    // opts into the relative spelling when its original bodies establish it.
+    // selects a historical spelling when its original bodies establish it.
 #if defined(CGS_RESOURCE_PTR_MATCH_RELATIVE_ASSERTS)
 #define CGS_RESOURCE_PTR_ASSERT_FILE "..\\..\\..\\GameShared\\GameClasses\\System/Resource/CgsResourcePtr.h"
+#elif defined(CGS_RESOURCE_PTR_MATCH_ABSOLUTE_ASSERTS)
+#define CGS_RESOURCE_PTR_ASSERT_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourcePtr.h"
 #else
 #define CGS_RESOURCE_PTR_ASSERT_FILE __FILE__
 #endif

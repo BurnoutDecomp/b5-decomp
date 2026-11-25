@@ -1,3 +1,4 @@
+#define CGS_RESOURCE_PTR_MATCH_ABSOLUTE_ASSERTS // ARTIST 0x828EA4C0 references 0x8201AE48.
 #include "GameShared/GameClasses/System/Resource/CgsResourcePoolModule.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/CgsStrStream.h" // original formatted pool assertions
@@ -18,7 +19,6 @@
     "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsPoolModule.cpp"
 #define CGS_ARTIST_POOL_MODULE_HEADER \
     "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsPoolModule.h"
-
 namespace CgsResource
 {
     s32 PoolModule::_miAllocateListTraceId = -1;

@@ -22,13 +22,15 @@ void SpatialPartition::AddEntity(u16 lu16Id, u32 lxTypeFlags, Vector3 lPosition,
     SpatialPartitionEntityLink* lpNewEntity =
         AllocEntity(lu16Id, lxTypeFlags, lPosition, lfRadius);
 
-    if (lpNewEntity != 0)
+    if (lpNewEntity == 0)
+    {
+        CGS_ASSERT(lpNewEntity != 0,
+                   CGS_ASSERT_MESSAGE_AT("lpNewEntity != NULL", KAC_ARTIST_ASSERT_FILE, 461));
+    }
+    else
     {
         AddEntityToGraph(lu16Id);
-        return;
     }
-
-    CGS_ASSERT(lpNewEntity != 0, "lpNewEntity != NULL");
 }
 
 // 0x828B1078 -- AllocEntity: stamp the entity's pool record. The record IS the pool
@@ -69,10 +71,13 @@ SpatialPartition::AllocEntity(u16 lu16Id, u32 lxTypeFlags, Vector3 lPosition, fl
 // minus the 128-byte header, divided by the 8-byte stride == the index into the pool.
 u16 SpatialPartition::CalcEntityIndex(const SpatialPartitionEntityLink& lrEntity) const
 {
-    const u32 luIndex = static_cast<u32>(&lrEntity - &maEntityLinks[0]);
+    // Check the unsigned byte distance before narrowing to the link index.
+    const uintptr_t luDistance = reinterpret_cast<uintptr_t>(&lrEntity) -
+                                 reinterpret_cast<uintptr_t>(maEntityLinks);
+    const u32 luIndex = static_cast<u32>(luDistance / sizeof(SpatialPartitionEntityLink));
 
     CGS_ASSERT(luIndex < static_cast<u32>(KI_MAX_NUM_ENTITIES),
-               "luIndex < (uint32_t)KI_MAX_NUM_ENTITIES");
+               CGS_ASSERT_MESSAGE_AT("luIndex < (uint32_t)KI_MAX_NUM_ENTITIES", KAC_ARTIST_ASSERT_FILE, 417));
 
     return static_cast<u16>(luIndex);
 }

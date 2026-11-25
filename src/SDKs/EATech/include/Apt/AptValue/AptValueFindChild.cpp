@@ -157,7 +157,7 @@ namespace
     // site like this one, so it is spelled out here.
     inline bool IsCIHLike(const AptValue* pValue)
     {
-        return pValue->isCIH() || pValue->getVtblIndex() == AptVFT_CIHNone;
+        return pValue->isCIH();
     }
 
     // Walk pStart's __proto__ chain (GetNativeHashVirtual()->mp__Proto__) looking for

@@ -86,44 +86,27 @@ AptActionQueueC::AptActionQueueC(u32 nCapacity)
 void AptActionQueueC::ClearActions()
 {
     AptAnimationPoolData* lpSlot = mpFront;
-    if (lpSlot != mpBack)
+    // ARTIST checks for an empty queue at 0x82ADF1FC before the wrap loop.
+    if (!IsLastItem(lpSlot))
     {
         do
         {
-            switch (lpSlot->mnType)
+            if (lpSlot->mnType == AptAnimationPoolData::E_ACTION_TYPE_ACTION)
             {
-                case AptAnimationPoolData::E_ACTION_TYPE_ACTION:
-                    if (lpSlot->action.mpCIH != 0)
-                    {
-                        lpSlot->action.mpCIH->Release();
-                    }
-                    break;
-
-                case AptAnimationPoolData::E_ACTION_TYPE_FUNCTION:
-                    if (lpSlot->function.mpContext != 0)
-                    {
-                        lpSlot->function.mpContext->Release();
-                    }
-                    if (lpSlot->function.mpFuncDef != 0)
-                    {
-                        lpSlot->function.mpFuncDef->Release();
-                    }
-                    break;
-
-                default:
-                    break;
+                lpSlot->action.mpCIH->Release();
             }
-
+            else if (lpSlot->mnType == AptAnimationPoolData::E_ACTION_TYPE_FUNCTION)
+            {
+                lpSlot->function.mpContext->Release();
+                lpSlot->function.mpFuncDef->Release();
+            }
             lpSlot->mnType = AptAnimationPoolData::E_ACTION_TYPE_EMPTY;
-
-            ++lpSlot;
-            lpSlot = WrapForward(lpSlot, mpBegin, mnCapacity);
+            lpSlot = GetNextItem(lpSlot);
         }
-        while (lpSlot != mpBack);
+        while (!IsLastItem(lpSlot));
     }
 
-    mpBack  = mpBegin;
-    mpFront = mpBegin;
+    mpFront = mpBack = mpBegin;
 }
 
 namespace
@@ -256,82 +239,42 @@ AptValue* AptActionQueueC::AddFunctionFront(AptValue* pContext, AptValue* pFuncD
     return pFuncDef;
 }
 
-// ---- RemoveActionFor @ 0x82ADF2A0 ----------------------------------------
-// Remove the first live ACTION slot queued for pContext (an action whose
-// mpCIH == pContext, that is not the current item), Release its CIH, and close
-// the gap. The X360 picks whichever end is nearer to minimise the memmove:
-//   * a slot below the back run   -> shift the slots after it down, mpBack--
-//   * a slot above the front      -> shift the slots before it up,  mpFront++
-//   * the front slot itself       -> just pop the front (no shift)
-// Returns pContext (X360 fastcall return value).
-AptValue* AptActionQueueC::RemoveActionFor(AptValue* pContext)
+// RemoveActionFor @0x82ADF2A0. Leave the executing slot in place and move
+// the appropriate contiguous run of the ring when removing a queued action.
+void AptActionQueueC::RemoveActionFor(AptCIH* pCIH)
 {
-    AptAnimationPoolData* lpFront = mpFront;
-    AptAnimationPoolData* lpBack  = mpBack;
-    AptAnimationPoolData* lpSlot  = lpFront;
-
-    if (lpFront == lpBack)
+    AptAnimationPoolData* lpSlot = mpFront;
+    while (!IsLastItem(lpSlot))
     {
-        return pContext;   // empty
-    }
-
-    for (;;)
-    {
-        const bool lbMatches =
-            lpSlot->mnType == AptAnimationPoolData::E_ACTION_TYPE_ACTION
-            && lpSlot->action.mpCIH == pContext
-            && lpSlot != mpCurItem;
-
-        if (lbMatches)
+        if (lpSlot->mnType == AptAnimationPoolData::E_ACTION_TYPE_ACTION
+            && lpSlot->action.mpCIH == pCIH)
         {
-            if (lpSlot < lpBack)
+            if (lpSlot == mpCurItem)
             {
-                // Interior of the back run: drop pContext's ref and shift every
-                // slot after lpSlot down by one, then retreat the back cursor.
-                pContext->Release();
-                const u32 lnTrailing =
-                    static_cast<u32>(lpBack - lpSlot) - 1u;   // slots after lpSlot
-                memmove(lpSlot, lpSlot + 1, lnTrailing * sizeof(AptAnimationPoolData));
-
-                AptAnimationPoolData* lpNewBack = mpBack - 1;
-                if (lpNewBack < mpBegin)
-                {
-                    lpNewBack = mpBegin + mnCapacity - 1;
-                }
-                mpBack = lpNewBack;
-                return pContext;
+                lpSlot = GetNextItem(lpSlot);
+                continue;
             }
-
-            if (lpSlot > lpFront)
+            if (lpSlot < mpBack)
             {
-                // In the wrapped front run: drop the ref and shift every slot
-                // before lpSlot up by one, then advance the front cursor.
-                pContext->Release();
-                const u32 lnLeading = static_cast<u32>(lpSlot - lpFront);
-                memmove(lpFront + 1, lpFront, lnLeading * sizeof(AptAnimationPoolData));
-
-                AptAnimationPoolData* lpNewFront = mpFront + 1;
-                lpNewFront = WrapForward(lpNewFront, mpBegin, mnCapacity);
-                mpFront = lpNewFront;
-                return pContext;
+                pCIH->Release();
+                memmove(lpSlot, lpSlot + 1, (mpBack - lpSlot - 1) * sizeof(AptAnimationPoolData));
+                mpBack = DecrementDequeLocation(mpBack);
+                break;
             }
-
-            // lpSlot == lpFront: pop the front (the X360 advances mpFront here
-            // without an extra shift or Release -- the front slot is the next to
-            // be dequeued, so its ref is settled on dequeue).
-            AptAnimationPoolData* lpNewFront = mpFront + 1;
-            lpNewFront = WrapForward(lpNewFront, mpBegin, mnCapacity);
-            mpFront = lpNewFront;
-            return pContext;
+            else if (lpSlot > mpFront)
+            {
+                pCIH->Release();
+                memmove(mpFront + 1, mpFront, (lpSlot - mpFront) * sizeof(AptAnimationPoolData));
+                mpFront = GetNextItem(mpFront);
+                break;
+            }
+            else if (lpSlot == mpFront)
+            {
+                mpFront = GetNextItem(mpFront);
+                break;
+            }
         }
-
-        // Advance to the next slot (wrapping); stop once we return to the back.
-        ++lpSlot;
-        lpSlot = WrapForward(lpSlot, mpBegin, mnCapacity);
-        if (lpSlot == mpBack)
-        {
-            return pContext;
-        }
+        lpSlot = GetNextItem(lpSlot);
     }
 }
 
@@ -388,63 +331,15 @@ AptAnimationPoolData* AptActionQueueC::GetDequeLocation(s32 nIndex)
     return mpBegin + liIndex;
 }
 
-// ---- DecrementDequeLocation @ 0x82AD5E68 ---------------------------------
-// The slot one position before pSlot, wrapping to the last slot when stepping
-// below mpBegin.
-AptAnimationPoolData* AptActionQueueC::DecrementDequeLocation(AptAnimationPoolData* pSlot)
-{
-    AptAnimationPoolData* lpPrev = pSlot - 1;
-    if (lpPrev < mpBegin)
-    {
-        lpPrev = mpBegin + mnCapacity - 1;
-    }
-    return lpPrev;
-}
-
-// ---- GetNextItem @ 0x82ADC5E0 --------------------------------------------
-// The slot one position after pSlot, wrapping to mpBegin when stepping past the
-// last slot.
-AptAnimationPoolData* AptActionQueueC::GetNextItem(AptAnimationPoolData* pSlot)
-{
-    AptAnimationPoolData* lpNext = pSlot + 1;
-    if (lpNext == mpBegin + mnCapacity)
-    {
-        return mpBegin;
-    }
-    return lpNext;
-}
-
-// ---- IsLastItem @ 0x82AD5E08 ---------------------------------------------
-// True iff pSlot is exactly the back of the queue.
-bool AptActionQueueC::IsLastItem(AptAnimationPoolData* pSlot) const
-{
-    return pSlot == mpBack;
-}
-
 // ---- IsLastItemOrBeyond @ 0x82AD5E20 -------------------------------------
 // True iff pSlot is at or past the back, accounting for ring wrap (front > back).
 bool AptActionQueueC::IsLastItemOrBeyond(AptAnimationPoolData* pSlot) const
 {
     AptAnimationPoolData* lpFront = mpFront;
-    AptAnimationPoolData* lpBack  = mpBack;
-
+    AptAnimationPoolData* lpBack = mpBack;
     if (lpFront <= lpBack)
-    {
-        // Non-wrapped: anything at or past the back.
         return pSlot >= lpBack;
-    }
-
-    // Wrapped (front > back): the live region is [front, end) U [begin, back).
-    // pSlot is "at or beyond the back" iff it is outside that live region.
-    if (pSlot < lpBack)
-    {
-        return false;
-    }
-    if (pSlot >= lpFront)
-    {
-        return false;
-    }
-    return true;
+    return pSlot >= lpBack && pSlot < lpFront;
 }
 
 // ---- SetCurItem @ 0x82AD5E60 ---------------------------------------------

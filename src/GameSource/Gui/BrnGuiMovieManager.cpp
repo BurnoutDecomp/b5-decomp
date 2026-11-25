@@ -1,3 +1,4 @@
+#define CGS_RESOURCE_PTR_MATCH_ABSOLUTE_ASSERTS // ARTIST 0x824FBBF0 references 0x8201AE48.
 #include "GameSource/Gui/BrnGuiVideoEvents.h"
 #include "GameSource/Gui/BrnGuiMovieManager.h"
 #include "GameSource/Resource/SharedIO/BrnGameDataEvents.h" // collision memory response owner
@@ -12,7 +13,6 @@
 #include <cstring>   // strlen / memset (X360 QueueNextMovie path construction)
 #include <xtl.h>
 #include <xmp.h>
-
 // Native ARTIST MovieManager: asynchronous bundle/resource replies, original
 // same-call state transitions, and dashboard-music ownership.
 

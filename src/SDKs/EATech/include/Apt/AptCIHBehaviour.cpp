@@ -329,7 +329,7 @@ void AptCIH::Remove(bool bClearGCRoots)
     // Cancel any in-flight asset load + drop the queued ActionScript actions
     // (through the Apt context singleton gpAptTarget, as the X360 inlines them).
     gpAptTarget->mpLinker->CancelLoad(this);   // X360 @0x82AFC0C8 (inlined accessor)
-    gpAptTarget->mpAnimationTarget->mpActionQueue->RemoveActionFor(this);   // X360 @0x82AFC0D8 (inlined accessor; AptValue* return discarded)
+    gpAptTarget->mpAnimationTarget->mpActionQueue->RemoveActionFor(this);   // ARTIST @0x82AFC0D8
 
     // Tear down the placed/character state.
     ClearCIH(bClearGCRoots);

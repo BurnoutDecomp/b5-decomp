@@ -1,5 +1,5 @@
+#define CGS_RESOURCE_PTR_MATCH_ABSOLUTE_ASSERTS // ARTIST 0x822CA008 references 0x8201AE48.
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
-
 // Per-instantiation TU for CgsResource::ResourcePtr<CgsGraphics::InstanceList>.
 //
 // Reconstructed from BURNOUT_X360_ARTIST.XEX

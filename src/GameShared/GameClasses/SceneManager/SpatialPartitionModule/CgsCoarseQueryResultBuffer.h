@@ -114,7 +114,7 @@ namespace CgsSceneManager
     s32 CoarseQueryResultBuffer<KU_MaxResults>::GetNumResultsAttempted() const
     {
         CGS_ASSERT(mbInABatch,
-                   "GetNumResultsAttempted called outside of a BeginResultsBatch/EndResultsBatch pair");
+                   CGS_ASSERT_MESSAGE_AT("GetNumResultsAttempted called outside of a BeginResultsBatch/EndResultsBatch pair", CGS_ARTIST_CGSCOARSEQUERYRESULTBUFFER_FILE, 348));
         return miNumResultsAttemptedThisBatch;
     }
 
@@ -232,8 +232,8 @@ namespace CgsSceneManager
     const u16* CoarseQueryResultBuffer<KU_MaxResults>::GetBatchByOffset(
         u32 luOffset, u32* lpNextBatchOffsetOut, u32* lpNumResultsOut) const
     {
-        CGS_ASSERT(lpNextBatchOffsetOut, "lpNextBatchOffsetOut");
-        CGS_ASSERT(lpNumResultsOut, "lpNumResultsOut");
+        CGS_ASSERT(lpNextBatchOffsetOut, CGS_ASSERT_MESSAGE_AT("lpNextBatchOffsetOut", CGS_ARTIST_CGSCOARSEQUERYRESULTBUFFER_FILE, 409));
+        CGS_ASSERT(lpNumResultsOut, CGS_ASSERT_MESSAGE_AT("lpNumResultsOut", CGS_ARTIST_CGSCOARSEQUERYRESULTBUFFER_FILE, 410));
 
         const u16* lpHeader = &mau16Buffer[luOffset];
         const u32  luNumResults = *lpHeader & 0x7FFF;
@@ -241,16 +241,14 @@ namespace CgsSceneManager
         // The batch header word must have its high (batch-start) bit set. Reproduced store-for-store
         // from the X360 (the check ORs in 0x8000, so it is effectively a non-empty-buffer guard).
         CGS_ASSERT(miTotalBufferSize > 0 || (*lpHeader | 0x8000),
-                   "Bad offset requested. Element is not a batch start offset");
+                   CGS_ASSERT_MESSAGE_AT("Bad offset requested. Element is not a batch start offset", CGS_ARTIST_CGSCOARSEQUERYRESULTBUFFER_FILE, 418));
 
-        if (luOffset < static_cast<u32>(miTotalBufferSize))
-        {
-            *lpNextBatchOffsetOut = luNumResults + luOffset + 1;
-            *lpNumResultsOut = luNumResults;
-            return lpHeader + 1;
-        }
+        if (luOffset >= static_cast<u32>(miTotalBufferSize))
+            return 0;
 
-        return 0;
+        *lpNextBatchOffsetOut = luNumResults + luOffset + 1;
+        *lpNumResultsOut = luNumResults;
+        return lpHeader + 1;
     }
 }
 

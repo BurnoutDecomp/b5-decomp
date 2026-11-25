@@ -368,7 +368,8 @@ namespace CgsDev
                     && (lpWindow->GetFlags() & Window::KX_FLAGNOFOCUS) != 0)
                     lpWindow->Render(mp2dRender);
 
-            if (mpActiveWindow && !mpActiveWindow->IsHidden())
+            // ARTIST 82817A60 draws an active window last whenever one is set.
+            if (mpActiveWindow)
                 mpActiveWindow->Render(mp2dRender);
         }
 

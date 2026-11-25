@@ -1,5 +1,5 @@
+#define CGS_RESOURCE_PTR_MATCH_ABSOLUTE_ASSERTS // ARTIST 0x822CA008 references 0x8201AE48.
 #include "GameSource/World/BrnWorldGraphicsStreamer.h"
-
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Resource/SharedIO/BrnGameDataEvents.h"
 #include "GameSource/World/EntityModules/WorldEntityModule/BrnWorldEntityModule.h"

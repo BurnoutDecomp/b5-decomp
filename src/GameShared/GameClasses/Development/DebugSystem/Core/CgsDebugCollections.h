@@ -225,7 +225,8 @@ namespace CgsDev
 
             bool IsEmpty() const  { return mpList == 0; }
             T*   GetFirst() const { return mpList; }
-            T*   GetNext(const T* lpItem) const { return lpItem->mpDebugLinkedListNext; }
+            // DecFIGS CgsDebugCollections.h:463. ARTIST 828179DC uses the head for a null item.
+            T*   GetNext(const T* lpItem) const { return !lpItem ? GetFirst() : lpItem->mpDebugLinkedListNext; }
 
             T* GetLast() const
             {

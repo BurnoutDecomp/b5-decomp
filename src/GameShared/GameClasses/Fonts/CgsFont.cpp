@@ -9,6 +9,8 @@
 //   GetFontChar(CgsUtf8*) 0x827EC588  (UTF-8 -> UTF-16, then FindFontChar + fallback)
 // The debug-text renderer (CgsGraphics::TextRenderer) drives these per character.
 
+#define CGS_ARTIST_FONT_HEADER_FILE "..\\..\\..\\GameShared\\GameClasses\\Fonts/CgsFont.h"
+
 namespace CgsResource
 {
     // Faithful port of X360 0x827E6D40. The glyph ids (mpaFontCharIds) are sorted within each of
@@ -16,13 +18,15 @@ namespace CgsResource
     // Returns the matching FontChar, or null if the char is not in the font.
     const FontChar* Font::FindFontChar(CgsUtf16 lu16Char) const
     {
-        const u32 luHash = lu16Char & KU_HASH_MASK;   // char & 127
-        // X360 asserts (debug-only bounds checks, CgsFont.h):
-        //   luHash + 1 < KU_HASH_TABLE_SIZE        (line 280)
-        //   luEndIndex >= luBeginIndex             (line 284)
-        //   luEndIndex <= muNumChars               (line 285)
+        const u32 luHash = lu16Char & KU_HASH_MASK;
+        CGS_ASSERT_AT(luHash + 1 < KU_HASH_TABLE_SIZE, "luHash + 1 < KU_HASH_TABLE_SIZE",
+                      CGS_ARTIST_FONT_HEADER_FILE, 280);
         u32 luBeginIndex = mauHashOffsets[luHash];
-        u32 luEndIndex   = mauHashOffsets[luHash + 1];
+        u32 luEndIndex = mauHashOffsets[luHash + 1];
+        CGS_ASSERT_AT(luEndIndex >= luBeginIndex, "luEndIndex >= luBeginIndex",
+                      CGS_ARTIST_FONT_HEADER_FILE, 284);
+        CGS_ASSERT_AT(luEndIndex <= muNumChars, "luEndIndex <= muNumChars",
+                      CGS_ARTIST_FONT_HEADER_FILE, 285);
 
         while (luBeginIndex < luEndIndex)
         {
@@ -30,10 +34,10 @@ namespace CgsResource
             const CgsUtf16 lu16MidId = mpaFontCharIds[luMid];
             if (lu16MidId == lu16Char)
                 return &mpaFontChars[luMid];
-            if (lu16MidId > lu16Char)
-                luEndIndex = luMid;
-            else
+            if (lu16MidId < lu16Char)
                 luBeginIndex = luMid + 1;
+            else if (lu16MidId > lu16Char)
+                luEndIndex = luMid;
         }
         return 0;
     }
@@ -56,16 +60,8 @@ namespace CgsResource
     // Faithful port of X360 0x827EC588 (the UTF-8 overload the text renderer calls per character).
     const FontChar* Font::GetFontChar(const CgsUtf8* lpUtf8Char) const
     {
-        // (X360 asserts lpUtf8Char != NULL, CgsFont.h:206.)
-        const CgsUtf16 lu16Char = CgsUnicode::ConvertUtf8CharToUtf16Char(lpUtf8Char);
-        const FontChar* lpFontChar = FindFontChar(lu16Char);
-        if (lpFontChar == 0)
-        {
-            lpFontChar = FindFontChar(static_cast<CgsUtf16>(KUTF16_DEFAULT_CHARACTER));  // '-'
-            if (lpFontChar == 0)
-                return mpaFontChars;  // X360: *(font + 0x20) -> &mpaFontChars[0]
-        }
-        return lpFontChar;
+        CGS_ASSERT_AT(lpUtf8Char != 0, "lpUtf8Char != NULL", CGS_ARTIST_FONT_HEADER_FILE, 206);
+        return GetFontChar(CgsUnicode::ConvertUtf8CharToUtf16Char(lpUtf8Char));
     }
 
     // Faithful port of X360 0x82834F20. Walks one line of the string (stops at '\n'), accumulating
@@ -373,3 +369,5 @@ namespace CgsResource
         mpTextureState = renderengine::TextureState::Initialize(mTextureStateResource, lParams);
     }
 }
+
+#undef CGS_ARTIST_FONT_HEADER_FILE

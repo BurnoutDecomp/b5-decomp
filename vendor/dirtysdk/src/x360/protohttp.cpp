@@ -73,21 +73,31 @@ extern "C" ProtoHttpRefT* ProtoHttpCreate(s32 iBufSize)
     return 0;
 }
 
-extern "C" void ProtoHttpAbort(ProtoHttpRefT* pState)
+static void ProtoHttpClose(ProtoHttpRefT* pState, const char* pReason);
+
+static void ProtoHttpReset(ProtoHttpRefT* pState)
 {
-    if (ProtoSSLStat(pState->pSsl, 0x73746174, 0, 0) >= 0)
-    {
-        NetPrintfCode("protohttp: closing connection: %s\n", "abort");
-        ProtoSSLDisconnect(pState->pSsl);
-        pState->bCloseHdr = 0;
-    }
     memset(pState->strHdr, 0, sizeof(pState->strHdr));
     memset(pState->strRequestHdr, 0, sizeof(pState->strRequestHdr));
-    pState->eState = 0; pState->iHdrCode = -1;
-    pState->iHdrDate = pState->iBodySize = pState->iHeadSize = pState->iRecvSize = 0;
-    pState->iInpOff = pState->iChkLen = pState->iNumRedirect = 0;
+    pState->eState = 0;
+    pState->iHdrCode = -1;
+    pState->iHdrDate = 0;
+    pState->iBodySize = 0;
+    pState->iHeadSize = 0;
+    pState->iRecvSize = 0;
+    pState->iInpOff = 0;
+    pState->iChkLen = 0;
+    pState->iNumRedirect = 0;
     pState->pLocation = 0;
-    pState->bTimeout = pState->bChunked = pState->bHeadOnly = 0;
+    pState->bTimeout = 0;
+    pState->bChunked = 0;
+    pState->bHeadOnly = 0;
+}
+
+extern "C" void ProtoHttpAbort(ProtoHttpRefT* pState)
+{
+    ProtoHttpClose(pState, "abort");
+    ProtoHttpReset(pState);
 }
 
 extern "C" s32 ProtoHttpStatus(ProtoHttpRefT* pState, s32 iSelect, void* pBuffer, s32 iBufSize)
@@ -96,7 +106,14 @@ extern "C" s32 ProtoHttpStatus(ProtoHttpRefT* pState, s32 iSelect, void* pBuffer
     if (iSelect == 0x686f7374) { ds_strnzcpy(static_cast<char*>(pBuffer), pState->strHost, iBufSize); return 0; }
     if (iSelect == 0x72747874) { ds_strnzcpy(static_cast<char*>(pBuffer), pState->strRequestHdr, iBufSize); return 0; }
     if (iSelect == 0x646f6e65) return pState->eState == 7 ? -1 : pState->eState == 6;
-    if (iSelect == 0x64617461) return pState->eState == 7 ? -1 : (pState->eState == 5 || pState->eState == 6 ? pState->iInpLen : 0);
+    if (iSelect == 0x64617461)
+    {
+        if (pState->eState == 7)
+            return -1;
+        if (pState->eState == 5 || pState->eState == 6)
+            return pState->iInpLen;
+        return 0;
+    }
     if (iSelect == 0x636f6465) return pState->iHdrCode;
     if (iSelect == 0x74696d65) return pState->bTimeout;
     if (pState->eState == 7) return -1;
@@ -205,16 +222,6 @@ static void ProtoHttpClose(ProtoHttpRefT* pState, const char* pReason)
         ProtoSSLDisconnect(pState->pSsl);
         pState->bCloseHdr = 0;
     }
-}
-static void ProtoHttpReset(ProtoHttpRefT* pState)
-{
-    memset(pState->strHdr, 0, sizeof(pState->strHdr));
-    memset(pState->strRequestHdr, 0, sizeof(pState->strRequestHdr));
-    pState->eState = 0; pState->iHdrCode = -1;
-    pState->iHdrDate = pState->iBodySize = pState->iHeadSize = pState->iRecvSize = 0;
-    pState->iInpOff = pState->iChkLen = pState->iNumRedirect = 0;
-    pState->pLocation = 0;
-    pState->bTimeout = pState->bChunked = pState->bHeadOnly = 0;
 }
 static const char* ProtoHttpParseUrl(const char* pUrl, char* pKind, s32 iKindSize, char* pHost, s32 iHostSize, s32* pPort)
 {

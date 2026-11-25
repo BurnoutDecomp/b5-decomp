@@ -1,6 +1,6 @@
+#define CGS_RESOURCE_PTR_MATCH_ABSOLUTE_ASSERTS // ARTIST 0x822C9A48 references 0x8201AE48.
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
 #include "SharedClasses/Graphics/BrnGlobalColourPalette.h"   // complete BrnWorld::GlobalColourPalette
-
 // Per-instantiation TU for CgsResource::ResourcePtr<BrnWorld::GlobalColourPalette>.
 // The body is the generic inline accessor in CgsResourcePtr.h; this .cpp only forces
 // the out-of-line emission of the one symbol the X360 ARTIST build attested.

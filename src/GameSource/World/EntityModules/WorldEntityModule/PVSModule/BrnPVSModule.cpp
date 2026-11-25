@@ -1,3 +1,4 @@
+#define CGS_RESOURCE_PTR_MATCH_ABSOLUTE_ASSERTS // ARTIST 0x822C9F68 references 0x8201AE48.
 #include "GameSource/World/EntityModules/WorldEntityModule/PVSModule/BrnPVSModule.h"
 #define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Module/CgsModuleSingleBufferedTemplate.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
@@ -26,7 +27,6 @@
 // "lpOutputBuffer" BrnPVSModule.h:122/130/138). CGS_ASSERT supplies __FILE__/__LINE__
 // itself; the baked file/line are not reproduced.
 // ============================================================================
-
 namespace BrnWorld
 {
 f32 mfCentreZoneBaseScore         = 100.0f;

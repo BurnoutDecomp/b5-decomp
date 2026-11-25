@@ -73,6 +73,14 @@ namespace CgsSceneManager
     // The shared coarse-query result buffer the frustum queries drain into.
     template <u32 KU_MaxResults> struct CoarseQueryResultBuffer;
 
+    // DecFIGS CgsLooseOctree.h:90. Keep the public numeric classification.
+    enum IntersectionResult
+    {
+        E_INTERSECTIONRESULT_OUTSIDE = 0,
+        E_INTERSECTIONRESULT_INSIDE,
+        E_INTERSECTIONRESULT_PARTIAL
+    };
+
     // CgsLooseOctreeNode.h:37 (DWARF)
     static const u16 KU_INVALID_NODE = 0xFFFF;
 
@@ -371,8 +379,8 @@ namespace CgsSceneManager
         // The leaf accept loop over one node's entity chain. The console inlines it into
         // every walker that needs it; it is factored out here so the walkers read as one.
         void TestNodeEntities(u16 lu16FirstEntity, FrustumTestParams* lpParams);
-        u32  NodeInsideFrustum(const LooseOctreeNode* lpNode,
-                               const CgsGeometric::Frustum& lrFrustum) const;          // @0x828BDAC0
+        IntersectionResult NodeInsideFrustum(LooseOctreeNode* lpNode,
+                                              const CgsGeometric::Frustum* lpFrustum) const;          // @0x828BDAC0
         void PushCoarseResult(FrustumTestParams* lpParams, u16 lu16EntityIndex);
 
         // @0x828BB4A0 (an export hole; DWARF CgsLooseOctree.cpp:386) -- the static tree: link the node to its

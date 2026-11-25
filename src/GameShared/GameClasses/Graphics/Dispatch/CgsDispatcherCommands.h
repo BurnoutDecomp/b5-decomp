@@ -134,7 +134,7 @@ struct DrawRenderable : public DispatchCommand
     // technique and frustum enable. Words 2 and 3 point to the renderable and trailer.
     static bool AddToBin(const Renderable* lpRenderable, DispatchFrame* lpFrame,
                          bool lbMarkAllConstantsDirty, s8 li8OpaqueList, s8 li8TransparentList,
-                         u8 lu8FrustumEnable, u8 lu8Technique, bool lbZOnly,
+                         bool lbFrustumTest, u8 lu8Technique, bool lbZOnly,
                          u8 lu8PreZList, u8 lu8PreZTechnique,
                          s32 liInstanceCount, u8 lu8ExcludeMeshBits);
 

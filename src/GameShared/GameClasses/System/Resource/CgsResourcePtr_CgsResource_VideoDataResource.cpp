@@ -1,5 +1,5 @@
+#define CGS_RESOURCE_PTR_MATCH_ABSOLUTE_ASSERTS // ARTIST 0x824FBBF0 references 0x8201AE48.
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
-
 // Per-instantiation TU for CgsResource::ResourcePtr<CgsResource::VideoDataResource>
 // (ledger id: class:CgsResource::VideoDataResource>).
 //

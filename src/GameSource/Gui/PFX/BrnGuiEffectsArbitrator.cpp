@@ -1,3 +1,4 @@
+#define CGS_RESOURCE_PTR_MATCH_ABSOLUTE_ASSERTS // ARTIST 0x824FBF18 references 0x8201AE48.
 #include "GameSource/Gui/PFX/BrnGuiEffectsArbitrator.h"
 #include "GameSource/Gui/Events/BrnGuiPFXEvents.h"                    // the 495..501 events
 #include "GameSource/Gui/BrnGuiCache.h"                               // BrnGui::GuiCache::GetTime
@@ -29,7 +30,6 @@
 // The console's "is this blender active" test is inlined at every site as the loop over the
 // node faders' state words (`cmpwi 4`); it is PFXHookNodeBlender::IsActive here.
 // =============================================================================
-
 namespace BrnGui
 {
     namespace

@@ -1,6 +1,6 @@
+#define CGS_RESOURCE_PTR_MATCH_RELATIVE_ASSERTS // ARTIST 0x8277AE80 references 0x82007258.
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
 #include "SharedClasses/AI/AISectionsResourceType.h"   // BrnAI::AISectionsData
-
 // Per-instantiation TU for CgsResource::ResourcePtr<BrnAI::AISectionsData>.
 // Bodies are the generic inline accessors in CgsResourcePtr.h; this .cpp only forces
 // the out-of-line emission of the two non-const symbols the X360 ARTIST build attested.

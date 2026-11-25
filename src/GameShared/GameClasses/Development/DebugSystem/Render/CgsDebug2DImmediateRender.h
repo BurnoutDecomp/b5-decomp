@@ -55,7 +55,13 @@ namespace CgsDev
 
         Vector2 GetVirtualScreenSize() const
         {
-            return Vector2(mfVirtualScreenWidth, mfVirtualScreenHeight);
+            // DecFIGS cpp:1029 and header:241 record the zero vector and
+            // per-lane extent setters (ARTIST 82818838..82818870).
+            Vector2 lVector;
+            lVector.SetZero();
+            lVector.SetX(mfVirtualScreenWidth);
+            lVector.SetY(mfVirtualScreenHeight);
+            return lVector;
         }
 
         // True if the screen-space point lies within the virtual-screen rect

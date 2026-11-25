@@ -39,6 +39,19 @@ namespace vpu
         // vector2 operations return through (e.g. operator+ = Vector2(vaddfp(a, b))).
         Vector2(VectorIntrinsicInParam v) : mV(v) {}
         void SetZero() { mV = __vspltisw(0); }
+
+        // DecFIGS vector2_type_inline.h:175, 241 and 268. A scalar assignment
+        // keeps the other lanes of the existing vector.
+        void SetComponent(int liComponent, float lfValue)
+        {
+            detail::VectorIntrinsicUnion lValue;
+            lValue.vector = mV;
+            lValue.scalarFloat[liComponent] = lfValue;
+            mV = lValue.vector;
+        }
+
+        void SetX(float lfX) { SetComponent(0, lfX); }
+        void SetY(float lfY) { SetComponent(1, lfY); }
     };
 
     // ADDITIVE GROW (rw-physics solver group): the SDK quaternion -- one 16-byte lane

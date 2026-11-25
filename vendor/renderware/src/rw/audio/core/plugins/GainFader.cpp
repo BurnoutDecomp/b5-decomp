@@ -149,17 +149,20 @@ int GainFader::Event(int aiEventId, void *apParam)
 // is latched as the pending Request for the next Process to service. Both compares are
 // ordered (fcmpu + bne), so a NaN in either field takes the real-fade path.
 // -------------------------------------------------------------------------------------
+#if defined(_XBOX) && defined(_MSC_VER)
+// Both ARTIST branches share the request-flag store and return at 0x82B9DF78.
+#pragma optimize("s", on)
+#endif
 int GainFader::StartFadeHandler(Command *apCommand)
 {
     StartFadeCommand *lpCommand = static_cast<StartFadeCommand *>(apCommand);
     GainFader *lpSelf = static_cast<GainFader *>(lpCommand->pObject);
 
-    u8 lu8Unserviced;
-    if (lpCommand->startTime == KD_ZERO && lpCommand->fadeTime == KF_ZERO)
+    if (lpCommand->startTime == 0.0 && lpCommand->fadeTime == 0.0f)
     {
         lpSelf->mLastGain = lpCommand->endGain;      // stfs +0x64
         lpSelf->mFadeState = FADESTATE_FINISHED;     // stb  +0x69
-        lu8Unserviced = 0;
+        lpSelf->mUnservicedRequest = 0;
     }
     else
     {
@@ -167,14 +170,16 @@ int GainFader::StartFadeHandler(Command *apCommand)
         lpSelf->mLastRequest.fadeTime = lpCommand->fadeTime;   // stfs +0x38
         lpSelf->mLastRequest.endGain = lpCommand->endGain;     // stfs +0x3C
         lpSelf->mLastRequest.fadeType = lpCommand->fadeType;   // stw  +0x40
-        lu8Unserviced = 1;
+        lpSelf->mUnservicedRequest = 1;
     }
-    lpSelf->mUnservicedRequest = lu8Unserviced;      // stb +0x68 (both paths)
 
-    // The console `li r3, 0x20` is its own sizeof(StartFadeCommand); it MUST stay identical
-    // to the producer's advance above, so both sides use the HOST sizeof.
-    return static_cast<int>(sizeof(StartFadeCommand));
+    // The command consumer advances by the same record size as the producer.
+    return sizeof(*lpCommand);
 }
+
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // -------------------------------------------------------------------------------------
 // Process @0x82B97378 -- build this frame's per-sample gain vector and apply it.

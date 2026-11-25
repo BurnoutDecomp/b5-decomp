@@ -1,6 +1,6 @@
+#define CGS_RESOURCE_PTR_MATCH_RELATIVE_ASSERTS // ARTIST 0x82324F00 references 0x82007258.
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
 #include "SharedClasses/StreetData/BrnStreetDataResourceType.h"   // BrnStreetData::StreetData
-
 // Per-instantiation TU for CgsResource::ResourcePtr<BrnStreetData::StreetData>.
 // Bodies are the generic inline accessors in CgsResourcePtr.h; this .cpp only forces
 // the out-of-line emission of the three symbols the X360 ARTIST build attested.

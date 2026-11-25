@@ -203,7 +203,12 @@ struct ShaderConstantTable
 
     // CgsShaderConstants.h:618 / 621
     u8 GetNumDirtyConstants();
-    u16 GetNumQWForDirtyHeaders();
+    u16 GetNumQWForDirtyHeaders()
+    {
+        const u16 lu16HeaderBytes = static_cast<u16>(((mu8NumDirtyConstants + 4) & ~3)
+            + sizeof(Vector4*) * mu8NumDirtyConstants);
+        return static_cast<u16>((lu16HeaderBytes + 15) / 16);
+    }
 
     // CgsShaderConstants.h:625 - defined in this TU.
     void AddDirtyConstantsToDispatchBin(Vector4* lpBinHeaderSpace);
@@ -214,7 +219,12 @@ struct ShaderConstantTable
     // CgsShaderConstants.h:632 / 635 / 638
     void ClearDispatchThreadPointers();
     void ClearDirtyConstants();
-    void SetAllConstantsDirty();
+    void SetAllConstantsDirty()
+    {
+        for (u32 luIndex = 0; luIndex < mu8NumUsedConstants; ++luIndex)
+            mau8DirtyConstants[luIndex] = static_cast<u8>(luIndex);
+        mu8NumDirtyConstants = mu8NumUsedConstants;
+    }
 
     // CgsShaderConstants.h:667
     Vector4* UpdateShaderChangeTableAndGetConstantDestination(u32 luIndex);

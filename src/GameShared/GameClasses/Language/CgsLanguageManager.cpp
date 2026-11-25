@@ -897,9 +897,10 @@ namespace CgsLanguage
                       CGS_ARTIST_LANGUAGE_MANAGER_FILE, 1706);
 
         const s32 liTotalHundredths = rw::math::fpu::IntRound(lfTimeInSeconds * 100.0f);
-        const s32 liMinutes = liTotalHundredths / 6000;
-        const s32 liSeconds = (liTotalHundredths % 6000) / 100;
-        const s32 liHundredths = (liTotalHundredths % 6000) % 100;
+        const s32 liSecondsAndHundredths = liTotalHundredths % 6000;
+        const s32 liMinutes = (liTotalHundredths - liSecondsAndHundredths) / 6000;
+        const s32 liHundredths = liSecondsAndHundredths % 100;
+        const s32 liSeconds = (liSecondsAndHundredths - liHundredths) / 100;
 
         CgsUnicode::UnicodeBuffer lMinutes;
         lMinutes.Construct();
@@ -1215,9 +1216,10 @@ namespace CgsLanguage
                       CGS_ARTIST_LANGUAGE_MANAGER_FILE, 1617);
 
         const s32 liTotalSeconds = rw::math::fpu::IntRound(lfTimeInSeconds);
-        const s32 liHours = liTotalSeconds / 3600;
-        const s32 liMinutes = (liTotalSeconds % 3600) / 60;
-        const s32 liSeconds = (liTotalSeconds % 3600) % 60;
+        const s32 liMinutesAndSeconds = liTotalSeconds % 3600;
+        const s32 liHours = (liTotalSeconds - liMinutesAndSeconds) / 3600;
+        const s32 liSeconds = liMinutesAndSeconds % 60;
+        const s32 liMinutes = (liMinutesAndSeconds - liSeconds) / 60;
         FormatHoursAndMinutesAndSecondsString(lpUtf8Target, liHours, liMinutes, liSeconds, liTargetSize);
     }
 
