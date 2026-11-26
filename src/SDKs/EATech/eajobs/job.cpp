@@ -130,38 +130,16 @@ namespace Jobs
     // reconstructed here -- declared only to satisfy the header's DWARF surface.
     // (Reconstruct it if/when a ground-truth address surfaces; do not fabricate it.)
 
-    // @ 0x82BCA078 -- chain walker behind GetDependency: advance to the bucket node
-    // that owns iIndex. Each full overflow node holds the fixed capacity (10), so the
-    // X360 subtracts 10 per hop (NOT mSize) while iIndex is still >= the current
-    // node's mSize, then returns &node.mBucket[iIndex].
-    const Job::Dependency* Job::IndexDependencyChain(
-        const Detail::BucketListNode<Dependency, 10>* pNode, int iIndex)
-    {
-        while (iIndex >= static_cast<int>(pNode->mSize))
-        {
-            pNode  = pNode->mNext;
-            iIndex -= 10;
-        }
-        return &pNode->mBucket[iIndex];
-    }
-
     // @ 0x82BCA258 -- the i-th dependency's owning Job.
     Job* Job::GetDependency(int iIndex) const
     {
-        const Dependency* lpDependency;
-        if (iIndex >= static_cast<int>(mDependencies.mSize))
-            lpDependency = IndexDependencyChain(mDependencies.mNext, iIndex - 10);
-        else
-            lpDependency = &mDependencies.mBucket[iIndex];
-        return lpDependency->mJob; // lwz r3,0(r3) -- the Dependency's leading Job*
+        return mDependencies[iIndex].mJob;
     }
 
     // @ 0x82BCA2A0 -- the i-th dependent (back-pointer) Job.
     Job* Job::GetDependent(int iIndex) const
     {
-        if (iIndex >= static_cast<int>(mDependents.mSize))
-            return mDependents.mNext->operator[](iIndex - 6);
-        return mDependents.mBucket[iIndex];
+        return mDependents[iIndex];
     }
 
     int Job::GetNumDependencies() const

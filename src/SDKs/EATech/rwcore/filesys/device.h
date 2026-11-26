@@ -264,7 +264,7 @@ namespace rw
 
                 // @0x82BBF608 -- Open the driver; if external just mark running, else spin
                 // up the worker thread and block until it reports running.
-                int Start();
+                void Start();
 
                 // @0x82BBF6B0 -- enqueue lpOp in priority order (auto-Start if idle) and
                 // wake the worker.

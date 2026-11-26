@@ -196,11 +196,10 @@ namespace Thread
     // If pData points inside the static pool, release its busy slot. Otherwise it
     // was heap-allocated: CloseHandle its HANDLE (if any) and operator-delete it.
     // The static-slot path also CloseHandles a live HANDLE.
+    // Range test first, null only for a heap record (ARTIST 0x82B43DD8; EAThread's own
+    // FreeThreadDynamicData tests the static pool range first too).
     void FreeThreadDynamicData(EAThreadDynamicData* pData)
     {
-        if (!pData)
-            return;
-
         EAThreadDynamicData* const lpPoolBegin = &gThreadDynamicDataPool[0];
         EAThreadDynamicData* const lpPoolEnd    = &gThreadDynamicDataPool[KI_THREAD_DYNAMIC_DATA_COUNT];
 
@@ -214,7 +213,7 @@ namespace Thread
             if (lhThread)
                 CloseHandle(lhThread);
         }
-        else
+        else if (pData)
         {
             // Heap record.
             HANDLE lhThread = pData->mhThread;

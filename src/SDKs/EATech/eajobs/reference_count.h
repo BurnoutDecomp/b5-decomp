@@ -15,6 +15,8 @@
 //
 // Vendor EA code reconstructed in its canonical home.
 
+#include "SDKs/EATech/eathread/eathread_atomic.h"
+
 namespace EA
 {
 namespace Jobs
@@ -32,7 +34,10 @@ namespace Detail
         // return true.
         bool Decrement();
 
-        s32 mCount; // +0x0 -- `this` points straight at this word in the asm.
+        // +0x0 -- `this` points straight at this word in the asm. An EAThread unsigned
+        // atomic: the guards compare unsigned (Decrement `cmplwi r11,1; bgt` 0x82BCA5C4) and
+        // the CAS result is checked with cmplw (0x82BCA558), as AtomicInt::SetValueConditional.
+        EA::Thread::AtomicUint32 mCount;
     };
 }
 }

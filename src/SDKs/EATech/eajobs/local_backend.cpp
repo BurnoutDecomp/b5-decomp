@@ -909,7 +909,7 @@ namespace LocalBackend
                     // Sleep-on jobs: the asm @0x82BCB868 CAS's the refcount word (this+0x270):
                     // if the old count == 1 it stores 0 and PROCEEDS to reclaim (no outstanding
                     // sleeper); otherwise (count != 1) it republishes the captured word and SKIPS
-                    // reclaim. mCount is the s32 ReferenceCount word; CAS 1->0 mirrors the binary.
+                    // reclaim. mCount is the ReferenceCount's atomic word; CAS 1->0 mirrors the binary.
                     bool lbReclaim = true;
                     if (lpInstance->mParameters.mAllowSleepOn)
                     {

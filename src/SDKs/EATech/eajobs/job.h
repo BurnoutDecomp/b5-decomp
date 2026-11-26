@@ -134,15 +134,6 @@ namespace Jobs
         const EntryPoint& GetEntryPoint() const { return mEntryPoint; }
         EntryPoint&       GetEntryPoint()       { return mEntryPoint; }
 
-    private:
-        // job.h -- chain walker behind GetDependency: advance to the bucket node that
-        // owns iIndex (fixed capacity-10 hops, matching the X360 helper @ 0x82BCA078),
-        // returning that node's slot. Static so it can recurse over a raw node pointer.
-        static const Dependency* IndexDependencyChain(
-            const Detail::BucketListNode<Dependency, 10>* pNode, int iIndex);
-
-    public:
-
         // Object layout. The +0x.. offsets below are the X360 object offsets proven by
         // the Clear/ctor/dtor/SubmitEventsAndDeps asm; the reconstruction models every
         // member BY NAME (no raw-offset reads). NOTE: the X360 had 4-byte pointers, so on

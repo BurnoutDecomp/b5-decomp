@@ -118,9 +118,11 @@ namespace rw
             // with the Manager's thread parameters and global user-wrapper, then block
             // (1ms sleeps) until the worker sets mbThreadRunning.
             // -----------------------------------------------------------------------------
-            int Device::Start()
+            // void: ARTIST keeps neither the driver's Init result nor a status (no r3 at the
+            // returns, 0x82BBF648 / 0x82BBF694); the caller ignores it.
+            void Device::Start()
             {
-                int liResult = mpDriver->Init();   // (*(driver+4))(driver)
+                mpDriver->Init();   // (*(driver+4))(driver)
 
                 if (mbExternalThread)
                 {
@@ -128,8 +130,9 @@ namespace rw
                 }
                 else
                 {
-                    // v3 = off_8327F078 (Manager*); v4 = sub_82B42D88() (the global runnable
-                    // user-wrapper). Begin(thread, ThreadEntry, this, &mgr->params, wrapper).
+                    // Begin(thread, ThreadEntry, this, &mgr->params, wrapper), then wait in 1 ms
+                    // sleeps for the worker to report. ARTIST reads the manager (r30, 0x82BBF650)
+                    // before it calls the wrapper getter sub_82B42D88.
                     EA::Thread::ThreadParameters* lpParams = &gpFileSysManager->mThreadParameters;
                     EA::Thread::RunnableFunctionUserWrapper lpWrapper =
                         EA::Thread::Thread::GetGlobalRunnableFunctionUserWrapper();  // sub_82B42D88
@@ -137,13 +140,11 @@ namespace rw
                     mThread.Begin(&Device::ThreadEntry, this, lpParams, lpWrapper);
 
                     while (!mbThreadRunning)
-                        { const u32 luSleepMilliseconds = 1; EA::Thread::ThreadSleep(&luSleepMilliseconds); }
-                    // result is the last ThreadSleep return in the asm; the function value is
-                    // unused by every caller (InsertOp/Handle::Handle ignore it).
-                    liResult = 0;
+                    {
+                        const u32 luSleepMilliseconds = 1;
+                        EA::Thread::ThreadSleep(&luSleepMilliseconds);
+                    }
                 }
-
-                return liResult;
             }
 
             // -----------------------------------------------------------------------------

@@ -40,32 +40,25 @@ namespace Detail
     // @ 0x82BCA520
     bool ReferenceCount::Increment()
     {
-        volatile long* lpCount = reinterpret_cast<volatile long*>(&mCount);
-        for (;;)
+        uint32_t nValue;
+        while ((nValue = mCount.GetValue()) != 0)
         {
-            long lOld = *lpCount;
-            if (lOld == 0)
-                return false; // dead object -- refuse to revive.
-            long lObserved = _InterlockedCompareExchange(lpCount, lOld + 1, lOld);
-            if (lObserved == lOld)
-                return true;  // CAS held -> incremented.
-            // otherwise the reservation was lost; re-read and retry.
+            if (mCount.SetValueConditional(nValue + 1, nValue))
+                return true;
         }
+        return false; // dead object -- refuse to revive.
     }
 
     // @ 0x82BCA580
     bool ReferenceCount::Decrement()
     {
-        volatile long* lpCount = reinterpret_cast<volatile long*>(&mCount);
-        for (;;)
+        uint32_t nValue;
+        while ((nValue = mCount.GetValue()) > 1)
         {
-            long lOld = *lpCount;
-            if (lOld <= 1)
-                return false; // at the floor -- never drop to/through 0 here.
-            long lObserved = _InterlockedCompareExchange(lpCount, lOld - 1, lOld);
-            if (lObserved == lOld)
-                return true;  // CAS held -> decremented.
+            if (mCount.SetValueConditional(nValue - 1, nValue))
+                return true;
         }
+        return false; // at the floor -- never drop to/through 0 here.
     }
 }
 }

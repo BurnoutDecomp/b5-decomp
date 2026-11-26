@@ -79,13 +79,12 @@ namespace Detail
         }
     }
 
+    // ListSize @ 0x82BCA030 / 0x82BCA0A0: this node's count plus the chain's, by recursion
+    // (ARTIST calls itself on mNext, then adds mSize).
     template <typename T, int N>
     u32 BucketListNode<T, N>::ListSize() const
     {
-        u32 luTotal = 0;
-        for (const BucketListNode* lpNode = this; lpNode; lpNode = lpNode->mNext)
-            luTotal += lpNode->mSize;
-        return luTotal;
+        return mSize + (mNext ? mNext->ListSize() : 0);
     }
 
     // Add @ 0x82BCADD0. Walk to the tail node that still has room (mSize < N),
@@ -125,17 +124,15 @@ namespace Detail
         ++lpNode->mSize;
     }
 
+    // operator[] @ 0x82BCA078 (<Dependency,10>) / 0x82BCA0E8 (<Job*,6>): the tail call on
+    // the next node with the index less N becomes ARTIST's loop (`addi r4,r4,-N`, no null
+    // test); the first level is inlined into Job::GetDependency / GetDependent.
     template <typename T, int N>
     const T& BucketListNode<T, N>::operator[](int iIndex) const
     {
-        const BucketListNode* lpNode = this;
-        int liIndex = iIndex;
-        while (liIndex >= (int)lpNode->mSize && lpNode->mNext)
-        {
-            liIndex -= (int)lpNode->mSize;
-            lpNode = lpNode->mNext;
-        }
-        return lpNode->mBucket[liIndex];
+        if (iIndex < (int)mSize)
+            return mBucket[iIndex];
+        return (*mNext)[iIndex - N];
     }
 
     // Explicit instantiations -- the (T,N) the X360 .XEX emits for this group.
