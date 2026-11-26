@@ -103,17 +103,13 @@ namespace Jobs
         mInitialized   = true;
     }
 
-    // @ 0x82BC9AF0 -- destroy the LOCAL backend. The asm reads mSchedulers[0] and, if
-    // non-null, dispatches its vtable slot +0x00 with the delete flag (1) -- the MSVC
-    // vector-deleting-destructor thunk, which runs ~LocalBackend and frees the storage
-    // through the Jobs allocator. Then clears mSchedulers[0] and mInitialized.
+    // @ 0x82BC9AF0 -- destroy the LOCAL backend: `delete` through the polymorphic pointer
+    // (ARTIST null-tests it and calls vtable slot +0x00 with the delete flag 1, the deleting
+    // destructor 0x82BCC420, which frees through LocalBackend's class operator delete).
+    // Then clears mSchedulers[0] and mInitialized.
     void JobScheduler::Destroy()
     {
-        LocalBackend::LocalBackend* lpBackend = static_cast<LocalBackend::LocalBackend*>(mSchedulers[0]);
-        if (lpBackend)
-        {
-            LocalBackend::LocalBackend_VectorDeletingDestructor(lpBackend, 1);
-        }
+        delete mSchedulers[0];
         mSchedulers[0] = 0;
         mInitialized   = false;
     }

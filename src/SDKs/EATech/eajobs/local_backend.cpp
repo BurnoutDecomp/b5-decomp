@@ -401,15 +401,13 @@ namespace LocalBackend
         // Final forced garbage-collection pass.
         TryToRunJobInstanceGarbageCollector(1);
 
-        EA::Jobs::Allocator* lpAllocator = EA::Jobs::GetAllocator();
-
         // Free the instance table (array vector-deleting dtor, flags 3 == array + free).
         if (mpJobInstances)
             JobInstance_VectorDeletingDestructor(mpJobInstances, 3);
 
-        // Free the priority queue.
+        // Free the priority queue (the allocator is read at the call, 0x82BCBFC8).
         if (mpPriorityQueue)
-            lpAllocator->Free(mpPriorityQueue, 0);
+            EA::Jobs::GetAllocator()->Free(mpPriorityQueue, 0);
 
         // Destruct the 32 worker threads (reverse order, matching the X360 walk).
         // The typed worker array destructs once through normal C++ lifetime.
@@ -858,8 +856,7 @@ namespace LocalBackend
     // The trailing EntryPoint is default-constructed, then assigned on harvest.
 
     // @ 0x82BCB718 -- TryToRunJobInstanceGarbageCollector.
-    void LocalBackend::TryToRunJobInstanceGarbageCollector(int bForce, int iClearArg2,
-                                                           int iClearArg3)
+    void LocalBackend::TryToRunJobInstanceGarbageCollector(int bForce)
     {
         // The rolling collection window: min(32, mNumSlots).
         s32 liWindow = (mNumSlots < KI_NUM_THREADS) ? mNumSlots : KI_NUM_THREADS;
@@ -992,20 +989,15 @@ namespace LocalBackend
             mpProfilingCallback(laRecords, liRecCount, mpProfilingContext);
         }
 
-        (void)iClearArg2;
-        (void)iClearArg3;
     }
 
-    // @ 0x82BCC420 -- LocalBackend `vector deleting destructor' thunk.
-    LocalBackend* LocalBackend_VectorDeletingDestructor(LocalBackend* pThis, char cFlags)
+    // Class operator delete (the deleting destructor 0x82BCC420 inlines it).
+    void LocalBackend::operator delete(void* p)
     {
-        pThis->~LocalBackend();
-        if ((cFlags & 1) != 0 && pThis != 0)
+        if (p)
         {
-            EA::Jobs::Allocator* lpAllocator = EA::Jobs::GetAllocator();
-            lpAllocator->Free(pThis, 0);
+            EA::Jobs::GetAllocator()->Free(p, 0);
         }
-        return pThis;
     }
 }
 }

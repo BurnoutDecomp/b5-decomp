@@ -77,15 +77,14 @@ AptValue* AptObject::objectMemberLookup(AptValue* const /*pThis*/,
 #pragma optimize("", on)
 #endif
 
-// ~AptObject @0x82AF00D0 -- the GC teardown for a property-bearing object: if the
-// hash has allocated a bucket table (mHash.mpTable != null, i.e. !IsEmpty()),
-// release every GC reference it holds. The two raw vtable writes in the asm
+// ~AptObject @0x82AF00D0 -- nothing of its own: the hash teardown (mHash.mpTable != null
+// -> DestroyGCPointers) is the base AptValueWithHash's. The two raw vtable writes in the asm
 // (off_821459D8 then off_82145594) are the during-/post-destruction vtable resets
 // the compiler emits automatically for a virtual dtor; they need no source line.
 AptObject::~AptObject()
 {
-    if (mHash.mpTable != 0)   // r3+4 = mHash.mpTable; !IsEmpty()
-        mHash.DestroyGCPointers();
+    // Empty: ARTIST 0x82AF00D0 only restamps the vtables; the single DestroyGCPointers
+    // (0x82AF0100) is the base AptValueWithHash's hash teardown.
 }
 
 // SetImplementedObjects @0x82AF5868 -- record the implements-set: store the

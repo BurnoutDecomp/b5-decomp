@@ -246,6 +246,11 @@ namespace LocalBackend
         // and the priority queue, destruct the worker threads, restore the base vtable.
         virtual ~LocalBackend();
 
+        // The deleting destructor 0x82BCC420 frees through the Jobs allocator, null-testing the
+        // pointer after the delete-flag test (0x82BCC448): the EA::Jobs class operator delete,
+        // as JobScheduler and Job declare it (DWARF job_scheduler.h:40 / job.h:38).
+        static void operator delete(void* p);
+
         // -- Detail::SchedulerBackend overrides (vtable +0x28/+0x30/+0x34/+0x38/+0x3C) --
 
         // @ 0x82BCC010 (vtable +0x28) AddNotReady: claim a free queue slot for
@@ -343,9 +348,9 @@ namespace LocalBackend
         // instance table, reclaim every free/done slot (Clear + republish the queue word
         // as -1), harvest profiling metrics into the callback if installed, and advance
         // the GC cursor. bForce (== 1) collects unconditionally without the rolling
-        // window. The other two ints are forwarded verbatim to JobInstance::Clear.
-        void TryToRunJobInstanceGarbageCollector(int bForce, int iClearArg2 = 0,
-                                                 int iClearArg3 = 0);
+        // window. One parameter: both ARTIST callers pass only r4 (~LocalBackend
+        // 0x82BCBF94, AddNotReady 0x82BCC140) and the prologue keeps only r4 (0x82BCB728).
+        void TryToRunJobInstanceGarbageCollector(int bForce);
 
         // +0x000 inherited Detail::SchedulerBackend vtable
         JobInstance*              mpJobInstances;            // +0x004
@@ -365,10 +370,6 @@ namespace LocalBackend
         LocalBackend& operator=(const LocalBackend&);
     };
 
-    // @ 0x82BCC420 -- MSVC `vector deleting destructor' thunk for LocalBackend (no
-    // portable C++ spelling; materialised as a free function). Runs ~LocalBackend, then
-    // (delete bit set + non-null) frees the storage via the Jobs allocator's Free virtual.
-    LocalBackend* LocalBackend_VectorDeletingDestructor(LocalBackend* pThis, char cFlags);
 }
 }
 }

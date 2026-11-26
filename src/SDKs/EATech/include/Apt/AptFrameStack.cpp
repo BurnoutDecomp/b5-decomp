@@ -78,9 +78,17 @@ AptFrameStack::AptFrameStack(AptFrameStack* pEnclosingScope, int nHashSize)
 // The enclosing-scope reference is released only by the GC path (DestroyGCPointers),
 // matching the asm (the dtor does not touch mpEnclosingScope).
 // ---------------------------------------------------------------------------
+#if defined(_XBOX) && defined(_MSC_VER)
+// ARTIST compiles this destructor at full optimisation (cr6 test, ~AptValueWithHash
+// inlined), like ~AptObject; the rest of the file keeps the size form.
+#pragma optimize("", on)
+#endif
 AptFrameStack::~AptFrameStack()
 {
 }
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 
 // ---------------------------------------------------------------------------
 // DestroyGCPointers @0x82AF0438 -- release the enclosing-scope reference, then

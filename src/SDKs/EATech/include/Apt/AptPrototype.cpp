@@ -72,9 +72,17 @@ AptPrototype::AptPrototype()
 // super-constructor reference is released on the GC path (DestroyGCPointers), not
 // here -- matching the asm, which never touches +0x1C in the destructor.
 // ---------------------------------------------------------------------------
+#if defined(_XBOX) && defined(_MSC_VER)
+// ARTIST compiles this destructor at full optimisation (cr6 test, ~AptValueWithHash
+// inlined), like ~AptObject; the rest of the file keeps the size form.
+#pragma optimize("", on)
+#endif
 AptPrototype::~AptPrototype()
 {
 }
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 
 // ---------------------------------------------------------------------------
 // SetSuperConstructor @ 0x82AD6418
