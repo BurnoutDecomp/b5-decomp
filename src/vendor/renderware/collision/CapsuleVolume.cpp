@@ -250,25 +250,26 @@ RwBool CapsuleVolume::GetMaximumFeature(RwBool /*abCcw*/, const Vector3& /*arDir
 //
 // Two paths (asm-attested; there is NO tight/loose split -- r5 is dead):
 //   1. lpTransform == NULL: axis = maFrame[2], centre = maFrame[3] (local).
-//   2. lpTransform != NULL: the oriented axis (maFrame[2]) is rotated by the
-//      transform's 3x3 (axis = m2.x*row0 + m2.y*row1 + m2.z*row2) and the
-//      centre (maFrame[3]) is transformed as a point (centre = m3.x*row0 +
-//      m3.y*row1 + m3.z*row2 + row3).
+//   2. lpTransform != NULL: the volume's frame times the transform, rwmath's
+//      Mult(Matrix44Affine, Matrix44Affine): its splat-first multiplies are
+//      ARTIST's (0x82BAFA08 vmulfp128 sp2*bx, 0x82BAFA10 vmaddfp sp3*bx + w);
+//      only the zAxis (axis) and wAxis (centre) rows are used, the other two
+//      are dead code. TransformVector/TransformPoint multiply row-first and
+//      cannot produce this order.
 // Both paths: extent[i] = |axis[i]| * mfHalfHeight + mfRadius,
 //             min = centre - extent, max = centre + extent; returns 1.
 // ---------------------------------------------------------------------------
 RwBool CapsuleVolume::GetBBox(const Matrix44Affine* lpTransform, RwBool /*abTight*/, AABBox& arResult) const
 {
     using math::vpu::Abs;
-    using math::vpu::TransformPoint;
-    using math::vpu::TransformVector;
     using math::vpu::VecFloat;
     Vector3 axis;
     Vector3 centre;
     if (lpTransform)
     {
-        axis = TransformVector(mTransform.zAxis, *lpTransform);
-        centre = TransformPoint(mTransform.wAxis, *lpTransform);
+        const Matrix44Affine lTransform = math::vpu::Mult(mTransform, *lpTransform);
+        axis = lTransform.zAxis;
+        centre = lTransform.wAxis;
     }
     else
     {

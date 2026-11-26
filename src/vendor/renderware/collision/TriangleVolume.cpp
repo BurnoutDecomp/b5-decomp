@@ -6,6 +6,7 @@
 #endif
 #include "vendor/renderware/collision/TriangleVolume.hpp"
 #include "rw/rwcore_structs.h"
+#include "rw/math/vpu/matrix44affine_operation.h"   // TransformPoint
 #include <cfloat>
 
 #include <cmath>
@@ -243,20 +244,13 @@ void TriangleVolume::GetNormal(Vector3& arNormal, const Matrix44Affine* lpTransf
 // lpTransform == NULL: copy the local vertices straight through.
 // lpTransform != NULL: affine-transform each vertex by the four rows.
 // ---------------------------------------------------------------------------
-static __vector4 TriangleTransformPoint(__vector4 point, const Matrix44Affine& transform)
-{
-    __vector4 result = __vmaddfp(transform.xAxis.mV, __vspltw(point, 0), transform.wAxis.mV);
-    result = __vmaddfp(transform.yAxis.mV, __vspltw(point, 1), result);
-    return __vmaddfp(transform.zAxis.mV, __vspltw(point, 2), result);
-}
-
 void TriangleVolume::GetPoints(Vector3& arP0, Vector3& arP1, Vector3& arP2, const Matrix44Affine* lpTransform) const
 {
     if (lpTransform)
     {
-        arP0.mV = TriangleTransformPoint(mTransform.xAxis.mV, *lpTransform);
-        arP1.mV = TriangleTransformPoint(mTransform.yAxis.mV, *lpTransform);
-        arP2.mV = TriangleTransformPoint(mTransform.zAxis.mV, *lpTransform);
+        arP0 = math::vpu::TransformPoint(mTransform.xAxis, *lpTransform);
+        arP1 = math::vpu::TransformPoint(mTransform.yAxis, *lpTransform);
+        arP2 = math::vpu::TransformPoint(mTransform.zAxis, *lpTransform);
     }
     else
     {
@@ -280,9 +274,9 @@ RwBool TriangleVolume::GetBBox(const Matrix44Affine* lpTransform, RwBool /*abTig
     __vector4 p2 = mTransform.zAxis.mV;
     if (lpTransform)
     {
-        p0 = TriangleTransformPoint(p0, *lpTransform);
-        p1 = TriangleTransformPoint(p1, *lpTransform);
-        p2 = TriangleTransformPoint(p2, *lpTransform);
+        p0 = math::vpu::TransformPoint(mTransform.xAxis, *lpTransform).mV;
+        p1 = math::vpu::TransformPoint(mTransform.yAxis, *lpTransform).mV;
+        p2 = math::vpu::TransformPoint(mTransform.zAxis, *lpTransform).mV;
     }
     const __vector4 low = __vminfp(p0, __vminfp(p1, p2));
     const __vector4 high = __vmaxfp(p0, __vmaxfp(p1, p2));

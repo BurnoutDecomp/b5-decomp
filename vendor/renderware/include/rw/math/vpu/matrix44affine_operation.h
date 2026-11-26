@@ -122,56 +122,99 @@ namespace vpu
         return lvResult;
     }
 
-    // DecFIGS matrix44affine_operation_platform_inline.h:17,20 specifies
-    // Vector3 first. The ARTIST kernels keep the full fused vector rows.
-    // Splat first: rw::collision::CapsuleVolume::GetBBox 0x82BAFA08..0x82BAFA24 is exact only so.
-    // OPEN (msgs/sdk-r6-rwmath-transform.txt): ARTIST's game code inlines the ROW-first order of
-    // the SDK's PPU body (Brn3DUserSpaceEffectControl::AttachEmitterPosition 0x82696C08
-    // `vmaddfp v0,v0(row),v13,v6(xSplat)`), so the rwcollision library and the game appear to
-    // have been built against different rwmath bodies.
-    inline Vector3 TransformVector(Vector3::InParam vector, Matrix44Affine::InParam matrix)
+    // rwmath 1.02.00 TransformVector / TransformPoint (DecFIGS matrix44affine_operation_platform_inline.h
+    // :32 / :48, the lines of rwmath 1.02.00's PPU header): the three splats, then the matrix ROW first in
+    // every multiply, `vmaddfp(matrix.xAxis, xSplat, ...)`. ARTIST: Brn3DUserSpaceEffectControl::
+    // AttachEmitterPosition 0x82696C08 (row * xSplat + T3) and rw::collision::TriangleVolume::GetPoints
+    // 0x82BB1230 (exact only row-first). The PPU's first TransformVector step multiplies-adds against
+    // vspltisw 0; the Xenon body multiplies (the XDK does not fold vmaddfp(a, b, +0)).
+    // The splat-first order seen in rw::collision's GetBBox functions is Mult(Matrix44Affine,
+    // Matrix44Affine) below, not a second TransformPoint (CapsuleVolume::GetBBox 0x82BAF9C8).
+    inline Vector3 TransformVector(Vector3::InParam vec, Matrix44Affine::InParam matrix)
     {
-        const VectorIntrinsic x = __vspltw(vector.mV, 0);
-        const VectorIntrinsic y = __vspltw(vector.mV, 1);
-        const VectorIntrinsic z = __vspltw(vector.mV, 2);
-        VectorIntrinsic result = __vmulfp(x, matrix.xAxis.mV);
-        result = __vmaddfp(y, matrix.yAxis.mV, result);
-        return Vector3(__vmaddfp(z, matrix.zAxis.mV, result));
+        const VectorIntrinsic tmp = vec.mV;
+        const VectorIntrinsic xSplat = __vspltw(tmp, 0);
+        const VectorIntrinsic ySplat = __vspltw(tmp, 1);
+        const VectorIntrinsic zSplat = __vspltw(tmp, 2);
+        VectorIntrinsic result = __vmulfp(matrix.xAxis.mV, xSplat);
+        result = __vmaddfp(matrix.yAxis.mV, ySplat, result);
+        result = __vmaddfp(matrix.zAxis.mV, zSplat, result);
+        return Vector3(result);
     }
 
-    inline Vector3 TransformPoint(Vector3::InParam point, Matrix44Affine::InParam matrix)
+    inline Vector3 TransformPoint(Vector3::InParam pt, Matrix44Affine::InParam matrix)
     {
-        const VectorIntrinsic x = __vspltw(point.mV, 0);
-        const VectorIntrinsic y = __vspltw(point.mV, 1);
-        const VectorIntrinsic z = __vspltw(point.mV, 2);
-        VectorIntrinsic result = __vmaddfp(x, matrix.xAxis.mV, matrix.wAxis.mV);
-        result = __vmaddfp(y, matrix.yAxis.mV, result);
-        return Vector3(__vmaddfp(z, matrix.zAxis.mV, result));
+        const VectorIntrinsic tmp = pt.mV;
+        const VectorIntrinsic xSplat = __vspltw(tmp, 0);
+        const VectorIntrinsic ySplat = __vspltw(tmp, 1);
+        const VectorIntrinsic zSplat = __vspltw(tmp, 2);
+        VectorIntrinsic result = __vmaddfp(matrix.xAxis.mV, xSplat, matrix.wAxis.mV);
+        result = __vmaddfp(matrix.yAxis.mV, ySplat, result);
+        result = __vmaddfp(matrix.zAxis.mV, zSplat, result);
+        return Vector3(result);
     }
 
     // -- composition --------------------------------------------------------------------
 
-    // Mult(m, b) / operator*(m, b): the affine matrix product `m * b` (row-major). Each
-    // output row i is m.row_i transformed by b: the rotation rows are
-    //   out.row_i = m.row_i.x * b.xAxis + m.row_i.y * b.yAxis + m.row_i.z * b.zAxis
-    // and the translation row additionally adds b.wAxis (m.wAxis is a point, so its w==1
-    // contribution is the +b.wAxis term). X360 shape (matrix44affine_operation_platform_inline.h
-    // :84-90): the source rows are vspltw128-broadcast component-by-component (sp0..sp3) and
-    // accumulated with a vmaddfp cascade over the loaded b rows (ma0..ma3 / bx/by/bz), the
-    // translation row seeded with b.wAxis (the `zero`/w handling). Per-lane f32 math gives exact
-    // semantic parity with that broadcast+FMA accumulation.
-    inline Matrix44Affine Mult(const Matrix44Affine& lrLhs, const Matrix44Affine& lrRhs)
+    // Mult(m, b): the affine matrix product `m * b` (row-major), rwmath 1.02.00's body (DecFIGS
+    // matrix44affine_operation_platform_inline.h:82, `Matrix44Affine Mult(Matrix44Affine,
+    // Matrix44Affine)`): each element of m's rows is splatted (sp0..sp3) and multiplies b's rows
+    // SPLAT FIRST, `vmaddfp(sp0, bx, zero)` .. `vmaddfp(sp3, bx, b.wAxis)`, accumulated over by and
+    // bz. Xenon multiplies where the PPU adds zero (the XDK does not fold vmaddfp(a, b, +0)):
+    // ARTIST rw::collision::CapsuleVolume::GetBBox 0x82BAFA08 `vmulfp128 v8(sp2), v12(bx)`, then
+    // 0x82BAFA10 `vmaddfp sp3 * bx + b.wAxis`; the rows the caller drops are dead code there.
+    // The SDK declares it `inline __attribute__ ((always_inline))` (LegacySrc rwmath 1.02.00
+    // ps3/ppu/matrix44affine_operation_platform_inline.h), the GCC spelling of a forced inline, as
+    // for IsValid(Matrix44Affine) below; ARTIST inlines it into the /Os rwcollision GetBBox.
+    // operator*(a, b) is Mult(a, b) (matrix44affine_operation_inline.h).
+    __forceinline Matrix44Affine Mult(Matrix44Affine::InParam m, Matrix44Affine::InParam b)
     {
-        Matrix44Affine lResult;
-        lResult.xAxis = TransformVector(lrRhs, lrLhs.xAxis);
-        lResult.yAxis = TransformVector(lrRhs, lrLhs.yAxis);
-        lResult.zAxis = TransformVector(lrRhs, lrLhs.zAxis);
-        lResult.wAxis = TransformPoint(lrRhs, lrLhs.wAxis);
-        return lResult;
+        VectorIntrinsic sp0, sp1, sp2, sp3;
+        VectorIntrinsic ma0, ma1, ma2, ma3;
+        VectorIntrinsic bx = b.xAxis.mV;
+        VectorIntrinsic by = b.yAxis.mV;
+        VectorIntrinsic bz = b.zAxis.mV;
+
+        sp0 = __vspltw(m.xAxis.mV, 0);
+        sp1 = __vspltw(m.yAxis.mV, 0);
+        sp2 = __vspltw(m.zAxis.mV, 0);
+        sp3 = __vspltw(m.wAxis.mV, 0);
+
+        ma0 = __vmulfp(sp0, bx);
+        ma1 = __vmulfp(sp1, bx);
+        ma2 = __vmulfp(sp2, bx);
+        ma3 = __vmaddfp(sp3, bx, b.wAxis.mV);
+
+        sp0 = __vspltw(m.xAxis.mV, 1);
+        sp1 = __vspltw(m.yAxis.mV, 1);
+        sp2 = __vspltw(m.zAxis.mV, 1);
+        sp3 = __vspltw(m.wAxis.mV, 1);
+
+        ma0 = __vmaddfp(sp0, by, ma0);
+        ma1 = __vmaddfp(sp1, by, ma1);
+        ma2 = __vmaddfp(sp2, by, ma2);
+        ma3 = __vmaddfp(sp3, by, ma3);
+
+        sp0 = __vspltw(m.xAxis.mV, 2);
+        sp1 = __vspltw(m.yAxis.mV, 2);
+        sp2 = __vspltw(m.zAxis.mV, 2);
+        sp3 = __vspltw(m.wAxis.mV, 2);
+
+        sp0 = __vmaddfp(sp0, bz, ma0);
+        sp1 = __vmaddfp(sp1, bz, ma1);
+        sp2 = __vmaddfp(sp2, bz, ma2);
+        sp3 = __vmaddfp(sp3, bz, ma3);
+
+        return Matrix44Affine(
+            Vector3(sp0),
+            Vector3(sp1),
+            Vector3(sp2),
+            Vector3(sp3)
+            );
     }
-    inline Matrix44Affine operator*(const Matrix44Affine& lrLhs, const Matrix44Affine& lrRhs)
+    inline Matrix44Affine operator*(Matrix44Affine::InParam a, Matrix44Affine::InParam b)
     {
-        return Mult(lrLhs, lrRhs);
+        return Mult(a, b);
     }
 
     // -- elementary rotation builders ----------------------------------------------------
