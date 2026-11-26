@@ -78,14 +78,15 @@
 
 namespace BrnReplays
 {
-    const PropLoadedZoneRecord* PropSerialiserFrame::GetZone(s32 liZoneId) const
+    PropLoadedZoneRecord* PropSerialiserFrame::GetZone(s32 liZoneId)
     {
-        for (u8 lu8Index = 0; lu8Index < maLoadedZones.muLength; ++lu8Index)
+        // ARTIST 0x822BBBDC..0x822BBC18: an int index narrowed to the u8 accessor argument, the
+        // count byte re-read each pass, and the checked accessor called again for the hit.
+        for (s32 liIndex = 0; liIndex < maLoadedZones.muLength; ++liIndex)
         {
-            const PropLoadedZoneRecord& lrRecord = maLoadedZones[lu8Index];
-            if (lrRecord.miZoneId == liZoneId)
+            if (maLoadedZones[liIndex].miZoneId == liZoneId)
             {
-                return &lrRecord;
+                return &maLoadedZones[liIndex];
             }
         }
 
@@ -99,7 +100,7 @@ namespace BrnReplays
     // (spurious) ODR duplicate, because it keys on (class, leaf) with no arity or cv.
     // Behaviour is unchanged: the forwarder is the same two lines, now inline.
 
-    bool PropSerialiserFrame::WasPropPreviouslyHit(s32 liZoneId, u32 luPropIndex) const
+    bool PropSerialiserFrame::WasPropPreviouslyHit(s32 liZoneId, u32 luPropIndex)
     {
         const PropLoadedZoneRecord* lpZone = GetZone(liZoneId);
         if (lpZone == 0)
@@ -147,12 +148,13 @@ namespace BrnReplays
     // 168-byte copy).
     void PropSerialiserFrame::RemoveLoadedZone(s32 liZoneId)
     {
-        for (u8 lu8Index = 0; lu8Index < maLoadedZones.muLength; ++lu8Index)
+        // Same search as GetZone (ARTIST 0x822BBB34..58: int index, count re-read per pass).
+        for (s32 liIndex = 0; liIndex < maLoadedZones.muLength; ++liIndex)
         {
-            if (maLoadedZones[lu8Index].miZoneId == liZoneId)
+            if (maLoadedZones[liIndex].miZoneId == liZoneId)
             {
                 --maLoadedZones.muLength;
-                maLoadedZones.maElements[lu8Index] =
+                maLoadedZones.maElements[liIndex] =
                     maLoadedZones.maElements[maLoadedZones.muLength];
                 return;
             }
@@ -181,13 +183,16 @@ namespace BrnReplays
         PropLoadedZoneRecord* lpZone = GetZone(liZoneId);
         CGS_ASSERT(lpZone != 0, CGS_ASSERT_MESSAGE_AT("lpZone != NULL", CGS_ARTIST_FILE, 1026));
 
+        // ARTIST takes the bit array's address once, before the branch (0x822BBC70 addi r27,r31,8),
+        // and both arms work through it.
+        CgsContainers::BitArray<KU_PROPS_PER_ZONE>& lrPropsAddedToScene = lpZone->maPropsAddedToScene;
         if (static_cast<u8>(liAddedToScene) != 0)
         {
-            lpZone->maPropsAddedToScene.SetBit(luPropIndex);
+            lrPropsAddedToScene.SetBit(luPropIndex);
         }
         else
         {
-            lpZone->maPropsAddedToScene.UnSetBit(luPropIndex);
+            lrPropsAddedToScene.UnSetBit(luPropIndex);
         }
     }
 }
@@ -456,11 +461,11 @@ namespace BrnReplays
     //     -> return 0
     // The count is re-read every iteration on the console; it cannot change inside the loop, so
     // it is hoisted into the loop condition here (same treatment as the sibling GetZone).
-    bool PropSerialiserFrame::IsCellActive(u32 luPackedCellId) const
+    bool PropSerialiserFrame::IsCellActive(u32 luPackedCellId)
     {
-        for (u8 lu8Index = 0; lu8Index < maRecordedCells.muLength; ++lu8Index)
+        for (s32 liIndex = 0; liIndex < maRecordedCells.muLength; ++liIndex)
         {
-            if (maRecordedCells[lu8Index] == luPackedCellId)
+            if (maRecordedCells[liIndex] == luPackedCellId)
             {
                 return true;
             }
@@ -483,7 +488,7 @@ namespace BrnReplays
     // `addi r11, r11, 0xB` == +0x58 == maPropsPreviouslyHit. Nothing else differs.
     // No console offset is transcribed: the field/bit split lives inside BitArray<600>::IsBitSet
     // and the record is indexed by member name.
-    bool PropSerialiserFrame::IsPropAddedToScene(s32 liZoneId, u32 luPropIndex) const
+    bool PropSerialiserFrame::IsPropAddedToScene(s32 liZoneId, u32 luPropIndex)
     {
         const PropLoadedZoneRecord* lpZone = GetZone(liZoneId);
         if (lpZone == 0)

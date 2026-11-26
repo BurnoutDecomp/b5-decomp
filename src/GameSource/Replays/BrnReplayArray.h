@@ -50,6 +50,7 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (bounds / capacity)
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"   // CgsDev::StrStream (operator[]'s streamed assert)
 
 namespace BrnReplays
 {
@@ -92,9 +93,14 @@ namespace BrnReplays
 
         // Checked indexed accessor. Asserts the index is in range then returns
         // &maElements[luIndex]; the accessor arithmetic is sizeof(T)*index + base.
+        // ARTIST keeps it out of line (0x822AA058 and seven more copies, 244 B each) with the
+        // streamed h:93 assert: "Array index out of bounds: " (0x820058EC) << index << " Length: "
+        // (0x82017DF4) << muLength << "\n", both through operator<<(int32_t) 0x821F0E50.
         T& operator[](u8 luIndex)
         {
-            CGS_ASSERT(luIndex < muLength, "Array index out of bounds: ");
+            CGS_ASSERT_STREAM_AT(luIndex < muLength,
+                                 "Array index out of bounds: " << luIndex << " Length: " << muLength << "\n",
+                                 "..\\..\\..\\GameSource\\Replays/BrnReplayArray.h", 93);
             return maElements[luIndex];
         }
 

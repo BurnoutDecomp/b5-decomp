@@ -258,23 +258,16 @@ namespace BrnReplays
         // INSTEAD of PropZoneManager::HasPropBeenHit whenever the replay stage is active,
         // so a played-back zone respawns exactly the props it did during recording.
         // Body: BrnReplayPropSerialiserFrame.cpp.
-        bool WasPropPreviouslyHit(s32 liZoneId, u32 luPropIndex) const;
+        bool WasPropPreviouslyHit(s32 liZoneId, u32 luPropIndex);   // non-const: calls GetZone
 
         // X360 @0x822BBBB8 -- the zone's loaded record, or null when the zone is not in the
         // replay's loaded set. Linear search of maLoadedZones for miZoneId == liZoneId.
         // Body: BrnReplayPropSerialiserFrame.cpp.
         //
-        // The console GetZone is ONE function; SetPropAddedToScene @0x822BBC28 calls it and
-        // then writes through the result, so both cv-forms are declared and the non-const one
-        // forwards to the const search rather than duplicating it.
-        const PropLoadedZoneRecord* GetZone(s32 liZoneId) const;
-        // RECON-ONLY cv forwarder (there is ONE console GetZone). Inline here rather than a
-        // second out-of-line body so the class keeps exactly one definition per X360 symbol.
-        PropLoadedZoneRecord* GetZone(s32 liZoneId)
-        {
-            const PropSerialiserFrame* lpConstThis = this;
-            return const_cast<PropLoadedZoneRecord*>(lpConstThis->GetZone(liZoneId));
-        }
+        // The console GetZone is ONE non-const function: it calls the array's non-const checked
+        // accessor (0x822AA058; ARTIST has no const operator[] copy for any BrnReplayArray), and
+        // SetPropAddedToScene @0x822BBC28 writes through its result.
+        PropLoadedZoneRecord* GetZone(s32 liZoneId);
 
         // ADDITIVE GROW (wave Q round 2). "Is this prop currently in the scene?" -- X360
         // @0x822CD818 (66 insns). Byte-for-byte WasPropPreviouslyHit with `addi r11,r11,1`
@@ -282,14 +275,14 @@ namespace BrnReplays
         // up, return false when it is not loaded, assert luPropIndex < 600 (the inlined
         // BitArray::IsBitSet guard, CgsBitArray.h:203) and test the bit.
         // Called by PropEntityModule::GenerateDispatchLists @0x822FB4F0.
-        bool IsPropAddedToScene(s32 liZoneId, u32 luPropIndex) const;
+        bool IsPropAddedToScene(s32 liZoneId, u32 luPropIndex);   // non-const: calls GetZone
 
         // ADDITIVE GROW. X360 @0x822BBDA0 (26 insns). Linear scan of maRecordedCells for the
         // packed cell word; the count byte is re-read every iteration on the console (it cannot
         // change inside the loop, so it is hoisted here). luPackedCellId is
         // `(cellId.GetX() << 16) | cellId.GetZ()` -- see maRecordedCells above.
         // Called by PropEntityModule::GenerateDispatchLists @0x822FB4F0.
-        bool IsCellActive(u32 luPackedCellId) const;
+        bool IsCellActive(u32 luPackedCellId);   // non-const: ARTIST calls the non-const accessor 0x822AA250
 
         // ADDITIVE GROW. X360 @0x822BB920 / @0x822BBA18 (62 insns each). Rebuild one recorded
         // prop / part transform: expand maProp{Part}Orientations[i] (a unit quaternion) into

@@ -6,8 +6,8 @@
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. Thin explicit instantiation of the generic
 // BrnReplayArray<T,N>::operator[] committed inline in BrnReplayArray.h (do NOT re-define).
 // X360 store-for-store: assert index < muLength (muLength is a u8 @ +0x5E8 == 9*168),
-// streaming "Array index out of bounds: <i> Length: <n>\n" (BrnReplayArray.h:93) collapsed to
-// one CGS_ASSERT, then return `168*index + base` (`mulli r11,index,0xA8; add r29`) ==
+// streaming "Array index out of bounds: <i> Length: <n>\n" (BrnReplayArray.h:93) through CGS_ASSERT_STREAM_AT,
+// then return `168*index + base` (`mulli r11,index,0xA8; add r29`) ==
 // &maElements[index]. The 168*index stride and the 0x5E8 count offset fix sizeof(T)==168
 // and N==9.
 //

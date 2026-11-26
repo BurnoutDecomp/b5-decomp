@@ -546,8 +546,7 @@ namespace BrnProgression
             mpProgressionManager->CheckForSpecialCarUnlocks();
         }
 
-        mpProgressionManager->mbHasJustRankedUp = false;
-        mpProgressionManager->mNewlyUnlockedCarID = 0;
+        mpProgressionManager->ClearRankUpCache();   // DWARF call list (ProgressionManager.h:586)
     }
 
     // X360 0x8239E418.
@@ -556,8 +555,7 @@ namespace BrnProgression
         mpProgressionManager->DEBUG_ClearMedals();
         mpProgressionManager->UnlockToProgressionRank(4, 0);
         mpProgressionManager->CheckForSpecialCarUnlocks();
-        mpProgressionManager->mbHasJustRankedUp = false;
-        mpProgressionManager->mNewlyUnlockedCarID = 0;
+        mpProgressionManager->ClearRankUpCache();   // DWARF call list (ProgressionManager.h:586)
 
         miNumberOfRaceWinsToAdd = 14;
         AddRaceWins();
@@ -580,8 +578,7 @@ namespace BrnProgression
         mpProgressionManager->DEBUG_ClearMedals();
         mpProgressionManager->UnlockToProgressionRank(5, 0);
         mpProgressionManager->CheckForSpecialCarUnlocks();
-        mpProgressionManager->mbHasJustRankedUp = false;
-        mpProgressionManager->mNewlyUnlockedCarID = 0;
+        mpProgressionManager->ClearRankUpCache();   // DWARF call list (ProgressionManager.h:586)
 
         miNumberOfRaceWinsToAdd = 39;
         AddRaceWins();
@@ -614,8 +611,7 @@ namespace BrnProgression
         mpProgressionManager->DEBUG_ClearMedals();
         mpProgressionManager->UnlockToProgressionRank(5, 0);
         mpProgressionManager->CheckForSpecialCarUnlocks();
-        mpProgressionManager->mbHasJustRankedUp = false;
-        mpProgressionManager->mNewlyUnlockedCarID = 0;
+        mpProgressionManager->ClearRankUpCache();   // DWARF call list (ProgressionManager.h:586)
 
         miNumberOfRaceWinsToAdd = 40;
         AddRaceWins();
