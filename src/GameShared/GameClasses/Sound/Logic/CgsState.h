@@ -76,9 +76,31 @@ struct State : public CgsSound::MemBase
         E_PREPARE_STATE_DONE           = 3,
     };
 
-    // CgsState.h:370. Default ctor: zero/seed the base members (matches the inlined
-    // base-init the derived ctors emit @ +4..+80). Defined in CgsState.cpp.
-    State();
+    // DWARF CgsState.h:370: defined in the class (ARTIST has no out-of-line copy; every derived
+    // CreateObject inlines it, e.g. BrnState::CreateObject 0x826C83C4: zero +4..+0x3C, then
+    // the time pair, then +0x40/+0x44 and the attached flag).
+    State()
+        : miInstNum(0)
+        , meMapState(0)
+        , miStateInstType(0)
+        , mpvAttachment(0)
+        , mpPrevState(0)
+        , mpNextState(0)
+        , mpHeadEffectControl(0)
+        , mpHeadEffectObject(0)
+        , mpStateManager(0)
+        , mpLogicModule(0)
+        , miSFXFlags(0)
+        , miNumLoadedEffectObjects(0)
+        , miNumLoadedEffectControls(0)
+        , meUpdateState(E_UPDATE_UNATTACHED)
+        , mePrepareState(E_PREPARE_STATE_CREATE_OBJECTS)
+        , mpCurrentEffect(0)
+        , mbIsAttached(false)
+        , mfCurTime(0.0f)
+        , mfDeltaTime(0.0f)
+    {
+    }
 
     // @ 0x826ABCD8 (scalar deleting destructor). Declaration-only so CgsState.cpp
     // emits the out-of-line State::~State symbol the deleting-destructor thunk is

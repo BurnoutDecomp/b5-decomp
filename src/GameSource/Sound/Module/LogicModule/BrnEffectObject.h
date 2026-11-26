@@ -42,7 +42,9 @@ struct BrnEffectObject : public IResourceRequester,
         void Construct();
     };
 
-    BrnEffectObject();
+    // DWARF BrnEffectObject.h:188: defined in the class (ARTIST has no out-of-line copy; every
+    // CreateObject inlines it, e.g. 0x826AF5A8). EffectBase() already clears mbEnabled.
+    BrnEffectObject() {}
     virtual ~BrnEffectObject();
 
     // — per-class RTTI.

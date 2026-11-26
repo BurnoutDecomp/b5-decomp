@@ -119,18 +119,18 @@ WheelControl::WheelControl()
     , mfTimeInAir(0.0f)
     , mfTimeSinceLanding(0.0f)
 {
-    mWheelAttribs.mPeelSlow.mV.x = 0.2f;
-    mWheelAttribs.mPeelSlow.mV.y = 4.0f;
-    mWheelAttribs.mPeelFast.mV.x = 0.2f;
-    mWheelAttribs.mPeelFast.mV.y = 4.0f;
-    mWheelAttribs.mLateralSlow.mV.x = 1.0f;
-    mWheelAttribs.mLateralSlow.mV.y = 7.0f;
-    mWheelAttribs.mLateralFast.mV.x = 2.5f;
-    mWheelAttribs.mLateralFast.mV.y = 13.0f;
-    mWheelAttribs.mBrakeSlow.mV.x = 0.1f;
-    mWheelAttribs.mBrakeSlow.mV.y = 0.5f;
-    mWheelAttribs.mBrakeFast.mV.x = 0.1f;
-    mWheelAttribs.mBrakeFast.mV.y = 0.5f;
+    mWheelAttribs.mPeelSlow.X() = 0.2f;
+    mWheelAttribs.mPeelSlow.Y() = 4.0f;
+    mWheelAttribs.mPeelFast.X() = 0.2f;
+    mWheelAttribs.mPeelFast.Y() = 4.0f;
+    mWheelAttribs.mLateralSlow.X() = 1.0f;
+    mWheelAttribs.mLateralSlow.Y() = 7.0f;
+    mWheelAttribs.mLateralFast.X() = 2.5f;
+    mWheelAttribs.mLateralFast.Y() = 13.0f;
+    mWheelAttribs.mBrakeSlow.X() = 0.1f;
+    mWheelAttribs.mBrakeSlow.Y() = 0.5f;
+    mWheelAttribs.mBrakeFast.X() = 0.1f;
+    mWheelAttribs.mBrakeFast.Y() = 0.5f;
     mWheelAttribs.mafSideRightLateralMultipler[0] = 0.8f;
     mWheelAttribs.mafSideRightLateralMultipler[1] = 1.1f;
     mWheelAttribs.mafSideLeftLateralMultipler[0] = 1.2f;
@@ -230,11 +230,12 @@ void WheelControl::UpdateWheelStatus(f32)
     mIsOnGround.Update(liGroundedWheels != 0);
 }
 
-f32 WheelControl::LerpedNormalise(const Vector2& arSlow, const Vector2& arFast,
+f32 WheelControl::LerpedNormalise(const rw::math::fpu::Vector2Template<f32>& arSlow,
+                                  const rw::math::fpu::Vector2Template<f32>& arFast,
                                   f32 afValue, f32 afFraction) const
 {
-    const f32 lfMinimum = arSlow.mV.x + (arFast.mV.x - arSlow.mV.x) * afFraction;
-    const f32 lfMaximum = arSlow.mV.y + (arFast.mV.y - arSlow.mV.y) * afFraction;
+    const f32 lfMinimum = arSlow.X() + (arFast.X() - arSlow.X()) * afFraction;
+    const f32 lfMaximum = arSlow.Y() + (arFast.Y() - arSlow.Y()) * afFraction;
     if (lfMaximum <= lfMinimum)
         return 0.0f;
     return Clamp((std::fabs(afValue) - lfMinimum) / (lfMaximum - lfMinimum), 0.0f, 1.0f);
@@ -492,16 +493,18 @@ void WheelControl::UpdateParams(f32 afTimeStep)
         UpdateDriftingRPM();
         UpdateSkidValues(afTimeStep);
     }
-    mfAudioRPM = mfRPMDueToPeel + mfRPMDueToDrift;
-    if (mIsOnGround.GetCurrent())
+    // ARTIST 0x826D06C0 / PS3 WheelControl::UpdateParams: the landing test goes through the
+    // header accessor IsOnGround() (DWARF h:448, returns the DataPoint by value).
+    mfAudioRPM = mfRPMDueToDrift + mfRPMDueToPeel;
+    if (IsOnGround().GetCurrent())
     {
-        mfTimeSinceLanding += afTimeStep;
         mfTimeInAir = 0.0f;
+        mfTimeSinceLanding += afTimeStep;
     }
     else
     {
-        mfTimeInAir += afTimeStep;
         mfTimeSinceLanding = 0.0f;
+        mfTimeInAir += afTimeStep;
     }
 }
 

@@ -19,13 +19,6 @@ void BrnEffectObject::SampleTag::Construct()
     miSampleIndex = 0;
 }
 
-BrnEffectObject::BrnEffectObject()
-    : IResourceRequester()
-    , CgsSound::Logic::EffectObject()
-{
-    mbEnabled = false;
-}
-
 // ARTIST 0x82F2E7FC: {0xFFFFFFFF, "BrnEffectObject", EffectObject, CreateObject}, registered
 // by its startup thunk through ClassTypeInfo<EffectObject>::AddToClassTypeInfoArray.
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> BrnEffectObject::sTypeInfo(

@@ -24,12 +24,6 @@ namespace BrnSound
 namespace Logic
 {
 
-BrnEffectControl::BrnEffectControl()
-    : IResourceRequester()
-    , CgsSound::Logic::EffectControl()
-{
-}
-
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>*
 BrnEffectControl::GetTypeInfo() const
 {

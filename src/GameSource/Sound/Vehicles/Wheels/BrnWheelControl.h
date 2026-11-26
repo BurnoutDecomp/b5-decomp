@@ -6,6 +6,7 @@
 #include "GameShared/GameClasses/Sound/CgsSoundUtils.h"
 #include "GameSource/Sound/Vehicles/Engines/BrnShiftControl.h"
 #include "BrnCommonTypes.h"
+#include "GameShared/GameClasses/RenderWare/Math/RwMathVectorTemplates.h"
 
 // =============================================================================
 // BrnSound::Vehicles::Wheels::WheelControl  (+ leaf AIWheelControl)
@@ -98,14 +99,18 @@ struct WheelControl : public BrnSound::Logic::BrnEffectControl,
         bool mbReverse;
     };
 
+    // DWARF BrnWheelControl.h:132: the six ranges are the scalar rw::math::fpu Vector2
+    // (vector2.h:123 `typedef Vector2Template<float> Vector2`, 8 bytes), not the 16-byte vpu
+    // vector: ARTIST's ctor (0x826CFC80) writes them at +0x3C..+0x68 and WheelData starts at
+    // +0x80 (addi r3,r31,0x80), mpPhysicsControl at +0xD8 (AttachController 0x82685C34).
     struct WheelAttribs
     {
-        Vector2 mPeelSlow;
-        Vector2 mPeelFast;
-        Vector2 mLateralSlow;
-        Vector2 mLateralFast;
-        Vector2 mBrakeSlow;
-        Vector2 mBrakeFast;
+        rw::math::fpu::Vector2Template<f32> mPeelSlow;
+        rw::math::fpu::Vector2Template<f32> mPeelFast;
+        rw::math::fpu::Vector2Template<f32> mLateralSlow;
+        rw::math::fpu::Vector2Template<f32> mLateralFast;
+        rw::math::fpu::Vector2Template<f32> mBrakeSlow;
+        rw::math::fpu::Vector2Template<f32> mBrakeFast;
         f32 mafSideRightLateralMultipler[E_MAX_SIDES];
         f32 mafSideLeftLateralMultipler[E_MAX_SIDES];
         f32 mfSlowFastThreshold;
@@ -158,7 +163,8 @@ private:
     void UpdateWheelsInAirRPM(f32 afTimeStep);
     void UpdateWheelStatus(f32 afTimeStep);
     void UpdateSkidValues(f32 afTimeStep);
-    f32 LerpedNormalise(const Vector2& arSlow, const Vector2& arFast,
+    f32 LerpedNormalise(const rw::math::fpu::Vector2Template<f32>& arSlow,
+                        const rw::math::fpu::Vector2Template<f32>& arFast,
                         f32 afValue, f32 afFraction) const;
 
     WheelAttribs mWheelAttribs;

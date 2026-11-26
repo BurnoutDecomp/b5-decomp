@@ -49,12 +49,7 @@ struct CollisionState : public BrnSound::Logic::BrnState
         E_SCRAPE    = 2,
     };
 
-    CollisionState()
-        : meLifetime(E_NONE)
-        , mOutputCollision()
-        , mfTimeWeAttached(0.0f)
-    {
-    }
+    CollisionState();
 
     // @ 0x826D3380 -- scalar/deleting destructor. The X360 thunk installs
     // CollisionState's own vtable (off_820AE1F4), calls State::DestroyEffects() to

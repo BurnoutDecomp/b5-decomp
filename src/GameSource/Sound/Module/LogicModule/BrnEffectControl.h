@@ -33,7 +33,9 @@ namespace Logic
 struct BrnEffectControl : public IResourceRequester,
                           public CgsSound::Logic::EffectControl
 {
-    BrnEffectControl();
+    // DWARF BrnEffectControl.h:256: defined in the class (ARTIST has no out-of-line copy; every
+    // CreateObject inlines it, e.g. MixerControl::CreateObject 0x826D2328).
+    BrnEffectControl() {}
     virtual ~BrnEffectControl();
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
     static CgsSound::Logic::EffectControl* CreateObject(u32 luAllocator);

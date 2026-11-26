@@ -84,10 +84,8 @@ extern f32 KF_GLOBAL_GAIN_ARRAY_SUB;
 // member clears).
 struct SubmixesEffect : public BrnSound::Logic::BrnEffectObject
 {
-    SubmixesEffect()
-        : mpStateManager(0)
-        , mbIsSurround(false)
-        , mbHoldVolumes(false) {}
+    // DWARF BrnSubmixesEffect.h lists SubmixesEffect() without a line: implicit. ARTIST's
+    // CreateObject (0x826D2C68) runs only the base constructors.
     virtual ~SubmixesEffect();
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F8DC)
 

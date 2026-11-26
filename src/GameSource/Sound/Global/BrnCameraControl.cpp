@@ -51,18 +51,6 @@ const char* CameraControl::GetTypeName() const
 
 
 // ---------------------------------------------------------------------------
-// ~CameraControl  (the out-of-line destructor that anchors the vtable)
-//
-// The destructor itself runs the inherited BrnEffectControl teardown (the X360
-// `scalar deleting destructor' the adjustor below forwards to). All observable
-// member teardown lives in the committed BrnEffectControl base, so this leaf
-// destructor body is empty.
-// ---------------------------------------------------------------------------
-CameraControl::~CameraControl()
-{
-}
-
-// ---------------------------------------------------------------------------
 // `vector deleting destructor' adjustor{4}  @ 0x826BB438
 //
 //   0x826BB438  addi r3, r3, -4

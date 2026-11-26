@@ -162,11 +162,8 @@ ResourceRegistrar& BrnStateManager::GetResourceRegistrar()
 // deleting-destructor thunk, re-synthesised from the virtual destructor + operator
 // delete), this destructor's OBSERVABLE work -- destroying the inherited
 // mContentPool -- happens via the implicit base-destructor chain; nothing
-// additional is bodied here.
+// additional is bodied here (the destructor is implicit, DWARF BrnStateManager.h:59).
 // ---------------------------------------------------------------------------
-BrnStateManager::~BrnStateManager()
-{
-}
 
 } // namespace Logic
 } // namespace BrnSound

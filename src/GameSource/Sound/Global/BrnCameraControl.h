@@ -56,8 +56,9 @@ namespace Logic
 // @ 0x826BB438) are generated structurally from the dual-base layout.
 struct CameraControl : public BrnSound::Logic::BrnEffectControl
 {
-    CameraControl() : mCameraMode(), mfRaceEndEffect(0.0f), mbLockedFor100Percent(false) {}
-    virtual ~CameraControl();
+    // DWARF BrnCameraControl.h:35 lists CameraControl() and ~CameraControl() without a line:
+    // both are implicit. ARTIST's CreateObject (0x826D25C8) inlines the base constructors and
+    // only mCameraMode's DataPoint constructor (+0x38/+0x3C); the other members stay unset.
 
     CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const ;
     const char* GetTypeName() const ;

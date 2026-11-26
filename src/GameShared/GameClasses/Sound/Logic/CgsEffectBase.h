@@ -80,22 +80,25 @@ struct EffectBase : public CgsSound::MemBase
         E_DETACH_STATE_FINISHED = 3,
     };
 
+    // DWARF CgsEffectBase.cpp:57. The PS3 body (._ZN8CgsSound5Logic10EffectBaseC1Ev 0x83F924)
+    // and every ARTIST copy inlined into a derived constructor (WheelControl::WheelControl
+    // 0x826CFC80, MixerControl::CreateObject 0x826D2328, BrnEffectObject::CreateObject
+    // 0x826AF5A8) clear exactly these members: mbEnabled starts false; mu16AllocatorIndex,
+    // miObjectId, mpLogicModule and mbHasLoadedData are left to Prepare and the allocator.
+    // The statements follow ARTIST's store order (the XDK compiler keeps the order of these
+    // independent stores; all ARTIST copies agree).
     EffectBase()
-        : mpNextEffectBase(0)
-        , mpState(0)
-        , mu16RefCount(0)
-        , mu16AttachCount(0)
-        , mu16AllocatorIndex(0)
-        , miObjectId(0)
-        , mfRunningTime(0.0f)
-        , mfDeltaTime(0.0f)
-        , meAttachState(E_ATTACH_STATE_NONE)
-        , meDetachState(E_DETACH_STATE_NONE)
-        , mpLogicModule(0)
-        , mbEnabled(true)
-        , mbHasLoadedData(false)
-        , mpDynamicMixIo(0)
     {
+        mfDeltaTime = 0.0f;
+        mfRunningTime = 0.0f;
+        mu16RefCount = 0;
+        mpState = 0;
+        mpDynamicMixIo = 0;
+        mpNextEffectBase = 0;
+        mbEnabled = false;
+        meDetachState = E_DETACH_STATE_NONE;
+        meAttachState = E_ATTACH_STATE_NONE;
+        mu16AttachCount = 0;
     }
 
     virtual ~EffectBase() {}

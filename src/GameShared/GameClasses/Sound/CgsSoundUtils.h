@@ -45,6 +45,10 @@ struct DataPoint
     explicit DataPoint(const T& lValue) : mCurrentValue(lValue), mPreviousValue(lValue) {}
     DataPoint(const T& lCurrent, const T& lPrevious)
         : mCurrentValue(lCurrent), mPreviousValue(lPrevious) {}
+    // DWARF CgsSoundUtils.h:430: a user-declared copy constructor (WheelControl::UpdateParams
+    // 0x826D06C0 copies through IsOnGround() and reads the byte after its float store).
+    DataPoint(const DataPoint& lDataPoint)
+        : mCurrentValue(lDataPoint.mCurrentValue), mPreviousValue(lDataPoint.mPreviousValue) {}
 
     const T& GetCurrent() const  { return mCurrentValue; }
     const T& GetPrevious() const { return mPreviousValue; }

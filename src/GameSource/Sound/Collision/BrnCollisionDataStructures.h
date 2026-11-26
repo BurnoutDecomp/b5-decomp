@@ -206,8 +206,10 @@ struct OutputCollision
 {
     void DebugPrint(const CollisionStateManager& lCollisionManager) const;
     // ARTIST 826FFC0C..50: only the bin key and embedded scrape validity
-    // are initialized; vector/entity default constructors perform no stores.
-    OutputCollision() : mBinKey(0) {}
+    // are initialized; vector/entity default constructors perform no stores. The bin key is
+    // cleared in the body: both ARTIST copies store mScrapeInfo's validity (member
+    // construction) before mBinKey (0x826FFC40/44, CollisionState::CreateObject 0x826D32BC/C0).
+    OutputCollision() { mBinKey = 0; }
 
     s32 meBankType;
     InputCollision::EPipeline mePipeline;

@@ -72,10 +72,9 @@ struct GuiEventAudioSettings
 // structurally from the dual-base layout of BrnEffectControl.
 struct MixerControl : public BrnSound::Logic::BrnEffectControl
 {
-    MixerControl()
-        : mpMixerData(0), mpcNicotineBundle(0), mpcNicotineAsset(0),
-          mpcNicotineSnapshotAsset(0), mCachedSettings() {}
-    virtual ~MixerControl();
+    // DWARF BrnMixerControl.h:36 lists MixerControl() and ~MixerControl() without a line:
+    // both are implicit. ARTIST's CreateObject (0x826D22F0) inlines only the base
+    // constructors and leaves the MixerControl members untouched.
 
     CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const ;
     const char* GetTypeName() const ;

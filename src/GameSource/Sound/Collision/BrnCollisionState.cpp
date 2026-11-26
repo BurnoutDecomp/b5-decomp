@@ -15,6 +15,15 @@ namespace Logic
 namespace Collision
 {
 
+// DWARF BrnCollisionState.cpp:33. ARTIST inlines it into CreateObject (0x826D324C): the State
+// base, meLifetime's DataPoint and OutputCollision's constructor; mfTimeWeAttached is left
+// for Attach.
+CollisionState::CollisionState()
+    : meLifetime(E_NONE)
+    , mOutputCollision()
+{
+}
+
 // ---------------------------------------------------------------------------
 // ~CollisionState  @ 0x826D3380  (scalar deleting destructor)
 //

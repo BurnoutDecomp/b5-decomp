@@ -77,36 +77,9 @@ const char* State::GetTypeName() const
     return sTypeInfo.typeName; // ARTIST 0x8268D420
 }
 
-// CgsState.h:370. Zero/seed the State base members. This mirrors the inline base
-// init the derived ctors emit (X360 stores 0 across +4..+80, with mfCurTime /
-// mfDeltaTime seeded to 0.0). MemBase's vtable is installed by its own ctor.
-State::State()
-    : miInstNum(0)
-    , meMapState(0)
-    , miStateInstType(0)
-    , mpvAttachment(0)
-    , mpPrevState(0)
-    , mpNextState(0)
-    , mpHeadEffectControl(0)
-    , mpHeadEffectObject(0)
-    , mpStateManager(0)
-    , mpLogicModule(0)
-    , miSFXFlags(0)
-    , miNumLoadedEffectObjects(0)
-    , miNumLoadedEffectControls(0)
-    , meUpdateState(E_UPDATE_UNATTACHED)
-    , mePrepareState(E_PREPARE_STATE_CREATE_OBJECTS)
-    , mpCurrentEffect(0)
-    , mbIsAttached(false)
-    , mfCurTime(0.0f)
-    , mfDeltaTime(0.0f)
-{
-    // ARTIST 0x826C47F8 and 0x826C4C50..0x826C4C54 access these two words.
-    CGS_STATIC_ASSERT(sizeof(meUpdateState) == 8, "State update history is two words");
-    CGS_STATIC_ASSERT(offsetof(State, meUpdateState) == 0x38, "ARTIST update state offset");
-    CGS_STATIC_ASSERT(offsetof(State, mePrepareState) == 0x40, "ARTIST prepare state offset");
-    CGS_STATIC_ASSERT(sizeof(State) == 0x54, "ARTIST sound state size");
-}
+// ARTIST 0x826C47F8 and 0x826C4C50..0x826C4C54 access the two meUpdateState words.
+CGS_STATIC_ASSERT(sizeof(Utils::DataPoint<State::EUpdateState>) == 8, "State update history is two words");
+CGS_STATIC_ASSERT(sizeof(State) == 0x54, "ARTIST sound state size");
 
 // 0x826916D8. The X360 computes (mpvAttachment - apv == 0) as a boolean: true when
 // the supplied pointer is this state's attachment.

@@ -64,10 +64,12 @@ namespace Logic
 struct BrnStateManager : public CgsSound::Logic::StateManager,
                          public IResourceRequester
 {
-    BrnStateManager() : miCpuMonitor(0) {}
-
-    // `vector deleting destructor'  @ X360 0x826FAB58 -- bodied out-of-line in the
-    // .cpp (see there for the asm rationale). Structurally identical to the base
+    // DWARF BrnStateManager.h:59 lists BrnStateManager() and ~BrnStateManager() without a
+    // line: both are implicit. ARTIST's CreateObject (0x826FB5F0) calls the StateManager
+    // constructor and stores the two vtables; miCpuMonitor stays unset.
+    //
+    // `vector deleting destructor'  @ X360 0x826FAB58 -- generated from the implicit
+    // destructor (see the .cpp for the asm rationale). Structurally identical to the base
     // CgsSound::Logic::StateManager's own vector-deleting destructor (0x826FAAB8,
     // CgsStateManagerDtor.cpp / CgsStateManager.cpp): BrnStateManager adds no member
     // requiring explicit teardown (miCpuMonitor is a scalar), so the compiler
@@ -75,7 +77,6 @@ struct BrnStateManager : public CgsSound::Logic::StateManager,
     // vtable re-install + conditional allocator-free shape the base already has --
     // the observable work (destroying the inherited mContentPool) happens via the
     // implicit base-destructor chain, matching the established base-class precedent.
-    virtual ~BrnStateManager();
 
     // ARTIST BrnStateManager primary vtable off_820B7C6C +0x04/+0x08.
     // Returns the canonical CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>

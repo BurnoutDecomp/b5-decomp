@@ -191,12 +191,8 @@ void MixerControl::RestartMixer()
 // The vptr stores are the compiler-emitted devirtualization of the destructor
 // base sub-objects; the observable member teardown is the inherited
 // BrnEffectControl teardown (meDetachState/mbResourcesReady/meAttachState). The
-// MixerControl-owned members are non-owning, so this leaf destructor runs only the
-// inherited base teardown (the base destructor body), leaving this body empty.
+// destructor itself is implicit (DWARF BrnMixerControl.h:36, no line).
 // ---------------------------------------------------------------------------
-MixerControl::~MixerControl()
-{
-}
 
 // ---------------------------------------------------------------------------
 // `vector deleting destructor' adjustor{4}  @ 0x826BAED0
