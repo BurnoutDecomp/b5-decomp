@@ -255,13 +255,13 @@ inline const T&
 Set<T, N>::GetItem(u32 luIndex) const
 {
     CGS_ASSERT_AT(muLength != KU_INVALID, "Set used before Construct/Clear was called", CGS_ARTIST_CGSSET_FILE, 257);
-    CGS_ASSERT_AT(luIndex < N, "Set index out of bounds", CGS_ARTIST_CGSSET_FILE, 258);
+    CGS_ASSERT_AT(luIndex < muLength, "Set index out of bounds", CGS_ARTIST_CGSSET_FILE, 258);
     return maElements[luIndex];
 }
 
-
-
-
+// Both GetItem overloads bound the index by the live length (world CR-30): ARTIST's copy
+// Set<u16,72>::GetItem 0x8270A5C8 reloads muLength (+0x90) for `cmplw` before the 275 assert,
+// as the inlined copies do (TrafficDebugComponent::DrawSections 0x82760C40, PropEntityModule).
 
 
 
@@ -272,7 +272,7 @@ inline T&
 Set<T, N>::GetItem(u32 luIndex)
 {
     CGS_ASSERT_AT(muLength != KU_INVALID, "Set used before Construct/Clear was called", CGS_ARTIST_CGSSET_FILE, 274);
-    CGS_ASSERT_AT(luIndex < N, "Set index out of bounds", CGS_ARTIST_CGSSET_FILE, 275);
+    CGS_ASSERT_AT(luIndex < muLength, "Set index out of bounds", CGS_ARTIST_CGSSET_FILE, 275);
     return maElements[luIndex];
 }
 
