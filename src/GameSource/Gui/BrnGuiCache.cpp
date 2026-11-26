@@ -2825,12 +2825,7 @@ namespace BrnGui
         return mfTargetTime;
     }
 
-    // @ 0x8240F450
-    s8 GuiCache::GetOpponentsInEvent() const
-    {
-        CGS_ASSERT(-1 < miOpponentsInEvent, CGS_ASSERT_MESSAGE_AT("-1 < miOpponentsInEvent", KAC_ARTIST_ASSERT_FILE, 3030 /* ARTIST 0x8240F490 */));
-        return miOpponentsInEvent;
-    }
+    // GetOpponentsInEvent (@0x8240F450) is header-inline in BrnGuiCache.h.
 
     // @ 0x82472DB0 -- valid only in the race-style game modes; then asserts the
     // district was actually resolved (!= E_DISTRICT_INVALID, value 18).
@@ -2855,14 +2850,7 @@ namespace BrnGui
         return mEventDestinationDistrict;
     }
 
-    // @ 0x824EC468
-    s32 GuiCache::GetCheckpointReached() const
-    {
-        CGS_ASSERT(0 <= miCheckpointReached,
-            CGS_ASSERT_MESSAGE_AT(
-                "0 <= miCheckpointReached", KAC_ARTIST_ASSERT_FILE, 2927 /* ARTIST 0x824EC494 */));
-        return miCheckpointReached;
-    }
+    // GetCheckpointReached (@0x824EC468) is header-inline in BrnGuiCache.h.
 
     // @ 0x8240F4B0 -- road-rage only.
     s32 GuiCache::GetCurrentTakedownsInEvent() const
@@ -2970,13 +2958,7 @@ namespace BrnGui
 
 
 
-    // @ 0x8240F168
-    const FreeburnChallengeManager* GuiCache::GetFreeburnChallengeManager() const
-    {
-        CGS_ASSERT(mpChallengeManager != 0,
-            CGS_ASSERT_MESSAGE_AT("mpChallengeManager", KAC_ARTIST_ASSERT_FILE, 2390 /* ARTIST 0x8240F190 */));
-        return mpChallengeManager;
-    }
+    // GetFreeburnChallengeManager (@0x8240F168) is header-inline in BrnGuiCache.h.
 
     // ⭐ [stuntrace] X360-INLINED at BrnGuiCache.h:2374 -- BrnGui::GuiModule::Construct
     // @0x82518028 fires the "lpChallengeManager" assert then stores the module's own
@@ -2997,13 +2979,7 @@ namespace BrnGui
         return mpHudMessageController;
     }
 
-    // @ 0x82472D58
-    const HudMessageDirector* GuiCache::GetHudMessageDirector() const
-    {
-        CGS_ASSERT(mpHudMessageDirector != 0,
-            CGS_ASSERT_MESSAGE_AT("mpHudMessageDirector", KAC_ARTIST_ASSERT_FILE, 2446 /* ARTIST 0x82472D80 */));
-        return mpHudMessageDirector;
-    }
+    // GetHudMessageDirector (@0x82472D58) is header-inline in BrnGuiCache.h.
 
     // @ 0x8240F0B0 -- mTimeInfo.mfTimeNow (member at +4); guards the uninitialised sentinel.
     f32 GuiCache::GetTime() const
@@ -3233,20 +3209,7 @@ namespace BrnGui
         return &maPlayerInfo[liPlayerInfoIndex];
     }
 
-    // @ 0x8240F910  ( maCurrentPlayerTeam @+0xB808, 4*(idx+11778)+this )
-    s32 GuiCache::GetCurrentOnlinePlayerTeam(EActiveRaceCarIndex leActiveRaceCarIndex) const
-    {
-        CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-            CGS_ASSERT_MESSAGE_AT(
-                "lePlayerActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0",
-                KAC_ARTIST_ASSERT_FILE, 3664 /* ARTIST 0x8240F93C */));
-        CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-            CGS_ASSERT_MESSAGE_AT(
-                "lePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
-                KAC_ARTIST_ASSERT_FILE, 3665 /* ARTIST 0x8240F960 */));
-
-        return maCurrentPlayerTeam[leActiveRaceCarIndex];
-    }
+    // GetCurrentOnlinePlayerTeam (@0x8240F910) is header-inline in BrnGuiCache.h.
 
     EActiveRaceCarIndex GuiCache::GetActiveRaceCarFromNetworkId(s32 lNetworkPlayerID) const
     {

@@ -1132,11 +1132,13 @@ namespace BrnGui
 
         // ---- the screen's own state ------------------------------------------------------
         meSubState      = E_SUBSTATE_LOADING_SCREEN;
+        // Source order per ARTIST's offset materialisation (0xA4FC, 0xA510, 0xA508, 0xA50C
+        // @0x8249C320..0x8249C338): the creating flag is set before the round/start resets.
         mpGuiCache      = 0;
         mpCommonOptions = 0;
+        mbIsCreating    = true;   // X360 stbx -- a byte store
         miCurrentRound  = 0;
         miStartItem     = 0;
-        mbIsCreating    = true;   // X360 stbx -- a byte store
 
         mGameOptions.Construct();
 
@@ -2816,10 +2818,15 @@ namespace BrnGui
         mGameOptions.miVehicleClass = liVehicleClass;
         mGameOptions.miTimeLimit    = 0;
 
-        if (leGameMode == GSM::E_MODE_ONLINE_ROAD_RAGE)
+        switch (leGameMode)
+        {
+        case GSM::E_MODE_ONLINE_ROAD_RAGE:
             mGameOptions.miNumRounds = 2;
-        else if (leGameMode == GSM::E_MODE_ONLINE_BURNING_HOME_RUN)
+            break;
+        case GSM::E_MODE_ONLINE_BURNING_HOME_RUN:
             mGameOptions.miTimeLimit = 0;
+            break;
+        }
     }
 
     // ================================================================================

@@ -8,6 +8,7 @@
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h"
 #include "GameShared/GameClasses/Core/CgsID.h"     // CgsID (u64) -- mPursuedCarID / mShutdownCarID
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+#define CGS_ARTIST_BRNGUICACHE_H_FILE "..\\..\\..\\GameSource\\Gui/BrnGuiCache.h"   // the header-inline accessors' assert path
 #include "GameShared/GameClasses/Language/CgsSku.h" // actual ESku/ELanguage
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"   // BrnGui::GuiFlow (AppendExpectedAptComponent selector)
 #include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h"
@@ -2356,6 +2357,47 @@ namespace BrnGui
 
         static void _AssertLayout();
     };
+
+    // Header-inline accessors: ARTIST's asserts name BrnGuiCache.h at these lines, callers in other
+    // TUs inline them, and the out-of-line copies are COMDATs in their users' code ranges.
+    inline s32 GuiCache::GetCheckpointReached() const
+    {
+        CGS_ASSERT(0 <= miCheckpointReached,
+            CGS_ASSERT_MESSAGE_AT("0 <= miCheckpointReached", CGS_ARTIST_BRNGUICACHE_H_FILE, 2927 /* ARTIST 0x824EC494 */));
+        return miCheckpointReached;
+    }
+
+    inline s8 GuiCache::GetOpponentsInEvent() const
+    {
+        CGS_ASSERT(-1 < miOpponentsInEvent,
+            CGS_ASSERT_MESSAGE_AT("-1 < miOpponentsInEvent", CGS_ARTIST_BRNGUICACHE_H_FILE, 3030 /* ARTIST 0x8240F490 */));
+        return miOpponentsInEvent;
+    }
+
+    inline const HudMessageDirector* GuiCache::GetHudMessageDirector() const
+    {
+        CGS_ASSERT(mpHudMessageDirector != 0,
+            CGS_ASSERT_MESSAGE_AT("mpHudMessageDirector", CGS_ARTIST_BRNGUICACHE_H_FILE, 2446 /* ARTIST 0x82472D80 */));
+        return mpHudMessageDirector;
+    }
+
+    inline const FreeburnChallengeManager* GuiCache::GetFreeburnChallengeManager() const
+    {
+        CGS_ASSERT(mpChallengeManager != 0,
+            CGS_ASSERT_MESSAGE_AT("mpChallengeManager", CGS_ARTIST_BRNGUICACHE_H_FILE, 2390 /* ARTIST 0x8240F190 */));
+        return mpChallengeManager;
+    }
+
+    inline s32 GuiCache::GetCurrentOnlinePlayerTeam(EActiveRaceCarIndex leActiveRaceCarIndex) const
+    {
+        CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+            CGS_ASSERT_MESSAGE_AT("lePlayerActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0",
+                                  CGS_ARTIST_BRNGUICACHE_H_FILE, 3664 /* ARTIST 0x8240F93C */));
+        CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+            CGS_ASSERT_MESSAGE_AT("lePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
+                                  CGS_ARTIST_BRNGUICACHE_H_FILE, 3665 /* ARTIST 0x8240F960 */));
+        return maCurrentPlayerTeam[leActiveRaceCarIndex];
+    }
 
     // Header-inline (DWARF h:1261; ARTIST asserts at BrnGuiCache.h:4210 and inlines it into the
     // road-rule HUD, e.g. RoadRuleComponent::UpdateUpcomingRoadLeaders @0x82410760; the COMDAT copy

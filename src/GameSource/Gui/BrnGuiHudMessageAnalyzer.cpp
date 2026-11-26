@@ -4626,36 +4626,39 @@ void HudMessageAnalyzer::HandleEventLeaderSplitTime(const GuiInEventLeaderSplit*
 {
     CGS_ASSERT_AT(lpEvent != NULL, "lpEvent", CGS_ARTIST_FILE, 3785);   // cpp:3785
 
-    GuiHudMessage lMessage;
-    s32 liSecondParam;
-
+    // Three messages (DWARF lMessage at cpp:3652 / :3667 / :3675): the online branch's own
+    // message encloses the leading-player block's, so the rival message keeps a separate
+    // stack slot (0x3B0) while the two triggered ones share 0x60; ARTIST cross-jumps their
+    // shared AddParam + TriggerMessage tail.
     if (mpGuiCache->IsOnlineStartInProgress())
     {
+        GuiHudMessage lMessage;
         if (!lpEvent->mbLocalPlayerIsLeading)
         {
-            GuiHudMessage lRivalMessage;
-            lRivalMessage.Construct("EventSpltRvl");
-            AddGamerTagToMessage(&lRivalMessage, "TEMP_ONLINE_NAME",
+            lMessage.Construct("EventSpltRvl");
+            AddGamerTagToMessage(&lMessage, "TEMP_ONLINE_NAME",
                                  lpEvent->meLeaderActiveRaceCarIndex);
-            return;   // FLAG: the console never triggers this one -- see above.
+            // FLAG: the console never triggers this one -- see above.
         }
-
-        lMessage.Construct("EventSpltYou");
-        liSecondParam = static_cast<s32>(lpEvent->mfLeadTime);
+        else
+        {
+            GuiHudMessage lMessage;
+            lMessage.Construct("EventSpltYou");
+            lMessage.AddParam(CgsGui::E_HUDMESSAGEPARAMTYPES_INT, 0,
+                              static_cast<s32>(lpEvent->mfLeadTime));
+            TriggerMessage(&lMessage);
+        }
     }
     else
     {
+        GuiHudMessage lMessage;
         lMessage.Construct("EventCheckPt");
-        // The console inlines GetCheckpointReached here (its "0 <= miCheckpointReached"
-        // assert, BrnGuiCache.h:2927, is folded into this body at 0x8251E714); the
-        // out-of-line accessor is the same function, so call it.
         lMessage.AddParam(CgsGui::E_HUDMESSAGEPARAMTYPES_INT, 0,
                           mpGuiCache->GetCheckpointReached());
-        liSecondParam = mpGuiCache->GetCheckpointsInEvent();   // u8 return, zero-extended
+        lMessage.AddParam(CgsGui::E_HUDMESSAGEPARAMTYPES_INT, 0,
+                          mpGuiCache->GetCheckpointsInEvent());   // u8 return, zero-extended
+        TriggerMessage(&lMessage);
     }
-
-    lMessage.AddParam(CgsGui::E_HUDMESSAGEPARAMTYPES_INT, 0, liSecondParam);
-    TriggerMessage(&lMessage);
 }
 
 // -------------------------------------------------------------------------------------
