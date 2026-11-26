@@ -127,19 +127,18 @@ bool MomentSelector::Prepare(MomentController& lrMomentController,
         {
             u32 luMomentsToNotInhibit = muMaxActiveMomentLimit;
 
+            // ARTIST 0x82255DB0..0x82255DC0: a failed first test re-tests the count before the
+            // inhibit arm, i.e. two conditions joined by else-if.
             for (luLoop = 0; luLoop < luMomentCount; ++luLoop)
             {
-                if (luMomentsToNotInhibit != 0)
+                if (luMomentsToNotInhibit > 0 && mMomentHandleArray[luLoop].IsAllocated() &&
+                    mMomentDescriptionArray[luLoop].mbCanBeInhibited)
                 {
-                    if (mMomentHandleArray[luLoop].IsAllocated() &&
-                        mMomentDescriptionArray[luLoop].mbCanBeInhibited)
-                    {
-                        --luMomentsToNotInhibit;
-                    }
+                    --luMomentsToNotInhibit;
                 }
                 else
                 {
-                    if (mMomentHandleArray[luLoop].IsAllocated() &&
+                    if (luMomentsToNotInhibit == 0 && mMomentHandleArray[luLoop].IsAllocated() &&
                         mMomentDescriptionArray[luLoop].mbCanBeInhibited)
                     {
                         // The console inlines MomentHandle::GetMoment (with its
@@ -200,18 +199,19 @@ u32 MomentSelector::SnoopNumValidMoments()
 
     muValidMoments = 0;                                              // +0x1D0 -- reset before the walk
 
+    // DWARF (cpp:255): three handle operator[] calls and two GetMoment()s per pass; ARTIST
+    // 0x8221BD28 re-fetches the handle before each test.
     for (u32 luLoop = 0; luLoop < luMomentCount; ++luLoop)
     {
-        if (!mMomentHandleArray[luLoop].IsAllocated())
+        if (mMomentHandleArray[luLoop].IsAllocated())
         {
-            continue;
-        }
-
-        const Moment* lpMoment = &mMomentHandleArray[luLoop].GetMoment();
-
-        if (lpMoment->GetState() == Moment::E_STATE_VALID && lpMoment->CanSwitchToMeNow())
-        {
-            ++muValidMoments;
+            if (mMomentHandleArray[luLoop].GetMoment().GetState() == Moment::E_STATE_VALID)
+            {
+                if (mMomentHandleArray[luLoop].GetMoment().CanSwitchToMeNow())
+                {
+                    ++muValidMoments;
+                }
+            }
         }
     }
 
@@ -220,173 +220,116 @@ u32 MomentSelector::SnoopNumValidMoments()
 
 void MomentSelector::Update(f32 lfTimestep)
 {
-    CGS_ASSERT(mbPrepared, CGS_ASSERT_MESSAGE_AT("mbPrepared", CGS_ARTIST_FILE, 117));
+    CGS_ASSERT_AT(mbPrepared, "mbPrepared", CGS_ARTIST_FILE, 117);
 
     mfTimeActive += lfTimestep;      // +0x1C4
     ++miFramesActive;                // +0x1C8
 
-    const s32 liMomentCount = static_cast<s32>(mMomentDescriptionArray.GetLength());  // +0x0A0
-
-    u32 luUninhibited        = 0;    // live, not inhibited, and inhibitable by policy
-    u32 luConditionsNotMet   = 0;    // conditions not met, not inhibited, inhibitable
-    u32 luInhibitedCandidate = 0;    // conditions met but currently inhibited
+    // DWARF locals cpp:123..128.
+    const s32 liMomentCount = mMomentDescriptionArray.GetLength();   // +0x0A0
+    s32 liLoop;
+    u32 luInvalidMoments          = 0;
+    u32 luPotentiallyValidMoments = 0;
+    u32 luUninhibitedMoments      = 0;
 
     muValidMoments = 0;              // +0x1D0 -- recounted from scratch every frame
 
-    for (s32 liLoop = 0; liLoop < liMomentCount; ++liLoop)
+    // ARTIST 0x82239FC0 re-fetches the handle and its moment before every test (one
+    // "mbIsAllocated" tripwire each); the classification is an else-if chain.
+    for (liLoop = 0; liLoop < liMomentCount; ++liLoop)
     {
-        // Never re-classify the slot that is already selected.
-        if (mbHasSelectedMoment && miSelectedMoment == liLoop)
+        if (!mbHasSelectedMoment || liLoop != miSelectedMoment)
         {
-            continue;
-        }
+            mRecencyArray[liLoop] *= mfRecencyFactor;   // +0x198[i] *= +0x1CC
 
-        // Recency decay (the console mutates the array element in place through GetItem).
-        mRecencyArray[static_cast<u32>(liLoop)] *= mfRecencyFactor;   // +0x198[i] *= +0x1CC
-
-        if (!mMomentHandleArray[static_cast<u32>(liLoop)].IsAllocated())
-        {
-            continue;
-        }
-
-        Moment* lpMoment = &mMomentHandleArray[static_cast<u32>(liLoop)].GetMoment();
-        const MomentDescription& lrDescription = mMomentDescriptionArray[static_cast<u32>(liLoop)];
-
-        // (A) running, and the policy is allowed to inhibit it.
-        if (!lpMoment->IsInhibited() && lrDescription.mbCanBeInhibited)
-        {
-            ++luUninhibited;
-        }
-
-        // (B) VALID and switchable right now: this is the count the roaming
-        // state reads.
-        if (lpMoment->IsValid() && lpMoment->CanSwitchToMeNow())
-        {
-            ++muValidMoments;
-            continue;
-        }
-
-        // (C) waiting on its conditions, not inhibited, inhibitable.
-        if (!lpMoment->ConditionsAreMet() && !lpMoment->IsInhibited() &&
-            lrDescription.mbCanBeInhibited)
-        {
-            ++luConditionsNotMet;
-            continue;
-        }
-
-        // (D) ready but held back: a candidate for the rebalance below.
-        if (lpMoment->ConditionsAreMet() && lpMoment->IsInhibited())
-        {
-            ++luInhibitedCandidate;
-            continue;
-        }
-
-        // (E) VALID but NOT switchable: inhibit it.
-        if (!lpMoment->IsValid() || lpMoment->CanSwitchToMeNow())
-        {
-            continue;
-        }
-
-        lpMoment->Inhibit();
-
-        // ⚠️ FAITHFUL QUIRK: when the description forbids inhibiting, the console inhibits it
-        // ANYWAY and then immediately un-inhibits it, asserts the byte really came back down
-        // (the assert lives in BrnMomentSelector.h), and decrements the uninhibited count.
-        // Inhibit()'s
-        // side effects (the virtual Release() and meState = E_STATE_INVALID_SEARCHING) are NOT
-        // undone -- only the flag is. Reproduced exactly.
-        if (!lrDescription.mbCanBeInhibited)
-        {
-            lpMoment->SetInhibited(false);
-            CGS_ASSERT(!lpMoment->IsInhibited(),
-                       CGS_ASSERT_MESSAGE_AT("!mMomentHandleArray[liLoop].GetMoment().IsInhibited()", CGS_ARTIST_FILE, 167));
-            --luUninhibited;
-        }
-    }
-
-    // [DIAG] NOT IN THE console BINARY. Rung 6 of the `[jump-ladder]`: the selector saw at
-    // least one moment go VALID + switchable. This is the number ArbStateRoaming::Update's
-    // DRIVING arm gates SelectBestMoment on, and it was PINNED AT 0 for the whole project
-    // (MomentController::NewMoment was a stub that allocated nothing, so every handle stayed
-    // !IsAllocated() and the loop above `continue`d on all of them). One-shot.
-    {
-        static bool sbLoggedFirstValid = false;
-        if (!sbLoggedFirstValid && muValidMoments != 0 && CgsDev::Log::gpDebugPrint != 0)
-        {
-            sbLoggedFirstValid = true;
-        }
-    }
-
-    // ---- THE MAX-ACTIVE-MOMENTS REBALANCE (0x8223A41C..0x8223A660) ----------------------------
-    // [FX-DIRECTOR2 2026-09-25, CHAINCHECK2 CC-12] It was gated on the premise that nothing calls
-    // SetMaxActiveMoments. That premise was stale: ArbStateCrashing::Construct @0x82259EA0 sets a limit of ONE
-    // (`li r4, 1` 0x82259FBC, bl 0x82259FC8; BrnArbStateCrashing.cpp:231), so every crash runs this. Prepare
-    // starts the second tumbling moment (TUMBLING_TRUCKING_SIDE) inhibited, and without this tail it could never
-    // swap in, nor could a moment that arm (E) above inhibited ever come back during that crash.
-    //   `lbz 0x1E2 ; beq` / `cmplwi r22, 0 ; beq`: only with a limit and a ready-but-held-back moment.
-    //   Under budget (`cmplw r28, 0x1D4`, unsigned): un-inhibit the best FUSSY candidates -- each one a direct
-    //   `stb 0, 0x17B` (no Prepare, no state change) -- returning at once when the held-back count runs out;
-    //   then, if any are left, the best ANY candidates while still under budget.
-    //   Then the swap, `do { if (!conditions-not-met) break; ... } while (held-back)`: the best FUSSY held-back
-    //   moment is un-inhibited and the worst FUSSY idle one is inhibited (Moment::Inhibit's body: +0x17B = 1,
-    //   Release through vtable +0x10, meState = SEARCHING -- the store lands after the two decrements).
-    if (mbHasMaxLimit && luInhibitedCandidate != 0)
-    {
-        if (luUninhibited < muMaxActiveMomentLimit)
-        {
-            u32 luMomentToUninhibit = 0;
-            while (luUninhibited < muMaxActiveMomentLimit)
+            if (mMomentHandleArray[liLoop].IsAllocated())
             {
+                if (!mMomentHandleArray[liLoop].GetMoment().IsInhibited() &&
+                    mMomentDescriptionArray[liLoop].mbCanBeInhibited)
+                {
+                    ++luUninhibitedMoments;
+                }
+
+                if (mMomentHandleArray[liLoop].GetMoment().GetState() == Moment::E_STATE_VALID &&
+                    mMomentHandleArray[liLoop].GetMoment().CanSwitchToMeNow())
+                {
+                    ++muValidMoments;
+                }
+                else if (!mMomentHandleArray[liLoop].GetMoment().ConditionsAreMet() &&
+                         !mMomentHandleArray[liLoop].GetMoment().IsInhibited() &&
+                         mMomentDescriptionArray[liLoop].mbCanBeInhibited)
+                {
+                    ++luInvalidMoments;
+                }
+                else if (mMomentHandleArray[liLoop].GetMoment().ConditionsAreMet() &&
+                         mMomentHandleArray[liLoop].GetMoment().IsInhibited())
+                {
+                    ++luPotentiallyValidMoments;
+                }
+                else if (mMomentHandleArray[liLoop].GetMoment().GetState() == Moment::E_STATE_VALID &&
+                         !mMomentHandleArray[liLoop].GetMoment().CanSwitchToMeNow())
+                {
+                    mMomentHandleArray[liLoop].GetMoment().Inhibit();
+
+                    // A moment the description says may not be inhibited is inhibited anyway
+                    // (Release and the state change stand) and only its flag is cleared again.
+                    if (!mMomentDescriptionArray[liLoop].mbCanBeInhibited)
+                    {
+                        mMomentHandleArray[liLoop].GetMoment().Uninhibit();
+                        CGS_ASSERT_AT(!mMomentHandleArray[liLoop].GetMoment().IsInhibited(),
+                                      "!mMomentHandleArray[liLoop].GetMoment().IsInhibited()",
+                                      CGS_ARTIST_FILE, 167);
+                        --luUninhibitedMoments;
+                    }
+                }
+            }
+        }
+    }
+
+    // ---- The max-active-moments rebalance (0x8223A41C..0x8223A660) ----------------------------
+    // ArbStateCrashing::Construct @0x82259EA0 sets a limit of one, so every crash runs this.
+    if (mbHasMaxLimit && luPotentiallyValidMoments > 0)
+    {
+        if (luUninhibitedMoments < muMaxActiveMomentLimit)
+        {
+            // ARTIST 0x8223A43C..0x8223A52C: each loop re-tests the budget at its top and leaves
+            // through the pick; the held-back count guards all three loops.
+            while (luPotentiallyValidMoments > 0 && luUninhibitedMoments < muMaxActiveMomentLimit)
+            {
+                u32 luMomentToUninhibit;   // DWARF cpp:179
                 if (!PickBestInhibitedMoment(&luMomentToUninhibit, E_PICK_BEST_FUSSY))
                 {
                     break;
                 }
-                mMomentHandleArray[luMomentToUninhibit].GetMoment().SetInhibited(false);
-   // [DIAG]
-                --luInhibitedCandidate;
-                ++luUninhibited;
-                if (luInhibitedCandidate == 0)
-                {
-                    return;
-                }
+                mMomentHandleArray[luMomentToUninhibit].GetMoment().Uninhibit();
+                --luPotentiallyValidMoments;
+                ++luUninhibitedMoments;
             }
-            if (luInhibitedCandidate == 0)
+            while (luPotentiallyValidMoments > 0 && luUninhibitedMoments < muMaxActiveMomentLimit)
             {
-                return;
-            }
-            while (luUninhibited < muMaxActiveMomentLimit)
-            {
+                u32 luMomentToUninhibit;
                 if (!PickBestInhibitedMoment(&luMomentToUninhibit, E_PICK_BEST_ANY))
                 {
                     break;
                 }
-                mMomentHandleArray[luMomentToUninhibit].GetMoment().SetInhibited(false);
-   // [DIAG]
-                ++luUninhibited;
+                mMomentHandleArray[luMomentToUninhibit].GetMoment().Uninhibit();
+                ++luUninhibitedMoments;
             }
         }
 
-        do
+        while (luPotentiallyValidMoments > 0 && luInvalidMoments > 0)
         {
-            if (luConditionsNotMet == 0)
-            {
-                break;
-            }
-            u32 luMomentToUninhibit = 0;
-            const bool lbPickedBest = PickBestInhibitedMoment(&luMomentToUninhibit, E_PICK_BEST_FUSSY);
-            CGS_ASSERT(lbPickedBest, CGS_ASSERT_MESSAGE_AT("PickBestInhibitedMoment(&luMomentToUninhibit)", CGS_ARTIST_FILE, 207));   // cpp:207
-            mMomentHandleArray[luMomentToUninhibit].GetMoment().SetInhibited(false);
-
-            u32 luMomentInhibit = 0;
-            const bool lbPickedWorst = PickWorstUninhibitedMoment(&luMomentInhibit, E_PICK_WORST_FUSSY);
-            CGS_ASSERT(lbPickedWorst, CGS_ASSERT_MESSAGE_AT("PickWorstUninhibitedMoment(&luMomentInhibit)", CGS_ARTIST_FILE, 210));   // cpp:210
+            u32 luMomentToUninhibit;   // DWARF cpp:204
+            u32 luMomentInhibit;       // DWARF cpp:205
+            CGS_ASSERT_AT(PickBestInhibitedMoment(&luMomentToUninhibit, E_PICK_BEST_FUSSY),
+                          "PickBestInhibitedMoment(&luMomentToUninhibit)", CGS_ARTIST_FILE, 207);
+            mMomentHandleArray[luMomentToUninhibit].GetMoment().Uninhibit();
+            CGS_ASSERT_AT(PickWorstUninhibitedMoment(&luMomentInhibit, E_PICK_WORST_FUSSY),
+                          "PickWorstUninhibitedMoment(&luMomentInhibit)", CGS_ARTIST_FILE, 210);
             mMomentHandleArray[luMomentInhibit].GetMoment().Inhibit();
-   // [DIAG]
-      // [DIAG]
-
-            --luInhibitedCandidate;
-            --luConditionsNotMet;
-        } while (luInhibitedCandidate != 0);
+            --luPotentiallyValidMoments;
+            --luInvalidMoments;
+        }
     }
 }
 
@@ -402,49 +345,55 @@ void MomentSelector::Update(f32 lfTimestep)
 // *lpuIndex is written even when nothing is found (the seed's 0). Returns whether anything was found.
 bool MomentSelector::PickBestInhibitedMoment(u32* lpuIndex, EPickBestInhibitedOptions leOptions)
 {
-    CGS_ASSERT(mbPrepared, CGS_ASSERT_MESSAGE_AT("mbPrepared", CGS_ARTIST_FILE, 456));   // cpp:456
+    CGS_ASSERT_AT(mbPrepared, "mbPrepared", CGS_ARTIST_FILE, 456);
 
-    bool lbTakeAny = false;   // r22
-    if (static_cast<u32>(leOptions) == E_PICK_BEST_ANY)
+    // DWARF locals cpp:458 / 481..486.
+    bool lbIgnoreConditionsMet = false;
+    switch (leOptions)
     {
-        lbTakeAny = true;
-    }
-    else if (static_cast<u32>(leOptions) != E_PICK_BEST_FUSSY)
-    {
-        CGS_ASSERT(false, "Unknown option: ");   // cpp:476 (the console streams the option after it)
+    case E_PICK_BEST_FUSSY:
+        lbIgnoreConditionsMet = false;
+        break;
+    case E_PICK_BEST_ANY:
+        lbIgnoreConditionsMet = true;
+        break;
+    default:
+        CGS_ASSERT_STREAM_AT(false, "Unknown option: " << leOptions, CGS_ARTIST_FILE, 476);
+        break;
     }
 
-    bool lbFound = false;           // r24
-    u32  luBest  = 0;               // r25
-    f32  lfBest  = KF_PICK_ZERO;    // f31, flt_82001CC0
-    const u32 luCount = mMomentHandleArray.GetLength();
-    for (u32 luLoop = 0; luLoop < luCount; ++luLoop)
+    bool      lbGotBest       = false;
+    u32       luBestIndex     = 0;
+    const u32 luNumMoments    = mMomentHandleArray.GetLength();
+    u32       luLoop;
+    f32       lfBestWeighting = 0.0f;
+
+    for (luLoop = 0; luLoop < luNumMoments; ++luLoop)
     {
-        if (!mMomentHandleArray[luLoop].IsAllocated())
+        if (mMomentHandleArray[luLoop].IsAllocated())
         {
-            continue;
-        }
-        const Moment* lpMoment = &mMomentHandleArray[luLoop].GetMoment();
-        if ((!lbFound && lpMoment->IsInhibited() && lpMoment->ConditionsAreMet()) || lbTakeAny)
-        {
-            luBest  = luLoop;
-            lbFound = true;
-            lfBest  = (KF_PICK_ONE - mRecencyArray.GetItem(luLoop)) * mMomentDescriptionArray[luLoop].mfWeighting;
-            continue;
-        }
-        if (!lpMoment->IsInhibited() || !lpMoment->ConditionsAreMet())
-        {
-            continue;
-        }
-        const f32 lfScore = (KF_PICK_ONE - mRecencyArray.GetItem(luLoop)) * mMomentDescriptionArray[luLoop].mfWeighting;
-        if (lfScore > lfBest)
-        {
-            luBest = luLoop;
-            lfBest = lfScore;
+            if ((!lbGotBest && mMomentHandleArray[luLoop].GetMoment().IsInhibited() &&
+                 mMomentHandleArray[luLoop].GetMoment().ConditionsAreMet()) || lbIgnoreConditionsMet)
+            {
+                luBestIndex     = luLoop;
+                lbGotBest       = true;
+                lfBestWeighting = mMomentDescriptionArray[luLoop].mfWeighting * (1.0f - mRecencyArray[luLoop]);
+            }
+            else if (mMomentHandleArray[luLoop].GetMoment().IsInhibited() &&
+                     mMomentHandleArray[luLoop].GetMoment().ConditionsAreMet())
+            {
+                const f32 lfWeighting = mMomentDescriptionArray[luLoop].mfWeighting * (1.0f - mRecencyArray[luLoop]);
+                if (lfWeighting > lfBestWeighting)
+                {
+                    luBestIndex     = luLoop;
+                    lfBestWeighting = lfWeighting;
+                }
+            }
         }
     }
-    *lpuIndex = luBest;
-    return lbFound;
+
+    *lpuIndex = luBestIndex;
+    return lbGotBest;
 }
 
 // ---- PickWorstUninhibitedMoment @0x8221C358 (DWARF BrnMomentSelector.h:167) -------------------------
@@ -458,54 +407,58 @@ bool MomentSelector::PickBestInhibitedMoment(u32* lpuIndex, EPickBestInhibitedOp
 //   Any other option streams "Unknown option: " << option (cpp:545) and runs as FUSSY.
 bool MomentSelector::PickWorstUninhibitedMoment(u32* lpuIndex, EPickWorstUninhibitedOptions leOptions)
 {
-    CGS_ASSERT(mbPrepared, CGS_ASSERT_MESSAGE_AT("mbPrepared", CGS_ARTIST_FILE, 526));   // cpp:526
+    CGS_ASSERT_AT(mbPrepared, "mbPrepared", CGS_ARTIST_FILE, 526);
 
-    bool lbTakeAny = false;   // r21
-    if (static_cast<u32>(leOptions) == E_PICK_WORST_ANY)
+    // DWARF locals cpp:528 / 550..555 / 575.
+    bool lbIgnoreConditionsMet = false;
+    switch (leOptions)
     {
-        lbTakeAny = true;
-    }
-    else if (static_cast<u32>(leOptions) != E_PICK_WORST_FUSSY)
-    {
-        CGS_ASSERT(false, "Unknown option: ");   // cpp:545 (the console streams the option after it)
+    case E_PICK_WORST_FUSSY:
+        lbIgnoreConditionsMet = false;
+        break;
+    case E_PICK_WORST_ANY:
+        lbIgnoreConditionsMet = true;
+        break;
+    default:
+        CGS_ASSERT_STREAM_AT(false, "Unknown option: " << leOptions, CGS_ARTIST_FILE, 545);
+        break;
     }
 
-    bool lbFound = false;           // r23
-    u32  luWorst = 0;               // r24
-    f32  lfWorst = KF_PICK_ZERO;    // f31, flt_82001CC0
-    const u32 luCount = mMomentHandleArray.GetLength();
-    for (u32 luLoop = 0; luLoop < luCount; ++luLoop)
+    bool      lbGotWorst       = false;
+    u32       luWorstIndex     = 0;
+    const u32 luNumMoments     = mMomentHandleArray.GetLength();
+    u32       luLoop;
+    f32       lfWorstWeighting = 0.0f;
+
+    for (luLoop = 0; luLoop < luNumMoments; ++luLoop)
     {
-        if (!mMomentHandleArray[luLoop].IsAllocated())
+        if (mMomentHandleArray[luLoop].IsAllocated())
         {
-            continue;
-        }
-        const Moment* lpMoment = &mMomentHandleArray[luLoop].GetMoment();
-        const bool lbIdle = !lpMoment->IsInhibited() && !lpMoment->ConditionsAreMet();
-        if ((!lbFound && lbIdle) || (lbTakeAny && mMomentDescriptionArray[luLoop].mbCanBeInhibited))
-        {
-            luWorst = luLoop;
-            lbFound = true;
-            lfWorst = (KF_PICK_ONE - mRecencyArray.GetItem(luLoop)) * mMomentDescriptionArray[luLoop].mfWeighting;
-            continue;
-        }
-        if (!lbIdle)
-        {
-            if (!lbTakeAny || !mMomentDescriptionArray[luLoop].mbCanBeInhibited
-                || !(mMomentDescriptionArray[luLoop].mfWeighting < lfWorst))
+            if ((!lbGotWorst && !mMomentHandleArray[luLoop].GetMoment().IsInhibited() &&
+                 !mMomentHandleArray[luLoop].GetMoment().ConditionsAreMet()) ||
+                (lbIgnoreConditionsMet && mMomentDescriptionArray[luLoop].mbCanBeInhibited))
             {
-                continue;
+                luWorstIndex     = luLoop;
+                lbGotWorst       = true;
+                lfWorstWeighting = mMomentDescriptionArray[luLoop].mfWeighting * (1.0f - mRecencyArray[luLoop]);
+            }
+            else if ((!mMomentHandleArray[luLoop].GetMoment().IsInhibited() &&
+                      !mMomentHandleArray[luLoop].GetMoment().ConditionsAreMet()) ||
+                     (lbIgnoreConditionsMet && mMomentDescriptionArray[luLoop].mbCanBeInhibited &&
+                      mMomentDescriptionArray[luLoop].mfWeighting < lfWorstWeighting))
+            {
+                const f32 lfWeighting = mMomentDescriptionArray[luLoop].mfWeighting * (1.0f - mRecencyArray[luLoop]);
+                if (lfWeighting < lfWorstWeighting)
+                {
+                    luWorstIndex     = luLoop;
+                    lfWorstWeighting = lfWeighting;
+                }
             }
         }
-        const f32 lfScore = (KF_PICK_ONE - mRecencyArray.GetItem(luLoop)) * mMomentDescriptionArray[luLoop].mfWeighting;
-        if (lfScore < lfWorst)
-        {
-            luWorst = luLoop;
-            lfWorst = lfScore;
-        }
     }
-    *lpuIndex = luWorst;
-    return lbFound;
+
+    *lpuIndex = luWorstIndex;
+    return lbGotWorst;
 }
 
 // Release --
@@ -723,67 +676,54 @@ bool MomentSelector::SelectBestLRUMomentWithExclusion(s32 liExclusion)
 bool MomentSelector::SelectBestRandomMomentWithExclusion(CgsNumeric::Random& lRandom,
                                                         s32 liExclusion)
 {
-    if (muValidMoments == 0)                                        // +0x1D0
+    // ARTIST 0x8223A668: one shared `return false` exit (beq to 0x8223A864), as in the LRU arm.
+    if (muValidMoments != 0)                                        // +0x1D0
     {
-        return false;
-    }
+        Selector<u32, 10> lSelector;
+        lSelector.Construct();
 
-    Selector<u32, 10> lSelector;
-    lSelector.Construct();
+        const s32 liMomentCount = static_cast<s32>(mMomentDescriptionArray.GetLength());   // +0x0A0
 
-    const s32 liMomentCount = static_cast<s32>(mMomentDescriptionArray.GetLength());   // +0x0A0
-
-    for (s32 liLoop = 0; liLoop < liMomentCount; ++liLoop)
-    {
-        if (!mMomentHandleArray[static_cast<u32>(liLoop)].IsAllocated())
+        for (s32 liLoop = 0; liLoop < liMomentCount; ++liLoop)
         {
-            continue;
+            if (!mMomentHandleArray[static_cast<u32>(liLoop)].IsAllocated())
+            {
+                continue;
+            }
+
+            if (mMomentHandleArray[static_cast<u32>(liLoop)].GetMoment().GetState() !=
+                Moment::E_STATE_VALID)                                   // +0x174 == 3
+            {
+                continue;
+            }
+
+            if (!mMomentHandleArray[static_cast<u32>(liLoop)].GetMoment().CanSwitchToMeNow())
+            {                                                            // +0x178
+                continue;
+            }
+
+            if (liLoop == liExclusion)
+            {
+                continue;
+            }
+
+            // The element temporary is stored before the score is computed (stw 0x50(r1) at
+            // 0x8223A7AC, ahead of the description GetItem call).
+            lSelector.AddElement(mMomentDescriptionArray[liLoop].mfWeighting * (1.0f - mRecencyArray[liLoop]),
+                                 liLoop);
         }
 
-        if (mMomentHandleArray[static_cast<u32>(liLoop)].GetMoment().GetState() !=
-            Moment::E_STATE_VALID)                                   // +0x174 == 3
+        if (lSelector.GetLength() != 0)
         {
-            continue;
-        }
+            const s32 liSelectedMoment = static_cast<s32>(lSelector.GetSelection(lRandom));
 
-        if (!mMomentHandleArray[static_cast<u32>(liLoop)].GetMoment().CanSwitchToMeNow())
-        {                                                            // +0x178
-            continue;
-        }
-
-        if (liLoop == liExclusion)
-        {
-            continue;
-        }
-
-        const MomentDescription& lrDescription = mMomentDescriptionArray[static_cast<u32>(liLoop)];
-        const f32 lfScore =
-            (1.0f - mRecencyArray[static_cast<u32>(liLoop)]) * lrDescription.mfWeighting;
-
-        lSelector.AddElement(lfScore, static_cast<u32>(liLoop));
-    }
-
-    if (lSelector.GetLength() == 0)
-    {
-        return false;
-    }
-
-    const s32 liSelectedMoment = static_cast<s32>(lSelector.GetSelection(lRandom));
-
-    mbHasSelectedMoment = true;            // +0x1E0
-    miSelectedMoment    = liSelectedMoment;   // +0x1D8
-    mRecencyArray[static_cast<u32>(liSelectedMoment)] = 1.0f;
-
-    // [DIAG] one-shot jump-ladder rung 7 for the random arm; remove with the other diagnostics.
-    {
-        static bool sbLoggedFirstRandomSelection = false;
-        if (!sbLoggedFirstRandomSelection && CgsDev::Log::gpDebugPrint != 0)
-        {
-            sbLoggedFirstRandomSelection = true;
+            mbHasSelectedMoment = true;            // +0x1E0
+            miSelectedMoment    = liSelectedMoment;   // +0x1D8
+            mRecencyArray[static_cast<u32>(liSelectedMoment)] = 1.0f;
+            return true;
         }
     }
-
-    return true;
+    return false;
 }
 
 // ----------------------------------------------------------------------------

@@ -34,6 +34,11 @@
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"          // CgsNumeric::Random (GetSelection draw)
 #include "rw/math/fpu/scalar_operation.h"                      // rw::math::fpu::IsZero (CalculateIntervals assert)
 
+// DWARF homes Selector<T,N> in BrnMomentSelector.h; ARTIST's asserts cite that path
+// (0x820039C8) at its lines 329/330 (AddElement 0x82213D50), 670 (GetSelection 0x8222EE38) and
+// 704/715 (CalculateIntervals 0x822142D8).
+#define CGS_ARTIST_BRNMOMENTSELECTOR_H_FILE "..\..\..\GameSource\Director/MomentController/BrnMomentSelector.h"
+
 namespace BrnDirector
 {
 
@@ -44,11 +49,13 @@ class Selector
 public:
     // Bring all three embedded arrays to their
     // empty-but-usable state and mark the interval cache stale.
+    // DWARF BrnMomentSelector.h:54. ARTIST SelectBestRandomMomentWithExclusion 0x8223A6A4..0x8223A6B4
+    // zeroes the weight and interval counts before the output count (+0xB4, +0xDC, +0x88, +0xE0).
     void Construct()
     {
-        mOutputArray.Construct();
         mOriginalWeights.Construct();
         mIntervalEnds.Construct();
+        mOutputArray.Construct();
         mbNormalised = false;
     }
 
@@ -56,8 +63,8 @@ public:
     // {weight in (0,1], output value}: append the weight, append the value, invalidate cache.
     void AddElement(f32 lfWeight0To1, const T& lrElement)
     {
-        CGS_ASSERT(lfWeight0To1 > 0.0f, "lfWeight0To1 > 0.0f");
-        CGS_ASSERT(lfWeight0To1 <= 1.0f, "lfWeight0To1 <= 1.0f");
+        CGS_ASSERT_AT(lfWeight0To1 > 0.0f, "lfWeight0To1 > 0.0f", CGS_ARTIST_BRNMOMENTSELECTOR_H_FILE, 329);
+        CGS_ASSERT_AT(lfWeight0To1 <= 1.0f, "lfWeight0To1 <= 1.0f", CGS_ARTIST_BRNMOMENTSELECTOR_H_FILE, 330);
         mOriginalWeights.Append(lfWeight0To1);
         mOutputArray.Append(lrElement);
         mbNormalised = false;
@@ -68,7 +75,8 @@ public:
     // interval table.
     const T& GetSelection(CgsNumeric::Random& lrRandom) const
     {
-        CGS_ASSERT(mOriginalWeights.GetLength() > 0, "mOriginalWeights.GetLength() > 0");
+        CGS_ASSERT_AT(mOriginalWeights.GetLength() > 0, "mOriginalWeights.GetLength() > 0",
+                      CGS_ARTIST_BRNMOMENTSELECTOR_H_FILE, 670);
 
         if (!mbNormalised)
         {
@@ -99,7 +107,8 @@ private:
     // interval cache + mbNormalised flag.
     void CalculateIntervals() const
     {
-        CGS_ASSERT(mOriginalWeights.GetLength() > 0, "mOriginalWeights.GetLength() > 0");
+        CGS_ASSERT_AT(mOriginalWeights.GetLength() > 0, "mOriginalWeights.GetLength() > 0",
+                      CGS_ARTIST_BRNMOMENTSELECTOR_H_FILE, 704);
 
         f32 lfWeightsSum = 0.0f;
         for (u32 luIndex = 0; luIndex < mOriginalWeights.GetLength(); ++luIndex)
@@ -107,7 +116,8 @@ private:
             lfWeightsSum += mOriginalWeights[luIndex];
         }
 
-        CGS_ASSERT(!rw::math::fpu::IsZero(lfWeightsSum), "!rw::math::fpu::IsZero(lfWeightsSum)");
+        CGS_ASSERT_AT(!rw::math::fpu::IsZero(lfWeightsSum), "!rw::math::fpu::IsZero(lfWeightsSum)",
+                      CGS_ARTIST_BRNMOMENTSELECTOR_H_FILE, 715);
 
         const f32 lfInverseSum = 1.0f / lfWeightsSum;
         f32 lfRunningTotal = 0.0f;

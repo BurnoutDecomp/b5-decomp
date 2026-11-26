@@ -110,7 +110,8 @@ namespace BrnDirector
         virtual const char* GetName() const = 0;
 
         // --- inline non-virtual interface ---
-        void Inhibit();
+        void Inhibit();                 // DWARF h:197
+        void Uninhibit();               // DWARF h:200
 
         // DWARF BrnMoment.h:283. No out-of-line console symbol: MomentController::UpdateAllMoments
         // @0x82239DE8 inlines it right before each moment's Update (0x82239F48..0x82239F94):
@@ -155,16 +156,6 @@ namespace BrnDirector
         // ADDITIVE GROW (MomentStaticCamImpact::Update writes the +0x179 flag byte):
         void SetCanSwitchFromMeNow(bool lbCanSwitch) { mbCanSwitchFromMeNow = lbCanSwitch; }
 
-    public:
-        // ADDITIVE GROW 2026-08-01, PUBLIC by necessity: MomentSelector::Update
-        // clears this moment's mbIsInhibited from OUTSIDE the class (it writes 0 into the
-        //     +0x17B flag byte of the moment GetMoment() just returned), immediately after
-        // Inhibit raised it, on
-        // the "valid but cannot be switched to, and the description says it may NOT be
-        // inhibited" path. The console reaches the private byte directly -- either MomentSelector
-        // was a friend or an inline setter folded away; a named setter is the faithful
-        // de-inlining and keeps the poke off a raw offset.
-        void SetInhibited(bool lbInhibited) { mbIsInhibited = lbInhibited; }
 
     protected:
 
@@ -188,6 +179,13 @@ namespace BrnDirector
         mbIsInhibited = true;
         Release();
         SetState(E_STATE_INVALID_SEARCHING);
+    }
+
+    // DWARF BrnMoment.h:200: clear the inhibit flag only (MomentSelector::Update stores 0 into
+    // +0x17B, e.g. 0x8223A4A8; no state change, no Release).
+    inline void Moment::Uninhibit()
+    {
+        mbIsInhibited = false;
     }
 
     inline void Moment::Construct()
