@@ -418,7 +418,7 @@ namespace CgsNetwork
         // scratch (recovered from the asm immediates @ 0x82878E78/0x82878E7C/0x82878E7C).
         u8 lacUserData[568];
         LobbyApiStatus(mpServerInterface->GetLobbyAPIRef(), 0x73656C66, lacUserData, 564);
-        lpPlayerInfo->SerialiseFromUser(lacUserData);
+        lpPlayerInfo->SerialiseFromUser(reinterpret_cast<const LobbyApiUserT*>(lacUserData));
     }
 
     // -----------------------------------------------------------------------------------

@@ -289,7 +289,7 @@ namespace BrnNetwork
     {
         u32 luResult = XShowSigninUI(1, 2);           // XShowSigninUI(1u, 2u)
         meSubState   = 2;                             // stw 2, 0x84
-        return luResult == 0;                         // return v2 == 0
+        return 0 == luResult;                         // constant on the left: ARTIST addi r11,r3,0; cntlzw
     }
 
     // X360 0x8254CE28 -- pop the Xbox Guide gamer-card UI for the requested XUID; enter the
@@ -307,7 +307,7 @@ namespace BrnNetwork
         // (lwz r3, 0x80(r30)) and r4 = the full 64-bit requested XUID (ld r4, 0x78(r30)).
         s32 liResult = XShowGamerCardUI(muRequestingControllerPort, mRequestedGamerCardXUID);
         meSubState   = 2;                             // stw 2, 0x84
-        return liResult == 0;                         // return v9 == 0
+        return 0 == liResult;                         // same shape (ARTIST 0x8254CEAC)
     }
 
     // X360 0x8254CED0 -- poll the player-info component's idle/error state for the request.

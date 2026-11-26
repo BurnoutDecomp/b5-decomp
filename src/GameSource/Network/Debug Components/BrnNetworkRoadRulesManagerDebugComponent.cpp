@@ -26,6 +26,8 @@ namespace BrnNetwork
 {
     void RoadRulesManagerDebugComponent::Construct( NetworkRoadRulesManager* lpRoadRulesManager )
     {
+        // ARTIST 0x8258636C: the base two-phase init first (folded onto 0x8284CB38).
+        DebugComponent::Construct();
         mpRoadRulesManager = lpRoadRulesManager;
         Register();
     }

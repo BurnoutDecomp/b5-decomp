@@ -44,18 +44,29 @@ extern "C" void CryptMD5Init(CryptMD5T* ctx)
 }
 extern "C" void CryptMD5Update(CryptMD5T* ctx, const void* buffer, s32 len)
 {
-    const u8* p=static_cast<const u8*>(buffer);
-    if (len<0) len=static_cast<s32>(strlen(reinterpret_cast<const char*>(p)));
-    const u32 used=ctx->uCount&63; ctx->uCount+=len;
-    if (used)
+    // DWARF locals uAdd/uCount/pBuffer (cryptmd5.c:306-308); statement order from the PS3 -O0
+    // body (0xF0D2F0), including its inline string-length loop.
+    s32 uAdd;
+    u32 uCount;
+    const u8* pBuffer=static_cast<const u8*>(buffer);
+    if (len<0)
     {
-        const s32 remain=64-used;
-        if (len<remain) { memcpy(ctx->strData+used,p,len); return; }
-        memcpy(ctx->strData+used,p,remain); p+=remain; len-=remain;
+        for (len=0; pBuffer[len]!=0; len++)
+            ;
+    }
+    uCount=ctx->uCount&63;
+    ctx->uCount+=len;
+    if (uCount!=0)
+    {
+        uAdd=64-uCount;
+        if (len<uAdd) { memcpy(ctx->strData+uCount,pBuffer,len); return; }
+        memcpy(ctx->strData+uCount,pBuffer,uAdd);
+        pBuffer+=uAdd;
+        len-=uAdd;
         CryptMD5Transform(ctx,ctx->strData);
     }
-    while (len>=64) { CryptMD5Transform(ctx,p); p+=64; len-=64; }
-    if (len>0) memcpy(ctx->strData,p,len);
+    while (len>63) { CryptMD5Transform(ctx,pBuffer); pBuffer+=64; len-=64; }
+    if (len>0) memcpy(ctx->strData,pBuffer,len);
 }
 extern "C" void CryptMD5Final(CryptMD5T* ctx, void* buffer, s32 len)
 {

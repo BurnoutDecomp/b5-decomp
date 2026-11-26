@@ -31,12 +31,10 @@ bool ServerInterfacePlayerInfoDataX360::Prepare()
 // SerialiseFromUser @ 0x82879EE0 -- chain to the base to fill the shared record,
 // then decode the 8-byte secure host address out of the lobby user record's machine
 // address into muXUID, returning the DirtyAddrToHostAddr result.
-bool ServerInterfacePlayerInfoDataX360::SerialiseFromUser(const void* lpUser)
+void ServerInterfacePlayerInfoDataX360::SerialiseFromUser(const LobbyApiUserT* lpUser)
 {
     ServerInterfacePlayerInfoDataBase::SerialiseFromUser(lpUser);
-
-    const LobbyApiUserT* lpUserRecord = static_cast<const LobbyApiUserT*>(lpUser);
-    return DirtyAddrToHostAddr(&muXUID, 8, &lpUserRecord->MachineAddr) != 0;
+    DirtyAddrToHostAddr(&muXUID, 8, &lpUser->MachineAddr);
 }
 
 }

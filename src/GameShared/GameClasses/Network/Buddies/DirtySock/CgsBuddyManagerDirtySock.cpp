@@ -484,17 +484,15 @@ namespace CgsNetwork
     // _MessageArrivedCallback @ 0x8287D980 (static)
     //
     // Forwards the inbound message text into MessageArrived (vtable slot +0x6C).
-    // The asm reads the message text out of the BuddyApiMsgT at +0x14.
+    // The asm reads the message text out of the BuddyApiMsgT at +0x14 (pData).
+    // DWARF local lpBuddyManager (CgsBuddyManagerDirtySock.cpp:866).
     // =========================================================================
-    void BuddyManagerBase::_MessageArrivedCallback(HLBApiRefT* /*lpApi*/,
+    void BuddyManagerBase::_MessageArrivedCallback(HLBApiRefT* /*lpRef*/,
                                                    CgsNetwork::DirtySock::BuddyApiMsgT* lpMsg,
-                                                   void* lpBuddyManager)
+                                                   void* lpData)
     {
-        // lpMsg's text field lives at +0x14; the record is opaque middleware data
-        // (no shared layout), so the text pointer cannot be named here. Flagged:
-        // BuddyApiMsgT layout unrecovered -- forward a null message text.
-        (void)lpMsg;
-        static_cast<BuddyManagerBase*>(lpBuddyManager)->MessageArrived(0);
+        BuddyManagerBase* lpBuddyManager = static_cast<BuddyManagerBase*>(lpData);
+        lpBuddyManager->MessageArrived(lpMsg->pData);
     }
 
     // =========================================================================

@@ -77,10 +77,11 @@ namespace CgsNetwork
         meStatus                = ServerInterfaceDirtySock::E_STATUS_IDLE;   // +0x08 (== 2)
         mpcCurrentAction        = "";                       // +0x04
         miLastError             = 0;                                         // +0x0C
-        miNumArbPacketsBuffered = 0;                                         // +0x580
+        // ARTIST 0x828767E4..0x828767F0 stores +0x584, +0x588, +0x58C, then +0x580.
+        mpServerInterface       = 0;                                         // +0x584
         meCurrentAction         = E_ACTION_COUNT;                           // +0x588 (== 1)
         miChatCallback          = KI_NO_CHAT_CALLBACK;                       // +0x58C (== -1)
-        mpServerInterface       = 0;                                         // +0x584
+        miNumArbPacketsBuffered = 0;                                         // +0x580
     }
 
     // @ 0x828767F8 -- reset our own state (the base slots are left to the base teardown).

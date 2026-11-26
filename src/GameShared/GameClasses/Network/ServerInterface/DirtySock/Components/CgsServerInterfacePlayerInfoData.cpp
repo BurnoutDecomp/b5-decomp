@@ -166,12 +166,12 @@ bool ServerInterfacePlayerInfoDataBase::Prepare()
     return true;
 }
 
-bool ServerInterfacePlayerInfoDataBase::SerialiseFromUser(const void* lpUser)
+void ServerInterfacePlayerInfoDataBase::SerialiseFromUser(const LobbyApiUserT* lpUser)
 {
     CGS_ASSERT(lpUser != 0, "lpUser");
 
     // Lobby user record fields, by byte offset (the record type has no home here).
-    const u8* lpcRec = static_cast<const u8*>(lpUser);
+    const u8* lpcRec = reinterpret_cast<const u8*>(lpUser);
 
     StrnCpyChecked(macName,          reinterpret_cast<const char*>(lpcRec + 0x008), 16);   // name
     StrnCpyChecked(macAuxiliaryData, reinterpret_cast<const char*>(lpcRec + 0x12C), 132);  // aux
@@ -211,7 +211,7 @@ bool ServerInterfacePlayerInfoDataBase::SerialiseFromUser(const void* lpUser)
     const void* lpData = lpcThis->GetData();
     if (lpData == 0)
     {
-        return false;
+        return;
     }
 
     CGS_ASSERT(std::strlen(GetPattern()) < static_cast<u32>(GetPatternLength()),
@@ -220,8 +220,8 @@ bool ServerInterfacePlayerInfoDataBase::SerialiseFromUser(const void* lpUser)
     const char* lpcPattern = GetPattern();
     const u32   luDataSize = GetDataSize();
     void*       lpDataBuf  = const_cast<void*>(lpcThis->GetData());
-    return TagFieldGetStructure(reinterpret_cast<const char*>(lpcRec + 0x28),
-                                lpDataBuf, static_cast<s32>(luDataSize), lpcPattern) != 0;
+    TagFieldGetStructure(reinterpret_cast<const char*>(lpcRec + 0x28),
+                         lpDataBuf, static_cast<s32>(luDataSize), lpcPattern);
 }
 
 }

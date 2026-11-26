@@ -64,6 +64,8 @@ namespace BrnNetwork
     // empty bodies); it is a no-op and is dropped.
     void StatsDebugComponent::Construct()
     {
+        // ARTIST 0x825851FC: the base two-phase init first (folded onto 0x8284CB38).
+        DebugComponent::Construct();
         Register();
 
         mpServerInterface   = 0;
@@ -113,6 +115,8 @@ namespace BrnNetwork
     // bodies) -- a no-op, dropped -- then stores 0 to mpServerInterface and the three ELO values.
     void StatsDebugComponent::Destruct()
     {
+        // ARTIST 0x825852D4: the base teardown first (folded onto 0x8284CB38).
+        DebugComponent::Destruct();
         mpServerInterface   = 0;
         miRaceElo           = 0;
         miBurningHomeRunElo = 0;

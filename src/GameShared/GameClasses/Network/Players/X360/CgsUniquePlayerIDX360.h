@@ -34,8 +34,9 @@ namespace CgsNetwork
         static const s32 KI_USERNAME_LENGTH = CgsNetwork::KI_USERNAME_LENGTH;
 
         // @ 0x82541A10 -- validate lpcPlayerName, copy it into the PlayerName base, then store
-        // the 64-bit XUID at +0x10. Returns `this` (the X360 returns PlayerName::Construct's r3).
-        UniquePlayerIDX360* Construct(const char* lpcPlayerName, u64 lqXuid);
+        // the 64-bit XUID at +0x10. void: ARTIST leaves PlayerName::Construct's r3 (DWARF
+        // CgsPlayerName.h: `void Construct(const char*)`) untouched.
+        void Construct(const char* lpcPlayerName, u64 lqXuid);
 
         // Build the identity from a lobby player's parameters: the XUID decoded from the
         // player's machine address, and the player's name.

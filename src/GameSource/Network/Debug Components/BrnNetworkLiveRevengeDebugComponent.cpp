@@ -50,6 +50,8 @@ namespace BrnNetwork
     void LiveRevengeDebugComponent::Construct(LiveRevengeManager* lpLiveRevengeManager)
     {
         mpLiveRevengeManager = lpLiveRevengeManager;
+        // ARTIST 0x82584D60: the base two-phase init (folded onto 0x8284CB38), after the member.
+        DebugComponent::Construct();
         Register();
     }
 

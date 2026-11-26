@@ -15,20 +15,23 @@
 // in the asm (lbz/until-NUL, subf, addi -1, cmplwi 0x10) is a plain strlen < KI_USERNAME_LENGTH.
 // The XUID store is `std r28, 0x10(this)` -- a 64-bit store of the single XUID arg register.
 
+// ARTIST's asserts name the header (lines 99/101), where the original defined this body.
+#define CGS_ARTIST_UNIQUE_PLAYER_ID_X360_H "..\\..\\..\\GameShared\\GameClasses\\Network/Players/X360/CgsUniquePlayerIDX360.h"
+
 namespace CgsNetwork
 {
 
-UniquePlayerIDX360* UniquePlayerIDX360::Construct(const char* lpcPlayerName, u64 lqXuid)
+void UniquePlayerIDX360::Construct(const char* lpcPlayerName, u64 lqXuid)
 {
-    CGS_ASSERT(lpcPlayerName != 0, "lpcPlayerName");
-    CGS_ASSERT(static_cast<s32>(std::strlen(lpcPlayerName)) < static_cast<s32>(KI_USERNAME_LENGTH),
-               "strlen( lpcPlayerName ) < static_cast<int32_t>( KI_USERNAME_LENGTH )");
+    CGS_ASSERT_AT(lpcPlayerName, "lpcPlayerName", CGS_ARTIST_UNIQUE_PLAYER_ID_X360_H, 99);
+    // size_t against int: the unsigned compare ARTIST makes (cmplwi 0x10 at 0x82541A78).
+    CGS_ASSERT_AT(std::strlen(lpcPlayerName) < static_cast<s32>(KI_USERNAME_LENGTH),
+                  "strlen( lpcPlayerName ) < static_cast<int32_t>( KI_USERNAME_LENGTH )",
+                  CGS_ARTIST_UNIQUE_PLAYER_ID_X360_H, 101);
 
-    // Copy the name into the PlayerName base (the X360 returns this call's r3 as the result).
     PlayerName::Construct(lpcPlayerName);
 
     mqXuid = lqXuid;   // std r28, 0x10(this)
-    return this;
 }
 
 // The lobby player's machine address carries the XUID; decode it, then take the name.

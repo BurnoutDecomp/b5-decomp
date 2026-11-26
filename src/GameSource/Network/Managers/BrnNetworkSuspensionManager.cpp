@@ -84,9 +84,10 @@ namespace BrnNetwork
 
     void SuspensionManager::Disconnected()
     {
+        // ARTIST 0x82544D18..0x82544D20 stores +0x00, +0x10, then +0x04.
         mCallback = 0;
-        mpUserData = 0;
         meSubState = E_SUBSTATE_COUNT;
+        mpUserData = 0;
     }
 
     bool SuspensionManager::IsSuspending() const

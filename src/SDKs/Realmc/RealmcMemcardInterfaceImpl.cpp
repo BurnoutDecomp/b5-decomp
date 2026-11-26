@@ -154,7 +154,8 @@ int MemcardInterfaceImpl::Update(int /*liArg*/)
 // @0x82B520E8.
 bool MemcardInterfaceImpl::IsResettable()
 {
-    return mMemcardState.GetMainTask() == 0;
+    // Constant on the left: ARTIST keeps the `addi r11,r3,0` before cntlzw (0x82B520FC).
+    return 0 == mMemcardState.GetMainTask();
 }
 
 // @0x82B52118. This global is shared with XenonUtil::CheckState and the

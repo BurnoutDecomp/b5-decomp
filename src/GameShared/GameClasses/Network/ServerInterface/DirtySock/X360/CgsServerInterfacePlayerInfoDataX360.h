@@ -39,8 +39,9 @@ namespace CgsNetwork
 
         // @ X360 0x82879EE0 -- chain to the base, then decode the secure host
         // address out of the lobby user record (user +0x1D0) into muXUID via
-        // DirtyAddrToHostAddr(&muXUID, 8, ...). Returns that call's result.
-        virtual bool SerialiseFromUser(const void* lpUser);
+        // DirtyAddrToHostAddr(&muXUID, 8, ...). void as the base (DWARF): ARTIST leaves
+        // DirtyAddrToHostAddr's r3 in place (0x82879F0C).
+        virtual void SerialiseFromUser(const LobbyApiUserT* lpUser);
 
         // The decoded 8-byte secure address / XUID. ADDITIVE GROW
         // (GamerPictureManagerX360 TU): BrnNetwork::GamerPictureManagerX360::AddPlayer

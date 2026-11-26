@@ -22,8 +22,16 @@ namespace DirtySock
     using ::HLBApiRefT;
     using ::HLBBudT;
 
-    // Opaque inbound chat / invite message (buddyapi.h).
-    struct BuddyApiMsgT;
+    // Inbound chat / invite message (DWARF buddyapi.h:219-226).
+    struct BuddyApiMsgT
+    {
+        s32         iType;        // +0x00
+        s32         iKind;        // +0x04
+        s32         iCode;        // +0x08
+        u32         uTimeStamp;   // +0x0C
+        u32         uUserFlags;   // +0x10
+        const char* pData;        // +0x14
+    };
 
     // hlbudapi.h:61 -- buddy presence state. The wrappers only test it against 0
     // (offline) vs non-zero (online), so the concrete enumerators are not needed

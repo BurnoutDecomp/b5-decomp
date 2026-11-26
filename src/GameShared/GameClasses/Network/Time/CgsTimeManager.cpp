@@ -294,8 +294,10 @@ namespace CgsNetwork
     {
         const f32 lfTimeStep = lpTimerStatus->GetCurrentTimeStep();
 
-        mNetworkTime += CgsSystem::Time(lfTimeStep);   // this+0x370 += Time(step)
-        mGlobalTime  += CgsSystem::Time(lfTimeStep);   // this+0x378 += Time(step)
+        // Implicit Time(f32) conversions: ARTIST passes the temporary's stack address, not the
+        // constructor's returned this (0x82581420 / 0x82581438).
+        mNetworkTime += lfTimeStep;                   // this+0x370
+        mGlobalTime  += lfTimeStep;                   // this+0x378
 
         ++muFrameCount;                                // this+0x388
     }

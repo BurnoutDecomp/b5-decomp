@@ -21,6 +21,8 @@ namespace BrnNetwork
     void ImageManagerDebugComponent::Construct( NetworkImageManager* lpImageManager,
                                                 CgsNetwork::NetworkTextureDXTCompress* lpTextureCompressor )
     {
+        // ARTIST 0x82586440: the base two-phase init first (folded onto 0x8284CB38).
+        DebugComponent::Construct();
         mImage.Construct();
         mCompressedImage.Construct();
         miImageQuality = 0;

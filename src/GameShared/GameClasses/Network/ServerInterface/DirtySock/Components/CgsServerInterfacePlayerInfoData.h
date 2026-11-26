@@ -4,6 +4,8 @@
 #include "types.hpp"
 #include "../CgsServerInterfaceStructureInterface.h"
 
+struct LobbyApiUserT;   // DirtySDK lobby user record (lobbyapi.h)
+
 // ===========================================================================
 // CgsNetwork::ServerInterfacePlayerInfoDataBase
 //   Home: GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/
@@ -96,7 +98,8 @@ namespace CgsNetwork
 
         // CgsServerInterfacePlayerInfoData.cpp (virtual; SerialiseFromUser fills the
         // record from a DirtySDK lobby user struct then parses the custom blob).
-        virtual bool SerialiseFromUser(const void* lpUser);
+        // DWARF CgsServerInterfacePlayerInfoData.h:523: void (const LobbyApiUserT*).
+        virtual void SerialiseFromUser(const LobbyApiUserT* lpUser);
 
         // CgsServerInterfacePlayerInfoData.h accessors.
         const char* GetName() const { return macName; }
