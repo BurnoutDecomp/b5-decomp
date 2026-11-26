@@ -39,7 +39,6 @@ namespace
     const u32 KU_OFFSET_WHEEL_NAME   = 0x10;
     const u32 KU_OFFSET_VEHICLE_NAME = 0x30;
     const u32 KU_OFFSET_FLAGS        = 0x94;
-    const u32 KU_OFFSET_UNLOCK_RANK  = 0x99;
 
     // Offsets inside the trailing opaque region (maPad224, +0xE0..0xEF).
     const u32 KU_OFFSET_CAR_TYPE     = 0xE8 - 0xE0;
@@ -92,12 +91,6 @@ bool VehicleListEntry::IsTrophyCar() const
 bool VehicleListEntry::CanAutoRepair() const
 {
     return (ReadU32(&maGamePlayDataHead[KU_OFFSET_FLAGS - 0x90]) & KU_FLAG_CAN_AUTOREPAIR) != 0;
-}
-
-// The required-progression-rank byte inside the gameplay-data sub-object (+0x99).
-u8 VehicleListEntry::GetUnlockRank() const
-{
-    return maGamePlayDataHead[KU_OFFSET_UNLOCK_RANK - 0x90];
 }
 
 // The car's boost class (+0xE8) -- raw byte, mapped by the caller.

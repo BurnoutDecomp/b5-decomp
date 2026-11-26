@@ -103,9 +103,11 @@ public:
     // :94  RECONSTRUCTED @0x8267B158
     void AddListResource(CgsResource::ResourcePtr<VehicleListResource>& lrResource);
 
-    s32 GetVehicleCount() const;                        // :97   RECONSTRUCTED
-    s32 GetSelectableVehicleCount() const;              // :100  RECONSTRUCTED
-    s32 GetSponsorVehicleCount() const;                 // :103  RECONSTRUCTED
+    // DWARF h:97 / :100 / :103, in-class: ARTIST has no copy of any of the three and reads the
+    // count word in line (DerivedCarArray::ConstructColourLiveryList 0x823750F8 `lwz 0x3400`).
+    s32 GetVehicleCount() const { return miCount; }
+    s32 GetSelectableVehicleCount() const { return miSelectableVehicleCount; }
+    s32 GetSponsorVehicleCount() const { return miSponsorVehicleCount; }
     const VehicleListEntry* GetVehicleData(s32 liIndex) const;   // :106 RECONSTRUCTED @0x822187E0
     s32 GetVehicleIndex(CgsID lCarId) const;            // :112  RECONSTRUCTED @0x822188C8
 

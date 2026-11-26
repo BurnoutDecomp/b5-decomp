@@ -1,6 +1,6 @@
 // VehicleList.cpp
 // BrnResource::VehicleList -- Construct / Destruct / AddListResource / GetVehicleData /
-// GetVehicleCount / GetSelectableVehicleCount / GetSponsorVehicleCount / GetVehicleIndex,
+// GetVehicleIndex (the three counters are in-class in VehicleList.h),
 // plus VehicleListResource::GetEntry.
 //
 // Reconstructed from the X360 ARTIST build:
@@ -212,24 +212,6 @@ void VehicleList::AddListResource(CgsResource::ResourcePtr<VehicleListResource>&
 
     // X360 @0x8267B334: ++miListCount.
     ++miListCount;
-}
-
-// VehicleList::GetVehicleCount @ VehicleList.h:97 (inlined on the console; the count word
-// GetVehicleIndex reads at +0x3400).
-s32 VehicleList::GetVehicleCount() const
-{
-    return miCount;
-}
-
-// VehicleList.h:100 / :103 -- the two derived counters AddListResource maintains.
-s32 VehicleList::GetSelectableVehicleCount() const
-{
-    return miSelectableVehicleCount;
-}
-
-s32 VehicleList::GetSponsorVehicleCount() const
-{
-    return miSponsorVehicleCount;
 }
 
 // VehicleList::GetVehicleData(s32) @ 0x822187E0

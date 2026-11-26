@@ -137,8 +137,8 @@ void OnlineCarSelectManager::EnterOnlineCarSelect(GameStateModuleIO::GameActionQ
 
     // The console writes only the control word and the drive-thru byte of this record.
     GameStateModuleIO::SetPlayerCarDriverAction lSetPlayerCarDriverAction;
-    lSetPlayerCarDriverAction.meCarControl  = BrnWorld::E_CAR_CONTROL_NONE;
     lSetPlayerCarDriverAction.mbIsDriveThru = false;
+    lSetPlayerCarDriverAction.meCarControl  = BrnWorld::E_CAR_CONTROL_NONE;
 
     mfTimeLeftInCarSelect = KF_MAX_CAR_SELECT_DURATION;
     mbIsInOnlineCarSelect = true;
@@ -173,21 +173,20 @@ void OnlineCarSelectManager::EnterOnlineCarSelect(GameStateModuleIO::GameActionQ
     lCars.Construct();
     mpGameStateModule->GetListOfPlayerSelectableVehicles(lCars);
 
-    if (lCars.FindFirstInstanceOf(mStartCarId) == lCars.KU_INVALID)
+    u32 luCurrentVehicleIndex = lCars.FindFirstInstanceOf(mStartCarId);
+    if (luCurrentVehicleIndex == lCars.KU_INVALID)
     {
         const BrnResource::VehicleListEntry* lpCurrentVehicleData = mpVehicleList->GetVehicleData(mStartCarId);
         CGS_ASSERT(lpCurrentVehicleData != 0, CGS_ASSERT_MESSAGE_AT("lpCurrentVehicleData != NULL", CGS_ARTIST_FILE, 210));
 
-        bool lbParentIsSelectable = false;
         if (lpCurrentVehicleData->IsLiveryColour())
         {
             CGS_ASSERT(lpCurrentVehicleData->GetParentId() != 0,
                        CGS_ASSERT_MESSAGE_AT("lpCurrentVehicleData->GetParentId() != kCGSID_NULL", CGS_ARTIST_FILE, 214));
-            const CgsID lParentId = lpCurrentVehicleData->GetParentId();
-            lbParentIsSelectable = lCars.FindFirstInstanceOf(lParentId) != lCars.KU_INVALID;
+            luCurrentVehicleIndex = lCars.FindFirstInstanceOf(lpCurrentVehicleData->GetParentId());
         }
 
-        if (!lbParentIsSelectable)
+        if (luCurrentVehicleIndex == lCars.KU_INVALID)
         {
             const BrnProgression::Profile* lpProfile = mpProgressionManager->GetProfile();
             CGS_ASSERT(lpProfile, CGS_ASSERT_MESSAGE_AT("lpProfile", CGS_ARTIST_FILE, 225));
@@ -241,9 +240,11 @@ void OnlineCarSelectManager::StartCarModificationState(GameStateModuleIO::GameAc
     BrnProgression::DerivedCarArray lDerivedCarArray;
     lDerivedCarArray.ConstructColourLiveryList(mpVehicleList, mDesiredCarId);
 
-    // The console streams "We weren't expecting " << n << " livery versions." into the message.
-    CGS_ASSERT(lDerivedCarArray.GetLength() <= BrnProgression::KU_MAX_AMOUNT_OF_DERIVED_CARS,
-               "We weren't expecting ");
+    // ARTIST 0x82388278..318: "We weren't expecting " (0x82031090) << length << " livery versions."
+    // (0x8203107C), fired at line 337.
+    CGS_ASSERT_STREAM_AT(lDerivedCarArray.GetLength() <= BrnProgression::KU_MAX_AMOUNT_OF_DERIVED_CARS,
+                         "We weren't expecting " << lDerivedCarArray.GetLength() << " livery versions.",
+                         CGS_ARTIST_FILE, 337);
 
     lDerivedCarArray.DEBUG_PrintArray();
 
@@ -314,18 +315,23 @@ void OnlineCarSelectManager::Update(GameStateModuleIO::GameActionQueue* lpAction
     {
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
         {
-            *CgsDev::Log::gpDebugPrint << "RG :: CS Manager : " << "TIMEOUT\n";
+            // ARTIST 0x8239C480 streams three literals: "TIMEOUT" (0x82032274), "\n" (0x82001CC4).
+            *CgsDev::Log::gpDebugPrint << "RG :: CS Manager : " << "TIMEOUT" << "\n";
         }
         StartWaitForOnline(lpActionQueue);
     }
 
-    if (meStateOfChangingCars == E_CAR_CHANGE_REQUEST)
+    // ARTIST tests == 1 then == 2 and lays the BUSY call first: a switch.
+    switch (meStateOfChangingCars)
     {
+    case E_CAR_CHANGE_REQUEST:
         UpdateRequestCarChangeState(lpActionQueue);
-    }
-    else if (meStateOfChangingCars == E_CAR_CHANGE_BUSY)
-    {
+        break;
+    case E_CAR_CHANGE_BUSY:
         UpdateChangeCarState(lpActionQueue);
+        break;
+    default:
+        break;
     }
 
     const bool lbCanShowCar = !mbWaitingForStreaming;
@@ -644,14 +650,10 @@ void OnlineCarSelectManager::SaveChosenLiveryForCar(CgsID lCarId)
     BrnProgression::Profile* lpProfile = mpProgressionManager->GetProfile();
     CGS_ASSERT(lpProfile, CGS_ASSERT_MESSAGE_AT("lpProfile", CGS_ARTIST_FILE, 771));
 
-    const BrnResource::VehicleList* lpVehicleList = mpVehicleList;
-    const s32 liVehicleIndex = lpVehicleList->GetVehicleIndex(lCarId);
-    const BrnResource::VehicleListEntry* lpVehicleListEntry =
-        (liVehicleIndex < 0) ? 0 : lpVehicleList->GetVehicleData(liVehicleIndex);
+    const BrnResource::VehicleListEntry* lpVehicleListEntry = mpVehicleList->GetVehicleData(lCarId);
     CGS_ASSERT(lpVehicleListEntry, CGS_ASSERT_MESSAGE_AT("lpVehicleListEntry", CGS_ARTIST_FILE, 774));
 
-    const u8 luLiveryType = lpVehicleListEntry->GetLiveryType();
-    if (luLiveryType == 1 || luLiveryType == 3 || luLiveryType == 4)
+    if (lpVehicleListEntry->IsLiveryColour())
     {
         lpProfile->SetChosenLiveryIdForBaseCar(lpVehicleListEntry->GetParentId(), lCarId);
     }

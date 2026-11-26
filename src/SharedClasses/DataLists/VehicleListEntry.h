@@ -101,7 +101,9 @@ struct VehicleListEntry
     // FLAG: the +0x94 bit0 / +0x99 byte offsets are recovered from the asm, not the exports.
     CgsID GetId() const { return mId; }   // DWARF h:362, header-inline (no ARTIST copy)
     bool  IsTrophyCar() const;
-    u8    GetUnlockRank() const;
+    // In-class: ARTIST has no copy of this accessor and reads the byte in line
+    // (OnlineCarSelectManager::EnterOnlineCarSelect 0x8239C924 `lbz r11,0x99(r3)`).
+    u8    GetUnlockRank() const { return maGamePlayDataHead[0x09]; }
 
     // ADDITIVE GROW (declare-only; body in the VehicleList/VehicleListEntry TU) for the
     // BrnGameState::DeveloperChallengeManager::CheckCarID parent-chain walk. X360 CheckCarID reads
