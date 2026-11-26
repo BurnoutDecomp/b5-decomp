@@ -562,12 +562,18 @@ namespace vpu
     // row, ANDed together); reconstructed here as four IsValid(Vector3) row checks. The
     // RaceCar transform asserts (AddToWorld / UpdatePositioningData) call this on the
     // full transform.
-    inline bool IsValid(const Matrix44Affine& lrMatrix)
+    // rwmath 1.02.00 matrix44affine_operation_inline.h:215-221 combines the four row results
+    // with a bitwise `&` (every row is evaluated, no short-circuit): ARTIST
+    // PhysicalBodyPart::UpdateRW materialises four bools and ANDs them (0x825E7CC8..0x825E7CD0).
+    // The SDK declares it `inline __attribute__ ((always_inline))` (the same LegacySrc file), the
+    // GCC spelling of a forced inline; ARTIST inlines it with its four row checks, which the XDK
+    // inliner declines for a plain `inline` of this size.
+    __forceinline bool IsValid(const Matrix44Affine& lrMatrix)
     {
-        return IsValid(lrMatrix.xAxis)
-            && IsValid(lrMatrix.yAxis)
-            && IsValid(lrMatrix.zAxis)
-            && IsValid(lrMatrix.wAxis);
+        return (bool)( IsValid(lrMatrix.xAxis) &
+                       IsValid(lrMatrix.yAxis) &
+                       IsValid(lrMatrix.zAxis) &
+                       IsValid(lrMatrix.wAxis) );
     }
 
     // -- SLerp's console arithmetic (FX-GATE, crash parity 2026-09-25) -------------------------------------------------
