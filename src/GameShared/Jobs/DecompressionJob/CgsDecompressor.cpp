@@ -159,13 +159,9 @@ namespace CgsResource
             const char* lpcSource =
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\jobs\\decompressionjob\\DecompressionJob.cpp";
             CGS_JOB_ASSERT_LOG(lpcSource, 56, lMessage.GetBuffer());
-            __asm { mfmsr r12 }
-            __asm { ori r12, r12, 0x400 }
-            __asm { mtmsr r12 }
+            CGS_JOB_ASSERT_BREAK();
             CGS_JOB_ASSERT_LOG(lpcSource, 56, lMessage.GetBuffer());
-            __asm { mfmsr r12 }
-            __asm { ori r12, r12, 0x400 }
-            __asm { mtmsr r12 }
+            CGS_JOB_ASSERT_BREAK();
         }
         gaDecompressors[static_cast<u32>(luJobThreadIndex)].Execute(
             static_cast<DecompressionJobData*>(lParam1.mpValue));

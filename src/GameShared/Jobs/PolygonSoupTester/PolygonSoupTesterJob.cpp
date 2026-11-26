@@ -62,21 +62,17 @@ namespace
 // The job-side assertion as ARTIST expands it in this TU (AllocateMemory 0x82916C10..0x82916C6C):
 // PrintStringed(file, 0, line, message) and the MSR[SE] trap, twice, each expansion with its own
 // copies of the literals (this TU is compiled /Od, so nothing pools them: "Trying to use too much
-// memory" sits at both 0x821004AC and 0x8210052C). The trap is an inline-assembly block, which
-// the compiler brackets with std/ld r12 as ARTIST shows; same sequence as the job entry points
+// memory" sits at both 0x821004AC and 0x8210052C). The trap with its r12 save is the shared
+// CGS_JOB_ASSERT_BREAK (CgsJobAssertBuffer.h), the same sequence as the job entry points
 // (PolygonSoupTester.cpp, RadixSort.cpp).
 #include "GameShared/Jobs/CgsJobAssertBuffer.h"
 #define POLYGONSOUPTESTERJOB_CPP "D:\\P4\\B5_MAIN\\Burnout\\MAIN\\Code\\GameShared\\Jobs\\PolygonSoupTester\\PolygonSoupTesterJob.cpp"
 #define POLYGONSOUPTESTER_JOB_FAIL(line, message)                          \
     {                                                                      \
         CGS_JOB_ASSERT_LOG(POLYGONSOUPTESTERJOB_CPP, line, message);       \
-        __asm { mfmsr r12 }                                                \
-        __asm { ori r12, r12, 0x400 }                                      \
-        __asm { mtmsr r12 }                                                \
+        CGS_JOB_ASSERT_BREAK();                                            \
         CGS_JOB_ASSERT_LOG(POLYGONSOUPTESTERJOB_CPP, line, message);       \
-        __asm { mfmsr r12 }                                                \
-        __asm { ori r12, r12, 0x400 }                                      \
-        __asm { mtmsr r12 }                                                \
+        CGS_JOB_ASSERT_BREAK();                                            \
     }
 
 // The line arm carves its result as one 128-byte arena slot and the stream copies a whole

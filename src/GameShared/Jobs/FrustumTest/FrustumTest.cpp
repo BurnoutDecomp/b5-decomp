@@ -35,13 +35,9 @@ namespace CgsSceneManager
     static void FrustumJobAssert(const char* lpFile, int liLine, const char* lpMessage)
     {
         CgsDev::Assert::PrintStringed(lpFile, 0, liLine, lpMessage);
-        __asm { mfmsr r12 }
-        __asm { ori r12, r12, 0x400 }
-        __asm { mtmsr r12 }
+        CGS_JOB_ASSERT_BREAK();
         CgsDev::Assert::PrintStringed(lpFile, 0, liLine, lpMessage);
-        __asm { mfmsr r12 }
-        __asm { ori r12, r12, 0x400 }
-        __asm { mtmsr r12 }
+        CGS_JOB_ASSERT_BREAK();
     }
 
     // 0x82BDF7B8 and 0x82BDF848: resolve and enqueue entity indices.

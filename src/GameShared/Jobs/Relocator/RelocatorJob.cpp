@@ -81,13 +81,9 @@ void RelocatorJob::ExecuteTestHijacks(CgsMemory::RelocationTestParams* lpParams,
             lMessage << "Added crazy number of results\n";
             const char* lpcFile = "D:\\P4\\B5_MAIN\\Burnout\\MAIN\\Code\\GameShared\\Jobs\\Relocator\\RelocatorJob.cpp";
             CGS_JOB_ASSERT_LOG(lpcFile, 252, lMessage.GetBuffer());
-            __asm { mfmsr r12 }
-            __asm { ori r12, r12, 0x400 }
-            __asm { mtmsr r12 }
+            CGS_JOB_ASSERT_BREAK();
             CGS_JOB_ASSERT_LOG(lpcFile, 252, lMessage.GetBuffer());
-            __asm { mfmsr r12 }
-            __asm { ori r12, r12, 0x400 }
-            __asm { mtmsr r12 }
+            CGS_JOB_ASSERT_BREAK();
         }
     }
     mCommandReader.Destruct();

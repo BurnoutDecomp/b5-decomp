@@ -61,13 +61,9 @@ void TrafficJobEntry(EA::Jobs::Param, EA::Jobs::Param lJobData,
         const char* lpcSource =
             "D:\\P4\\B5_MAIN\\Burnout\\MAIN\\Code\\GameSource\\Jobs\\Traffic\\Traffic.cpp";
         CgsDev::Assert::PrintStringed(lpcSource, 0, 57, lMessage.GetBuffer());
-        __asm { mfmsr r12 }
-        __asm { ori r12, r12, 0x400 }
-        __asm { mtmsr r12 }
+        CGS_JOB_ASSERT_BREAK();
         CgsDev::Assert::PrintStringed(lpcSource, 0, 57, lMessage.GetBuffer());
-        __asm { mfmsr r12 }
-        __asm { ori r12, r12, 0x400 }
-        __asm { mtmsr r12 }
+        CGS_JOB_ASSERT_BREAK();
     }
     gaTrafficJobs[static_cast<u32>(luWorkerIndex)].Execute(
         static_cast<JobParams*>(lJobData.mpValue));

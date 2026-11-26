@@ -21,13 +21,9 @@ void ContactGeneratorEntry(EA::Jobs::Param, EA::Jobs::Param lParam1,
         lMessage << "SPU Id out of range: " << luReportedThreadId << "\n";
         const char* lpcSource = "D:\\P4\\B5_MAIN\\Burnout\\MAIN\\Code\\GameShared\\Jobs\\ContactGenerator\\ContactGenerator.cpp";
         CGS_JOB_ASSERT_LOG(lpcSource, 55, lMessage.GetBuffer());
-        __asm { mfmsr r12 }
-        __asm { ori r12, r12, 0x400 }
-        __asm { mtmsr r12 }
+        CGS_JOB_ASSERT_BREAK();
         CGS_JOB_ASSERT_LOG(lpcSource, 55, lMessage.GetBuffer());
-        __asm { mfmsr r12 }
-        __asm { ori r12, r12, 0x400 }
-        __asm { mtmsr r12 }
+        CGS_JOB_ASSERT_BREAK();
     }
     gaContactGeneratorJobs[static_cast<u32>(luJobThreadIndex)].Execute(lParam1.mpValue);
 }

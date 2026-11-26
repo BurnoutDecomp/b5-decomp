@@ -24,13 +24,9 @@ void ParticleRenderEntry(EA::Jobs::Param, EA::Jobs::Param param, EA::Jobs::Param
         message << "SPU Id out of range: " << reported << "\n";
         const char* const file = "D:\\P4\\B5_MAIN\\Burnout\\MAIN\\Code\\GameSource\\Jobs\\ParticleRender\\ParticleRender.cpp";
         CgsDev::Assert::PrintStringed(file, 0, 54, message.GetBuffer());
-        __asm { mfmsr r12 }
-        __asm { ori r12, r12, 0x400 }
-        __asm { mtmsr r12 }
+        CGS_JOB_ASSERT_BREAK();
         CgsDev::Assert::PrintStringed(file, 0, 54, message.GetBuffer());
-        __asm { mfmsr r12 }
-        __asm { ori r12, r12, 0x400 }
-        __asm { mtmsr r12 }
+        CGS_JOB_ASSERT_BREAK();
     }
     gaParticleRenderJobs[static_cast<u32>(index)].Execute(static_cast<ParticleRenderJobData*>(param.mpValue));
 }

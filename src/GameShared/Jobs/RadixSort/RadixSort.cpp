@@ -22,13 +22,9 @@ void RadixSortEntry(EA::Jobs::Param, EA::Jobs::Param lParam1,
         lMessage << "SPU Id out of range: " << luReportedThreadId << "\n";
         const char* lpcSource = "D:\\P4\\B5_MAIN\\Burnout\\MAIN\\Code\\GameShared\\Jobs\\RadixSort\\RadixSort.cpp";
         CGS_JOB_ASSERT_LOG(lpcSource, 59, lMessage.GetBuffer());
-        __asm { mfmsr r12 }
-        __asm { ori r12, r12, 0x400 }
-        __asm { mtmsr r12 }
+        CGS_JOB_ASSERT_BREAK();
         CGS_JOB_ASSERT_LOG(lpcSource, 59, lMessage.GetBuffer());
-        __asm { mfmsr r12 }
-        __asm { ori r12, r12, 0x400 }
-        __asm { mtmsr r12 }
+        CGS_JOB_ASSERT_BREAK();
     }
     gaRadixSortJobs[static_cast<u32>(luJobThreadIndex)].Execute(static_cast<SortInfo*>(lParam1.mpValue));
 }
