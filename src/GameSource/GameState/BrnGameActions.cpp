@@ -29,16 +29,12 @@ namespace BrnGameState
 {
 namespace GameStateModuleIO
 {
-// X360 0x822A0250. True iff the requested reset position OR direction is non-zero. The X360
-// spelled this with the rwmath VPU operator!=(Vector3,Vector3); the unused 4th (w) lane is zero
-// in both operands, so this is a faithful 3-lane (V3) compare.
+// X360 0x822A0250. True iff the requested reset position OR direction is non-zero: DWARF
+// (BrnEntityModuleUnity) lists rw::math::vpu::operator!=(Vector3, Vector3) and _asmIsEqualV3 here,
+// against the SDK zero register (vspltisw 0, 0x822A0254).
 bool ResetPlayerCarAction::HasToChangeLocation() const
 {
-    if (mPosition.GetX() != 0.0f || mPosition.GetY() != 0.0f || mPosition.GetZ() != 0.0f)
-    {
-        return true;
-    }
-    return mDirection.GetX() != 0.0f || mDirection.GetY() != 0.0f || mDirection.GetZ() != 0.0f;
+    return mPosition != rw::math::vpu::GetVector3_Zero() || mDirection != rw::math::vpu::GetVector3_Zero();
 }
 
 // X360 0x82355178. Empty iff the query position is (within tolerance) zero AND there is no
