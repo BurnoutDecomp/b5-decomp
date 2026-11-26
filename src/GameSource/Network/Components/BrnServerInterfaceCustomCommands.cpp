@@ -13,6 +13,8 @@
 #include "lobbyapi.h"        // DirtySDK LobbyApiRequestCB / LobbyApiRefT / LobbyApiMsgT
 #include "lobbytagfield.h"   // DirtySDK TagFieldFind/Get*/Set*
 
+#include "rw/core/stdc/util.h"  // rw::core::stdc::Min (GetRoadRulesHighScores, DWARF)
+#include <xtl.h>  // XMemSet
 #include <cstring>  // std::strncpy / strncat / strtok / strchr / strncmp / memset
 #include <cstdlib>  // std::atoi
 
@@ -47,24 +49,23 @@ namespace
     // Message-buffer length the X360 inlines as the literal 2048 at every TagField* site.
     const s32 KI_MESSAGE_BUFFER_LENGTH = CgsNetwork::KI_MESSAGE_BUFFER_SIZE;  // 2048
 
-    // BrnServerInterfaceCustomCommands.cpp:46 -- per-action human-readable label, indexed
-    // by EAction (off_82F29F30 on X360); passed to StartActionCore and used by the net-stream
-    // log. The entries the X360 string pool attests via this TU's action sites are exact
-    // (off_82F29F30 [0], off_82F29F34 [1], off_82F29F40 [4], off_82F29F4C [7]); the rest are
-    // recovered from the EAction names (the label is cosmetic -- only used for logging).
-    const char* const KPC_ACTION_NAMES[ServerInterfaceCustomCommands::E_ACTION_COUNT] =
+    // BrnServerInterfaceCustomCommands.cpp:46 -- per-action label, indexed by EAction; passed to
+    // StartActionCore and the net-stream log. DWARF declares `const char *[N]` (non-const pointers):
+    // ARTIST keeps the table in .data at 0x82F29F30 and reloads the entry at each use. Every string
+    // is read from the image (the pointers at 0x82F29F30..0x82F29F58 -> 0x82086EC8..0x82086E04).
+    const char* KPC_ACTION_NAMES[ServerInterfaceCustomCommands::E_ACTION_COUNT] =
     {
-        "Upld RR Score",       // [0]  E_ACTION_SET_ROAD_RULES_SCORES        (off_82F29F30, exact)
-        "Dnld RR Scores",      // [1]  E_ACTION_GET_ROAD_RULES_SCORES        (off_82F29F34, exact)
-        "Dnld Local RR Scores",// [2]  E_ACTION_GET_LOCAL_ROAD_RULES_SCORES  (inferred)
-        "Dnld Friends list",   // [3]  E_ACTION_GET_FRIENDS                  (inferred)
-        "Upld Friends list",   // [4]  E_ACTION_UPLOAD_FRIENDS               (off_82F29F40, exact)
-        "Upld FBurn Stats",    // [5]  E_ACTION_UPLOAD_FREEBURN_LOBBY_STATS  (inferred)
-        "Upld Offline Prog",   // [6]  E_ACTION_UPLOAD_OFFLINE_PROGRESSION   (inferred)
-        "Upld Rivals Data",    // [7]  E_ACTION_UPLOAD_RIVAL_DATA            (off_82F29F4C, exact)
-        "Upld Event Score",    // [8]  E_ACTION_UPLOAD_EVENT_SCORE_DATA      (inferred)
-        "Get ELO",             // [9]  E_ACTION_GET_ELO                      (inferred)
-        "Set ELO"              // [10] E_ACTION_SET_ELO                      (inferred)
+        "Upld RR Score",          // [0]  E_ACTION_SET_ROAD_RULES_SCORES        0x82086EC8
+        "Dnld RR Scores",         // [1]  E_ACTION_GET_ROAD_RULES_SCORES        0x82086EB8
+        "Dnld Local RR Scores",   // [2]  E_ACTION_GET_LOCAL_ROAD_RULES_SCORES  0x82086EA0
+        "Get Friends list",       // [3]  E_ACTION_GET_FRIENDS                  0x82086E8C
+        "Upld Friends list",      // [4]  E_ACTION_UPLOAD_FRIENDS               0x82086E78
+        "Upld FreeBrn Stat",      // [5]  E_ACTION_UPLOAD_FREEBURN_LOBBY_STATS  0x82086E64
+        "Upld Offline Prog",      // [6]  E_ACTION_UPLOAD_OFFLINE_PROGRESSION   0x82086E50
+        "Upld Rivals Data",       // [7]  E_ACTION_UPLOAD_RIVAL_DATA            0x82086E3C
+        "Upld Event Score Data",  // [8]  E_ACTION_UPLOAD_EVENT_SCORE_DATA      0x82086E24
+        "Get Debug ELO",          // [9]  E_ACTION_GET_ELO                      0x82086E14
+        "Set Debug ELO"           // [10] E_ACTION_SET_ELO                      0x82086E04
     };
 
     // The per-action lobby message-kind fourcc, indexed by EAction (read from the image).
@@ -267,16 +268,25 @@ void ServerInterfaceCustomCommands::SetEloOfLocalPlayer(s32 liRaceElo, s32 liRoa
     mpCallbackData = lpData;     // a1[10]
     mpCallback     = lCallback;  // a1[9]
 
-    char* lpcBuffer = mpServerInterface->GetMessageBuffer();
-    lpcBuffer[0] = 0;  // empty the record
-
-    bool lbOk;
-    lbOk = TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_LENGTH, "RACE", liRaceElo) != 0;
-    CGS_ASSERT(lbOk, "TagFieldSetNumber RACE");
-    lbOk = TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_LENGTH, "ROADRAGE", liRoadRageElo) != 0;
-    CGS_ASSERT(lbOk, "TagFieldSetNumber ROADRAGE");
-    lbOk = TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_LENGTH, "BURNINGHOMERUN", liBurningHomeRunElo) != 0;
-    CGS_ASSERT(lbOk, "TagFieldSetNumber BURNINGHOMERUN");
+    // Every buffer use goes through GetMessageBuffer, each field written inside its assert as the
+    // assert texts quote them (ARTIST 0x8258F228..0x8258F3BC, lines 638..640).
+    mpServerInterface->GetMessageBuffer()[0] = 0;  // empty the record
+    CGS_ASSERT_AT(TagFieldSetNumber(mpServerInterface->GetMessageBuffer(),
+                                    mpServerInterface->GetMessageBufferLength(), "RACE", liRaceElo),
+                  "CgsNetwork::DirtySock::TagFieldSetNumber(mpServerInterface->GetMessageBuffer(), "
+                  "mpServerInterface->GetMessageBufferLength(), \"RACE\", liRaceElo)",
+                  __FILE__, 638);
+    CGS_ASSERT_AT(TagFieldSetNumber(mpServerInterface->GetMessageBuffer(),
+                                    mpServerInterface->GetMessageBufferLength(), "ROADRAGE", liRoadRageElo),
+                  "CgsNetwork::DirtySock::TagFieldSetNumber(mpServerInterface->GetMessageBuffer(), "
+                  "mpServerInterface->GetMessageBufferLength(), \"ROADRAGE\", liRoadRageElo)",
+                  __FILE__, 639);
+    CGS_ASSERT_AT(TagFieldSetNumber(mpServerInterface->GetMessageBuffer(),
+                                    mpServerInterface->GetMessageBufferLength(), "BURNINGHOMERUN",
+                                    liBurningHomeRunElo),
+                  "CgsNetwork::DirtySock::TagFieldSetNumber(mpServerInterface->GetMessageBuffer(), "
+                  "mpServerInterface->GetMessageBufferLength(), \"BURNINGHOMERUN\", liBurningHomeRunElo)",
+                  __FILE__, 640);
 
     SendCustomCommand(E_ACTION_SET_ELO, mpServerInterface->GetMessageBuffer());
 }
@@ -287,11 +297,16 @@ void ServerInterfaceCustomCommands::GetFriendsListFromServer(CustomCommandCallba
     mpCallbackData = lpData;     // a1[10]
     mpCallback     = lCallback;  // a1[9]
 
-    char* lpcBuffer = mpServerInterface->GetMessageBuffer();
-    lpcBuffer[0] = 0;
-
-    bool lbOk = TagFieldSetString(lpcBuffer, KI_MESSAGE_BUFFER_LENGTH, "TAG", "F") != 0;
-    CGS_ASSERT(lbOk, "TagFieldSetString TAG F");
+    // Every buffer use goes through GetMessageBuffer (DWARF lists four calls; ARTIST 0x8258FD34..
+    // 0x8258FE60), the field write inside its assert, as the assert text quotes it.
+    CGS_ASSERT_AT(mpServerInterface->GetMessageBuffer(), "mpServerInterface->GetMessageBuffer()",
+                  __FILE__, 851);
+    mpServerInterface->GetMessageBuffer()[0] = 0;
+    CGS_ASSERT_AT(TagFieldSetString(mpServerInterface->GetMessageBuffer(),
+                                    mpServerInterface->GetMessageBufferLength(), "TAG", "F"),
+                  "CgsNetwork::DirtySock::TagFieldSetString( mpServerInterface->GetMessageBuffer(), "
+                  "mpServerInterface->GetMessageBufferLength(), \"TAG\", \"F\" )",
+                  __FILE__, 861);
 
     SendCustomCommand(E_ACTION_GET_FRIENDS, mpServerInterface->GetMessageBuffer());
 }
@@ -302,21 +317,28 @@ void ServerInterfaceCustomCommands::GetLocalRoadRulesHighScores(s32 liNumScoresT
                                                                 const char* lpcRoadRulesServerKey,
                                                                 CustomCommandCallback lCallback, void* lpData)
 {
-    CGS_ASSERT(liNumScoresToDownload != 0, "liNumScoresToDownload");
+    CGS_ASSERT_AT(liNumScoresToDownload != 0, "liNumScoresToDownload", __FILE__, 808);
 
     mpCallbackData = lpData;     // a1[10]
     mpCallback     = lCallback;  // a1[9]
 
-    char* lpcBuffer = mpServerInterface->GetMessageBuffer();
-    lpcBuffer[0] = 0;
-
-    bool lbOk;
-    lbOk = TagFieldSetRaw(lpcBuffer, KI_MESSAGE_BUFFER_LENGTH, "SKEY", lpcRoadRulesServerKey) != 0;
-    CGS_ASSERT(lbOk, "TagFieldSetRaw SKEY");
-    lbOk = TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_LENGTH, "NUM", liNumScoresToDownload) != 0;
-    CGS_ASSERT(lbOk, "TagFieldSetNumber NUM");
-    lbOk = TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_LENGTH, "IDX", liNextRoadIndexToDownload) != 0;
-    CGS_ASSERT(lbOk, "TagFieldSetNumber IDX");
+    // ARTIST 0x8258FB98..0x8258FCF8: GetMessageBuffer at each use, the fields inside their asserts.
+    mpServerInterface->GetMessageBuffer()[0] = 0;
+    CGS_ASSERT_AT(TagFieldSetRaw(mpServerInterface->GetMessageBuffer(),
+                                 mpServerInterface->GetMessageBufferLength(), "SKEY", lpcRoadRulesServerKey),
+                  "CgsNetwork::DirtySock::TagFieldSetRaw( mpServerInterface->GetMessageBuffer(), "
+                  "mpServerInterface->GetMessageBufferLength(), \"SKEY\", lpcRoadRulesServerKey )",
+                  __FILE__, 820);
+    CGS_ASSERT_AT(TagFieldSetNumber(mpServerInterface->GetMessageBuffer(),
+                                    mpServerInterface->GetMessageBufferLength(), "NUM", liNumScoresToDownload),
+                  "CgsNetwork::DirtySock::TagFieldSetNumber( mpServerInterface->GetMessageBuffer(), "
+                  "mpServerInterface->GetMessageBufferLength(), \"NUM\", liNumScoresToDownload )",
+                  __FILE__, 826);
+    CGS_ASSERT_AT(TagFieldSetNumber(mpServerInterface->GetMessageBuffer(),
+                                    mpServerInterface->GetMessageBufferLength(), "IDX", liNextRoadIndexToDownload),
+                  "CgsNetwork::DirtySock::TagFieldSetNumber( mpServerInterface->GetMessageBuffer(), "
+                  "mpServerInterface->GetMessageBufferLength(), \"IDX\", liNextRoadIndexToDownload )",
+                  __FILE__, 830);
 
     SendCustomCommand(E_ACTION_GET_LOCAL_ROAD_RULES_SCORES, mpServerInterface->GetMessageBuffer());
 }
@@ -326,14 +348,15 @@ void ServerInterfaceCustomCommands::UploadOfflineProgress(
     const NetworkInOfflineProgression::OfflineProgressionT* lpOfflineProgression,
     s32 liFreeburnChallengeSuccessCount)
 {
-    CGS_ASSERT(lpOfflineProgression != 0, "lpOfflineProgression");
-    CGS_ASSERT(mpServerInterface != 0, "mpServerInterface");
+    CGS_ASSERT_AT(lpOfflineProgression != 0, "lpOfflineProgression", __FILE__, 1317);
+    CGS_ASSERT_AT(mpServerInterface != 0, "mpServerInterface", __FILE__, 1318);
 
-    char* lpcBuffer = mpServerInterface->GetMessageBuffer();
-    lpcBuffer[0] = 0;
+    // DWARF: no locals, three GetMessageBuffer calls (ARTIST 0x825909AC / 0x825909BC: the clear
+    // and the OFFPROG field each read the buffer through it).
+    mpServerInterface->GetMessageBuffer()[0] = 0;
 
     // The OFFPROG field packs the offline-progression record with the X360 byte pattern.
-    TagFieldSetStructure(lpcBuffer, KI_MESSAGE_BUFFER_LENGTH, "OFFPROG",
+    TagFieldSetStructure(mpServerInterface->GetMessageBuffer(), KI_MESSAGE_BUFFER_LENGTH, "OFFPROG",
                          lpOfflineProgression, 64, "lllwwwbbb13s13s13sb");
     TagFieldSetNumber(mpServerInterface->GetMessageBuffer(), KI_MESSAGE_BUFFER_LENGTH,
                       "FBURNCHALL", liFreeburnChallengeSuccessCount);
@@ -353,45 +376,34 @@ void ServerInterfaceCustomCommands::GetRoadRulesHighScores(u32 luTimeStamp, s32 
     mpCallbackData = lpData;     // a1[10]
     mpCallback     = lCallback;  // a1[9]
 
-    char* lpcBuffer = mpServerInterface->GetMessageBuffer();
-    lpcBuffer[0] = 0;
+    mpServerInterface->GetMessageBuffer()[0] = 0;
 
-    char lacRoadId[16];
-    char lacRoadsToGetScoresFor[192];
-    std::memset(lacRoadId, 0, 4);
-    std::memset(lacRoadsToGetScoresFor, 0, 120);
+    // DWARF BrnServerInterfaceCustomCommands.cpp:722..725. The two clears are CgsCore::MemSet in
+    // DWARF (no home in this tree); ARTIST calls XMemSet (0x8258F970 / 0x8258F980).
+    char lacRoadIndex[4];
+    char lacRoadsToGetScoresFor[120];
+    XMemSet(lacRoadIndex, 0, sizeof(lacRoadIndex));
+    XMemSet(lacRoadsToGetScoresFor, 0, sizeof(lacRoadsToGetScoresFor));
 
-    // v12 = min(liStartIndex + liNumScores, 64).
-    s32 liEnd = liStartIndex + liNumScores;
-    if (liEnd >= 64)
-        liEnd = 64;
+    s32 liEndRoadIndex = rw::core::stdc::Min(liStartIndex + liNumScores, 64);
 
-    for (s32 liRoad = liStartIndex; liRoad < liEnd; )
+    for (s32 liIndex = liStartIndex; liIndex < liEndRoadIndex; )
     {
-        CgsCore::SPrintf(lacRoadId, 120, "%d", liRoad);
-        std::strncat(lacRoadsToGetScoresFor, lacRoadId, 120);
-        if (++liRoad == liEnd)
+        CgsCore::SPrintf(lacRoadIndex, 120, "%d", liIndex);
+        std::strncat(lacRoadsToGetScoresFor, lacRoadIndex, 120);
+        if (++liIndex == liEndRoadIndex)
             break;
         std::strncat(lacRoadsToGetScoresFor, ",", 120);
     }
 
-    char* lpcMessageData = mpServerInterface->GetMessageBuffer();
-    bool lbOk = TagFieldSetRaw(lpcMessageData, KI_MESSAGE_BUFFER_LENGTH, "R",
-                               lacRoadsToGetScoresFor) != 0;
-    CGS_ASSERT(lbOk, "TagFieldSetRaw R");
+    CGS_ASSERT_AT(TagFieldSetRaw(mpServerInterface->GetMessageBuffer(),
+                                 mpServerInterface->GetMessageBufferLength(), "R", lacRoadsToGetScoresFor),
+                  "CgsNetwork::DirtySock::TagFieldSetRaw( mpServerInterface->GetMessageBuffer(), "
+                  "mpServerInterface->GetMessageBufferLength(), \"R\", lacRoadsToGetScoresFor )",
+                  __FILE__, 787);
 
-    lpcMessageData = mpServerInterface->GetMessageBuffer();
-
-    meCurrentAction = E_ACTION_GET_ROAD_RULES_SCORES;            // a1[8] = 1
-    StartActionCore(KPC_ACTION_NAMES[E_ACTION_GET_ROAD_RULES_SCORES]); // off_82F29F34
-
-    CGS_ASSERT(lpcMessageData != 0, "lpcMessageData");
-
-    LobbyApiRequestCB(mpServerInterface->GetLobbyAPIRef(),
-                      KI_ACTIONS_TO_MESSAGE_CODES[meCurrentAction],
-                      lpcMessageData,
-                      &ServerInterfaceCustomCommands::_CustomCommandSentCallback,
-                      this);
+    // ARTIST inlines SendCustomCommand here (its lpcMessageData assert, line 578 at 0x8258FAD0).
+    SendCustomCommand(E_ACTION_GET_ROAD_RULES_SCORES, mpServerInterface->GetMessageBuffer());
 }
 
 // ---------------------------------------------------------------------------
@@ -491,55 +503,53 @@ void ServerInterfaceCustomCommands::SetRoadRulesForLocalPlayer(RoadRulesUploadDa
 void ServerInterfaceCustomCommands::OverWriteServerFriendsRecord(
     const CgsNetwork::PlayerName* lpaFriendsNames, s32 liNumBuddies)
 {
-    CGS_ASSERT(liNumBuddies > 0, "liNumBuddies > 0");
-    // PlayerName::IsEmpty() is "first char is NUL"; the X360 checks `lbz; cmplwi 0`.
-    CGS_ASSERT(lpaFriendsNames[0].GetPlayerName()[0] != 0, "!lpaFriendsNames[0].IsEmpty()");
+    CGS_ASSERT_AT(liNumBuddies > 0, "liNumBuddies > 0", __FILE__, 998);
+    CGS_ASSERT_AT(!lpaFriendsNames[0].IsEmpty(), "!lpaFriendsNames[0].IsEmpty()", __FILE__, 999);
 
     mpCallbackData = 0;  // a1[10]
     mpCallback     = 0;  // a1[9]
 
-    char* lpcBuffer = mpServerInterface->GetMessageBuffer();
-    lpcBuffer[0] = 0;
-
-    bool lbOk = TagFieldSetRaw(lpcBuffer, KI_MESSAGE_BUFFER_LENGTH, "TAG", "F") != 0;
-    CGS_ASSERT(lbOk, "TagFieldSetRaw TAG F");
+    // ARTIST 0x8259032C..0x82590594: GetMessageBuffer at each use, the fields inside their asserts
+    // (texts quoted from the image), SendCustomCommand inlined after the loop (its line 578).
+    CGS_ASSERT_AT(mpServerInterface->GetMessageBuffer(), "mpServerInterface->GetMessageBuffer()",
+                  __FILE__, 1004);
+    mpServerInterface->GetMessageBuffer()[0] = 0;
+    CGS_ASSERT_AT(TagFieldSetRaw(mpServerInterface->GetMessageBuffer(),
+                                 mpServerInterface->GetMessageBufferLength(), "TAG", "F"),
+                  "CgsNetwork::DirtySock::TagFieldSetRaw( mpServerInterface->GetMessageBuffer(), "
+                  "mpServerInterface->GetMessageBufferLength(), \"TAG\", \"F\" )",
+                  __FILE__, 1014);
 
     if (liNumBuddies > 0)
     {
-        char lacFriendsList[2000];
-        std::memset(lacFriendsList, 0, 1900);
+        // DWARF BrnServerInterfaceCustomCommands.cpp:961..963 (the PS3 list is 2300 bytes; ARTIST's
+        // is the 1900 it clears and appends to: frame 0x840, list at +0x70). The clear is
+        // CgsCore::MemSet in DWARF (no home in this tree), XMemSet in ARTIST (0x82590434).
+        char lacFriendsList[1900];
+        char lacAppendPlayerName[23];
+        XMemSet(lacFriendsList, 0, 1900);
 
-        const CgsNetwork::PlayerName* lpName = lpaFriendsNames;
-        for (s32 liBuddy = 0; liBuddy < liNumBuddies; ++liBuddy)
+        for (s32 liFriendIndex = 0; liFriendIndex < liNumBuddies; )
         {
-            char lacFormatted[32];
             // Names with embedded spaces are quoted; others are written bare.
-            const char* lpcFormat = (std::strchr(lpName->GetPlayerName(), ' ') != 0)
+            const char* lpcFormat = (std::strchr(lpaFriendsNames[liFriendIndex].GetPlayerName(), ' ') != 0)
                                         ? "\"%s\"" : "%s";
-            CgsCore::SPrintf(lacFormatted, 19, lpcFormat, lpName->GetPlayerName());
-            std::strncat(lacFriendsList, lacFormatted, 1900);
-            if (liBuddy + 1 != liNumBuddies)
+            CgsCore::SPrintf(lacAppendPlayerName, 19, lpcFormat, lpaFriendsNames[liFriendIndex].GetPlayerName());
+            std::strncat(lacFriendsList, lacAppendPlayerName, 1900);
+            if (++liFriendIndex != liNumBuddies)
+            {
                 std::strncat(lacFriendsList, ",", 1900);
-            ++lpName;
+            }
         }
 
-        lbOk = TagFieldSetRaw(mpServerInterface->GetMessageBuffer(), KI_MESSAGE_BUFFER_LENGTH,
-                              "SET", lacFriendsList) != 0;
-        CGS_ASSERT(lbOk, "TagFieldSetRaw SET");
+        CGS_ASSERT_AT(TagFieldSetRaw(mpServerInterface->GetMessageBuffer(),
+                                     mpServerInterface->GetMessageBufferLength(), "SET", lacFriendsList),
+                      "CgsNetwork::DirtySock::TagFieldSetRaw( mpServerInterface->GetMessageBuffer(), "
+                      "mpServerInterface->GetMessageBufferLength(), \"SET\", lacFriendsList )",
+                      __FILE__, 1048);
     }
 
-    char* lpcMessageData = mpServerInterface->GetMessageBuffer();
-
-    meCurrentAction = E_ACTION_UPLOAD_FRIENDS;                 // a1[8] = 4
-    StartActionCore(KPC_ACTION_NAMES[E_ACTION_UPLOAD_FRIENDS]); // off_82F29F40
-
-    CGS_ASSERT(lpcMessageData != 0, "lpcMessageData");
-
-    LobbyApiRequestCB(mpServerInterface->GetLobbyAPIRef(),
-                      KI_ACTIONS_TO_MESSAGE_CODES[meCurrentAction],
-                      lpcMessageData,
-                      &ServerInterfaceCustomCommands::_CustomCommandSentCallback,
-                      this);
+    SendCustomCommand(E_ACTION_UPLOAD_FRIENDS, mpServerInterface->GetMessageBuffer());
 }
 
 // ---------------------------------------------------------------------------
@@ -629,37 +639,29 @@ void ServerInterfaceCustomCommands::UploadLiveRevengeData(const ServerGeneratedT
                                                           const s32* lpiRivalIDs,
                                                           s32 liNumberToUpload)
 {
-    CGS_ASSERT(lpRivalData != 0, "lpRivalData");
-    CGS_ASSERT(liNumberToUpload >= 0, "liNumberToUpload >= 0");
+    CGS_ASSERT_AT(lpRivalData != 0, "lpRivalData", __FILE__, 1352);
+    CGS_ASSERT_AT(liNumberToUpload >= 0, "liNumberToUpload >= 0", __FILE__, 1353);
 
-    if (liNumberToUpload <= 0)
-        return;
-
-    char* lpcBuffer = mpServerInterface->GetMessageBuffer();
-    lpcBuffer[0] = 0;
-
-    // One 64-byte rival record per row; lpiRivalIDs supplies each row's id.
-    for (s32 liRival = 0; liRival < liNumberToUpload; ++liRival)
+    if (liNumberToUpload > 0)
     {
-        char lacFieldName[96];
-        CgsCore::SPrintf(lacFieldName, 7, "RIVAL%i", lpiRivalIDs[liRival]);
-        TagFieldSetStructure(mpServerInterface->GetMessageBuffer(), KI_MESSAGE_BUFFER_LENGTH,
-                             lacFieldName, &lpRivalData[liRival], static_cast<s32>(sizeof(ServerGeneratedTypes::RivalDataT)),
-                             "llllllllllll16s");
+        mpServerInterface->GetMessageBuffer()[0] = 0;
+
+        // One 64-byte rival record per row; lpiRivalIDs supplies each row's id. DWARF locals
+        // liRivalIndex and the loop's char lacBuffer[7].
+        for (s32 liRivalIndex = 0; liRivalIndex < liNumberToUpload; ++liRivalIndex)
+        {
+            char lacBuffer[7];
+            CgsCore::SPrintf(lacBuffer, 7, "RIVAL%i", lpiRivalIDs[liRivalIndex]);
+            TagFieldSetStructure(mpServerInterface->GetMessageBuffer(), KI_MESSAGE_BUFFER_LENGTH,
+                                 lacBuffer, &lpRivalData[liRivalIndex],
+                                 static_cast<s32>(sizeof(ServerGeneratedTypes::RivalDataT)),
+                                 "llllllllllll16s");
+        }
+
+        // ARTIST inlines SendCustomCommand here (its lpcMessageData assert, line 578 at
+        // 0x82590C28); the action-count assert folds away for the constant action.
+        SendCustomCommand(E_ACTION_UPLOAD_RIVAL_DATA, mpServerInterface->GetMessageBuffer());
     }
-
-    char* lpcMessageData = mpServerInterface->GetMessageBuffer();
-
-    meCurrentAction = E_ACTION_UPLOAD_RIVAL_DATA;              // v7[8] = 7
-    StartActionCore(KPC_ACTION_NAMES[E_ACTION_UPLOAD_RIVAL_DATA]); // off_82F29F4C
-
-    CGS_ASSERT(lpcMessageData != 0, "lpcMessageData");
-
-    LobbyApiRequestCB(mpServerInterface->GetLobbyAPIRef(),
-                      KI_ACTIONS_TO_MESSAGE_CODES[meCurrentAction],
-                      lpcMessageData,
-                      &ServerInterfaceCustomCommands::_CustomCommandSentCallback,
-                      this);
 }
 
 // ---------------------------------------------------------------------------
@@ -670,44 +672,47 @@ void ServerInterfaceCustomCommands::UploadFreeBurnLobbyStats(
     const BrnGameState::GameStateModuleIO::OnlineGameResults* lpResults,
     s32 liNumberOfRivals, s32 liNumberOfChallengesCompleted)
 {
-    if (!static_cast<CgsNetwork::ServerInterfaceConnection*>(mpServerInterface->GetConnectionComponent())->IsLoggedIn())
+    // The logged-in arm first, the warning in the else (ARTIST 0x825906D8 branches to the warning
+    // placed at the end, 0x825908E0).
+    if (static_cast<CgsNetwork::ServerInterfaceConnection*>(mpServerInterface->GetConnectionComponent())->IsLoggedIn())
+    {
+        mpServerInterface->GetMessageBuffer()[0] = 0;
+
+        if (lpResults->miTakedownsFor > 0)
+        {
+            TagFieldSetNumber(mpServerInterface->GetMessageBuffer(), KI_MESSAGE_BUFFER_LENGTH, "TKDNF",
+                              lpResults->miTakedownsFor);
+        }
+        if (lpResults->miTakedownsAgainst > 0)
+        {
+            TagFieldSetNumber(mpServerInterface->GetMessageBuffer(), KI_MESSAGE_BUFFER_LENGTH, "TKDNA",
+                              lpResults->miTakedownsAgainst);
+        }
+        if (lpResults->miMarkedManTakedownsFor > 0)
+        {
+            TagFieldSetNumber(mpServerInterface->GetMessageBuffer(), KI_MESSAGE_BUFFER_LENGTH, "CRSH",
+                              lpResults->miMarkedManTakedownsFor);
+        }
+        if (liNumberOfChallengesCompleted > 0)
+        {
+            TagFieldSetNumber(mpServerInterface->GetMessageBuffer(), KI_MESSAGE_BUFFER_LENGTH, "FBCHAL",
+                              liNumberOfChallengesCompleted);
+        }
+
+        TagFieldSetNumber(mpServerInterface->GetMessageBuffer(), KI_MESSAGE_BUFFER_LENGTH, "DIST",
+                          static_cast<s32>(lpResults->mfMetersDriven));
+        TagFieldSetNumber(mpServerInterface->GetMessageBuffer(), KI_MESSAGE_BUFFER_LENGTH, "TIME",
+                          lpResults->mSecondsInEvent.GetSeconds());
+        TagFieldSetNumber(mpServerInterface->GetMessageBuffer(), KI_MESSAGE_BUFFER_LENGTH, "RIVALS",
+                          liNumberOfRivals);
+
+        SendCustomCommand(E_ACTION_UPLOAD_FREEBURN_LOBBY_STATS, mpServerInterface->GetMessageBuffer());
+    }
+    else
     {
         CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput
             << "WARNING: Trying to upload freeburn stats whilst not connect, these have now been lost. ";
-        return;
     }
-
-    mpServerInterface->GetMessageBuffer()[0] = 0;
-
-    if (lpResults->miTakedownsFor > 0)
-    {
-        TagFieldSetNumber(mpServerInterface->GetMessageBuffer(), KI_MESSAGE_BUFFER_LENGTH, "TKDNF",
-                          lpResults->miTakedownsFor);
-    }
-    if (lpResults->miTakedownsAgainst > 0)
-    {
-        TagFieldSetNumber(mpServerInterface->GetMessageBuffer(), KI_MESSAGE_BUFFER_LENGTH, "TKDNA",
-                          lpResults->miTakedownsAgainst);
-    }
-    if (lpResults->miMarkedManTakedownsFor > 0)
-    {
-        TagFieldSetNumber(mpServerInterface->GetMessageBuffer(), KI_MESSAGE_BUFFER_LENGTH, "CRSH",
-                          lpResults->miMarkedManTakedownsFor);
-    }
-    if (liNumberOfChallengesCompleted > 0)
-    {
-        TagFieldSetNumber(mpServerInterface->GetMessageBuffer(), KI_MESSAGE_BUFFER_LENGTH, "FBCHAL",
-                          liNumberOfChallengesCompleted);
-    }
-
-    TagFieldSetNumber(mpServerInterface->GetMessageBuffer(), KI_MESSAGE_BUFFER_LENGTH, "DIST",
-                      static_cast<s32>(lpResults->mfMetersDriven));
-    TagFieldSetNumber(mpServerInterface->GetMessageBuffer(), KI_MESSAGE_BUFFER_LENGTH, "TIME",
-                      lpResults->mSecondsInEvent.GetSeconds());
-    TagFieldSetNumber(mpServerInterface->GetMessageBuffer(), KI_MESSAGE_BUFFER_LENGTH, "RIVALS",
-                      liNumberOfRivals);
-
-    SendCustomCommand(E_ACTION_UPLOAD_FREEBURN_LOBBY_STATS, mpServerInterface->GetMessageBuffer());
 }
 
 // ---------------------------------------------------------------------------

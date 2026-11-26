@@ -296,7 +296,7 @@ namespace BrnNetwork
     {
         BuddyManagerDebugComponent* lpBuddyDebug = static_cast<BuddyManagerDebugComponent*>(lpData);
 
-        CGS_ASSERT_AT(lpBuddyDebug->mInviteBuddy.macName[0] != '\0',
+        CGS_ASSERT_AT(!lpBuddyDebug->mInviteBuddy.IsEmpty(),
                       "!lpBuddyDebug->mInviteBuddy.IsEmpty()", CGS_ARTIST_FILE, 336);
 
         // Remove this one-shot action from the menu (matches the X360 UnregisterFunction(this,

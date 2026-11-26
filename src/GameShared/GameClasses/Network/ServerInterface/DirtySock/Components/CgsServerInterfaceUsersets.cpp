@@ -376,13 +376,15 @@ namespace CgsNetwork
         LobbyApiListFlush(mpServerInterface->GetLobbyAPIRef(), KI_LOBBY_LIST_USERSET_USERS);
     }
 
-    void ServerInterfaceUsersets::UpdateUserSetParams(ServerInterfaceUsersetParamsBase* lpParams)
+    void ServerInterfaceUsersets::UpdateUserSetParams(ServerInterfaceUsersetParamsBase* lpUsersetParams)
     {
-        CGS_ASSERT(IsLocalPlayerHost(), "IsLocalPlayerHost()");
+        CGS_ASSERT_AT(IsLocalPlayerHost(), "IsLocalPlayerHost()", CGS_ARTIST_FILE, 631);
 
-        char* lpcRecord = mpServerInterface->GetMessageBuffer();
-        lpcRecord[0] = 0;
-        lpParams->SerialiseToString(lpcRecord, KI_MESSAGE_BUFFER_SIZE);
+        // DWARF CgsServerInterfaceUsersets.cpp:633/634.
+        char* lpcMessageBuffer    = mpServerInterface->GetMessageBuffer();
+        s32   liMessageBufferSize = KI_MESSAGE_BUFFER_SIZE;
+        lpcMessageBuffer[0] = 0;
+        lpUsersetParams->SerialiseToString(lpcMessageBuffer, liMessageBufferSize);
 
         StartAction(E_ACTION_UPDATE);
     }

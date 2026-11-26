@@ -188,27 +188,36 @@ namespace CgsNetwork
     // body; the asm passes a2 straight to HLBListGetBuddyByName, so a2 is a name
     // pointer. Reconstructed faithfully to the asm.
     // =========================================================================
-    bool BuddyManagerBase::IsFullBuddy(const PlayerName* lpPlayerName)
+    // DWARF CgsBuddyManagerDirtySock.cpp:309 lpBuddy; the name goes straight to the lookup (ARTIST
+    // 0x8287D568 passes r4 through: no null test on the name), nested ifs as IsFullBuddy(int).
+    bool BuddyManagerBase::IsFullBuddy(const PlayerName* lpBuddyName)
     {
-        if (mpBuddies == 0)
+        if (mpBuddies)
         {
-            return false;
+            HLBBudT* lpBuddy = HLBListGetBuddyByName(mpBuddies, lpBuddyName->GetPlayerName());
+            if (lpBuddy)
+            {
+                return HLBBudIsRealBuddy(lpBuddy) == 1;
+            }
         }
-        HLBBudT* lpBuddy = HLBListGetBuddyByName(mpBuddies, lpPlayerName ? lpPlayerName->GetPlayerName() : 0);
-        return lpBuddy != 0 && HLBBudIsRealBuddy(lpBuddy) == 1;
+        return false;
     }
 
     // =========================================================================
     // IsBuddyBlocked @ 0x8287D5A8
     // =========================================================================
-    bool BuddyManagerBase::IsBuddyBlocked(const PlayerName* lpPlayerName)
+    // DWARF CgsBuddyManagerDirtySock.cpp:365 lpBuddy; same shape as IsFullBuddy.
+    bool BuddyManagerBase::IsBuddyBlocked(const PlayerName* lpBuddyName)
     {
-        if (mpBuddies == 0)
+        if (mpBuddies)
         {
-            return false;
+            HLBBudT* lpBuddy = HLBListGetBuddyByName(mpBuddies, lpBuddyName->GetPlayerName());
+            if (lpBuddy)
+            {
+                return HLBBudIsBlocked(lpBuddy) == 1;
+            }
         }
-        HLBBudT* lpBuddy = HLBListGetBuddyByName(mpBuddies, lpPlayerName ? lpPlayerName->GetPlayerName() : 0);
-        return lpBuddy != 0 && HLBBudIsBlocked(lpBuddy) == 1;
+        return false;
     }
 
     // =========================================================================

@@ -494,8 +494,7 @@ namespace BrnNetwork
 
             CgsNetwork::PlayerName lPlayerName;
             lPlayerName.Construct(lpNetworkPlayer->GetName());
-            // PlayerName::IsEmpty (inline): the first name character is the terminator.
-            CGS_ASSERT_AT(lPlayerName.GetPlayerName()[0] != '\0',
+            CGS_ASSERT_AT(!lPlayerName.IsEmpty(),
                 "!lPlayerName.IsEmpty()",
                 __FILE__, 430 /* ARTIST 0x8256DBA8 */);
 
@@ -504,8 +503,7 @@ namespace BrnNetwork
             {
                 LiveRevengeRelationship::UniquePlayerID lUniquePlayerID;
                 GetUniqueIDByName(&lPlayerName, &lUniquePlayerID);
-                // UniquePlayerID::IsValid (inline): a non-empty name and a non-zero XUID.
-                CGS_ASSERT_AT(lUniquePlayerID.GetPlayerName()[0] != '\0' && lUniquePlayerID.mqXuid != 0,
+                CGS_ASSERT_AT(lUniquePlayerID.IsValid(),
                     "lUniquePlayerID.IsValid()",
                     __FILE__, 442 /* ARTIST 0x8256DC18 */);
 
@@ -596,10 +594,9 @@ namespace BrnNetwork
     {
         LiveRevengeRelationship lRelationship;
         LiveRevengeProfile* lpProfile = GetProfile();
-        CGS_ASSERT(lpProfile, "lpProfile");
-        CGS_ASSERT(lpUniqueID, "lpUniqueID");
-        // UniquePlayerID::IsValid (inline): a non-empty name and a non-zero XUID.
-        CGS_ASSERT(lpUniqueID->GetPlayerName()[0] != '\0' && lpUniqueID->mqXuid != 0, "lpUniqueID->IsValid()");
+        CGS_ASSERT_AT(lpProfile, "lpProfile", __FILE__, 559);
+        CGS_ASSERT_AT(lpUniqueID, "lpUniqueID", __FILE__, 562);
+        CGS_ASSERT_AT(lpUniqueID->IsValid(), "lpUniqueID->IsValid()", __FILE__, 563);
 
         lRelationship.Construct();
         lRelationship.Prepare(lpUniqueID);

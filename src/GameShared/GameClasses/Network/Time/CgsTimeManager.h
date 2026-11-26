@@ -168,4 +168,14 @@ namespace CgsNetwork
     {
         return static_cast<u16>(muFrameCount % KU_FRAME_WRAP_MODULUS);
     }
+
+    // DWARF CgsTimeManager.h:65; a header inline (PS3 line info CgsTimeManager.h:211 inside
+    // Construct/Prepare/Release, 0xC203B8 / 0xC20174 / 0xC1FCE0): zero the network clock and clear
+    // the start frame. PS3 Construct tail-calls SetStartFrame(E_START_FRAME_INVALID, NULL, 0) after
+    // the clock (0xC20414); ARTIST inlines that arm, logs included (Construct 0x82898F4C..0x82898F8C).
+    inline void TimeManager::ResetNetworkTime()
+    {
+        mNetworkTime.SetFloatVal(0.0f);
+        SetStartFrame(E_START_FRAME_INVALID, 0, 0.0f);
+    }
 } // namespace CgsNetwork

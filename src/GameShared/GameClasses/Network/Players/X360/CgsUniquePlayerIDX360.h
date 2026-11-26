@@ -42,6 +42,11 @@ namespace CgsNetwork
         // player's machine address, and the player's name.
         void Construct(ServerInterfacePlayerParamsBase* lpPlayerParams);
 
+        // DWARF (PS3 sibling CgsUniquePlayerIDPS3.h:69) declares IsValid() const; ARTIST inlines the
+        // X360 form as a materialised bool: a name, then a non-zero XUID (LiveRevengeManager::
+        // AddPlayer 0x8256DBD8..0x8256DBFC, assert "lUniquePlayerID.IsValid()").
+        bool IsValid() const { return !IsEmpty() && mqXuid != 0; }
+
         u64 mqXuid;   // +0x10
     };
 }

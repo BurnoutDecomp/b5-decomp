@@ -215,8 +215,10 @@ namespace CgsNetwork
                           719);
             return mpacMessageBuffer;
         }
-        // CgsServerInterfaceDirtySock.h:724
-        s32 GetMessageBufferLength() const;
+        // CgsServerInterfaceDirtySock.h:724: header inline. ARTIST passes the constant 0x800 where
+        // the asserted expression names it (ServerInterfaceCustomCommands::GetFriendsListFromServer
+        // 0x8258FDFC, assert text "TagFieldSetString( ..., mpServerInterface->GetMessageBufferLength(), ...").
+        s32 GetMessageBufferLength() const { return KI_MESSAGE_BUFFER_SIZE; }
 
         // ADDITIVE GROW (flagged by cgs-scene-net group): inline accessor for the
         // lobby-login ref handle (the +0x7C member). ServerInterfaceConnection::GetLogi

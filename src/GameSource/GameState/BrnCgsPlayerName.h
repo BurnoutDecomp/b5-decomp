@@ -33,6 +33,9 @@ namespace CgsNetwork
         // DWARF CgsPlayerName.h:49; LegacySrc CgsPlayerName.h:98 defines it inline in the header.
         void Clear() { macName[0] = '\0'; }
 
+        // DWARF CgsPlayerName.h:58; LegacySrc CgsPlayerName.h:139 defines it inline in the header.
+        bool IsEmpty() const { return ( macName[0] == '\0' ); }
+
         const char* GetPlayerName() const { return macName; }
     };
 }

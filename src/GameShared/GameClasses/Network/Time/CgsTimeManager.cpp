@@ -18,13 +18,12 @@
 //
 // Also here: ReleaseSyncTimeManagers, SetStartFrame, IsTimeSynchronised,
 // OnHostMigration, StartSyncingTime, Disconnected and the two frame/wrap helpers. The
-// trivial accessors are inline in the header; ResetNetworkTime and Destruct have no
-// caller in the tree and stay declared only.
+// trivial accessors and ResetNetworkTime are inline in the header; Destruct has no
+// caller in the tree and stays declared only.
 //
-// The original streamed a handful of dev-log lines ("Cleared Start frame", "...called",
-// "SyncTimeManager invalid status ...") through a CgsDev::StrStream debug stream; per
-// the project convention those dev-log streams are dropped, and the asserts that built
-// a message through gpcMessageBuffer lower to the project CGS_ASSERT macro.
+// The dev-log lines ("Set Start frame", "... called", "OnHostMigration: OldHost=...") go to
+// the network log stream ServerInterfaceDirtySock::mNetStreamLogChannelOutput (ARTIST
+// 0x82F335C8); the failing defaults stream their message through gpcMessageBuffer.
 // ===================================================================================
 
 #include "GameShared/GameClasses/Network/Time/CgsTimeManager.h"
@@ -33,6 +32,8 @@
 #include "GameShared/GameClasses/Network/Players/CgsPlayerManager.h"   // PlayerManager
 #include "GameShared/GameClasses/Network/Players/CgsNetworkPlayer.h"   // NetworkPlayer
 #include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT
+#include "GameShared/GameClasses/Development/CgsStrStream.h"           // CgsDev::StrStream (streamed asserts)
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h" // mNetStreamLogChannelOutput
 
 namespace CgsNetwork
 {
@@ -53,11 +54,7 @@ namespace CgsNetwork
 
         mGlobalTime.SetFloatVal(0.f);
         mbWeAreSyncingTime      = false;
-        mNetworkTime.SetFloatVal(0.f);
-
-        // Clear the start-frame bookmark (original dev-logged "Cleared Start frame").
-        mu16StartFrame          = KU16_INVALID_FRAME;   // asm: sth -1
-        miStartFrameWrapCount   = 0;
+        ResetNetworkTime();
     }
 
     // ---- Prepare @0x82898FA0 --------------------------------------------------------
@@ -66,18 +63,14 @@ namespace CgsNetwork
     bool
     TimeManager::Prepare()
     {
-        // Original dev-logged "CgsNetwork::TimeManager::Prepare called".
+        ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "" << __FUNCTION__ << " called\n";
         CGS_ASSERT_AT(miPlayersAdded == 0,
             "miPlayersAdded == 0",
             __FILE__, 73 /* ARTIST 0x82899030 */);
 
         meSyncTimePrepareStatus = E_SYNC_TIME_PREPARE_STATUS_NONE;
         mbWeAreSyncingTime      = false;
-        mNetworkTime.SetFloatVal(0.f);
-
-        // Clear the start-frame bookmark.
-        mu16StartFrame          = KU16_INVALID_FRAME;
-        miStartFrameWrapCount   = 0;
+        ResetNetworkTime();
 
         return true;
     }
@@ -111,7 +104,8 @@ namespace CgsNetwork
             break;
 
         default:
-            CGS_FAIL("SyncTimeManager invalid status in CgsNetwork::TimeManager::Update");
+            CGS_FAIL_STREAM_AT("SyncTimeManager invalid status " << meSyncTimePrepareStatus << " in "
+                                   << __FUNCTION__ << "\n", __FILE__, 121);
             break;
         }
     }
@@ -123,11 +117,7 @@ namespace CgsNetwork
     {
         ReleaseSyncTimeManagers();
 
-        mNetworkTime.SetFloatVal(0.f);
-
-        // Clear the start-frame bookmark.
-        mu16StartFrame        = KU16_INVALID_FRAME;
-        miStartFrameWrapCount = 0;
+        ResetNetworkTime();
 
         miPlayersAdded        = 0;
         mbWeAreSyncingTime    = false;
@@ -140,21 +130,28 @@ namespace CgsNetwork
     void
     TimeManager::PrepareSyncTimeManagers(bool lbIAmHost, NetworkPlayerID lNewHostID)
     {
-        meSyncTimePrepareStatus = lbIAmHost ? E_SYNC_TIME_PREPARE_STATUS_HOST
-                                            : E_SYNC_TIME_PREPARE_STATUS_CLIENT;
+        if (lbIAmHost)
+        {
+            meSyncTimePrepareStatus = E_SYNC_TIME_PREPARE_STATUS_HOST;
+        }
+        else
+        {
+            meSyncTimePrepareStatus = E_SYNC_TIME_PREPARE_STATUS_CLIENT;
+        }
 
         switch (meSyncTimePrepareStatus)
         {
         case E_SYNC_TIME_PREPARE_STATUS_HOST:
-            CGS_ASSERT(mSyncTimeHost.Prepare(), "mSyncTimeHost.Prepare()");
+            CGS_ASSERT_AT(mSyncTimeHost.Prepare(), "mSyncTimeHost.Prepare()", __FILE__, 609);
             break;
 
         case E_SYNC_TIME_PREPARE_STATUS_CLIENT:
-            CGS_ASSERT(mSyncTimeClient.Prepare(lNewHostID), "mSyncTimeClient.Prepare(lNewHostID)");
+            CGS_ASSERT_AT(mSyncTimeClient.Prepare(lNewHostID), "mSyncTimeClient.Prepare(lNewHostID)", __FILE__, 614);
             break;
 
         default:
-            CGS_FAIL("Can't prepare state in CgsNetwork::TimeManager::PrepareSyncTimeManagers");
+            CGS_FAIL_STREAM_AT("Can't prepare state " << meSyncTimePrepareStatus << " in " << __FUNCTION__ << "\n",
+                               __FILE__, 619);
             break;
         }
     }
@@ -221,13 +218,12 @@ namespace CgsNetwork
     u16
     TimeManager::GetU16FrameCountSinceStart() const
     {
-        const u16 lu16Now   = GetU16FrameCount();
-        const u16 lu16Start = mu16StartFrame;
-
-        u16 lu16Result = static_cast<u16>(lu16Now - lu16Start);
-        if (lu16Now < lu16Start)
+        // DWARF cpp:401 lu16Result; PS3 0xBE7B1C reads the bookmark through GetU16StartFrame. A
+        // current frame below the bookmark wraps by the 0xFFFF window (ARTIST 0x8288B324 adds 0xFFFF).
+        u16 lu16Result = static_cast<u16>(GetU16FrameCount() - GetU16StartFrame());
+        if (GetU16FrameCount() < GetU16StartFrame())
         {
-            --lu16Result;   // borrow into the 0xFFFF-wide window
+            lu16Result += KU_FRAME_WRAP_MODULUS;
         }
 
         CGS_ASSERT_AT(lu16Result != KU16_INVALID_FRAME,
@@ -241,25 +237,15 @@ namespace CgsNetwork
     s32
     TimeManager::GetFrameWrapCountSinceStart() const
     {
-        // A count that is negative as a signed value takes the second reduction, which
-        // rounds the wrap count down rather than toward zero.
-        s32 liWrapsNow;
-        if (static_cast<s32>(muFrameCount) >= 0)
+        // PS3 0xBE7BD4 (cpp:425..449): the wrap count now less the bookmark's, one fewer while the
+        // current 16-bit frame is still below the bookmark. DWARF local cpp:439.
+        s32 liFrameWrapsSinceInit = CalculateFrameWrapCount() - GetStartFrameWrapCount();
+        if (GetU16FrameCount() < GetU16StartFrame())
         {
-            liWrapsNow = static_cast<s32>(muFrameCount / KU_FRAME_WRAP_MODULUS);
-        }
-        else
-        {
-            liWrapsNow = static_cast<s32>((muFrameCount - 1) / KU_FRAME_WRAP_MODULUS) - 0x10001;
+            --liFrameWrapsSinceInit;
         }
 
-        s32 liResult = liWrapsNow - miStartFrameWrapCount;
-        if (GetU16FrameCount() < mu16StartFrame)
-        {
-            --liResult;
-        }
-
-        return liResult;
+        return liFrameWrapsSinceInit;
     }
 
     // ---- GetFramesSinceStart @0x82893388 --------------------------------------------
@@ -267,11 +253,9 @@ namespace CgsNetwork
     s32
     TimeManager::GetFramesSinceStart() const
     {
-        const u16 lu16FramesSinceStart = GetU16FrameCountSinceStart();
-        const s32 liWrapsSinceStart    = GetFrameWrapCountSinceStart();
-
-        return static_cast<s32>(lu16FramesSinceStart)
-             + static_cast<s32>(KU_FRAME_WRAP_MODULUS) * liWrapsSinceStart;
+        // DWARF: no locals; one expression (ARTIST 0x828933A8 widens the 16-bit count before the
+        // second call).
+        return GetU16FrameCountSinceStart() + GetFrameWrapCountSinceStart() * KU_FRAME_WRAP_MODULUS;
     }
 
     // GetU16FrameCount is a header inline (CgsTimeManager.h): ARTIST holds no copy.
@@ -347,6 +331,9 @@ namespace CgsNetwork
     // ---- IsTimeSynchronised ---------------------------------------------------------
     // The host's clock is the reference, so it is always in sync. A client is in sync
     // once its averaged clock difference is within 0.05 s over at least 8 replies.
+    // The original body sits in CgsTimeManager.h (its failing default names that file, line 248;
+    // ARTIST keeps one out-of-line copy, 0x828803E0, called from StartTimeManager::
+    // UpdateClientSyncTime); it stays here until the header move is measured against its caller.
     bool
     TimeManager::IsTimeSynchronised() const
     {
@@ -362,18 +349,19 @@ namespace CgsNetwork
             return mSyncTimeClient.TimeIsSynchronised(CgsSystem::Time(0.05f), 8);
 
         default:
-            // The original streams the function name after this prefix.
-            CGS_FAIL("SyncTimeManager not prepared in ");
+            CGS_FAIL_STREAM_AT("SyncTimeManager not prepared in " << __FUNCTION__ << "\n",
+                               "..\\..\\..\\GameShared\\GameClasses\\Network/Time/CgsTimeManager.h", 248);
             return false;
         }
     }
 
     // ---- OnHostMigration ------------------------------------------------------------
-    // Re-prepare the sync halves under the new host. The old host id only reaches a
-    // dropped dev-log line.
+    // Log the migration, then re-prepare the sync halves under the new host.
     void
-    TimeManager::OnHostMigration(NetworkPlayerID /*lOldHostID*/, NetworkPlayerID lNewHostID, bool lbIAmHost)
+    TimeManager::OnHostMigration(NetworkPlayerID lOldHostID, NetworkPlayerID lNewHostID, bool lbIAmHost)
     {
+        ServerInterfaceDirtySock::mNetStreamLogChannelOutput << __FUNCTION__ << ": OldHost=" << lOldHostID
+            << " NewHost=" << lNewHostID << " lbIAmHost " << lbIAmHost << "\n";
         CGS_ASSERT_AT(miPlayersAdded > 0,
             "miPlayersAdded > 0",
             __FILE__, 230 /* ARTIST 0x82892DF0 */);
@@ -392,7 +380,9 @@ namespace CgsNetwork
         if (leStartFrame == E_START_FRAME_CURRENT)
         {
             mu16StartFrame        = GetU16FrameCount();
+            ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "Set Start frame " << mu16StartFrame << "\n";
             miStartFrameWrapCount = CalculateFrameWrapCount();
+            ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "Set Start frame wrap count " << miStartFrameWrapCount << "\n";
         }
         else if (leStartFrame == E_START_FRAME_PAST)
         {
@@ -404,10 +394,12 @@ namespace CgsNetwork
                 __FILE__, 364 /* ARTIST 0x82893198 */);
 
             const CgsSystem::Time lElapsedTime    = mNetworkTime - *lpStartTime;
-            const u32             luElapsedFrames = static_cast<u32>(static_cast<s64>(lElapsedTime.GetFloatVal() / lfTimeStep));
+            const u32             luElapsedFrames = static_cast<u32>(lElapsedTime.GetFloatVal() / lfTimeStep);
             const u32             luStartFrame    = muFrameCount - luElapsedFrames;
 
             CalculateFrameCountAndWrapCount(luStartFrame, &mu16StartFrame, &miStartFrameWrapCount);
+            ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "Set Start frame " << mu16StartFrame << "\n";
+            ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "Set Start frame wrap count " << miStartFrameWrapCount << "\n";
         }
         else
         {
@@ -416,8 +408,24 @@ namespace CgsNetwork
                 __FILE__, 381 /* ARTIST 0x828932C0 */);
 
             mu16StartFrame        = KU16_INVALID_FRAME;
+            ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "Cleared Start frame\n";
             miStartFrameWrapCount = 0;
+            ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "Cleared Start frame wrap count\n";
         }
+    }
+
+    // ---- GetU16StartFrame / GetStartFrameWrapCount (DWARF cpp:463 / :478) -----------
+    // The bookmark's two halves; ARTIST holds no copy of either (inlined at every caller).
+    u16
+    TimeManager::GetU16StartFrame() const
+    {
+        return mu16StartFrame;
+    }
+
+    s32
+    TimeManager::GetStartFrameWrapCount() const
+    {
+        return miStartFrameWrapCount;
     }
 
     // ---- CalculateFrameWrapCount ----------------------------------------------------
@@ -438,14 +446,16 @@ namespace CgsNetwork
     void
     TimeManager::CalculateFrameCountAndWrapCount(u32 luFrameCount, u16* lpu16FrameCount, s32* lpiWrapCount) const
     {
+        // The top-bit test is unsigned: ARTIST compares the count with 0x80000000 (cmplw,
+        // GetFrameWrapCountSinceStart 0x82893318) and falls through into the rounding-down arm.
         s32 liNumWraps;
-        if (static_cast<s32>(luFrameCount) >= 0)
+        if (luFrameCount >= 0x80000000u)
         {
-            liNumWraps = static_cast<s32>(luFrameCount / KU_FRAME_WRAP_MODULUS);
+            liNumWraps = static_cast<s32>((luFrameCount - 1) / KU_FRAME_WRAP_MODULUS) - 0x10001;
         }
         else
         {
-            liNumWraps = static_cast<s32>((luFrameCount - 1) / KU_FRAME_WRAP_MODULUS) - 0x10001;
+            liNumWraps = static_cast<s32>(luFrameCount / KU_FRAME_WRAP_MODULUS);
         }
 
         *lpiWrapCount    = liNumWraps;

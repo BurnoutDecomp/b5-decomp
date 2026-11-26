@@ -361,18 +361,20 @@ namespace BrnNetwork
     // and a queue of forced updates jumps the round-robin.
     bool BrnNetworkPlayer::IsOurTurnToSend()
     {
-        if (HasConnectionFailed())
+        // The connected arm first, `return false` last (ARTIST SendFburnChallengeStatusMessage
+        // 0x8258294C branches to a tail-placed false; PS3 0x654890 the same order).
+        if (!HasConnectionFailed())
         {
-            return false;
+            if (mu8NumForcedUpdates != 0)
+            {
+                --mu8NumForcedUpdates;
+                return true;
+            }
+
+            return GetPlayerManager()->IsPlayerTurnToSendRoundRobinMessage(GetPlayerID(), true, 0);
         }
 
-        if (mu8NumForcedUpdates != 0)
-        {
-            --mu8NumForcedUpdates;
-            return true;
-        }
-
-        return GetPlayerManager()->IsPlayerTurnToSendRoundRobinMessage(GetPlayerID(), true, 0);
+        return false;
     }
 
     // Pause the player when nothing has arrived from it for the timeout, and drive the
