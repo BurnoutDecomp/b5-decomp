@@ -236,61 +236,66 @@ namespace BrnGui
     }
 
     // @ 0x82430430 -------------------------------------------------------------------
-    void RivalMapPanel::SetRivalData(CgsID lRivalId)
+    // DWARF (_compile/BrnGuiComponentUnity.cpp): parameter lRivalCarID, locals
+    // TEMP_STRING_LENGTH (cpp:182), lpVehicleData (cpp:189), lacCarIdString (cpp:201),
+    // lacTempString (cpp:206). The PS3 body inlines VehicleList::GetVehicleData(CgsID), asserts
+    // the entry (no null guard after it) and overwrites lRivalCarID with the parent id;
+    // ARTIST keeps the id in r22 throughout (0x82430784, 0x824307E8).
+    void RivalMapPanel::SetRivalData(CgsID lRivalCarID)
     {
-        CGS_ASSERT(meCurrentRivalType == E_RIVAL_TYPE_OFFLINE_RIVAL,
-                   "E_RIVAL_TYPE_OFFLINE_RIVAL == meCurrentRivalType");   // cpp:170
+        CGS_ASSERT_AT(E_RIVAL_TYPE_OFFLINE_RIVAL == meCurrentRivalType,
+                      "E_RIVAL_TYPE_OFFLINE_RIVAL == meCurrentRivalType", CGS_ARTIST_FILE, 170);
 
-        if (mRivalID == lRivalId)   // ld 0x5E0 / cmpld -- unchanged, nothing to do
+        if (mRivalID == lRivalCarID)   // ld 0x5E0 / cmpld -- unchanged, nothing to do
         {
             return;
         }
 
         const bool lbWasActive = mbActive;   // lbz 0x7A1, read BEFORE the store
-        mRivalID = lRivalId;                 // std 0x5E0
+        mRivalID = lRivalCarID;              // std 0x5E0
 
         if (lbWasActive)
         {
             SetState(KAC_STATE_RIVAL);
         }
 
-        CGS_ASSERT(mpStateInterface != 0, "mpStateInterface");                          // cpp:184
-        CGS_ASSERT(mpStateInterface->GetAccessPointers() != 0,
-                   "mpStateInterface->GetAccessPointers()");                            // cpp:185
-        CGS_ASSERT(mpStateInterface->GetAccessPointers()->GetGuiCache() != 0,
-                   "mpStateInterface->GetAccessPointers()->GetGuiCache()");             // cpp:186
-        CGS_ASSERT(mpStateInterface->GetAccessPointers()->GetGuiCache()->GetWorldDataController() != 0,
-                   "mpStateInterface->GetAccessPointers()->GetGuiCache()->GetWorldDataController()"); // cpp:187
-        CGS_ASSERT(mpStateInterface->GetAccessPointers()->GetGuiCache()
-                       ->GetWorldDataController()->GetVehicleList() != 0,
-                   "mpStateInterface->GetAccessPointers()->GetGuiCache()->GetWorldDataController()->GetVehicleList()"); // cpp:188
+        const int32_t TEMP_STRING_LENGTH = 32;
 
-        const BrnResource::VehicleList* const lpVehicleList =
-            mpStateInterface->GetAccessPointers()->GetGuiCache()
-                ->GetWorldDataController()->GetVehicleList();
+        CGS_ASSERT_AT(mpStateInterface, "mpStateInterface", CGS_ARTIST_FILE, 184);
+        CGS_ASSERT_AT(mpStateInterface->GetAccessPointers(),
+                      "mpStateInterface->GetAccessPointers()", CGS_ARTIST_FILE, 185);
+        CGS_ASSERT_AT(mpStateInterface->GetAccessPointers()->GetGuiCache(),
+                      "mpStateInterface->GetAccessPointers()->GetGuiCache()", CGS_ARTIST_FILE, 186);
+        CGS_ASSERT_AT(mpStateInterface->GetAccessPointers()->GetGuiCache()->GetWorldDataController(),
+                      "mpStateInterface->GetAccessPointers()->GetGuiCache()->GetWorldDataController()",
+                      CGS_ARTIST_FILE, 187);
+        CGS_ASSERT_AT(mpStateInterface->GetAccessPointers()->GetGuiCache()->GetWorldDataController()->GetVehicleList(),
+                      "mpStateInterface->GetAccessPointers()->GetGuiCache()->GetWorldDataController()->GetVehicleList()",
+                      CGS_ARTIST_FILE, 188);
 
-        // `GetVehicleIndex` answers < 0 when the id is not in the list; the console then leaves
-        // the entry pointer NULL and falls into the assert (no early out).
-        const s32 liVehicleIndex = lpVehicleList->GetVehicleIndex(mRivalID);
-        const BrnResource::VehicleListEntry* const lpVehicleData =
-            (liVehicleIndex < 0) ? 0 : lpVehicleList->GetVehicleData(liVehicleIndex);
-        CGS_ASSERT(lpVehicleData != 0, "lpVehicleData");   // cpp:190
+        const BrnResource::VehicleListEntry* lpVehicleData =
+            mpStateInterface->GetAccessPointers()->GetGuiCache()->GetWorldDataController()->GetVehicleList()
+                ->GetVehicleData(lRivalCarID);
+        CGS_ASSERT_AT(lpVehicleData, "lpVehicleData", CGS_ARTIST_FILE, 190);
 
-        const CgsID lDisplayCarId = ResolveDisplayCarId(lpVehicleData, mRivalID);
+        // A livery variant (livery type != 2) displays under its parent car's id.
+        if (lpVehicleData->GetLiveryType() != 2 && lpVehicleData->GetParentId() != 0)
+        {
+            lRivalCarID = lpVehicleData->GetParentId();
+        }
 
-        char lacCarId[KI_SCRATCH_LEN];
-        char lacScratch[KI_SCRATCH_LEN];
+        char lacCarIdString[TEMP_STRING_LENGTH];
+        CgsIDConvertToString(lRivalCarID, lacCarIdString);
+        lacCarIdString[TEMP_STRING_LENGTH - 1] = 0;
 
-        CgsIDConvertToString(lDisplayCarId, lacCarId);
-        lacCarId[KI_SCRATCH_LEN - 1] = 0;
+        char lacTempString[TEMP_STRING_LENGTH];
+        CgsCore::SPrintf(lacTempString, TEMP_STRING_LENGTH, "CAR_CAPS_%s", lacCarIdString);
+        lacTempString[TEMP_STRING_LENGTH - 1] = 0;
+        maTextfields[E_TEXTFIELD_RIVAL_NAME].SetLocalisedText(lacTempString, LM::E_FORMAT_ID_LOOKUP);
 
-        CgsCore::SPrintf(lacScratch, KI_SCRATCH_LEN, KAC_CAR_CAPS_KEY_FORMAT, lacCarId);
-        lacScratch[KI_SCRATCH_LEN - 1] = 0;
-        maTextfields[E_TEXTFIELD_RIVAL_NAME].SetLocalisedText(lacScratch, LM::E_FORMAT_ID_LOOKUP);
-
-        CgsCore::SPrintf(lacScratch, KI_SCRATCH_LEN, KAC_CAR_STATE_FORMAT, lacCarId);
-        lacScratch[KI_SCRATCH_LEN - 1] = 0;
-        mCarImageIcon.SetState(lacScratch);
+        CgsCore::SPrintf(lacTempString, TEMP_STRING_LENGTH, "CAR_%s", lacCarIdString);
+        lacTempString[TEMP_STRING_LENGTH - 1] = 0;
+        mCarImageIcon.SetState(lacTempString);
 
         // The three stat rows have no meaning for an offline rival: blank and re-push each.
         maTextfields[E_TEXTFIELD_TEXT1].ClearText();

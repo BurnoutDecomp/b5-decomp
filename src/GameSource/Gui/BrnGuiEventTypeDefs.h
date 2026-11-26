@@ -651,6 +651,16 @@ private:
     bool mbButon2ParamUsed;
 };
 CGS_STATIC_ASSERT((sizeof(GuiOverlayRequest) == 0x120), "ARTIST overlay request payload");
+
+// Header-inline (DWARF BrnGuiEventTypeDefs.h:5706): ARTIST has no out-of-line copy and
+// CarSelectVehicle::OnEnter (0x824C98CC) inlines it after its CgsIDCompress call.
+inline void GuiOverlayRequest::Construct(CgsID lOverlayId)
+{
+    mOverlayID = lOverlayId;
+    miNumMessages = 0;
+    mbButon1ParamUsed = false;
+    mbButon2ParamUsed = false;
+}
 CGS_STATIC_ASSERT((__alignof(GuiOverlayRequest) == 8), "ARTIST overlay request alignment");
 
 // ===================================================================================

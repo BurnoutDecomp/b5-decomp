@@ -46,7 +46,9 @@ namespace
     };
 
     // GuiReplayPlayReelEvent (console id 526): { 8, 526, 12 } + the reel index and three flag
-    // bytes, 20 bytes. The console never writes the fourth byte.
+    // bytes, 20 bytes. The console never writes the fourth byte. No constructor: the DWARF
+    // GuiReplayPlayReelEvent (BrnGuiEventTypeDefs.h:6289) has none, and ARTIST PlayReel
+    // (0x824D4630) stores only the four fields it sets.
     struct GuiReplayPlayReelWire : public CgsGui::GuiEvent<526>
     {
         s32 miReel;          // +0x0C
@@ -54,9 +56,6 @@ namespace
         u8  mbFlag11;        // +0x11 FLAG: role not recovered; always 1 here
         u8  mbPspQuality;    // +0x12 (the export-quality toggle is on "$PSP_QUALITY")
         u8  muReserved;      // +0x13 (never written by the console)
-        GuiReplayPlayReelWire()
-            : miReel(0), mbExport(0), mbFlag11(0),
-              mbPspQuality(0), muReserved(0) {}
     };
 
     // The director's camera-type request (console id 591): { 4, 591, 12 } + the camera, 16 bytes.

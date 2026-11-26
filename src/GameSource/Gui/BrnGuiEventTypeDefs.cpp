@@ -323,14 +323,6 @@ void GuiOverlayRequest::Construct(const char* lpcOverlayId)
     mbButon2ParamUsed = false;
 }
 
-void GuiOverlayRequest::Construct(CgsID lOverlayId)
-{
-    miNumMessages = 0;
-    mbButon1ParamUsed = false;
-    mbButon2ParamUsed = false;
-    mOverlayID = lOverlayId;
-}
-
 void GuiOverlayRequest::AddMessageParam(CgsGui::PopupParamTypes leType, const char* lpcParam)
 {
     if (miNumMessages >= KI_MAX_MESSAGES)

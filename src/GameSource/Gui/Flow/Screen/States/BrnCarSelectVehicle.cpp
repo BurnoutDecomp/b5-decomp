@@ -276,7 +276,7 @@ namespace BrnGui
         if (!mbTitleTickerPosted)
         {
             GuiOverlayRequest lTitleTicker;
-            lTitleTicker.Construct("DwnldTitleUp");
+            lTitleTicker.Construct(CgsIDCompress("DwnldTitleUp"));   // ARTIST 0x824C98D4: the CgsID overload
             mpStateInterface->OutputGuiEvent(lTitleTicker);
             mbTitleTickerPosted = true;
         }

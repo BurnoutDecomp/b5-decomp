@@ -194,11 +194,12 @@ namespace BrnGui
         // @ 0x82488ED0 - true when a route of >= 2 points is loaded. Returns false when
         // the "has route" flag (mbHasRoute) is clear; otherwise asserts the route-info
         // array was Construct/Clear'd and returns (count >= 2).
-        bool IsRouteInfoAvailable();
+        bool IsRouteInfoAvailable() const;   // DWARF BrnGuiTracker.h:99 (const)
 
-        // @ 0x82488F58 - route distance (f32 at +0x65068) as a double. Asserts
-        // IsRouteInfoAvailable().
-        double GetRouteDistance();
+        // @ 0x82488F58 - route distance (f32 at +0x65068). DWARF BrnGuiTracker.h:145
+        // `float32_t GetRouteDistance() const`; defined in this header below the class (its
+        // assert names BrnGuiTracker.h:371).
+        f32 GetRouteDistance() const;
 
         // @ 0x824FA0A8 - drop the current route/tracker state. Declared-only here; the body
         // belongs to the BrnGuiTracker TU. Called by
@@ -346,6 +347,16 @@ namespace BrnGui
 
     // The record stride is load-bearing (it reproduces the X360 48-byte stride).
     CGS_STATIC_ASSERT((sizeof(GuiTracker::TrackerInformation) == 0x30), "GuiTracker record stride");
+
+    // Header-inline: ARTIST's only copy (0x82488F58, called out of line from OnlineSelectRoute)
+    // asserts with this header's path and line 371.
+#define CGS_ARTIST_BRNGUITRACKER_H_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\satnav\\BrnGuiTracker.h"
+    inline f32 GuiTracker::GetRouteDistance() const
+    {
+        CGS_ASSERT_AT(IsRouteInfoAvailable(), "IsRouteInfoAvailable()", CGS_ARTIST_BRNGUITRACKER_H_FILE, 371);
+
+        return mfRouteDistance;
+    }
 
     // ⭐ 2026-09-07: the event-64 payload, PROMOTED out of BrnGuiTracker.cpp's anonymous
     // namespace so the publisher can build one. It is a single GuiCache pointer: the

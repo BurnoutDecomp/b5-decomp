@@ -129,7 +129,7 @@ namespace BrnGui
     // live-count word at +0x65050, asserting it was Construct/Clear'd (count != -1,
     // CgsArray.h:336), and returns true only when the count is >= 2 (the `cmplwi 2` /
     // `bge` -> 1, else 0). The X360 returns the 0/1 in the low byte (clrlwi 24).
-    bool GuiTracker::IsRouteInfoAvailable()
+    bool GuiTracker::IsRouteInfoAvailable() const
     {
         if (!mbHasRoute)
         {
@@ -144,16 +144,6 @@ namespace BrnGui
 
         return static_cast<u32>(mRoutePoints.GetCount())
                    >= static_cast<u32>(KI_ROUTE_MIN_POINTS);
-    }
-
-    // @ 0x82488F58 - route distance. Asserts IsRouteInfoAvailable() (BrnGuiTracker.h:371)
-    // then loads the f32 at +0x65068 (lfsx) and returns it in f1 (widened to double by
-    // the float-return convention).
-    double GuiTracker::GetRouteDistance()
-    {
-        CGS_ASSERT(IsRouteInfoAvailable(), "IsRouteInfoAvailable()");
-
-        return mfRouteDistance;
     }
 
     // @ 0x824FA0A8 - drop the current route / tracker state. A straight-line, branch-free,

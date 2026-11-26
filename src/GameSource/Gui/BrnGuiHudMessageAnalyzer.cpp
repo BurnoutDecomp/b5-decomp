@@ -4681,16 +4681,18 @@ void HudMessageAnalyzer::HandlePowerParkingResult(const GuiPowerParkResult* lpEv
 
     if (lpEvent->meOutcome == BrnWorld::E_PPO_SUCCESS)
     {
-        const u32 luRatingIndex = lpEvent->miOverallRating / KI_POWER_PARK_RATING_BAND_SIZE;
+        // DWARF locals in declaration order: lacBuffer (PS3 cpp:4860), luRatingIndex (cpp:4862).
+        char lacBuffer[32];
+
+        uint32_t luRatingIndex = lpEvent->miOverallRating / KI_POWER_PARK_RATING_BAND_SIZE;
         CGS_ASSERT_AT(luRatingIndex < KU_POWER_PARK_RATING_COUNT, "luRatingIndex<6", CGS_ARTIST_FILE, 4998);  // cpp:4998
 
-        char lacRatingStringID[32];
-        CgsCore::SPrintf(lacRatingStringID, sizeof(lacRatingStringID),
+        CgsCore::SPrintf(lacBuffer, sizeof(lacBuffer),
                          "HUDMESSAGE_POWERPARK_RATING%d", luRatingIndex);
 
         lMessage.Construct("PowPkWin");
         lMessage.AddParam(CgsGui::E_HUDMESSAGEPARAMTYPES_INT, 1, lpEvent->miOverallRating);
-        lMessage.AddParam(CgsGui::E_HUDMESSAGEPARAMTYPES_STRINGID, 1, lacRatingStringID);
+        lMessage.AddParam(CgsGui::E_HUDMESSAGEPARAMTYPES_STRINGID, 1, lacBuffer);
         TriggerMessage(&lMessage);
     }
     else
