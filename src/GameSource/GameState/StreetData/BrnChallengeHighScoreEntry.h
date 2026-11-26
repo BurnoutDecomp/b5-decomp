@@ -71,8 +71,10 @@ namespace BrnStreetData
         CGS_ASSERT( leScoreType >= 0 && leScoreType < E_SCORE_TYPE_COUNT,
                     CGS_ASSERT_MESSAGE_AT("leScoreType >=0 && leScoreType < E_SCORE_TYPE_COUNT", CGS_ARTIST_BRNCHALLENGEHIGHSCOREENTRY_FILE, 155) );
 
-        if ( liScore >= ScoreList::KAI_MIN_SCORES[ leScoreType ] &&
-             liScore <= ScoreList::KAI_MAX_SCORES[ leScoreType ] )
+        // ARTIST tests the maximum first (lwzx 0x820A7654 ; bgt at 0x8231C550), then the
+        // minimum (0x820A764C ; blt at 0x8231C564).
+        if ( liScore <= ScoreList::KAI_MAX_SCORES[ leScoreType ] &&
+             liScore >= ScoreList::KAI_MIN_SCORES[ leScoreType ] )
         {
             mDirty.SetBit( leScoreType );
             mValidScores.SetBit( leScoreType );

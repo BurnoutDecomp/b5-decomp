@@ -437,8 +437,10 @@ public:
     f32 GetTimeInFreeBurn() const { return mfTimeInFreeBurn; }
     f32 GetTimeInMode()     const { return mfTimeInMode; }
 
-    ScoringSystem*       GetScoringSystem();                              // == &mScoringSystem (X360 +0xDB0; console inlines the adjust)
-    const ScoringSystem* GetScoringSystem() const;
+    // DWARF BrnModeManager.h:293 / :300, header-inline: ARTIST holds no standalone copy and
+    // adds +0xDB0 in place (e.g. ModeManagerDebugComponent::OnActivate 0x82329C3C, +0x33BC).
+    ScoringSystem*       GetScoringSystem()       { return &mScoringSystem; }
+    const ScoringSystem* GetScoringSystem() const { return &mScoringSystem; }
 
     // == mePlayerActiveRaceCarIndex (+0x8038). The console emits no accessor; this one serves
     // readers outside the class.

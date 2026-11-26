@@ -1047,6 +1047,9 @@ enum EGameActionType
     //      AddEvent immediate; the name is the reference enumerator at the band shift noted.
     //   1   GuiUpdatePlayerCarID: unshifted region (0..17); the bridge reads the car id at +0.
     E_ACTION_GUI_UPDATE_PLAYER_CAR_ID                    = 1,
+    //   83  band +5 (DWARF 78): OnlineCarSelectManager::StartWaitForOnline posts the empty record
+    //       (li r5,0x53 ; li r6,1 at ARTIST 0x82388460).
+    E_ACTION_CAR_SELECT_ONLINE_END                       = 83,
     //   84  band +5: OnlineCarSelectManager::SendOnlineChangeCarAction posts it (car id +0).
     E_ACTION_CAR_SELECT_ONLINE_SELECT_CAR                = 84,
     //   93 / 95  band +5: GameStateModule::ProcessGameEvents posts 93 (size 1) and 95 (the 0x9C-byte
@@ -3607,6 +3610,10 @@ CGS_STATIC_ASSERT((sizeof(PlayerEliminatedAction) == 8 &&
               offsetof(PlayerEliminatedAction, mbLastBlueTeamMember) == 4 &&
               offsetof(PlayerEliminatedAction, mbLocalPlayerEliminated) == 5),
               "X360 posts action 165 with size 8; flags at +4/+5");
+
+// DecFIGS BrnGameActions.h:2758: the empty online car-select end record. ARTIST
+// StartWaitForOnline 0x82388464 posts its one uninitialised byte from the stack.
+struct CarSelectOnlineEndAction : public GameAction<E_ACTION_CAR_SELECT_ONLINE_END> {};
 
 // The player picked a car in online car select. OnlineCarSelectManager::SendOnlineChangeCarAction
 // fills the car id, the profile car's deformation amount, the colour and paint finish from the

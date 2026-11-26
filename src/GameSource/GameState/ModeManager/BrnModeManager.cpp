@@ -8890,8 +8890,7 @@ void ModeManager::HandleWorldStunt(StuntElementType leStuntType, CgsID lStuntID)
 // No current caller was found for PreWorldUpdateClocksBringUp in this source tree; retain it for
 // separate cleanup and do not add it alongside the full pre-world route.
 //
-// GetScoringSystem is this repository's de-inlining of the console's ScoringSystem member adjust.
-// Keep these accessors while mode/scoring bodies call them.
+// GetScoringSystem is header-inline again (BrnModeManager.h:293/:300).
 // ============================================================================================
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"
 
@@ -8903,20 +8902,6 @@ void ModeManager::HandleWorldStunt(StuntElementType leStuntType, CgsID lStuntID)
 #include "GameSource/GameState/NetworkRoundManager/BrnNetworkRoundManager.h" // NetworkRoundManager (mpNetworkRoundManager)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
 
-namespace BrnGameState
-{
-
-ScoringSystem* ModeManager::GetScoringSystem()
-{
-    return &mScoringSystem;
-}
-
-const ScoringSystem* ModeManager::GetScoringSystem() const
-{
-    return &mScoringSystem;
-}
-
-}
 
 #undef CGS_ARTIST_FILE
 #undef CGS_ARTIST_FILE_BRNMODEMANAGER

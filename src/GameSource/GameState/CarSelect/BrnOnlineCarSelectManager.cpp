@@ -20,7 +20,6 @@ namespace
 // Game actions this manager posts whose ids have no enumerator in BrnGameActions.h: the reference
 // enumerator plus the car-select band's +5 shift (the immediates the console passes to AddEvent).
 const s32 KI_ACTION_CAR_SELECTION_CHANGED_ONLINE = 67;    // E_ACTION_CAR_SELECTION_CHANGED_ONLINE (62), 8 bytes
-const s32 KI_ACTION_CAR_SELECT_ONLINE_END        = 83;    // E_ACTION_CAR_SELECT_ONLINE_END (78), 1 byte
 const s32 KI_ACTION_PLAYER_RESET_ON_TRACK        = 119;   // E_ACTION_PLAYER_RESET_ON_TRACK (114), 1 byte
 const s32 KI_ACTION_CAR_SELECT_ONLINE_TIME_LEFT   = 82;    // ARTIST Update @0x8239C480, f32 payload
 const s32 KI_ACTION_CAR_SELECT_ONLINE_SHOWABLE    = 85;    // ARTIST Update @0x8239C480, u8 payload
@@ -282,9 +281,9 @@ void OnlineCarSelectManager::StartWaitForOnline(GameStateModuleIO::GameActionQue
 
     meInternalState = E_INTERNAL_STATE_WAIT_FOR_ONLINE;
 
-    const u8 lu8OnlineEnd = 0;
-    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lu8OnlineEnd),
-                            KI_ACTION_CAR_SELECT_ONLINE_END, sizeof(lu8OnlineEnd));
+    // DWARF: AddGameAction<CarSelectOnlineEndAction>; the empty record goes out uninitialised.
+    GameStateModuleIO::CarSelectOnlineEndAction lAction;
+    lpActionQueue->AddEvent(&lAction, GameStateModuleIO::E_ACTION_CAR_SELECT_ONLINE_END, sizeof(lAction));
 }
 
 // X360 ARTIST 0x8239C480; DecFIGS prototype: void Update(GameActionQueue*,
@@ -755,8 +754,8 @@ void OnlineCarSelectManager::ExitOnlineCarSelect(GameStateModuleIO::GameActionQu
                             sizeof(lExitAction));
 
     GameStateModuleIO::SetPlayerCarDriverAction lDriverAction;
+    lDriverAction.mbIsDriveThru = false;                                   // stb +0x2C first (0x8238855C)
     lDriverAction.meCarControl  = BrnWorld::E_CAR_CONTROL_ENTITY_MODULE;
-    lDriverAction.mbIsDriveThru = false;
     lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lDriverAction),
                             GameStateModuleIO::E_ACTION_SET_PLAYER_CAR_DRIVER,
                             sizeof(lDriverAction));
