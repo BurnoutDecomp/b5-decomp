@@ -138,12 +138,11 @@ void* AptKey::operator new(size_t size)
 // Free the GC block; on a successful free clear the AptValueGC_MemItem
 // "allocated" flag. The X360 does DOGMA_PoolManager::Deallocate(gpGCPoolManager,
 // p, size) then, iff it freed, SetIsAllocated(p, gAptValueGCSizeOffset, 0) --
-// exactly AptValueGC_PoolManager::DeallocateAptValueGC. Guarded for a null pool.
+// exactly AptValueGC_PoolManager::DeallocateAptValueGC.
 // ---------------------------------------------------------------------------
 void AptKey::operator delete(void* p, size_t size)
 {
-    if (gpGCPoolManager != 0)
-        gpGCPoolManager->DeallocateAptValueGC(p, size);
+    gpGCPoolManager->DeallocateAptValueGC(p, size);   // no pool null test on the console
 }
 
 // ---------------------------------------------------------------------------

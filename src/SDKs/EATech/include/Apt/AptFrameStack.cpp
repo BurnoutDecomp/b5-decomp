@@ -44,8 +44,7 @@ void* AptFrameStack::operator new(size_t size)
 // ---------------------------------------------------------------------------
 void AptFrameStack::operator delete(void* p, size_t size)
 {
-    if (gpGCPoolManager != 0)
-        gpGCPoolManager->DeallocateAptValueGC(p, size);
+    gpGCPoolManager->DeallocateAptValueGC(p, size);   // no pool null test on the console
 }
 
 // ---------------------------------------------------------------------------

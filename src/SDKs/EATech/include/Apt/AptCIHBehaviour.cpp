@@ -479,15 +479,10 @@ AptCIH* AptCIH::SetIsInserted()
 
 // operator new @0x82AE5B90 -- AptCIH is an AptValueGC value: allocate from the GC
 // value pool (gpGCPoolManager) and mark the AptValueGC_MemItem header allocated.
-// The gpGCPoolManager null-guard matches every committed GC-value sibling operator
-// new (AptPrototype/AptArray/...) for the pre-AptInit startup window.
+// No pool null test on the console (0x82AE5BA8 loads the pool and calls Allocate).
 void* AptCIH::operator new(size_t size)
 {
-    if (gpGCPoolManager == 0)
-        return 0;
-    void* pMem = gpGCPoolManager->Allocate(size);
-    reinterpret_cast<AptValueGC_MemItem*>(pMem)->SetIsAllocated(gAptValueGCSizeOffset, true);
-    return pMem;
+    return gpGCPoolManager->AllocateAptValueGC(size);
 }
 
 // operator delete @0x82AE72E8 -- free the GC block; on a successful free clear the

@@ -34,8 +34,7 @@ void* AptObject::operator new(size_t size)
 
 void AptObject::operator delete(void* p, size_t size)
 {
-    if (gpGCPoolManager != 0)
-        gpGCPoolManager->DeallocateAptValueGC(p, size);
+    gpGCPoolManager->DeallocateAptValueGC(p, size);   // no pool null test on the console
 }
 
 // The plain AS "new Object()" -- allocate a generic AptObject (value type

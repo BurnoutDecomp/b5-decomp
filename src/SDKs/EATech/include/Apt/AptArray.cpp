@@ -30,11 +30,19 @@ void* AptArray::operator new(size_t size)
     return gpGCPoolManager->AllocateAptValueGC(size);
 }
 
+// ARTIST tests Deallocate's bool with the record form (clrlwi. 0x82AF1C80) and calls
+// SetIsAllocated: a size region, as the other GC-pool operator deletes get in the bulk TU.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
 void AptArray::operator delete(void* p, size_t size)
 {
-    if (gpGCPoolManager != 0)
-        gpGCPoolManager->DeallocateAptValueGC(p, size);
+    gpGCPoolManager->DeallocateAptValueGC(p, size);   // no pool null test on the console
 }
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
+
 
 // ctor @0x82D978 -- empty array (object hash capacity 8).
 AptArray::AptArray() : AptObject(AptVFT_Array, 8)

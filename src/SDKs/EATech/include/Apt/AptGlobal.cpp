@@ -39,8 +39,7 @@ AptValueWithHash* gpAptGlobalFallback = 0;   // X360 off_8324E380
 // Allocate the AptGlobal block from the GC pool and mark its AptValueGC_MemItem
 // "allocated" flag. The X360 calls DOGMA_PoolManager::Allocate directly on the
 // GC pool (off_8324D834 == gpGCPoolManager), then SetIsAllocated(block,
-// gAptValueGCSizeOffset /*byte_8324D804*/, 1). Guarded for a null pool before
-// AptAllocatorInitialize @0x82ADD118 (AptInit.cpp) wires gpGCPoolManager.
+// gAptValueGCSizeOffset /*byte_8324D804*/, 1).
 // ---------------------------------------------------------------------------
 void* AptGlobal::operator new(size_t size)
 {
@@ -53,12 +52,11 @@ void* AptGlobal::operator new(size_t size)
 // Free the GC block; on a successful free clear the AptValueGC_MemItem
 // "allocated" flag. The X360 does DOGMA_PoolManager::Deallocate(gpGCPoolManager,
 // p, size) then, iff it freed, SetIsAllocated(p, gAptValueGCSizeOffset, 0) --
-// exactly AptValueGC_PoolManager::DeallocateAptValueGC. Guarded for a null pool.
+// exactly AptValueGC_PoolManager::DeallocateAptValueGC.
 // ---------------------------------------------------------------------------
 void AptGlobal::operator delete(void* p, size_t size)
 {
-    if (gpGCPoolManager != 0)
-        gpGCPoolManager->DeallocateAptValueGC(p, size);
+    gpGCPoolManager->DeallocateAptValueGC(p, size);   // no pool null test on the console
 }
 
 // ---------------------------------------------------------------------------

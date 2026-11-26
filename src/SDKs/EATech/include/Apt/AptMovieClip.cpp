@@ -51,8 +51,7 @@ void* AptMovieClip::operator new(size_t size)
 // ---------------------------------------------------------------------------
 void AptMovieClip::operator delete(void* p, size_t size)
 {
-    if (gpGCPoolManager != 0)
-        gpGCPoolManager->DeallocateAptValueGC(p, size);
+    gpGCPoolManager->DeallocateAptValueGC(p, size);   // no pool null test on the console
 }
 
 // ---------------------------------------------------------------------------
