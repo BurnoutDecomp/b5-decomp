@@ -55,6 +55,9 @@ public:
     void SetSilentMode(bool);
     void SetSignedInUserIndex(s32);
     s32 GetSignedInUserIndex() const { return miField210; }
+    // DWARF CgsSaveLoadPS3.h:469 (header-inline; no ARTIST copy): ProfileManager::Autosave
+    // 0x82513974 reads the +0x180 flag inline for its "mSaveLoadSystem.AutosaveIsEnabled()" assert.
+    bool AutosaveIsEnabled() const { return mbField180; }
     void RunPendingUIClosed();
     void CopyImageToBuffer(const void*);
     void Load(SaveLoadTaskResultHandler*, const void*);

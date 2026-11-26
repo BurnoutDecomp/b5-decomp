@@ -127,15 +127,5 @@ namespace BrnGui
     // Push the named show/hide state at the panel's own apt clip, then latch the active
     // flag. Store-for-store: the state push comes FIRST in both arms, the flag store
     // second (asm order at the two E_PANEL_DRIVETHRU arms).
-    void DriveThruMapPanel::TransitionIn()
-    {
-        SetState("transIn");    // sub_824E2B90(panel, "transIn")
-        mbActive = true;        // stb 1, +0x2F0
-    }
-
-    void DriveThruMapPanel::TransitionOut()
-    {
-        SetState("transOut");   // sub_824E2B90(panel, "transOut")
-        mbActive = false;       // stb 0, +0x2F0
-    }
+    // TransitionIn / TransitionOut are header-inline (BrnDriveThruMapPanel.h:116 / :132).
 }

@@ -76,8 +76,8 @@ namespace BrnGui
         //   out: `sub_824E2B90(this + 0x3788, "transOut"); *(this + 14968) = 0;`
         //   in : `sub_824E2B90(this + 0x3788, "transIn");  *(this + 14968) = 1;`
         // with 0x3788 == CrashNavPanel::mDrivethruPanel and 14968 == 0x3A78 == that panel's
-        // own mbActive (+0x2F0). Bodies live here (this is the member's home) rather than in
-        // the caller, which is what the DWARF method set says.
+        // own mbActive (+0x2F0). DWARF places both bodies in this header (h:116 / h:132) and
+        // ARTIST keeps no copy of either: they are defined below the class.
         void TransitionIn();
         void TransitionOut();
 
@@ -86,4 +86,18 @@ namespace BrnGui
         CgsID     mDriveThruID;                      // panel+0x2E8
         bool      mbActive;                          // panel+0x2F0
     };
+
+    // BrnDriveThruMapPanel.h:116
+    inline void DriveThruMapPanel::TransitionIn()
+    {
+        SetState("transIn");    // IconComponent::SetState 0x824E2B90
+        mbActive = true;        // stb 1, +0x2F0
+    }
+
+    // BrnDriveThruMapPanel.h:132
+    inline void DriveThruMapPanel::TransitionOut()
+    {
+        SetState("transOut");
+        mbActive = false;       // stb 0, +0x2F0
+    }
 }

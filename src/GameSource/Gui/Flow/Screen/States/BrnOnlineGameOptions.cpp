@@ -1275,73 +1275,69 @@ namespace BrnGui
     //  The DWARF signature carries a bool parameter and both call sites pass 0, but the
     //  X360 body never reads r4 -- the flag is dead on this build.
     // ================================================================================
-    void OnlineGameOptions::SetupHelpBar(bool /*lbUnused*/)
+    void OnlineGameOptions::SetupHelpBar(bool lbSnap)
     {
         CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 1936);   // cpp:1936 (non-fatal)
 
-        // The X360 builds two parallel stack arrays (buttons then texts, both walked with
-        // a word-scaled index) rather than an array of the class's HelpBarItem pairs.
+        // DWARF locals (cpp:1953..1957): the two parallel stack arrays sized
+        // KI_MAX_HELP_BAR_ITEMS (3, DWARF h:377), the append index and the running count.
         const char*                     lapcHelpBarText[KI_MAX_HELP_BAR_ITEMS];
-        ButtonIconComponent::EPadButton laeHelpBarButton[KI_MAX_HELP_BAR_ITEMS];
-        s32                             liHelpBarItemCount;
+        ButtonIconComponent::EPadButton laButtons[KI_MAX_HELP_BAR_ITEMS];
+        int32_t                         liIndex;
+        int32_t                         liHelpBarItemCount = 0;
 
-        // The X360 tests the common create-page sub-state first (`cmpwi 2 / beq`) and only
-        // then the load sub-state; the two compares collapse to this single test because
-        // the create arm and the fall-through arm are the same block.
+        // A switch on the sub-state: ARTIST tests the SELECTING_PARAMS label first
+        // (`cmpwi 2 / beq` 0x82485CC4) and then LOAD_OPTIONS, the decision tree of a switch
+        // whose SELECTING_PARAMS case shares the default arm.
         //
         // The static_cast on every meButton read is the header's doing, not the data's:
         // BrnOnlineGameOptions.h models HelpBarItem::meButton as s32 while the DWARF types
         // it BrnGui::ButtonIconComponent::EPadButton. The values are the enumerators.
-        if (meSubState == E_SUBSTATE_LOAD_OPTIONS)
+        switch (meSubState)
         {
-            lapcHelpBarText[0]  = KA_HELPBAR_ITEMS[2].mpcText;    // "$CAPS_BUTTON_LOAD"
-            laeHelpBarButton[0] = static_cast<ButtonIconComponent::EPadButton>(
-                                      KA_HELPBAR_ITEMS[2].meButton);   // 4 SELECT
-            liHelpBarItemCount  = 1;
-        }
-        else
-        {
-            lapcHelpBarText[0]  = KA_HELPBAR_ITEMS[1].mpcText;    // "$CAPS_BUTTON_CONTINUE"
-            laeHelpBarButton[0] = static_cast<ButtonIconComponent::EPadButton>(
-                                      KA_HELPBAR_ITEMS[1].meButton);   // 4 SELECT
-            liHelpBarItemCount  = 1;
+        case E_SUBSTATE_LOAD_OPTIONS:
+            lapcHelpBarText[liHelpBarItemCount] = KA_HELPBAR_ITEMS[2].mpcText;    // "$CAPS_BUTTON_LOAD"
+            laButtons[liHelpBarItemCount] = static_cast<ButtonIconComponent::EPadButton>(
+                                                KA_HELPBAR_ITEMS[2].meButton);   // 4 SELECT
+            ++liHelpBarItemCount;
+            break;
 
-            // The two counters live in the cache's player-options profile block: the X360
-            // folds both the profile fetch and the two counter reads into single
-            // displacements off the cache pointer (cache+76672 / +76676 == the profile at
-            // cache+0xB878 plus its +0x7308 / +0x730C). Un-inlined back onto the profile's
-            // own public accessors rather than poking the (private) members.
-            const OptionsDataProfile* lpOptionsDataProfile = mpGuiCache->GetMenuOptionsData();
-            if (lpOptionsDataProfile->GetNumCreatedOnlineGameOptions() > 0 ||
-                lpOptionsDataProfile->GetNumReceivedOnlineGameOptions() > 0)
+        case E_SUBSTATE_SELECTING_PARAMS:
+        default:
+        {
+            lapcHelpBarText[liHelpBarItemCount] = KA_HELPBAR_ITEMS[1].mpcText;    // "$CAPS_BUTTON_CONTINUE"
+            laButtons[liHelpBarItemCount] = static_cast<ButtonIconComponent::EPadButton>(
+                                                KA_HELPBAR_ITEMS[1].meButton);   // 4 SELECT
+            ++liHelpBarItemCount;
+
+            // The two counters live in the cache's player-options profile block (cache+0x12B80 /
+            // +0x12B84 == the profile's +0x7308 / +0x730C), read through its in-class accessors.
+            if (mpGuiCache->GetMenuOptionsData()->GetNumCreatedOnlineGameOptions() > 0 ||
+                mpGuiCache->GetMenuOptionsData()->GetNumReceivedOnlineGameOptions() > 0)
             {
-                lapcHelpBarText[1]  = KA_HELPBAR_ITEMS[3].mpcText;    // "$CAPS_BUTTON_LOAD"
-                laeHelpBarButton[1] = static_cast<ButtonIconComponent::EPadButton>(
-                                          KA_HELPBAR_ITEMS[3].meButton);   // 6 OPTION0
-                liHelpBarItemCount  = 2;
+                lapcHelpBarText[liHelpBarItemCount] = KA_HELPBAR_ITEMS[3].mpcText;    // "$CAPS_BUTTON_LOAD"
+                laButtons[liHelpBarItemCount] = static_cast<ButtonIconComponent::EPadButton>(
+                                                    KA_HELPBAR_ITEMS[3].meButton);   // 6 OPTION0
+                ++liHelpBarItemCount;
             }
+            break;
+        }
         }
 
-        // The back-up prompt is written at the running count and only then counted in --
-        // which is why the bound check below runs on the incremented count.
-        lapcHelpBarText[liHelpBarItemCount]  = KA_HELPBAR_ITEMS[0].mpcText;  // "$CAPS_BUTTON_BACK_UP"
-        laeHelpBarButton[liHelpBarItemCount] = static_cast<ButtonIconComponent::EPadButton>(
-                                                   KA_HELPBAR_ITEMS[0].meButton);   // 5 BACK
+        lapcHelpBarText[liHelpBarItemCount] = KA_HELPBAR_ITEMS[0].mpcText;  // "$CAPS_BUTTON_BACK_UP"
+        laButtons[liHelpBarItemCount] = static_cast<ButtonIconComponent::EPadButton>(
+                                            KA_HELPBAR_ITEMS[0].meButton);   // 5 BACK
         ++liHelpBarItemCount;
 
         CGS_ASSERT_AT(liHelpBarItemCount <= KI_MAX_HELP_BAR_ITEMS,
                    "liHelpBarItemCount <= KI_MAX_HELP_BAR_ITEMS", CGS_ARTIST_FILE, 1995);   // cpp:1995 (non-fatal)
 
         mHelpBar.Clear();   // this+0x5C40
-        for (s32 liItem = 0; liItem < liHelpBarItemCount; ++liItem)
+        for (liIndex = 0; liIndex < liHelpBarItemCount; ++liIndex)
         {
             // Third argument 15: the append's optional SECOND button icon, left invisible
-            // (E_PADBUTTON_INVISIBLE). The callee asserts both button arguments < 0x10.
-            // Both are ButtonIconComponent::EPadButton in the DWARF signature (s32 return,
-            // BrnHelpBar.h:103), so the enumerators go through untouched; the s32 return is
-            // the appended item's index and the X360 discards it here.
-            mHelpBar.AppendHelpBarItem(lapcHelpBarText[liItem],
-                                       laeHelpBarButton[liItem],
+            // (E_PADBUTTON_INVISIBLE); the s32 return (the item's index) is discarded.
+            mHelpBar.AppendHelpBarItem(lapcHelpBarText[liIndex], laButtons[liIndex],
                                        ButtonIconComponent::E_PADBUTTON_INVISIBLE);
         }
     }

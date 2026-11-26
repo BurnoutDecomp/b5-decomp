@@ -36,7 +36,7 @@
 // machine able to complete on PC (no real storage yet).
 // ===========================================================================
 
-// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Gui/BrnGuiProfile.cpp".
+// Asserts pass CGS_ARTIST_FILE, ARTIST's spelling: "..\\..\\..\\GameSource\\Gui/BrnGuiProfile.cpp".
 static const char KAC_ARTIST_ASSERT_HEADER[] = "..\\..\\..\\GameSource\\Gui/BrnGuiProfile.h";
 
 namespace BrnGui
@@ -81,11 +81,6 @@ namespace
 
     // ---- CgsGui::SaveLoadSystem boundary (un-reconstructed X360 entry points /
     //      private state; see the banner) -------------------------------------------
-
-    bool SaveLoadSystem_AutosaveIsEnabled(const CgsGui::SaveLoadSystem& /*lrSystem*/)
-    {
-        return true;
-    }
 
     // SaveLoadSystem's signed-in-user word (X360 system+0x210; -1 == none), read inline by
     // SigninStateChanged @0x827E2F40. It used to report a permanent "signed in" slot 0, which
@@ -475,7 +470,7 @@ void ProfileManager::Construct(GuiCache& lrGuiCache, CgsGui::SystemUserProfile& 
 bool ProfileManager::Prepare(CgsMemory::HeapMalloc* lpHeapMalloc, CgsMemory::LinearMalloc* lpLinearMalloc)
 {
     CGS_ASSERT_AT(lpHeapMalloc != 0,
-        "lpHeapMalloc != NULL", __FILE__, 231 /* ARTIST 0x824F8D08 */);
+        "lpHeapMalloc != NULL", CGS_ARTIST_FILE, 231 /* ARTIST 0x824F8D08 */);
 
     mpHeapMalloc = lpHeapMalloc;
 
@@ -513,7 +508,7 @@ void ProfileManager::Update()
 
 bool ProfileManager::AutosaveIsEnabled() const
 {
-    return SaveLoadSystem_AutosaveIsEnabled(mSaveLoadSystem);
+    return mSaveLoadSystem.AutosaveIsEnabled();
 }
 
 // ===========================================================================
@@ -649,7 +644,7 @@ void ProfileManager::HandleOption(u32 luOption)
     HideMessage();   // X360: virtual dispatch through the MessageDisplay base
 
     CGS_ASSERT_AT(mpOptionFunc != 0,
-        "mpOptionFunc", __FILE__, 1312 /* ARTIST 0x824EF834 */);
+        "mpOptionFunc", CGS_ARTIST_FILE, 1312 /* ARTIST 0x824EF834 */);
     (this->*mpOptionFunc)(luOption);
 }
 
@@ -805,24 +800,22 @@ bool ProfileManager::PendingCollisionWorldValidate()
 // ---------------------------------------------------------------------------
 void ProfileManager::SetCollisionWorldValid(bool lbValid)
 {
-    if (lbValid)
+    // ARTIST falls into the invalid arm (0x82517F68 `bne` jumps to the valid one).
+    if (!lbValid)
     {
-        if (meCollisionWorldState == E_COLLISIONWORLDSTATE_VALIDATING)
+        if (meCollisionWorldState == E_COLLISIONWORLDSTATE_INVALIDATING)
         {
-            meCollisionWorldState = E_COLLISIONWORLDSTATE_VALID;
-            ReportTaskCompleted();
+            meCollisionWorldState = E_COLLISIONWORLDSTATE_INVALID;
+            // X360 0x82517F98 tail-call: CgsGui::SaveLoadSystem::Bootup(&mSaveLoadSystem, this,
+            // &mMetadata, mbAutoLoad), which shows the SAVELOAD_AUTOSAVE_WARNING prompt and blocks
+            // the boot-up task until the user answers (the result lands in BootupResult).
+            mSaveLoadSystem.Bootup(this, &mMetadata, mbAutoLoad);
         }
     }
-    else if (meCollisionWorldState == E_COLLISIONWORLDSTATE_INVALIDATING)
+    else if (meCollisionWorldState == E_COLLISIONWORLDSTATE_VALIDATING)
     {
-        meCollisionWorldState = E_COLLISIONWORLDSTATE_INVALID;
-        // X360 0x82517F98 tail-call: CgsGui::SaveLoadSystem::Bootup(&mSaveLoadSystem, this,
-        // &mMetadata, mbAutoLoad). This shows the SAVELOAD_AUTOSAVE_WARNING prompt and BLOCKS the
-        // boot-up task until the user answers CONTINUE (SaveLoadSystem::BootupStart then reports the
-        // result, which lands in ProfileManager::BootupResult). The prior fabricated
-        // SaveLoadSystem_Bootup leaf reported SUCCESS synchronously right here, so the prompt never
-        // showed and BF_PROFILE flashed straight through into the BF_COMPLOAD intro video.
-        mSaveLoadSystem.Bootup(this, &mMetadata, mbAutoLoad);
+        meCollisionWorldState = E_COLLISIONWORLDSTATE_VALID;
+        ReportTaskCompleted();
     }
 }
 
@@ -839,7 +832,12 @@ void ProfileManager::StartTask(TaskResultFunc lpTaskResultFunc,
 {
     mpTaskResultHandler = lpTaskResultHandler;
     mpTaskResultFunc    = lpTaskResultFunc;
-    PostByteEvent(mEventQueue, KI_EVENT_PROFILE_TASK_STARTED);
+    // Every inlined copy also resets the result word (ARTIST Autosave 0x82513AEC, Save
+    // 0x82513BCC, Bootup, Load, LoadImageFiles: stwx 0 at +0x4141C).
+    miSaveLoadResult    = E_SAVELOADRESULT_INVALID;
+
+    GuiSaveLoadOperationStarted lSaveLoadStarted;   // DWARF cpp:1257
+    mEventQueue.AddGuiEvent(lSaveLoadStarted);
 }
 
 // ---------------------------------------------------------------------------
@@ -861,17 +859,17 @@ void ProfileManager::HandleSaveLoadTaskResult(CgsGui::ESaveLoadTaskResult leResu
 void ProfileManager::CheckDiskSpace(ProfileTaskResultHandler* lpTaskResultHandler)
 {
     CGS_ASSERT_AT(lpTaskResultHandler != 0,
-        "lpTaskResultHandler != NULL", __FILE__, 371 /* ARTIST 0x82523CCC */);
+        "lpTaskResultHandler != NULL", CGS_ARTIST_FILE, 371 /* ARTIST 0x82523CCC */);
 
     CGS_ASSERT_AT(!TaskIsRunning(),
-        "!TaskIsRunning()", __FILE__, 372 /* ARTIST 0x82523CFC */);
+        "!TaskIsRunning()", CGS_ARTIST_FILE, 372 /* ARTIST 0x82523CFC */);
 
     mpTaskResultHandler   = lpTaskResultHandler;
     mpTaskResultFunc      = &ProfileManager::CheckDiskSpaceResult;
     mMetadata.mStoredData = CgsGui::MakeOpaqueBuffer(mStoredData);
 
     CGS_FAIL_AT(
-        "Should never get here", __FILE__, 382 /* ARTIST 0x82523D58 */);
+        "Should never get here", CGS_ARTIST_FILE, 382 /* ARTIST 0x82523D58 */);
 }
 
 // ---------------------------------------------------------------------------
@@ -890,10 +888,10 @@ void ProfileManager::CheckDiskSpaceResult(CgsGui::ESaveLoadTaskResult /*leResult
 // ---------------------------------------------------------------------------
 void ProfileManager::Bootup(ProfileTaskResultHandler& lrTaskResultHandler, bool lbAutoLoad)
 {
-    CGS_ASSERT_AT(!TaskIsRunning(), "!TaskIsRunning()", __FILE__, 405 /* ARTIST 0x825138B4 */);
+    CGS_ASSERT_AT(!TaskIsRunning(), "!TaskIsRunning()", CGS_ARTIST_FILE, 405 /* ARTIST 0x825138B4 */);
 
-    mbAutoLoad        = lbAutoLoad;
     mbAutosaveEnabled = false;
+    mbAutoLoad        = lbAutoLoad;
 
     ReadProfileData();
 
@@ -911,11 +909,11 @@ void ProfileManager::Bootup(ProfileTaskResultHandler& lrTaskResultHandler, bool 
 // ---------------------------------------------------------------------------
 void ProfileManager::BootupResult(CgsGui::ESaveLoadTaskResult leResult)
 {
-    CGS_ASSERT_AT(!mbAutosaveEnabled, "!mbAutosaveEnabled", __FILE__, 428 /* ARTIST 0x82510FC0 */);
+    CGS_ASSERT_AT(!mbAutosaveEnabled, "!mbAutosaveEnabled", CGS_ARTIST_FILE, 428 /* ARTIST 0x82510FC0 */);
 
     if (leResult == CgsGui::E_SAVELOADTASKRESULT_SUCCESS)
     {
-        if (mbAutoLoad)
+        if (mbAutoLoad == true)   // cmplwi 1 (ARTIST 0x82510FE0)
         {
             miSaveLoadResult = E_SAVELOADRESULT_PROFILE_LOADED;
         }
@@ -923,11 +921,12 @@ void ProfileManager::BootupResult(CgsGui::ESaveLoadTaskResult leResult)
     }
     else if (leResult == CgsGui::E_SAVELOADTASKRESULT_CANCELLED)
     {
-        PostByteEvent(mEventQueue, KI_EVENT_BOOTUP_CANCELLED);
+        GuiEndGameEvent lEndGameEvent;   // DWARF cpp:312
+        mEventQueue.AddGuiEvent(lEndGameEvent);
     }
     else
     {
-        mbAutosaveEnabled = SaveLoadSystem_AutosaveIsEnabled(mSaveLoadSystem);
+        mbAutosaveEnabled = mSaveLoadSystem.AutosaveIsEnabled();
     }
 
     meCollisionWorldState = E_COLLISIONWORLDSTATE_VALIDATE;
@@ -939,12 +938,13 @@ void ProfileManager::BootupResult(CgsGui::ESaveLoadTaskResult leResult)
 void ProfileManager::Autosave(ProfileTaskResultHandler* lpTaskResultHandler,
                               s32 liNumberOfImageFiles, const CgsGui::ImageFileInfo* laImageFileInfo)
 {
-    CGS_ASSERT(SaveLoadSystem_AutosaveIsEnabled(mSaveLoadSystem), "mSaveLoadSystem.AutosaveIsEnabled()");
+    CGS_ASSERT_AT(mSaveLoadSystem.AutosaveIsEnabled(), "mSaveLoadSystem.AutosaveIsEnabled()", CGS_ARTIST_FILE, 467);
 
     if (TaskIsRunning())
     {
         // The X360 buffers a single image when the (first) record names a real slot.
-        if (laImageFileInfo != 0 && laImageFileInfo->IsValid())
+        // `IsValid() == true` (ARTIST 0x825139D4 cmplwi 1).
+        if (laImageFileInfo != 0 && laImageFileInfo->IsValid() == true)
         {
             BufferProfileOperation(E_PROFILEOPERATION_AUTOSAVE, lpTaskResultHandler, 1, laImageFileInfo);
         }
@@ -963,8 +963,9 @@ void ProfileManager::Autosave(ProfileTaskResultHandler* lpTaskResultHandler,
 
     if (liNumberOfImageFiles > 0)
     {
-        std::memcpy(maImageFileInfo, laImageFileInfo,
-                    static_cast<usize>(liNumberOfImageFiles) * sizeof(CgsGui::ImageFileInfo));
+        // The XDK's XMemCpy (ARTIST 0x82513A80).
+        XMemCpy(maImageFileInfo, laImageFileInfo,
+                static_cast<usize>(liNumberOfImageFiles) * sizeof(CgsGui::ImageFileInfo));
         for (s32 liIndex = 0; liIndex < miNumberOfImageFiles; ++liIndex)
         {
             SetMugshotBufferFromCircularBuffer(&maImageFileInfo[liIndex], &laImageFileInfo[liIndex]);
@@ -984,9 +985,15 @@ void ProfileManager::Autosave(ProfileTaskResultHandler* lpTaskResultHandler,
 // ---------------------------------------------------------------------------
 void ProfileManager::AutosaveResult(CgsGui::ESaveLoadTaskResult leResult)
 {
-    if (leResult != CgsGui::E_SAVELOADTASKRESULT_SUCCESS)
+    // The success arm is tested first (ARTIST 0x824FF254 falls into it).
+    if (leResult == CgsGui::E_SAVELOADTASKRESULT_SUCCESS)
     {
-        if (!mbAutosaveEnabled || SaveLoadSystem_AutosaveIsEnabled(mSaveLoadSystem))
+        miSaveLoadResult = E_SAVELOADRESULT_PROFILE_AND_IMAGE_FILES_SAVED;
+        ReportTaskCompleted();
+    }
+    else
+    {
+        if (!mbAutosaveEnabled || mSaveLoadSystem.AutosaveIsEnabled())
         {
             ReportTaskCompleted();
         }
@@ -995,11 +1002,6 @@ void ProfileManager::AutosaveResult(CgsGui::ESaveLoadTaskResult leResult)
             mbAutosaveEnabled = false;
             ShowAutosaveDisabledMessage();
         }
-    }
-    else
-    {
-        miSaveLoadResult = E_SAVELOADRESULT_PROFILE_AND_IMAGE_FILES_SAVED;
-        ReportTaskCompleted();
     }
 }
 
@@ -1032,7 +1034,7 @@ void ProfileManager::SaveResult(CgsGui::ESaveLoadTaskResult leResult)
 {
     if (leResult == CgsGui::E_SAVELOADTASKRESULT_SUCCESS)
     {
-        if (!mbAutosaveEnabled && SaveLoadSystem_AutosaveIsEnabled(mSaveLoadSystem))
+        if (!mbAutosaveEnabled && mSaveLoadSystem.AutosaveIsEnabled())
         {
             mbAutosaveEnabled = true;
             ShowAutosaveEnabledMessage();
@@ -1042,7 +1044,7 @@ void ProfileManager::SaveResult(CgsGui::ESaveLoadTaskResult leResult)
         return;
     }
 
-    if (!mbAutosaveEnabled || SaveLoadSystem_AutosaveIsEnabled(mSaveLoadSystem))
+    if (!mbAutosaveEnabled || mSaveLoadSystem.AutosaveIsEnabled())
     {
         ReportTaskCompleted();
         return;
@@ -1063,7 +1065,6 @@ void ProfileManager::Load(ProfileTaskResultHandler& lrTaskResultHandler)
         return;
     }
 
-    miSaveLoadResult      = E_SAVELOADRESULT_INVALID;
     mMetadata.mStoredData = CgsGui::MakeOpaqueBuffer(mStoredData);
     StartTask(&ProfileManager::LoadResult, &lrTaskResultHandler);
 
@@ -1081,7 +1082,7 @@ void ProfileManager::LoadResult(CgsGui::ESaveLoadTaskResult leResult)
     {
         miSaveLoadResult = E_SAVELOADRESULT_PROFILE_LOADED;
 
-        if (!mbAutosaveEnabled && SaveLoadSystem_AutosaveIsEnabled(mSaveLoadSystem))
+        if (!mbAutosaveEnabled && mSaveLoadSystem.AutosaveIsEnabled())
         {
             mbAutosaveEnabled = true;
             ShowAutosaveEnabledMessage();
@@ -1091,7 +1092,7 @@ void ProfileManager::LoadResult(CgsGui::ESaveLoadTaskResult leResult)
         return;
     }
 
-    if (!mbAutosaveEnabled || SaveLoadSystem_AutosaveIsEnabled(mSaveLoadSystem))
+    if (!mbAutosaveEnabled || mSaveLoadSystem.AutosaveIsEnabled())
     {
         ReportTaskCompleted();
         return;
@@ -1110,24 +1111,24 @@ void ProfileManager::LoadImageFiles(ProfileTaskResultHandler* lpTaskResultHandle
                                     const CgsGui::ImageFileInfo* laImageFileInfo)
 {
     CGS_ASSERT_AT(lpTaskResultHandler != 0, "lpTaskResultHandler != NULL",
-                __FILE__, 720 /* ARTIST 0x82513C3C */);
+                CGS_ARTIST_FILE, 720 /* ARTIST 0x82513C3C */);
     CGS_ASSERT_AT(laImageFileInfo != 0, "laImageFileInfo != NULL",
-                __FILE__, 721 /* ARTIST 0x82513C60 */);
+                CGS_ARTIST_FILE, 721 /* ARTIST 0x82513C60 */);
 
     s32 liNumberOfImageFiles = 0;
     for (s32 liIndex = 0; liIndex < CgsGui::KI_MAX_IMAGE_FILES_PER_OPERATION; ++liIndex)
     {
-        if (laImageFileInfo[liIndex].IsValid())
+        if (laImageFileInfo[liIndex].IsValid() == true)   // cmplwi 1 (ARTIST 0x82513CA0)
         {
             ++liNumberOfImageFiles;
             CGS_ASSERT_AT(laImageFileInfo[liIndex].miSize > 0, "laImageFileInfo[liIndex].miSize > 0",
-                __FILE__, 734 /* ARTIST 0x82513CC8 */);
+                CGS_ARTIST_FILE, 734 /* ARTIST 0x82513CC8 */);
             CGS_ASSERT_AT(laImageFileInfo[liIndex].mpBuffer != 0, "laImageFileInfo[liIndex].mpBuffer != NULL",
-                __FILE__, 735 /* ARTIST 0x82513CEC */);
+                CGS_ARTIST_FILE, 735 /* ARTIST 0x82513CEC */);
         }
     }
     CGS_ASSERT_AT(liNumberOfImageFiles > 0, "liNumberOfImageFiles > 0",
-                __FILE__, 739 /* ARTIST 0x82513D20 */);
+                CGS_ARTIST_FILE, 739 /* ARTIST 0x82513D20 */);
 
     if (TaskIsRunning())
     {
@@ -1184,10 +1185,10 @@ void ProfileManager::BufferProfileOperation(EProfileOperation leProfileOperation
                                             const CgsGui::ImageFileInfo* laImageFileInfoArray)
 {
     CGS_ASSERT_AT(TaskIsRunning() == true, "TaskIsRunning() == true",
-                __FILE__, 1081 /* ARTIST 0x824F8F40 */);
+                CGS_ARTIST_FILE, 1081 /* ARTIST 0x824F8F40 */);
     CGS_ASSERT_AT(meBufferedOperation == leProfileOperation || meBufferedOperation == E_PROFILEOPERATION_NONE,
                "meBufferedOperation == leProfileOperation || meBufferedOperation == E_PROFILEOPERATION_NONE",
-                __FILE__, 1083 /* ARTIST 0x824F8F78 */);
+                CGS_ARTIST_FILE, 1083 /* ARTIST 0x824F8F78 */);
 
     if (meBufferedOperation == E_PROFILEOPERATION_NONE)
     {
@@ -1203,10 +1204,10 @@ void ProfileManager::BufferProfileOperation(EProfileOperation leProfileOperation
     if (liNumberOfImageFiles > 0)
     {
         CGS_ASSERT_AT(laImageFileInfoArray != 0, "laImageFileInfoArray != NULL",
-                __FILE__, 1099 /* ARTIST 0x824F9008 */);
+                CGS_ARTIST_FILE, 1099 /* ARTIST 0x824F9008 */);
         CGS_ASSERT_AT(miBufferedNumberOfImageFiles + liNumberOfImageFiles <= CgsGui::KI_MAX_IMAGE_FILES_PER_OPERATION,
                    "miBufferedNumberOfImageFiles + liNumberOfImageFiles <= CgsGui::KI_MAX_IMAGE_FILES_PER_OPERATION",
-                __FILE__, 1100 /* ARTIST 0x824F9038 */);
+                CGS_ARTIST_FILE, 1100 /* ARTIST 0x824F9038 */);
 
         std::memcpy(&maBufferedImageFileInfo[miBufferedNumberOfImageFiles], laImageFileInfoArray,
                     static_cast<usize>(liNumberOfImageFiles) * sizeof(CgsGui::ImageFileInfo));
@@ -1335,7 +1336,8 @@ void ProfileManager::ReportTaskCompleted()
     mpTaskResultHandler = 0;
     lpTaskResultHandler->HandleProfileTaskResult();
 
-    PostByteEvent(mEventQueue, KI_EVENT_PROFILE_TASK_FINISHED);
+    GuiSaveLoadOperationCompleted lSaveLoadComplete;   // DWARF cpp:912
+    mEventQueue.AddGuiEvent(lSaveLoadComplete);
     miSaveLoadResult     = E_SAVELOADRESULT_INVALID;
     miNumberOfImageFiles = 0;
 
@@ -1479,7 +1481,7 @@ void ProfileManager::SetMugshotBufferFromCircularBuffer(CgsGui::ImageFileInfo* l
                                                         const CgsGui::ImageFileInfo* lpSourceImageFileInfo)
 {
     CGS_ASSERT_AT(lpDestImageFileInfo != 0,
-        "lpDestImageFileInfo != NULL", __FILE__, 1458 /* ARTIST 0x824EFC64 */);
+        "lpDestImageFileInfo != NULL", CGS_ARTIST_FILE, 1458 /* ARTIST 0x824EFC64 */);
 
     // An unsigned compare (cmplwi @0x824EFC70): the record size is sizeof the slot.
     if (lpDestImageFileInfo->miSize == sizeof(MugshotSaveBuffer))
@@ -1496,7 +1498,7 @@ void ProfileManager::SetMugshotBufferFromCircularBuffer(CgsGui::ImageFileInfo* l
     {
         CGS_ASSERT_AT(lpSourceImageFileInfo->miSize == KI_MUGSHOT_PICTURE_SIZE_BYTES,
             "lpSourceImageFileInfo->miSize == KI_MUGSHOT_PICTURE_SIZE_BYTES",
-                                      __FILE__, 1475 /* ARTIST 0x824EFCCC */);
+                                      CGS_ARTIST_FILE, 1475 /* ARTIST 0x824EFCCC */);
         lpSlot->Construct(lpSourceImageFileInfo->mpBuffer, KI_MUGSHOT_PICTURE_SIZE_BYTES);
     }
     else

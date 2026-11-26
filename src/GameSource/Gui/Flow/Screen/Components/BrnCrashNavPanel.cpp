@@ -35,9 +35,6 @@
 // ("E_PANEL_EVENT == mePanelType", "mePrepareStage == E_PREPARESTAGE_CONSTRUCTED",
 // "E_FILTER_LEVEL_SECOND == liCurrentlySelectedFilter", ...), which are reproduced verbatim.
 // ===================================================================================
-#if defined(_XBOX) && defined(_MSC_VER)
-#pragma auto_inline(off)
-#endif
 #define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnCrashNavPanel.cpp"
 #include "GameSource/Gui/Flow/Screen/Components/BrnCrashNavPanel.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // ([cnav-diag])
@@ -471,8 +468,8 @@ namespace BrnGui
             case E_PANEL_GENERIC:    mGenericPanel.SetState(KAC_TRANSITION_OUT); break;
             case E_PANEL_COUNT:      break;   // nothing was showing yet
             default:
-                // Console: "Unhandled next panel type " << leNextPanel << ".\n" (cpp:430).
-                CGS_FAIL("Unhandled next panel type");
+                CGS_FAIL_STREAM_AT("Unhandled next panel type " << leNextPanel << ".\n",
+                                   CGS_ARTIST_FILE, 430);   // ARTIST 0x8243A670
                 break;
             }
         }
@@ -534,9 +531,9 @@ namespace BrnGui
             break;
 
         default:
-            // Console: "Unhandled next panel type " << leNextPanel << ".\n" (cpp:481).
-            // NOTE the console still commits the store on this arm (`goto LABEL_23`).
-            CGS_FAIL("Unhandled next panel type");
+            // The console still commits the store on this arm.
+            CGS_FAIL_STREAM_AT("Unhandled next panel type " << leNextPanel << ".\n",
+                               CGS_ARTIST_FILE, 481);   // ARTIST 0x8243A7FC
             meVisiblePanel = leNextPanel;
             break;
         }
@@ -786,7 +783,6 @@ namespace BrnGui
         // BrnCarSelectLivery_Input / BrnCarSelectUnlock / BrnBootProfile already do.
         const s32 liAction =
             reinterpret_cast<const s32*>(reinterpret_cast<const u8*>(lpControllerEvent) + 4)[0];
-        // [DIAG] NOT IN THE X360 BINARY -- [cnav-diag] every controller press the panel sees.
 
         switch (liAction)
         {

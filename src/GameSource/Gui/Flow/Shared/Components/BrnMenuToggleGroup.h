@@ -336,13 +336,18 @@ namespace BrnGui
         s32 liIndex, s32 liNumOptions, bool lbActive, const char* lpacText,
         const char** lppacOptions, u64* lpu64Ids)
     {
-        CGS_ASSERT(liIndex >= 0 && liIndex <= miMaxItems,
-                   "MenuToggleGroupVarSize::SetupToggle() invalid index specified");
-        CGS_ASSERT(GetSelectable(liIndex) != 0, "Invalid selectable specified");
+        // Streamed asserts on this header's lines 395..397 (ARTIST <3> 0x8242832C / 0x82428398 /
+        // 0x824283F4).
+        CGS_ASSERT_STREAM_AT(liIndex >= 0 && liIndex <= miMaxItems,
+                   "MenuToggleGroupVarSize::SetupToggle() invalid index specified",
+                   "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnMenuToggleGroup.h", 395);
+        CGS_ASSERT_STREAM_AT(GetSelectable(liIndex) != 0, "Invalid selectable specified",
+                   "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnMenuToggleGroup.h", 396);
         // X360 @0x82428288 (<3>): `if (!a6 && a3)` -- the OPTION-TEXT array (r8) is null while
         // liNumOptions (r5) is non-zero. The row text may legitimately be null: CrashNavPanel's
         // `SetupToggle(KI_TOGGLE_IN_EVENT, 0, true, 0, 0, 0)` is the console's own call.
-        CGS_ASSERT(!(lppacOptions == 0 && liNumOptions != 0), "Invalid text specified");   // h:397
+        CGS_ASSERT_STREAM_AT(!(lppacOptions == 0 && liNumOptions != 0), "Invalid text specified",
+                   "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnMenuToggleGroup.h", 397);
 
         MenuToggle* lpItem = &maItems[liIndex];
         lpItem->Clear();                                 // row slot 6

@@ -136,7 +136,13 @@ namespace BrnGui
         bool mbSkipPrompt;
         FlaptAnimatorComponent mSkipPromptAnimator;
         FlaptHelpItem mSkipPromptButton;
-        bool mbCrashIsSkippable;
-        BrnFlapt::MovieClipRef mCrashHudAnimator;
+        bool mbCrashIsSkippable;   // +0x900 (ARTIST UpdateSetupState / UpdatePermenant / OnEnter stb/lbz 0x900)
+        // ARTIST's object has 20 bytes here (+0x904..+0x917) that the DecFIGS build lacks:
+        // PS3 places mCrashHudAnimator straight after the bool (OnLeave 0x458D78 addi 0x8FC
+        // after mbCrashIsSkippable at 0x8F8), ARTIST at +0x918 (OnEnter / OnLeave
+        // 0x8247D308.. lwz 0x918 / 0x91C). No CrashedHudState function touches them, so their
+        // type and name are unknown; they are kept as bytes for the X360 layout only.
+        u8 maPad904[0x14];
+        BrnFlapt::MovieClipRef mCrashHudAnimator;   // +0x918
     };
 }

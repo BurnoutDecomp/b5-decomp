@@ -2243,6 +2243,21 @@ public:
 };
 CGS_STATIC_ASSERT((sizeof(GuiChallengeEndEvent) == 24), "X360 AddGuiEvent size 24 (id 578)");
 
+// DWARF :6617 / :6621 -- the profile task's empty start/finish events (GuiEvent<67> / <68>;
+// ARTIST ProfileManager's inlined StartTask queues id 67 with size 1 and writes no payload,
+// 0x82513AD4..0x82513AF4).
+struct GuiSaveLoadOperationStarted : public CgsGui::GuiEvent<67>
+{
+};
+
+struct GuiSaveLoadOperationCompleted : public CgsGui::GuiEvent<68>
+{
+};
+
+// DWARF :874 `typedef GuiEvent<90> GuiEndGameEvent` (PS3 id); X360 id 89: ProfileManager::
+// BootupResult queues it as an empty record of size 1 (0x82511000..0x82511010).
+typedef CgsGui::GuiEvent<89> GuiEndGameEvent;
+
 // DWARF :4198 (PS3 GuiEvent<333>; X360 id 337, record 48 bytes). X360 FIELD ORDER pinned
 // by HandleRoadRuleFailed @0x8251F020: the road id qword LEADS the record (SPrintf'd
 // "%llu" from +0x00 -- same X360 mRoadId-first drift as the committed GuiEventRoadRuleEnter),

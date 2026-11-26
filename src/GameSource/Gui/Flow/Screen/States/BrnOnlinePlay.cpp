@@ -648,15 +648,16 @@ void OnlinePlay::ShowFriendsMenu()
     if (mpGuiCache == NULL)
         return;
 
-    if (XUserGetSigninState(mpGuiCache->GetActiveControllerIndex()) ==
+    // ARTIST falls into the sign-in arm (0x82485A3C `beq` jumps to the friends UI).
+    if (XUserGetSigninState(mpGuiCache->GetActiveControllerIndex()) !=
         eXUserSigninState_SignedInToLive)
-    {
-        XShowFriendsUI(mpGuiCache->GetActiveControllerIndex());
-    }
-    else
     {
         XShowSigninUI(KU_SIGNIN_UI_PANES, KU_SIGNIN_UI_ONLINE_ENABLED);
         meSubState = E_SUBSTATE_WAIT_SIGN_IN_FINISH;
+    }
+    else
+    {
+        XShowFriendsUI(mpGuiCache->GetActiveControllerIndex());
     }
 }
 }   // namespace BrnGui
