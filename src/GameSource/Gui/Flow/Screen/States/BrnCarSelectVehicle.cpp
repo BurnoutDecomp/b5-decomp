@@ -988,9 +988,14 @@ namespace BrnGui
         bool lbStepped = false;
 
         // The quiet (lbQuiet == true) highlight probes only report whether a step is
-        // POSSIBLE in that direction; the offset only accumulates when it is.
-        if ((mfCarouselXOffsetDecay > 0.0f && mCarSelector.HighlightPrevious(true)) ||
-            (mfCarouselXOffsetDecay < 0.0f && mCarSelector.HighlightNext(true)))
+        // POSSIBLE in that direction; the offset only accumulates when it is. One add per
+        // direction (ARTIST 0x824D7E1C: the two arms' adds are cross-jumped into one tail,
+        // which is what gives its `fadds f0, f13, f0` operand order).
+        if (mfCarouselXOffsetDecay > 0.0f && mCarSelector.HighlightPrevious(true))
+        {
+            mfCarouselXOffset += mfCarouselXOffsetDecay;
+        }
+        else if (mfCarouselXOffsetDecay < 0.0f && mCarSelector.HighlightNext(true))
         {
             mfCarouselXOffset += mfCarouselXOffsetDecay;
         }

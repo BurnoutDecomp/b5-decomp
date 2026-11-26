@@ -79,7 +79,9 @@ namespace BrnGui
 
         // The GuiCache and player profile the readout renders from (the X360 inlines the
         // GetAccessPointers/GetGuiCache asserts -- they live in those accessors' bodies).
-        CgsGui::GuiAccessPointers* lpAccessPointers = lpStateInterface->GetAccessPointers();
+        // Through the adopted member, not the parameter: ARTIST reloads it (lwz r29,0(r31)
+        // @0x82415168) after the three animator Constructs.
+        CgsGui::GuiAccessPointers* lpAccessPointers = mpStateInterface->GetAccessPointers();
         mpGuiCache = lpAccessPointers->GetGuiCache();
         mpProfile  = mpGuiCache->GetProfile();
 

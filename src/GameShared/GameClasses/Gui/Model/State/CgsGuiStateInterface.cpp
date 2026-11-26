@@ -1,7 +1,6 @@
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"
 #include "GameShared/GameClasses/Language/CgsLanguageManager.h"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
-#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/State/CgsGuiStateInterface.h"
 #include <cstring>   // memcpy
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. CgsGui::StateInterface is the
@@ -13,77 +12,13 @@
 
 namespace CgsGui
 {
-    // [map arm 2026-08-27] The allocator accessor -- console-INLINED at every call site
-    // (its own "mpAllocator != NULL" assert carries the header line, h:337: e.g.
-    // MapManager::Construct @0x82458590's `lwz r11, 8(r30)` bracketed by that assert).
-    // First out-of-line consumer on this host: the mounted BrnMapManager.cpp.
-    rw::IResourceAllocator* StateInterface::GetAllocator()
-    {
-        CGS_ASSERT(mpAllocator != 0, "mpAllocator != NULL");   // h:337
-        return mpAllocator;
-    }
-
-    // @ 0x8240E438 - the language manager reached through the access pointers. The
-    // X360 body inlines GetAccessPointers() twice (once feeding the h:351 manager
-    // check, once for the returning load), so the h:344 "mpAccessPointers != NULL"
-    // tripwire brackets the manager check; the accessor calls below reproduce that
-    // exact assert sequence.
-    CgsLanguage::LanguageManager* StateInterface::GetLanguageManager()
-    {
-        CGS_ASSERT_AT(GetAccessPointers()->mpLanguageManager != 0,
-                      "GetAccessPointers()->mpLanguageManager != NULL", CGS_ARTIST_FILE, 351);
-        return GetAccessPointers()->mpLanguageManager;
-    }
-
     // @ 0x8240E4E0 - reads the metric-units flag off the language manager reached
     // through the access pointers.
     bool StateInterface::IsUsingMetricUnits()
     {
         CGS_ASSERT_AT(GetAccessPointers()->mpLanguageManager != 0,
-                      "GetAccessPointers()->mpLanguageManager != NULL", CGS_ARTIST_FILE, 358);
+                      "GetAccessPointers()->mpLanguageManager != NULL", CGS_GUI_STATE_INTERFACE_H_FILE, 358);
         return GetAccessPointers()->mpLanguageManager->IsUsingMetricUnits();
-    }
-
-    // @ 0x82436F10 - queue a "play apt movie" view-state event (type 18, channel 41).
-    void StateInterface::PlayAptMovie(const char* lpacMovieName, s32 liLevelNum)
-    {
-        GuiEventPlayAptMovie lEvent;
-        lEvent.mpacMovieName = lpacMovieName;
-        lEvent.miLevelNum    = liLevelNum;
-        OutputViewState(lEvent);   // ARTIST: {8, 18, 12} + 8 bytes on channel 41, size 20
-    }
-
-    // @ 0x82476F98 - queue a "play apt loading movie" event (type 19, channel 40).
-    void StateInterface::PlayLoadingScreen()
-    {
-        GuiEventPlayAptLoadingMovie lEvent;
-        OutputGuiEvent(lEvent);   // ARTIST: {1, 19, 12} on channel 40, size 16
-    }
-
-    // @ 0x82476FE0 - queue a "stop apt loading movie" event (type 20, channel 40).
-    void StateInterface::StopLoadingScreen()
-    {
-        GuiEventStopAptLoadingMovie lEvent;
-        OutputGuiEvent(lEvent);   // ARTIST: {1, 20, 12} on channel 40, size 16
-    }
-
-    // @ 0x82436E40 - queue a resource load/unload request (channel 39).
-    void StateInterface::RequestResource(const char* lpacFileName, ResourceRequestTypes leType,
-                                         s32 liUserData, ResourceRequestLoadUnload leLoadUnload)
-    {
-        CGS_ASSERT(lpacFileName != 0, "Invalid file to load in StateInterface::RequestResource");
-
-        GuiEventLoadRequest lEvent;
-        lEvent.Construct(leType, leLoadUnload, lpacFileName, static_cast<u32>(liUserData));
-        mOutEventQueue.AddEvent(&lEvent, 39, sizeof(lEvent));   // X360 size 24
-    }
-
-    // @ 0x82846F90 - install the event observer (the X360 asserts on a null pointer).
-    void StateInterface::SetEventObserver(CgsGui::EventObserver* lpObserver)
-    {
-        CGS_ASSERT(lpObserver != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event observer pointer in StateInterface::SetEventObserver", CGS_ARTIST_FILE, 478));
-
-        mpObserver = lpObserver;
     }
 
     // Stand up the interface: zero the channel pointers + construct the output event queue. (Cast to the
@@ -103,11 +38,6 @@ namespace CgsGui
     {
         mpAllocator      = lpAllocator;
         mpAccessPointers = lpAccessPointers;
-    }
-
-    GuiStackEventQueue::GuiEventQueueLarge* StateInterface::GetOutputEventQueue()
-    {
-        return &mOutEventQueue;
     }
 
     // Registration payloads use the canonical flat types in the header.
@@ -167,4 +97,3 @@ namespace CgsGui
     }
 }
 
-#undef CGS_ARTIST_FILE

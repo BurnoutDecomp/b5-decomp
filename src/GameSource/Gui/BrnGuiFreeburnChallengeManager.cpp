@@ -213,11 +213,12 @@ void FreeburnChallengeManager::StartChallenge( const GuiChallengeStartEvent* lpE
     const CgsID lChallengeId = lpEvent->mChallengeID;
     mpCurrentChallenge = mpGuiCache->GetFreeburnChallengeList()->GetChallengeData(lChallengeId);
 
+    // ARTIST reads the event's host byte (lbz 8(r30) @0x82509DB4) before the member resets.
+    mbIsLocalHost        = lpEvent->mbIsLocalHost;
     miTargetsCount       = 0;
     miCurrentTargetIndex = 0;
     miCurrentAction      = 0;
     meInternalState      = E_INTERNAL_STATE_INITIALISED;
-    mbIsLocalHost        = lpEvent->mbIsLocalHost;
     mePageState          = E_PAGE_STATE_AUTO_ROTATE;
 
     const BrnResource::ChallengeListEntryAction* lpCurrentAction = GetCurrentAction();

@@ -64,6 +64,7 @@ namespace BrnGui
     // ARTIST82523B90. The observed base activation call is empty8284CB38.
     void GuiHudMessagesDebugComponent::OnActivate()
     {
+        CgsDev::DebugComponent::OnActivate(); // ICF-folded blr at 0x8284CB38 (bl @0x82523BA8)
         RegisterVariable(&miMessageId, "Message Id to send");
         SetReadOnly(&miMessageId, true);
         RegisterVariable(&miMessageGroup, "Group Of Messages");

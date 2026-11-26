@@ -51,38 +51,18 @@ namespace CgsGui
         ResourceRequestTypes meType;
     };
 
-    // Native request image: type@0, operation@4, path@8, request id@12,
-    // resource id@16. Queue id 39 belongs to the event queue header.
-    struct GuiEventLoadRequest : public CgsModule::Event
+    // DWARF CgsGuiResourceModuleIO.h:162 `struct GuiEventLoadRequest : public GuiEvent<39>`, members
+    // h:164-168 and no constructor or other method: the posters fill the fields they need and the
+    // rest of the record is left as the stack held it (ARTIST StateInterface::RequestResource
+    // 0x82436E40 writes the first four words and never muResourceId). Native image: type@0,
+    // operation@4, path@8, request id@12, resource id@16; queue id 39.
+    struct GuiEventLoadRequest : public GuiEvent<39>
     {
         ResourceRequestTypes      meRequestType;
         ResourceRequestLoadUnload meLoadUnload;
         const char*               mpacFileToLoad;
         u32                       muLoadRequestId;
         u64                       muResourceId;
-
-        GuiEventLoadRequest()
-            : meRequestType(E_GUI_RESOURCETYPE_START)
-            , meLoadUnload(E_GUI_RESOURCEREQUEST_LOAD)
-            , mpacFileToLoad(0)
-            , muLoadRequestId(0)
-            , muResourceId(0)
-        {
-        }
-
-        void Construct(ResourceRequestTypes leRequestType,
-                       ResourceRequestLoadUnload leLoadUnload,
-                       const char* lpacFileToLoad,
-                       u32 luLoadRequestId)
-        {
-            meRequestType   = leRequestType;
-            meLoadUnload    = leLoadUnload;
-            mpacFileToLoad  = lpacFileToLoad;
-            muLoadRequestId = luLoadRequestId;
-            muResourceId    = 0;
-        }
-
-        s32 GetEventType() const { return 39; }
     };
 
     CGS_STATIC_ASSERT((sizeof(GuiEventLoadRequest) == 24), "X360 load-request payload");

@@ -510,14 +510,20 @@ namespace BrnGui
             CgsGui::GuiEventLoadRequest lRequest;
             if (lrInfo.meState == E_STATE_LOAD_REQUESTED)
             {
-                lRequest.Construct(lrInfo.meType, CgsGui::E_GUI_RESOURCEREQUEST_LOAD,
-                                   lpacResourceName, luResourceId);
+                lRequest.meRequestType   = lrInfo.meType;
+                lRequest.meLoadUnload    = CgsGui::E_GUI_RESOURCEREQUEST_LOAD;
+                lRequest.mpacFileToLoad  = lpacResourceName;
+                lRequest.muLoadRequestId = luResourceId;
+                lRequest.muResourceId    = 0;
                 lrInfo.meState = E_STATE_LOADING;
             }
             else if (lrInfo.meState == E_STATE_UNLOAD_REQUESTED)
             {
-                lRequest.Construct(lrInfo.meType, CgsGui::E_GUI_RESOURCEREQUEST_UNLOAD,
-                                   lpacResourceName, luResourceId);
+                lRequest.meRequestType   = lrInfo.meType;
+                lRequest.meLoadUnload    = CgsGui::E_GUI_RESOURCEREQUEST_UNLOAD;
+                lRequest.mpacFileToLoad  = lpacResourceName;
+                lRequest.muLoadRequestId = luResourceId;
+                lRequest.muResourceId    = 0;
                 lrInfo.meState = E_STATE_UNLOADING;
             }
             else

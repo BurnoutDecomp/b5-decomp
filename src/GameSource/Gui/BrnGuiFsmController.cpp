@@ -237,10 +237,11 @@ void GuiFsmController::Update(CgsGui::ModelIO::InputBuffer* lpModelInputBuffer,
                 mapLoadNotification[liFlow] = 0;
 
                 CgsGui::GuiEventLoadRequest lLoadRequest;
-                lLoadRequest.Construct(CgsGui::E_GUI_RESOURCETYPE_PFX_BUNDLE,
-                                       CgsGui::E_GUI_RESOURCEREQUEST_LOAD,
-                                       maacNameToLoad[liFlow],
-                                       FlowLoadRequestId(liFlow));
+                lLoadRequest.meRequestType   = CgsGui::E_GUI_RESOURCETYPE_PFX_BUNDLE;
+                lLoadRequest.meLoadUnload    = CgsGui::E_GUI_RESOURCEREQUEST_LOAD;
+                lLoadRequest.mpacFileToLoad  = maacNameToLoad[liFlow];
+                lLoadRequest.muLoadRequestId = FlowLoadRequestId(liFlow);
+                lLoadRequest.muResourceId    = 0;
                 lpModelInputBuffer->AddResourceRequests(lLoadRequest);
                 maeFlowLoadState[liFlow] = E_FLOWLOADSTAGE_WFLOAD;
                 // fall through

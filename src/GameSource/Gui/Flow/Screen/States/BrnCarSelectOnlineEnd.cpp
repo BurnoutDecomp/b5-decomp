@@ -76,14 +76,6 @@ namespace BrnGui
         // picks the car for everyone.
         const s32 KI_ONLINE_HOST_GAME_HOST_CHOOSES = 1;
 
-        // The GUI 192 action words this screen posts (entry, exit) for the online car-select
-        // type.
-        const u32 KU_CAR_SELECT_ACTION_ONLINE_ENTER = 3;
-        const u32 KU_CAR_SELECT_ACTION_EXIT         = 4;
-        const u32 KU_CAR_SELECT_TYPE_ONLINE         = 2;
-
-
-
         // ---- in-queue payload views (the queue hands out the header-stripped payload) ----
         struct CountdownTimePayload : public CgsModule::Event
         {
@@ -99,20 +91,6 @@ namespace BrnGui
         };
 
         // ---- out-queue wire records ------------------------------------------------------
-        // { 8, 192, 12, action, car-select type }, channel 40, 20 bytes.
-        struct GuiActivateCarSelectWire : public CgsGui::GuiEvent<192>
-        {
-            u32 muAction;          // +0x0C
-            u32 muCarSelectType;   // +0x10
-
-            GuiActivateCarSelectWire(u32 luAction, u32 luCarSelectType)
-                : muAction(luAction)
-                , muCarSelectType(luCarSelectType)
-            {
-            }
-            GuiActivateCarSelectWire() {}
-        };
-
         // { 8, 415, 16, <pad>, the car id }, channel 40, 24 bytes: change the local car.
         struct GuiChangeCarWire : public CgsGui::GuiEvent<415>
         {
@@ -125,7 +103,6 @@ namespace BrnGui
             GuiChangeCarWire() {}
         };
 
-        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiActivateCarSelectWire>) == 20), "activate car-select record is 20 bytes");
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiChangeCarWire>) == 24), "change-car record is 24 bytes");
         CGS_STATIC_ASSERT((sizeof(GuiEventNetworkLobbyPlayerListPayload) >= 0x1C4),
                       "lobby roster count sits at +0x1C0");
@@ -150,8 +127,11 @@ namespace BrnGui
         mOnlinePlayerList.Construct(KAC_ONLINE_PLAYER_LIST, mpStateInterface, 0);
         mHostChoosingAnimator.Construct(KAC_HOST_CHOOSING_ANIMATOR_NAME, mpStateInterface, 0);
 
-        GuiActivateCarSelectWire lActivateCarSelect(KU_CAR_SELECT_ACTION_ONLINE_ENTER,
-                                                          KU_CAR_SELECT_TYPE_ONLINE);
+        // DWARF local GuiEventActivateCarSelect lActivateCarSelect (cpp:82); ARTIST stores the
+        // type word (+0x54) before the state word (+0x50) @0x824966EC.
+        GuiEventActivateCarSelect lActivateCarSelect;
+        lActivateCarSelect.meCarSelectType = BrnGameState::GameStateModuleIO::E_CAR_SELECT_TYPE_ONLINE_EVENT_START;
+        lActivateCarSelect.meState         = BrnGameState::GameStateModuleIO::E_CAR_SELECT_STATE_ACCEPT_CAR;
         mpStateInterface->OutputGuiEvent(lActivateCarSelect);
 
         meInternalState = E_INTERNALSTATE_LOADRESOURCES;
@@ -169,9 +149,11 @@ namespace BrnGui
         // clears the level.
         mpStateInterface->PlayAptMovie(KPC_EMPTY_STRING, KI_APT_MOVIE_LEVEL);
 
-        GuiActivateCarSelectWire lExitCarSelect(KU_CAR_SELECT_ACTION_EXIT,
-                                                      KU_CAR_SELECT_TYPE_ONLINE);
-        mpStateInterface->OutputGuiEvent(lExitCarSelect);
+        // DWARF local GuiEventActivateCarSelect lActivateEvent (cpp:175).
+        GuiEventActivateCarSelect lActivateEvent;
+        lActivateEvent.meCarSelectType = BrnGameState::GameStateModuleIO::E_CAR_SELECT_TYPE_ONLINE_EVENT_START;
+        lActivateEvent.meState         = BrnGameState::GameStateModuleIO::E_CAR_SELECT_STATE_EXIT;
+        mpStateInterface->OutputGuiEvent(lActivateEvent);
 
         meInternalState = E_INTERNALSTATE_LEFT;
     }

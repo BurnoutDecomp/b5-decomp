@@ -919,33 +919,6 @@ namespace BrnGui
         // three-word GuiEvent header (12 on the X360, and 12 here too because
         // CgsModule::Event is empty -- written as sizeof so it tracks the host layout).
 
-        // The answer record. X360 stack-builds { 8, 48, 12 } followed by the 8 payload
-        // bytes it assembles in a scratch slot first (@0x824CAE28-0x824CAE48: stw the
-        // question at +0, stb the two answers at +4 / +5, then one ld/std pair copies the
-        // whole 8 bytes into the record) and AddEvent()s it with size 20 on channel 40.
-        // The DWARF name for id 48 is CgsGui::GuiEventAnswerLoginQuestion.
-        typedef CgsGui::GuiEvent<48> AnswerLoginQuestionHeader;
-
-        struct GuiEventAnswerLoginQuestionWire : public AnswerLoginQuestionHeader
-        {
-            CgsGui::ELoginQuestion meLoginQuestion;   // +0x0C -- the question being answered
-            bool                   mbAccept;          // +0x10 -- first answer (row 0 / "yes")
-            bool                   mbAccept2;         // +0x11 -- second answer (share-info row 1)
-            u16                    muPad12;           // +0x12 -- X360 ships the scratch slot's
-                                                      //          two trailing bytes as-is; zeroed here
-
-            GuiEventAnswerLoginQuestionWire(CgsGui::ELoginQuestion leLoginQuestion,
-                                            bool lbAccept,
-                                            bool lbAccept2)
-                : meLoginQuestion(leLoginQuestion)
-                , mbAccept(lbAccept)
-                , mbAccept2(lbAccept2)
-                , muPad12(0)
-            {
-            }
-            GuiEventAnswerLoginQuestionWire() {}
-        };
-
         // The "cancel the sign-in attempt" request. X360 stack-builds { 1, 49, 12 } and
         // AddEvent()s it with size 16 on channel 40 (@0x824D8690-0x824D86BC), leaving the
         // single payload byte on the stack UNWRITTEN -- so its value is whatever the frame
@@ -976,8 +949,12 @@ namespace BrnGui
     {
         // The question is captured into the record BEFORE it is reset below (the X360
         // reads this+0xC8 @0x824CAE28, well ahead of the `li r10, 7` store @0x824CAEA4).
-        GuiEventAnswerLoginQuestionWire lAnswer(meCurrentLoginQuestion, lbAccept, lbAccept2);
-        mpStateInterface->OutputGuiEvent(lAnswer);      // X360 record size 20
+        // DWARF local CgsGui::GuiEventAnswerLoginQuestion lAnswerEvent (cpp:1070).
+        CgsGui::GuiEventAnswerLoginQuestion lAnswerEvent;
+        lAnswerEvent.meLoginQuestion = meCurrentLoginQuestion;
+        lAnswerEvent.mbAccept        = lbAccept;
+        lAnswerEvent.mbAccept2       = lbAccept2;
+        mpStateInterface->OutputGuiEvent(lAnswerEvent);      // X360 record size 20
 
         mfTimeInState = 0.0f;                        // flt_82001CC0 == 0.0f
 
@@ -1277,28 +1254,6 @@ namespace BrnGui
         // same record on 40) -- the X360 loads `li r5, 0x2A` @0x824CB038.
         const s32 KI_CHANNEL_GUI_INTERNAL = 42;
 
-        // ---- out-queue wire record ----------------------------------------------------
-        // The { 1, 148, 12, flag } show/hide-HUD command (BrnPauseScreen.cpp's
-        // GuiEventHudComponentsCommand twin: flag 0 shuts the HUD components down). The
-        // X360 stack-builds it at 0x824CB040-0x824CB060 and pushes 16 bytes on channel 42;
-        // it writes only the flag byte, so the pad is modelled zeroed.
-        //
-        // Both header words are HOST expressions, never the console's baked immediates:
-        // the payload size is sizeof(the flag byte) and the payload offset is the host
-        // sizeof of the 3-word GuiEvent header (12 on the X360, and 12 here too because
-        // CgsModule::Event is empty -- but written as sizeof so it tracks the host layout).
-        typedef CgsGui::GuiEvent<148> ShowHideHudHeader;
-
-        struct EnterJunkyardShowHudWire : public ShowHideHudHeader
-        {
-            u8 mu8Show;      // +0x0C
-
-            explicit EnterJunkyardShowHudWire(u8 lu8Show)
-                : mu8Show(lu8Show)
-            {
-            }
-            EnterJunkyardShowHudWire() {}
-        };
     }
 
     // ---- HandleEnteringJunkyard @ 0x824CAFD8 (cpp:1418) ----------------------------
@@ -1310,15 +1265,20 @@ namespace BrnGui
     {
         // cpp:1418. Plain (unstreamed) FireAssert on the X360; non-fatal, and the body
         // re-tests the pointer afterwards (@0x824CB018) rather than early-returning.
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+        CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 1418);
 
         if (mpGuiCache != 0 && !mpGuiCache->GetInEventColouringGate())
         {
-            EnterJunkyardShowHudWire lHideHud(0);
-            mpStateInterface->OutputInternalState(lHideHud);          // X360 record size 16
+            // DWARF local GuiEventShowHideHud lShowHideHud (cpp:1426), posted through
+            // OutputInternalState<GuiEventShowHideHud>: {1, 148, 12} + the byte, size 16.
+            GuiEventShowHideHud lShowHideHud;
+            lShowHideHud.maData[0] = 0;
+            mpStateInterface->OutputInternalState(lShowHideHud);
 
-            SendStateEvent(mpGuiCache->IsJunkyardCarUnlockPending() ? "TO_CUNLOCK"
-                                                                    : "TO_CSELECT");
+            if (mpGuiCache->IsJunkyardCarUnlockPending() == true)
+                SendStateEvent("TO_CUNLOCK");
+            else
+                SendStateEvent("TO_CSELECT");
         }
     }
 }

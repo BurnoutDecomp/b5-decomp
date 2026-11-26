@@ -3,6 +3,8 @@
 #include "types.hpp"
 #include <cstddef>
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h"
@@ -16,6 +18,9 @@ namespace BrnGui { struct GuiAudioTriggerEvent; class GuiEventPlayVideo; class G
 // pointers / allocator the state needs. Recovered from the X360 spine; layout,
 // method set and the emitted event records are from the DecFIGS DWARF
 // (CgsGuiStateInterface.h).
+// The original header path ARTIST bakes into the asserts of this header's inline bodies
+// (file string 0x8204D2F8).
+#define CGS_GUI_STATE_INTERFACE_H_FILE "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/State/CgsGuiStateInterface.h"
 namespace CgsGui
 {
     class EventObserver;
@@ -164,7 +169,8 @@ namespace CgsGui
                              s32 liUserData, ResourceRequestLoadUnload leLoadUnload);
         void UnloadResource(const char* lpacFileName, ResourceRequestTypes leType, s32 liUserData);
 
-        GuiStackEventQueue::GuiEventQueueLarge* GetOutputEventQueue();
+        // Header-inline (DWARF h:304; no ARTIST body: inlined at every caller).
+        GuiStackEventQueue::GuiEventQueueLarge* GetOutputEventQueue() { return &mOutEventQueue; }
         void SetEventObserver(CgsGui::EventObserver* lpObserver);
 
         // The three output channels (DecFIGS CgsGuiStateInterface.h:404 / 423 / 442; ARTIST
@@ -189,16 +195,30 @@ namespace CgsGui
         void StopLoadingScreen();
         void Clear();
 
-        rw::IResourceAllocator*       GetAllocator();
-        // Inline at the original call sites, with the standalone ARTIST body at 0x8240E3E0.
+        // Header-inline in the class (DWARF h:335/342/349; the asserts carry h:337/344/351).
+        // ARTIST inlines them at most call sites; the standalone copies are COMDATs in the Gui
+        // code (GetAccessPointers 0x8240E3E0, GetLanguageManager 0x8240E438), and GetAllocator
+        // has none (e.g. MapManager::Construct @0x82458590 inlines it).
+        rw::IResourceAllocator* GetAllocator()
+        {
+            CGS_ASSERT_AT(mpAllocator != 0, "mpAllocator != NULL", CGS_GUI_STATE_INTERFACE_H_FILE, 337);
+            return mpAllocator;
+        }
         GuiAccessPointers* GetAccessPointers()
         {
-            CGS_ASSERT_AT(mpAccessPointers != 0, "mpAccessPointers != NULL",
-                          "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/State/CgsGuiStateInterface.h", 344);
+            CGS_ASSERT_AT(mpAccessPointers != 0, "mpAccessPointers != NULL", CGS_GUI_STATE_INTERFACE_H_FILE, 344);
             return mpAccessPointers;
         }
-        CgsLanguage::LanguageManager* GetLanguageManager();
-        bool                          IsUsingMetricUnits();
+        CgsLanguage::LanguageManager* GetLanguageManager()
+        {
+            CGS_ASSERT_AT(GetAccessPointers()->mpLanguageManager != 0,
+                          "GetAccessPointers()->mpLanguageManager != NULL", CGS_GUI_STATE_INTERFACE_H_FILE, 351);
+            return GetAccessPointers()->mpLanguageManager;
+        }
+        // DWARF h:356 (header-inline too); kept out of line in the .cpp because its body needs
+        // the complete CgsLanguage::LanguageManager, which this header does not include. Both
+        // ARTIST callers (EventInfoComponent::Construct / UpdateRace) call 0x8240E4E0.
+        bool IsUsingMetricUnits();
     };
 
     template <typename TEvent>
@@ -223,5 +243,57 @@ namespace CgsGui
         GuiOutInternalEvent<TEvent> lOutEventWrapper;
         lOutEventWrapper.SetRawEvent(lOutEvent);
         mOutEventQueue.AddGuiEvent(lOutEventWrapper);
+    }
+
+    // ---- header-inline bodies after the class (DWARF: they appear in the game unity CUs
+    // with these header lines; ARTIST: their standalone copies are COMDATs in the Gui code,
+    // emitted where a caller did not inline them) ----
+
+    // h:476, streamed assert h:478. Standalone ARTIST copy 0x82846F90.
+    inline void StateInterface::SetEventObserver(CgsGui::EventObserver* lpObserver)
+    {
+        CGS_ASSERT(lpObserver != 0, CGS_ASSERT_STREAM_MESSAGE_AT("Invalid event observer pointer in StateInterface::SetEventObserver", CGS_GUI_STATE_INTERFACE_H_FILE, 478));
+
+        mpObserver = lpObserver;
+    }
+
+    // h:496, streamed assert h:498, local lLoadRequest h:500. Standalone ARTIST copy 0x82436E40.
+    inline void StateInterface::RequestResource(const char* lpacFileName, ResourceRequestTypes leFileType,
+                                                s32 liRequestId, ResourceRequestLoadUnload leLoadUnload)
+    {
+        CGS_ASSERT_STREAM_AT(lpacFileName != 0, "Invalid file to load in StateInterface::RequestResource",
+                             CGS_GUI_STATE_INTERFACE_H_FILE, 498);
+
+        // Fields filled in parameter order (ARTIST's stores: +8, +0, +0xC, +4 @0x82436EE4..EFC).
+        GuiEventLoadRequest lLoadRequest;
+        lLoadRequest.mpacFileToLoad  = lpacFileName;
+        lLoadRequest.meRequestType   = leFileType;
+        lLoadRequest.muLoadRequestId = liRequestId;
+        lLoadRequest.meLoadUnload    = leLoadUnload;
+        mOutEventQueue.AddEvent(&lLoadRequest, 39, sizeof(lLoadRequest));   // X360 size 24
+    }
+
+    // h:540, local lPlayMovieEvent h:542; {8, 18, 12} + 8 bytes on channel 41, size 20.
+    // Standalone ARTIST copy 0x82436F10.
+    inline void StateInterface::PlayAptMovie(const char* lpacMovieName, s32 liLevelNum)
+    {
+        GuiEventPlayAptMovie lPlayMovieEvent;
+        lPlayMovieEvent.mpacMovieName = lpacMovieName;
+        lPlayMovieEvent.miLevelNum    = liLevelNum;
+        OutputViewState(lPlayMovieEvent);
+    }
+
+    // h:581, local lPlayMovieEvent h:583; {1, 19, 12} on channel 40, size 16. ARTIST 0x82476F98.
+    inline void StateInterface::PlayLoadingScreen()
+    {
+        GuiEventPlayAptLoadingMovie lPlayMovieEvent;
+        OutputGuiEvent(lPlayMovieEvent);
+    }
+
+    // h:598, local lStopMovieEvent h:600; {1, 20, 12} on channel 40, size 16. ARTIST 0x82476FE0.
+    inline void StateInterface::StopLoadingScreen()
+    {
+        GuiEventStopAptLoadingMovie lStopMovieEvent;
+        OutputGuiEvent(lStopMovieEvent);
     }
 }
