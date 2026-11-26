@@ -497,11 +497,10 @@ bool GameMode::ShouldExit(const ScoringSystem* lpScoringSystem) const
     const f32 KF_NO_INPUT_TIME_FOR_MODE_EXIT       = 10.0f;
     const f32 KF_MAX_STATIONARY_TIME_FOR_MODE_EXIT = 4.0f;
 
-    const f32 lfNoInputTime    = lpScoringSystem->GetPlayerNoInputTime();
-    const f32 lfStationaryTime = lpScoringSystem->GetPlayerStationaryTime();
-
-    if (lfNoInputTime > KF_MAX_STATIONARY_TIME_FOR_MODE_EXIT)
+    // ARTIST 0x82315B80 reads the stationary time only after the no-input test (0x82315B98).
+    if (lpScoringSystem->GetPlayerNoInputTime() > KF_MAX_STATIONARY_TIME_FOR_MODE_EXIT)
     {
+        const f32 lfStationaryTime = lpScoringSystem->GetPlayerStationaryTime();
         if (lfStationaryTime > KF_STATIONARY_TIME_FOR_MODE_EXIT &&
             (!mbVisibleCars || lfStationaryTime > KF_NO_INPUT_TIME_FOR_MODE_EXIT))
         {

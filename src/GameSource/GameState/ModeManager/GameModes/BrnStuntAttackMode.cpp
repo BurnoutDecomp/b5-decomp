@@ -503,16 +503,17 @@ bool StuntAttackMode::ShouldFinish(ScoringSystem* lpScoringSystem)
     const f32 KF_MAX_NO_INPUT_TIME_FOR_MODE_FINISH   = 4.0f;   // image.bin @0x211D4
     const f32 KF_MAX_STATIONARY_TIME_FOR_MODE_FINISH = 3.0f;   // image.bin @0x20F90
 
-    if (lpScoringSystem->GetStuntScorer()->IsComboInProgress())
+    // ARTIST 0x823162C0 branches away on a combo in progress: the idle test is the fall-through arm.
+    if (!lpScoringSystem->GetStuntScorer()->IsComboInProgress())
     {
-        // `stfs f0(0.0), 0x5CF4(r4)` then `stfs f0, 0x5CF0(r4)` -- order preserved.
-        lpScoringSystem->ResetPlayerNoInputTime();
-        lpScoringSystem->ResetPlayerStationaryTime();
-        return false;
+        return (lpScoringSystem->GetPlayerNoInputTime()    > KF_MAX_NO_INPUT_TIME_FOR_MODE_FINISH) &&
+               (lpScoringSystem->GetPlayerStationaryTime() > KF_MAX_STATIONARY_TIME_FOR_MODE_FINISH);
     }
 
-    return (lpScoringSystem->GetPlayerNoInputTime()    > KF_MAX_NO_INPUT_TIME_FOR_MODE_FINISH) &&
-           (lpScoringSystem->GetPlayerStationaryTime() > KF_MAX_STATIONARY_TIME_FOR_MODE_FINISH);
+    // `stfs f0(0.0), 0x5CF4(r4)` then `stfs f0, 0x5CF0(r4)` -- order preserved.
+    lpScoringSystem->ResetPlayerNoInputTime();
+    lpScoringSystem->ResetPlayerStationaryTime();
+    return false;
 }
 }
 

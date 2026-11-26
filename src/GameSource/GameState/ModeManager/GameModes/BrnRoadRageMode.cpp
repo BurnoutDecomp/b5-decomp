@@ -79,13 +79,6 @@ namespace
     const s32 KI_ROAD_RAGE_AI_SPEED_SELECTION_METHOD  = 2;
     const s32 KI_ROAD_RAGE_AI_AGGRESSIVE_CAR_COUNT    = 2;
 
-    // ---- ShouldFinish @0x82315D60 ------------------------------------------------------------
-    // 0x82315D6C `lfs f0, flt_820211D4` (image.bin @0x211D4 == 40 80 00 00 == 4.0f) and
-    // 0x82315D80 `lfs f0, flt_82020F90` (@0x20F90 == 3.0f) -- the SAME two idle thresholds
-    // GameMode::ShouldExit and StuntAttackMode::ShouldFinish use.
-    const f32 KF_MAX_NO_INPUT_TIME_FOR_MODE_FINISH   = 4.0f;
-    const f32 KF_MAX_STATIONARY_TIME_FOR_MODE_FINISH = 3.0f;
-
     // ---- UpdateMaxActiveCars @0x82315E58 -----------------------------------------------------
     // DWARF :31. 0x82315F40 `lfs f13, flt_820211FC`; image.bin @0x211FC == 3B 23 D7 0A == 0.0025f.
     const f32 KF_BROADCAST_MADNESS_TRESHOLD = 0.0025f;              // (sic -- the DWARF's spelling)
@@ -415,6 +408,11 @@ void RoadRageMode::PreWorldUpdate(GameStateModuleIO::OutputBuffer* lpOutput,
 // ============================================================================================
 bool RoadRageMode::ShouldFinish(ScoringSystem* lpScoringSystem)
 {
+    // 0x82315D6C `lfs f0, flt_820211D4` (4.0f) and 0x82315D80 `lfs f0, flt_82020F90` (3.0f) -- the
+    // same two idle thresholds GameMode::ShouldExit and StuntAttackMode::ShouldFinish declare locally.
+    const f32 KF_MAX_NO_INPUT_TIME_FOR_MODE_FINISH   = 4.0f;
+    const f32 KF_MAX_STATIONARY_TIME_FOR_MODE_FINISH = 3.0f;
+
     if (lpScoringSystem->GetPlayerNoInputTime()    < KF_MAX_NO_INPUT_TIME_FOR_MODE_FINISH ||
         lpScoringSystem->GetPlayerStationaryTime() < KF_MAX_STATIONARY_TIME_FOR_MODE_FINISH)
     {
