@@ -123,6 +123,20 @@ namespace CgsResource
         }
     };
 
+    // DWARF CgsResourcePtr.h:69; header-inline as LegacySrc CgsResourcePtr.h:217 spells it. ARTIST
+    // inlines it at its call sites (e.g. FactoryNew<GenericRwacWaveContent> 0x826DD768..0x826DD784)
+    // and keeps one out-of-line copy (0x82204E20, called by the dynamic initializer 0x82C71080).
+    // SmallResource initializes every lane; ARTIST clears main memory again. mpThis (+1C) is not
+    // initialized.
+    inline BaseResourcePtr::BaseResourcePtr()
+    {
+        mResourceMemory.m_baseResources[0] = 0;
+        mpNext = this;
+        mpPrev = this;
+        mHandle.mpResourceMemory = &mResourceMemory;
+        mHandle.mpSourceEntry = 0;
+    }
+
 
 
 

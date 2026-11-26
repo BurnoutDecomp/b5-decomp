@@ -2,16 +2,7 @@
 
 namespace CgsResource
 {
-    // ARTIST82204E20. The last member at1C is not initialized.
-    BaseResourcePtr::BaseResourcePtr()
-    {
-        // SmallResource initializes every lane. ARTIST explicitly clears main memory again.
-        mResourceMemory.m_baseResources[0] = 0;
-        mpNext = this;
-        mpPrev = this;
-        mHandle.mpResourceMemory = &mResourceMemory;
-        mHandle.mpSourceEntry = 0;
-    }
+    // BaseResourcePtr::BaseResourcePtr (ARTIST 0x82204E20) is header-inline: CgsResourcePtr.h.
 
     // ARTIST821F1E18.
     BaseResourcePtr::~BaseResourcePtr()
