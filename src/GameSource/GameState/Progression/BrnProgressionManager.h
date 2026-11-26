@@ -423,7 +423,8 @@ public:
     }
 
     // X360 0x8237C0D8. Read car lCarId's current colour + palette indices into the two out-params.
-    void GetCarColourAndPalette(CgsID lCarId, s32* lpiColour, s32* lpiPalette);
+    // DWARF h:573: `void GetCarColourAndPalette(CgsID, uint32_t &, uint32_t &) const`.
+    void GetCarColourAndPalette(CgsID lCarID, u32& luOutCarColourIndex, u32& luOutCarPaletteIndex) const;
 
     // X360 0x82363630. Clear the deform/damage on the just-repaired car lCarId.
     void RepairUnlockedVehicle(CgsID lCarId);
@@ -620,7 +621,7 @@ public:
 
     // X360 UpdateExitState de-inlined byte poke at ProgressionManager+133489 (`stbx 1`) -- a
     // rivals-update request flag. FLAG: de-inlined byte poke, not a named member in the exports.
-    void RequestUpdateRivals();
+    void RequestUpdateRivals() { mbUpdateRivalsRequested = true; }   // DWARF h:407, no ARTIST copy
 
     // Debug info BrnProgressionManager.h, all three inlined into ProcessGameEvents
     // (cases 26, 149 and 147): one byte store of 1 at +0x20975 / +0x20981, and the mugshot count
@@ -631,7 +632,7 @@ public:
 
     // X360 UpdateExitState de-inlined byte poke at ProgressionManager+133512 (`stbx 1`) -- a
     // drive-thrus/rivals dirty flag. FLAG: de-inlined byte poke, not a named member in the exports.
-    void SetDriveThrusDirtyFlag();
+    void SetDriveThrusDirtyFlag() { mbDriveThrusDirty = true; }      // DWARF h:469, no ARTIST copy
 
     // [minimap blips, issue #9, 2026-09-07] the CONSUMER side of that byte. The console's
     // GameStateModule::PreWorldUpdate reads it (ProgressionManager +0x20988), clears it in the

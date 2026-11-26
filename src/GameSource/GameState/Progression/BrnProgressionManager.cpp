@@ -1407,7 +1407,7 @@ void ProgressionManager::OnLoadProfile()
 // "unset" sentinel in either field falls back to the car's authored defaults out of its
 // VehicleListEntry (`BYTE2 / LOBYTE` of the word at entry+0xEC).
 // --------------------------------------------------------------------------------------------
-void ProgressionManager::GetCarColourAndPalette(CgsID lCarId, s32* lpiColour, s32* lpiPalette)
+void ProgressionManager::GetCarColourAndPalette(CgsID lCarID, u32& luOutCarColourIndex, u32& luOutCarPaletteIndex) const
 {
     // X360: a linear walk of mProfile.maCars[0 .. miCarCount) comparing the record's id.
     const CarData* lpCarData = 0;
@@ -1415,28 +1415,28 @@ void ProgressionManager::GetCarColourAndPalette(CgsID lCarId, s32* lpiColour, s3
     for (s32 liCar = 0; liCar < liCarCount; ++liCar)
     {
         const CarData* lpCandidate = mProfile.GetCarData(liCar);
-        if (lpCandidate != 0 && lpCandidate->GetId() == lCarId)
+        if (lpCandidate != 0 && lpCandidate->GetId() == lCarID)
         {
             lpCarData = lpCandidate;
             break;
         }
     }
 
-    *lpiColour  = 255;
-    *lpiPalette = 255;
+    luOutCarColourIndex  = 255;
+    luOutCarPaletteIndex = 255;
     if (lpCarData != 0)
     {
-        *lpiColour  = lpCarData->mu8ColourIndex;
-        *lpiPalette = lpCarData->mu8PaletteIndex;
+        luOutCarColourIndex  = lpCarData->mu8ColourIndex;
+        luOutCarPaletteIndex = lpCarData->mu8PaletteIndex;
     }
 
-    if (*lpiColour != 255 && *lpiPalette != 255)
+    if (luOutCarColourIndex != 255 && luOutCarPaletteIndex != 255)
     {
         return;
     }
 
     const BrnResource::VehicleList* lpVehicleList = mpVehicleList;
-    const s32 liVehicleIndex = (lpVehicleList != 0) ? lpVehicleList->GetVehicleIndex(lCarId) : -1;
+    const s32 liVehicleIndex = (lpVehicleList != 0) ? lpVehicleList->GetVehicleIndex(lCarID) : -1;
     const BrnResource::VehicleListEntry* lpVehicleListEntry =
         (liVehicleIndex < 0) ? 0 : lpVehicleList->GetVehicleData(liVehicleIndex);
 
@@ -1453,21 +1453,12 @@ void ProgressionManager::GetCarColourAndPalette(CgsID lCarId, s32* lpiColour, s3
     // `lbz r11,0xEF` -> palette out). Not named fields yet -- DELETE-WHEN the VehicleListEntry
     // gameplay tail is homed.
     const u8* lpcEntryBytes = reinterpret_cast<const u8*>(lpVehicleListEntry);
-    *lpiColour  = lpcEntryBytes[0xEE];
-    *lpiPalette = lpcEntryBytes[0xEF];
+    luOutCarColourIndex  = lpcEntryBytes[0xEE];
+    luOutCarPaletteIndex = lpcEntryBytes[0xEF];
 }
 
 // The two one-byte request flags CarSelectManager::UpdateExitState sets on junkyard exit
 // (X360 `stbx r25(1), mpProgressionManager, 0x20971` and `... 0x20988`).
-void ProgressionManager::RequestUpdateRivals()
-{
-    mbUpdateRivalsRequested = true;
-}
-
-void ProgressionManager::SetDriveThrusDirtyFlag()
-{
-    mbDriveThrusDirty = true;
-}
 
 } // namespace BrnProgression
 

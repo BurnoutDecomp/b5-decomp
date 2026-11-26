@@ -299,7 +299,9 @@ public:
                       GameStateModuleIO::GameActionQueue* lpGameActionQueue,
                       s32 liArg3, s32 liArg4);
 
-    bool IsTrainingPauseSuppressed() const;
+    // DWARF h:1161, header-inline: no ARTIST copy; CarSelectManager::Update 0x8239C264..74 and the
+    // training manager read the pause word in line (`lwzx ; cmpwi 0`).
+    bool IsAnythingPaused() const { return miSimPauseFlags != 0; }
 
     // DWARF h:627, header-inline (no ARTIST copy).
     const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*

@@ -21,6 +21,7 @@
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"   // CgsID (GetJunkyardId return)
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT_AT (GetType's range assert)
 
 namespace BrnTrigger
 {
@@ -38,14 +39,19 @@ namespace BrnTrigger
             E_TYPE_COUNT            = 4,   // BrnSpawnLocation.h:152 assert bound
         };
 
-        // X360: read the u8 muType at this+0x28 and return it as Type. Body in
-        // BrnSpawnLocation.cpp.
-        Type GetType() const;
-
-        // X360: read the 8-byte junkyard id mJunkyardId at SpawnLocation +0x20.
-        // SetupSpawnLocations matches it to claim each junkyard's spawn points.
-        // Declare-only here (body in the SpawnLocation/TriggerData TU).
-        CgsID GetJunkyardId() const;
+        // DWARF h:66..75: the accessors are defined in this header. ARTIST inlines them (the
+        // car-select callers read +0x28 and assert at BrnSpawnLocation.h:152 in line, e.g.
+        // CarSelectManager::EnterJunkyardAtStartOfGame 0x823930D8); the one out-of-line GetType,
+        // 0x823547C8, is the copy a caller that did not inline it emitted.
+        Vector3 GetPosition() const  { return mPosition; }
+        Vector3 GetDirection() const { return mDirection; }
+        CgsID GetJunkyardId() const  { return mJunkyardId; }
+        Type GetType() const
+        {
+            CGS_ASSERT_AT(muType < E_TYPE_COUNT, "muType < E_TYPE_COUNT",
+                          "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\trigger\\BrnSpawnLocation.h", 152);
+            return static_cast<Type>(muType);
+        }
 
         // --- layout (DWARF-named; muType pinned by the X360 lbz at +0x28) --------------
         Vector3 mPosition;    // +0x00 (16B slot)

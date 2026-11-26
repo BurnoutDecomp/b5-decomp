@@ -560,20 +560,16 @@ void OnlineCarSelectManager::SpawnInStartCar(GameStateModuleIO::GameActionQueue*
         *CgsDev::Log::gpDebugPrint << "RG :: CS Manager : " << "SpawnInStartCar\n" << "\n";
     }
 
-    // Drop the start car at the spawn point with its default wheels, no scoring slot and the
-    // no-deform sentinel, flagged as a car-select car. +0x38 is not written on this path.
+    // DWARF cpp:628 and its inlined members: Construct, SetInCarSelect, SetCarData,
+    // SetCarSelectType, SetKeepResetSection, SetCarSelectDontStreamAudio.
     GameStateModuleIO::ResetPlayerCarAction lResetPlayerCarAction;
-    lResetPlayerCarAction.mPosition                  = mSpawnPosition;
-    lResetPlayerCarAction.mDirection                 = mSpawnDirection;
-    lResetPlayerCarAction.mCarModelId                = mStartCarId;
-    lResetPlayerCarAction.mWheelModelId              = 0;
-    lResetPlayerCarAction.mePlayerScoringIndex       = GameStateModuleIO::E_PLAYER_SCORING_INDEX_COUNT;
-    lResetPlayerCarAction.mfDeformationAmount        = -1.0f;
-    lResetPlayerCarAction.meCarSelectType            = GameStateModuleIO::ResetPlayerCarAction::E_CAR_SELECT_DONT_DROP;
-    lResetPlayerCarAction.mbInCarSelectScreen        = true;
-    lResetPlayerCarAction.mbCarSelectDontStreamAudio = true;
-    lResetPlayerCarAction.muReserved0x42             = 0;
-    lResetPlayerCarAction.mbKeepResetSection         = true;
+    lResetPlayerCarAction.Construct();
+    lResetPlayerCarAction.SetLocation(mSpawnPosition, mSpawnDirection);
+    lResetPlayerCarAction.SetInCarSelect(true);
+    lResetPlayerCarAction.SetCarData(mStartCarId, 0);
+    lResetPlayerCarAction.SetCarSelectType(GameStateModuleIO::ResetPlayerCarAction::E_CAR_SELECT_DONT_DROP);
+    lResetPlayerCarAction.SetCarSelectDontStreamAudio(true);
+    lResetPlayerCarAction.SetKeepResetSection(true);
     lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lResetPlayerCarAction),
                             GameStateModuleIO::E_ACTION_RESET_PLAYER_CAR,
                             static_cast<s32>(sizeof(lResetPlayerCarAction)));
@@ -584,15 +580,7 @@ void OnlineCarSelectManager::SpawnInStartCar(GameStateModuleIO::GameActionQueue*
                             GameStateModuleIO::E_ACTION_CAR_SELECTION_CHANGED_ONLINE,
                             static_cast<s32>(sizeof(lSelectionChangedAction)));
 
-    s32 liColourIndex;
-    s32 liPaletteIndex;
-    mpProgressionManager->GetCarColourAndPalette(mStartCarId, &liColourIndex, &liPaletteIndex);
-    GameStateModuleIO::CarSelectChangeColourAction lChangeColourAction;
-    lChangeColourAction.muPaletteIndex = static_cast<u32>(liPaletteIndex);
-    lChangeColourAction.muColourIndex  = static_cast<u32>(liColourIndex);
-    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lChangeColourAction),
-                            GameStateModuleIO::E_ACTION_CAR_SELECT_CHANGE_COLOUR,
-                            static_cast<s32>(sizeof(lChangeColourAction)));
+    UpdateCarColour(mStartCarId, lpActionQueue);
 }
 
 void OnlineCarSelectManager::SendOnlineChangeCarAction(GameStateModuleIO::GameActionQueue* lpActionQueue,
@@ -602,19 +590,32 @@ void OnlineCarSelectManager::SendOnlineChangeCarAction(GameStateModuleIO::GameAc
     const f32 lfDeformationAmount = (lpCarData != 0) ? lpCarData->GetUnlockDeformationAmount()
                                                      : KF_UNOWNED_CAR_DEFORMATION_AMOUNT;
 
-    s32 liColourIndex;
-    s32 liPaletteIndex;
-    mpProgressionManager->GetCarColourAndPalette(mDesiredCarId, &liColourIndex, &liPaletteIndex);
+    u32 lu32ColourIndex;
+    u32 lu32PaletteIndex;
+    mpProgressionManager->GetCarColourAndPalette(mDesiredCarId, lu32ColourIndex, lu32PaletteIndex);
 
     GameStateModuleIO::CarSelectOnlineSelectCarAction lSelectCarAction;
     lSelectCarAction.mCarID                = mDesiredCarId;
     lSelectCarAction.mfDeformationAmount   = lfDeformationAmount;
-    lSelectCarAction.mu16ColourIndex       = static_cast<u16>(liColourIndex);
-    lSelectCarAction.mu16PaintFinishIndex  = static_cast<u16>(liPaletteIndex);
+    lSelectCarAction.mu16ColourIndex       = static_cast<u16>(lu32ColourIndex);
+    lSelectCarAction.mu16PaintFinishIndex  = static_cast<u16>(lu32PaletteIndex);
     lSelectCarAction.mbFinalSelection      = lbFinalSelection;
     lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lSelectCarAction),
                             GameStateModuleIO::E_ACTION_CAR_SELECT_ONLINE_SELECT_CAR,
                             static_cast<s32>(sizeof(lSelectCarAction)));
+}
+
+// DWARF cpp:727 (h:186): the car's colour and palette, read straight into the action's fields
+// (ARTIST passes &action+4 / &action+0, 0x823937A0..A8). No ARTIST copy: SpawnInStartCar and
+// TeleportCurrentVehicle inline it.
+void OnlineCarSelectManager::UpdateCarColour(CgsID lCarId, GameStateModuleIO::GameActionQueue* lpActionQueue)
+{
+    GameStateModuleIO::CarSelectChangeColourAction lChangeCarColourAction;
+    mpProgressionManager->GetCarColourAndPalette(lCarId, lChangeCarColourAction.muColourIndex,
+                                                 lChangeCarColourAction.muPaletteIndex);
+    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lChangeCarColourAction),
+                            GameStateModuleIO::E_ACTION_CAR_SELECT_CHANGE_COLOUR,
+                            static_cast<s32>(sizeof(lChangeCarColourAction)));
 }
 
 const BrnProgression::CarData* OnlineCarSelectManager::GetProfileCarData(CgsID& lrCarID) const
@@ -672,32 +673,24 @@ void OnlineCarSelectManager::TeleportCurrentVehicle(GameStateModuleIO::GameActio
     const f32 lfDeformationAmount = (lpCarData != 0) ? lpCarData->GetUnlockDeformationAmount()
                                                      : KF_UNOWNED_CAR_DEFORMATION_AMOUNT;
 
+    // DWARF cpp:601 and its inlined members: Construct, SetCarData, SetDeformationResetType,
+    // SetDeformAmount, SetCarSelectType, SetKeepResetSection, SetInCarSelect,
+    // SetCarSelectDontStreamAudio.
     GameStateModuleIO::ResetPlayerCarAction lResetPlayerCarAction;
-    lResetPlayerCarAction.mPosition                  = mSpawnPosition;
-    lResetPlayerCarAction.mDirection                 = mSpawnDirection;
-    lResetPlayerCarAction.mCarModelId                = mDesiredCarId;
-    lResetPlayerCarAction.mWheelModelId              = 0;
-    lResetPlayerCarAction.mePlayerScoringIndex       = GameStateModuleIO::E_PLAYER_SCORING_INDEX_COUNT;
-    lResetPlayerCarAction.mfDeformationAmount        = lfDeformationAmount;
-    lResetPlayerCarAction.miBaseDeformationType      = 1;
-    lResetPlayerCarAction.meCarSelectType            = GameStateModuleIO::ResetPlayerCarAction::E_CAR_SELECT_DONT_DROP;
-    lResetPlayerCarAction.mbInCarSelectScreen        = true;
-    lResetPlayerCarAction.mbCarSelectDontStreamAudio = true;
-    lResetPlayerCarAction.muReserved0x42             = 0;
-    lResetPlayerCarAction.mbKeepResetSection         = true;
+    lResetPlayerCarAction.Construct();
+    lResetPlayerCarAction.SetLocation(mSpawnPosition, mSpawnDirection);
+    lResetPlayerCarAction.SetCarData(mDesiredCarId, 0);
+    lResetPlayerCarAction.SetDeformationResetType(1);
+    lResetPlayerCarAction.SetDeformAmount(lfDeformationAmount);
+    lResetPlayerCarAction.SetCarSelectType(GameStateModuleIO::ResetPlayerCarAction::E_CAR_SELECT_DONT_DROP);
+    lResetPlayerCarAction.SetInCarSelect(true);
+    lResetPlayerCarAction.SetCarSelectDontStreamAudio(true);
+    lResetPlayerCarAction.SetKeepResetSection(true);
     lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lResetPlayerCarAction),
                             GameStateModuleIO::E_ACTION_RESET_PLAYER_CAR,
                             static_cast<s32>(sizeof(lResetPlayerCarAction)));
 
-    s32 liColourIndex;
-    s32 liPaletteIndex;
-    mpProgressionManager->GetCarColourAndPalette(mDesiredCarId, &liColourIndex, &liPaletteIndex);
-    GameStateModuleIO::CarSelectChangeColourAction lChangeColourAction;
-    lChangeColourAction.muPaletteIndex = static_cast<u32>(liPaletteIndex);
-    lChangeColourAction.muColourIndex  = static_cast<u32>(liColourIndex);
-    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lChangeColourAction),
-                            GameStateModuleIO::E_ACTION_CAR_SELECT_CHANGE_COLOUR,
-                            static_cast<s32>(sizeof(lChangeColourAction)));
+    UpdateCarColour(mDesiredCarId, lpActionQueue);
 }
 
 } // namespace BrnGameState

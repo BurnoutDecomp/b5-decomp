@@ -572,6 +572,17 @@ enum EGameActionType
     // X360 62) and CAR_UNLOCK_END (DWARF 58 -> X360 63).
     E_ACTION_CAR_SELECTION_REQUEST_STREAMING = 69, // ARTIST; DecFIGS 64
     E_ACTION_CAR_SELECT_CHANGE_COLOUR   = 79,    // DWARF 74 (+5 X360)
+    // The rest of the car-select band (DWARF 57..75, +5 on the console, like the ids above), each
+    // pinned by its CarSelectManager post: `li r5,<id>` with the DWARF record's size in r6.
+    E_ACTION_GUI_CAR_UNLOCK                  = 2,   // DWARF 2;  size 8  (UpdateUnlockState)
+    E_ACTION_NEW_CAR_UNLOCKED                = 62,  // DWARF 57; size 16 (UpdateUnlockState)
+    E_ACTION_CAR_UNLOCK_END                  = 63,  // DWARF 58; size 1  (EndUnlockState)
+    E_ACTION_CAR_SELECTION_CHANGED_DROPIN    = 65,  // DWARF 60; size 16 (SpawnInStartCar 0x82387E50)
+    E_ACTION_CAR_SELECTION_DROPIN_COMPLETE   = 66,  // DWARF 61; size 16
+    E_ACTION_CAR_SELECT_TRANSITION_IN        = 73,  // DWARF 68; size 2
+    E_ACTION_CAR_SELECT_WAITING_FOR_AUDIO    = 74,  // DWARF 69; size 1  (ExitJunkyard 0x82387928)
+    E_ACTION_CAR_SELECT_ABORT                = 78,  // DWARF 73; size 1  (ForceExitJunkyard)
+    E_ACTION_CAR_SELECT_PAUSED_IN_CAR_SELECT = 80,  // DWARF 75; size 1  (Update)
 
     // ⭐ [tut-ticker] X360-attested pair (2026-08-24):
     //   77  -- "the player's car settled out of car-select": HandleGameActions case 77 reads the
@@ -1643,10 +1654,54 @@ struct CGS_ALIGN(16) ResetPlayerCarAction : public GameAction<E_ACTION_RESET_PLA
     CarSelectType meCarSelectType;     // +0x3C  (4 bytes: an int-backed enum)
     bool    mbInCarSelectScreen;       // +0x40  -> RaceCarEntityModule::mbInCarSelectScreen
     bool    mbCarSelectDontStreamAudio;// +0x41  -> RaceCarEntityModule::mbCarSelectDontStreamAudio
-    u8      muReserved0x42;            // +0x42  written 0 by every producer; NO consumer reads it
+    bool    mbResetPlayerCamera;       // +0x42  DWARF h:669 (SetShouldResetPlayerCamera h:649)
     bool    mbKeepResetSection;        // +0x43  -> SpawnRaceCar's 5th arg -> the DWARF-named
                                        //        AttachAIControlEvent::mbKeepResetSection
     u8      maReserved0x44[0x0C];      // +0x44..+0x4F  tail of the 80-byte AddEvent image
+
+    // DWARF BrnGameActions.h:566..656: the record is built through these header-inline members
+    // (ARTIST has no out-of-line copy of any of them; every producer stores the fields in line).
+    // The X360 field order departs from DWARF's (mbInCarSelect joined the bool block at +0x40),
+    // so the members keep this tree's X360-mapped names. Construct's defaults are the values
+    // every producer leaves in the fields it does not set: zero location (PS3 0x2B675C stores
+    // two vspltisw zeros before the setter overwrites them), no scoring slot (`li 8`), the -1.0
+    // no-deform sentinel (ARTIST 0x82393744), cleared flags; meDeformationType is not written
+    // (OnlineCarSelectManager::SpawnInStartCar 0x82393690 never stores +0x38).
+    void Construct()
+    {
+        mPosition.SetZero();
+        mDirection.SetZero();
+        mCarModelId                = 0;
+        mWheelModelId              = 0;
+        mePlayerScoringIndex       = E_PLAYER_SCORING_INDEX_COUNT;
+        mbInCarSelectScreen        = false;
+        mfDeformationAmount        = -1.0f;
+        meCarSelectType            = E_CAR_SELECT_DONT_DROP;
+        mbCarSelectDontStreamAudio = false;
+        mbResetPlayerCamera        = false;
+        mbKeepResetSection         = false;
+    }
+
+    void SetLocation(Vector3 lPosition, Vector3 lDirection)
+    {
+        mPosition  = lPosition;
+        mDirection = lDirection;
+    }
+
+    void SetCarData(CgsID lCarModelId, CgsID lWheelModelId)
+    {
+        mCarModelId   = lCarModelId;
+        mWheelModelId = lWheelModelId;
+    }
+
+    void SetPlayerScoringIndex(EPlayerScoringIndex lePlayerScoringIndex) { mePlayerScoringIndex = lePlayerScoringIndex; }
+    void SetInCarSelect(bool lbInCarSelect) { mbInCarSelectScreen = lbInCarSelect; }
+    void SetDeformAmount(f32 lfDeformAmount) { mfDeformationAmount = lfDeformAmount; }
+    void SetDeformationResetType(s32 leDeformationType) { miBaseDeformationType = leDeformationType; }
+    void SetCarSelectType(CarSelectType leCarSelectType) { meCarSelectType = leCarSelectType; }
+    void SetCarSelectDontStreamAudio(bool lbDontStreamAudio) { mbCarSelectDontStreamAudio = lbDontStreamAudio; }
+    void SetShouldResetPlayerCamera(bool lbResetPlayerCamera) { mbResetPlayerCamera = lbResetPlayerCamera; }
+    void SetKeepResetSection(bool lbKeepResetSection) { mbKeepResetSection = lbKeepResetSection; }
 
     bool HasToChangeLocation() const;
 };
@@ -1668,14 +1723,14 @@ struct CGS_ALIGN(16) CarSelectionChangedAction
     u8      maReserved0x08[8];  // +0x08  never written by any producer
     Vector3 mPosition;          // +0x10  SpawnLocation::mPosition
     Vector3 mDirection;         // +0x20  SpawnLocation::mDirection
-    bool    mbJunkyardPosIsLeft;// +0x30  == (SpawnLocation::GetType() == E_TYPE_CAR_SELECT_LEFT)
-    bool    mbReserved0x31;     // +0x31  1 for a model change, 0 on entry
+    bool    mbIsLeft;           // +0x30  DWARF h:3903; == (SpawnLocation::GetType() == E_TYPE_CAR_SELECT_LEFT)
+    bool    mbPlayCraneDropAudio;// +0x31 DWARF h:3904; 1 for a model change, 0 on entry
     u8      maReserved0x32[14]; // +0x32..+0x3F  tail of the 64-byte AddEvent image
 };
 CGS_STATIC_ASSERT((sizeof(CarSelectionChangedAction) == 64),
               "CarSelectionChangedAction must be the 64-byte image AddEvent(.., 64, 64) posts");
-CGS_STATIC_ASSERT((offsetof(CarSelectionChangedAction, mbJunkyardPosIsLeft) == 0x30),
-              "CarSelectionChangedAction::mbJunkyardPosIsLeft at +0x30 (the consumer's lbz offset)");
+CGS_STATIC_ASSERT((offsetof(CarSelectionChangedAction, mbIsLeft) == 0x30),
+              "CarSelectionChangedAction::mbIsLeft at +0x30 (the consumer's lbz offset)");
 
 // ARTIST action 69, 88 bytes; DecFIGS BrnGameActions.h:2657.
 struct CarSelectionRequestStreamingAction : public GameAction<E_ACTION_CAR_SELECTION_REQUEST_STREAMING>
@@ -1745,6 +1800,70 @@ struct RemotePlayerDisconnectedAction : public GameAction<E_ACTION_REMOTE_PLAYER
     void SetActiveRaceCarIndex(EActiveRaceCarIndex leActiveRaceCarIndex);
     void SetNetworkPlayerID(BrnNetwork::NetworkPlayerID lPlayerID);
 };
+
+// The car-select records CarSelectManager posts (DWARF BrnGameActions.h:539..3935). Members and
+// order are the DWARF's except where an ARTIST producer's stores show the console layout.
+// DWARF h:539.
+struct CarUnlockAction : public GameAction<E_ACTION_GUI_CAR_UNLOCK>
+{
+    CgsID mCurrentCarToUnlock;
+};
+// DWARF h:3764.
+struct NewCarUnlockedAction : public GameAction<E_ACTION_NEW_CAR_UNLOCKED>
+{
+    enum Type   // DWARF h:3770
+    {
+        E_TYPE_UNLOCK         = 0,
+        E_TYPE_GIFT           = 1,
+        E_TYPE_TROPHY         = 2,
+        E_TYPE_SHUTDOWN_RIVAL = 3,
+    };
+    CgsID mCarModelId;                 // h:3778
+    Type  meType;                      // h:3779
+    f32   mfMinPresentationDuration;   // h:3780
+};
+CGS_STATIC_ASSERT((sizeof(NewCarUnlockedAction) == 16), "posted as 16 bytes");
+// DWARF h:3793 (no members: posted as its one object byte).
+struct CarUnlockEndAction : public GameAction<E_ACTION_CAR_UNLOCK_END> {};
+// DWARF h:3916 lists mbIsLeft before mCarId; the console record has the id first: ARTIST
+// CarSelectManager::SpawnInStartCar stores the id at +0 and the bool at +8 (0x82387E28 / 0x82387E68).
+struct CarSelectionChangedDropInAction : public GameAction<E_ACTION_CAR_SELECTION_CHANGED_DROPIN>
+{
+    CgsID mCarId;
+    bool  mbIsLeft;
+};
+CGS_STATIC_ASSERT((sizeof(CarSelectionChangedDropInAction) == 16), "posted as 16 bytes");
+// DWARF h:3932, same console reordering (UpdateChangeCarState stores the id at +0, the bool at +8:
+// 0x8239890C / 0x82398910).
+struct CarSelectionDropInCompleteAction : public GameAction<E_ACTION_CAR_SELECTION_DROPIN_COMPLETE>
+{
+    CgsID mCarId;
+    bool  mbIsLeft;
+};
+CGS_STATIC_ASSERT((sizeof(CarSelectionDropInCompleteAction) == 16), "posted as 16 bytes");
+// DWARF h:2061 (id 106, DWARF 101 +5).
+struct JunkYardDriveThruOnGameStartAction : public GameAction<E_ACTION_DRIVE_THRU_JUNK_YARD_ON_GAME_START>
+{
+    bool mbNewProfile;   // h:2063
+};
+// DWARF h:2682.
+struct CarSelectTransitionInAction : public GameAction<E_ACTION_CAR_SELECT_TRANSITION_IN>
+{
+    bool mbStart;           // h:2684
+    bool mbUnlockingCars;   // h:2685
+};
+// DWARF h:2695.
+struct CarSelectWaitingForAudioAction : public GameAction<E_ACTION_CAR_SELECT_WAITING_FOR_AUDIO>
+{
+    bool mbWaiting;         // h:2697
+};
+// DWARF h:2797.
+struct CarSelectAbortAction : public GameAction<E_ACTION_CAR_SELECT_ABORT>
+{
+    bool mbToOnlineEvent;   // h:2800
+};
+// DWARF h:2720: `typedef GameAction<E_ACTION_CAR_SELECT_PAUSED_IN_CAR_SELECT> PausedInCarSelectAction;`
+typedef GameAction<E_ACTION_CAR_SELECT_PAUSED_IN_CAR_SELECT> PausedInCarSelectAction;
 
 // Empty record, posted by ProcessGameEvents when the local player is disconnected.
 struct NotifyDirectorLocalPlayerDisconnectedAction : public GameAction<E_ACTION_NOTIFY_DIRECTOR_LOCAL_PLAYER_DISCONNECTED> {};
@@ -2537,6 +2656,7 @@ typedef GameAction<E_ACTION_STOP_MODE_SPLASH> StopModeSplashAction;   // case 22
 // Ask the GUI for an autosave; the forced flag bypasses the autosave throttle.
 struct RequestAutoSaveAction : public GameAction<E_ACTION_REQUEST_AUTOSAVE>
 {
+    RequestAutoSaveAction() : mbForceAutosave(false) {}   // DWARF h:5652
     bool mbForceAutosave;   // +0x00
 };
 CGS_STATIC_ASSERT((sizeof(RequestAutoSaveAction) == 1), "action 55 is posted with size 1");

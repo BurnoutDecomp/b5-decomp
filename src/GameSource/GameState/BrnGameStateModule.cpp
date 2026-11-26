@@ -1475,13 +1475,6 @@ u32 GameStateModule::GetNetworkRandomSeed() const
     return muNetworkGameRandomSeed;
 }
 
-// ⭐ The raw `*(this + 232288)` nonzero test three console call sites open-code. That word IS
-// miSimPauseFlags (see the header note), so this is exactly IsSimPaused(false, false).
-bool GameStateModule::IsTrainingPauseSuppressed() const
-{
-    return miSimPauseFlags != 0;
-}
-
 // --------------------------------------------------------------------------------------------
 // RequestUnpause (X360 0x82382138).
 // Clear the leUnpauseModule pause-reason bits from miSimPauseFlags. The console samples
@@ -5201,15 +5194,15 @@ void GameStateModule::HandleChangePlayerCarEvent(
     lReset.mCarModelId = lpEvent->mCarModelId;
     lReset.mWheelModelId = lpEvent->mWheelModelId;
     lReset.mePlayerScoringIndex = GameStateModuleIO::E_PLAYER_SCORING_INDEX_COUNT;
-    lReset.muReserved0x42 = lpEvent->mbResetPlayerCamera;
+    lReset.mbResetPlayerCamera = lpEvent->mbResetPlayerCamera;
     lReset.mbKeepResetSection = lpEvent->mbKeepResetSection;
     lReset.mfDeformationAmount = mProgressionManager.GetProfile()->GetPlayerBaseDeformAmount(lpEvent->mCarModelId);
     lReset.miBaseDeformationType = lReset.mfDeformationAmount > 0.0f ? 1 : -1;
     lpActions->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lReset),
                        GameStateModuleIO::E_ACTION_RESET_PLAYER_CAR, sizeof(lReset));
     GameStateModuleIO::CarSelectChangeColourAction lColour;
-    s32 liColour, liPalette;
-    mProgressionManager.GetCarColourAndPalette(lpEvent->mCarModelId, &liColour, &liPalette);
+    u32 liColour, liPalette;
+    mProgressionManager.GetCarColourAndPalette(lpEvent->mCarModelId, liColour, liPalette);
     lColour.muPaletteIndex = liPalette;
     lColour.muColourIndex = liColour;
     lpActions->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lColour),

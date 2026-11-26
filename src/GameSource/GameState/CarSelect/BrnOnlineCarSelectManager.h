@@ -105,6 +105,7 @@ private:
     void TeleportCurrentVehicle(GameStateModuleIO::GameActionQueue* lpActionQueue);
     void GetCurrentPlayerVehicle(CgsID& lrCarID) const;
     void SendOnlineChangeCarAction(GameStateModuleIO::GameActionQueue* lpActionQueue, bool lbFinalSelection);
+    void UpdateCarColour(CgsID lCarId, GameStateModuleIO::GameActionQueue* lpActionQueue);   // DWARF h:186
 
     EInternalState                                meInternalState;          // X360 this+0
     GameStateModule*                              mpGameStateModule;        // console +0x04

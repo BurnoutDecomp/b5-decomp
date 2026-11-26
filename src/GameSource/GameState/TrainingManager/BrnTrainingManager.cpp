@@ -25,7 +25,7 @@
 //                              accumulate/reset writers in ModeManager::PreWorldUpdate
 //                              @0x823537B8 -- see BrnModeManager.h)
 //   gsm+183744              == mCarSelectManager.mJunkyardId (CarSelectManager +0x20)
-//   gsm+232288              == miSimPauseFlags (IsTrainingPauseSuppressed, already named)
+//   gsm+232288              == miSimPauseFlags (IsAnythingPaused, already named)
 //   gsm+7604 / gsm+7608     == mModeManager.meCurrentGameModeType / mpCurrentGameMode
 //   gsm+245952              == (the one true gap) a byte with NO writer anywhere in the
 //                              30,084-function export set; see ShouldAllowTimedTutorialTips
@@ -241,7 +241,7 @@ void TrainingManager::TriggerAnyFollowOnTrainingTips(
         SendTrainingTickerMessage(lpGameActionQueue);
         meTrainingState = E_TRAINING_STATE_PLAYING_MESSAGE;
 
-        if (!mpGameStateModule->IsTrainingPauseSuppressed())
+        if (!mpGameStateModule->IsAnythingPaused())
         {
             if (DoesTrainingPauseGame(meCurrentTrainingType) &&
                 !DoesTrainingPauseGame(leFinishedTrainingType))
@@ -425,7 +425,7 @@ void TrainingManager::Update(const GameStateModuleIO::PreWorldInputBuffer* lpInp
                 meTrainingState = E_TRAINING_STATE_PLAYING_MESSAGE;
                 mfStateTime     = 0.0f;
 
-                if (!mpGameStateModule->IsTrainingPauseSuppressed())
+                if (!mpGameStateModule->IsAnythingPaused())
                 {
                     if (DoesTrainingPauseGame(meCurrentTrainingType))
                     {
@@ -563,7 +563,7 @@ void TrainingManager::RequestTraining(BrnProgression::ETrainingType leTrainingTy
         }
         // `if (*(gsm+245952) || *(gsm+232288)) fail` -- the first read is the no-writer byte
         // (see ShouldAllowTimedTutorialTips' FLAG; reads as 0), the second is the pause mask.
-        if (mpGameStateModule->IsTrainingPauseSuppressed())
+        if (mpGameStateModule->IsAnythingPaused())
         {
             return;
         }

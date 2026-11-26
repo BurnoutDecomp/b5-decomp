@@ -713,7 +713,6 @@ public:
     s32             GetCarCount() const { return miCarCount; }   // header-inline (DWARF h:458)
     const CarData*  GetCarData(s32 liIndex) const;
           CarData*  GetCarData(s32 liIndex);
-    bool IsStartOfGameDeformActive() const;
 
     bool HasPlayerCompletedFreeburnChallenge(CgsID lChallengeID) const;
     u32  CompleteFreeburnChallenge(CgsID lChallengeID);

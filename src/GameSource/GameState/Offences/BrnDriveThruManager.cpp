@@ -703,9 +703,9 @@ void DriveThruManager::ProcessDriveThru(BrnTrigger::GenericRegion::Type leTrigge
             {
                 const CgsID lCarId = lpCarData->GetId();
 
-                s32 liColourIndex  = 0;
-                s32 liPaletteIndex = 0;
-                mpProgressionManager->GetCarColourAndPalette(lCarId, &liColourIndex, &liPaletteIndex);
+                u32 liColourIndex  = 0;
+                u32 liPaletteIndex = 0;
+                mpProgressionManager->GetCarColourAndPalette(lCarId, liColourIndex, liPaletteIndex);
                 liPaletteIndex = 2;   // X360 forces palette index 2 (the paint-shop palette)
 
                 // Advance the colour by one within palette 2's colour count (wrap-around).

@@ -2095,16 +2095,16 @@ namespace BrnDirector
             // ---- 0  E_ACTION_RESET_PLAYER_CAR (80 bytes) @0x82238478 -------------------
             //     lbz r11, 0x42(r30) ; stbx r11, 0x33931   -> +0x151 mbShouldResetPlayerCameraThisFrame
             // Record +0x42 is DWARF ResetPlayerCarAction::mbResetPlayerCamera (BrnGameActions.h:669;
-            // this tree names the byte muReserved0x42 -- HandleChangePlayerCarEvent posts it from
+            // HandleChangePlayerCarEvent posts it from
             // ChangePlayerCarEvent::mbResetPlayerCamera). Per-frame (ResetPerFrameData, 0x82237360).
             // Consumer: Arbitrator::Update @0x8226ADE0 -> SharedCameraContainer::mbUseGameplayExternal.
             // Read by offset: the record is alignas(16) and the queue does not align payloads.
             case 0:
             {
-                CGS_STATIC_ASSERT((offsetof(BrnGameState::GameStateModuleIO::ResetPlayerCarAction, muReserved0x42) == 0x42),
+                CGS_STATIC_ASSERT((offsetof(BrnGameState::GameStateModuleIO::ResetPlayerCarAction, mbResetPlayerCamera) == 0x42),
                               "the console reads the reset-camera byte at record +0x42");
                 maGameState.mbShouldResetPlayerCameraThisFrame =
-                    (lpacPayload[offsetof(BrnGameState::GameStateModuleIO::ResetPlayerCarAction, muReserved0x42)] != 0);
+                    (lpacPayload[offsetof(BrnGameState::GameStateModuleIO::ResetPlayerCarAction, mbResetPlayerCamera)] != 0);
 
                 break;
             }

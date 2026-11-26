@@ -305,7 +305,7 @@ void GameStateModule::ProcessGameEvents_Group1(s32 liEventType, const CgsModule:
         lResetPlayerCarAction.meCarSelectType            = GameStateModuleIO::ResetPlayerCarAction::E_CAR_SELECT_DONT_DROP;
         lResetPlayerCarAction.mbInCarSelectScreen        = false;
         lResetPlayerCarAction.mbCarSelectDontStreamAudio = false;
-        lResetPlayerCarAction.muReserved0x42             = 0;
+        lResetPlayerCarAction.mbResetPlayerCamera        = false;
         lResetPlayerCarAction.mbKeepResetSection         = false;
         lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lResetPlayerCarAction),
                                 GameStateModuleIO::E_ACTION_RESET_PLAYER_CAR,
@@ -340,7 +340,7 @@ void GameStateModule::ProcessGameEvents_Group1(s32 liEventType, const CgsModule:
         lResetPlayerCarAction.meCarSelectType            = GameStateModuleIO::ResetPlayerCarAction::E_CAR_SELECT_DONT_DROP;
         lResetPlayerCarAction.mbInCarSelectScreen        = false;
         lResetPlayerCarAction.mbCarSelectDontStreamAudio = false;
-        lResetPlayerCarAction.muReserved0x42             = 0;
+        lResetPlayerCarAction.mbResetPlayerCamera        = false;
         lResetPlayerCarAction.mbKeepResetSection         = false;
         lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lResetPlayerCarAction),
                                 GameStateModuleIO::E_ACTION_RESET_PLAYER_CAR,
@@ -404,10 +404,10 @@ void GameStateModule::ProcessGameEvents_Group1(s32 liEventType, const CgsModule:
         const GameStateModuleIO::PlayerCarColourRequestEvent* lpPlayerCarColourRequestEvent =
             reinterpret_cast<const GameStateModuleIO::PlayerCarColourRequestEvent*>(lpEvent);
 
-        s32 liColourIndex;
-        s32 liPaletteIndex;
+        u32 liColourIndex;
+        u32 liPaletteIndex;
         mProgressionManager.GetCarColourAndPalette(lpPlayerCarColourRequestEvent->mCarId,
-                                                   &liColourIndex, &liPaletteIndex);
+                                                   liColourIndex, liPaletteIndex);
 
         GameStateModuleIO::PlayerCarColourResponseAction lColourResponseAction;
         lColourResponseAction.muPaletteIndex = static_cast<u32>(liPaletteIndex);

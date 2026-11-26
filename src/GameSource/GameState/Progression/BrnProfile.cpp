@@ -1876,29 +1876,6 @@ void SplitArray<ProfileEvent, BrnGuiSaveLoad::ProfileEvent>(
 }
 
 // ------------------------------------------------------------------------------------
-// Profile::IsStartOfGameDeformActive
-//
-// ⭐⭐ CORRECTION. The committed comment at BrnCarSelectManager.cpp's call site read
-// "FLAG: Profile + 118401 (de-inlined byte read)". 118401 is NOT a Profile offset -- the X360
-// (CarSelectManager::ReallyEnterJunkyardAtStartOfGame @0x823931F8) reads
-//     if ( *(mpProgressionManager + 118401) )
-// and mProfile is embedded at ProgressionManager + 0x170 (368), which is independently proven
-// two lines from the same asm (EnterJunkyard @0x82398508 computes `*(a1+16) + 368` as the
-// Profile `this`). 118401 - 368 == 118033 == mbIsNewProfile.
-//
-// So the start-of-game deform is gated on THE PROFILE BEING BRAND NEW: on a first-ever boot
-// the start car is handed out pre-deformed (the same asm then writes 0.85f into the CarData's
-// mfUnlockDeformedAmount), and on any later boot it is not. That is exactly the user-visible
-// "your first car is a wreck" behaviour, and it was pointing at the wrong object.
-// (The accessor NAME is this repo's -- the X360 inlines the byte read and the DWARF declares
-// no such member function -- but the byte it reads is now attested.)
-// ------------------------------------------------------------------------------------
-bool Profile::IsStartOfGameDeformActive() const
-{
-    return mbIsNewProfile;
-}
-
-// ------------------------------------------------------------------------------------
 // Profile::SetChosenLiveryIdForBaseCar (single-CgsID form)
 //
 // ⚠️⚠️ SIGNATURE DISCREPANCY, RECORDED NOT PAPERED OVER. This overload is what the CONSOLE

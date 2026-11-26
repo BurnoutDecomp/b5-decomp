@@ -18,6 +18,8 @@
 #include "GameSource/GameState/Progression/BrnDerivedCars.h"       // BrnProgression::DerivedCarArray (StartCarModificationState's livery family)
 #include "GameSource/GameState/BrnGameStateModule.h"               // BrnGameState::GameStateModule (streaming / car-change / pause hooks)
 #include "GameSource/GameState/BrnGameActions.h"                   // GameStateModuleIO::ResetPlayerCarAction / CarSelectionChangedAction (typed payloads)
+#include "SharedClasses/Trigger/BrnTriggerData.h"                  // BrnTrigger::TriggerData (GetSpawnLocation / count)
+#include "GameSource/GameState/TriggerQueryManager/BrnTriggerQueryManager.h" // TriggerQueryManager::GetTriggerData
 
 namespace BrnGameState
 {
@@ -38,6 +40,11 @@ static const char* const KAC_CSM_FILE =
     "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/CarSelect/BrnCarSelectManager.cpp";
 static const char* const KAC_SPAWNLOC_FILE =
     "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\trigger\\BrnSpawnLocation.h";
+static const char* const KAC_BRNPROFILE_FILE =
+    "..\\..\\..\\GameSource\\GameState/Progression/BrnProfile.h";
+
+// flt_82029BB8 == 0.85: the deform DEBUG_UnlockCarsForTesting stamps onto a force-unlocked trophy car.
+static const f32 KF_DEBUG_TROPHY_CAR_DEFORM = 0.85f;
 
 // ----------------------------------------------------------------------------
 // X360-baked tuning constants (the float rodata the bodies compare against). The DWARF declares the
@@ -262,27 +269,14 @@ void CarSelectManager::Update(GameStateModuleIO::GameActionQueue* lpActionQueue,
 {
     (void)lpControllerInput;   // passed through to the deeper state updaters; not read at this level
 
-    GameStateModule* lpModule = mpGameStateModule;
-    if (lpModule == 0)
+    CGS_ASSERT_AT(mpGameStateModule, "mpGameStateModule", KAC_CSM_FILE, 67);
+    if (mpGameStateModule->IsAnythingPaused())
     {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("mpGameStateModule", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 67));
-        CgsDev::Assert::EndAssert();
-    }
-
-    // X360: *(mpGameStateModule + 232288) -- "is the world currently paused / a pause is suppressing
-    // the car-select tick". When set, just re-post the paused HUD action and bail.
-    if (lpModule->IsTrainingPauseSuppressed())   // FLAG: GameStateModule + 232288 (training-pause/paused gate)
-    {
-        if (lpActionQueue == 0)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpActionQueue", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 70));
-            CgsDev::Assert::EndAssert();
-        }
-        u8 lacPaused[1] = { 0 };
-        AsActionQueue(lpActionQueue)->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(lacPaused), KI_ACTION_PAUSED_IN_CAR_SELECT, 1);
+        CGS_ASSERT_AT(lpActionQueue, "lpActionQueue", KAC_CSM_FILE, 70);
+        // DWARF h:2720: an empty record, posted as its one uninitialised byte (no store, 0x8239C2A0).
+        GameStateModuleIO::PausedInCarSelectAction lPausedAction;
+        lpActionQueue->AddEvent(&lPausedAction, GameStateModuleIO::E_ACTION_CAR_SELECT_PAUSED_IN_CAR_SELECT,
+                                static_cast<s32>(sizeof(lPausedAction)));
         return;
     }
 
@@ -296,7 +290,7 @@ void CarSelectManager::Update(GameStateModuleIO::GameActionQueue* lpActionQueue,
         {
             if (mbTransitionInRequestStreaming)
             {
-                if (lfTimer >= KF_TRANSITION_IN_REQUEST_STREAMING)   // 0.5
+                if (lfTimer >= 0.5f)   // KF_CARSELECT_TRANSITION_IN_REQUEST_STREAMING: ARTIST loads the pooled 0.5 (0x82001DA0)
                 {
                     RequestStreamingForUnlock(lpActionQueue);
                     mbTransitionInRequestStreaming = false;
@@ -304,9 +298,13 @@ void CarSelectManager::Update(GameStateModuleIO::GameActionQueue* lpActionQueue,
             }
             else
             {
-                const f32 lfMinTime = muUnlockCount ? KF_TRANSITION_IN_MIN_TIME_WITH_CARS  // 6.0 (has unlock cars)
-                                                    : KF_TRANSITION_IN_MIN_TIME_NO_CARS;   // 2.0
-                if (lfTimer >= lfMinTime && !mbWaitingForStreaming)
+                // DWARF cpp:97.
+                bool lbMinTransitionTimeElapsed;
+                if (muUnlockCount == 0)
+                    lbMinTransitionTimeElapsed = lfTimer >= KF_TRANSITION_IN_MIN_TIME_NO_CARS;     // 2.0
+                else
+                    lbMinTransitionTimeElapsed = lfTimer >= KF_TRANSITION_IN_MIN_TIME_WITH_CARS;   // 6.0
+                if (lbMinTransitionTimeElapsed && !mbWaitingForStreaming)
                     EndTransitionInState(lpActionQueue);
             }
             break;
@@ -339,12 +337,9 @@ void CarSelectManager::Update(GameStateModuleIO::GameActionQueue* lpActionQueue,
 // ============================================================================
 void CarSelectManager::StartTransitionInState(GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
-    if (meState != E_STATE_NONE)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("CarSelectManager: State needs to be in E_STATE_NONE", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 251));
-        CgsDev::Assert::EndAssert();
-    }
+    // ARTIST streams this assert through a StrStream over gpcMessageBuffer (line 251).
+    CGS_ASSERT_STREAM_AT(meState == E_STATE_NONE,
+                         "CarSelectManager: State needs to be in E_STATE_NONE", KAC_CSM_FILE, 251);
 
     mfStateTimer = 0.0f;
     meState      = E_STATE_TRANSITION_IN;
@@ -363,11 +358,13 @@ void CarSelectManager::StartTransitionInState(GameStateModuleIO::GameActionQueue
         mCurrentCarToUnlock = GetNextUnlockCarID(0);
     }
 
-    u8 lacTransition[2];
-    lacTransition[0] = 1;
-    lacTransition[1] = (muUnlockCount != 0) ? 1 : 0;
-    AsActionQueue(lpActionQueue)->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(lacTransition), KI_ACTION_TRANSITION_IN, 2);
+    // DWARF cpp:275.
+    GameStateModuleIO::CarSelectTransitionInAction lTransitionAction;
+    lTransitionAction.mbStart         = true;
+    lTransitionAction.mbUnlockingCars = muUnlockCount > 0;
+    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lTransitionAction),
+                            GameStateModuleIO::E_ACTION_CAR_SELECT_TRANSITION_IN,
+                            static_cast<s32>(sizeof(lTransitionAction)));
 
     SpawnInStartCar(lpActionQueue);
 }
@@ -380,21 +377,20 @@ void CarSelectManager::StartTransitionInState(GameStateModuleIO::GameActionQueue
 // ============================================================================
 void CarSelectManager::EndTransitionInState(GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
-    if (meState != E_STATE_TRANSITION_IN)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("CarSelectManager: State needs to be in E_STATE_TRANSITION_IN.", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 294));
-        CgsDev::Assert::EndAssert();
-    }
+    // ARTIST streams this assert through a StrStream over gpcMessageBuffer (line 294).
+    CGS_ASSERT_STREAM_AT(meState == E_STATE_TRANSITION_IN,
+                         "CarSelectManager: State needs to be in E_STATE_TRANSITION_IN.", KAC_CSM_FILE, 294);
 
     if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
         *CgsDev::Log::gpDebugPrint << "=== CarSelectManager: Transition In [End]\n";
 
-    u8 lacTransition[2];
-    lacTransition[0] = 0;
-    lacTransition[1] = (muUnlockCount != 0) ? 1 : 0;
-    AsActionQueue(lpActionQueue)->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(lacTransition), KI_ACTION_TRANSITION_IN, 2);
+    // DWARF cpp:299.
+    GameStateModuleIO::CarSelectTransitionInAction lTransitionAction;
+    lTransitionAction.mbStart         = false;
+    lTransitionAction.mbUnlockingCars = muUnlockCount > 0;
+    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lTransitionAction),
+                            GameStateModuleIO::E_ACTION_CAR_SELECT_TRANSITION_IN,
+                            static_cast<s32>(sizeof(lTransitionAction)));
 
     if (muUnlockCount)
         StartUnlockState(lpActionQueue);
@@ -572,16 +568,12 @@ void CarSelectManager::StartCarModificationState(GameStateModuleIO::GameActionQu
 
 void CarSelectManager::StartCarSelectState(GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
-    if (meState != E_STATE_TRANSITION_IN && meState != E_STATE_CAR_MODIFICATION &&
-        meState != E_STATE_DISPLAY_UNLOCKED_CARS && meState != E_STATE_DISPLAY_UNLOCKED_SHUTDOWN_CARS &&
-        meState != E_STATE_CAR_SELECT)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "CarSelectManager: State needs to be in E_STATE_TRANSITION_IN or E_STATE_CAR_MODIFICATION.",
-            CGS_ASSERT_LOCATION(KAC_CSM_FILE, 331));
-        CgsDev::Assert::EndAssert();
-    }
+    // ARTIST 0x82387310..0x82387350: the streamed assert (cpp:326 lStrStream, line 331).
+    CGS_ASSERT_STREAM_AT(meState == E_STATE_TRANSITION_IN || meState == E_STATE_CAR_MODIFICATION ||
+                         meState == E_STATE_DISPLAY_UNLOCKED_CARS || meState == E_STATE_DISPLAY_UNLOCKED_SHUTDOWN_CARS ||
+                         meState == E_STATE_CAR_SELECT,
+                         "CarSelectManager: State needs to be in E_STATE_TRANSITION_IN or E_STATE_CAR_MODIFICATION.",
+                         KAC_CSM_FILE, 331);
 
     if (meState == E_STATE_CAR_SELECT)
         return;
@@ -598,16 +590,19 @@ void CarSelectManager::StartCarSelectState(GameStateModuleIO::GameActionQueue* l
     if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
         *CgsDev::Log::gpDebugPrint << "=== CarSelectManager: Car Select\n";
 
-    s32 liReady = 1;
-    AsActionQueue(lpActionQueue)->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(&liReady), KI_ACTION_CAR_SELECT_READY, 4);
+    // DWARF cpp:354 / cpp:359.
+    GameStateModuleIO::CarSelectReadyAction lReadyAction;
+    lReadyAction.miCarSelectFlow = GameStateModuleIO::E_CAR_SELECT_TYPE_JUNKYARD;
+    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lReadyAction),
+                            GameStateModuleIO::E_ACTION_CAR_SELECT_READY,
+                            static_cast<s32>(sizeof(lReadyAction)));
 
-    GameStateModuleIO::CarSelectModificationScreen lModScreen;
-    lModScreen.meCarSelectType = GameStateModuleIO::E_CAR_SELECT_TYPE_JUNKYARD;
-    lModScreen.mbEntering = false;
-    AsActionQueue(lpActionQueue)->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(&lModScreen),
-        KI_ACTION_CAR_MOD_SCREEN, sizeof(lModScreen));
+    GameStateModuleIO::CarSelectModificationScreen lModScreenAction;
+    lModScreenAction.meCarSelectType = GameStateModuleIO::E_CAR_SELECT_TYPE_JUNKYARD;
+    lModScreenAction.mbEntering      = false;
+    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lModScreenAction),
+                            GameStateModuleIO::E_ACTION_CAR_SELECT_MODIFICATION_SCREEN,
+                            static_cast<s32>(sizeof(lModScreenAction)));
 
     // X360: if (mDesiredCarId hi-word == 0) mDesiredCarId = mStartCarId.
     if (mDesiredCarId == 0)
@@ -623,14 +618,9 @@ void CarSelectManager::StartCarSelectState(GameStateModuleIO::GameActionQueue* l
 // ============================================================================
 void CarSelectManager::StartUnlockState(GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
-    if (meState != E_STATE_TRANSITION_IN && meState != E_STATE_DISPLAY_UNLOCKED_CARS)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "CarSelectManager: State needs to be in E_STATE_TRANSITION_IN or E_STATE_DISPLAY_UNLOCKED_CARS.",
-            CGS_ASSERT_LOCATION(KAC_CSM_FILE, 449));
-        CgsDev::Assert::EndAssert();
-    }
+    // ARTIST streams this assert through a StrStream over gpcMessageBuffer (line 449).
+    CGS_ASSERT_STREAM_AT(meState == E_STATE_TRANSITION_IN || meState == E_STATE_DISPLAY_UNLOCKED_CARS,
+                         "CarSelectManager: State needs to be in E_STATE_TRANSITION_IN or E_STATE_DISPLAY_UNLOCKED_CARS.", KAC_CSM_FILE, 449);
 
     if (mbDEBUG_DisableUnlock)   // X360 *(this+118): when set, force the unlock count to 0 (FLAG: flag<->slot)
         muUnlockCount = 0;
@@ -672,12 +662,9 @@ void CarSelectManager::StartUnlockState(GameStateModuleIO::GameActionQueue* lpAc
 // ============================================================================
 void CarSelectManager::UpdateUnlockState(GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
-    if (meState != E_STATE_DISPLAY_UNLOCKED_CARS && meState != E_STATE_DISPLAY_UNLOCKED_SHUTDOWN_CARS)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("CarSelectManager: State needs to be in Unlock sequence.", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 758));
-        CgsDev::Assert::EndAssert();
-    }
+    // ARTIST streams this assert through a StrStream over gpcMessageBuffer (line 758).
+    CGS_ASSERT_STREAM_AT(meState == E_STATE_DISPLAY_UNLOCKED_CARS || meState == E_STATE_DISPLAY_UNLOCKED_SHUTDOWN_CARS,
+                         "CarSelectManager: State needs to be in Unlock sequence.", KAC_CSM_FILE, 758);
 
     const f32 lfTimer = mfStateTimer;
     if (!(lfTimer >= KF_CARSELECT_UNLOCK_MIN_TIME && !mbWaitingForStreaming &&
@@ -780,9 +767,9 @@ void CarSelectManager::UpdateUnlockState(GameStateModuleIO::GameActionQueue* lpA
     // -- the COLOUR goes to payload+4 and the PALETTE to payload+0.
     {
         GameStateModuleIO::CarSelectChangeColourAction lColour;
-        s32 liColour  = 0;
-        s32 liPalette = 0;
-        mpProgressionManager->GetCarColourAndPalette(mCurrentCarToUnlock, &liColour, &liPalette);
+        u32 liColour  = 0;
+        u32 liPalette = 0;
+        mpProgressionManager->GetCarColourAndPalette(mCurrentCarToUnlock, liColour, liPalette);
         lColour.muPaletteIndex = static_cast<u32>(liPalette);
         lColour.muColourIndex  = static_cast<u32>(liColour);
         AsActionQueue(lpActionQueue)->AddEvent(
@@ -815,12 +802,9 @@ void CarSelectManager::UpdateUnlockState(GameStateModuleIO::GameActionQueue* lpA
 // ============================================================================
 void CarSelectManager::EndUnlockState(GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
-    if (meState != E_STATE_DISPLAY_UNLOCKED_CARS && meState != E_STATE_DISPLAY_UNLOCKED_SHUTDOWN_CARS)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("CarSelectManager: State needs to be in Unlock sequence.", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 880));
-        CgsDev::Assert::EndAssert();
-    }
+    // ARTIST streams this assert through a StrStream over gpcMessageBuffer (line 880).
+    CGS_ASSERT_STREAM_AT(meState == E_STATE_DISPLAY_UNLOCKED_CARS || meState == E_STATE_DISPLAY_UNLOCKED_SHUTDOWN_CARS,
+                         "CarSelectManager: State needs to be in Unlock sequence.", KAC_CSM_FILE, 880);
 
     if (meState == E_STATE_DISPLAY_UNLOCKED_CARS)
     {
@@ -940,12 +924,9 @@ void CarSelectManager::EndUnlockState(GameStateModuleIO::GameActionQueue* lpActi
 // ============================================================================
 void CarSelectManager::UpdateRequestCarChangeState(GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
-    if (meState != E_STATE_REQUEST_CAR_CHANGE)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("CarSelectManager: State needs to be in E_STATE_REQUEST_CAR_CHANGE.", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 611));
-        CgsDev::Assert::EndAssert();
-    }
+    // ARTIST streams this assert through a StrStream over gpcMessageBuffer (line 611).
+    CGS_ASSERT_STREAM_AT(meState == E_STATE_REQUEST_CAR_CHANGE,
+                         "CarSelectManager: State needs to be in E_STATE_REQUEST_CAR_CHANGE.", KAC_CSM_FILE, 611);
 
     // X360: if (active-player-car CgsID == mDesiredCarId) -> swap already complete.
     const CgsID lActiveCarId = mpGameStateModule->GetActivePlayerCarId();   // GameStateModule + 0x456D8
@@ -990,8 +971,8 @@ void CarSelectManager::UpdateRequestCarChangeState(GameStateModuleIO::GameAction
         lChanged.mJunkyardId = mJunkyardId;
         lChanged.mPosition = lpSpawnLocation->mPosition;
         lChanged.mDirection = lpSpawnLocation->mDirection;
-        lChanged.mbJunkyardPosIsLeft = lpSpawnLocation->GetType() == 1;
-        lChanged.mbReserved0x31 = true;
+        lChanged.mbIsLeft = lpSpawnLocation->GetType() == BrnTrigger::SpawnLocation::E_TYPE_CAR_SELECT_LEFT;
+        lChanged.mbPlayCraneDropAudio = true;
         AsActionQueue(lpActionQueue)->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lChanged), KI_ACTION_CAR_SELECTION_CHANGED, sizeof(lChanged));
     }
@@ -1014,12 +995,9 @@ void CarSelectManager::UpdateRequestCarChangeState(GameStateModuleIO::GameAction
 // ============================================================================
 void CarSelectManager::UpdateChangeCarState(GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
-    if (meState != E_STATE_STARTING_CHANGING_CAR && meState != E_STATE_CHANGING_CAR)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("CarSelectManager: State needs to be in E_STATE_CHANGING_CAR.", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 679));
-        CgsDev::Assert::EndAssert();
-    }
+    // ARTIST streams this assert through a StrStream over gpcMessageBuffer (line 679).
+    CGS_ASSERT_STREAM_AT(meState == E_STATE_STARTING_CHANGING_CAR || meState == E_STATE_CHANGING_CAR,
+                         "CarSelectManager: State needs to be in E_STATE_CHANGING_CAR.", KAC_CSM_FILE, 679);
 
     if (meState == E_STATE_STARTING_CHANGING_CAR)   // 7
     {
@@ -1028,13 +1006,13 @@ void CarSelectManager::UpdateChangeCarState(GameStateModuleIO::GameActionQueue* 
             const CgsID lActiveCarId = mpGameStateModule->GetActivePlayerCarId();
             if (lActiveCarId == mDesiredCarId)
             {
-                // CarSelectionChangedDropInAction (16B): the desired car id + "type 1" bit.
-                u8 lacDropIn[16];
-                std::memset(lacDropIn, 0, sizeof(lacDropIn));
-                std::memcpy(lacDropIn, &mDesiredCarId, sizeof(mDesiredCarId));
-                lacDropIn[8] = (meLastSpawnLocationType == 1) ? 1 : 0;
-                AsActionQueue(lpActionQueue)->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(lacDropIn), KI_ACTION_CAR_SELECTION_DROPIN, 16);
+                // DWARF cpp:699.
+                GameStateModuleIO::CarSelectionChangedDropInAction lCarSelectDropInAction;
+                lCarSelectDropInAction.mbIsLeft = meLastSpawnLocationType == BrnTrigger::SpawnLocation::E_TYPE_CAR_SELECT_LEFT;
+                lCarSelectDropInAction.mCarId   = mDesiredCarId;
+                lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lCarSelectDropInAction),
+                                        GameStateModuleIO::E_ACTION_CAR_SELECTION_CHANGED_DROPIN,
+                                        static_cast<s32>(sizeof(lCarSelectDropInAction)));
                 meState = E_STATE_CHANGING_CAR;   // 8
             }
             else
@@ -1079,13 +1057,13 @@ void CarSelectManager::UpdateChangeCarState(GameStateModuleIO::GameActionQueue* 
     }
     else
     {
-        // CarSelectionDropInCompleteAction (16B): mDesiredCarId + the spawn-type bit.
-        u8 lacDropInDone[16];
-        std::memset(lacDropInDone, 0, sizeof(lacDropInDone));
-        std::memcpy(lacDropInDone, &mDesiredCarId, sizeof(mDesiredCarId));
-        lacDropInDone[8] = (meLastSpawnLocationType == 1) ? 1 : 0;
-        AsActionQueue(lpActionQueue)->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(lacDropInDone), KI_ACTION_CAR_SELECTION_DROPIN_DONE, 16);
+        // DWARF cpp:736.
+        GameStateModuleIO::CarSelectionDropInCompleteAction lCarSelectDropInCompleteAction;
+        lCarSelectDropInCompleteAction.mbIsLeft = meLastSpawnLocationType == BrnTrigger::SpawnLocation::E_TYPE_CAR_SELECT_LEFT;
+        lCarSelectDropInCompleteAction.mCarId   = mDesiredCarId;
+        lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lCarSelectDropInCompleteAction),
+                                GameStateModuleIO::E_ACTION_CAR_SELECTION_DROPIN_COMPLETE,
+                                static_cast<s32>(sizeof(lCarSelectDropInCompleteAction)));
     }
 }
 
@@ -1100,12 +1078,9 @@ void CarSelectManager::UpdateChangeCarState(GameStateModuleIO::GameActionQueue* 
 // ============================================================================
 void CarSelectManager::UpdateExitState(GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
-    if (meState != E_STATE_EXITING)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("CarSelectManager: State needs to be in E_STATE_EXITING.", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 958));
-        CgsDev::Assert::EndAssert();
-    }
+    // ARTIST streams this assert through a StrStream over gpcMessageBuffer (line 958).
+    CGS_ASSERT_STREAM_AT(meState == E_STATE_EXITING,
+                         "CarSelectManager: State needs to be in E_STATE_EXITING.", KAC_CSM_FILE, 958);
 
     if (mbWaitingForStreaming)
         return;
@@ -1114,95 +1089,78 @@ void CarSelectManager::UpdateExitState(GameStateModuleIO::GameActionQueue* lpAct
     mbInCarModScreen = false;          // X360 *(this+115) = 0
     mfStateTimer     = KF_TIMER_RESET; // 0.0
 
-    GameActionQueueImpl* lpQueue = AsActionQueue(lpActionQueue);
-
-    // Publish the end of the offline junkyard mod screen (action 76: type=JUNKYARD, entering=0).
-    {
-        GameStateModuleIO::CarSelectModificationScreen lModScreen;
-        lModScreen.meCarSelectType = GameStateModuleIO::E_CAR_SELECT_TYPE_JUNKYARD;
-        lModScreen.mbEntering = false;
-        lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lModScreen),
-                          KI_ACTION_CAR_MOD_SCREEN, sizeof(lModScreen));
-    }
+    // DWARF cpp:973: the end of the offline junkyard mod screen.
+    GameStateModuleIO::CarSelectModificationScreen lModScreenAction;
+    lModScreenAction.meCarSelectType = GameStateModuleIO::E_CAR_SELECT_TYPE_JUNKYARD;
+    lModScreenAction.mbEntering      = false;
+    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lModScreenAction),
+                            GameStateModuleIO::E_ACTION_CAR_SELECT_MODIFICATION_SCREEN,
+                            static_cast<s32>(sizeof(lModScreenAction)));
 
     if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
         *CgsDev::Log::gpDebugPrint << "=== CarSelectManager: Exit state is finished.\n";
 
     mJunkyardId = 0;   // X360 *(this+0x20) = 0
 
-    {
-        u8 lacResetDriver[1] = { 1 };
-        lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(lacResetDriver), KI_ACTION_RESET_PLAYER_DRIVER, 1);
-    }
+    // DWARF cpp:983.
+    GameStateModuleIO::AllowBoostEarningAction lAllowBoostEarningAction;
+    lAllowBoostEarningAction.mbAllowBoostEarning = true;
+    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lAllowBoostEarningAction),
+                            GameStateModuleIO::E_ACTION_ALLOW_BOOST_EARNING,
+                            static_cast<s32>(sizeof(lAllowBoostEarningAction)));
 
-    const BrnTrigger::SpawnLocation* lpExitSpawnLocation = maSpawnLocations[4];
-    if (lpExitSpawnLocation == 0)   // X360 v2[14] byte 0x38 == maSpawnLocations[4]
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpSpawnLocation", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 988));
-        CgsDev::Assert::EndAssert();
-    }
+    // DWARF cpp:987: the junkyard's exit spawn location (maSpawnLocations[4], +0x38).
+    const BrnTrigger::SpawnLocation* lpSpawnLocation = maSpawnLocations[4];
+    CGS_ASSERT_AT(lpSpawnLocation, "lpSpawnLocation", KAC_CSM_FILE, 988);
 
-    GameStateModuleIO::CarSelectExitAction lExitAction;
-    lExitAction.mExitSpawnLocation = lpExitSpawnLocation->mPosition;
-    lExitAction.mbOnlineCarSelect = false;
-    lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lExitAction),
-                      GameStateModuleIO::E_ACTION_CAR_SELECT_FINISHED, sizeof(lExitAction));
+    // DWARF cpp:991.
+    GameStateModuleIO::CarSelectExitAction lCarSelectExitAction;
+    lCarSelectExitAction.mExitSpawnLocation = lpSpawnLocation->mPosition;
+    lCarSelectExitAction.mbOnlineCarSelect  = false;
+    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lCarSelectExitAction),
+                            GameStateModuleIO::E_ACTION_CAR_SELECT_FINISHED,
+                            static_cast<s32>(sizeof(lCarSelectExitAction)));
 
-    {
-        u8 lacJunkInput[1] = { 0 };
-        lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(lacJunkInput), KI_ACTION_JUNKYARD_ENTERED, 1);
-    }
+    // DWARF cpp:997 JunkYardDriveThruAction (this tree's DriveThruJunkYardAction, id 99).
+    GameStateModuleIO::DriveThruJunkYardAction lJunkYardAction;
+    lJunkYardAction.mbIsInJunkYard = false;
+    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lJunkYardAction),
+                            GameStateModuleIO::E_ACTION_DRIVE_THRU_JUNK_YARD,
+                            static_cast<s32>(sizeof(lJunkYardAction)));
 
-    CgsID lDesiredCarId = mDesiredCarId;
-    const BrnProgression::CarData* lpCarData = GetProfileCarData(lDesiredCarId);
-    if (lpCarData == 0)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpCarData", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1004));
-        CgsDev::Assert::EndAssert();
-    }
+    // DWARF cpp:1002 (ARTIST passes &mDesiredCarId itself, 0x82398DA4).
+    const BrnProgression::CarData* lpCarData = GetProfileCarData(mDesiredCarId);
+    CGS_ASSERT_AT(lpCarData, "lpCarData", KAC_CSM_FILE, 1004);
 
-    // ResetPlayerCarAction (80B) -- the EXIT placement: this is the record that puts the player's
-    // car back on the junkyard's generic drive-in slot when they leave. ⛔ CORRECTED 2026-08-01:
-    // "the X360 vector copies are opaque" was wrong; they are the spawn transform, and the rest of
-    // the fields were at the wrong offsets. Attested at 0x82398DDC..0x82398E3C (payload base ==
-    // var_A0, size 0x50, r31 == 0, r25 == 1):
-    //   +0x00 mPosition (16B)   +0x10 mDirection (16B)   +0x20 mDesiredCarId (8B)   +0x28 0 (8B)
-    //   +0x30 8 (s32)           +0x34 deform (f32)       +0x38 1 (s32)              +0x3C 0 (s32)
-    //   +0x40..+0x43 all 0      [this is the one builder of the five whose trailing bytes are 0]
-    {
-        u8 lacReset[80];
-        std::memset(lacReset, 0, sizeof(lacReset));
-        const CgsID lDesired      = mDesiredCarId;
-        const f32   lfDeform      = lpCarData->GetUnlockDeformationAmount();
-        const s32   liCarSelType  = 8;
-        const s32   liInCarSelect = 1;
-        std::memcpy(lacReset + 0x00, &lpExitSpawnLocation->mPosition,  sizeof(Vector3));
-        std::memcpy(lacReset + 0x10, &lpExitSpawnLocation->mDirection, sizeof(Vector3));
-        std::memcpy(lacReset + 0x20, &lDesired,      sizeof(lDesired));
-        std::memcpy(lacReset + 0x30, &liCarSelType,  sizeof(liCarSelType));
-        std::memcpy(lacReset + 0x34, &lfDeform,      sizeof(lfDeform));
-        std::memcpy(lacReset + 0x38, &liInCarSelect, sizeof(liInCarSelect));
-        lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(lacReset), KI_ACTION_RESET_PLAYER_CAR, 80);
-    }
+    // DWARF cpp:1007: the car goes back onto the exit spawn point, out of car-select.
+    GameStateModuleIO::ResetPlayerCarAction lResetPlayerCarAction;
+    lResetPlayerCarAction.Construct();
+    lResetPlayerCarAction.SetLocation(lpSpawnLocation->mPosition, lpSpawnLocation->mDirection);
+    lResetPlayerCarAction.SetCarData(mDesiredCarId, 0);
+    lResetPlayerCarAction.SetDeformAmount(lpCarData->GetUnlockDeformationAmount());
+    lResetPlayerCarAction.SetInCarSelect(false);
+    lResetPlayerCarAction.SetCarSelectDontStreamAudio(false);
+    lResetPlayerCarAction.SetDeformationResetType(1);
+    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lResetPlayerCarAction),
+                            GameStateModuleIO::E_ACTION_RESET_PLAYER_CAR,
+                            static_cast<s32>(sizeof(lResetPlayerCarAction)));
 
-    // CarSelectExitAction (48B): payload[0]=1 (X360 v21[0]=1). FLAG: full layout not in exports.
-    {
-        u8 lacExit[48];
-        std::memset(lacExit, 0, sizeof(lacExit));
-        lacExit[0] = 1;
-        lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(lacExit), KI_ACTION_JUNKYARD_DRIVE_THRU, 48);
-    }
+    // DWARF cpp:1019: control goes back to the player.
+    GameStateModuleIO::SetPlayerCarDriverAction lSetPlayerCarDriverAction;
+    lSetPlayerCarDriverAction.mbIsDriveThru = false;
+    lSetPlayerCarDriverAction.meCarControl  = BrnWorld::E_CAR_CONTROL_ENTITY_MODULE;
+    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lSetPlayerCarDriverAction),
+                            GameStateModuleIO::E_ACTION_SET_PLAYER_CAR_DRIVER,
+                            static_cast<s32>(sizeof(lSetPlayerCarDriverAction)));
 
-    // RequestGameTrainingAction (4B: 0).
-    {
-        s32 liTraining = 0;
-        lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&liTraining), KI_ACTION_REQUEST_GAME_TRAINING, 4);
-    }
+    // DWARF cpp:1026.
+    GameStateModuleIO::RequestGameTrainingAction lTrainingAction;
+    lTrainingAction.meTrainingType = BrnProgression::E_TRAINING_TYPE_LEAVES_JUNKYARD;
+    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lTrainingAction),
+                            GameStateModuleIO::E_ACTION_REQUEST_GAME_TRAINING,
+                            static_cast<s32>(sizeof(lTrainingAction)));
 
-    // X360 raw poke: *(mpProgressionManager + 133512) = 1 (a drive-thrus-dirty / rivals-dirty flag).
-    mpProgressionManager->SetDriveThrusDirtyFlag();   // FLAG: ProgressionManager + 133512 (de-inlined byte poke)
+    mpProgressionManager->SetDriveThrusDirtyFlag();
 
     // X360 UpdateExitState @0x82398C20: `li r4, 1` -- the pause-REASON bit this exit clears, not a
     // bool (see the RequestUnpause signature note in BrnGameStateModule.h).
@@ -1211,21 +1169,14 @@ void CarSelectManager::UpdateExitState(GameStateModuleIO::GameActionQueue* lpAct
     if (!mpGameStateModule->IsOnlineGameMode())
         mpGameStateModule->OnPlayerCarChange(mDesiredCarId, 0, lpActionQueue, true);
 
-    if (mpProgressionManager == 0)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("mpProgressionManager", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1043));
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT_AT(mpProgressionManager, "mpProgressionManager", KAC_CSM_FILE, 1043);
+    mpProgressionManager->RequestUpdateRivals();
 
-    // X360 raw poke: *(mpProgressionManager + 133489) = 1 (rivals-update request flag).
-    mpProgressionManager->RequestUpdateRivals();   // FLAG: ProgressionManager + 133489 (de-inlined byte poke)
-
-    // RequestAutoSaveAction (1B: 0).
-    {
-        u8 lacAutosave[1] = { 0 };
-        lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(lacAutosave), KI_ACTION_AUTOSAVE, 1);
-    }
+    // DWARF cpp:1047 (RequestAutoSaveAction's constructor clears mbForceAutosave).
+    GameStateModuleIO::RequestAutoSaveAction lAutosaveAction;
+    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lAutosaveAction),
+                            GameStateModuleIO::E_ACTION_REQUEST_AUTOSAVE,
+                            static_cast<s32>(sizeof(lAutosaveAction)));
 
     mDesiredCarId = 0;   // X360 *v10 = 0
 }
@@ -1240,53 +1191,55 @@ void CarSelectManager::UpdateExitState(GameStateModuleIO::GameActionQueue* lpAct
 // ============================================================================
 void CarSelectManager::EnterJunkyard(GameStateModuleIO::GameActionQueue* lpActionQueue, CgsID lJunkyardId)
 {
-    if (meState != E_STATE_NONE)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("CarSelectManager: State is invalid", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 196));
-        CgsDev::Assert::EndAssert();
-    }
+    // ARTIST streams this assert through a StrStream over gpcMessageBuffer (line 196).
+    CGS_ASSERT_STREAM_AT(meState == E_STATE_NONE,
+                         "CarSelectManager: State is invalid", KAC_CSM_FILE, 196);
 
     if (mbDEBUG_UnlockTrophyCarsForTesting || mbDEBUG_UnlockShutdownCarsForTesting)   // X360 *(this+119)||*(this+120)
         DEBUG_UnlockCarsForTesting();
 
     mJunkyardId = lJunkyardId;   // X360 *(this+0x20) = lJunkyardId
 
+    // ARTIST 0x823985DC..0x82398628: the id goes out in hex-once mode (`stw 2, 4(stream)`) through
+    // the out-of-line operator<<(u64) 0x82203EE8.
     if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
     {
-        *CgsDev::Log::gpDebugPrint << "=== CarSelectManager: EnterJunkyard: ";
-        // X360 then streams the junkyard id then "\n" (pure logging; id stream omitted -- the
-        // StrStream id-format helper sub_82203EE8 is out of scope for parity).
-        *CgsDev::Log::gpDebugPrint << "\n";
+        *CgsDev::Log::gpDebugPrint << "=== CarSelectManager: EnterJunkyard: "
+                                   << CgsDev::E_PRINTMODE_HEXONCE << mJunkyardId << "\n";
     }
 
     SetupSpawnLocations();
 
-    GameActionQueueImpl* lpQueue = AsActionQueue(lpActionQueue);
+    // DWARF cpp:212 JunkYardDriveThruAction (this tree's DriveThruJunkYardAction, id 99).
+    GameStateModuleIO::DriveThruJunkYardAction lJunkYardAction;
+    lJunkYardAction.mbIsInJunkYard = true;
+    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lJunkYardAction),
+                            GameStateModuleIO::E_ACTION_DRIVE_THRU_JUNK_YARD,
+                            static_cast<s32>(sizeof(lJunkYardAction)));
 
-    {
-        u8 lacEntered[1] = { 1 };
-        lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(lacEntered), KI_ACTION_JUNKYARD_ENTERED, 1);
-    }
-    {
-        u8 lacDriveThru[48];
-        std::memset(lacDriveThru, 0, sizeof(lacDriveThru));   // X360 v21[0]=0, v22=0
-        lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(lacDriveThru), KI_ACTION_JUNKYARD_DRIVE_THRU, 48);
-    }
-    {
-        u8 lacResetDriver[1] = { 0 };
-        lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(lacResetDriver), KI_ACTION_RESET_PLAYER_DRIVER, 1);
-    }
-    {
-        u8 lacInput[1] = { 0 };
-        lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(lacInput), KI_ACTION_SET_INPUT_ENABLED, 1);
-    }
+    // DWARF cpp:217.
+    GameStateModuleIO::SetPlayerCarDriverAction lSetPlayerCarDriverAction;
+    lSetPlayerCarDriverAction.mbIsDriveThru = false;
+    lSetPlayerCarDriverAction.meCarControl  = BrnWorld::E_CAR_CONTROL_NONE;
+    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lSetPlayerCarDriverAction),
+                            GameStateModuleIO::E_ACTION_SET_PLAYER_CAR_DRIVER,
+                            static_cast<s32>(sizeof(lSetPlayerCarDriverAction)));
 
-    // Snapshot the active player car id into mStartCarId, then pin its chosen-livery base car on the
-    // profile (X360 reads the active car CgsID at GameStateModule + 0x456D8).
-    const CgsID lActiveCarId = mpGameStateModule->GetActivePlayerCarId();
-    mStartCarId = lActiveCarId;
-    mpProgressionManager->GetProfile()->SetChosenLiveryIdForBaseCar(lActiveCarId);
+    // DWARF cpp:223 / cpp:228 (StopBoostingAction has no members: its one byte is posted as is).
+    GameStateModuleIO::AllowBoostEarningAction lAllowBoostEarningAction;
+    lAllowBoostEarningAction.mbAllowBoostEarning = false;
+    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lAllowBoostEarningAction),
+                            GameStateModuleIO::E_ACTION_ALLOW_BOOST_EARNING,
+                            static_cast<s32>(sizeof(lAllowBoostEarningAction)));
+    GameStateModuleIO::StopBoostingAction lStopBoostingAction;
+    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lStopBoostingAction),
+                            GameStateModuleIO::E_ACTION_STOP_BOOSTING,
+                            static_cast<s32>(sizeof(lStopBoostingAction)));
+
+    // The active player car becomes the start car and its own chosen livery (ARTIST passes the id
+    // twice, r4/r5, 0x823986AC..B0; DWARF Profile::SetChosenLiveryIdForBaseCar(CgsID, CgsID)).
+    mStartCarId = mpGameStateModule->GetActivePlayerCarId();
+    mpProgressionManager->GetProfile()->SetChosenLiveryIdForBaseCar(mStartCarId, mStartCarId);
 
     StartTransitionInState(lpActionQueue);
 }
@@ -1308,79 +1261,49 @@ void CarSelectManager::EnterJunkyardAtStartOfGame(GameStateModuleIO::GameActionQ
 
     SetupSpawnLocations();
 
-    const BrnTrigger::SpawnLocation* lpSpawnLocation = maSpawnLocations[1];   // X360 *(this+44)
-    if (lpSpawnLocation == 0)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpSpawnLocation", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1589));
-        CgsDev::Assert::EndAssert();
-    }
-    if (static_cast<u32>(lpSpawnLocation->GetType()) >= static_cast<u32>(BrnTrigger::SpawnLocation::E_TYPE_COUNT))
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("muType < E_TYPE_COUNT", CGS_ASSERT_LOCATION(KAC_SPAWNLOC_FILE, 152));
-        CgsDev::Assert::EndAssert();
-    }
+    // DWARF cpp:1588: the left car-select spawn point (maSpawnLocations[1], +0x2C).
+    const BrnTrigger::SpawnLocation* lpSpawnLocation = maSpawnLocations[BrnTrigger::SpawnLocation::E_TYPE_CAR_SELECT_LEFT];
+    CGS_ASSERT_AT(lpSpawnLocation, "lpSpawnLocation", KAC_CSM_FILE, 1589);
+    meLastSpawnLocationType = lpSpawnLocation->GetType();   // X360 *(this+60)
 
-    meLastSpawnLocationType = static_cast<s32>(lpSpawnLocation->GetType());   // X360 *(this+60)
+    // DWARF cpp:1592: the start-of-game car drops into the junkyard's car-select slot with the
+    // -1.0 no-deform sentinel Construct leaves (ARTIST 0x82393124); +0x38 is not written.
+    GameStateModuleIO::ResetPlayerCarAction lResetPlayerCarAction;
+    lResetPlayerCarAction.Construct();
+    lResetPlayerCarAction.SetLocation(lpSpawnLocation->GetPosition(), lpSpawnLocation->GetDirection());
+    lResetPlayerCarAction.SetPlayerScoringIndex(leScoringIndex);
+    lResetPlayerCarAction.SetCarData(lCarModelId, lWheelId);
+    lResetPlayerCarAction.SetInCarSelect(true);
+    lResetPlayerCarAction.SetCarSelectType(GameStateModuleIO::ResetPlayerCarAction::E_CAR_SELECT_DONT_DROP);
+    lResetPlayerCarAction.SetCarSelectDontStreamAudio(false);
+    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lResetPlayerCarAction),
+                            GameStateModuleIO::E_ACTION_RESET_PLAYER_CAR,
+                            static_cast<s32>(sizeof(lResetPlayerCarAction)));
 
-    // ⛔⛔ CORRECTED 2026-08-01 (reset-player-car wave). THE START-OF-GAME RECORD WAS STILL BUILT AT
-    // THE OLD WRONG OFFSETS -- the previous wave fixed five ResetPlayerCarAction producers and
-    // missed this one, which lives in this file rather than BrnCarSelectManager_CarChange.cpp. It
-    // is the ONE the whole junkyard flow depends on: SendSetupPlayerCarEvent @0x8239A918 and
-    // OnProfileLoaded @0x82397310 are its only callers, and they are the start-of-game entry.
-    //
-    // What was wrong, measured against 0x8239310C..0x82393174 (record base == var_B0, size 0x50):
-    //   * the car model id was written at +0x00, ON TOP OF the spawn POSITION      (real: +0x20)
-    //   * the wheel id at +0x08, on top of the position's z/w lanes                (real: +0x28)
-    //   * the scoring index at +0x10, on top of the spawn DIRECTION                (real: +0x30)
-    //   * THE SPAWN TRANSFORM WAS ABSENT ENTIRELY -- so the consumer's
-    //     HasToChangeLocation() would have read the car id as a position and placed the car
-    //     wherever those bits landed.
-    // Real stores, one per field:
-    //   +0x00 stvx128 lvx128(spawnLoc+0x00)   mPosition
-    //   +0x10 stvx128 lvx128(spawnLoc+0x10)   mDirection
-    //   +0x20 std r26  mCarModelId      +0x28 std r24  mWheelModelId
-    //   +0x30 stw r23  mePlayerScoringIndex  (the 5th argument)
-    //   +0x34 stfs -1.0 mfDeformationAmount  (flt_820037C8)
-    //   +0x3C stw 0    +0x40 stb 1  +0x41 stb 0  +0x42 stb 0  +0x43 stb 0
-    // ⚠️ +0x38 is NOT written -- the console does not memset this record, and leaving that field
-    // uninitialised is safe ONLY because +0x34 carries the -1.0 sentinel that gates the consumer's
-    // read of the pair. The typed struct below zero-initialises it, which is strictly safer.
-    {
-        GameStateModuleIO::ResetPlayerCarAction lReset;
-        std::memset(&lReset, 0, sizeof(lReset));
-        lReset.mPosition            = lpSpawnLocation->mPosition;
-        lReset.mDirection           = lpSpawnLocation->mDirection;
-        lReset.mCarModelId          = lCarModelId;
-        lReset.mWheelModelId        = lWheelId;
-        lReset.mePlayerScoringIndex = leScoringIndex;
-        lReset.mfDeformationAmount  = KF_STARTOFGAME_DEFORM_SENTINEL;   // -1.0
-        lReset.meCarSelectType      = GameStateModuleIO::ResetPlayerCarAction::E_CAR_SELECT_DONT_DROP;
-        lReset.mbInCarSelectScreen  = true;                             // X360 v27 = 1
-        AsActionQueue(lpActionQueue)->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lReset), KI_ACTION_RESET_PLAYER_CAR,
-            static_cast<s32>(sizeof(lReset)));
-    }
-
-    // Fill the caller's CarSelectionChangedAction (X360 0x82393178..0x823931E0). ⛔ THE TRANSFORM
-    // COPY WAS MISSING: the console does `std mJunkyardId, 0(r28)` then TWO stvx128 at r28+0x10
-    // and r28+0x20 (the spawn location's position and direction) before the type bit at +0x30.
-    // The old body wrote the id and the bit and dropped both vectors -- the same "the transform is
-    // opaque" mistake the sibling producers were corrected for one wave ago.
-    if (lpCarSelectChangedAction != 0)
-    {
-        lpCarSelectChangedAction->mJunkyardId         = mJunkyardId;
-        lpCarSelectChangedAction->mPosition           = lpSpawnLocation->mPosition;
-        lpCarSelectChangedAction->mDirection          = lpSpawnLocation->mDirection;
-        lpCarSelectChangedAction->mbJunkyardPosIsLeft =
-            (static_cast<u32>(lpSpawnLocation->GetType()) == 1u);
-        lpCarSelectChangedAction->mbReserved0x31      = false;
-    }
+    // The caller's selection record (ARTIST 0x82393178..0x823931E0 stores through it unguarded).
+    lpCarSelectChangedAction->mJunkyardId           = mJunkyardId;
+    lpCarSelectChangedAction->mPosition             = lpSpawnLocation->GetPosition();
+    lpCarSelectChangedAction->mDirection            = lpSpawnLocation->GetDirection();
+    lpCarSelectChangedAction->mbIsLeft              = lpSpawnLocation->GetType() == BrnTrigger::SpawnLocation::E_TYPE_CAR_SELECT_LEFT;
+    lpCarSelectChangedAction->mbPlayCraneDropAudio  = false;
 
     mpGameStateModule->OnSpecialEventPlayerCarChange(lCarModelId, lWheelId, lpActionQueue, true);
 
     mStartCarId = lCarModelId;   // X360 *(this+64) = v7 (car model id)
+}
+
+// ============================================================================
+// UpdateCarColour (DWARF cpp:1523, h:167; no ARTIST copy: every caller inlines it).
+// The car's colour and palette, read straight into the action's fields.
+// ============================================================================
+void CarSelectManager::UpdateCarColour(CgsID lCarId, GameStateModuleIO::GameActionQueue* lpActionQueue) const
+{
+    GameStateModuleIO::CarSelectChangeColourAction lChangeCarColourAction;
+    mpProgressionManager->GetCarColourAndPalette(lCarId, lChangeCarColourAction.muColourIndex,
+                                                 lChangeCarColourAction.muPaletteIndex);
+    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lChangeCarColourAction),
+                            GameStateModuleIO::E_ACTION_CAR_SELECT_CHANGE_COLOUR,
+                            static_cast<s32>(sizeof(lChangeCarColourAction)));
 }
 
 // ============================================================================
@@ -1392,54 +1315,40 @@ void CarSelectManager::EnterJunkyardAtStartOfGame(GameStateModuleIO::GameActionQ
 // ============================================================================
 void CarSelectManager::ReallyEnterJunkyardAtStartOfGame(GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
-    GameActionQueueImpl* lpQueue = AsActionQueue(lpActionQueue);
+    // DWARF cpp:1628: the player keeps no driver while the junkyard takes over.
+    GameStateModuleIO::SetPlayerCarDriverAction lSetPlayerCarDriverAction;
+    lSetPlayerCarDriverAction.mbIsDriveThru = false;
+    lSetPlayerCarDriverAction.meCarControl  = BrnWorld::E_CAR_CONTROL_NONE;
+    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lSetPlayerCarDriverAction),
+                            GameStateModuleIO::E_ACTION_SET_PLAYER_CAR_DRIVER,
+                            static_cast<s32>(sizeof(lSetPlayerCarDriverAction)));
 
-    {
-        u8 lacDriveThru[48];
-        std::memset(lacDriveThru, 0, sizeof(lacDriveThru));
-        lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(lacDriveThru), KI_ACTION_JUNKYARD_DRIVE_THRU, 48);
-    }
+    UpdateCarColour(mStartCarId, lpActionQueue);
 
-    // CarSelectChangeColourAction (8B): the desired car's palette + colour.
-    // ⭐ THIS is the event that paints the Hunter Cavalry its authored colour on the junkyard
-    // start-of-game path. X360 0x8239322C..0x82393250: `r5 = sp+0x5C` (the COLOUR out-param),
-    // `r6 = sp+0x58` (the PALETTE out-param), then `AddEvent(sp+0x58, 79, 8)` -- the payload
-    // BASE is the palette slot, so the record is {palette, colour}, not {colour, palette}.
+    // DWARF cpp:1640: a brand-new profile's start car is handed out pre-deformed (0.85 read from
+    // the same constant as the livery-select delay, 0x82029BB8).
+    GameStateModuleIO::JunkYardDriveThruOnGameStartAction lGameAction;
+    if (mpProgressionManager->GetProfile()->GetIsNewProfile())
     {
-        GameStateModuleIO::CarSelectChangeColourAction lColour;
-        s32 liColour  = 0;
-        s32 liPalette = 0;
-        mpProgressionManager->GetCarColourAndPalette(mStartCarId, &liColour, &liPalette);
-        lColour.muPaletteIndex = static_cast<u32>(liPalette);
-        lColour.muColourIndex  = static_cast<u32>(liColour);
-        lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lColour),
-                          KI_ACTION_CAR_SELECT_CHANGE_COLOUR, static_cast<s32>(sizeof(lColour)));
+        BrnProgression::CarData* lpCarData = mpProgressionManager->GetProfile()->FindCar(mStartCarId);
+        CGS_ASSERT_AT(lpCarData, "lpCarData", KAC_CSM_FILE, 1646);
+        lGameAction.mbNewProfile = true;
+        lpCarData->SetUnlockDeformationAmount(KF_LIVERYSELECT_DELAY_BEFORE_CHANGE);
     }
+    else
+    {
+        lGameAction.mbNewProfile = false;
+    }
+    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lGameAction),
+                            GameStateModuleIO::E_ACTION_DRIVE_THRU_JUNK_YARD_ON_GAME_START,
+                            static_cast<s32>(sizeof(lGameAction)));
 
-    u8 lacStartupDeform[1] = { 0 };
-    BrnProgression::Profile* lpProfile = mpProgressionManager->GetProfile();
-    // X360: `if ( *(mpProgressionManager + 118401) )`. mProfile is embedded at ProgressionManager
-    // +0x170 (368), so that byte is Profile +118033 == mbIsNewProfile -- the start-of-game deform
-    // is gated on the profile being BRAND NEW. (The old comment here said "Profile + 118401",
-    // which is 368 bytes past the real member; see the body in BrnProfile.cpp.)
-    if (lpProfile->IsStartOfGameDeformActive())
-    {
-        BrnProgression::CarData* lpCarData = lpProfile->FindCar(mStartCarId);
-        if (lpCarData == 0)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpCarData", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1646));
-            CgsDev::Assert::EndAssert();
-        }
-        lacStartupDeform[0] = 1;
-        lpCarData->SetUnlockDeformationAmount(KF_LIVERYSELECT_DELAY_BEFORE_CHANGE);   // 0.85 (X360 *(car+12) = 0.85)
-    }
-    lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(lacStartupDeform), KI_ACTION_STARTUP_DEFORM, 1);
-
-    {
-        u8 lacEntered[1] = { 1 };
-        lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(lacEntered), KI_ACTION_JUNKYARD_ENTERED, 1);
-    }
+    // DWARF cpp:1661 JunkYardDriveThruAction (this tree's DriveThruJunkYardAction, id 99).
+    GameStateModuleIO::DriveThruJunkYardAction lJunkYardAction;
+    lJunkYardAction.mbIsInJunkYard = true;
+    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lJunkYardAction),
+                            GameStateModuleIO::E_ACTION_DRIVE_THRU_JUNK_YARD,
+                            static_cast<s32>(sizeof(lJunkYardAction)));
 
     StartTransitionInState(lpActionQueue);
 }
@@ -1451,21 +1360,19 @@ void CarSelectManager::ReallyEnterJunkyardAtStartOfGame(GameStateModuleIO::GameA
 // ============================================================================
 void CarSelectManager::ExitJunkyard(GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
-    if (meState != E_STATE_CAR_MODIFICATION)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("CarSelectManager: State needs to be in E_STATE_CAR_MODIFICATION.", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 503));
-        CgsDev::Assert::EndAssert();
-    }
+    // ARTIST 0x823878A0..0x82387914: the streamed assert (StrStream over gpcMessageBuffer, cpp:503).
+    CGS_ASSERT_STREAM_AT(meState == E_STATE_CAR_MODIFICATION,
+                         "CarSelectManager: State needs to be in E_STATE_CAR_MODIFICATION.", KAC_CSM_FILE, 503);
 
     mfStateTimer = KF_TIMER_RESET;   // 0.0
     meState      = E_STATE_EXITING;  // 9
 
-    {
-        u8 lacExit[1] = { 1 };
-        AsActionQueue(lpActionQueue)->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(lacExit), KI_ACTION_CAR_SELECT_EXIT, 1);
-    }
+    // DWARF cpp:508.
+    GameStateModuleIO::CarSelectWaitingForAudioAction lWaitingForAudioAction;
+    lWaitingForAudioAction.mbWaiting = true;
+    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lWaitingForAudioAction),
+                            GameStateModuleIO::E_ACTION_CAR_SELECT_WAITING_FOR_AUDIO,
+                            static_cast<s32>(sizeof(lWaitingForAudioAction)));
 
     mbWaitingForStreaming = true;   // X360 *(this+88) = 1
     mbCarUnlockEnabled    = true;   // X360 *(this+117) = 1 == byte 0x75 == mbCarUnlockEnabled (re-enable car unlock on exit)
@@ -1501,6 +1408,760 @@ void CarSelectManager::ForceExitJunkyard(GameStateModuleIO::GameActionQueue* lpA
 
     mbCarUnlockEnabled = true;   // X360 *(this+117) = 1 == byte 0x75 == mbCarUnlockEnabled (re-enable car unlock on exit)
 }
+// ---- formerly BrnCarSelectManager_CarChange.cpp (same DWARF home file) ----
+
+// ============================================================================
+// GetProfileCarData (X360 0x82365760).
+// Resolve the player Profile's CarData record whose car id == lrCarID, or NULL on miss. Used by the
+// unlock-display / change-car / exit / spawn paths to fetch the deform amount + id of the car being
+// shown or spawned. (lrCarID is taken by reference to mirror the DWARF signature; only its value is
+// read here.)
+// ============================================================================
+const BrnProgression::CarData* CarSelectManager::GetProfileCarData(CgsID& lrCarID) const
+{
+    if (mpProgressionManager == 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("mpProgressionManager", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1341));
+        CgsDev::Assert::EndAssert();
+    }
+
+    BrnProgression::Profile* lpProfile = mpProgressionManager->GetProfile();
+    if (lpProfile == 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("lpProfile", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1347));
+        CgsDev::Assert::EndAssert();
+    }
+
+    const BrnProgression::CarData* lpCarData = 0;
+    const s32 liCarCount = lpProfile->GetCarCount();
+    for (s32 li = 0; li < liCarCount; ++li)
+    {
+        const BrnProgression::CarData* lpCandidate = lpProfile->GetCarData(li);
+        if (lpCandidate->GetId() == lrCarID)
+        {
+            lpCarData = lpCandidate;
+            break;
+        }
+    }
+
+    if (lpCarData == 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("lpCarData", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1351));
+        CgsDev::Assert::EndAssert();
+    }
+    return lpCarData;
+}
+
+// ============================================================================
+// IsThisCarInCurrentUnlockSequence (X360 0x823799E8).
+// Predicate used while building the unlock list (and walking GetNextUnlockCarID): does this profile
+// car belong in the set of cars whose unlock is being shown right now?
+//
+// CarData fields the X360 reads:
+//   +0x0A  bool  -- a per-car "hidden / already-shown" flag (true => excluded from BOTH paths).
+//   +0x10  s32   -- the car's UNLOCK-TYPE enumerator (1/2/3 == various trophy/event unlocks, 5 == a
+//                   rank-gated unlock, etc.).
+// Two modes, selected by mbShutdownUnlockSequence (X360 *(this+0x74)):
+//   * shutdown-unlock list (mbShutdownUnlockSequence != 0): in iff unlock-type == 3.
+//   * normal list (mbShutdownUnlockSequence == 0):
+//       - unlock-type == 3  -> NOT in this list (it belongs to the shutdown list).
+//       - unlock-type == 5  -> in iff the player's progression rank >= the car's required rank
+//                              (read from the VehicleListEntry gameplay data, +0x99).
+//       - any other type    -> in.
+// The hidden-flag at +0x0A short-circuits everything to "false".
+// ============================================================================
+bool CarSelectManager::IsThisCarInCurrentUnlockSequence(const BrnProgression::CarData* lpProfileCar) const
+{
+    if (lpProfileCar->WasUnlockSequenceAlreadyShown())   // X360 *(lpProfileCar + 0x0A) -- FLAG: CarData +0x0A bool
+        return false;
+
+    const s32 leUnlockType = lpProfileCar->GetUnlockType();   // X360 *(lpProfileCar + 0x10) -- FLAG: CarData +0x10 s32
+
+    if (mbShutdownUnlockSequence)   // X360 *(this + 0x74) == mbShutdownUnlockSequence (the +0x70 select)
+        return leUnlockType == 3;
+
+    if (leUnlockType == 5)
+    {
+        // Rank-gated unlock: in iff the player's progression rank has reached the car's requirement.
+        const s32 liVehicleIndex = mpVehicleList->GetVehicleIndex(lpProfileCar->GetId());
+        const BrnResource::VehicleListEntry* lpEntry =
+            (liVehicleIndex < 0) ? 0 : mpVehicleList->GetVehicleData(liVehicleIndex);
+        if (lpEntry == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpVehicleListEntry != NULL", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1169));
+            CgsDev::Assert::EndAssert();
+        }
+        // X360 takes &entry->mGamePlayData (entry + 0x90) and asserts it non-NULL (it never is for a
+        // by-value sub-object, but the baked assert is reproduced for fidelity), then reads the
+        // required-rank byte at +0x09 of that sub-object.
+        if (lpEntry == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpVehicleListEntryGamePlayData != NULL", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1172));
+            CgsDev::Assert::EndAssert();
+        }
+        const s32 liRequiredRank = lpEntry->GetUnlockRank();   // X360 *(entry + 0x90 + 0x09) -- FLAG
+        if (mpProgressionManager->GetProgressionRank() >= liRequiredRank)
+            return true;
+        return false;
+    }
+    else
+    {
+        // Every non-rank-gated unlock is in the normal list -- except the shutdown-only type 3.
+        if (leUnlockType != 3)
+            return true;
+        return false;
+    }
+}
+
+// ============================================================================
+// SetupNormalUnlockList (X360 0x82379AD8).
+// Recount how many profile cars belong in the NORMAL unlock-display sequence: clear the count + the
+// shutdown-select flag, then (offline only, and only when unlock is enabled) walk every profile car
+// and tally the ones IsThisCarInCurrentUnlockSequence accepts. Finally latch mbNoNormalUnlockCars =
+// (count == 0). muUnlockCount drives the transition-in min-time + the unlock-state branch.
+// ============================================================================
+void CarSelectManager::SetupNormalUnlockList()
+{
+    if (mpProgressionManager == 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("mpProgressionManager", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1199));
+        CgsDev::Assert::EndAssert();
+    }
+    BrnProgression::Profile* lpProfile = mpProgressionManager->GetProfile();
+    if (lpProfile == 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("lpProfile", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1203));
+        CgsDev::Assert::EndAssert();
+    }
+
+    muUnlockCount            = 0;   // X360 *(this + 0x5C) = 0
+    mbShutdownUnlockSequence = false;   // X360 *(this + 0x74) = 0 (select the normal predicate)
+
+    // Offline only, and only when car-unlock is enabled (X360 *(this + 0x75) == mbCarUnlockEnabled).
+    if (!mpGameStateModule->IsOnlineGameMode() && mbCarUnlockEnabled)
+    {
+        // The count is re-read every pass (lwz 0x26c at 0x82379BD8).
+        for (s32 li = 0; li < lpProfile->GetCarCount(); ++li)
+        {
+            const BrnProgression::CarData* lpProfileCar = lpProfile->GetCarData(li);
+            if (lpProfileCar == 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("lpProfileCar", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1217));
+                CgsDev::Assert::EndAssert();
+            }
+            if (IsThisCarInCurrentUnlockSequence(lpProfileCar))
+                ++muUnlockCount;
+        }
+    }
+
+    mbNoNormalUnlockCars = (muUnlockCount < 1);    // X360 0x82379BEC: unsigned compare with 1 (subfc/subfe)
+}
+
+// ============================================================================
+// SetupShutdownUnlockList (X360 0x82379C08).
+// The "Burning Route / shutdown rival" variant: arm the shutdown-select flag, recount how many
+// profile cars are in the shutdown sequence (offline + unlock-enabled), leaving muUnlockCount set.
+// Unlike the normal list it does NOT touch mbNoNormalUnlockCars (it only sets the +0x70 select to 1
+// up front). Used when entering the junkyard after taking down a rival who drops a car.
+// ============================================================================
+void CarSelectManager::SetupShutdownUnlockList()
+{
+    if (mpProgressionManager == 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("mpProgressionManager", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1239));
+        CgsDev::Assert::EndAssert();
+    }
+    BrnProgression::Profile* lpProfile = mpProgressionManager->GetProfile();
+    if (lpProfile == 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("lpProfile", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1243));
+        CgsDev::Assert::EndAssert();
+    }
+
+    // X360 0x82379C08 writes BOTH bytes: *(this + 0x70) = 1 (mbNoNormalUnlockCars -- the "this junkyard
+    // entry should run a shutdown-rival unlock display" select StartTransitionInState/StartUnlockState
+    // read) AND *(this + 0x74) = 1 (mbShutdownUnlockSequence -- the IsThisCarInCurrentUnlockSequence
+    // shutdown-predicate select). They are set together here but read at different points, so they are
+    // kept DISTINCT (folding them is unsafe: SetupNormalUnlockList clears only 0x74 while leaving 0x70 live).
+    mbNoNormalUnlockCars     = true;    // X360 *(this + 0x70) = 1
+    muUnlockCount            = 0;       // X360 *(this + 0x5C) = 0
+    mbShutdownUnlockSequence = true;    // X360 *(this + 0x74) = 1
+
+    if (!mpGameStateModule->IsOnlineGameMode() && mbCarUnlockEnabled)
+    {
+        // The count is re-read every pass (lwz 0x26c at 0x82379D10).
+        for (s32 li = 0; li < lpProfile->GetCarCount(); ++li)
+        {
+            const BrnProgression::CarData* lpProfileCar = lpProfile->GetCarData(li);
+            if (lpProfileCar == 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("lpProfileCar", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1258));
+                CgsDev::Assert::EndAssert();
+            }
+            if (IsThisCarInCurrentUnlockSequence(lpProfileCar))
+                ++muUnlockCount;
+        }
+    }
+}
+
+// ============================================================================
+// GetNextUnlockCarID (X360 0x82379D28).
+// Given the car id currently being shown (lCurrentID, or kCGSID_NULL to start), return the id of the
+// NEXT profile car in the unlock sequence. Finds lCurrentID's index in the profile car array (asserts
+// it is present when non-null), then scans forward from index+1 for the first car
+// IsThisCarInCurrentUnlockSequence accepts. Asserts "Can't find next unlock!" + returns kCGSID_NULL if
+// none remains.
+// ============================================================================
+CgsID CarSelectManager::GetNextUnlockCarID(CgsID lCurrentID)
+{
+    BrnProgression::Profile* lpProfile = mpProgressionManager->GetProfile();
+    if (lpProfile == 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("lpProfile", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1372));
+        CgsDev::Assert::EndAssert();
+    }
+
+    s32 liCurrentIndex = -1;
+
+    if (lCurrentID != 0)
+    {
+        s32 liCarCount = lpProfile->GetCarCount();
+        s32 liCarIndex = 0;
+        if (liCarCount > 0)
+        {
+            for (;;)
+            {
+                if (liCarIndex < 0 || liCarIndex >= liCarCount)
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert(
+                        "liCarIndex >= 0 && liCarIndex < miCarCount", CGS_ASSERT_LOCATION(KAC_BRNPROFILE_FILE, 1923));
+                    CgsDev::Assert::EndAssert();
+                }
+                if (lpProfile->GetCarData(liCarIndex)->GetId() == lCurrentID)
+                {
+                    liCurrentIndex = liCarIndex;
+                    break;
+                }
+                liCarCount = lpProfile->GetCarCount();
+                ++liCarIndex;
+                if (liCarIndex >= liCarCount)
+                    break;
+            }
+        }
+        if (liCurrentIndex < 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("liCurrentIndex >=0", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1386));
+            CgsDev::Assert::EndAssert();
+        }
+    }
+
+    s32 liCarCount = lpProfile->GetCarCount();
+    s32 liNextIndex = liCurrentIndex + 1;
+    if (liNextIndex >= liCarCount)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("Can't find next unlock!\n", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1401));
+        CgsDev::Assert::EndAssert();
+        return 0;
+    }
+
+    for (;;)
+    {
+        if (liNextIndex < 0 || liNextIndex >= liCarCount)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "liCarIndex >= 0 && liCarIndex < miCarCount", CGS_ASSERT_LOCATION(KAC_BRNPROFILE_FILE, 1923));
+            CgsDev::Assert::EndAssert();
+        }
+        const BrnProgression::CarData* lpProfileCar = lpProfile->GetCarData(liNextIndex);
+        if (lpProfileCar == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpProfileCar", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1393));
+            CgsDev::Assert::EndAssert();
+        }
+        if (IsThisCarInCurrentUnlockSequence(lpProfileCar))
+            return lpProfileCar->GetId();
+
+        liCarCount = lpProfile->GetCarCount();
+        ++liNextIndex;
+        if (liNextIndex >= liCarCount)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("Can't find next unlock!\n", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1401));
+            CgsDev::Assert::EndAssert();
+            return 0;
+        }
+    }
+}
+
+// ============================================================================
+// RequestChangeCar (X360 0x82387990).
+// Public entry: the player asked to switch to lCarId. Asserts a non-null id. If a car change is
+// already in flight (state 7/8), it just stashes lCarId in mCacheDuringChangeCarId (it will be picked
+// up when the in-flight swap finishes). Otherwise it records the chosen livery for the new car (from
+// the live selection when in the car-mod screen, else from the saved per-car choice), stores lCarId
+// as mDesiredCarId, resets the timer, and enters E_STATE_REQUEST_CAR_CHANGE so Update can drive the
+// teleport/swap on the next ticks.
+// ============================================================================
+void CarSelectManager::RequestChangeCar(const CgsID& lCarId)
+{
+    if (lCarId == 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("lCardId != kCGSID_NULL", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 569));
+        CgsDev::Assert::EndAssert();
+    }
+
+    if (meState == E_STATE_CHANGING_CAR || meState == E_STATE_STARTING_CHANGING_CAR)
+    {
+        // A swap is mid-flight; cache the request for when it completes.
+        mCacheDuringChangeCarId = lCarId;
+        return;
+    }
+
+    BrnProgression::Profile* lpProfile = mpProgressionManager->GetProfile();
+    if (lpProfile == 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("lpProfile", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 580));
+        CgsDev::Assert::EndAssert();
+    }
+
+    if (mbInCarModScreen)   // X360 *(this + 0x73) == mbInCarModScreen
+    {
+        // In the car-mod screen the player picked a livery live -- persist that choice for lCarId.
+        SaveChosenLiveryForCar(lCarId);
+        mDesiredCarId = lCarId;
+    }
+    else
+    {
+        // Otherwise look up the livery already chosen for this base car.
+        mDesiredCarId = lpProfile->GetChosenLiveryIdForBaseCar(lCarId);
+    }
+
+    mfStateTimer = 0.0f;
+    meState      = E_STATE_REQUEST_CAR_CHANGE;
+
+    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+    {
+        // ARTIST 0x82387A7C..0x82387A9C: the id in hex-once mode through operator<<(u64) 0x82203EE8.
+        *CgsDev::Log::gpDebugPrint << "=== CarSelectManager: RequestChangeCar, CarId: "
+                                   << CgsDev::E_PRINTMODE_HEXONCE << lCarId << "\n";
+    }
+}
+
+// ============================================================================
+// RequestStreamingForUnlock (X360 0x82387E78).
+// Kick the world to start streaming the car(s) involved in the current unlock step, then latch
+// mbWaitingForStreaming so the state machine stalls until StreamingFinished clears it.
+//   * muUnlockCount == 0 -> nothing to stream (returns without arming the wait).
+//   * muUnlockCount == 1 -> stream just the current unlock car (one CarUnlockEndAction entry).
+//   * muUnlockCount >  1 -> stream the current unlock car AND prefetch the NEXT one (two entries; the
+//                          second entry's "is-stream-target" flag layout differs for the prefetch).
+// The action posted is CarUnlockEndAction (type 69 == 0x45, size 88 == 0x58).
+// ============================================================================
+void CarSelectManager::RequestStreamingForUnlock(GameStateModuleIO::GameActionQueue* lpActionQueue)
+{
+    if (muUnlockCount > 0)
+    {
+        // DWARF cpp:1424: the car being unlocked (extra-info 4, priority 0) and, when another car
+        // follows, the next one (ARTIST 0x82387EA8..0x82387EF4; the flag/priority values are the
+        // stores' immediates).
+        GameStateModuleIO::CarSelectionRequestStreamingAction lRequestStreaming;
+        lRequestStreaming.maCars[0]            = mCurrentCarToUnlock;
+        lRequestStreaming.mauExtraInfoFlags[0] = 4;
+        lRequestStreaming.maiPriorities[0]     = 0;
+        lRequestStreaming.miCount              = 1;
+
+        // DWARF cpp:1432.
+        const u32 luCarsRemaining = muUnlockCount - 1;
+        if (luCarsRemaining > 0)
+        {
+            lRequestStreaming.maCars[1] = GetNextUnlockCarID(mCurrentCarToUnlock);
+            if (lRequestStreaming.maCars[1] != 0)
+            {
+                lRequestStreaming.miCount = 2;
+                if (meState == E_STATE_TRANSITION_IN)
+                {
+                    lRequestStreaming.mauExtraInfoFlags[1] = 0;
+                    lRequestStreaming.maiPriorities[1]     = 1;
+                }
+                else
+                {
+                    lRequestStreaming.mauExtraInfoFlags[1] = 4;
+                    lRequestStreaming.maiPriorities[1]     = 0;
+                }
+            }
+        }
+        lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lRequestStreaming),
+                                GameStateModuleIO::E_ACTION_CAR_SELECTION_REQUEST_STREAMING,
+                                static_cast<s32>(sizeof(lRequestStreaming)));
+        mbWaitingForStreaming = true;
+    }
+}
+
+// ============================================================================
+// StreamingFinished (X360 0x82387210).
+// Streaming-complete callback (the world finished streaming the car we asked for). Only acts when the
+// completed car id (lActiveCarZeroId) matches the car we were waiting on (mDesiredCarId), or when no
+// car was pending. Clears mbWaitingForStreaming. If we were EXITING and have held the exit long enough
+// (timer >= 2.0), posts the CarSelectExitAction (type 74) to actually leave the junkyard.
+// ============================================================================
+void CarSelectManager::StreamingFinished(CgsID lActiveCarZeroId, GameStateModuleIO::GameActionQueue* lpActionQueue)
+{
+    if (lActiveCarZeroId == mDesiredCarId || mDesiredCarId == 0)
+    {
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+            *CgsDev::Log::gpDebugPrint << "=== CarSelectManager: StreamingFinished\n";
+
+        mbWaitingForStreaming = false;   // X360 *(this + 0x58) = 0
+
+        // The exit waits for the audio: 2.0 is the pooled literal ARTIST loads (0x82001D9C).
+        if (meState == E_STATE_EXITING && mfStateTimer >= 2.0f)
+        {
+            // DWARF cpp:178.
+            GameStateModuleIO::CarSelectWaitingForAudioAction lWaitingForAudioAction;
+            lWaitingForAudioAction.mbWaiting = false;
+            lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lWaitingForAudioAction),
+                                    GameStateModuleIO::E_ACTION_CAR_SELECT_WAITING_FOR_AUDIO,
+                                    static_cast<s32>(sizeof(lWaitingForAudioAction)));
+        }
+    }
+}
+
+// ============================================================================
+// SpawnInStartCar (X360 0x82387CD8).
+// Place the player's start car at the chosen "drive-in" spawn location when the junkyard transition
+// begins. Asserts maSpawnLocations[0] is set (the X360 reads the +0x2C slot == maSpawnLocations[1] in
+// the asm: this+0x2C; see note), marks streaming pending, resolves the start car's CarData (for the
+// deform amount), then posts three game actions:
+//   - ResetPlayerCarAction      (type 0,  80B): the start car id + deform + in-car-select flags.
+//   - CarSelectionChangedAction (type 64, 64B): the start car id + spawn-location transform + type bit.
+//   - CarSelectionDropInAction  (type 65, 16B): the start car id + spawn-location type bit.
+// The spawn-location transform is read from the chosen SpawnLocation; its type bit (a single bool ==
+// "is this a generic / drive-in spawn") is derived from SpawnLocation::GetType().
+// ============================================================================
+void CarSelectManager::SpawnInStartCar(GameStateModuleIO::GameActionQueue* lpActionQueue)
+{
+    // DWARF cpp:1280: the start car always drops at the left car-select spawn point.
+    const BrnTrigger::SpawnLocation* lpSpawnLocation = maSpawnLocations[BrnTrigger::SpawnLocation::E_TYPE_CAR_SELECT_LEFT];
+    CGS_ASSERT_AT(lpSpawnLocation, "lpSpawnLocation", KAC_CSM_FILE, 1281);
+    meLastSpawnLocationType = BrnTrigger::SpawnLocation::E_TYPE_CAR_SELECT_LEFT;
+
+    // DWARF cpp:1285 (no null test: ARTIST reads +0xC straight off the result, 0x82387D54).
+    const BrnProgression::CarData* lpCarData = GetProfileCarData(mStartCarId);
+
+    // DWARF cpp:1288.
+    GameStateModuleIO::ResetPlayerCarAction lResetPlayerCarAction;
+    lResetPlayerCarAction.Construct();
+    lResetPlayerCarAction.SetLocation(lpSpawnLocation->GetPosition(), lpSpawnLocation->GetDirection());
+    lResetPlayerCarAction.SetDeformAmount(lpCarData->GetUnlockDeformationAmount());
+    lResetPlayerCarAction.SetCarData(mStartCarId, 0);
+    lResetPlayerCarAction.SetInCarSelect(true);
+    lResetPlayerCarAction.SetCarSelectType(GameStateModuleIO::ResetPlayerCarAction::E_CAR_SELECT_DONT_DROP);
+    lResetPlayerCarAction.SetCarSelectDontStreamAudio(false);
+    lResetPlayerCarAction.SetDeformationResetType(1);
+    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lResetPlayerCarAction),
+                            GameStateModuleIO::E_ACTION_RESET_PLAYER_CAR,
+                            static_cast<s32>(sizeof(lResetPlayerCarAction)));
+
+    // DWARF cpp:1301.
+    GameStateModuleIO::CarSelectionChangedAction lCarSelectionChangedAction;
+    lCarSelectionChangedAction.mJunkyardId          = mJunkyardId;
+    lCarSelectionChangedAction.mPosition            = lpSpawnLocation->GetPosition();
+    lCarSelectionChangedAction.mDirection           = lpSpawnLocation->GetDirection();
+    lCarSelectionChangedAction.mbIsLeft             = lpSpawnLocation->GetType() == BrnTrigger::SpawnLocation::E_TYPE_CAR_SELECT_LEFT;
+    lCarSelectionChangedAction.mbPlayCraneDropAudio = false;
+    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lCarSelectionChangedAction),
+                            GameStateModuleIO::E_ACTION_CAR_SELECTION_CHANGED,
+                            static_cast<s32>(sizeof(lCarSelectionChangedAction)));
+
+    // DWARF cpp:1312.
+    GameStateModuleIO::CarSelectionChangedDropInAction lCarSelectDropInAction;
+    lCarSelectDropInAction.mCarId   = mStartCarId;
+    lCarSelectDropInAction.mbIsLeft = lpSpawnLocation->GetType() == BrnTrigger::SpawnLocation::E_TYPE_CAR_SELECT_LEFT;
+    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lCarSelectDropInAction),
+                            GameStateModuleIO::E_ACTION_CAR_SELECTION_CHANGED_DROPIN,
+                            static_cast<s32>(sizeof(lCarSelectDropInAction)));
+}
+
+// ============================================================================
+// TeleportCurrentVehicle (X360 0x82392EF0).
+// Move the player's car to the spawn location for the FINISHED swap. Indexes the spawn-location array
+// by meLastSpawnLocationType (this+0x3C; maSpawnLocations[type]) -- the slot the previous flow recorded
+// -- and asserts it is set. Resolves the desired car's CarData (deform). Posts three actions:
+//   - ResetPlayerCarAction      (type 0,  80B): desired car id + deform + the in-car-mod flag.
+//   - CarSelectionDropInAction  (type 65, 16B): desired car id + spawn-location type bit.
+//   - CarUnlockAction           (type 79,  8B): the desired car's colour + palette indices.
+// ============================================================================
+void CarSelectManager::TeleportCurrentVehicle(GameStateModuleIO::GameActionQueue* lpActionQueue)
+{
+    // DWARF cpp:1472: the spawn point the last drop used.
+    const BrnTrigger::SpawnLocation* lpSpawnLocation = maSpawnLocations[meLastSpawnLocationType];
+    CGS_ASSERT_AT(lpSpawnLocation, "lpSpawnLocation", KAC_CSM_FILE, 1473);
+
+    const BrnProgression::CarData* lpCarData = GetProfileCarData(mDesiredCarId);
+    CGS_ASSERT_AT(lpCarData, "lpCarData", KAC_CSM_FILE, 1478);
+
+    // DWARF cpp:1480: the car drops in unless the livery screen is up (ARTIST cntlzw of
+    // mbInCarModScreen, 0x82392F80..9C).
+    GameStateModuleIO::ResetPlayerCarAction::CarSelectType leCarSelectType;
+    if (mbInCarModScreen)
+        leCarSelectType = GameStateModuleIO::ResetPlayerCarAction::E_CAR_SELECT_DONT_DROP;
+    else
+        leCarSelectType = GameStateModuleIO::ResetPlayerCarAction::E_CAR_SELECT_DROP_NORMAL;
+
+    // DWARF cpp:1491.
+    GameStateModuleIO::ResetPlayerCarAction lResetPlayerCarAction;
+    lResetPlayerCarAction.Construct();
+    lResetPlayerCarAction.SetCarSelectType(leCarSelectType);
+    lResetPlayerCarAction.SetLocation(lpSpawnLocation->GetPosition(), lpSpawnLocation->GetDirection());
+    lResetPlayerCarAction.SetCarData(mDesiredCarId, 0);
+    lResetPlayerCarAction.SetDeformAmount(lpCarData->GetUnlockDeformationAmount());
+    lResetPlayerCarAction.SetDeformationResetType(1);
+    lResetPlayerCarAction.SetInCarSelect(true);
+    lResetPlayerCarAction.SetCarSelectDontStreamAudio(true);
+    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lResetPlayerCarAction),
+                            GameStateModuleIO::E_ACTION_RESET_PLAYER_CAR,
+                            static_cast<s32>(sizeof(lResetPlayerCarAction)));
+
+    // DWARF cpp:1504.
+    GameStateModuleIO::CarSelectionChangedDropInAction lCarSelectDropInAction;
+    lCarSelectDropInAction.mbIsLeft = lpSpawnLocation->GetType() == BrnTrigger::SpawnLocation::E_TYPE_CAR_SELECT_LEFT;
+    lCarSelectDropInAction.mCarId   = mDesiredCarId;
+    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lCarSelectDropInAction),
+                            GameStateModuleIO::E_ACTION_CAR_SELECTION_CHANGED_DROPIN,
+                            static_cast<s32>(sizeof(lCarSelectDropInAction)));
+
+    UpdateCarColour(mDesiredCarId, lpActionQueue);
+}
+
+// ============================================================================
+// SetupSpawnLocations (X360 0x8236EA98).
+// Build the junkyard's spawn-location array from the loaded track TriggerData: clear all five slots,
+// then for every SpawnLocation whose junkyard id matches mJunkyardId, file it by type:
+//   * type 1..3 -> maSpawnLocations[type]  (asserts the slot is empty; one of each).
+//   * type 0    -> the two "generic drive-in" slots: the first found goes to maSpawnLocations[0], the
+//                  second to maSpawnLocations[4].
+// Then, when the player has a valid last-active race car, it measures which of the two type-0 slots is
+// nearer the car's last position and swaps them so maSpawnLocations[0] is the nearest (the player
+// drives back in next to where they were). Finally asserts all five slots are filled.
+// ============================================================================
+void CarSelectManager::SetupSpawnLocations()
+{
+    if (mJunkyardId == 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("mJunkyardId != kCGSID_NULL", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1063));
+        CgsDev::Assert::EndAssert();
+    }
+    if (mpTriggerQueryManager == 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("mpTriggerQueryManager", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1064));
+        CgsDev::Assert::EndAssert();
+    }
+
+    for (u32 lu = 0; lu < KU_CARSELECT_SPAWNLOCATION_COUNT; ++lu)
+        maSpawnLocations[lu] = 0;
+
+    const BrnTrigger::TriggerData* lpTriggerData = mpTriggerQueryManager->GetTriggerData();
+    if (lpTriggerData == 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("lpTriggerData", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1082));
+        CgsDev::Assert::EndAssert();
+    }
+
+    const s32 liSpawnCount = lpTriggerData->GetSpawnLocationCount();
+    for (s32 li = 0; li < liSpawnCount; ++li)
+    {
+        const BrnTrigger::SpawnLocation* lpSpawnLocation = lpTriggerData->GetSpawnLocation(li);
+        if (lpSpawnLocation == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpSpawnLocation", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1088));
+            CgsDev::Assert::EndAssert();
+        }
+
+        if (lpSpawnLocation->GetJunkyardId() == mJunkyardId)
+        {
+            const u32 luType = static_cast<u32>(lpSpawnLocation->GetType());
+            if (luType >= 4u)   // E_TYPE_COUNT == 4
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("muType < E_TYPE_COUNT", CGS_ASSERT_LOCATION(KAC_SPAWNLOC_FILE, 152));
+                CgsDev::Assert::EndAssert();
+            }
+
+            if (luType != 0)
+            {
+                // type 1..3 -> the matching dedicated slot (exactly one of each).
+                const u32 luSlot = luType;
+                if (maSpawnLocations[luSlot] != 0)
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert(
+                        "maSpawnLocations[lSpawnLocationType] == NULL", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1110));
+                    CgsDev::Assert::EndAssert();
+                }
+                maSpawnLocations[luSlot] = lpSpawnLocation;
+            }
+            else if (maSpawnLocations[0] != 0)
+            {
+                // second generic drive-in slot -> index 4.
+                maSpawnLocations[4] = lpSpawnLocation;
+            }
+            else
+            {
+                // first generic drive-in slot -> index 0.
+                maSpawnLocations[0] = lpSpawnLocation;
+            }
+        }
+    }
+
+    // ARTIST 0x8236ECB4..0x8236ED6C. Keep the authored slot order unless
+    // the active player's heading opposes the second generic spawn.
+    const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpLastActiveCar =
+        mpGameStateModule->GetLastActiveRaceCarInterface();
+    if (lpLastActiveCar == 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("lpLastActiveRaceCarInterface", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1119));
+        CgsDev::Assert::EndAssert();
+    }
+
+    if (lpLastActiveCar->IsPlayerCarActive())
+    {
+        const Vector3 lvSpawnDirection = maSpawnLocations[4]->mDirection;
+        const Vector3 lvPlayerDirection = lpLastActiveCar->GetPlayerDirection();
+        if (rw::math::vpu::Dot(lvSpawnDirection, lvPlayerDirection) < 0.0f)
+        {
+            const BrnTrigger::SpawnLocation* lpFirst = maSpawnLocations[0];
+            maSpawnLocations[0] = maSpawnLocations[4];
+            maSpawnLocations[4] = lpFirst;
+        }
+    }
+
+    // --- All five slots must now be filled --------------------------------------------------------
+    for (u32 lu = 0; lu < KU_CARSELECT_SPAWNLOCATION_COUNT; ++lu)
+    {
+        if (maSpawnLocations[lu] == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "The junkyard does not have all of the spawn locations setup.", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1140));
+            CgsDev::Assert::EndAssert();
+        }
+    }
+}
+
+// ============================================================================
+// DEBUG_UnlockCarsForTesting (X360 0x82387F18).
+// Cheat: force-add cars to the player profile for testing. Walks the whole VehicleList; for each
+// vehicle that is a trophy/special car (VehicleListEntry +0x94 bit0) and that the profile does NOT yet
+// own, it calls ProgressionManager::AddCar. Two passes, each capped at 3 newly-counted cars:
+//   * Pass 1 == trophy pass (entered when mbDEBUG_UnlockTrophyCarsForTesting != 0): AddCar(id, 0), no
+//     deform stamp.
+//   * Pass 2 == shutdown pass (entered after the cap iff mbDEBUG_UnlockShutdownCarsForTesting != 0):
+//     AddCar(id, 3) AND stamp a 0.85 deform onto the new CarData (CarData +0x0C) so it reads as "won".
+// The X360 carries a single byte `v4` that is BOTH the pass selector and the AddCar-type selector:
+//   v4 == 0  -> trophy pass     -> AddCar(id, 0), no deform.
+//   v4 != 0  -> shutdown pass   -> AddCar(id, 3), 0.85 deform.
+// v4 starts as (mbDEBUG_UnlockTrophyCarsForTesting == 0); when the cap is hit in the trophy pass it is
+// reloaded from mbDEBUG_UnlockShutdownCarsForTesting (which, if armed, is non-zero -> the shutdown
+// pass). An already-owned trophy car that is NOT hidden (CarData +0x0A == 0) still counts toward the
+// cap without being re-added.
+// ============================================================================
+void CarSelectManager::DEBUG_UnlockCarsForTesting()
+{
+    BrnProgression::Profile* lpProfile = mpProgressionManager->GetProfile();
+    if (lpProfile == 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("lpProfile", CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1681));
+        CgsDev::Assert::EndAssert();
+    }
+    if (!mbDEBUG_UnlockTrophyCarsForTesting && !mbDEBUG_UnlockShutdownCarsForTesting)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "mbDEBUG_UnlockTrophyCarsForTesting || mbDEBUG_UnlockShutdownCarsForTesting",
+            CGS_ASSERT_LOCATION(KAC_CSM_FILE, 1682));
+        CgsDev::Assert::EndAssert();
+    }
+
+    // X360 v4: 0 == trophy pass (AddCar type 0), non-zero == shutdown pass (AddCar type 3 + deform).
+    u8  lucPass = (mbDEBUG_UnlockTrophyCarsForTesting == 0) ? 1 : 0;
+    u32 luAddedThisPass = 0;
+
+    const s32 liVehicleCount = mpVehicleList->GetVehicleCount();
+    for (s32 liVehicle = 0; liVehicle < liVehicleCount; ++liVehicle)
+    {
+        const BrnResource::VehicleListEntry* lpVehicleData = mpVehicleList->GetVehicleData(liVehicle);
+        const CgsID lCarId = lpVehicleData->GetId();   // X360 *(VehicleData) (the leading car id)
+
+        // Does the profile already own this car?
+        const BrnProgression::CarData* lpOwned = 0;
+        const s32 liCarCount = lpProfile->GetCarCount();
+        for (s32 li = 0; li < liCarCount; ++li)
+        {
+            const BrnProgression::CarData* lpCandidate = lpProfile->GetCarData(li);
+            if (lpCandidate->GetId() == lCarId)
+            {
+                lpOwned = lpCandidate;
+                break;
+            }
+        }
+
+        // Only trophy/special cars are eligible (the +0x94 bit0 flag).
+        if (lpVehicleData->IsTrophyCar())
+        {
+            if (lpOwned == 0)
+            {
+                // Not owned -> add it. Pass selector chooses the unlock type + deform stamp.
+                const s32 leUnlockType = (lucPass != 0) ? 3 : 0;
+                BrnProgression::CarData* lpNewCar = mpProgressionManager->AddCar(lCarId, leUnlockType);
+                if (lucPass != 0)
+                    lpNewCar->SetUnlockDeformationAmount(KF_DEBUG_TROPHY_CAR_DEFORM);   // CarData +0x0C = 0.85
+                ++luAddedThisPass;
+            }
+            else if (!lpOwned->WasUnlockSequenceAlreadyShown())   // X360 *(lpOwned + 0x0A) == 0 (not hidden)
+            {
+                // Already owned and visible -> still counts toward the cap, no re-add.
+                ++luAddedThisPass;
+            }
+        }
+
+        // Cap each pass at 3. When the trophy pass tops out, switch to the shutdown pass iff armed.
+        if (luAddedThisPass >= 3)
+        {
+            if (lucPass != 0)
+                return;   // shutdown pass done
+            lucPass         = (mbDEBUG_UnlockShutdownCarsForTesting != 0) ? 1 : 0;
+            luAddedThisPass = 0;
+            if (lucPass == 0)
+                return;   // no shutdown pass requested
+        }
+    }
+}
+
 }
 
 // ARTIST ProcessGameEvents case 83 inlines CarSelectManager::OnCarUnlockTickerComplete.
