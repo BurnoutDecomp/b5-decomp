@@ -1366,6 +1366,9 @@ namespace BrnGui
     // DWARF: a typedef of the empty GuiEvent<251> (PS3); id 253 on the X360
     // (OnlineCustomMatch::OnLeave @0x82497168 `li r11, 0xfd`, no payload store).
     typedef CgsGui::GuiEvent<253> GuiEventNetworkCancelSearch;
+    // DWARF: a typedef of the empty GuiEvent<248> (PS3); id 250 on the X360
+    // (OnlinePause::HandleOverlayComplete @0x8249BAxx, no payload store).
+    typedef CgsGui::GuiEvent<250> GuiEventNetworkQuitPlaying;
     // DWARF BrnGuiEventTypeDefs.h:2056..2058: GuiEvent<213> on PS3, id 215 on the X360.
     struct GuiEventShowHideAboveCar : public CgsGui::GuiEvent<215>
     {

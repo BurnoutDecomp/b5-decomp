@@ -32,6 +32,16 @@ static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Gui/BrnGui
 namespace BrnGui
 {
 
+// DWARF BrnGuiEventTypeDefs.h:925; the X360 table @0x820654E4 (read back from the image).
+// Users load the names from it (ShowtimeInstantResultsState::OnLeave @0x824C6028 `lwz r3, 4(r11)`).
+const char* const KAPC_INGAME_FSM_NAMES[E_GUI_HUD_NUMSFSMS] =
+{
+    "BRNBOOTFSM",
+    "BRNFBFSM",
+    "BRNEVENTFSM",
+    "BRNONHUDFSM",
+};
+
 // Original debug HUD globals, written by UpdateWorstCaseHUD (8250CBC8).
 bool GuiEventUpdateSatNav::msbForceWorstCase = false;          // 82FB508A
 bool GuiRaceCarInfoEvent::msbForceWorstCase = false;           // 82FB508B

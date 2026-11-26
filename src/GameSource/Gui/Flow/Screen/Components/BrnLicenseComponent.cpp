@@ -736,10 +736,14 @@ namespace BrnGui
                 mbAtTopRank = true;
         }
 
-        mfRequiredWinsTickUpRate =
-            ((miWinsInCurrentRank * KF_REQUIRED_WINS_TICK_UP_RATE) <= lfWinTickUpDuration)
-                ? KF_REQUIRED_WINS_TICK_UP_RATE
-                : (lfWinTickUpDuration / static_cast<f32>(miWinsInCurrentRank));
+        if ((miWinsInCurrentRank * KF_REQUIRED_WINS_TICK_UP_RATE) > lfWinTickUpDuration)
+        {
+            mfRequiredWinsTickUpRate = lfWinTickUpDuration / static_cast<f32>(miWinsInCurrentRank);
+        }
+        else
+        {
+            mfRequiredWinsTickUpRate = KF_REQUIRED_WINS_TICK_UP_RATE;
+        }
         mfTimeToNextWinIncrement = mfRequiredWinsTickUpRate;
 
         meCurrentLicenseState = E_LICENSE_FIRST_RESOURCE_UNLOADING;

@@ -67,12 +67,10 @@ namespace
             : miValue(2) {}
     };
 
-    // { 1, 282, 12 }: posted once the screen's movie is up. The console leaves the payload
-    // word unwritten.
-    struct GuiEventMarkManLoaded : public CgsGui::GuiEvent<282>
+    // DWARF BrnGuiEventTypeDefs.h:5571 `GuiEventNetworkMarkedManLoadedEvent : GuiEvent<280> {}`
+    // (PS3 280 -> X360 282): posted once the screen's movie is up; empty, no constructor.
+    struct GuiEventNetworkMarkedManLoadedEvent : public CgsGui::GuiEvent<282>
     {
-
-        GuiEventMarkManLoaded() {}
     };
 
     // The overlay request as the out-queue carries it: the GuiEvent<184> header sized to the
@@ -263,17 +261,17 @@ const s32 OnlineMarkMan::miNumEventsObserved = 5;
     {
         CGS_ASSERT_AT(mpGuiCache, "mpGuiCache", CGS_ARTIST_FILE, 261);
 
-        if (!mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
+        if (mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
         {
-            return false;
+            SetExpectedAptComponentList();
+            mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[KU_MARK_MAN_RESOURCE_ID], KI_MOVIE_LEVEL);
+
+            GuiEventNetworkMarkedManLoadedEvent lMarkedManLoadedEvent;   // DWARF local cpp:240
+            mpStateInterface->OutputGuiEvent(lMarkedManLoadedEvent);
+            return true;
         }
 
-        SetExpectedAptComponentList();
-        mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[KU_MARK_MAN_RESOURCE_ID], KI_MOVIE_LEVEL);
-
-        GuiEventMarkManLoaded lLoaded;
-        mpStateInterface->OutputGuiEvent(lLoaded);
-        return true;
+        return false;
     }
 
     // ---- UpdateWFInit ----------------------------------------------------------

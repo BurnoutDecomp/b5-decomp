@@ -158,11 +158,8 @@ namespace BrnGui
     // level 1; the old "unresolved -> unposted" FLAG is paid off).
     void BootVideos::OnLeave()
     {
-        if (mpStateInterface != 0)
-        {
-            mpStateInterface->UnRegisterForEvents(KAI_OBSERVED_EVENTS, KI_NUM_OBSERVED_EVENTS);
-            mpStateInterface->PlayAptMovie("", 1);   // {8,18,12,"",1} @0x82478D60-A8
-        }
+        mpStateInterface->UnRegisterForEvents(KAI_OBSERVED_EVENTS, KI_NUM_OBSERVED_EVENTS);
+        mpStateInterface->PlayAptMovie("", 1);   // {8,18,12,"",1} @0x82478D60-A8
     }
 
     void BootVideos::Update()

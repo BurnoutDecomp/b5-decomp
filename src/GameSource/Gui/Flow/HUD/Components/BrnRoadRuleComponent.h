@@ -174,6 +174,10 @@ namespace BrnGui
         }
 
     private:
+        // DWARF BrnRoadRuleComponent.h:288/:289 (private static tables, defined in the .cpp).
+        static const char* const KAPC_UPCOMING_ROAD_ANIMATIONS[E_UPCOMING_ROAD_ANIM_COUNT];
+        static const char* const KAPC_UPCOMING_SUGGESTED_ROAD_ANIMATIONS[E_UPCOMING_ROAD_ANIM_COUNT];
+
         // ---- private helpers (DWARF :464-:587) -- declared-only except EnterRoad.
         void GetNameOfRule(char* lpacBuffer, s32 liBufferSize,
                            const GuiEventRoadRuleEnter* lpEvent,

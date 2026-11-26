@@ -42,6 +42,10 @@ namespace BrnGui
         // sub-components with the movie clip names, clear the message state.
         void Construct(CgsGui::StateInterface* lpStateInterface);
 
+        // DWARF cpp:98: an empty body (DecFIGS 0x451244). ARTIST folds it into the shared
+        // four-byte `blr` @0x8284CB38 (CrashNavProfile::OnLeave calls it @0x824CD7EC).
+        void Destruct();
+
         // @0x82473C38 (cpp:121) -- register the five sub-component names as expected
         // apt components on the cache watcher (GuiCache::AppendExpectedAptComponent's
         // name-taking entry @0x824F87C0, once per sub-component).

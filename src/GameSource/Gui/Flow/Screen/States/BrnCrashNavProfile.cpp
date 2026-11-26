@@ -157,7 +157,9 @@ namespace BrnGui
     {
         mpProfileManager->DetachMessageDisplay(mProfileMessage);
 
-        // The prompt surface's own teardown is the shared empty one: nothing to run.
+        // DecFIGS 0x4EB1F8 calls ProfileMessageComponent::Destruct here; ARTIST's call
+        // @0x824CD7EC lands on the ICF-folded empty body 0x8284CB38.
+        mProfileMessage.Destruct();
 
         mProfileMenuComponent.Clear();
 

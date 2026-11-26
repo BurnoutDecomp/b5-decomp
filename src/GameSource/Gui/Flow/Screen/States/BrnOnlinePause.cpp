@@ -384,7 +384,8 @@ namespace BrnGui
         if (lpPayload->mOverlayId == CgsIDCompress("GMOnlLvGmQn") &&
             lpPayload->meLeaveMethod == GuiOverlayCompleteEvent::E_LEAVEMETHOD_OK)
         {
-            PostByteEvent<KI_GUI_EVENT_LEAVE_GAME>(mpStateInterface, 0);
+            GuiEventNetworkQuitPlaying lQuitPlayingEvent;   // DWARF local cpp:367
+            mpStateInterface->OutputGuiEvent(lQuitPlayingEvent);
         }
     }
 }

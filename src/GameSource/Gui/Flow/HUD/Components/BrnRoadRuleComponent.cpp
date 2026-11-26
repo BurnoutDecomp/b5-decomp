@@ -151,20 +151,6 @@ namespace
     //     read off the image 2026-08-25 -- h2_dump2.txt). Indexed by
     //     EUpcomingRoadAnimState; the SUGGESTED table is selected when the road
     //     state is E_ROADSTATE_SUGGESTED.
-    const char* const KAPC_UPCOMING_ROAD_FRAMES_NORMAL[RoadRuleComponent::E_UPCOMING_ROAD_ANIM_COUNT] =
-    {
-        "invisible",      // [0] E_UPCOMING_ROAD_ANIM_INVISIBLE
-        "transin",        // [1] E_UPCOMING_ROAD_ANIM_TRANS_IN
-        "transout",       // [2] E_UPCOMING_ROAD_ANIM_TRANS_OUT_TAKEN
-        "transoutfade",   // [3] E_UPCOMING_ROAD_ANIM_TRANS_OUT_NOT_TAKEN
-    };
-    const char* const KAPC_UPCOMING_ROAD_FRAMES_SUGGESTED[RoadRuleComponent::E_UPCOMING_ROAD_ANIM_COUNT] =
-    {
-        "invisible",              // [0]
-        "transinSuggested",       // [1]
-        "transoutSuggested",      // [2]
-        "transoutfadeSuggested",  // [3]
-    };
 
     // --- the road-rule sound triggers (X360 table off_82F277A8; only the two entries
     //     this TU reads are named -- [1] and [7] of the shared 8-name apt-trigger set).
@@ -213,6 +199,24 @@ namespace
     }
 
 }
+
+// DWARF BrnRoadRuleComponent.h:288/:289: private static members of RoadRuleComponent,
+// defined here. X360 tables @0x82F24D20 / @0x82F24D30 (read off the image 2026-08-25),
+// each loaded through its own symbol in SetUpcomingRoadAnimation @0x82438598.
+const char* const RoadRuleComponent::KAPC_UPCOMING_ROAD_ANIMATIONS[RoadRuleComponent::E_UPCOMING_ROAD_ANIM_COUNT] =
+{
+    "invisible",      // [0] E_UPCOMING_ROAD_ANIM_INVISIBLE
+    "transin",        // [1] E_UPCOMING_ROAD_ANIM_TRANS_IN
+    "transout",       // [2] E_UPCOMING_ROAD_ANIM_TRANS_OUT_TAKEN
+    "transoutfade",   // [3] E_UPCOMING_ROAD_ANIM_TRANS_OUT_NOT_TAKEN
+};
+const char* const RoadRuleComponent::KAPC_UPCOMING_SUGGESTED_ROAD_ANIMATIONS[RoadRuleComponent::E_UPCOMING_ROAD_ANIM_COUNT] =
+{
+    "invisible",              // [0]
+    "transinSuggested",       // [1]
+    "transoutSuggested",      // [2]
+    "transoutfadeSuggested",  // [3]
+};
 
 // ---------------------------------------------------------------------------
 // The X360-inlined sound-event emitter shared by AnimateCurrentTime (:2018),
@@ -1038,8 +1042,8 @@ void RoadRuleComponent::UpdateUpcomingRoadSign(GuiEventRoadRuleUpcomingRoads::ER
                    "(0 <= leNavigationState) && (GuiEventRoadRuleUpcomingRoads::E_ROADSTATE_COUNT > leNavigationState)");   // :2160 (non-gating)
         const char* const* lppcFrames =
             (leState == GuiEventRoadRuleUpcomingRoads::E_ROADSTATE_SUGGESTED)
-                ? KAPC_UPCOMING_ROAD_FRAMES_SUGGESTED
-                : KAPC_UPCOMING_ROAD_FRAMES_NORMAL;
+                ? KAPC_UPCOMING_SUGGESTED_ROAD_ANIMATIONS
+                : KAPC_UPCOMING_ROAD_ANIMATIONS;
         lpAnimator->Run(lppcFrames[(mCurrentRunningRoadID != 0)
                                        ? E_UPCOMING_ROAD_ANIM_TRANS_OUT_NOT_TAKEN
                                        : E_UPCOMING_ROAD_ANIM_TRANS_OUT_TAKEN]);
@@ -1303,7 +1307,7 @@ void RoadRuleComponent::SetUpcomingRoadAnimation(GuiEventRoadRuleUpcomingRoads::
     const char* const* lppcFrames;
     if (leState == GuiEventRoadRuleUpcomingRoads::E_ROADSTATE_SUGGESTED)
     {
-        lppcFrames = KAPC_UPCOMING_ROAD_FRAMES_SUGGESTED;
+        lppcFrames = KAPC_UPCOMING_SUGGESTED_ROAD_ANIMATIONS;
         if (leAnimState == E_UPCOMING_ROAD_ANIM_TRANS_IN)
         {
             GuiEventRequestTraining lTraining;
@@ -1316,7 +1320,7 @@ void RoadRuleComponent::SetUpcomingRoadAnimation(GuiEventRoadRuleUpcomingRoads::
     }
     else
     {
-        lppcFrames = KAPC_UPCOMING_ROAD_FRAMES_NORMAL;
+        lppcFrames = KAPC_UPCOMING_ROAD_ANIMATIONS;
     }
     lpAnimator->Run(lppcFrames[leAnimState]);
 }

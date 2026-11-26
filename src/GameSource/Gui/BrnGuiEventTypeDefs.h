@@ -155,6 +155,10 @@ enum EHUDFSMs
     E_GUI_HUD_NUMSFSMS = 4,
 };
 
+// DWARF BrnGuiEventTypeDefs.h:925: the in-game HUD FSM resource names, one per EHUDFSMs
+// (X360 table @0x820654E4: "BRNBOOTFSM", "BRNFBFSM", "BRNEVENTFSM", "BRNONHUDFSM").
+extern const char* const KAPC_INGAME_FSM_NAMES[E_GUI_HUD_NUMSFSMS];
+
 // DecFIGS BrnGuiEventTypeDefs.h:3556; ARTIST BridgeGuiToGame
 //823CBA30..BA6C copies this raw16-byte event362 into SnapShotRequest.
 struct GuiSnapShotRequested : public CgsModule::Event

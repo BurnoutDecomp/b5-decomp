@@ -144,6 +144,11 @@ namespace BrnGui
         mbHasMessage     = false;
     }
 
+    // DWARF cpp:98 -- nothing to release (ICF-folded into the shared `blr` @0x8284CB38).
+    void ProfileMessageComponent::Destruct()
+    {
+    }
+
     // @ 0x82473C38 (cpp:121) -- register the five sub-component names on the cache's
     // apt-component watcher (GuiCache::AppendExpectedAptComponent @0x824F87C0 per name;
     // PC boundary no-op, see above).

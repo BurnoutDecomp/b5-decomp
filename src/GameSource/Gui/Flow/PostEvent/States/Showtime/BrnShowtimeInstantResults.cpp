@@ -284,15 +284,12 @@ namespace BrnGui
 
         if (!lbWasOnlineSession)
         {
-            GuiEventRunFsm lRunFsm;
-            lRunFsm.mFsmId          = CgsIDCompress("BRNFBFSM");
-            lRunFsm.mInitialStateId = static_cast<CgsID>(0);
-            lRunFsm.meFsmToRun      = E_GUI_HUD_FREEBURN;
-            lRunFsm.meFlowToUse     = E_GUIFLOW_HUD;
-            // ARTIST 0x824938D0 boxes this payload on channel 40 (offset 16: align 8).
-            CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventRunFsm>) == 40),
-                          "RunFsm record contains a 16-byte header and 24-byte payload");
-            mpStateInterface->OutputGuiEvent(lRunFsm);
+            GuiEventRunFsm lGuiEventRunFsm;   // DWARF local cpp:192
+            lGuiEventRunFsm.mInitialStateId = 0;
+            lGuiEventRunFsm.meFsmToRun = E_GUI_HUD_FREEBURN;
+            lGuiEventRunFsm.mFsmId = CgsIDCompress(KAPC_INGAME_FSM_NAMES[E_GUI_HUD_FREEBURN]);
+            lGuiEventRunFsm.meFlowToUse = E_GUIFLOW_HUD;
+            mpStateInterface->OutputGuiEvent(lGuiEventRunFsm);
         }
 
         mpGuiCache = 0;

@@ -15,7 +15,6 @@ target_sources(${PROJECT_NAME}
         BrnCrashNavColourCalibrate.cpp
         BrnCrashNavDriverDetails.cpp
         BrnCrashNavEnterOnline.cpp
-        BrnCrashNavEnterOnline_wI_01.cpp
         BrnCrashNavEnterOnline_wI_02.cpp
         BrnCrashNavEnterOnline_wI_03.cpp
         BrnCrashNavEnterOnline_wI_04.cpp
@@ -68,7 +67,6 @@ target_sources(${PROJECT_NAME}
         BrnOnlineGameRoomPlayerInfo_wH_12.cpp
         BrnOnlineGameRoomPlayerInfo_wH_13.cpp
         BrnOnlineGameRoomPlayerInfo_wH_14.cpp
-        BrnOnlineGameRoomPlayerInfo_wH_15.cpp
         BrnOnlineGameRoomPlayerInfo_wH_16.cpp
         BrnOnlineGameRoomPlayerInfo_wH_17.cpp
         BrnOnlineGameRoomPlayerInfo_wH_18.cpp
@@ -91,7 +89,6 @@ target_sources(${PROJECT_NAME}
         BrnOnlineScoreboards_wI_02.cpp
         BrnOnlineScoreboards_wI_03.cpp
         BrnOnlineScoreboards_wI_04.cpp
-        BrnOnlineScoreboards_wI_05.cpp
         BrnOnlineScoreboards_wI_06.cpp
         BrnOnlineScoreboards_wI_07.cpp
         BrnOnlineScoreboards_wS34_00.cpp
