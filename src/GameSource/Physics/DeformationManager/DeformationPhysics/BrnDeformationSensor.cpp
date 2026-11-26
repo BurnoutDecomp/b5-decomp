@@ -1046,24 +1046,22 @@ namespace Deformation
 	// Caller (X360 xref): BrnPhysics::Deformation::DeformableObject::UpdatePostPhysics.
 	void DeformationSensor::ClearNonWorldContacts()
 	{
-		s32 liIndex = 0;
-		if ( mi32NumStoredContacts > 0 )
+		// DWARF local liIndex (BrnDeformationSensor.h:320). Swap-remove: pull the last live
+		// contact into this slot, drop the live count, step back so the refilled slot is re-tested.
+		for ( s32 liIndex = 0; liIndex < mi32NumStoredContacts; ++liIndex )
 		{
-			do
+			if ( maStoredContacts[liIndex].IsVehicleContact() )
 			{
-				if ( maStoredContacts[liIndex].IsVehicleContact() )
-				{
-					// Swap-remove: pull the last live contact into this slot, drop the
-					// live count, and step back so the refilled slot is re-tested.
-					const StoredContact& lrLastContact = maStoredContacts[mi32NumStoredContacts - 1];
-					maStoredContacts[liIndex] = lrLastContact;
-					--liIndex;
-					--mi32NumStoredContacts;
-				}
-				++liIndex;
+				maStoredContacts[liIndex] = maStoredContacts[mi32NumStoredContacts - 1];
+				--liIndex;
+				--mi32NumStoredContacts;
 			}
-			while ( liIndex < mi32NumStoredContacts );
 		}
+		// (The PC tree's do/while form spanned the lines below; kept for the file's __LINE__ layout.)
+
+
+
+
 
 		// Post-physics scratch reset.
 		mImpulseContact.mfImpactTimeInFrame = 100.0f;   // disarm (walls leg 4 rename)

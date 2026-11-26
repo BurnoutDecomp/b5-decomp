@@ -8321,19 +8321,18 @@ bool PropManager::Prepare( rw::IResourceAllocator* lpPhysicsAllocator )
                                    << " bytes\n";
     }
 
-    // 0x8260EEA0..0x8260EEEC. Default construction gives every entry the identity {0, 1} pair the
-    // console's five-iteration loop writes; only entry 0 is then filled in.
-    rw::BaseResourceDescriptors<5> lPropsResDesc;
-    lPropsResDesc.m_baseResourceDescriptors[0].m_size      = static_cast<u32>( liPropBufferSize );
-    lPropsResDesc.m_baseResourceDescriptors[0].m_alignment = 0x10;   // ALIGNMENT, not a size: 16 on both targets
+    // 0x8260EEA0..0x8260EEEC. DWARF :196 `ResourceDescriptor lPropsResDesc` built by
+    // ResourceDescriptor(size, alignment): the five-lane {0, 1} loop, then lane 0 from a
+    // BaseResourceDescriptor temporary (ARTIST's stw/stw at 0x50 + ld/std into the descriptor).
+    rw::ResourceDescriptor lPropsResDesc( liPropBufferSize, 0x10 );
 
-    // 0x8260EEF0..0x8260EEF8. Virtual dispatch through the allocator; the Resource comes back by
-    // value (the console passes the sret pointer in r3) and pool 0 is the array base.
-    rw::Resource lPropsRes = lpPhysicsAllocator->DoAllocate(
-        reinterpret_cast<const rw::ResourceDescriptor&>( lPropsResDesc ), "PropInstances" );
+    // 0x8260EEF0..0x8260EEF8. DWARF :199 `Resource lPropsRes` from IResourceAllocator::Allocate,
+    // the inline DoAllocate dispatch; pool 0 is the array base.
+    rw::Resource lPropsRes = lpPhysicsAllocator->Allocate( lPropsResDesc, "PropInstances" );
     mpaPropInstances = static_cast<PropInstance*>( lPropsRes.m_baseResources[0] );
 
-    CGS_ASSERT( mpaPropInstances != NULL, "mpaPropInstances != NULL" );   // BrnPropManager.cpp:205
+
+    CGS_ASSERT_AT( mpaPropInstances != NULL, "mpaPropInstances != NULL", CGS_ARTIST_FILE, 205 );
 
     // ---------------------------------------------------------------------------------------
     // The prop-part instance array. Console immediate 0x780 == 30 * 64.
@@ -8349,15 +8348,14 @@ bool PropManager::Prepare( rw::IResourceAllocator* lpPhysicsAllocator )
                                    << " bytes\n";
     }
 
-    rw::BaseResourceDescriptors<5> lPropPartsResDesc;
-    lPropPartsResDesc.m_baseResourceDescriptors[0].m_size      = static_cast<u32>( liPartBufferSize );
-    lPropPartsResDesc.m_baseResourceDescriptors[0].m_alignment = 0x10;
+    rw::ResourceDescriptor lPropPartsResDesc( liPartBufferSize, 0x10 );   // DWARF :214
 
-    rw::Resource lPropPartsRes = lpPhysicsAllocator->DoAllocate(
-        reinterpret_cast<const rw::ResourceDescriptor&>( lPropPartsResDesc ), "PropPartInstances" );
+
+    rw::Resource lPropPartsRes = lpPhysicsAllocator->Allocate( lPropPartsResDesc, "PropPartInstances" );   // :217
+
     mpaPartInstances = static_cast<PropPartInstance*>( lPropPartsRes.m_baseResources[0] );
 
-    CGS_ASSERT( mpaPartInstances != NULL, "mpaPartInstances != NULL" );   // BrnPropManager.cpp:223
+    CGS_ASSERT_AT( mpaPartInstances != NULL, "mpaPartInstances != NULL", CGS_ARTIST_FILE, 223 );
 
     // 0x8260F004  li r3, 1 -- unconditional.
     return true;

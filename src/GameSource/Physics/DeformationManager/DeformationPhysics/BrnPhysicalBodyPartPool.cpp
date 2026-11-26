@@ -8,7 +8,7 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Physics/CgsPhysicsSimulationIO_Events.h"  // OutUpdateRigidBody (UpdatePart's echo event)
-
+#define KAC_BRNPHYSICALBODYPARTPOOL_CPP "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/DeformationManager/DeformationPhysics/BrnPhysicalBodyPartPool.cpp"  // ARTIST 0x82099040
 // ============================================================================
 // BrnPhysics::Deformation::PhysicalBodyPartPool
 //
@@ -483,16 +483,16 @@ namespace Deformation
     void PhysicalBodyPartPool::UpdatePart(const OutUpdateRigidBody* lpUpdateEvent,
                                           CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface)
     {
-        const u64 lu64EventId =
-            reinterpret_cast<const CgsPhysics::PhysicsSimulationIO::OutUpdateRigidBody*>(lpUpdateEvent)->mID;
-        const u16 lu16PartIndex = static_cast<u16>(lu64EventId & 0xFFFFu);
-
-        // CgsBitArray.h:203 -- the inlined bound tripwire, non-gating.
-
-        // :172 / :173 -- both non-gating.
-        CGS_ASSERT(mUsedParts.IsBitSet(lu16PartIndex), "mUsedParts.IsBitSet( lu16PartIndex )");
-        CGS_ASSERT(maParts[lu16PartIndex].GetRigidBodyId().GetBaseRigidBodyID() == lu64EventId,
-                   "maParts[ lu16PartIndex ].GetRigidBodyId().GetBaseRigidBodyID() == lpUpdateEvent->mID");
+        const CgsPhysics::PhysicsSimulationIO::OutUpdateRigidBody* lpEvent =
+            reinterpret_cast<const CgsPhysics::PhysicsSimulationIO::OutUpdateRigidBody*>(lpUpdateEvent);
+        BurnoutBodyPartID lPartId;                                  // DWARF cpp:166
+        lPartId = lpEvent->mID; const u16 lu16PartIndex = lPartId.GetPartPoolIndex();   // cpp:167
+        // :172 / :173 -- both non-gating; the second re-reads the event's id (ARTIST 0x8260CC40).
+        CGS_ASSERT_AT(mUsedParts.IsBitSet(lu16PartIndex), "mUsedParts.IsBitSet( lu16PartIndex )",
+                      KAC_BRNPHYSICALBODYPARTPOOL_CPP, 172);
+        CGS_ASSERT_AT(maParts[lu16PartIndex].GetRigidBodyId().GetBaseRigidBodyID() == lpEvent->mID,
+                      "maParts[ lu16PartIndex ].GetRigidBodyId().GetBaseRigidBodyID() == lpUpdateEvent->mID",
+                      KAC_BRNPHYSICALBODYPARTPOOL_CPP, 173);
 
         maParts[lu16PartIndex].Update(lpUpdateEvent, lpSceneInterface);
     }

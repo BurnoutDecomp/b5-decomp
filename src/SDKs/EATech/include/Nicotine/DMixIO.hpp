@@ -72,14 +72,15 @@ struct DMixIO
     // the input array is null). Returns this (X360 returns the object ptr).
     DMixIO* SetDMixInput(int iSlot, int iValue);
 
-    // SetDMixInputUnsafe (DWARF DMixIO.hpp:45): unchecked store variant.
-    void SetDMixInputUnsafe(int iSlot, int iValue);
+    // SetDMixInputUnsafe (DWARF DMixIO.hpp:45, no ARTIST copy: in-class inline): unchecked store.
+    void SetDMixInputUnsafe(int iSlot, int iValue) { m_pDMixInputBlock[iSlot] = iValue; }
 
     // GetDMixInput @ 0x82B448E8: read input slot iSlot (0 if array null).
     int GetDMixInput(int iSlot);
 
-    // GetDMixInputPtr (DWARF DMixIO.hpp:59): raw input-array base.
-    int* GetDMixInputPtr();
+    // GetDMixInputPtr (DWARF DMixIO.hpp:59, no ARTIST copy: in-class inline; ARTIST
+    // Cgs3dEffectControl::SetMixerInputValueUnbound 0x826825B4 reads +0x08 inline): raw input-array base.
+    int* GetDMixInputPtr() { return m_pDMixInputBlock; }
 
     // -- OUTPUT array (mixer -> game). Two 16-bit fields packed per int. -------
 
@@ -87,8 +88,8 @@ struct DMixIO
     // the packed field per ePreset (0 if array null / unknown preset).
     int GetDMixOutput(int iSlot, int ePreset);
 
-    // GetDMixOutputPtr (DWARF DMixIO.hpp:60): raw output-array base.
-    int* GetDMixOutputPtr();
+    // GetDMixOutputPtr (DWARF DMixIO.hpp:60, no ARTIST copy: in-class inline): raw output-array base.
+    int* GetDMixOutputPtr() { return m_pDMixOutputBlock; }
 
     // TurnOffMixOutput @ 0x82B44988 / TurnOnMixOutput @ 0x82B449A0: clear/set
     // the output-array enable word (+0x3C). No-op if the output array is null.

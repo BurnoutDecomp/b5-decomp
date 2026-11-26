@@ -21,7 +21,7 @@
 #include "GameSource/World/BrnEntityTypes.h"   // BrnWorld::E_ENTITYTYPE_* (the car-part contact builder)
 #include "GameSource/Sound/Vehicles/Traffic/BrnTrafficStateManager.h"   // Traffic::TrafficStateManager::TrafficClassToSize
 #include "SharedClasses/Physics/Props/BrnPropPhysicsDataHeader.h"
-
+#define KAC_BRNCOLLISIONSTATEMANAGER_CPP "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Collision/BrnCollisionStateManager.cpp"  // ARTIST 0x820AD1F0
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -2237,23 +2237,31 @@ void CollisionStateManager::CullAgainstPlaying()
 // ARTIST 0x826BE910: compact in reverse index order by replacing with the tail.
 void CollisionStateManager::CullInputCollisions()
 {
+    u8 lau8Cullable[64];          // DWARF cpp:2047
+    u32 lu32CullableCount = 0;    // cpp:2048
+    u32 lu32I;                    // cpp:2049
     CullInputCollisions_RemoveDuplicates();
     CullAgainstPlaying();
-    u8 lauRemoved[64];
-    u32 luRemoved = 0;
-    for (u32 luIndex = 0; luIndex < mu32InputCollisionCount; ++luIndex)
+    for (lu32I = 0; lu32I < mu32InputCollisionCount; ++lu32I)
     {
-        CGS_ASSERT(luIndex < 64u, "lu32I < E_MAX_COLLISION");
-        if (maInputCollision[luIndex].mbCull)
-            lauRemoved[luRemoved++] = static_cast<u8>(luIndex);
+        if (IsInputCollisionCullable(lu32I))
+            lau8Cullable[lu32CullableCount++] = static_cast<u8>(lu32I);
     }
-    while (luRemoved)
+    while (lu32CullableCount)
     {
-        const u32 luIndex = lauRemoved[--luRemoved];
+        --lu32CullableCount;
         --mu32InputCollisionCount;
-        if (luIndex != mu32InputCollisionCount)
-            maInputCollision[luIndex] = maInputCollision[mu32InputCollisionCount];
+        if (mu32InputCollisionCount != lau8Cullable[lu32CullableCount])
+            maInputCollision[lau8Cullable[lu32CullableCount]] = maInputCollision[mu32InputCollisionCount];
     }
+}
+
+// DWARF cpp:2304 (X360 assert line 2384, string 0x820AD1F0): the per-slot cull test ARTIST
+// inlines into CullInputCollisions (0x826BE960..0x826BE988).
+bool CollisionStateManager::IsInputCollisionCullable(u32 lu32I) const
+{
+    CGS_ASSERT_AT(lu32I < 64u, "lu32I < E_MAX_COLLISION", KAC_BRNCOLLISIONSTATEMANAGER_CPP, 2384);
+    return maInputCollision[lu32I].mbCull;
 }
 
 // SKF32_CAMERA_ASPECT_RATIO_NORMAL (DWARF cpp:82) -- unk_830085F0 = splat(4/3), written by the CRT

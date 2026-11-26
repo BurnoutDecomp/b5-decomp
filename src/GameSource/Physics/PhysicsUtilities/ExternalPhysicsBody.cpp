@@ -4,10 +4,10 @@
 #include "rw/math/vpu/matrix44affine_operation.h"
 #include "GameShared/GameClasses/Physics/CgsPhysicsSimulationIO_Events.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
-
+#define KAC_EXTERNALPHYSICSBODY_H "..\\..\\..\\GameSource\\Physics/PhysicsUtilities/ExternalPhysicsBody.h"  // ARTIST 0x82092F38 (header-inline adders)
 // Native ARTIST ExternalPhysicsBody. Real XDK VMX operations retain all
 // lanes, ordered fused arithmetic, reciprocal refinements and store order.
-// Root's PC-only state removal and the native120-byte class gates remain.
+#define KAC_EXTERNALPHYSICSBODY_CPP "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/PhysicsUtilities/ExternalPhysicsBody.cpp"  // unity path; native 120-byte class gates remain
 #include <cstddef>   // offsetof
 
 CGS_STATIC_ASSERT((sizeof(BrnPhysics::ExternalPhysicsBody) == 0x120),
@@ -186,31 +186,31 @@ namespace BrnPhysics
 
     void ExternalPhysicsBody::AddWorldSpaceForce(Vector3 value)
     {
-        CGS_ASSERT(IsValid3(value.mV), "Bad force added ");
+        CGS_ASSERT_AT(rw::math::vpu::IsValid(value), "Bad force added ", KAC_EXTERNALPHYSICSBODY_H, 449);
         mTotalLinearForce.mV = __vaddfp(mTotalLinearForce.mV, value.mV);
     }
 
     void ExternalPhysicsBody::AddWorldSpaceTorque(Vector3 value)
     {
-        CGS_ASSERT(IsValid3(value.mV), "Bad torque added ");
+        CGS_ASSERT_AT(rw::math::vpu::IsValid(value), "Bad torque added ", KAC_EXTERNALPHYSICSBODY_H, 533);
         mTotalTorque.mV = __vaddfp(mTotalTorque.mV, value.mV);
     }
 
     void ExternalPhysicsBody::AddWorldSpaceImpulse(Vector3 value)
     {
-        CGS_ASSERT(IsValid3(value.mV), "Bad impulse added ");
+        CGS_ASSERT_AT(rw::math::vpu::IsValid(value), "Bad impulse added ", KAC_EXTERNALPHYSICSBODY_H, 491);
         mTotalLinearImpulse.mV = __vaddfp(mTotalLinearImpulse.mV, value.mV);
     }
 
     void ExternalPhysicsBody::AddWorldSpaceAngularImpulse(Vector3 value)
     {
-        CGS_ASSERT(IsValid3(value.mV), "Bad angular impulse added ");
+        CGS_ASSERT_AT(rw::math::vpu::IsValid(value), "Bad angular impulse added ", KAC_EXTERNALPHYSICSBODY_H, 575);
         mTotalAngularImpulse.mV = __vaddfp(mTotalAngularImpulse.mV, value.mV);
     }
 
     void ExternalPhysicsBody::AddLocalSpaceForce(Vector3 value)
     {
-        CGS_ASSERT(IsValid3(value.mV), "Bad force added ");
+        CGS_ASSERT_AT(rw::math::vpu::IsValid(value), "Bad force added ", KAC_EXTERNALPHYSICSBODY_H, 457);
         const __vector4 world = RotateToWorld(mTransform, value.mV);
         mTotalLinearForce.mV = __vaddfp(mTotalLinearForce.mV, world);
     }
@@ -219,16 +219,16 @@ namespace BrnPhysics
     void ExternalPhysicsBody::CalculateNewVelocity(VecFloat deltaTime)
     {
         const __vector4 inverseMass = ReciprocalTwice(mfMass.mV);
-        CGS_ASSERT(IsValid3(mAngularVelocity.mV), "rw::math::IsValid(mAngularVelocity)");
-        CGS_ASSERT(IsValid3(mLinearVelocity.mV), "rw::math::IsValid(mLinearVelocity)");
+        CGS_ASSERT_AT(rw::math::vpu::IsValid(mAngularVelocity), "rw::math::IsValid(mAngularVelocity)", KAC_EXTERNALPHYSICSBODY_CPP, 279);
+        CGS_ASSERT_AT(rw::math::vpu::IsValid(mLinearVelocity), "rw::math::IsValid(mLinearVelocity)", KAC_EXTERNALPHYSICSBODY_CPP, 280);
         const __vector4 impulse = __vmaddfp(mTotalLinearForce.mV, deltaTime.mV, mTotalLinearImpulse.mV);
         mLinearVelocity.mV = __vmaddfp(impulse, inverseMass, mLinearVelocity.mV);
         const __vector4 angularImpulse = __vmaddfp(mTotalTorque.mV, deltaTime.mV, mTotalAngularImpulse.mV);
         const __vector4 deltaAngular = RowProduct(mWorldInverseInertia.xAxis.mV,
             mWorldInverseInertia.yAxis.mV, mWorldInverseInertia.zAxis.mV, angularImpulse);
         mAngularVelocity.mV = __vaddfp(mAngularVelocity.mV, deltaAngular);
-        CGS_ASSERT(IsValid3(mAngularVelocity.mV), "rw::math::IsValid(mAngularVelocity)");
-        CGS_ASSERT(IsValid3(mLinearVelocity.mV), "rw::math::IsValid(mLinearVelocity)");
+        CGS_ASSERT_AT(rw::math::vpu::IsValid(mAngularVelocity), "rw::math::IsValid(mAngularVelocity)", KAC_EXTERNALPHYSICSBODY_CPP, 291);
+        CGS_ASSERT_AT(rw::math::vpu::IsValid(mLinearVelocity), "rw::math::IsValid(mLinearVelocity)", KAC_EXTERNALPHYSICSBODY_CPP, 292);
         const __vector4 zero = __vspltisw(0);
         mTotalLinearImpulse.mV = zero;
         mTotalAngularImpulse.mV = zero;

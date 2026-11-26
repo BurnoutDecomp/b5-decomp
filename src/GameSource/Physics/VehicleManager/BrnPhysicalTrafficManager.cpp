@@ -12,7 +12,7 @@
 // ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
 // containers\./CgsBitArray.h, e.g. PhysicalTrafficManager::GetGlobalTrafficEntityId 0x825C2C38): see CgsBitArray.h.
 #define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
-// This unit's own asserts name its unity path (string 0x820945F0).
+#define KAC_BRNPHYSICALTRAFFICVEHICLE_CPP "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/VehicleManager/BrnPhysicalTrafficVehicle.cpp"  // 0x82092028; this unit's own asserts: 0x820945F0
 #define BRN_PHYSICALTRAFFICMANAGER_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/VehicleManager/BrnPhysicalTrafficManager.cpp"
 #include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager.h"
 
@@ -470,9 +470,9 @@ bool PhysicalTrafficManager::ValidateAndFixUpTrafficTrafficContact(void* lpConta
 //   return mpVehicleBody (+0x1C) as the concrete full-physics body.
 TrafficPhysics* PhysicalTrafficVehicle::GetFullTrafficPhysics()
 {
-    CGS_ASSERT(mu8PhysicalType < E_PHYSICAL_TRAFFIC_TYPE_COUNT,
-               "leType < E_PHYSICAL_TRAFFIC_TYPE_COUNT");
-    CGS_ASSERT(mu8PhysicalType == E_PHYSICAL_TRAFFIC_TYPE_FULL, "IsFullyPhysical()");
+    // Header-inline on the original (BrnPhysicalTrafficVehicle.h:191, assert h:391).
+
+    CGS_ASSERT_AT(IsFullyPhysical(), "IsFullyPhysical()", CGS_ARTIST_FILE, 391);
     return reinterpret_cast<TrafficPhysics*>(mpVehicleBody);
 }
 
@@ -483,9 +483,9 @@ void PhysicalTrafficVehicle::AddAirRam(u32 luFlags, f32 lfFactor, f32 lfDecay,
                                        Vector3 lvCustomImpulse, Vector3 lvCustomPosition,
                                        f32 lfTimerTillFire)
 {
-    CGS_ASSERT(mu8PhysicalType < E_PHYSICAL_TRAFFIC_TYPE_COUNT,
-               "leType < E_PHYSICAL_TRAFFIC_TYPE_COUNT");
-    if (mu8PhysicalType == E_PHYSICAL_TRAFFIC_TYPE_FULL)
+
+
+    if (IsFullyPhysical())
     {
         // X360: GetFullTraffic() returns *(this+0x1C)=mpVehicleBody; VehiclePhysics::AddAirRam(body,...).
         reinterpret_cast<VehiclePhysics*>(GetFullTrafficPhysics())->AddAirRam(
@@ -673,10 +673,10 @@ bool PhysicalTrafficVehicle::PreparePhysical(const CreatePhysicalTrafficEvent* l
                                              const Deformation::StreamedDeformationSpec* lpModelData,
                                              const Vector3* lpWheelPositions, const f32* lpafWheelRadii)
 {
-    CGS_ASSERT(mpVehicleBody != 0, "mpVehicleBody != NULL");
-    CGS_ASSERT(mu8PhysicalType < E_PHYSICAL_TRAFFIC_TYPE_COUNT, "leType < E_PHYSICAL_TRAFFIC_TYPE_COUNT");
+    CGS_ASSERT_AT(mpVehicleBody != 0, "mpVehicleBody != NULL", KAC_BRNPHYSICALTRAFFICVEHICLE_CPP, 150);
 
-    if (mu8PhysicalType == E_PHYSICAL_TRAFFIC_TYPE_FULL)
+
+    if (IsFullyPhysical())   // DWARF: IsFullyPhysical, then the cpp:155 block local lAABB
     {
         // The AABB enclosing every deformation-sensor sphere (X360 builds it on the stack).
         CgsGeometric::AxisAlignedBox lAABB;
@@ -705,7 +705,7 @@ bool PhysicalTrafficVehicle::PreparePhysical(const CreatePhysicalTrafficEvent* l
         meArticulatedVehicleType = E_ARTICULATE_VEHICLE_CAB;
 
     mePhysicalTrafficState = lpEvent->meTrafficType;   // +0x20 (event +0x80)
-    switch (lpEvent->meTrafficType)
+    switch (mePhysicalTrafficState)                     // one event load (ARTIST 0x8264115C)
     {
     case E_TRAFFIC_TYPE_POTENTIAL:   // 0 -- no body activation
     case E_TRAFFIC_TYPE_PHYSICAL:    // 2 -- no body activation
@@ -717,7 +717,7 @@ bool PhysicalTrafficVehicle::PreparePhysical(const CreatePhysicalTrafficEvent* l
         reinterpret_cast<VehiclePhysics*>(mpVehicleBody)->SetCrashing();
         break;
     default:                         // 3+ (SLAMMED, ...) -- not a valid PHYSICAL prepare state
-        CGS_ASSERT(false, "Invalid physical traffic type");
+        CGS_ASSERT_AT(false, "Invalid physical traffic type", KAC_BRNPHYSICALTRAFFICVEHICLE_CPP, 212);
         break;
     }
     return true;
@@ -732,9 +732,9 @@ void PhysicalTrafficVehicle::OnChecked(EActiveRaceCarIndex leOwner,
                                        const RaceCarPhysics* lpRaceCarPhysics,
                                        Vector3 lContactPointOnTraffic)
 {
-    CGS_ASSERT(leOwner >= E_ACTIVE_RACE_CAR_INDEX_0 && leOwner < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-               "(leOwner >= E_ACTIVE_RACE_CAR_INDEX_0) && (leOwner < E_ACTIVE_RACE_CAR_INDEX_COUNT)");
-    CGS_ASSERT(lpRaceCarPhysics != 0, "lpRaceCarPhysics");
+    CGS_ASSERT_AT(leOwner >= E_ACTIVE_RACE_CAR_INDEX_0 && leOwner < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+               "(leOwner >= E_ACTIVE_RACE_CAR_INDEX_0) && (leOwner < E_ACTIVE_RACE_CAR_INDEX_COUNT)", KAC_BRNPHYSICALTRAFFICVEHICLE_CPP, 498);
+    CGS_ASSERT_AT(lpRaceCarPhysics != 0, "lpRaceCarPhysics", KAC_BRNPHYSICALTRAFFICVEHICLE_CPP, 499);
 
     miCheckOwner           = static_cast<s8>(leOwner);   // +0x33
     mfTimeSinceCheckNotify = 0.0f;                        // +0x18
@@ -743,9 +743,9 @@ void PhysicalTrafficVehicle::OnChecked(EActiveRaceCarIndex leOwner,
     const u8 lu8CheckerStrength = lpRaceCarPhysics->GetStrengthStat();
     if (lu8CheckerStrength > 8u)
     {
-        CGS_ASSERT(mu8PhysicalType < E_PHYSICAL_TRAFFIC_TYPE_COUNT,
-                   "leType < E_PHYSICAL_TRAFFIC_TYPE_COUNT");
-        if (mu8PhysicalType == E_PHYSICAL_TRAFFIC_TYPE_FULL)
+
+
+        if (IsFullyPhysical())
         {
             // 0x8261E430..0x8261E47C -- the inlined TrafficPhysics::SetCrashingFromCheck (DWARF
             // TrafficPhysics.h:66). LANDED 2026-09-02 (traffic crash wave); the FLAG that stood here
@@ -779,9 +779,9 @@ void PhysicalTrafficVehicle::Update(f32 lfSimTimerTimeStep, f32 lfGameTimerTimeS
                                     const BrnPlayerDriverControls* lpControls, bool lbImpactTime,
                                     bool lbDoForceAdditiveAftertouch, bool lbUseSixaxis)
 {
-    CGS_ASSERT(mu8PhysicalType < E_PHYSICAL_TRAFFIC_TYPE_COUNT, "leType < E_PHYSICAL_TRAFFIC_TYPE_COUNT");
 
-    if (mu8PhysicalType == E_PHYSICAL_TRAFFIC_TYPE_FULL)
+
+    if (IsFullyPhysical())
     {
         // X360 0x82641230..0x8264129C, in order:
         //   bl GetFullTraffic
@@ -793,21 +793,21 @@ void PhysicalTrafficVehicle::Update(f32 lfSimTimerTimeStep, f32 lfGameTimerTimeS
         //     every frame is what stops a traffic car ever latching frozen.
         //   `lbz r11,0x70(full) ; bne` -> skip the tick when the body is already frozen
         //   bl TrafficPhysics::Update(sim, game, camera, controls, impact, forceAdditive, sixaxis)
-        TrafficPhysics* const lpFullTraffic = GetFullTrafficPhysics();
+        TrafficPhysics* lpPhysics = GetFullTrafficPhysics();   // DWARF cpp:323
 
         const VecFloat lvSimTimerTimeStep(lfSimTimerTimeStep);
-        lpFullTraffic->UpdateFreezing(lpControls, lvSimTimerTimeStep);
+        lpPhysics->UpdateFreezing(lpControls, lvSimTimerTimeStep);
 
         if (!gbAllowTrafficFreezing)
         {
-            lpFullTraffic->mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.mV.y = 0.0f;
+            lpPhysics->ResetCoolDown();   // DWARF VehiclePhysics::ResetCoolDown
         }
 
-        if (!lpFullTraffic->IsFrozen())
-        {
-            lpFullTraffic->Update(lfSimTimerTimeStep, lfGameTimerTimeStep, lpCameraMatrix,
-                                  lpControls, lbImpactTime, lbDoForceAdditiveAftertouch,
-                                  lbUseSixaxis);
+        if (!lpPhysics->IsFrozen())
+        {   // ARTIST 0x8264129C and PS3 0x72C61C call TrafficPhysics::Update directly (no vtable).
+            lpPhysics->TrafficPhysics::Update(lfSimTimerTimeStep, lfGameTimerTimeStep, lpCameraMatrix,
+                                              lpControls, lbImpactTime, lbDoForceAdditiveAftertouch,
+                                              lbUseSixaxis);
         }
     }
 
@@ -897,9 +897,9 @@ void PhysicalTrafficVehicle::SetArticulated(const CreatePhysicalTrafficEvent& lr
     // lanes (Prepare's -0.1 / 1.0 / 100.0) are untouched. SolvePenetration reads the lane back through
     // DeformableObject::GetWeightFactor, so an articulated full-physics truck pushes out of
     // penetration at half weight.
-    CGS_ASSERT(mu8PhysicalType < E_PHYSICAL_TRAFFIC_TYPE_COUNT,
-               "leType < E_PHYSICAL_TRAFFIC_TYPE_COUNT");                                 // h:382
-    if (mu8PhysicalType == E_PHYSICAL_TRAFFIC_TYPE_FULL)
+    // (IsFullyPhysical() carries the h:382 range assert.)
+
+    if (IsFullyPhysical())
     {
         GetFullTrafficPhysics()
             ->mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.mV.w =
@@ -1156,9 +1156,9 @@ void PhysicalTrafficManager::UpdateTrafficPhysicsPostSimulation(
                    "liVehicle < ku8TotalMaxNumPhysicalTraffic");
 
         PhysicalTrafficVehicle& lrVehicle = mpaTrafficVehicles[liVehicle];
-        CGS_ASSERT(lrVehicle.mu8PhysicalType < PhysicalTrafficVehicle::E_PHYSICAL_TRAFFIC_TYPE_COUNT,
-                   "leType < E_PHYSICAL_TRAFFIC_TYPE_COUNT");
-        if (lrVehicle.mu8PhysicalType == PhysicalTrafficVehicle::E_PHYSICAL_TRAFFIC_TYPE_FULL)
+
+
+        if (lrVehicle.IsFullyPhysical())
             lrVehicle.GetFullTrafficPhysics()->UpdatePostSimulation(lvfTimeStep);
 
         CGS_ASSERT(liVehicle < static_cast<s32>(KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC),
@@ -1974,10 +1974,10 @@ namespace Vehicle
              liVehicle = mUsedTrafficVehicles.GetNextNonZeroBit(liVehicle))
         {
             const PhysicalTrafficVehicle* lpVehicle = GetTrafficVehicle(liVehicle);
-            const u8 lu8Type = lpVehicle->mu8PhysicalType;
-            CGS_ASSERT(lu8Type < PhysicalTrafficVehicle::E_PHYSICAL_TRAFFIC_TYPE_COUNT,
-                       "leType < E_PHYSICAL_TRAFFIC_TYPE_COUNT");
-            if (lu8Type != PhysicalTrafficVehicle::E_PHYSICAL_TRAFFIC_TYPE_FULL)
+
+
+
+            if (!lpVehicle->IsFullyPhysical())
             {
                 continue;
             }

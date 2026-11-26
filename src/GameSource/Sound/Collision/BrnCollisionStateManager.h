@@ -368,6 +368,7 @@ private:
                         f32 afDeltaTime);
     void AddInputCollision(const InputCollision& lrCollision);
     void CullInputCollisions();
+    bool IsInputCollisionCullable(u32 lu32I) const;   // DWARF cpp:2304
     void CullInputCollisions_RemoveDuplicates();
     void CullAgainstPlaying();
     bool ProcessCollision(OutputCollision& lrOutput, const InputCollision& lrInput);

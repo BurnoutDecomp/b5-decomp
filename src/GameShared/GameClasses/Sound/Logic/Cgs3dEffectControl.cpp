@@ -19,7 +19,7 @@
 // ============================================================================
 
 #include "GameShared/GameClasses/Sound/Logic/Cgs3dEffectControl.h"
-
+#define KAC_CGS3DEFFECTCONTROL_H "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/Cgs3dEffectControl.h"  // ARTIST 0x820AB7E8
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsSoundLogicModule.h"
 #include "GameShared/GameClasses/Sound/IO/CgsMessage.h"
@@ -108,8 +108,8 @@ bool Cgs3dEffectControl::Detach()
         SetMixerInputValueUnbound(1, -1);
         SetMixerInputValueUnbound(2, 0);
         SetMixerInputValueUnbound(0, -1);
-        SetMixerInputValueUnbound(
-            15, GetDMixIOPtr()->GetDMixInput(15) & ~1);
+        const s32 nvar = GetMixerInputValue(15);   // DWARF block local (cpp:348)
+        SetMixerInputValueUnbound(15, nvar & ~1);
     }
     return true;
 }
@@ -124,8 +124,8 @@ void Cgs3dEffectControl::UpdateParams(f32 afDeltaTime)
             SetMixerInputValueUnbound(1, -1);
             SetMixerInputValueUnbound(2, 0);
             SetMixerInputValueUnbound(0, -1);
-            SetMixerInputValueUnbound(
-                15, GetDMixIOPtr()->GetDMixInput(15) & ~1);
+            const s32 nvar = GetMixerInputValue(15);
+            SetMixerInputValueUnbound(15, nvar & ~1);
         }
         return;
     }
@@ -133,8 +133,9 @@ void Cgs3dEffectControl::UpdateParams(f32 afDeltaTime)
     mEmitterPosition.Update(*mpEmitterPosition);
     if (mpEmitterDirection)
         mEmitterDirection.Update(*mpEmitterDirection);
-    if (GetDMixIOPtr())
-        SetMixerInputValueUnbound(15, GetDMixIOPtr()->GetDMixInput(15) | 1);
+    {   // DWARF block local nvar (cpp:95): read first, the latch tested afterwards (0x826FA980..0x826FA9A4)
+        const s32 nvar = GetMixerInputValue(15) | 1;
+        if (GetDMixIOPtr()) SetMixerInputValueUnbound(15, nvar); }
     Generate3DParams(0);
     UpdateDoppler(afDeltaTime, 0);
 
@@ -277,9 +278,9 @@ void Cgs3dEffectControl::UpdateDoppler(f32 afDeltaTime, s32 aiPlayer)
 // ---------------------------------------------------------------------------
 void Cgs3dEffectControl::SetMixerInputValueUnbound(s32 aiSlot, s32 aiValue)
 {
-    Nicotine::DMixIO* lpNicotineData = GetDMixIOPtr();
-    CGS_ASSERT(lpNicotineData, "lpNicotineData");
-    CGS_ASSERT(lpNicotineData->GetDMixInputPtr(), "lpNicotineData->GetDMixInputPtr()");
+    Nicotine::DMixIO* lpNicotineData = GetDMixIOPtr();   // asserts: header path 0x820AB7E8, h:225/226
+    CGS_ASSERT_AT(lpNicotineData, "lpNicotineData", KAC_CGS3DEFFECTCONTROL_H, 225);
+    CGS_ASSERT_AT(lpNicotineData->GetDMixInputPtr(), "lpNicotineData->GetDMixInputPtr()", KAC_CGS3DEFFECTCONTROL_H, 226);
 
     lpNicotineData->GetDMixInputPtr()[aiSlot] = aiValue;
 }

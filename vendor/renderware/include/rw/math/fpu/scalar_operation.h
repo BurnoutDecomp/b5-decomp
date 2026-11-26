@@ -104,6 +104,12 @@ namespace fpu
     // Scalar magnitude (fabs).
     inline float Abs(float lfValue) { return std::fabs(lfValue); }
 
+    // rwmath 1.02.00 fpu/constants.h:53 (SMALL_FLOAT = 1/65536, 0x37800000) and fpu/scalar.h:393:
+    // IsSimilar(a, b, epsilon = SMALL_FLOAT) is |a - b| < epsilon. DWARF names it in
+    // SpliceSample::FreeVoice (ARTIST 0x826A38C0..0x826A38E8).
+    const float SMALL_FLOAT = (1.0f / 65536.0f);
+    inline bool IsSimilar(float a, float b, float epsilon = SMALL_FLOAT) { return Abs(a - b) < epsilon; }
+
     // scalar.h:289-297 -- Sqrt<float> is the XDK __fsqrts intrinsic (one fsqrts; e.g. inlined by
     // Magnitude in BrnAI::AStar::EuclideanDistance 0x8276E0F8).
     template <class T> inline T Sqrt(T lValue);

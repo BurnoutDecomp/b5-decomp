@@ -1,7 +1,7 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnPhysicalBodyPart.h"
 #include "GameShared/GameClasses/Geometric/Primitives/CgsBox.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint (walls leg 4 gates)
-
+#define KAC_BRNPHYSICALBODYPART_H "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\deformationmanager\\deformationphysics\\BrnPhysicalBodyPart.h"  // ARTIST 0x820936F8 (header-inline bodies' asserts)
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnIKBodyPart.h"           // IKBodyPart, GetActiveJointSpec/Index, CheckSensorForcesForJointDetachment
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformableObject.h"      // DeformableObject (GetVehicleBody / transform delta path)
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"                   // VehiclePhysics::GetTransformDelta
@@ -2056,16 +2056,16 @@ namespace Deformation
         lEvent.mAngularVel  = mRwBody.GetAngularVelocity(); // this+80
 
         // Non-gating finiteness tripwires (the per-lane vcmpeqfp self-equality NaN checks), in the
-        // asm's order: angular velocity, then velocity, then the full transform.
-        CGS_ASSERT(rw::math::vpu::IsValid(lEvent.mAngularVel),
-                   "rw::math::IsValid( lUpdateEvent.mAngularVel )");
-        CGS_ASSERT(rw::math::vpu::IsValid(lEvent.mVel),
-                   "rw::math::IsValid( lUpdateEvent.mVel )");
-        CGS_ASSERT(rw::math::vpu::IsValid(lEvent.mTransform.xAxis)
-                       && rw::math::vpu::IsValid(lEvent.mTransform.yAxis)
-                       && rw::math::vpu::IsValid(lEvent.mTransform.zAxis)
-                       && rw::math::vpu::IsValid(lEvent.mTransform.wAxis),
-                   "rw::math::IsValid( lUpdateEvent.mTransform )");
+        // asm's order: angular velocity, then velocity, then the full transform. ARTIST fires them on
+        // BrnPhysicalBodyPart.h:686/687/688 (string 0x820936F8): UpdateRW's body sits in the header
+        // on the original (DWARF declares it at h:193); the transform check is the SDK's
+        // IsValid(Matrix44Affine), whose four row results ARTIST ANDs (0x825E7CC8..0x825E7CD0).
+        CGS_ASSERT_AT(rw::math::vpu::IsValid(lEvent.mAngularVel),
+                      "rw::math::IsValid( lUpdateEvent.mAngularVel )", KAC_BRNPHYSICALBODYPART_H, 686);
+        CGS_ASSERT_AT(rw::math::vpu::IsValid(lEvent.mVel),
+                      "rw::math::IsValid( lUpdateEvent.mVel )", KAC_BRNPHYSICALBODYPART_H, 687);
+        CGS_ASSERT_AT(rw::math::vpu::IsValid(lEvent.mTransform),
+                      "rw::math::IsValid( lUpdateEvent.mTransform )", KAC_BRNPHYSICALBODYPART_H, 688);
 
         // 0x825E7D04 calls the write accessor 0x825BCEB0, then AddEvent at 0x825E4340.
         lpSimInput->GetUpdateExternalBodyQueue()->AddEvent(lEvent);

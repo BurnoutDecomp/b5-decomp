@@ -37,12 +37,6 @@ DMixIO* DMixIO::SetDMixInput(int iSlot, int iValue)
     return this;
 }
 
-// SetDMixInputUnsafe (DWARF DMixIO.hpp:45): unchecked store (no null guard).
-void DMixIO::SetDMixInputUnsafe(int iSlot, int iValue)
-{
-    m_pDMixInputBlock[iSlot] = iValue;
-}
-
 // GetDMixInput @ 0x82B448E8
 //   v2 = *(a1+8); if (v2) return *(4*a2 + v2); else return 0;
 int DMixIO::GetDMixInput(int iSlot)
@@ -51,12 +45,6 @@ int DMixIO::GetDMixInput(int iSlot)
     if (lpiInput)
         return lpiInput[iSlot];
     return 0;
-}
-
-// GetDMixInputPtr (DWARF DMixIO.hpp:59)
-int* DMixIO::GetDMixInputPtr()
-{
-    return m_pDMixInputBlock;
 }
 
 // GetDMixOutput @ 0x82B44908
@@ -93,12 +81,6 @@ int DMixIO::GetDMixOutput(int iSlot, int ePreset)
     default:
         return 0;
     }
-}
-
-// GetDMixOutputPtr (DWARF DMixIO.hpp:60)
-int* DMixIO::GetDMixOutputPtr()
-{
-    return m_pDMixOutputBlock;
 }
 
 // TurnOffMixOutput @ 0x82B44988

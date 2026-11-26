@@ -433,6 +433,16 @@ struct PhysicalTrafficVehicle
                               Vector3 lvCustomImpulse, Vector3 lvCustomPosition, f32 lfTimerTillFire);
     // @0x825B33B8: true iff this is a SIMPLE (non-full-physics) traffic vehicle.
     bool            IsSimple() const;
+    // DWARF BrnPhysicalTrafficVehicle.h:283, no ARTIST copy (header-inline). Its inlined copies
+    // range-check the type on h:382 exactly as IsSimple does, then compare it with FULL (0):
+    // PreparePhysical 0x826410AC..0x826410DC, GetFullTraffic 0x825C0160..0x825C0188.
+    bool IsFullyPhysical() const
+    {
+        const EPhysicalTrafficType leType = static_cast<EPhysicalTrafficType>(mu8PhysicalType);
+        CGS_ASSERT_AT(leType < E_PHYSICAL_TRAFFIC_TYPE_COUNT, "leType < E_PHYSICAL_TRAFFIC_TYPE_COUNT",
+                      "..\\..\\..\\GameSource\\Physics/VehicleManager/BrnPhysicalTrafficVehicle.h", 382);
+        return leType == E_PHYSICAL_TRAFFIC_TYPE_FULL;
+    }
     // @0x825B3418: true iff this vehicle has an ATTACHED (non-broken) articulation joint.
     bool            HasNonBrokenJoint() const;
     // @0x825C01B8: latch the active-race-car that "checked" this vehicle (asserts not already checked).

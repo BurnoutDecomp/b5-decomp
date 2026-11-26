@@ -75,7 +75,7 @@
 //       the super-jump tally (that is the StuntManager collectible ladder), and event 120 still
 //       has no drain -- if you are here about event 120, nothing changed.
 //
-
+#define KAC_BRNVEHICLEMANAGER_H "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\vehiclemanager\\BrnVehicleManager.h"  // ARTIST 0x82090FC8
 // ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
 // containers\./CgsBitArray.h, e.g. VehicleManager::ProcessResetEvents 0x82617820): see CgsBitArray.h.
 #define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
@@ -114,26 +114,26 @@ namespace Vehicle
 // -------------------------------------------------------------------------------------------------
 bool VehicleManager::IsRaceCarHidden(s32 liRaceCarIndex)
 {
-    CGS_ASSERT(liRaceCarIndex >= 0 && liRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-               "liRaceCarIndex >= 0 && liRaceCarIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS");
-    CGS_ASSERT(static_cast<u32>(liRaceCarIndex) < 8u, "invalid index");
+    // Header-inline on the original: ARTIST asserts on BrnVehicleManager.h:1941/1948/1949 (string
+    // 0x82090FC8). The bitset read's bound check is IsBitSet's own streamed assert; ARTIST has no
+    // early-out for a bad index (the PC-era "invalid index" assert and guard are gone).
+    CGS_ASSERT_AT(liRaceCarIndex >= 0 && liRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                  "liRaceCarIndex >= 0 && liRaceCarIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS",
+                  KAC_BRNVEHICLEMANAGER_H, 1941);
 
-    if (liRaceCarIndex < 0 || liRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_COUNT)
-    {
-        // DIVERGENCE (named): the console reads the bitset regardless and would fault/alias on an
-        // out-of-range index; on this build the same read is a stack smash. The assert above is the
-        // console's; this early-out is the guard.
-        return false;
-    }
+
 
     const bool lbHidden = mHiddenRaceCars.IsBitSet(static_cast<u32>(liRaceCarIndex));
 
+
+
     if (lbHidden)
     {
-        CGS_ASSERT(maeRaceCarTypes[liRaceCarIndex] == BrnWorld::E_RACE_CAR_TYPE_NETWORK,
-                   "maeRaceCarTypes[liRaceCarIndex] == BrnWorld::E_RACE_CAR_TYPE_NETWORK");
-        CGS_ASSERT(liRaceCarIndex != static_cast<s32>(mePlayerActiveRaceCarIndex),
-                   "leRaceCarIndex != mePlayerActiveRaceCarIndex");
+        CGS_ASSERT_AT(maeRaceCarTypes[liRaceCarIndex] == BrnWorld::E_RACE_CAR_TYPE_NETWORK,
+                      "maeRaceCarTypes[liRaceCarIndex] == BrnWorld::E_RACE_CAR_TYPE_NETWORK",
+                      KAC_BRNVEHICLEMANAGER_H, 1948);
+        CGS_ASSERT_AT(liRaceCarIndex != static_cast<s32>(mePlayerActiveRaceCarIndex),
+                      "leRaceCarIndex != mePlayerActiveRaceCarIndex", KAC_BRNVEHICLEMANAGER_H, 1949);
     }
 
     return lbHidden;

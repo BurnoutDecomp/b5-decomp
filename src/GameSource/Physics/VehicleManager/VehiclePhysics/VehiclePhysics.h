@@ -847,6 +847,17 @@ namespace Vehicle
         // showtime, always when mbForceFrozen; zeroes both velocity registers when frozen.
         void UpdateFreezing(const BrnPlayerDriverControls* lpControls, VecFloat lvfTimeStep);
 
+        // DWARF VehiclePhysics.h:428, no ARTIST copy (inline): SetCoolDown(GetVecFloat_Zero()), i.e.
+        // zero the cool-down lane (.y) of +0x1060. ARTIST (PhysicalTrafficVehicle::Update
+        // 0x8264125C..0x8264126C) inserts the lane with the Xenon rwmath SetY: vspltisw 0 +
+        // vrlimi128 mask 4. The tree's SDK Vector4::SetY(VecFloat) is still the scalar lane model
+        // (a stack round trip), so the insert is spelled with the intrinsic here.
+        void ResetCoolDown()
+        {
+            mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.mV =
+                __vrlimi(mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.mV, __vspltisw(0), 4, 0);
+        }
+
         // @0x8262E848 (77): fold the debug gas-boost (flt_82FB7E24, ships 0.0 -- written only by
         // VehicleManagerDebugComponent::OnActivate) into clamp01(mfGas), force full throttle when
         // boosting without handbrake, then hand the five control scalars + forward speed to

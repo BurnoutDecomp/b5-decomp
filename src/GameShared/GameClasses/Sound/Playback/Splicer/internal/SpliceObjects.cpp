@@ -14,7 +14,7 @@
 // CgsGenericRwacFactory.h); bodied in the RWAC System TU.
 namespace rw { namespace audio { namespace core {
     void RwacSystemUnlock( System* apSystem );
-} } }
+} } } extern "C" rw::audio::core::System* off_83271928;   // the System singleton (vendor System.cpp)
 
 // ============================================================================
 // SpliceObjects.cpp -- runtime splice / splice-sample playback objects.
@@ -240,27 +240,27 @@ void SpliceSample::FreeVoice()
 {
     if ( mpVoicePluginPair )
     {
-        rw::audio::core::System* lpSystem = CgsSound::Playback::GetDefaultRwacSystem();
-        rw::audio::core::RwacSystemLock( lpSystem );
-
+        // System::Lock / Unlock on the System singleton, read at each call (ARTIST 0x826A3890 /
+        // 0x826A391C; PS3 System::spInstance, the tree's off_83271928).
+        rw::audio::core::System::Lock( off_83271928 );
         if ( mbUsingDynamicVoice )
         {
             gpSpliceManager->DestroyVoice( mpVoicePluginPair );
         }
-        else if ( fabsf( mpData->mfAzimuth - KI_STEREO_SAMPLE_AZIMUTH ) < 0.000015258789f )
+        else if ( !rw::math::fpu::IsSimilar( mpData->mfAzimuth, KI_STEREO_SAMPLE_AZIMUTH ) )   // DWARF
         {
-            gpSpliceManager->FreeStereoVoicePlugInPair( mpVoicePluginPair );
+            gpSpliceManager->FreeMonoVoicePlugInPair( mpVoicePluginPair );
         }
         else
         {
-            gpSpliceManager->FreeMonoVoicePlugInPair( mpVoicePluginPair );
+            gpSpliceManager->FreeStereoVoicePlugInPair( mpVoicePluginPair );
         }
 
         mpVoicePluginPair = 0;
         mbStartVoice      = false;
         mpSubMix          = 0;
 
-        rw::audio::core::RwacSystemUnlock( lpSystem );
+        rw::audio::core::System::Unlock( off_83271928 );
     }
 }
 
@@ -288,9 +288,9 @@ void StereoSpliceSample::StartVoice()
 
     if ( !mpVoicePluginPair )
     {
-        rw::audio::core::System* lpSystem = CgsSound::Playback::GetDefaultRwacSystem();
-        rw::audio::core::RwacSystemLock( lpSystem );
-
+        // PS3 0x82A998: System::Lock / Unlock on rw::audio::core::System::spInstance, read at
+        // each call (ARTIST 0x826A4004 / 0x826A4054); the tree names that global off_83271928.
+        rw::audio::core::System::Lock( off_83271928 );
         mpVoicePluginPair = &mDynamicVoicePluginPair;
         gpSpliceManager->CreateStereoVoice( &mDynamicVoicePluginPair );
 
@@ -302,7 +302,7 @@ void StereoSpliceSample::StartVoice()
         }
 
         mbUsingDynamicVoice = true;
-        rw::audio::core::RwacSystemUnlock( lpSystem );
+        rw::audio::core::System::Unlock( off_83271928 );
     }
 
     if ( !mpVoicePluginPair )
@@ -313,12 +313,12 @@ void StereoSpliceSample::StartVoice()
     }
 
     // Cache the plug-in stages from the acquired chain (send = [2], resample = [1]); a
-    // stereo sample uses no panning stage.
-    SpliceManager::VoicePluginPair* lpPair = mpVoicePluginPair;
-    mpSendPlugIn     = lpPair->mppPlugIn[2];
+    // stereo sample uses no panning stage. Statement order from ARTIST 0x826A4088..0x826A40AC.
+    // (DWARF lists no local for the pair: each stage is read through mpVoicePluginPair.)
+    mpSendPlugIn     = mpVoicePluginPair->mppPlugIn[2];
+    mpResamplePlugIn = mpVoicePluginPair->mppPlugIn[1];
     mpPanningPlugIn  = 0;
     mbStartVoice     = true;
-    mpResamplePlugIn = lpPair->mppPlugIn[1];
 }
 
 Splice::Splice( SPLICE_TYPE aeType, int aiIndex,

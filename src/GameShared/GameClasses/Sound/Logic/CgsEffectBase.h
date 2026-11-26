@@ -192,6 +192,16 @@ struct EffectBase : public CgsSound::MemBase
     // reach past the access boundary; matches the raw load, no layout/behaviour change.
     Nicotine::DMixIO* GetDMixIOPtr() const { return mpDynamicMixIo; }
 
+    // DWARF CgsEffectBase.h:832 `int32_t GetMixerInputValue(int32_t) const`, no ARTIST copy:
+    // the slot read through the latched DMixIO, 0 when none is latched (PS3 0x8AFBC0 inlines
+    // it; ARTIST Cgs3dEffectControl::UpdateParams 0x826FA908..0x826FA930, 0x826FA980..0x826FA998).
+    s32 GetMixerInputValue(s32 liIndex) const
+    {
+        if (mpDynamicMixIo)
+            return mpDynamicMixIo->GetDMixInput(liIndex);
+        return 0;
+    }
+
     // DWARF CgsEffectBase.cpp:192 / :208 (PS3 bodies: a null-guarded DMixIO call). ARTIST
     // keeps no out-of-line copy of either and inlines both into State::UpdateParams
     // (0x826C4960 TurnOnMixOutput, 0x826C4A64 TurnOffMixOutput), another unit, so the
