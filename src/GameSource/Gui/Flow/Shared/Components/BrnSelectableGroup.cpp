@@ -113,16 +113,20 @@ namespace BrnGui
     }
 
     // @ 0x824E4158 -- linear search for the item whose id matches (low 32 bits), else -1.
-    s32 SelectableGroup::GetIndexFromId(u64 luId)
+    s32 SelectableGroup::GetIndexFromId(u64 lId)
     {
-        CGS_ASSERT(static_cast<u32>(luId) != static_cast<u32>(KU64_NO_ID),
-                   "Invalid index to search for (probable duplication of invalid index, too)");
-        for (s32 li = 0; li < miSelectableCount; ++li)
+        // Full 64-bit id compares (ARTIST cmpld 0x824E4174/0x824E42FC); DWARF cpp:534 liIndex;
+        // streamed cpp:532/538, GetSelectable called for the assert and again for the compare.
+        CGS_ASSERT_STREAM_AT(lId != KU64_NO_ID,
+            "Invalid index to search for (probable duplication of invalid index, too)", CGS_ARTIST_FILE, 532);
+        for (s32 liIndex = 0; liIndex < miSelectableCount; ++liIndex)
         {
-            Selectable* lpSel = GetSelectable(li);
-            CGS_ASSERT(lpSel != 0, "unable to get selectable with index");
-            if (static_cast<u32>(lpSel->GetId()) == static_cast<u32>(luId))
-                return li;
+            CGS_ASSERT_STREAM_AT(GetSelectable(liIndex) != NULL,
+                "unable to get selectable with index : " << liIndex << "\n", CGS_ARTIST_FILE, 538);
+            if (GetSelectable(liIndex)->GetId() == lId)
+            {
+                return liIndex;
+            }
         }
         return -1;
     }
@@ -130,7 +134,9 @@ namespace BrnGui
     // @ 0x824E3CE0 -- highlight index (un-highlight the previous; -1 clears). Returns changed.
     bool SelectableGroup::HighlightIndex(s32 liIndex)
     {
-        CGS_ASSERT(liIndex >= -1 && liIndex < miSelectableCount, "Invalid item index to highlight");
+        CGS_ASSERT_STREAM_AT(liIndex >= -1 && liIndex < miSelectableCount,
+            "Invalid item index to highlight : " << liIndex << " / " << miSelectableCount << "\n",
+            CGS_ARTIST_FILE, 419);
 
         if (liIndex == -1)
         {
@@ -144,107 +150,122 @@ namespace BrnGui
             return false;
         }
 
-        Selectable* lpSel = maSelectables[liIndex];
-        if (!lpSel->IsActive() || !lpSel->IsHighlightable())
+        // No DWARF local here: the slot is re-read for the final call (ARTIST 0x824E3E8C).
+        if (!maSelectables[liIndex]->IsActive() || !maSelectables[liIndex]->IsHighlightable())
             return false;
 
         if (miHighlightedIndex != -1)
             maSelectables[miHighlightedIndex]->SetHighlighted(false);
         miHighlightedIndex = static_cast<s8>(liIndex);
-        lpSel->SetHighlighted(true);
+        maSelectables[liIndex]->SetHighlighted(true);
         SetDirty();
         return true;
     }
 
     // @ 0x824E6720 -- resolve the id to an index, then highlight it.
-    bool SelectableGroup::HighlightId(u64 luId)
+    bool SelectableGroup::HighlightId(u64 lId)
     {
-        CGS_ASSERT(static_cast<u32>(luId) != static_cast<u32>(KU64_NO_ID), "Not valid to find an invalid Id");
-        const s32 liIndex = GetIndexFromId(luId);
-        CGS_ASSERT(liIndex >= 0 && liIndex < miSelectableCount, "Could not find item with liIndex");
-        if (liIndex == -1)
-            return false;
-        return HighlightIndex(liIndex);
+        // Streamed cpp:462/467 (the id through the u64 operator<<, ARTIST 0x824E685C); DWARF
+        // cpp:464 lbSuccess, cpp:465 liIndex.
+        CGS_ASSERT_STREAM_AT(lId != KU64_NO_ID, "Not valid to find an invalid Id", CGS_ARTIST_FILE, 462);
+        bool lbSuccess = false;
+        s32 liIndex = GetIndexFromId(lId);
+        CGS_ASSERT_STREAM_AT(liIndex >= 0 && liIndex < miSelectableCount,
+            "Could not find item with liIndex : " << liIndex << " : (" << lId << ")\n",
+            CGS_ARTIST_FILE, 467);
+        if (liIndex != -1)
+        {
+            lbSuccess = HighlightIndex(liIndex);
+        }
+        return lbSuccess;
     }
 
     // @ 0x824E3808 -- move the highlight forward to the next usable item; wrap when mbWrapped.
     bool SelectableGroup::HighlightNext(bool lbQuiet)
     {
+        // DWARF cpp:294..296 locals; streamed asserts cpp:290/302 (ARTIST 0x824E3890/0x824E394C).
         if (miHighlightedIndex == -1)
         {
-            CGS_FAIL("ERROR : No option highlighted to select the next");
+            CGS_FAIL_STREAM_AT("ERROR : No option highlighted to select the next\n",
+                                 CGS_ARTIST_FILE, 290);
             return false;
         }
 
-        bool lbHighlighted = false;
-        for (s32 li = miHighlightedIndex + 1; li < miSelectableCount; ++li)
+        s32 liIter;
+        Selectable* lpSelectable;
+        bool lbSuccess = false;
+        for (liIter = miHighlightedIndex + 1; liIter < miSelectableCount; ++liIter)
         {
-            Selectable* lpSel = maSelectables[li];
-            CGS_ASSERT(lpSel != 0, "Invalid selectable item");
-            if (lpSel->IsActive() && lpSel->IsHighlightable() && !lpSel->IsHighlighted())
+            lpSelectable = maSelectables[liIter];
+            CGS_ASSERT_STREAM_AT(lpSelectable != NULL, "Invalid selectable item", CGS_ARTIST_FILE, 302);
+            if (lpSelectable->IsActive() && lpSelectable->IsHighlightable() && !lpSelectable->IsHighlighted())
             {
                 if (!lbQuiet)
-                    HighlightIndex(li);
-                lbHighlighted = true;
+                    HighlightIndex(liIter);
+                lbSuccess = true;
                 break;
             }
         }
 
-        if (!lbHighlighted && mbWrapped)
+        if (!lbSuccess && mbWrapped)
         {
-            for (s32 li = 0; li < miHighlightedIndex; ++li)
+            for (liIter = 0; liIter < miHighlightedIndex; ++liIter)
             {
-                Selectable* lpSel = maSelectables[li];
-                if (lpSel->IsActive() && lpSel->IsHighlightable() && !lpSel->IsHighlighted())
+                lpSelectable = maSelectables[liIter];
+                if (lpSelectable->IsActive() && lpSelectable->IsHighlightable() && !lpSelectable->IsHighlighted())
                 {
                     if (!lbQuiet)
-                        HighlightIndex(li);
-                    lbHighlighted = true;
+                        HighlightIndex(liIter);
+                    lbSuccess = true;
                     break;
                 }
             }
         }
-        return lbHighlighted;
+        return lbSuccess;
     }
 
     // @ 0x824E3A78 -- move the highlight backward to the previous usable item; wrap when mbWrapped.
     bool SelectableGroup::HighlightPrevious(bool lbQuiet)
     {
+        // Streamed asserts cpp:356/368 (the mirror of HighlightNext).
         if (miHighlightedIndex == -1)
         {
-            CGS_FAIL("No option highlighted to select the previous");
+            CGS_FAIL_STREAM_AT("No option highlighted to select the previous\n",
+                                 CGS_ARTIST_FILE, 356);
             return false;
         }
 
-        bool lbHighlighted = false;
-        for (s32 li = miHighlightedIndex - 1; li >= 0; --li)
+        s32 liIter;
+        Selectable* lpSelectable;
+        bool lbSuccess = false;
+        for (liIter = miHighlightedIndex - 1; liIter >= 0; --liIter)
         {
-            Selectable* lpSel = maSelectables[li];
-            CGS_ASSERT(lpSel != 0, "Invalid selectable item");
-            if (lpSel->IsActive() && lpSel->IsHighlightable() && !lpSel->IsHighlighted())
+            lpSelectable = maSelectables[liIter];
+            CGS_ASSERT_STREAM_AT(lpSelectable != NULL, "Invalid selectable item", CGS_ARTIST_FILE, 368);
+            if (lpSelectable->IsActive() && lpSelectable->IsHighlightable() && !lpSelectable->IsHighlighted())
             {
                 if (!lbQuiet)
-                    HighlightIndex(li);
-                lbHighlighted = true;
+                    HighlightIndex(liIter);
+                lbSuccess = true;
                 break;
             }
         }
 
-        if (!lbHighlighted && mbWrapped)
+        if (!lbSuccess && mbWrapped)
         {
-            for (s32 li = miSelectableCount - 1; li > miHighlightedIndex; --li)
+            for (liIter = miSelectableCount - 1; liIter > miHighlightedIndex; --liIter)
             {
-                Selectable* lpSel = maSelectables[li];
-                if (lpSel->IsActive() && lpSel->IsHighlightable() && !lpSel->IsHighlighted())
+                lpSelectable = maSelectables[liIter];
+                if (lpSelectable->IsActive() && lpSelectable->IsHighlightable() && !lpSelectable->IsHighlighted())
                 {
                     if (!lbQuiet)
-                        HighlightIndex(li);
-                    lbHighlighted = true;
+                        HighlightIndex(liIter);
+                    lbSuccess = true;
                     break;
                 }
             }
         }
-        return lbHighlighted;
+        return lbSuccess;
     }
 
     // @ 0x824E3490 -- (re)enable the item: Active/Highlightable/Selectable on.
@@ -296,10 +317,11 @@ namespace BrnGui
     // @ 0x824E3EC8 -- select (activate) the highlighted item if it is selectable.
     void SelectableGroup::Select()
     {
-        CGS_ASSERT(miHighlightedIndex < KI_MAX_SELECTABLES, "Invalid highlighted index");
-        Selectable* lpSel = maSelectables[miHighlightedIndex];
-        if (lpSel->IsSelectable())
-            lpSel->Select();   // slot 4
+        // Streamed cpp:488; the index is re-read for each use (ARTIST 0x824E3F90/0x824E3FB4).
+        CGS_ASSERT_STREAM_AT(miHighlightedIndex >= 0 && miHighlightedIndex < KI_MAX_SELECTABLES,
+            "Invalid highlighted index : " << miHighlightedIndex << "\n", CGS_ARTIST_FILE, 488);
+        if (maSelectables[miHighlightedIndex]->IsSelectable())
+            maSelectables[miHighlightedIndex]->Select();   // slot 4
     }
 
     // @ 0x824E3FE0 -- if dirty, Update every item and clear the dirty bit.
@@ -308,11 +330,13 @@ namespace BrnGui
         if (!IsDirty())
             return;
         ClearFlag(E_FLAG_DIRTY);   // `xori 0x10` on a bit just tested set
-        for (s32 li = 0; li < miSelectableCount; ++li)
+        // DWARF cpp:512 int8_t liIndex; streamed cpp:515 (its s32 operator<< inlines in the loop).
+        for (s8 liIndex = 0; liIndex < miSelectableCount; ++liIndex)
         {
-            Selectable* lpSel = maSelectables[li];
-            CGS_ASSERT(lpSel != 0, "Invalid pointer index set in SelectableGroup::Update()");
-            lpSel->Update();   // slot 5
+            CGS_ASSERT_STREAM_AT(maSelectables[liIndex] != NULL,
+                "Invalid pointer index set in SelectableGroup::Update() : " << liIndex << "\n",
+                CGS_ARTIST_FILE, 515);
+            maSelectables[liIndex]->Update();   // slot 5
         }
     }
 
