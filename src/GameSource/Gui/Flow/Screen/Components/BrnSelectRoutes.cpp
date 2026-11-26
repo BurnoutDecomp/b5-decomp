@@ -29,6 +29,12 @@
 
 namespace BrnGui
 {
+    // DWARF BrnSelectRoutes.cpp:36/:38/:39, in ARTIST's .rdata order (0x8204CA4C / 0x8204CA50 /
+    // 0x8204CA54).
+    const s32 SelectRoutes::KI_NUM_DISPLAYABLE_CHECKPOINTS = 6;
+    const f32 SelectRoutes::KF_MIN_ROUTE_DISTANCE = 1000.0f;
+    const f32 SelectRoutes::KF_MIN_CHECKPOINT_DISTANCE = 200.0f;
+
     // DWARF BrnSelectRoutes.cpp:48; ARTIST .data 0x82F25298 -> 0x8204B4F8 / 0x82049C28 / 0x820490C8.
     const char* SelectRoutes::KPC_ARROW_ANIMATION_STATES[3] = { "invisible", "visible", "animate" };
 
@@ -141,8 +147,7 @@ namespace BrnGui
     namespace
     {
         // Candidates for the first checkpoint (or, for the start point, the start) must lie at
-        // least this far from the other end of that first leg.
-        const f32 KF_MIN_FIRST_LEG_DISTANCE = 200.0f;
+        // least SelectRoutes::KF_MIN_CHECKPOINT_DISTANCE from the other end of that first leg.
 
         // The candidate bit sets: one bit per event start / per online landmark slot.
         const u32 KU_MAX_EVENT_STARTS      = 175;
@@ -231,7 +236,7 @@ namespace BrnGui
 
                 if (!lbIsPreviousCheckpoint && !lbIsNextCheckpoint &&
                     (liCheckpointItem > 1 ||
-                     Distance3(lLandmarkInfo.GetPositionLane(), lv3StartPosition) >= KF_MIN_FIRST_LEG_DISTANCE))
+                     Distance3(lLandmarkInfo.GetPositionLane(), lv3StartPosition) >= KF_MIN_CHECKPOINT_DISTANCE))
                 {
                     ++liNumSelected;
                     lSelectedLandmarks.SetBit(static_cast<u32>(liLandmarkSlot));
@@ -319,7 +324,7 @@ namespace BrnGui
 
                 if (!lbIsPreviousCheckpoint && !lbIsNextCheckpoint &&
                     (liCheckpointItem > 1 ||
-                     Distance3(lFinishInfo.GetPositionLane(), lv3StartPosition) >= KF_MIN_FIRST_LEG_DISTANCE))
+                     Distance3(lFinishInfo.GetPositionLane(), lv3StartPosition) >= KF_MIN_CHECKPOINT_DISTANCE))
                 {
                     ++liNumSelected;
                     lSelectedLandmarks.SetBit(static_cast<u32>(liLandmarkSlot));
@@ -388,7 +393,7 @@ namespace BrnGui
 
             if ((static_cast<s32>(lpEventStart->muCounty) == static_cast<s32>(leCounty) ||
                  leCounty == BrnWorld::E_COUNTY_COUNT) &&
-                Distance3(lpEventStart->mv3Position, lv4FirstCheckpoint) >= KF_MIN_FIRST_LEG_DISTANCE)
+                Distance3(lpEventStart->mv3Position, lv4FirstCheckpoint) >= KF_MIN_CHECKPOINT_DISTANCE)
             {
                 ++luNumSelected;
                 lSelectedEvents.SetBit(luIndex);

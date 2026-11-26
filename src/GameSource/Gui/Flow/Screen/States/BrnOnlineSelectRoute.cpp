@@ -65,12 +65,11 @@ namespace
                                          __vcmpeqfp(squared, zero));
         CGS_ALIGN(16) f32 lanes[4];
         __stvx(length, lanes, 0);
-        return lanes[0] < 200.0f;
+        return lanes[0] < SelectRoutes::KF_MIN_CHECKPOINT_DISTANCE;   // 0x8204CA54
     }
 
-    // The shortest route an online event accepts (rodata 1000.0; the main-option handler
-    // tests the route against the same word).
-    const f32 KF_MINIMUM_ROUTE_DISTANCE = 1000.0f;
+    // The shortest route an online event accepts is SelectRoutes::KF_MIN_ROUTE_DISTANCE (DWARF
+    // BrnSelectRoutes.h:51; ARTIST reads its symbol 0x8204CA50 here and in the main-option handler).
 
     // The GUI-out channel the overlay request rides.
     const s32 KI_CHANNEL_GUI_OUT = 40;
@@ -585,7 +584,7 @@ namespace
             {
                 GuiTracker* lpTracker = mpGuiCache->GetGuiTracker();
                 if (lpTracker->IsRouteInfoAvailable() &&
-                    lpTracker->GetRouteDistance() < KF_MINIMUM_ROUTE_DISTANCE)
+                    lpTracker->GetRouteDistance() < SelectRoutes::KF_MIN_ROUTE_DISTANCE)
                 {
                     DisplayTooShortRouteMessage();
                 }
@@ -883,7 +882,8 @@ namespace
         meSubState = E_SUBSTATE_SELECTING_PRESET_EVENT;
         CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache", CGS_ARTIST_FILE, 1872 /* ARTIST 0x82493344 */);
 
-        mpIconManager->SetUseEventIcons(
+        // The cache's manager (ARTIST 0x8249334C..0x82493368: mpGuiCache reloaded, +0x4060).
+        mpGuiCache->GetMapIconManager()->SetUseEventIcons(
             GuiEventDrawEventIcons::E_ICON_DISPLAY_TYPE_ONLINE_EVENT_PRESETS,
             mpStateInterface, KF_EVENT_ICON_FADE_TIME, 0, 0);
 
@@ -909,8 +909,14 @@ namespace
             liMode == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FREE_BURN ||
             liMode == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FUGITIVE ||
             liMode == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_MODE_END;
-        mInfoBackgroundAnimator.AddOutputAptViewState(
-            "apt_Transition", KAPC_ANIMATION_STATES[lbSpecialMode ? 2 : 0], false);
+        if (lbSpecialMode)
+        {
+            mInfoBackgroundAnimator.AddOutputAptViewState("apt_Transition", KAPC_ANIMATION_STATES[2], false);
+        }
+        else
+        {
+            mInfoBackgroundAnimator.AddOutputAptViewState("apt_Transition", KAPC_ANIMATION_STATES[0], false);
+        }
         mMainMapComponent.SetActive(true);
         if (mpIconManager != 0)
             mpIconManager->mbIsActive = true;
@@ -1696,7 +1702,7 @@ namespace
         mpStateInterface->GetLanguageManager()->FormatAndAddText(
             "ONLINE_ROUTE_DISTANCE", lacDistance, CgsLanguage::LanguageManager::E_FORMAT_SMALL_DISTANCE);
 
-        CgsCore::SPrintf(lacDistance, sizeof(lacDistance), "%f", static_cast<double>(KF_MINIMUM_ROUTE_DISTANCE));
+        CgsCore::SPrintf(lacDistance, sizeof(lacDistance), "%f", SelectRoutes::KF_MIN_ROUTE_DISTANCE);
         mpStateInterface->GetLanguageManager()->FormatAndAddText(
             "ONLINE_ROUTE_MINIMUM_DISTANCE", lacDistance, CgsLanguage::LanguageManager::E_FORMAT_SMALL_DISTANCE);
 

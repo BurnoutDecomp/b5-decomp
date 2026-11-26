@@ -56,6 +56,11 @@ namespace BrnGui
 
         // debug-info BrnSelectRoutes.h:50 (GetCheckpointLandmark's bound).
         static const s32 KI_MAX_CHECKPOINTS = 17;
+        // debug-info BrnSelectRoutes.h:51/:52, defined cpp:38/:39 (ARTIST .rdata 0x8204CA50 = 1000.0f,
+        // 0x8204CA54 = 200.0f). Public: OnlineSelectRoute reads both from their symbols
+        // (DisplayTooShortRouteMessage 0x8249EFB4, UpdateAfterToggleChange 0x8249E558).
+        static const f32 KF_MIN_ROUTE_DISTANCE;
+        static const f32 KF_MIN_CHECKPOINT_DISTANCE;
         // The per-round array length of CheckpointData and maiNumCheckpoints (debug-info [10]).
         static const s32 KI_MAX_ROUNDS = 10;
 
@@ -114,7 +119,8 @@ namespace BrnGui
         void SetRouteFromPresetEvent(s32 liPresetEventID);
 
     private:
-        static const s32 KI_NUM_DISPLAYABLE_CHECKPOINTS = 6;
+        // debug-info BrnSelectRoutes.h:200, defined cpp:36 = 6 (ARTIST .rdata 0x8204CA4C).
+        static const s32 KI_NUM_DISPLAYABLE_CHECKPOINTS;
         // DWARF BrnSelectRoutes.cpp:48, a private static array of (non-const) pointers: ARTIST keeps it in
         // .data at 0x82F25298 = {"invisible", "visible", "animate"} and loads an entry per use (Hide 0x82418D18).
         static const char* KPC_ARROW_ANIMATION_STATES[3];

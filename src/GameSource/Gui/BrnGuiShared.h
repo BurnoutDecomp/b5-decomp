@@ -98,6 +98,16 @@ namespace BrnGui
         E_GUI_RESOURCEID_APT_HUD_CRASHED = 193,        // "B5CrashedHud" (PS3 184)
         E_GUI_RESOURCEID_APT_HUD_CRASHED_STUNT = 194,  // "B5CrashedStuntHud" (PS3 185)
 
+        // The post-fx hook bundle and its six colour cubes (PS3 219..225); EffectsArbitrator
+        // requests and receives them (ResourceUpdate's switch, ARTIST 0x82517910/0x82517918).
+        E_GUI_RESOURCEID_PFX_HOOKS = 228,              // "pfxhooks"
+        E_GUI_RESOURCEID_PFX_COLOURCUBE_1 = 229,       // "<COLOURCUBE1>"
+        E_GUI_RESOURCEID_PFX_COLOURCUBE_2 = 230,       // "<COLOURCUBE2>"
+        E_GUI_RESOURCEID_PFX_COLOURCUBE_3 = 231,       // "<COLOURCUBE3>"
+        E_GUI_RESOURCEID_PFX_COLOURCUBE_4 = 232,       // "<COLOURCUBE4>"
+        E_GUI_RESOURCEID_PFX_COLOURCUBE_5 = 233,       // "<COLOURCUBE5>"
+        E_GUI_RESOURCEID_PFX_COLOURCUBE_6 = 234,       // "<COLOURCUBE6>"
+
         // Terminating count. X360-gated (see the drift note above).
         E_GUI_RESOURCEID_NUM = 237,
     };

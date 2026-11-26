@@ -1287,8 +1287,10 @@ namespace BrnGui
         int32_t                         liHelpBarItemCount = 0;
 
         // A switch on the sub-state: ARTIST tests the SELECTING_PARAMS label first
-        // (`cmpwi 2 / beq` 0x82485CC4) and then LOAD_OPTIONS, the decision tree of a switch
-        // whose SELECTING_PARAMS case shares the default arm.
+        // (`cmpwi 2 / beq` 0x82485CC4) and then LOAD_OPTIONS, and both the 2 label and the
+        // default land on ONE block (0x82485CF0). The XDK emits that test only for a label with
+        // its own body: SELECTING_PARAMS and the default carry the same statements, which it
+        // merges after lowering the switch (a shared `case 2: default:` label drops the test).
         //
         // The static_cast on every meButton read is the header's doing, not the data's:
         // BrnOnlineGameOptions.h models HelpBarItem::meButton as s32 while the DWARF types
@@ -1303,7 +1305,6 @@ namespace BrnGui
             break;
 
         case E_SUBSTATE_SELECTING_PARAMS:
-        default:
         {
             lapcHelpBarText[liHelpBarItemCount] = KA_HELPBAR_ITEMS[1].mpcText;    // "$CAPS_BUTTON_CONTINUE"
             laButtons[liHelpBarItemCount] = static_cast<ButtonIconComponent::EPadButton>(
@@ -1312,6 +1313,22 @@ namespace BrnGui
 
             // The two counters live in the cache's player-options profile block (cache+0x12B80 /
             // +0x12B84 == the profile's +0x7308 / +0x730C), read through its in-class accessors.
+            if (mpGuiCache->GetMenuOptionsData()->GetNumCreatedOnlineGameOptions() > 0 ||
+                mpGuiCache->GetMenuOptionsData()->GetNumReceivedOnlineGameOptions() > 0)
+            {
+                lapcHelpBarText[liHelpBarItemCount] = KA_HELPBAR_ITEMS[3].mpcText;    // "$CAPS_BUTTON_LOAD"
+                laButtons[liHelpBarItemCount] = static_cast<ButtonIconComponent::EPadButton>(
+                                                    KA_HELPBAR_ITEMS[3].meButton);   // 6 OPTION0
+                ++liHelpBarItemCount;
+            }
+            break;
+        }
+        default:
+        {
+            lapcHelpBarText[liHelpBarItemCount] = KA_HELPBAR_ITEMS[1].mpcText;    // "$CAPS_BUTTON_CONTINUE"
+            laButtons[liHelpBarItemCount] = static_cast<ButtonIconComponent::EPadButton>(
+                                                KA_HELPBAR_ITEMS[1].meButton);   // 4 SELECT
+            ++liHelpBarItemCount;
             if (mpGuiCache->GetMenuOptionsData()->GetNumCreatedOnlineGameOptions() > 0 ||
                 mpGuiCache->GetMenuOptionsData()->GetNumReceivedOnlineGameOptions() > 0)
             {

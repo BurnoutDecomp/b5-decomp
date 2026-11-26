@@ -2,6 +2,7 @@
 #include "GameSource/Gui/PFX/BrnGuiEffectsArbitrator.h"
 #include "GameSource/Gui/Events/BrnGuiPFXEvents.h"                    // the 495..501 events
 #include "GameSource/Gui/BrnGuiCache.h"                               // BrnGui::GuiCache::GetTime
+#include "GameSource/Gui/BrnGuiShared.h"                              // E_GUI_RESOURCEID_PFX_*
 #include "GameSource/Graphics/BrnRendererModuleIO.h"                  // RendererIO::OutputBuffer::GetFXEventsEffectsFrame
 #include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"                // CgsGuiModuleIO::InputBuffer / OutputBuffer
 #include "GameShared/GameClasses/Gui/Model/CgsModelModuleIO.h"        // ModelIO::InputBuffer / OutputBuffer
@@ -34,11 +35,9 @@ namespace BrnGui
 {
     namespace
     {
-        // The load-request ids this class owns: the hook bundle rides request 228 (the boot
-        // preload's "pfxhooks" entry), the colour cubes 229..234 (KU_MAX_NUM_COLOURCUBES).
-        const u32 KU_PFX_HOOK_BUNDLE_REQUEST_ID  = 228;
-
-        const u32 KU_PFX_COLOURCUBE_REQUEST_BASE = 229;
+        // The load-request ids this class owns are the DWARF resource ids (BrnGuiShared.h):
+        // E_GUI_RESOURCEID_PFX_HOOKS (228, the boot preload's "pfxhooks" entry) and
+        // E_GUI_RESOURCEID_PFX_COLOURCUBE_1..6 (229..234).
         // ARTIST's E_GUI_RESOURCETYPE_PFX_COLOURCUBE. The DecFIGS-derived enum in
         // CgsGuiResourceModuleIO.h ends one entry early (its 22 is DONE); the loader's switch in
         // CgsGuiResourceModule.cpp is keyed on the ARTIST numbering (`case 22: // pfx colour
@@ -142,17 +141,28 @@ namespace BrnGui
             {
                 const CgsGui::GuiEventLoadNotification* lpLoadNotification =
                     static_cast<const CgsGui::GuiEventLoadNotification*>(lpEvent);
-                if (lpLoadNotification->muLoadRequestId == KU_PFX_HOOK_BUNDLE_REQUEST_ID)
+                // A switch on the request id (the DWARF resource ids): the hook bundle's case
+                // first (cpp:198), then the six colour-cube labels (the luIndex loop, cpp:213).
+                // Both compilers lower it as a switch: ARTIST `cmplwi 228; beq` to the hook arm
+                // placed last (0x82517910), then the cubes' range test (`id - 229 <= 5`,
+                // 0x82517918); the PS3 build bounds the whole case set [219, 225] (0x5A0F34).
+                switch (lpLoadNotification->muLoadRequestId)
                 {
+                case E_GUI_RESOURCEID_PFX_HOOKS:
                     // ResourcePtr::operator=(const ResourceHandle&): one CreateFromHandle
                     // straight into the member (ARTIST 0x82517980).
                     mpHookInfo = lpLoadNotification->mResourceHandle;
                     CGS_ASSERT_AT(mpHookInfo != CgsResource::NULLResourcePtr,
                                "mpHookInfo != CgsResource::NULLResourcePtr", CGS_ARTIST_FILE, 198);           // :198
                     Acquire3dTints(lpGuiModelInputBuffer);
-                }
-                else if (lpLoadNotification->muLoadRequestId - KU_PFX_COLOURCUBE_REQUEST_BASE <= 5u)
-                {
+                    break;
+
+                case E_GUI_RESOURCEID_PFX_COLOURCUBE_1:
+                case E_GUI_RESOURCEID_PFX_COLOURCUBE_2:
+                case E_GUI_RESOURCEID_PFX_COLOURCUBE_3:
+                case E_GUI_RESOURCEID_PFX_COLOURCUBE_4:
+                case E_GUI_RESOURCEID_PFX_COLOURCUBE_5:
+                case E_GUI_RESOURCEID_PFX_COLOURCUBE_6:
                     for (uint32_t luIndex = 0; luIndex < muColourCubeCount; ++luIndex)
                     {
                         if (mauColourCubeRequestIds[luIndex] == lpLoadNotification->muLoadRequestId)
@@ -161,6 +171,7 @@ namespace BrnGui
                             break;
                         }
                     }
+                    break;
                 }
             }
             liEventId = lpLoadNotifications->GetNextEvent(lpEvent, &lpEvent, &liEventSize);
@@ -188,7 +199,7 @@ namespace BrnGui
                 lRequest.meLoadUnload   = CgsGui::E_GUI_RESOURCEREQUEST_LOAD;
                 lRequest.mpacFileToLoad = 0;
                 maColourCubes[muColourCubeCount].muResourceId = lpGroup->muTint3DResourceId;
-                mauColourCubeRequestIds[muColourCubeCount]    = KU_PFX_COLOURCUBE_REQUEST_BASE + muColourCubeCount;
+                mauColourCubeRequestIds[muColourCubeCount]    = E_GUI_RESOURCEID_PFX_COLOURCUBE_1 + muColourCubeCount;
                 lRequest.muLoadRequestId = mauColourCubeRequestIds[muColourCubeCount];
                 lRequest.muResourceId    = lpGroup->muTint3DResourceId;
                 lpGuiModelInputBuffer->AddResourceRequests(lRequest);

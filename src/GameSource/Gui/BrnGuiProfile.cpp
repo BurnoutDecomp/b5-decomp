@@ -830,8 +830,11 @@ void ProfileManager::SetCollisionWorldValid(bool lbValid)
 void ProfileManager::StartTask(TaskResultFunc lpTaskResultFunc,
                                ProfileTaskResultHandler* lpTaskResultHandler)
 {
-    mpTaskResultHandler = lpTaskResultHandler;
+    // In parameter order (DWARF h:665, lpTaskFunc then lpTaskResultHandler): ProfileManager::Load
+    // 0x82523D90 holds the handler in r10 across the function pointer's load, which this order
+    // gives; every other inlined copy is the same either way.
     mpTaskResultFunc    = lpTaskResultFunc;
+    mpTaskResultHandler = lpTaskResultHandler;
     // Every inlined copy also resets the result word (ARTIST Autosave 0x82513AEC, Save
     // 0x82513BCC, Bootup, Load, LoadImageFiles: stwx 0 at +0x4141C).
     miSaveLoadResult    = E_SAVELOADRESULT_INVALID;
@@ -1489,21 +1492,22 @@ void ProfileManager::SetMugshotBufferFromCircularBuffer(CgsGui::ImageFileInfo* l
         return;   // already framed into a slot
     }
 
-    MugshotSaveBuffer* lpSlot = &mpaMugshotCircularBuffer[miNextMugshotInCircularBuffer];
+    // DWARF local lpMugshotSaveBuffer (cpp:1217).
+    MugshotSaveBuffer* lpMugshotSaveBuffer = &mpaMugshotCircularBuffer[miNextMugshotInCircularBuffer];
 
     lpDestImageFileInfo->miSize   = sizeof(MugshotSaveBuffer);
-    lpDestImageFileInfo->mpBuffer = reinterpret_cast<char*>(lpSlot);
+    lpDestImageFileInfo->mpBuffer = reinterpret_cast<char*>(lpMugshotSaveBuffer);
 
     if (lpSourceImageFileInfo != 0)
     {
         CGS_ASSERT_AT(lpSourceImageFileInfo->miSize == KI_MUGSHOT_PICTURE_SIZE_BYTES,
             "lpSourceImageFileInfo->miSize == KI_MUGSHOT_PICTURE_SIZE_BYTES",
                                       CGS_ARTIST_FILE, 1475 /* ARTIST 0x824EFCCC */);
-        lpSlot->Construct(lpSourceImageFileInfo->mpBuffer, KI_MUGSHOT_PICTURE_SIZE_BYTES);
+        lpMugshotSaveBuffer->Construct(lpSourceImageFileInfo->mpBuffer, KI_MUGSHOT_PICTURE_SIZE_BYTES);
     }
     else
     {
-        lpSlot->Construct();
+        lpMugshotSaveBuffer->Construct();
     }
 
     miNextMugshotInCircularBuffer = (miNextMugshotInCircularBuffer + 1) % KI_MUGSHOTS_IN_CIRCULAR_BUFFER;

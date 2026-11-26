@@ -22,8 +22,10 @@
 namespace BrnGui
 {
     // ---- class statics -------------------------------------------------------------
-    // X360 .rdata flt_82F25640 == 5.0f, the float the scroll-bar arithmetic uses.
-    const f32 EATraxMenuComponent::KF_NUM_VISIBLE_TRACKS = 5.0f;
+    // X360 flt_82F25640 == 5.0f, the float the scroll-bar arithmetic uses. It sits in writable
+    // .data with no CRT writer: a const initialised from another constant (here the DWARF
+    // KI_NUM_VISIBLE_TRACKS) rather than from a literal, which would land in .rdata (D18).
+    const f32 EATraxMenuComponent::KF_NUM_VISIBLE_TRACKS = static_cast<f32>(KI_NUM_VISIBLE_TRACKS);
 
     // The six apt id tables are STATIC on the console too -- fixed .bss at 0x82FB2790 /
     // 0x82FB0070 / 0x82FB00D0 / 0x82FB2740 / 0x82FB0120 / 0x82FB26F0, five 16-byte slots
