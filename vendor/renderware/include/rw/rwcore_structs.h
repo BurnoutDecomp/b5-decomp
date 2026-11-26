@@ -305,6 +305,14 @@ struct RGBA {  // sizeof = 4
                  (static_cast<uint32_t>(lu8Blue) << 16) |
                  (static_cast<uint32_t>(lu8Green) << 8) | static_cast<uint32_t>(lu8Red)) {}
 
+    // DWARF rw/core/base/detail/hosttype.h:188/:204/:220/:236 (inline). The Xenon word is the native
+    // ABGR order the constructor above packs: red in the low byte (AIDebugComponent::StateTableDrawEntry
+    // 0x827673B4..0x827673D8 extracts each channel as a u8 and divides the promoted int: divw).
+    uint8_t GetRed() const   { return static_cast<uint8_t>(m_rgba); }
+    uint8_t GetGreen() const { return static_cast<uint8_t>(m_rgba >> 8); }
+    uint8_t GetBlue() const  { return static_cast<uint8_t>(m_rgba >> 16); }
+    uint8_t GetAlpha() const { return static_cast<uint8_t>(m_rgba >> 24); }
+
     uint32_t m_rgba;  // +0
 };
 RW_SIZE_ASSERT(rw::RGBA, 4);
