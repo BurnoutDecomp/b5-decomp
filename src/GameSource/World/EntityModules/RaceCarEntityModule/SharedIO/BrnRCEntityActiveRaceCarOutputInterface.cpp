@@ -494,8 +494,16 @@ void RCEntityActiveRaceCarOutputInterface::AddCarToRace(BrnWorld::RaceCar* lpRac
     CGS_ASSERT_AT(lpRaceCar->GetType() < E_RACE_CAR_TYPE_COUNT,
                "muType < E_RACE_CAR_TYPE_COUNT", BRN_RACECAR_H_ASSERT_FILE, 577);
     lCachedCar.mbIsPlayer = lpRaceCar->GetType() == E_RACE_CAR_TYPE_PLAYER;
-    lCachedCar.mDirection = lCachedCar.mbIsPlayer
-        ? lpRaceCar->GetVelocity() : Vector3(__vspltisw(0));
+    // if/else, not a ?: temporary: ARTIST keeps each arm's vector in v0 and shares one store
+    // (lvx128 v0 after GetVelocity 0x822B405C / vspltisw v0 0x822B4064 -> stvx 0x822B4074).
+    if (lCachedCar.mbIsPlayer)
+    {
+        lCachedCar.mDirection = lpRaceCar->GetVelocity();
+    }
+    else
+    {
+        lCachedCar.mDirection = Vector3(__vspltisw(0));
+    }
     maCarsInTheRace.Append(lCachedCar);
 }
 

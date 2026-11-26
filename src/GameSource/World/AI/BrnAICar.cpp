@@ -849,6 +849,7 @@ namespace BrnAI
 #include "GameSource/Math/BrnMathUtils.h"                                // BrnMath::IsNormal / Flatten
 
 #include "GameSource/AttribSys/Generated/classes/burnoutcarasset.h"              // SetDriver: key -> car asset
+#include "GameShared/GameClasses/Core/CgsCoreConstants.h"                        // CgsCore::KF_MPH_TO_MPS
 #include "GameSource/AttribSys/Generated/classes/physicsvehiclehandling.h"       // SetDriver: handling record
 #include "GameSource/AttribSys/Generated/classes/physicsvehicleboostattribs.h"   // SetDriver: MaxBoostSpeed
 
@@ -925,7 +926,6 @@ namespace BrnAI
     const f32 KF_ROUTE_OLD_DISTANCE_AI            = 200.0f;          // flt_820C4318
     const f32 KF_ROUTE_OLD_DISTANCE_PLAYER        = 50.0f;           // flt_820C4244
     const f32 KF_SECTION_SPEED_TO_BUZZ_RATIO      = 0.0076923077f;   // flt_820C5E94 (1/130)
-    const f32 KF_MPH_TO_MPS                       = 0.44704f;        // flt_82F31928
     const f32 KF_MAX_PLAYER_SPEED_SCALE           = 1.1f;            // flt_820C3D90
     const f32 KF_AICAR_FLT_MAX                    = 3.4028234663852886e+38f;  // flt_82F302F4 (0x7F7FFFFF)
     // DWARF BrnAICar.cpp:32 KF_DEFAULT_OUT_OF_RANGE_SPEED. flt_8300D7FC is .bss (hence the 0
@@ -2054,15 +2054,17 @@ namespace BrnAI
     {
         mpDriver = lpDriver;                                                            // stw r11,0x14B0
 
-        Attrib::Gen::burnoutcarasset lCarAsset(mCarAssetAttribKey, 0);                      // ld r4,0x14D8 ; bl sub_82204998
-        Attrib::Gen::physicsvehiclehandling lHandling(
-            const_cast<Attrib::Collection*>(lCarAsset.GetPhysicsVehicleHandlingRefSpec()->GetCollection()), 0);
-        const Attrib::Collection* const lpBoostCollection =
-            const_cast<Attrib::RefSpec&>(lHandling.PhysicsVehicleBoostAttribs()).GetCollection();
-        Attrib::Gen::physicsvehicleboostattribs lBoost(const_cast<Attrib::Collection*>(lpBoostCollection), 0);
+        // DWARF locals lBaseCarAsset (cpp:1138), lHandlingAttribs (:1139), lBoostAttribs (:1140).
+        Attrib::Gen::burnoutcarasset lBaseCarAsset(mCarAssetAttribKey, 0);                  // ld r4,0x14D8 ; bl sub_82204998
+        Attrib::Gen::physicsvehiclehandling lHandlingAttribs(
+            const_cast<Attrib::Collection*>(const_cast<Attrib::RefSpec&>(lBaseCarAsset.PhysicsVehicleHandlingAsset()).GetCollection()), 0);
+        Attrib::Gen::physicsvehicleboostattribs lBoostAttribs(
+            const_cast<Attrib::Collection*>(const_cast<Attrib::RefSpec&>(lHandlingAttribs.PhysicsVehicleBoostAttribs()).GetCollection()), 0);
 
-        const f32* lpBoostData = static_cast<const f32*>(lBoost.GetLayoutPointer());
-        mfMaxPlayerSpeed = lpBoostData[0] * KF_MPH_TO_MPS * KF_MAX_PLAYER_SPEED_SCALE;   // stfs 0x1504
+        const f32* lpBoostData = static_cast<const f32*>(lBoostAttribs.GetLayoutPointer());
+        // CgsCore::KF_MPH_TO_MPS is the engine's extern (.data 0x82F31928), multiplied at run time
+        // (0x8276EF90..9C) before the 1.1 scale.
+        mfMaxPlayerSpeed = lpBoostData[0] * CgsCore::KF_MPH_TO_MPS * KF_MAX_PLAYER_SPEED_SCALE;   // stfs 0x1504
 
         // (2026-09-05, aiwave2: a first-8 witness here proved every rival resolves its key to the
         // right car -- mfMaxPlayerSpeed 78..85 m/s. The "rival top speed ~10 m/s" symptom was

@@ -2,6 +2,7 @@
 #include "GameSource/World/AI/BrnAICar.h"
 #include "GameSource/World/AI/BrnAICar_Constants.h"    // the .bss tunables, recovered from their start-up initialisers
 #include "GameSource/World/AI/BrnAIUtils.h"                 // BrnAI::StepTo (step-toward helper)
+#include "GameShared/GameClasses/Core/CgsCoreConstants.h"   // CgsCore::KF_MPH_TO_MPS
 #define CGS_ARTIST_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\""../World/AI/BrnAIAggression.cpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"          // CGS_ASSERT
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"       // CgsNumeric::Random (mRandom.RandomFloat)
@@ -124,9 +125,8 @@ const f32 KF_SPEED_MATCH_SEP_PROX0  =  0.0f; // rodata 0x820C42F0 == 0x00000000 
 const f32 KF_FALL_PAST_SPURT_MIN_TIME = -1.0f;  // rodata 0x820037C8 == 0xBF800000 -- UpdateAggressionStateFallPast @0x82793568 keeps f31 = flt_820037C8 live from 0x82793620 through BOTH fsel floors, the spurt time's `fsel f0, f0, f0, f31` at 0x82793704 and the BE_FODDER time's at 0x827937C4 (the same -1 it stores at 0x82793818)
 const f32 KF_FALL_PAST_TIME_LERP_LO   = 0.0f;   // rodata 0x820C4288 == 0x00000000 (read from image.bin) -- low endpoint of the BE_FODDER state-time lerp in FallPast
 const f32 KF_FALL_PAST_TIME_LERP_HI   = 2.0f;   // rodata 0x820C428C == 0x40000000 (read from image.bin) -- high endpoint of the BE_FODDER state-time lerp in FallPast
-// 0x82F31928 is INITIALISED .data (not .bss): 0x3EE4E26D == 0.44704, the mph -> m/s factor.
-// SpurtForward's 130.0 * this == 58.1 m/s == 130 mph, which is what the name says it is.
-const f32 KF_SPURT_PASSING_SPEED_SCALE = 0.44704f; // .data 0x82F31928 == 0x3EE4E26D (read from image.bin)
+// SpurtForward's passing speed is 130 mph: CgsCore::KF_MPH_TO_MPS (.data 0x82F31928, the engine's
+// extern, 0.44704) * 130.0, multiplied at run time.
 
     // ================================================================================
     // The ONE definition of the static member declared in BrnAIAggression.h (DWARF :370).
@@ -1091,17 +1091,33 @@ void AIAggression::Update(f32 lfTimeStep, const AICar* lpPlayerCar)
     }
 }
 
-// ===== STATE TIME-OUT POLARITY (FX-AINAN2) =====
-// The DWARF's AIAggression::StateHasTimedOut() (DecFIGS PS3 0x9B52C8: mfStateTime != -1.0f &&
-// mfStateTime <= 0.0f) is inlined at every X360 site as `fcmpu t,-1.0 ; bne` then
-// `fcmpu t,0.0 ; ble -> timed out`. bne and ble are both TAKEN on an unordered compare, so on the
-// console a NaN state time HAS timed out (the PS3's GCC spells the same `<=` as cror lt|eq and
-// does not). Every site below is spelt `t != -1.0f && !(t > 0.0f)` to answer as the X360 does:
-//   Passive 0x827938B4, BeFodder 0x8277DC34, ClipOffBehind 0x82770BD4, ComeSlowFromBehind
-//   0x8278B63C, DropBackToSlam 0x82796930, FallPast 0x82793648, OvertakeFast 0x8278B518,
-//   OvertakeToSlam 0x82793A30, SpurtForward 0x82770E2C, Veer 0x8277DD1C, VeerExtreme 0x82770EF4,
-//   Wait 0x82770E84. (AttackSlam's `t == -1.0f || t > 0.0f` @0x82793B48/0x82793B64 is the exact
-//   negation and already answers "timed out" for a NaN.)
+// ===== StateHasTimedOut =====
+// DWARF BrnAIAggression.h:195 `bool StateHasTimedOut()`, home BrnAIAggression.cpp (decfigs_func_files;
+// PS3 out-of-line body 0x9B52C8: false when mfStateTime == -1.0f, else `<= 0.0f`). ARTIST has no
+// copy: every handler inlines it, and the inlined shape is the early `return false` (VeerExtreme
+// 0x82770ED8: `bne` over `li r11,0 ; b`) followed by the bool of `<= 0.0f` (`li 1 ; ble ; li 0 ;
+// clrlwi`) and the caller's own clrlwi/cmplwi. `ble` is taken on an unordered compare, so on the
+// console a NaN state time has timed out (FX-AINAN2): Passive, BeFodder, ClipOffBehind,
+// ComeSlowFromBehind, DropBackToSlam, FallPast, OvertakeFast, OvertakeToSlam, SpurtForward, Veer,
+// VeerExtreme, Wait and AttackSlam (negated) all call it.
+bool BrnAI::AIAggression::StateHasTimedOut()
+{
+    if (mfStateTime == -1.0f)
+    {
+        return false;
+    }
+    return mfStateTime <= 0.0f;
+}
+
+// ===== SetSpeedMatch =====
+// DWARF BrnAIAggression.h:187, home BrnAIAggression.cpp; PS3 out-of-line body 0x9B531C (assert
+// "leType < ESpeedMatch_Count" at the unity .cpp's line 1447, then the store to +0x58). ARTIST
+// inlines it everywhere with a constant type, so the assert folds away.
+void BrnAI::AIAggression::SetSpeedMatch(ESpeedMatch leType)
+{
+    CGS_ASSERT_AT(leType < ESpeedMatch_Count, "leType < ESpeedMatch_Count", CGS_ARTIST_FILE, 1447);
+    meSpeedMatchType = leType;
+}
 
 // ===== UpdateAggressionPassive =====
 // BrnAI::AIAggression::UpdateAggressionPassive @0x82793830.
@@ -1128,10 +1144,7 @@ void BrnAI::AIAggression::UpdateAggressionPassive(const AICar* lpTargetCar)
         lpTargetCar != mpCar &&
         (!lpTargetCar->mbIsPlayer || lpTargetCar->mbIsDrivenByPlayer))
     {
-        const f32 lfStateTime = mfStateTime;
-        const bool lbTimedOut = (lfStateTime != -1.0f && !(lfStateTime > 0.0f));
-
-        if (lbTimedOut || OutOfSpeedMatchRange(mpCar, lpTargetCar))
+        if (StateHasTimedOut() || OutOfSpeedMatchRange(mpCar, lpTargetCar))
         {
             mfStateTime       = -1.0f;
             meAggressionState = E_AI_AGGRESSION_STATE_OUT_OF_RANGE;
@@ -1156,11 +1169,10 @@ void BrnAI::AIAggression::UpdateAggressionStateAttackSlam()
         return;
     }
 
-    const f32 lfStateTime   = mfStateTime;
     mfRelativePositionAhead = -3.0f;
     meSpeedMatchType        = ESpeedMatch_Enabled;
 
-    if (lfStateTime == -1.0f || lfStateTime > 0.0f)
+    if (!StateHasTimedOut())
     {
         // `fcmpu lead, flt_820C42DC (-3.0) ; blt -> 0x82793C38` @0x82793BB0/0x82793BB4: a NaN lead
         // falls through to the lineup arm (FX-AINAN2; `lead >= -3` sent it to OVERTAKE_TO_SLAM).
@@ -1200,7 +1212,7 @@ void BrnAI::AIAggression::UpdateAggressionStateAttackSlam()
 // the slam lineup point (mbTargetPosValid) -- console store order +0x5C, +0x58, +0x44.
 void BrnAI::AIAggression::UpdateAggressionStateBeFodder()
 {
-    if (mfStateTime != -1.0f && !(mfStateTime > 0.0f))
+    if (StateHasTimedOut())
     {
         if (mpCar->meRouteFindingStyle == E_ROUTE_FINDING_PURSUIT)   // ==3
         {
@@ -1228,13 +1240,19 @@ void BrnAI::AIAggression::UpdateAggressionStateBeFodder()
 // slam lineup point (mbTargetPosValid); the no-target arm stores neither.
 void BrnAI::AIAggression::UpdateAggressionStateClipOffBehind()
 {
-    if (mfStateTime != -1.0f && !(mfStateTime > 0.0f))
+    if (StateHasTimedOut())
     {
         mfStateTime = -1.0f;
         meAggressionState = E_AI_AGGRESSION_STATE_OUT_OF_RANGE;   // 0
     }
 
-    if (mpTargetCar != NULL)
+    // The no-target arm comes first (ARTIST `bne` over it at 0x82770BFC).
+    if (mpTargetCar == NULL)
+    {
+        mfStateTime = -1.0f;
+        meAggressionState = E_AI_AGGRESSION_STATE_OUT_OF_RANGE;   // 0
+    }
+    else
     {
         if (mpTargetCar->GetSpeed() < KF_CLIP_OFF_MIN_SPEED)
         {
@@ -1243,11 +1261,6 @@ void BrnAI::AIAggression::UpdateAggressionStateClipOffBehind()
         }
         mbTargetPosValid = false;                    // +0x44 (li r30,0 @0x82770BA8; stb r30,0x44 @0x82770C2C)
         meSpeedMatchType = ESpeedMatch_SlowToClip;   // +0x58 = 3 (stw @0x82770C30)
-    }
-    else
-    {
-        mfStateTime = -1.0f;
-        meAggressionState = E_AI_AGGRESSION_STATE_OUT_OF_RANGE;   // 0
     }
 }
 
@@ -1292,7 +1305,7 @@ void BrnAI::AIAggression::UpdateAggressionStateComeSlowFromBehind()
 
     }
 
-    if (lfLeadingSeparation > 12.0f || (mfStateTime != -1.0f && !(mfStateTime > 0.0f)))
+    if (lfLeadingSeparation > 12.0f || StateHasTimedOut())
     {
         mfStateTime       = -1.0f;
         meAggressionState = E_AI_AGGRESSION_STATE_OUT_OF_RANGE;   // 0
@@ -1327,7 +1340,7 @@ void BrnAI::AIAggression::UpdateAggressionStateDropBackToSlam(const AICar* /*lpP
         return;
     }
 
-    if (mfStateTime != -1.0f && !(mfStateTime > 0.0f))
+    if (StateHasTimedOut())
     {
         StopAttacking(E_AGGRESSION_ATTACKAGAIN);
         return;
@@ -1399,7 +1412,7 @@ void BrnAI::AIAggression::UpdateAggressionStateFallPast(const AICar* lpPlayerCar
     }
 
     // State timed out?
-    if (mfStateTime != -1.0f && !(mfStateTime > 0.0f))
+    if (StateHasTimedOut())
     {
         const ERouteFindingStyle leStyle = mpCar->meRouteFindingStyle;
         const bool lbAggressiveStyle = (leStyle == E_ROUTE_FINDING_ROAD_RAGE) ||   // 2
@@ -1634,7 +1647,7 @@ void BrnAI::AIAggression::UpdateAggressionStateOvertakeFast()
         meAggressionState = E_AI_AGGRESSION_STATE_FALL_PAST;   // 7
     }
 
-    if (mfStateTime != -1.0f && !(mfStateTime > 0.0f))
+    if (StateHasTimedOut())
     {
         mfStateTime = -1.0f;
         meAggressionState = E_AI_AGGRESSION_STATE_OUT_OF_RANGE;   // 0
@@ -1678,7 +1691,7 @@ void BrnAI::AIAggression::UpdateAggressionStateOvertakeToSlam(const AICar* /*lpP
     if (mpCar->meRouteFindingStyle == E_ROUTE_FINDING_ROAD_RAGE ||
         mpCar->meRouteFindingStyle == E_ROUTE_FINDING_MARKED_MAN)
     {
-        if (mfStateTime != -1.0f && !(mfStateTime > 0.0f))
+        if (StateHasTimedOut())
         {
             meAggressionState = E_AI_AGGRESSION_STATE_SPURT_FORWARD;
             mfStateTime       = (1.0f + mRandom.RandomFloat()) * 0.5f;
@@ -1690,17 +1703,18 @@ void BrnAI::AIAggression::UpdateAggressionStateOvertakeToSlam(const AICar* /*lpP
 //
 // SPURT_FORWARD handler: a timed burst to pull ahead. Forces speed-match mode
 // OvertakeSlowly, drops the slam lineup point (mbTargetPosValid) so the racing line stops
-// steering at it, and sets the fixed passing speed to KF_SPURT_PASSING_SPEED_SCALE * 130.0.
+// steering at it, and sets the fixed passing speed to CgsCore::KF_MPH_TO_MPS * 130.0.
 // On state-timeout it resets to OUT_OF_RANGE.
 void BrnAI::AIAggression::UpdateAggressionStateSpurtForward()
 {
-    const f32 lfStateTime = mfStateTime;
 
-    meSpeedMatchType = ESpeedMatch_OvertakeSlowly;   // +0x58 = 5 (stw @0x82770DE4)
+    // Statement order and SetSpeedMatch from the PS3 body (0x9B54E8: SetSpeedMatch(5), then the
+    // stb 0x44, then the stfs 0x48).
+    SetSpeedMatch(ESpeedMatch_OvertakeSlowly);       // +0x58 = 5 (stw @0x82770DE4)
     mbTargetPosValid = false;                        // +0x44 (li r10,0 @0x82770DE0; stb r10,0x44 @0x82770DF4)
-    mFixedPassingSpeed = KF_SPURT_PASSING_SPEED_SCALE * 130.0f;   // +0x48 (flt_82F31928 * flt_820C436C, stfs @0x82770E04)
+    mFixedPassingSpeed = CgsCore::KF_MPH_TO_MPS * 130.0f;   // +0x48 (flt_82F31928 * flt_820C436C, stfs @0x82770E04)
 
-    if (lfStateTime != -1.0f && !(lfStateTime > 0.0f))
+    if (StateHasTimedOut())
     {
         mfStateTime = -1.0f;
         meAggressionState = E_AI_AGGRESSION_STATE_OUT_OF_RANGE;   // 0
@@ -1716,14 +1730,13 @@ void BrnAI::AIAggression::UpdateAggressionStateSpurtForward()
 // GetPositionNextToTarget at a +6 offset. With no target at all it likewise spurts forward.
 void BrnAI::AIAggression::UpdateAggressionStateVeer()
 {
-    const f32 lfStateTime   = mfStateTime;
     mbTargetPosValid        = false;
     mfRelativePositionAhead = 2.0f;
     meSpeedMatchType        = ESpeedMatch_Enabled;
 
     bool lbSpurtForward = false;
 
-    if (lfStateTime != -1.0f && !(lfStateTime > 0.0f))
+    if (StateHasTimedOut())
     {
         if (!mpCar->mbIsTouchingPlayer)
         {
@@ -1760,12 +1773,11 @@ void BrnAI::AIAggression::UpdateAggressionStateVeer()
 // it transitions to WAIT (state 4, 1s).
 void BrnAI::AIAggression::UpdateAggressionStateVeerExtreme()
 {
-    const f32 lfStateTime = mfStateTime;
 
     meSpeedMatchType = ESpeedMatch_SlowToClip;   // +0x58 = 3 (stw @0x82770EC0)
     mbTargetPosValid = false;                    // +0x44 (li r11,0 @0x82770EC4; stb r11,0x44 @0x82770EC8)
 
-    if (lfStateTime != -1.0f && !(lfStateTime > 0.0f))
+    if (StateHasTimedOut())
     {
         mfStateTime = 1.0f;
         meAggressionState = E_AI_AGGRESSION_STATE_WAIT;   // 4
@@ -1779,10 +1791,9 @@ void BrnAI::AIAggression::UpdateAggressionStateVeerExtreme()
 // position bias, the cached target car and target-position validity.
 void BrnAI::AIAggression::UpdateAggressionStateWait()
 {
-    const f32 lfStateTime = mfStateTime;
     meSpeedMatchType = ESpeedMatch_Disabled;
 
-    if (lfStateTime != -1.0f && !(lfStateTime > 0.0f))
+    if (StateHasTimedOut())
     {
         mfStateTime             = -1.0f;
         meAggressionState       = E_AI_AGGRESSION_STATE_OUT_OF_RANGE;

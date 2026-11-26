@@ -2211,16 +2211,18 @@ namespace BrnAI
     {
         ResetPIDTuningState();                                    // @0x8277DA48
 
-        if (mpCar != 0)
+        // `NULL != GetCar()`: ARTIST's signed compare (cmpwi 0x8278B2CC), as in ResetPIDTuningState.
+        if (NULL != GetCar())
         {
-            // ARTIST8278B2D4..8278B344: keyed car -> handling -> steering.
-            Attrib::Gen::burnoutcarasset lAsset(mpCar->mCarAssetAttribKey, 0);
+            // ARTIST8278B2D4..8278B344: keyed car -> handling -> steering. DWARF locals
+            // lBaseCarAsset (cpp:2774), lHandling (:2775), lSteeringAttribs (:2776).
+            Attrib::Gen::burnoutcarasset lBaseCarAsset(mpCar->mCarAssetAttribKey, 0);
             Attrib::Gen::physicsvehiclehandling lHandling(
-                const_cast<Attrib::Collection*>(lAsset.GetPhysicsVehicleHandlingRefSpec()->GetCollection()), 0);
-            Attrib::Gen::physicsvehiclesteeringattribs lSteering(
+                const_cast<Attrib::Collection*>(const_cast<Attrib::RefSpec&>(lBaseCarAsset.PhysicsVehicleHandlingAsset()).GetCollection()), 0);
+            Attrib::Gen::physicsvehiclesteeringattribs lSteeringAttribs(
                 const_cast<Attrib::Collection*>(lHandling.PhysicsVehicleSteeringAttribs().GetCollection()), 0);
-            mfTimeToLookAheadForDrift = lSteering.GetDriverTimeToLookAheadForDrift();
-            mfMinDistanceToLookAheadForDrift = lSteering.GetDriverMinDistanceToLookAheadForDrift();
+            mfTimeToLookAheadForDrift = lSteeringAttribs.GetDriverTimeToLookAheadForDrift();
+            mfMinDistanceToLookAheadForDrift = lSteeringAttribs.GetDriverMinDistanceToLookAheadForDrift();
 
             return;
         }
@@ -2242,21 +2244,24 @@ namespace BrnAI
     // ================================================================================
     void AIDriver::ResetPIDTuningState()
     {
-        if (mpCar != 0)
+        // `NULL != GetCar()` (DWARF: GetCar is called) is the signed compare ARTIST has (cmpwi
+        // 0x8277DA60); DWARF locals lBaseCarAsset (cpp:2812), lHandling (:2813), lSteeringAttribs (:2814).
+        if (NULL != GetCar())
         {
             //8277DA68..8277DAC4: preserve both validation and balanced instance lifetimes.
-            Attrib::Gen::burnoutcarasset lAsset(mpCar->mCarAssetAttribKey, 0);
+            Attrib::Gen::burnoutcarasset lBaseCarAsset(mpCar->mCarAssetAttribKey, 0);
             Attrib::Gen::physicsvehiclehandling lHandling(
-                const_cast<Attrib::Collection*>(lAsset.GetPhysicsVehicleHandlingRefSpec()->GetCollection()), 0);
-            Attrib::Gen::physicsvehiclesteeringattribs lSteering(
+                const_cast<Attrib::Collection*>(const_cast<Attrib::RefSpec&>(lBaseCarAsset.PhysicsVehicleHandlingAsset()).GetCollection()), 0);
+            Attrib::Gen::physicsvehiclesteeringattribs lSteeringAttribs(
                 const_cast<Attrib::Collection*>(lHandling.PhysicsVehicleSteeringAttribs().GetCollection()), 0);
         }
 
-        const f32 lafNormal[3] = { KF_PID_NORMAL_P, KF_PID_NORMAL_I, KF_PID_NORMAL_D };
-        const f32 lafDrift[3]  = { KF_PID_DRIFT_P,  KF_PID_DRIFT_I,  KF_PID_DRIFT_D  };
+        // DWARF: non-const float32_t[3] lafPIDCoefficients (cpp:2817) / lafDriftPIDCoefficients (:2818).
+        f32 lafPIDCoefficients[3]      = { KF_PID_NORMAL_P, KF_PID_NORMAL_I, KF_PID_NORMAL_D };
+        f32 lafDriftPIDCoefficients[3] = { KF_PID_DRIFT_P,  KF_PID_DRIFT_I,  KF_PID_DRIFT_D  };
 
-        mPIDController.Prepare(lafNormal);         // r3 = this + 0x1B34
-        mPIDControllerDrift.Prepare(lafDrift);     // r3 = this + 0x1B98
+        mPIDController.Prepare(lafPIDCoefficients);           // r3 = this + 0x1B34
+        mPIDControllerDrift.Prepare(lafDriftPIDCoefficients); // r3 = this + 0x1B98
     }
 
     // ================================================================================

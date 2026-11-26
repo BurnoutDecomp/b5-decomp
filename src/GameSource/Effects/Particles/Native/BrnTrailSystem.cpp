@@ -152,8 +152,8 @@ namespace Native
     bool EmitterArray::Prepare()
     {
         // Inlined into TrailSystem::Prepare @0x8228BE78: memset the 384-byte pointer table, size 0.
-        memset(mapEmitters, 0, sizeof(mapEmitters));
         mnCurrentSize = 0;
+        memset(mapEmitters, 0, sizeof(mapEmitters));
         return true;
     }
 
@@ -304,7 +304,9 @@ namespace Native
     // =========================================================================================
     bool TrailSystem::Prepare()
     {
-        for (s32 lnIndex = 0; lnIndex < KN_TRAIL_EMITTER_POOL_SIZE; ++lnIndex)
+        // DWARF cpp:133: one lnIndex for both loops.
+        s32 lnIndex;
+        for (lnIndex = 0; lnIndex < KN_TRAIL_EMITTER_POOL_SIZE; ++lnIndex)
         {
             TrailEmitter* lpEmitter = &maEmitterPool[lnIndex];
             mFreeEmitters.Push(lpEmitter);
@@ -316,9 +318,9 @@ namespace Native
             lpEmitter->mpCurrentSegments      = &maSegments[lnIndex];
             lpEmitter->mpOldSegments          = &maSegments[KN_TRAIL_EMITTER_POOL_SIZE + lnIndex];
         }
-        for (s32 lnTrailType = 0; lnTrailType < KI_MAX_NUM_TRAIL_TYPES; ++lnTrailType)
+        for (lnIndex = 0; lnIndex < KI_MAX_NUM_TRAIL_TYPES; ++lnIndex)
         {
-            maActiveEmitters[lnTrailType].Prepare();
+            maActiveEmitters[lnIndex].Prepare();
         }
         mnCurrentBuffer = 0;
         return true;

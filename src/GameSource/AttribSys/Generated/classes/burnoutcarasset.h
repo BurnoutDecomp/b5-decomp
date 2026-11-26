@@ -78,6 +78,14 @@ namespace Gen
         RefSpec* GetExternalCamRefSpec() const { return RefSpecAt(KU_EXTERNAL_CAM_REFSPEC_OFFSET); }
         RefSpec* GetPhysicsVehicleHandlingRefSpec() const
         { return RefSpecAt(KU_PHYSICS_VEHICLE_HANDLING_REFSPEC_OFFSET); }
+        // DWARF burnoutcarasset.h:181 `const Attrib::RefSpec& PhysicsVehicleHandlingAsset() const`:
+        // the generated reference accessor, the layout field with no null test (ARTIST
+        // AICar::SetDriver 0x8276EF50 `addi r3, data, 0x158` straight into GetCollection).
+        const RefSpec& PhysicsVehicleHandlingAsset() const
+        {
+            return *reinterpret_cast<const RefSpec*>(
+                static_cast<const u8*>(GetLayoutPointer()) + KU_PHYSICS_VEHICLE_HANDLING_REFSPEC_OFFSET);
+        }
         RefSpec* GetGraphicsAssetRefSpec() const
         { return RefSpecAt(KU_GRAPHICS_ASSET_REFSPEC_OFFSET); }
         const char* GetAssetName() const

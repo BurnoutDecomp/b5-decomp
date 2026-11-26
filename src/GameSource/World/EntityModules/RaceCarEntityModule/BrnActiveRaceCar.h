@@ -544,7 +544,10 @@ public:
         // X360 0x822B8B60: the inlined BitArray<96>::IsBitSet (field = part/64).
         bool IsPartVisible(u8 lu8Part) const;
         void ChangePartVisibility(u8 lu8Part, bool lbVisible);
-        void MakeAllPartsVisible();
+        // DWARF h:178. Header-inline: no ARTIST or PS3 out-of-line copy exists. LegacySrc
+        // BrnActiveRaceCar.h:1910 has the body `mBodyPartVisibility.SetAll()`, and ARTIST inlines
+        // it as two `std -1` stores (ActiveRaceCar::ResetAfterCrash 0x822BF4A4/A8).
+        void MakeAllPartsVisible() { mBodyPartVisibility.SetAll(); }
 
         // --- LOD / damage state ---------------------------------------------
         CgsGraphics::Model::State GetLOD() const { return mLOD; }

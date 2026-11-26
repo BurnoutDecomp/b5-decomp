@@ -186,14 +186,7 @@ void ActiveRaceCar::RenderParams::ChangePartVisibility(u8 lu8Part, bool lbVisibl
     }
 }
 
-// MakeAllPartsVisible (DWARF BrnActiveRaceCar.h:178).
-void ActiveRaceCar::RenderParams::MakeAllPartsVisible()
-{
-    for (u32 luPart = 0; luPart < KU_MAX_BODY_PARTS_PER_RACE_CAR; ++luPart)
-    {
-        mBodyPartVisibility.SetBit(luPart);
-    }
-}
+// (MakeAllPartsVisible is header-inline: BrnActiveRaceCar.h, DWARF h:178.)
 
 // ----------------------------------------------------------------------------
 // Cracked-glass shader params (8 panes)

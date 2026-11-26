@@ -40,14 +40,11 @@ void TrafficInputInterface::Construct()
 //   i.e. each mask's memberwise (u64[10]) copy-assignment. Returns *this.
 TrafficInputInterface& TrafficInputInterface::operator=(const TrafficInputInterface& lOther)
 {
-    mAddCrashingTrafficEventQueue.Clear();
-    mAddCrashingTrafficEventQueue.Append(lOther.mAddCrashingTrafficEventQueue);
-
-    mRemoveSlammedTrafficEventQueue.Clear();
-    mRemoveSlammedTrafficEventQueue.Append(lOther.mRemoveSlammedTrafficEventQueue);
-
-    mRemoveCrashedTrafficEventQueue.Clear();
-    mRemoveCrashedTrafficEventQueue.Append(lOther.mRemoveCrashedTrafficEventQueue);
+    // EventQueue::operator= (CgsEventQueue.h:194, inline: Clear then Append); ARTIST computes
+    // each destination queue's address before the inlined `stw 0, 8(queue)` (0x827AA508/10).
+    mAddCrashingTrafficEventQueue   = lOther.mAddCrashingTrafficEventQueue;
+    mRemoveSlammedTrafficEventQueue = lOther.mRemoveSlammedTrafficEventQueue;
+    mRemoveCrashedTrafficEventQueue = lOther.mRemoveCrashedTrafficEventQueue;
 
     mRenderingBits     = lOther.mRenderingBits;
     mFarFromCameraBits = lOther.mFarFromCameraBits;
