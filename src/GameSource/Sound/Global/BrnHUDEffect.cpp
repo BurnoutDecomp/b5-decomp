@@ -517,14 +517,16 @@ namespace
         bool IsTimedEvent()  const { return mpBase[0xAA8u] != 0; }  // *(v6 + 2728)
     };
 
-    // .rdata: the three showtime/stunt score-rate thresholds and the re-trigger gate, plus
-    // the boost-earn threshold and the event-timer window.
-    const f32 KF_SCORE_RATE_FAST      = 3.5f;    // flt_82F2CE48
-    const f32 KF_SCORE_RATE_MEDIUM    = 1.5f;    // flt_82F2CE4C
-    const f32 KF_SCORE_RATE_SLOW      = 1.0f;    // flt_82F2CE50
-    const f32 KF_SCORE_TICK_GAP       = 0.379f;  // flt_82F2CE54 -- seconds between ticks
-    const f32 KF_BOOST_EARN_THRESHOLD = 0.1f;    // flt_82F2CE58
-    const f32 KF_EVENT_TIMER_WINDOW   = 10.0f;   // flt_82004A20 -- the countdown window
+    // DWARF BrnHUDEffect.cpp:30..39: KF_RE_TRIGGER_TIME is the one const (a literal: ARTIST
+    // .rdata 0x82004A20); the stunt-rate thresholds, the tick spacing and the showtime boost
+    // threshold are plain float32_t with internal linkage (ARTIST writable .data, in
+    // declaration order, each loaded from memory).
+    const f32 KF_RE_TRIGGER_TIME         = 10.0f;   // cpp:30, flt_82004A20 -- the countdown window
+    f32 KF_STUNT_DELTA_FAST              = 3.5f;    // cpp:32, flt_82F2CE48
+    f32 KF_STUNT_DELTA_MEDIUM            = 1.5f;    // cpp:33, flt_82F2CE4C
+    f32 KF_STUNT_DELTA_SLOW              = 1.0f;    // cpp:34, flt_82F2CE50
+    f32 KF_STUNT_TICK_SPACING            = 0.379f;  // cpp:36, flt_82F2CE54 -- seconds between ticks
+    f32 KF_SHOWTIME_BOOST_THRESHOLD      = 0.1f;    // cpp:39, flt_82F2CE58
 
     // The X360 compares the previous boost delta against +/-FLT_EPSILON to mean "was zero".
     const f32 KF_EPSILON = 1.1920929e-7f;
@@ -659,18 +661,18 @@ void HUDEffect::UpdateShowtime()
         lfBoostAmount - mGameModeData.mEventBoostAmount.mPreviousValue);
 
     const f32 lfRate = mGameModeData.mEventScoreDelta.GetAverage();
-    if (mGameModeData.mfTimeSinceScoreTick > KF_SCORE_TICK_GAP)
+    if (mGameModeData.mfTimeSinceScoreTick > KF_STUNT_TICK_SPACING)
     {
         s32 leTag = -1;
-        if (lfRate >= KF_SCORE_RATE_FAST)
+        if (lfRate >= KF_STUNT_DELTA_FAST)
         {
             leTag = E_SPLICE_SHOWTIME_SCORE_FAST;
         }
-        else if (lfRate >= KF_SCORE_RATE_MEDIUM)
+        else if (lfRate >= KF_STUNT_DELTA_MEDIUM)
         {
             leTag = E_SPLICE_SHOWTIME_SCORE_MEDIUM;
         }
-        else if (lfRate >= KF_SCORE_RATE_SLOW)
+        else if (lfRate >= KF_STUNT_DELTA_SLOW)
         {
             leTag = E_SPLICE_SHOWTIME_SCORE_SLOW;
         }
@@ -693,7 +695,7 @@ void HUDEffect::UpdateShowtime()
     const f32 lfPreviousDelta = mGameModeData.mShowtimeBoostDelta.mPreviousValue;
     const bool lbWasZero = (lfPreviousDelta <= KF_EPSILON) && (lfPreviousDelta >= -KF_EPSILON);
     if (lbWasZero &&
-        mGameModeData.mShowtimeBoostDelta.mCurrentValue > KF_BOOST_EARN_THRESHOLD)
+        mGameModeData.mShowtimeBoostDelta.mCurrentValue > KF_SHOWTIME_BOOST_THRESHOLD)
     {
         PlaySound(E_SPLICE_SHOWTIME_BOOST_EARN, KU8_MIXER_OUTPUT_SHOWTIME);
     }
@@ -706,7 +708,7 @@ void HUDEffect::UpdateRoadRage(const Module::Io::RootInputBuffer::ScoringOutputI
 {
     const ScoringCursor lScoring = { reinterpret_cast<const u8*>(apScoring) };
 
-    UpdateEventTimeRemaining(lScoring.TimeRemaining(), KF_EVENT_TIMER_WINDOW,
+    UpdateEventTimeRemaining(lScoring.TimeRemaining(), KF_RE_TRIGGER_TIME,
                              E_SPLICE_ROAD_RAGE_COUNT_DOWN, KU8_MIXER_OUTPUT_ROAD_RAGE);
 
     // The clock going UP is a takedown award; latch it and wait for the camera.
@@ -778,18 +780,18 @@ void HUDEffect::UpdateStuntRun(const Module::Io::RootInputBuffer::ScoringOutputI
         lfRate = mGameModeData.mEventScoreDelta.GetAverage();
     }
 
-    if (mGameModeData.mfTimeSinceScoreTick > KF_SCORE_TICK_GAP)
+    if (mGameModeData.mfTimeSinceScoreTick > KF_STUNT_TICK_SPACING)
     {
         s32 leTag = -1;
-        if (lfRate >= KF_SCORE_RATE_FAST)
+        if (lfRate >= KF_STUNT_DELTA_FAST)
         {
             leTag = E_SPLICE_STUNT_SCORE_FAST;
         }
-        else if (lfRate >= KF_SCORE_RATE_MEDIUM)
+        else if (lfRate >= KF_STUNT_DELTA_MEDIUM)
         {
             leTag = E_SPLICE_STUNT_SCORE_MEDIUM;
         }
-        else if (lfRate >= KF_SCORE_RATE_SLOW)
+        else if (lfRate >= KF_STUNT_DELTA_SLOW)
         {
             leTag = E_SPLICE_STUNT_SCORE_SLOW;
         }
@@ -849,7 +851,7 @@ void HUDEffect::UpdateStuntRun(const Module::Io::RootInputBuffer::ScoringOutputI
     // mixer output. Tag 21 is the generic last-ten-seconds countdown bank and all three
     // timed lanes reuse it -- E_SPLICE_EVENT_COUNTDOWN (14) is a different cue and is NOT
     // what any of these pass. Do not "correct" this to 14.
-    UpdateEventTimeRemaining(lScoring.TimeRemaining(), KF_EVENT_TIMER_WINDOW,
+    UpdateEventTimeRemaining(lScoring.TimeRemaining(), KF_RE_TRIGGER_TIME,
                              E_SPLICE_ROAD_RAGE_COUNT_DOWN, KU8_MIXER_OUTPUT_STUNT);
 }
 
@@ -904,7 +906,7 @@ void HUDEffect::UpdateGameModeHud(Module::SoundLogicModule* apModule)
         if (lScoring.IsTimedEvent())
         {
             UpdateEventTimeRemaining(lScoring.EventDuration() - lScoring.EventElapsed(),
-                                     KF_EVENT_TIMER_WINDOW,
+                                     KF_RE_TRIGGER_TIME,
                                      E_SPLICE_ROAD_RAGE_COUNT_DOWN,
                                      KU8_MIXER_OUTPUT_ROAD_RAGE);
         }

@@ -91,11 +91,6 @@ const f32 KF_DEFAULT_TORQUE_CURVE_INPUT_MIN = 37.0f;             // flt_82092094
 const f32 KF_DEFAULT_TORQUE_CURVE_INPUT_MAX = 740.0f;            // flt_82092098
 const f32 KF_DEFAULT_TORQUE_CURVE_OUTPUT_AT_MIN = 0.0f;          // flt_82001CC0
 
-// SetupAttribsForDonutAI @0x825F6298 loads ONE .rdata float (flt_8205820C) and stores it to two
-// places -- the engine's MaxTorque lane and the base block's Mass lane. Modelled as the single
-// constant the asm actually has, not as two same-valued names.
-const f32 KF_DONUT_AI_MASS_AND_MAX_TORQUE = 700.0f;   // flt_8205820C
-const f32 KF_DONUT_AI_MIN_SPEED_FOR_DRIFT = 0.0f;     // flt_82001CC0
 }
 
 namespace HandlingDefaults
@@ -1181,13 +1176,19 @@ void VehicleAttribs::SetupAttribs(const Attrib::Gen::physicsvehiclehandling& lrH
 // SetDifferential(0) instead: a car that must reach 700 mph to drift and has no drive at all. The
 // committed comment there argued the +0x110 write was "EngineAttribs+0x10 (SetDifferential), NOT
 // +0x20 (SetMaxTorque)"; with the engine block at its real base the write IS +0x20.
+// Source form: DWARF VehicleAttribs.cpp:862..870 lists VecFloat::VecFloat before each setter and
+// the setters' Vector4::SetX (vector4_type_inline.h:95); ARTIST builds each argument as a stack
+// temporary from an .rdata literal (lfs flt_82001CC0 / flt_8205820C, stfs, lvlx 0x825F62B8..),
+// i.e. literal arguments, not a named constant bound by reference. STUCK on the unity: ARTIST keeps
+// `this` in r7 and 700.0 in f10 across the two Prepare*TireForDonutAI calls, which only a same-TU
+// callee (Wheel.cpp, BrnPhysicsUnity2 member 16) allows.
 void VehicleAttribs::SetupAttribsForDonutAI()
 {
-    mDriftAttribs.SetMinSpeedForDrift(KVF(KF_DONUT_AI_MIN_SPEED_FOR_DRIFT));   // [this+0x110].x
-    mEngineAttribs.SetMaxTorque(KVF(KF_DONUT_AI_MASS_AND_MAX_TORQUE));         // [this+0x1B0].x
-    mFrontTireAttribs.PrepareFrontTireForDonutAI();                            // this+0x2D0
-    mRearTireAttribs.PrepareRearTireForDonutAI();                              // this+0x310
-    mBaseAttribs.SetMass(KVF(KF_DONUT_AI_MASS_AND_MAX_TORQUE));                // [this+0x70].x
+    mDriftAttribs.SetMinSpeedForDrift(VecFloat(0.0f));     // [this+0x110].x, flt_82001CC0
+    mEngineAttribs.SetMaxTorque(VecFloat(700.0f));         // [this+0x1B0].x, flt_8205820C
+    mFrontTireAttribs.PrepareFrontTireForDonutAI();        // this+0x2D0
+    mRearTireAttribs.PrepareRearTireForDonutAI();          // this+0x310
+    mBaseAttribs.SetMass(VecFloat(700.0f));                // [this+0x70].x
 }
 
 // @0x825B2B68 (92 instrs)  BrnPhysics::Vehicle::VehicleAttribs::operator=

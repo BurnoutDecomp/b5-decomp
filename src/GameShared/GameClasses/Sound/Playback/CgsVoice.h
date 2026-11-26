@@ -495,7 +495,10 @@ inline void PlayerVoice::Stop()
 // latched one. ARTIST keeps an out-of-line copy (0x82680E18: the CHANGED bit cleared
 // unconditionally (stb at 0x82680E70), the state compared signed (cmpw at 0x82680E6C), the
 // new state stored with the CHANGED bit inserted (rlwimi at 0x82680E7C)) and inlines it with
-// a constant state (GenericRwacPlayerVoice's constructor 0x826C7FFC..0x826C8018).
+// a constant state (GenericRwacPlayerVoice's constructor 0x826C7FFC..0x826C8018). The state
+// test reads the member itself, not GetPlaybackState() (h:1440): the PS3 constructor 0x90C738
+// inlines only CgsVoice.h:1463 and :1473..1476 here, and ARTIST's inlined copy compares the
+// zero-extended byte unsigned (cmplwi at 0x826C8008).
 inline void Voice::SetPlaybackState(EPlaybackState lePlaybackState)
 {
     CGS_ASSERT_AT(!(lePlaybackState & E_PLAYBACK_STATE_CHANGED),
@@ -503,7 +506,7 @@ inline void Voice::SetPlaybackState(EPlaybackState lePlaybackState)
                CGS_ARTIST_CGSVOICE_H_FILE, 1471);
 
     AcknowledgePlaybackStateChange();
-    if (GetPlaybackState() != lePlaybackState)
+    if (mu8PlaybackState != lePlaybackState)
         mu8PlaybackState = static_cast<u8>(lePlaybackState | E_PLAYBACK_STATE_CHANGED);
 }
 

@@ -69,16 +69,19 @@ const u32 KU_SCRAPE_PARAMETERS[9] = {
 const u32 KU_SEND01 = static_cast<u32>(
     CgsSound::Playback::Name::MakeHash("Send01"));
 
-// DWARF BrnScrapeEffect.cpp:32..43 -- the scrape voice's start delay and intensity shaping, read from
-// the image (.data, in declaration order):
-const f32 KF_TIME_DELAY_BEFORE_SCRAPES = 0.15f;   // cpp:32, 0x82F2CED8 = 0x3E19999A
-const u8  KI_MATERIAL_AI = 1;                     // cpp:35 (MapScrapeToMaterial's buckets)
+const u8  KI_MATERIAL_AI = 1;                     // DWARF cpp:35 const uint8_t (MapScrapeToMaterial's buckets)
 const u8  KI_MATERIAL_TRAFFIC = 2;                // cpp:36
-const f32 KF_AEMS_FRICTION_SCALE_UP = 250.0f;     // cpp:39, 0x82F2CEDC = 0x437A0000
-const f32 KF_RAMP_DOWN_TIME = 0.25f;              // cpp:40, 0x82F2CEE0 = 0x3E800000
-const f32 KF_AI_SCALING_UP = 10.0f;               // cpp:42, 0x82F2CEE4 = 0x41200000
-const f32 KF_WORLD_SCALING_UP = 2.5f;             // cpp:43, 0x82F2CEE8 = 0x40200000
 }
+
+// DWARF BrnScrapeEffect.cpp:32..43 -- the scrape voice's start delay and intensity shaping: plain
+// (non-const) float32_t tunables, which is why ARTIST holds them in writable .data and loads each
+// one from memory (values read from the image, in declaration order). DWARF gives the first external
+// linkage and the four after it internal linkage.
+f32 KF_TIME_DELAY_BEFORE_SCRAPES = 0.15f;         // cpp:32, 0x82F2CED8 = 0x3E19999A
+static f32 KF_AEMS_FRICTION_SCALE_UP = 250.0f;    // cpp:39, 0x82F2CEDC = 0x437A0000
+static f32 KF_RAMP_DOWN_TIME = 0.25f;             // cpp:40, 0x82F2CEE0 = 0x3E800000
+static f32 KF_AI_SCALING_UP = 10.0f;              // cpp:42, 0x82F2CEE4 = 0x41200000
+static f32 KF_WORLD_SCALING_UP = 2.5f;            // cpp:43, 0x82F2CEE8 = 0x40200000
 
 ScrapeEffect::ScrapeEffect()
     : BrnSound::Logic::BrnEffectObject()

@@ -219,7 +219,7 @@ public:
     int GetPpuTicksEvent() const;
 
     // ---- the self-contained callbacks/helpers (phase E) --------------------------------
-    static int GetSize(const PlugInConfig *config);                 // @0x826A4210
+    static unsigned int GetSize(PlugInConfig *pPlugInConfig);       // @0x826A4210 (DWARF signature)
     static int PreProcess(SndPlayer1_CgsStreamMod *self, Mixer *ctx,
                           bool discontinuity, int outputSamplesRequested); // @0x8268CD10
     int  Declick(Mixer *ctx);                                            // @0x8268CB78

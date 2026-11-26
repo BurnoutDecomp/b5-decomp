@@ -206,7 +206,8 @@ namespace
 // live. The console spells the same thing with its own extents (declick at 0x188, then
 // align_up(0x188 + 4*channels, 8), then + 0x20 per request); BOTH of those are console
 // sizes containing 32-bit pointers, so the host recomputes all three from its own sizeofs.
-// GetSize and CreateInstance share this so the allocation and the placement cannot drift.
+// CreateInstance places the tails through it; GetSize sums the same extents in the
+// original's own LinearAllocAddSize form (below).
 // -------------------------------------------------------------------------------------
 SndPlayer1_CgsStreamMod::HostLayout
 SndPlayer1_CgsStreamMod::ComputeHostLayout(u32 auChannels, s32 aiMaxRequests)
@@ -225,13 +226,38 @@ SndPlayer1_CgsStreamMod::ComputeHostLayout(u32 auChannels, s32 aiMaxRequests)
 // GetSize @0x826A4210 -- the stage-carve stride. The constructor parameter's first float
 // is the request-ring depth (default 1); the config's +8 byte is the channel count.
 // -------------------------------------------------------------------------------------
-int SndPlayer1_CgsStreamMod::GetSize(const PlugInConfig* config)
+// rw::audio::core::LinearAllocAddSize: rwaudiocore's inline (DWARF rwaudiocore/3.03.00
+// source/cmn/ibase.h:54, `void LinearAllocAddSize(unsigned int&, unsigned int, unsigned int)`;
+// that private package header is not in the tree, so the inline lives with its one user).
+// Body from ARTIST GetSize 0x826A4238..0x826A424C: the running size is aligned first and the
+// block added after it (no trailing align of the last block).
+inline void LinearAllocAddSize(unsigned int& totalSize, unsigned int size, unsigned int alignment)
 {
-    const s32 liMaxRequests = config->pConstructorParams
-        ? PpcFctidzLowS32(*static_cast<const f32*>(config->pConstructorParams))
-        : 1;
-    const u32 luChannels = config->outputChannels;
-    return static_cast<int>(ComputeHostLayout(luChannels, liMaxRequests).totalBytes);
+    totalSize = ((totalSize + alignment - 1) & ~(alignment - 1)) + size;
+}
+
+// DWARF (_compile/BrnSoundUnity.cpp, sndplayer1.cpp:930/948): locals `unsigned int
+// maxRequests` and `unsigned int size`, the size summed through the inlined rwaudiocore
+// LinearAllocAddSize (ibase.h:54); the X360 audio PDB lists the same maxRequests for
+// rw::audio::core::SndPlayer1::GetSize (68 B, as here). The float-to-unsigned conversion is
+// ARTIST's fctidz/stfiwx pair (0x826A4224).
+unsigned int SndPlayer1_CgsStreamMod::GetSize(PlugInConfig* pPlugInConfig)
+{
+    unsigned int maxRequests;
+    if (pPlugInConfig->pConstructorParams)
+    {
+        maxRequests = static_cast<unsigned int>(*static_cast<const float*>(pPlugInConfig->pConstructorParams));
+    }
+    else
+    {
+        maxRequests = 1;
+    }
+
+    unsigned int size = 0;
+    LinearAllocAddSize(size, sizeof(SndPlayer1_CgsStreamMod), 8);
+    LinearAllocAddSize(size, sizeof(float) * pPlugInConfig->outputChannels, 8);
+    LinearAllocAddSize(size, sizeof(RequestInternal) * maxRequests, 8);
+    return size;
 }
 
 // -------------------------------------------------------------------------------------

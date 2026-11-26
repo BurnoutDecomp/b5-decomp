@@ -91,6 +91,7 @@ namespace Vehicle
             VecFloat GetPeakCoefficient() const;
             VecFloat GetFallCoefficient() const;
             void     Construct();
+            // DWARF Wheel.cpp:322; bodied in Wheel.cpp (inlined into the eight Prepare*Tire*).
             void     Prepare(f32 lfPeakSlipRatio, f32 lfFloorSlipRatio,
                              f32 lfPeakCoefficient, f32 lfFallCoefficient);
 

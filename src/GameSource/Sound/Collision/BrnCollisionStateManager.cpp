@@ -1570,10 +1570,6 @@ f32 KF_HINGING_VELOCITY_DELTA_TOLERANCE = 0.1f;
 
 namespace
 {
-// UpdateHingingBodyParts's open / closed test: an orientation within 0.08 (flt_82F2FD30 = 0x3DA3D70A)
-// of 1 is open, of 0 closed.
-const f32 KF_HINGE_OPEN_CLOSED_EPSILON = 0.08f;
-
 // The regular builders' camera lanes (maParameter[1] = the distance squared to the camera, [2] = how
 // much the camera faces the point). The glass and hinge builders dot the RAW offset with the camera's
 // At row (0x826BE52C..0x826BE540 / 0x826BDF60's tail -- no normalisation); the contact-spy builders
@@ -1983,7 +1979,7 @@ void CollisionStateManager::UpdateGlass(const BrnPhysics::Deformation::Deformati
 //
 // The deformation output's hinged parts (+0x74, asserted cpp:3187), against mHingeCache (aged first
 // with the manager's clock). Per event: the orientation clamped to [0, 1] (two fsel -- a NaN gives 1)
-// is OPEN within KF_HINGE_OPEN_CLOSED_EPSILON of 1 and CLOSED within it of 0. A part the cache does
+// is OPEN within KF_HINGE_ORIENTATION_TOLERANCE of 1 and CLOSED within it of 0. A part the cache does
 // not hold is inserted; one it holds, whose vehicle FindEntity knows (looked up only on a new vehicle;
 // one GenericEntity local), sounds:
 //   it just opened (was not open)   -> HingeOpen  with the new velocity
@@ -1996,6 +1992,11 @@ void CollisionStateManager::UpdateGlass(const BrnPhysics::Deformation::Deformati
 void CollisionStateManager::UpdateHingingBodyParts(
     const BrnPhysics::Deformation::DeformationOutputInterface::JointedPartStateQueue* lpQueue)
 {
+    // The open / closed test: an orientation within 0.08 of 1 is open, of 0 closed. DWARF lists it as
+    // the function's own float32_t KF_HINGE_ORIENTATION_TOLERANCE (cpp:3087); ARTIST holds it in
+    // writable .data (flt_82F2FD30 = 0x3DA3D70A), i.e. a function-scope static.
+    static f32 KF_HINGE_ORIENTATION_TOLERANCE = 0.08f;
+
     CGS_ASSERT(lpQueue != 0, "lpQueue");
     mHingeCache.Update(mfCurrentTime);
 
@@ -2010,8 +2011,8 @@ void CollisionStateManager::UpdateHingingBodyParts(
         f32 lfOrientation = lrEvent.mfCurrentOrientation;
         lfOrientation = (-lfOrientation >= 0.0f) ? 0.0f : lfOrientation;
         lfOrientation = (1.0f - lfOrientation >= 0.0f) ? lfOrientation : 1.0f;
-        const bool lbClosed = std::fabs(lfOrientation) < KF_HINGE_OPEN_CLOSED_EPSILON;
-        const bool lbOpen = std::fabs(lfOrientation - 1.0f) < KF_HINGE_OPEN_CLOSED_EPSILON;
+        const bool lbClosed = std::fabs(lfOrientation) < KF_HINGE_ORIENTATION_TOLERANCE;
+        const bool lbOpen = std::fabs(lfOrientation - 1.0f) < KF_HINGE_ORIENTATION_TOLERANCE;
 
         HingeStateCache::CacheNode* lpCached = mHingeCache.FindInCache(lrEvent);
         if (!lpCached)

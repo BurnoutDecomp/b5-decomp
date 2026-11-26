@@ -598,58 +598,48 @@ namespace Vehicle
     //     image address at its use);
     // * the DonutAI pair runs 15 vperms, not 16: maPackedVariables.mV.w (the long-force-bias
     //     lane) is DELIBERATELY PRESERVED, not written. See the note on the pair.
+    //
+    // Source form (DWARF Wheel.cpp:77..278 + the PS3 bodies 0x6B6650 etc.): each variant calls
+    // TireGripCurve::Prepare(peakSlip, floorSlip, peakCo, fallCo) for the three curves and stores
+    // the packed lanes through Vector4::operator[] (VecFloatRefIndex::operator=); every vperm above
+    // is one such indexed store.
 
     // The attrib-driven pair read the record as a byte-addressed float array, same convention as
     // SimpleVehicleAttribs::SetupAttribs(handling) (offsets asm-exact; the name in each comment is
     // the schema's field name at that offset).
     #define BP_TIRE_SRC_F(base, byteOff) ((base)[(byteOff) >> 2])
+    // Each field is read through the attribute instance at its use, as ARTIST re-loads the data
+    // pointer (`lwz +4`) for every curve (PrepareFrontTire 0x825D5AC8 / 0x825D5B88): no cached local.
+    #define BP_TIRE_ATTRIB_F(byteOff) BP_TIRE_SRC_F(static_cast<const f32*>(lrAttribs.GetLayoutPointer()), byteOff)
 
     // @0x825D5500  Wheel::TireAttribs::PrepareDefaultFrontTire
     void Wheel::TireAttribs::PrepareDefaultFrontTire()
     {
-        mLongGripCurve.maGripVariables.mV.x = 0.2f;       // peakSlipRatio    flt_82004744
-        mLongGripCurve.maGripVariables.mV.y = 1.0f;       // floorSlipRatio   flt_82001C98
-        mLongGripCurve.maGripVariables.mV.z = 1.0f;       // peakCoefficient
-        mLongGripCurve.maGripVariables.mV.w = 1.0f;       // fallCoefficient
+        mLongGripCurve.Prepare(0.2f, 1.0f, 1.0f, 1.0f);   // flt_82004744, flt_82001C98
 
-        mLatGripCurve.maGripVariables.mV.x = 1.0f;        // peakSlipRatio
-        mLatGripCurve.maGripVariables.mV.y = 1.0f;        // floorSlipRatio
-        mLatGripCurve.maGripVariables.mV.z = 1.5f;        // peakCoefficient  flt_820945DC
-        mLatGripCurve.maGripVariables.mV.w = 1.5f;        // fallCoefficient
+        mLatGripCurve.Prepare(1.0f, 1.0f, 1.5f, 1.5f);   // flt_820945DC
 
-        mDriftLatGripCurve.maGripVariables.mV.x = 1.0f;   // peakSlipRatio
-        mDriftLatGripCurve.maGripVariables.mV.y = 1.0f;   // floorSlipRatio
-        mDriftLatGripCurve.maGripVariables.mV.z = 1.5f;   // peakCoefficient
-        mDriftLatGripCurve.maGripVariables.mV.w = 1.5f;   // fallCoefficient
+        mDriftLatGripCurve.Prepare(1.0f, 1.0f, 1.5f, 1.5f);
 
-        maPackedVariables.mV.x = 4.0f;                    // staticFrictionCo  flt_8208FA0C
-        maPackedVariables.mV.y = 4.0f;                    // dynamicFrictionCo
-        maPackedVariables.mV.z = 14000.0f;                // adhesiveLimit     flt_82094C74
-        maPackedVariables.mV.w = 0.0f;                    // longForceBias     flt_82001CC0
+        maPackedVariables[0] = 4.0f;                    // staticFrictionCo  flt_8208FA0C
+        maPackedVariables[1] = 4.0f;                    // dynamicFrictionCo
+        maPackedVariables[2] = 14000.0f;                // adhesiveLimit     flt_82094C74
+        maPackedVariables[3] = 0.0f;                    // longForceBias     flt_82001CC0
     }
 
     // @0x825D57D8  Wheel::TireAttribs::PrepareDefaultRearTire
     void Wheel::TireAttribs::PrepareDefaultRearTire()
     {
-        mLongGripCurve.maGripVariables.mV.x = 0.2f;       // peakSlipRatio    flt_82004744
-        mLongGripCurve.maGripVariables.mV.y = 1.0f;       // floorSlipRatio   flt_82001C98
-        mLongGripCurve.maGripVariables.mV.z = 1.0f;       // peakCoefficient
-        mLongGripCurve.maGripVariables.mV.w = 0.7f;       // fallCoefficient  flt_82004C68
+        mLongGripCurve.Prepare(0.2f, 1.0f, 1.0f, 0.7f);   // flt_82004744, flt_82001C98, flt_82004C68
 
-        mLatGripCurve.maGripVariables.mV.x = 0.5f;        // peakSlipRatio    flt_82001DA0
-        mLatGripCurve.maGripVariables.mV.y = 3.0f;        // floorSlipRatio   flt_82004270
-        mLatGripCurve.maGripVariables.mV.z = 4.0f;        // peakCoefficient  flt_8208FA0C
-        mLatGripCurve.maGripVariables.mV.w = 0.9f;        // fallCoefficient  flt_82005450
+        mLatGripCurve.Prepare(0.5f, 3.0f, 4.0f, 0.9f);   // flt_82001DA0, flt_82004270, flt_8208FA0C, flt_82005450
 
-        mDriftLatGripCurve.maGripVariables.mV.x = 1.0f;   // peakSlipRatio (own value; rest shared with lat)
-        mDriftLatGripCurve.maGripVariables.mV.y = 3.0f;   // floorSlipRatio
-        mDriftLatGripCurve.maGripVariables.mV.z = 4.0f;   // peakCoefficient
-        mDriftLatGripCurve.maGripVariables.mV.w = 0.9f;   // fallCoefficient
+        mDriftLatGripCurve.Prepare(1.0f, 3.0f, 4.0f, 0.9f);
 
-        maPackedVariables.mV.x = 4.0f;                    // staticFrictionCo
-        maPackedVariables.mV.y = 3.0f;                    // dynamicFrictionCo
-        maPackedVariables.mV.z = 14000.0f;                // adhesiveLimit     flt_82094C74
-        maPackedVariables.mV.w = 0.1f;                    // longForceBias     flt_82004014
+        maPackedVariables[0] = 4.0f;                    // staticFrictionCo
+        maPackedVariables[1] = 3.0f;                    // dynamicFrictionCo
+        maPackedVariables[2] = 14000.0f;                // adhesiveLimit     flt_82094C74
+        maPackedVariables[3] = 0.1f;                    // longForceBias     flt_82004014
     }
 
     // @0x825D5AC8  Wheel::TireAttribs::PrepareFrontTire
@@ -657,102 +647,68 @@ namespace Vehicle
     // names from the schema).
     void Wheel::TireAttribs::PrepareFrontTire(const Attrib::Gen::physicsvehiclebaseattribs& lrAttribs)
     {
-        const f32* lpData = static_cast<const f32*>(lrAttribs.GetLayoutPointer());
+        // Front LongGripCurve PeakSlipRatio / FloorSlipRatio / PeakCoefficient / FallCoefficient
+        mLongGripCurve.Prepare(BP_TIRE_ATTRIB_F(0xE0), BP_TIRE_ATTRIB_F(0xE8), BP_TIRE_ATTRIB_F(0xE4), BP_TIRE_ATTRIB_F(0xEC));
 
-        mLongGripCurve.maGripVariables.mV.x = BP_TIRE_SRC_F(lpData, 0xE0);       // FrontLongGripCurvePeakSlipRatio
-        mLongGripCurve.maGripVariables.mV.y = BP_TIRE_SRC_F(lpData, 0xE8);       // FrontLongGripCurveFloorSlipRatio
-        mLongGripCurve.maGripVariables.mV.z = BP_TIRE_SRC_F(lpData, 0xE4);       // FrontLongGripCurvePeakCoefficient
-        mLongGripCurve.maGripVariables.mV.w = BP_TIRE_SRC_F(lpData, 0xEC);       // FrontLongGripCurveFallCoefficient
-
-        mLatGripCurve.maGripVariables.mV.x = BP_TIRE_SRC_F(lpData, 0xF0);        // FrontLatGripCurvePeakSlipRatio
-        mLatGripCurve.maGripVariables.mV.y = BP_TIRE_SRC_F(lpData, 0xF8);        // FrontLatGripCurveFloorSlipRatio
-        mLatGripCurve.maGripVariables.mV.z = BP_TIRE_SRC_F(lpData, 0xF4);        // FrontLatGripCurvePeakCoefficient
-        mLatGripCurve.maGripVariables.mV.w = BP_TIRE_SRC_F(lpData, 0xFC);        // FrontLatGripCurveFallCoefficient
+        // Front LatGripCurve PeakSlipRatio / FloorSlipRatio / PeakCoefficient / FallCoefficient
+        mLatGripCurve.Prepare(BP_TIRE_ATTRIB_F(0xF0), BP_TIRE_ATTRIB_F(0xF8), BP_TIRE_ATTRIB_F(0xF4), BP_TIRE_ATTRIB_F(0xFC));
 
         // The drift curve has its own peak slip ratio and shares the lat curve's other three lanes.
-        mDriftLatGripCurve.maGripVariables.mV.x = BP_TIRE_SRC_F(lpData, 0x100);  // FrontLatGripCurveDriftPeakSlipRatio
-        mDriftLatGripCurve.maGripVariables.mV.y = BP_TIRE_SRC_F(lpData, 0xF8);   // FrontLatGripCurveFloorSlipRatio
-        mDriftLatGripCurve.maGripVariables.mV.z = BP_TIRE_SRC_F(lpData, 0xF4);   // FrontLatGripCurvePeakCoefficient
-        mDriftLatGripCurve.maGripVariables.mV.w = BP_TIRE_SRC_F(lpData, 0xFC);   // FrontLatGripCurveFallCoefficient
+        // FrontLatGripCurveDriftPeakSlipRatio, then the lat curve fields
+        mDriftLatGripCurve.Prepare(BP_TIRE_ATTRIB_F(0x100), BP_TIRE_ATTRIB_F(0xF8), BP_TIRE_ATTRIB_F(0xF4), BP_TIRE_ATTRIB_F(0xFC));
 
-        maPackedVariables.mV.x = BP_TIRE_SRC_F(lpData, 0xD0);                    // FrontTireStaticFrictionCoefficient
-        maPackedVariables.mV.y = BP_TIRE_SRC_F(lpData, 0xD8);                    // FrontTireDynamicFrictionCoefficient
-        maPackedVariables.mV.z = BP_TIRE_SRC_F(lpData, 0xDC);                    // FrontTireAdhesiveLimit
-        maPackedVariables.mV.w = BP_TIRE_SRC_F(lpData, 0xD4);                    // FrontTireLongForceBias
+        maPackedVariables[0] = BP_TIRE_ATTRIB_F(0xD0);                    // FrontTireStaticFrictionCoefficient
+        maPackedVariables[1] = BP_TIRE_ATTRIB_F(0xD8);                    // FrontTireDynamicFrictionCoefficient
+        maPackedVariables[2] = BP_TIRE_ATTRIB_F(0xDC);                    // FrontTireAdhesiveLimit
+        maPackedVariables[3] = BP_TIRE_ATTRIB_F(0xD4);                    // FrontTireLongForceBias
     }
 
     // @0x825D5DC8  Wheel::TireAttribs::PrepareRearTire
     void Wheel::TireAttribs::PrepareRearTire(const Attrib::Gen::physicsvehiclebaseattribs& lrAttribs)
     {
-        const f32* lpData = static_cast<const f32*>(lrAttribs.GetLayoutPointer());
+        // Rear LongGripCurve PeakSlipRatio / FloorSlipRatio / PeakCoefficient / FallCoefficient
+        mLongGripCurve.Prepare(BP_TIRE_ATTRIB_F(0x78), BP_TIRE_ATTRIB_F(0x80), BP_TIRE_ATTRIB_F(0x7C), BP_TIRE_ATTRIB_F(0x84));
 
-        mLongGripCurve.maGripVariables.mV.x = BP_TIRE_SRC_F(lpData, 0x78);       // RearLongGripCurvePeakSlipRatio
-        mLongGripCurve.maGripVariables.mV.y = BP_TIRE_SRC_F(lpData, 0x80);       // RearLongGripCurveFloorSlipRatio
-        mLongGripCurve.maGripVariables.mV.z = BP_TIRE_SRC_F(lpData, 0x7C);       // RearLongGripCurvePeakCoefficient
-        mLongGripCurve.maGripVariables.mV.w = BP_TIRE_SRC_F(lpData, 0x84);       // RearLongGripCurveFallCoefficient
+        // Rear LatGripCurve PeakSlipRatio / FloorSlipRatio / PeakCoefficient / FallCoefficient
+        mLatGripCurve.Prepare(BP_TIRE_ATTRIB_F(0x88), BP_TIRE_ATTRIB_F(0x90), BP_TIRE_ATTRIB_F(0x8C), BP_TIRE_ATTRIB_F(0x94));
 
-        mLatGripCurve.maGripVariables.mV.x = BP_TIRE_SRC_F(lpData, 0x88);        // RearLatGripCurvePeakSlipRatio
-        mLatGripCurve.maGripVariables.mV.y = BP_TIRE_SRC_F(lpData, 0x90);        // RearLatGripCurveFloorSlipRatio
-        mLatGripCurve.maGripVariables.mV.z = BP_TIRE_SRC_F(lpData, 0x8C);        // RearLatGripCurvePeakCoefficient
-        mLatGripCurve.maGripVariables.mV.w = BP_TIRE_SRC_F(lpData, 0x94);        // RearLatGripCurveFallCoefficient
+        // RearLatGripCurveDriftPeakSlipRatio, then the lat curve fields
+        mDriftLatGripCurve.Prepare(BP_TIRE_ATTRIB_F(0x98), BP_TIRE_ATTRIB_F(0x90), BP_TIRE_ATTRIB_F(0x8C), BP_TIRE_ATTRIB_F(0x94));
 
-        mDriftLatGripCurve.maGripVariables.mV.x = BP_TIRE_SRC_F(lpData, 0x98);   // RearLatGripCurveDriftPeakSlipRatio
-        mDriftLatGripCurve.maGripVariables.mV.y = BP_TIRE_SRC_F(lpData, 0x90);   // RearLatGripCurveFloorSlipRatio
-        mDriftLatGripCurve.maGripVariables.mV.z = BP_TIRE_SRC_F(lpData, 0x8C);   // RearLatGripCurvePeakCoefficient
-        mDriftLatGripCurve.maGripVariables.mV.w = BP_TIRE_SRC_F(lpData, 0x94);   // RearLatGripCurveFallCoefficient
-
-        maPackedVariables.mV.x = BP_TIRE_SRC_F(lpData, 0x68);                    // RearTireStaticFrictionCoefficient
-        maPackedVariables.mV.y = BP_TIRE_SRC_F(lpData, 0x70);                    // RearTireDynamicFrictionCoefficient
-        maPackedVariables.mV.z = BP_TIRE_SRC_F(lpData, 0x74);                    // RearTireAdhesiveLimit
-        maPackedVariables.mV.w = BP_TIRE_SRC_F(lpData, 0x6C);                    // RearTireLongForceBias
+        maPackedVariables[0] = BP_TIRE_ATTRIB_F(0x68);                    // RearTireStaticFrictionCoefficient
+        maPackedVariables[1] = BP_TIRE_ATTRIB_F(0x70);                    // RearTireDynamicFrictionCoefficient
+        maPackedVariables[2] = BP_TIRE_ATTRIB_F(0x74);                    // RearTireAdhesiveLimit
+        maPackedVariables[3] = BP_TIRE_ATTRIB_F(0x6C);                    // RearTireLongForceBias
     }
 
     // @0x825D60C8  Wheel::TireAttribs::PrepareFrontTireForAI
     void Wheel::TireAttribs::PrepareFrontTireForAI()
     {
-        mLongGripCurve.maGripVariables.mV.x = 0.2f;       // peakSlipRatio    flt_82004744
-        mLongGripCurve.maGripVariables.mV.y = 1.0f;       // floorSlipRatio   flt_82001C98
-        mLongGripCurve.maGripVariables.mV.z = 1.0f;       // peakCoefficient
-        mLongGripCurve.maGripVariables.mV.w = 0.2f;       // fallCoefficient
+        mLongGripCurve.Prepare(0.2f, 1.0f, 1.0f, 0.2f);   // flt_82004744, flt_82001C98
 
-        mLatGripCurve.maGripVariables.mV.x = 0.5f;        // peakSlipRatio    flt_82001DA0
-        mLatGripCurve.maGripVariables.mV.y = 3.0f;        // floorSlipRatio   flt_82004270
-        mLatGripCurve.maGripVariables.mV.z = 2.0f;        // peakCoefficient  flt_82001D9C
-        mLatGripCurve.maGripVariables.mV.w = 1.0f;        // fallCoefficient
+        mLatGripCurve.Prepare(0.5f, 3.0f, 2.0f, 1.0f);   // flt_82001DA0, flt_82004270, flt_82001D9C
 
-        mDriftLatGripCurve.maGripVariables.mV.x = 0.5f;   // peakSlipRatio
-        mDriftLatGripCurve.maGripVariables.mV.y = 3.0f;   // floorSlipRatio
-        mDriftLatGripCurve.maGripVariables.mV.z = 2.0f;   // peakCoefficient
-        mDriftLatGripCurve.maGripVariables.mV.w = 1.0f;   // fallCoefficient
+        mDriftLatGripCurve.Prepare(0.5f, 3.0f, 2.0f, 1.0f);
 
-        maPackedVariables.mV.x = 20.0f;                   // staticFrictionCo  flt_8208F9D4
-        maPackedVariables.mV.y = 5.0f;                    // dynamicFrictionCo flt_8200426C
-        maPackedVariables.mV.z = 100000.0f;               // adhesiveLimit     flt_820080E8
-        maPackedVariables.mV.w = 0.0f;                    // longForceBias     flt_82001CC0
+        maPackedVariables[0] = 20.0f;                   // staticFrictionCo  flt_8208F9D4
+        maPackedVariables[1] = 5.0f;                    // dynamicFrictionCo flt_8200426C
+        maPackedVariables[2] = 100000.0f;               // adhesiveLimit     flt_820080E8
+        maPackedVariables[3] = 0.0f;                    // longForceBias     flt_82001CC0
     }
 
     // @0x825D63B8  Wheel::TireAttribs::PrepareRearTireForAI
     void Wheel::TireAttribs::PrepareRearTireForAI()
     {
-        mLongGripCurve.maGripVariables.mV.x = 0.4f;       // peakSlipRatio    flt_8200473C
-        mLongGripCurve.maGripVariables.mV.y = 1.0f;       // floorSlipRatio   flt_82001C98
-        mLongGripCurve.maGripVariables.mV.z = 1.0f;       // peakCoefficient
-        mLongGripCurve.maGripVariables.mV.w = 0.2f;       // fallCoefficient  flt_82004744
+        mLongGripCurve.Prepare(0.4f, 1.0f, 1.0f, 0.2f);   // flt_8200473C, flt_82001C98, flt_82004744
 
-        mLatGripCurve.maGripVariables.mV.x = 0.5f;        // peakSlipRatio    flt_82001DA0
-        mLatGripCurve.maGripVariables.mV.y = 3.0f;        // floorSlipRatio   flt_82004270
-        mLatGripCurve.maGripVariables.mV.z = 4.0f;        // peakCoefficient  flt_8208FA0C
-        mLatGripCurve.maGripVariables.mV.w = 2.5f;        // fallCoefficient  flt_82005548
+        mLatGripCurve.Prepare(0.5f, 3.0f, 4.0f, 2.5f);   // flt_82001DA0, flt_82004270, flt_8208FA0C, flt_82005548
 
-        mDriftLatGripCurve.maGripVariables.mV.x = 0.5f;   // peakSlipRatio
-        mDriftLatGripCurve.maGripVariables.mV.y = 3.0f;   // floorSlipRatio
-        mDriftLatGripCurve.maGripVariables.mV.z = 4.0f;   // peakCoefficient
-        mDriftLatGripCurve.maGripVariables.mV.w = 2.5f;   // fallCoefficient
+        mDriftLatGripCurve.Prepare(0.5f, 3.0f, 4.0f, 2.5f);
 
-        maPackedVariables.mV.x = 20.0f;                   // staticFrictionCo  flt_8208F9D4
-        maPackedVariables.mV.y = 4.5f;                    // dynamicFrictionCo flt_820139F0
-        maPackedVariables.mV.z = 100000.0f;               // adhesiveLimit     flt_820080E8
-        maPackedVariables.mV.w = 0.0f;                    // longForceBias     flt_82001CC0
+        maPackedVariables[0] = 20.0f;                   // staticFrictionCo  flt_8208F9D4
+        maPackedVariables[1] = 4.5f;                    // dynamicFrictionCo flt_820139F0
+        maPackedVariables[2] = 100000.0f;               // adhesiveLimit     flt_820080E8
+        maPackedVariables[3] = 0.0f;                    // longForceBias     flt_82001CC0
     }
 
     // @0x825D66B8  Wheel::TireAttribs::PrepareFrontTireForDonutAI
@@ -763,24 +719,15 @@ namespace Vehicle
     // the scatter by writing w; the preservation is the shipped behaviour.
     void Wheel::TireAttribs::PrepareFrontTireForDonutAI()
     {
-        mLongGripCurve.maGripVariables.mV.x = 0.2f;       // peakSlipRatio    flt_82004744
-        mLongGripCurve.maGripVariables.mV.y = 1.0f;       // floorSlipRatio   flt_82001C98
-        mLongGripCurve.maGripVariables.mV.z = 1.0f;       // peakCoefficient
-        mLongGripCurve.maGripVariables.mV.w = 1.0f;       // fallCoefficient
+        mLongGripCurve.Prepare(0.2f, 1.0f, 1.0f, 1.0f);   // flt_82004744, flt_82001C98
 
-        mLatGripCurve.maGripVariables.mV.x = 1.0f;        // peakSlipRatio
-        mLatGripCurve.maGripVariables.mV.y = 1.0f;        // floorSlipRatio
-        mLatGripCurve.maGripVariables.mV.z = 1.5f;        // peakCoefficient  flt_820945DC
-        mLatGripCurve.maGripVariables.mV.w = 1.5f;        // fallCoefficient
+        mLatGripCurve.Prepare(1.0f, 1.0f, 1.5f, 1.5f);   // flt_820945DC
 
-        mDriftLatGripCurve.maGripVariables.mV.x = 1.0f;   // peakSlipRatio
-        mDriftLatGripCurve.maGripVariables.mV.y = 1.0f;   // floorSlipRatio
-        mDriftLatGripCurve.maGripVariables.mV.z = 1.5f;   // peakCoefficient
-        mDriftLatGripCurve.maGripVariables.mV.w = 1.5f;   // fallCoefficient
+        mDriftLatGripCurve.Prepare(1.0f, 1.0f, 1.5f, 1.5f);
 
-        maPackedVariables.mV.x = 2.0f;                    // staticFrictionCo  flt_82001D9C
-        maPackedVariables.mV.y = 2.0f;                    // dynamicFrictionCo
-        maPackedVariables.mV.z = 10000.0f;                // adhesiveLimit     flt_82005D9C
+        maPackedVariables[0] = 2.0f;                    // staticFrictionCo  flt_82001D9C
+        maPackedVariables[1] = 2.0f;                    // dynamicFrictionCo
+        maPackedVariables[2] = 10000.0f;                // adhesiveLimit     flt_82005D9C
         // maPackedVariables.mV.w (longForceBias) DELIBERATELY NOT WRITTEN -- see the banner above.
     }
 
@@ -788,27 +735,33 @@ namespace Vehicle
     // Same w-lane preservation as the front variant -- see the note above.
     void Wheel::TireAttribs::PrepareRearTireForDonutAI()
     {
-        mLongGripCurve.maGripVariables.mV.x = 0.3f;       // peakSlipRatio    flt_82004740
-        mLongGripCurve.maGripVariables.mV.y = 1.5f;       // floorSlipRatio   flt_820945DC
-        mLongGripCurve.maGripVariables.mV.z = 3.0f;       // peakCoefficient  flt_82004270
-        mLongGripCurve.maGripVariables.mV.w = 2.25f;      // fallCoefficient  flt_82009A74
+        mLongGripCurve.Prepare(0.3f, 1.5f, 3.0f, 2.25f);   // flt_82004740, flt_820945DC, flt_82004270, flt_82009A74
 
-        mLatGripCurve.maGripVariables.mV.x = 0.3f;        // peakSlipRatio
-        mLatGripCurve.maGripVariables.mV.y = 3.0f;        // floorSlipRatio
-        mLatGripCurve.maGripVariables.mV.z = 2.25f;       // peakCoefficient
-        mLatGripCurve.maGripVariables.mV.w = 1.5f;        // fallCoefficient
+        mLatGripCurve.Prepare(0.3f, 3.0f, 2.25f, 1.5f);
 
-        mDriftLatGripCurve.maGripVariables.mV.x = 1.0f;   // peakSlipRatio (own value; rest shared with lat)  flt_82001C98
-        mDriftLatGripCurve.maGripVariables.mV.y = 3.0f;   // floorSlipRatio
-        mDriftLatGripCurve.maGripVariables.mV.z = 2.25f;  // peakCoefficient
-        mDriftLatGripCurve.maGripVariables.mV.w = 1.5f;   // fallCoefficient
+        mDriftLatGripCurve.Prepare(1.0f, 3.0f, 2.25f, 1.5f);   // flt_82001C98
 
-        maPackedVariables.mV.x = 2.0f;                    // staticFrictionCo  flt_82001D9C
-        maPackedVariables.mV.y = 2.0f;                    // dynamicFrictionCo
-        maPackedVariables.mV.z = 10000.0f;                // adhesiveLimit     flt_82005D9C
+        maPackedVariables[0] = 2.0f;                    // staticFrictionCo  flt_82001D9C
+        maPackedVariables[1] = 2.0f;                    // dynamicFrictionCo
+        maPackedVariables[2] = 10000.0f;                // adhesiveLimit     flt_82005D9C
         // maPackedVariables.mV.w (longForceBias) DELIBERATELY NOT WRITTEN -- see the banner above.
     }
 
+    // DWARF Wheel.cpp:322: the four lanes through Vector4::operator[] (VecFloatRefIndex::operator=
+    // x4). Every TireAttribs::Prepare*Tire* calls it three times (PS3 0x6B6650 etc.: three
+    // `bl TireGripCurve::Prepare(float,float,float,float)`); ARTIST inlines it at each call (the
+    // stfs x4 + lvx + vperm against gSwizzleStoreConstants 0x8327F140 per lane, 0x825D66C8..) and
+    // keeps no out-of-line copy.
+    void Wheel::TireGripCurve::Prepare(f32 lfPeakSlipRatio, f32 lfFloorSlipRatio,
+                                       f32 lfPeakCoefficient, f32 lfFallCoefficient)
+    {
+        maGripVariables[0] = lfPeakSlipRatio;
+        maGripVariables[1] = lfFloorSlipRatio;
+        maGripVariables[2] = lfPeakCoefficient;
+        maGripVariables[3] = lfFallCoefficient;
+    }
+
+    #undef BP_TIRE_ATTRIB_F
     #undef BP_TIRE_SRC_F
 }
 }

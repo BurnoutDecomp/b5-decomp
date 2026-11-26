@@ -371,7 +371,7 @@ InputParameter* Voice::FindNamedInputParameter(Name akName)
     for (u32 lu32I = 0; lu32I < lu32Count; ++lu32I)
     {
         InputParameter* lpParam = &GetInputParameter(lu32I);
-        if (akName == lpParam->GetName())      // *a2 == *result (Name.mHash)
+        if (lpParam->GetName() == akName)      // DWARF h:1030 lParam; Name::operator== compares the argument first (cmplw akName, param 0x826ACC10)
             return lpParam;
     }
     return 0;
@@ -529,20 +529,20 @@ void Voice::SetParameter(s32 as32Index, f32 af32Value, Name akParamName)
 // @ 0x826A24F0. Per-frame tick. While ALIVE, update each slot then run the type-specific
 // DoUpdate; while REMOVING, run DoRemove and advance to REMOVED when it reports done.
 // (mu8RemoveState @+0x11: 1=ALIVE, 2=REMOVING, 3=REMOVED.)
+// DWARF (_compile/BrnSoundUnity.cpp, CgsVoice.cpp:217) lists only the loop index lu32I: the remove
+// state is tested on the member itself.
 void Voice::Update(System* apSystem, f32 af32DeltaTime)
 {
-    u8 lu8RemoveState = mu8RemoveState;         // *(this+0x11)
-    if (lu8RemoveState == E_VOICE_REMOVE_ALIVE)
+    if (mu8RemoveState == E_VOICE_REMOVE_ALIVE)   // *(this+0x11)
     {
         for (u32 lu32I = 0; lu32I < mu32SlotCount; ++lu32I)   // *(this+0x14)
         {
-            Slot& lrSlot = GetSlot(lu32I);
             // asm: r4=System*, r5=this(Voice&), r6=this(PlayerVoice&), f1=dt.
-            lrSlot.Update(apSystem, *this, static_cast<PlayerVoice*>(this), af32DeltaTime);
+            GetSlot(lu32I).Update(apSystem, *this, static_cast<PlayerVoice*>(this), af32DeltaTime);
         }
         DoUpdate(apSystem, af32DeltaTime);      // vtable byte 0x14
     }
-    else if (lu8RemoveState == E_VOICE_REMOVE_REMOVING)
+    else if (mu8RemoveState == E_VOICE_REMOVE_REMOVING)
     {
         if (DoRemove())                         // vtable byte 0x1C
             mu8RemoveState = E_VOICE_REMOVE_REMOVED;

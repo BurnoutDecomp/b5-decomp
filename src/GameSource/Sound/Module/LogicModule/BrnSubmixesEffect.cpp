@@ -115,19 +115,19 @@ void SubmixesEffect::Notify(const CgsSound::Io::MessageHeader* apMessageHeader)
 // under its own label ("Master Gain", "LF Shelf Gain", "LF Shelf Freq", "Limiter Thresh",
 // "Limiter Release", "GainArray Centre", "GainArray Front", "Array Rear").
 // =============================================================================
-f32 KF_GLOBAL_GAIN                                  =     4.0f;  // 0x82F2CE94
-f32 KF_GLOBAL_LOW_SHELF_GAIN                         =     0.5f;  // 0x82F2CE98
-f32 KF_GLOBAL_LOW_SHELF_FREQ                         =    50.0f;  // 0x82F2CE9C
-static const f32 KF_GLOBAL_LOW_SHELF_GAIN_SURROUND    =     0.3f;  // .rdata 0x82F2CEA0
-static const f32 KF_GLOBAL_LOW_SHELF_FREQ_SURROUND    =    56.0f;  // .rdata 0x82F2CEA4
-f32 KF_GLOBAL_LIMITER_THRESHOLD                     =     0.0f;  // 0x82FFB8D4
-f32 KF_GLOBAL_LIMITER_RELEASE                       =     5.0f;  // 0x82F2CEA8
-static const f32 KF_GLOBAL_LIMITER_GROUPTYPE          =     2.0f;  // .rdata 0x82F2CEAC
-f32 KF_GLOBAL_GAIN_ARRAY_CENTRE                     =     1.0f;  // 0x82F2CEB0
-f32 KF_GLOBAL_GAIN_ARRAY_FRONT                      =     1.0f;  // 0x82F2CEB4
-f32 KF_GLOBAL_GAIN_ARRAY_REAR                       =     1.0f;  // 0x82F2CEB8
-f32 KF_GLOBAL_GAIN_ARRAY_SUB                        =     1.0f;  // 0x82F2CEBC
-static const f32 KF_GLOBAL_GAIN_ARRAY_CENTRE_SURROUND =     1.3f;  // .rdata 0x82F2CEC0
+f32 KF_GLOBAL_GAIN                              =     4.0f;  // 0x82F2CE94
+f32 KF_GLOBAL_LOW_SHELF_GAIN                    =     0.5f;  // 0x82F2CE98
+f32 KF_GLOBAL_LOW_SHELF_FREQ                    =    50.0f;  // 0x82F2CE9C
+f32 KF_GLOBAL_LOW_SHELF_GAIN_SURROUND           =     0.3f;  // 0x82F2CEA0
+f32 KF_GLOBAL_LOW_SHELF_FREQ_SURROUND           =    56.0f;  // 0x82F2CEA4
+f32 KF_GLOBAL_LIMITER_THRESHOLD                 =     0.0f;  // 0x82FFB8D4
+f32 KF_GLOBAL_LIMITER_RELEASE                   =     5.0f;  // 0x82F2CEA8
+f32 KF_GLOBAL_LIMITER_GROUPTYPE                 =     2.0f;  // 0x82F2CEAC
+f32 KF_GLOBAL_GAIN_ARRAY_CENTRE                 =     1.0f;  // 0x82F2CEB0
+f32 KF_GLOBAL_GAIN_ARRAY_FRONT                  =     1.0f;  // 0x82F2CEB4
+f32 KF_GLOBAL_GAIN_ARRAY_REAR                   =     1.0f;  // 0x82F2CEB8
+f32 KF_GLOBAL_GAIN_ARRAY_SUB                    =     1.0f;  // 0x82F2CEBC
+f32 KF_GLOBAL_GAIN_ARRAY_CENTRE_SURROUND        =     1.3f;  // 0x82F2CEC0
 
 // SubmixesEffect's OWN cutoff clamp, applied on TOP of the one inside the inlined
 // EffectBase::GetRWACMixerOutputValue.

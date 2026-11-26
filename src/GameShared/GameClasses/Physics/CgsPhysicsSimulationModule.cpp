@@ -2738,23 +2738,24 @@ namespace CgsPhysics
     // -------------------------------------------------------------------------------------
     void PhysicsSimulationModule::AddDriveSpiesToOutputQueue(PhysicsSimulationIO::OutputBuffer* lpOutput)
     {
-        PhysicsSimulationIO::OutputBuffer::OutDriveSpyQueue* const lpQueue =
+        // DWARF locals (_compile/CgsPhysicsUnity.cpp, cpp:2295..2329): lpDriveSpyQueue,
+        // liNumDriveSpies, liDriveLoop, the block's lpRWDriveSpy and lOutSpy; no drive-index local
+        // (GetGameID takes the tag straight from the drive).
+        PhysicsSimulationIO::OutputBuffer::OutDriveSpyQueue* lpDriveSpyQueue =
             lpOutput->GetDriveSpyQueue();                               // the 0x8259F270 accessor
 
-        const s32 liNumSpies = static_cast<s32>(mpSimulation->GetDriveSpyCount());   // `lwz 0x78`
-        for (s32 liSpy = 0; liSpy < liNumSpies; ++liSpy)
+        s32 liNumDriveSpies = static_cast<s32>(mpSimulation->GetDriveSpyCount());   // `lwz 0x78`
+        for (s32 liDriveLoop = 0; liDriveLoop < liNumDriveSpies; ++liDriveLoop)
         {
-            const rw_physics::DriveJacobianSpy* const lpSpy = mpSimulation->GetDriveSpy(liSpy);
+            const rw_physics::DriveJacobianSpy* lpRWDriveSpy = mpSimulation->GetDriveSpy(liDriveLoop);
 
-            const s32 liDriveIndex = static_cast<s32>(lpSpy->mpDrive->GetTag());   // `lwz 0x18(drive)`
-
-            PhysicsSimulationIO::OutDriveSpy lEvent;
-            lEvent.mID = mDriveData.GetGameID(liDriveIndex);            // h:648/h:649
-            lEvent.mLinearStress = lpSpy->mForce.mV;
-            lEvent.mAngularStress = lpSpy->mTorque.mV;
-            lEvent.mLinearDistanceToKey  = lpSpy->mSeparation;          // `lfs 0x20(spy)`
-            lEvent.mAngularDistanceToKey = lpSpy->mAngSeparation;       // `lfs 0x24(spy)`
-            lpQueue->AddEvent(lEvent);                                  // `bl 0x828A1D90`
+            PhysicsSimulationIO::OutDriveSpy lOutSpy;
+            lOutSpy.mID = mDriveData.GetGameID(static_cast<s32>(lpRWDriveSpy->mpDrive->GetTag()));   // h:648/h:649
+            lOutSpy.mLinearStress = lpRWDriveSpy->mForce.mV;
+            lOutSpy.mAngularStress = lpRWDriveSpy->mTorque.mV;
+            lOutSpy.mLinearDistanceToKey  = lpRWDriveSpy->mSeparation;          // `lfs 0x20(spy)`
+            lOutSpy.mAngularDistanceToKey = lpRWDriveSpy->mAngSeparation;       // `lfs 0x24(spy)`
+            lpDriveSpyQueue->AddEvent(lOutSpy);                                 // `bl 0x828A1D90`
         }
     }
 

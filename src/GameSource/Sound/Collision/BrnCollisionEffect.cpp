@@ -37,7 +37,15 @@ namespace Collision
 
 volatile s32 KI_SPEW_COLLISION_INFO = 0;      // ARTIST 0x82FFB8D8
 volatile s32 KI_SPEW_COLLISION_BIN_LOGIC = 0; // 0x82FFB8DC
-s32 KI_DEBUG_DUCKING = 0;                   // 0x82FFB8E0
+// DWARF BrnCollisionEffect.cpp:45..50: the ducking intensities, plain float32_t with external
+// linkage (ARTIST writable .data in declaration order, each loaded from memory by
+// CalculateIntensity 0x82688240).
+f32 KF_BASE_VALUE = 25.0f;                    // cpp:45, flt_82F2CEC4
+f32 KF_PROP_DUCKING = 12.0f;                  // cpp:47, flt_82F2CEC8 (E_PROP pipeline)
+f32 KF_AGGRESSIVE_DRIVING_DUCKING = 100.0f;   // cpp:48, flt_82F2CECC (race car vs race car)
+f32 KF_CAR_VS_WORLD_DUCKING = 100.0f;         // cpp:49, flt_82F2CED0 (race car vs world)
+f32 KF_TRAFFIC_DUCKING = 100.0f;              // cpp:50, flt_82F2CED4 (either side traffic)
+s32 KI_DEBUG_DUCKING = 0;                   // cpp:52, 0x82FFB8E0
 
 // ---------------------------------------------------------------------------
 // CollisionEffect  @ 0x826AFD20  (field-init ctor)
@@ -285,12 +293,6 @@ void CollisionEffect::InitWork(CollisionState* apState, const OutputCollision& a
 // ---------------------------------------------------------------------------
 f32 CollisionEffect::CalculateIntensity(const OutputCollision& arCollision)
 {
-    const f32 KF_MIN_INTENSITY = 25.0f;           // flt_82F2CEC4
-    const f32 KF_PROP_INTENSITY_SCALE = 12.0f;    // flt_82F2CEC8
-    const f32 KF_RACECAR_VS_RACECAR = 100.0f;     // flt_82F2CECC
-    const f32 KF_RACECAR_VS_WORLD = 100.0f;       // flt_82F2CED0
-    const f32 KF_VERSUS_TRAFFIC = 100.0f;         // flt_82F2CED4
-
     const f32 lfImpulse = arCollision.mNormalizedImpulse.mV.x;
     if (arCollision.meAction != AttribSys::Enums::eAction::Collision)
         return 0.0f;
@@ -298,7 +300,7 @@ f32 CollisionEffect::CalculateIntensity(const OutputCollision& arCollision)
     CgsDev::StrStreamBase& lrLog = BrnSound::Debug::DebugComponent::mLogCombined;
     if (arCollision.mePipeline == InputCollision::E_PROP)
     {
-        const f32 lfIntensity = KF_PROP_INTENSITY_SCALE * lfImpulse;
+        const f32 lfIntensity = KF_PROP_DUCKING * lfImpulse;
         if (KI_DEBUG_DUCKING)
             lrLog << "ducking: InputCollision::E_PROP" << " " << lfIntensity << "\n";
         return lfIntensity;
@@ -314,19 +316,19 @@ f32 CollisionEffect::CalculateIntensity(const OutputCollision& arCollision)
         {
             if (KI_DEBUG_DUCKING)
                 lrLog << "ducking: E_ENTITYTYPE_RACECAR vs  E_ENTITYTYPE_WORLD";
-            lfFullIntensity = KF_RACECAR_VS_WORLD;
+            lfFullIntensity = KF_CAR_VS_WORLD_DUCKING;
         }
         else if (luTypeB == BrnWorld::E_ENTITYTYPE_RACECAR)
         {
             if (KI_DEBUG_DUCKING)
                 lrLog << "ducking: E_ENTITYTYPE_RACECAR vs  E_ENTITYTYPE_RACECAR";
-            lfFullIntensity = KF_RACECAR_VS_RACECAR;
+            lfFullIntensity = KF_AGGRESSIVE_DRIVING_DUCKING;
         }
         else if (luTypeB == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE)
         {
             if (KI_DEBUG_DUCKING)
                 lrLog << "ducking: E_ENTITYTYPE_RACECAR vs  E_ENTITYTYPE_TRAFFIC_VEHICLE";
-            lfFullIntensity = KF_VERSUS_TRAFFIC;
+            lfFullIntensity = KF_TRAFFIC_DUCKING;
         }
         else
         {
@@ -339,7 +341,7 @@ f32 CollisionEffect::CalculateIntensity(const OutputCollision& arCollision)
     {
         if (KI_DEBUG_DUCKING)
             lrLog << "ducking: E_ENTITYTYPE_TRAFFIC_VEHICLE";
-        lfFullIntensity = KF_VERSUS_TRAFFIC;
+        lfFullIntensity = KF_TRAFFIC_DUCKING;
     }
     else
     {
@@ -353,7 +355,7 @@ f32 CollisionEffect::CalculateIntensity(const OutputCollision& arCollision)
         return 0.0f;   // the world, or any other owner
     }
 
-    const f32 lfIntensity = (lfFullIntensity - KF_MIN_INTENSITY) * lfImpulse + KF_MIN_INTENSITY;
+    const f32 lfIntensity = (lfFullIntensity - KF_BASE_VALUE) * lfImpulse + KF_BASE_VALUE;
     if (KI_DEBUG_DUCKING)
         lrLog << " " << lfIntensity << "\n";
     return lfIntensity;

@@ -44,13 +44,16 @@ f32 KF_DECEL_GINSU_FADE_OUT = 0.05f;  // X360 unk_82F2CC60; no ARTIST consumer x
 f32 KF_DEBUG_IDLE_RPM_INTERPOLATION = 2000.0f; // X360 flt_82F2CC84; player idle-volume blend ceiling
 f32 KF_DECEL_GINSU_FADE_IN = 0.05f;   // X360 flt_82F2CC64
 
+// DWARF BrnHybridEngineControl.cpp:31..38: plain float32_t tunables with external linkage (ARTIST
+// keeps them in writable .data and loads each from memory).
+f32 KF_THROTTLE_THRESHOLD = 1.0f;          // cpp:31, flt_82F2CC68
+f32 KF_DELTA_RPM_OFFSET = 6.0f;            // cpp:33, flt_82F2CC6C
+f32 KF_AI_DELTA_RPM_OFFSET = 15.0f;        // cpp:34, flt_82F2CC70
+f32 KF_SMOOTHNESS_FACTOR = 0.2f;           // cpp:36, flt_82F2CC74
+f32 KF_LOW_PASS_SMOOTHING_FACTOR = 6000.0f; // cpp:38, flt_82F2CC78
+
 namespace
 {
-const f32 KF_THROTTLE_THRESHOLD = 1.0f;    // flt_82F2CC68
-const f32 KF_DELTA_RPM_OFFSET = 6.0f;      // flt_82F2CC6C
-const f32 KF_AI_DELTA_RPM_OFFSET = 15.0f;  // flt_82F2CC70
-const f32 KF_SMOOTHNESS_FACTOR = 0.2f;     // flt_82F2CC74
-const f32 KF_LOW_PASS_SMOOTHING_FACTOR = 6000.0f; // flt_82F2CC78
 const f32 KF_GINSU_CUTOFF = 25000.0f;      // flt_820B3D08
 
 f32 Clamp01(f32 lfValue)
