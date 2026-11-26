@@ -71,13 +71,9 @@ namespace BrnGui
         mAchievementIcon.Construct(KAC_ACHIEVEMENTICON_NAME, lpStateInterface, 0);
 
         // Invalidate the two text-field handles.
-        mAchievementAwardedRef.mpTextFieldInstance = 0;
-        mAchievementAwardedRef.mpParentMovie       = 0;
-        mAchievementAwardedRef.mpTransform         = 0;
+        mAchievementAwardedRef.SetInvalid();
 
-        mAchievementNameRef.mpTextFieldInstance = 0;
-        mAchievementNameRef.mpParentMovie       = 0;
-        mAchievementNameRef.mpTransform         = 0;
+        mAchievementNameRef.SetInvalid();
     }
 
     // @ 0x82415C20 -- bind the pop-up's own apt clip, the embedded icon, and the two

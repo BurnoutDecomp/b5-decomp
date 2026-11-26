@@ -264,9 +264,7 @@ bool CrashedHudState::UpdateWFInit()
 }
 void CrashedHudState::SetExpectedAptComponentList()
 {
-    mpCache->ClearExpectedAptComponentList(E_GUIFLOW_HUD);
-    std::memset(mauExpectedComponentIds, 0, sizeof(mauExpectedComponentIds));
-    muNumExpectedComponents = 0;
+    ClearExpectedComponent();
     SetExpectedComponent(mImpactTimePageChanger.GetName());
     SetExpectedComponent(mImpactTimeButton.GetName());
     SetExpectedComponent(mShowTimeButton1.GetName());

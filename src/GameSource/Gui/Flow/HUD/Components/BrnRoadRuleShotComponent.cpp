@@ -50,15 +50,9 @@ void RoadRuleShotComponent::Construct(const void* lpDEBUGName,
     FlaptIconComponent::Construct(lpDEBUGName, lpStateInterface, lpcParentName);
     mpcComponentState = 0;
     meComponentState  = E_COMPONENT_STATE_INVALID;
-    mGamertagTextfield.mpTextFieldInstance  = 0;
-    mGamertagTextfield.mpParentMovie        = 0;
-    mGamertagTextfield.mpTransform          = 0;
-    mRoadNameTextfield.mpTextFieldInstance  = 0;
-    mRoadNameTextfield.mpParentMovie        = 0;
-    mRoadNameTextfield.mpTransform          = 0;
-    mRuleStateTextfield.mpTextFieldInstance = 0;
-    mRuleStateTextfield.mpParentMovie       = 0;
-    mRuleStateTextfield.mpTransform         = 0;
+    mGamertagTextfield.SetInvalid();
+    mRoadNameTextfield.SetInvalid();
+    mRuleStateTextfield.SetInvalid();
 }
 
 // @ 0x82424690 -- cpp:92. The base icon Prepare re-inlined verbatim (the

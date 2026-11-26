@@ -617,7 +617,7 @@ namespace
             static s32        siDiagPrinted = 0;
         }
 
-        if (maTextFields[liIndex].mpTextFieldInstance == NULL)
+        if (!maTextFields[liIndex].IsValid())
             return;
 
         const s32 liNumParams = maiCurrentStringParamCount[liIndex];

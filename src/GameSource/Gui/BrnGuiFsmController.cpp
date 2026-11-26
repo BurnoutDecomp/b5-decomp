@@ -64,17 +64,19 @@ void GuiFsmController::Construct()
         mapFlows[luFlow] = 0;
         maeFlowLoadState[luFlow] = E_FLOWLOADSTAGE_UNLOADED;
         maHashToLoad[luFlow] = 0;
-        mInitialStateId[luFlow] = 0;
         mapLoadNotification[luFlow] = 0;
         mapUnloadNotification[luFlow] = 0;
         mbFsmTransitionPending[luFlow] = false;
-        mbModeManagerWaitingForResponse[luFlow] = false;
 
-        // ARTIST824F19A0..19B4 leaves the initial-state word untouched.
+        // ARTIST824F19A0..19B4 leaves the initial-state word untouched. The initial state
+        // id and the waiting flag are written after the change request (ARTIST 0x824F19A8
+        // / 0x824F19E8, the same order as the PS3 body).
         mFsmToChangeTo[luFlow].meFlowToUse = E_GUIFLOW_COUNT;
         mFsmToChangeTo[luFlow].meFsmToRun = E_GUI_HUD_NUMSFSMS;
+        mInitialStateId[luFlow] = 0;
         mFsmToChangeTo[luFlow].mFsmId = CgsIDCompress(" ");
         mCurrentFsm[luFlow] = mFsmToChangeTo[luFlow];
+        mbModeManagerWaitingForResponse[luFlow] = false;
     }
 
 }

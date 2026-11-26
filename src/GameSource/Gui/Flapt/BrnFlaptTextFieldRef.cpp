@@ -42,7 +42,7 @@ void TextFieldRef::Construct(void* lpTextFieldInstance,
     CGS_ASSERT(lpParentMovie != 0, CGS_ASSERT_MESSAGE_AT("lpParentMovie", CGS_ARTIST_FILE, 211 /* ARTIST 0x8246B054 */));
     CGS_ASSERT(lpTransform != 0, CGS_ASSERT_MESSAGE_AT("lpTransform", CGS_ARTIST_FILE, 212 /* ARTIST 0x8246B078 */));
 
-    mpTextFieldInstance = lpTextFieldInstance;
+    mpTextFieldInst = lpTextFieldInstance;
     mpParentMovie       = lpParentMovie;
     mpTransform         = lpTransform;
 
@@ -57,19 +57,19 @@ void TextFieldRef::SetText(const char* lpacNewText, bool lbAlreadyLocalised)
 {
     CGS_ASSERT(lpacNewText != 0,
         CGS_ASSERT_MESSAGE_AT("lpacNewText", __FILE__, 76 /* ARTIST 0x8246CC84 */));
-    CGS_ASSERT(mpTextFieldInstance != 0,
+    CGS_ASSERT(mpTextFieldInst != 0,
         CGS_ASSERT_MESSAGE_AT("mpTextFieldInst", __FILE__, 77 /* ARTIST 0x8246CCAC */));
 
-    static_cast<TextFieldInstance*>(mpTextFieldInstance)->ChangeText(
+    static_cast<TextFieldInstance*>(mpTextFieldInst)->ChangeText(
         reinterpret_cast<const CgsUnicode::CgsUtf8*>(lpacNewText), lbAlreadyLocalised);
 }
 
 // ---- SetAutoSize @ 0x8246D488 --------------------------------------------
 void TextFieldRef::SetAutoSize(bool lbAutoSize)
 {
-    CGS_ASSERT(mpTextFieldInstance != 0,
+    CGS_ASSERT(mpTextFieldInst != 0,
                "Textfield must be constructed before we can set it to autosize");
-    static_cast<TextFieldInstance*>(mpTextFieldInstance)->SetAutoSize(lbAutoSize);
+    static_cast<TextFieldInstance*>(mpTextFieldInst)->SetAutoSize(lbAutoSize);
 }
 
 // ---- ClearText @ 0x8246CBD8 ------------------------------------------------
@@ -80,9 +80,9 @@ void TextFieldRef::SetAutoSize(bool lbAutoSize)
 // the link found it the moment JunctionInfoComponent::SetEventNameText mounted.
 void TextFieldRef::ClearText()
 {
-    CGS_ASSERT(mpTextFieldInstance != 0,
+    CGS_ASSERT(mpTextFieldInst != 0,
         CGS_ASSERT_MESSAGE_AT("mpTextFieldInst", __FILE__, 61 /* ARTIST 0x8246CC00 */));
-    static_cast<TextFieldInstance*>(mpTextFieldInstance)->ChangeText(
+    static_cast<TextFieldInstance*>(mpTextFieldInst)->ChangeText(
         reinterpret_cast<const CgsUnicode::CgsUtf8*>(""), false);
 }
 
@@ -265,14 +265,14 @@ bool TextFieldRef::SetLocalisedText(s32 liValue, s32 liFormatType)
 // stands (the X360 never touches the top byte). The w lane is ignored.
 void TextFieldRef::SetColour(Vector4 lv4Colour)
 {
-    CGS_ASSERT(mpTextFieldInstance != 0, "mpTextFieldInst");   // cpp:423 (non-gating)
+    CGS_ASSERT(mpTextFieldInst != 0, "mpTextFieldInst");   // cpp:423 (non-gating)
 
     const u32 luRed   = static_cast<u32>(static_cast<s64>(lv4Colour.GetX().GetFloat() * 255.0f)) & 0xFFu;
     const u32 luGreen = static_cast<u32>(static_cast<s64>(lv4Colour.GetY().GetFloat() * 255.0f)) & 0xFFu;
     const u32 luBlue  = static_cast<u32>(static_cast<s64>(lv4Colour.GetZ().GetFloat() * 255.0f)) & 0xFFu;
 
     CgsGraphics::TextObject& lrTextObject =
-        static_cast<TextFieldInstance*>(mpTextFieldInstance)->GetTextObject();
+        static_cast<TextFieldInstance*>(mpTextFieldInst)->GetTextObject();
     lrTextObject.mTextColour = (lrTextObject.mTextColour & 0xFF000000u)
                              | (luBlue << 16) | (luGreen << 8) | luRed;
 }
@@ -295,11 +295,11 @@ void TextFieldRef::SetColour(Vector4 lv4Colour)
 // re-spelled -- no conversion happens on the console either.
 const char* TextFieldRef::GetText() const
 {
-    CGS_ASSERT(mpTextFieldInstance != 0,
+    CGS_ASSERT(mpTextFieldInst != 0,
         CGS_ASSERT_MESSAGE_AT("mpTextFieldInst", __FILE__, 408 /* ARTIST 0x8246E0E8 */));   // cpp:408 (non-gating)
 
     return reinterpret_cast<const char*>(
-        static_cast<const TextFieldInstance*>(mpTextFieldInstance)->GetAptString().GetText());
+        static_cast<const TextFieldInstance*>(mpTextFieldInst)->GetAptString().GetText());
 }
 
 }

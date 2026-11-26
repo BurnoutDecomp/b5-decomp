@@ -10,6 +10,7 @@
 #include "GameSource/Gui/Flow/HUD/Components/BrnRoadRuleShotComponent.h"
 #include "GameSource/Gui/Flow/Shared/Components/BrnAnimationComponent.h"
 #include "GameSource/Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptHelpItem.h"
+#include "GameSource/Gui/BrnGuiCache.h"                                 // GuiCache (ClearExpectedComponent)
 
 // Member order follows DecFIGS, with native host component types.
 namespace BrnGui
@@ -73,6 +74,18 @@ namespace BrnGui
         bool UpdateSetupState();
         void UpdateRunning();
         void SetExpectedAptComponentList();
+
+        // DWARF BrnCrashedHudState.h:291 (local luIter h:293), header-inline: no ARTIST copy,
+        // SetExpectedAptComponentList 0x82475444 inlines the cache clear and the 8-word loop.
+        void ClearExpectedComponent()
+        {
+            mpCache->ClearExpectedAptComponentList(E_GUIFLOW_HUD);
+            for (u32 luIter = 0; luIter < KU_MAX_INIT_COMPONENTS_NUM; ++luIter)
+            {
+                mauExpectedComponentIds[luIter] = 0;
+            }
+            muNumExpectedComponents = 0;
+        }
 
         // Post the running free-burn challenge to the ticker. UpdatePermenant's
         // 573/574/576/581 arms call it.

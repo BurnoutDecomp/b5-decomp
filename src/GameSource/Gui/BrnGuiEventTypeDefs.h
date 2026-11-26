@@ -1755,6 +1755,17 @@ struct GuiDirtyTrickTriggerableEvent : public CgsGui::GuiEvent<370>
 {
 };
 
+// DWARF :849 -- ask the front end for the player's name, an EMPTY event (PS3 GuiEvent<497>;
+// X360 id 507: BootProfile::OnLeave 0x824785EC queues the bare {1, 507, 12} header).
+struct GuiEventTriggerGetPlayerName : public CgsGui::GuiEvent<507>
+{
+};
+
+// DWARF :783 area (after GuiEventShowLoadingScreen :777 / GuiEventHideLoadingScreen :780):
+// `typedef GuiEvent<136> GuiEventShowLoadingScreenAsBackground` on PS3; X360 id 138
+// (BootProfile::Update 0x8247E6E0 queues the bare {1, 138, 12} header).
+typedef CgsGui::GuiEvent<138> GuiEventShowLoadingScreenAsBackground;
+
 class GuiDirtyTrickEndedEvent
 {
 public:

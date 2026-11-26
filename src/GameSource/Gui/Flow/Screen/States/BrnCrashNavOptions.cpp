@@ -224,19 +224,8 @@ namespace BrnGui
         { { KI_RESOURCE_ID_OPTIONS, CgsGui::E_GUI_RESOURCETYPE_APT } };
     u32       CrashNavOptions::muNumResourcesToLoad = 1;
 
-    // ---- CrashNavOptions @0x82508AA0 -----------------------------------------------
-    // The X360 body is vptr installs plus the embedded components' own constructors, all
-    // of which C++ emits implicitly here. The scalar fields are seeded by OnEnter.
-    CrashNavOptions::CrashNavOptions()
-        : meState(E_STATE_INIT_SETUP)
-        , mpGuiCache(0)
-        , mMenuToggleGroup()
-        , mOptionsData()
-        , mHelpItem()
-        , mbSettingsChanged(false)
-        , mbInputHandled(false)
-    {
-    }
+    // CrashNavOptions @0x82508AA0 is the implicit constructor (vptrs and the members' own
+    // constructors only); it is emitted where BrnScreenFlow::Prepare creates the state.
 
     // ---- OnEnter @0x824BCEE8 -------------------------------------------------------
     void CrashNavOptions::OnEnter()

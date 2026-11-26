@@ -10,7 +10,7 @@
 // BrnFlapt::TextFieldRef — a handle onto a live text field within a Flapt movie.
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. The handle stores three pointers,
 // proven by Construct @ 0x8246AFF0 (stw at +0, +4, +8):
-//   +0x00  mpTextFieldInstance   ("lpTextFieldInst")
+//   +0x00  mpTextFieldInst       ("lpTextFieldInst")
 //   +0x04  mpParentMovie         ("lpParentMovie")
 //   +0x08  mpTransform           ("lpTransform")
 //
@@ -91,9 +91,9 @@ namespace BrnFlapt
         // @0x824B1F0C/@0x824B2020/@0x824B2E50).
         void SetInvalid()
         {
-            mpTextFieldInstance = NULL;
-            mpParentMovie       = NULL;
-            mpTransform         = NULL;
+            mpTextFieldInst = NULL;
+            mpParentMovie   = NULL;
+            mpTransform     = NULL;
         }
 
         // SetLocalisedText(const char*, StringIdType, count, params, formats)
@@ -147,9 +147,17 @@ namespace BrnFlapt
         // (@0x82438AF8/@0x82438B40/@0x82438BBC/@0x82438BFC/@0x82438C44). Declaration-only.
         const char* GetText() const;
 
-        void* mpTextFieldInstance;   // +0x00
-        void* mpParentMovie;         // +0x04
-        void* mpTransform;           // +0x08
+        // IsValid (DWARF h:71) -- the field is bound. ARTIST inlines it at every site
+        // (FlaptTimerFieldComponent::SetTime 0x82427DE0 tests the instance word).
+        bool IsValid() const { return NULL != mpTextFieldInst; }
+
+    private:
+        // DWARF h:190..192: private members, so the class is not a POD and the XDK copies
+        // it member by member (lwz/stw pairs, FlaptTimerFieldComponent::Prepare 0x82427DAC);
+        // a public-member aggregate is block-copied instead.
+        void* mpTextFieldInst;       // +0x00 (TextFieldInstance*)
+        void* mpParentMovie;         // +0x04 (MovieClipInstance*)
+        void* mpTransform;           // +0x08 (Im2dTransform*)
     };
 }
 

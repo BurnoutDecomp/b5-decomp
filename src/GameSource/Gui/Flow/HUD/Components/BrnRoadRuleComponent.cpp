@@ -315,6 +315,8 @@ void RoadRuleComponent::Construct(const char* lpacName, CgsGui::StateInterface* 
     mCurrentCrashTextField.SetInvalid();
     mCurrentTimeAnimator.Construct("CurrentTime_anim", mpStateInterface, 0);
     mCurrentCrashAnimator.Construct("CurrentCrash_anim", mpStateInterface, 0);
+    meCurrentTimerAnimState = E_ANIMATION_STATE_INVISIBLE;   // X360 +0x3DC (stored ahead of the colours, 0x8242AE80)
+    meCurrentCrashAnimState = E_ANIMATION_STATE_INVISIBLE;   // X360 +0x3E0
     mCurrentTimerField.SetSafeColours(255, 204, 0);
     mCurrentTimerField.SetDangerColours(153, 16, 16);
 
@@ -334,19 +336,16 @@ void RoadRuleComponent::Construct(const char* lpacName, CgsGui::StateInterface* 
         mabRuleActive[liRule]  = false;
         mabRulePending[liRule] = false;
     }
-    meCurrentTimerAnimState = E_ANIMATION_STATE_INVISIBLE;   // X360 +0x3DC (zero run)
-    meCurrentCrashAnimState = E_ANIMATION_STATE_INVISIBLE;   // X360 +0x3E0
-    maRoadWorldPosition[0].SetZero();   // X360 stvx zero @+0x1D0
-    maRoadWorldPosition[1].SetZero();   // X360 stvx zero @+0x1E0
     mTargetTimeMC.SetInvalid();
     mTargetCrashMC.SetInvalid();
     mbTimeTargetVisible  = false;
     mbCrashTargetVisible = false;
-    meCurrentlyActiveRule = static_cast<BrnGameState::EActiveRoadRule>(0);
-    mePreviousActiveRule  = static_cast<BrnGameState::EActiveRoadRule>(0);
-    mpGuiCache = 0;
     mRoadRulePlayerNameFormatType =
         static_cast<CgsLanguage::LanguageManager::ParameterFormatType>(9);   // X360 +0x510 := 9 (E_FORMAT_ID_LOOKUP)
+    maRoadWorldPosition[0].SetZero();   // X360 stvx zero @+0x1D0
+    maRoadWorldPosition[1].SetZero();   // X360 stvx zero @+0x1E0
+    meCurrentlyActiveRule = static_cast<BrnGameState::EActiveRoadRule>(0);
+    mePreviousActiveRule  = static_cast<BrnGameState::EActiveRoadRule>(0);
     mbRoadRulesVisible     = false;   // X360 stb 0 @+0x518
     mbUpcomingRoadsVisible = true;    // X360 stb 1 @+0x519
 }

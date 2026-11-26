@@ -7,6 +7,8 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                // CgsDev::Log (stage log)
 #include "GameShared/GameClasses/Language/CgsLanguageManager.h"           // CgsLanguage::LanguageManager (no-space formatting)
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache (resource/watcher surface)
+#include "GameSource/Gui/BrnGuiShared.h"                                  // gGuiResourceIdentifier
+#include "GameShared/GameClasses/Development/CgsStrStream.h"              // CGS_ASSERT_STREAM_AT
 #include "GameSource/Input/GameInputActions.h"                       // EGameInputActions (the controller action vocabulary)
 
 #include <cstdio>   // std::snprintf (the stage log)
@@ -362,11 +364,9 @@ namespace BrnGui
     void BootProfile::OnEnter()
     {
         meInternalState = E_INTERNALSTATE_GETCACHE;
-        if (mpStateInterface != 0)
-            mpStateInterface->RegisterForEvents(maiEventToObserve, miNumEventsObserved);
+        mpStateInterface->RegisterForEvents(maiEventToObserve, miNumEventsObserved);
         mProfileMessage.Construct(mpStateInterface);
-        if (mpProfileManager != 0)   // X360 unconditional; PC null-guard, see the flow's fallback
-            mpProfileManager->AttachMessageDisplay(&mProfileMessage);
+        mpProfileManager->AttachMessageDisplay(&mProfileMessage);
         GuiOptionEvent20 lOption(1);
         mpStateInterface->OutputViewState(lOption);
     }
@@ -375,17 +375,17 @@ namespace BrnGui
     // (the empty-name level record on the view channel), release the profile resources.
     void BootProfile::OnLeave()
     {
-        if (mpStateInterface == 0)
-            return;
-        if (mpProfileManager != 0)   // X360 unconditional; PC null-guard
-            mpProfileManager->DetachMessageDisplay(mProfileMessage);
+        mpProfileManager->DetachMessageDisplay(mProfileMessage);
         mpStateInterface->UnRegisterForEvents(maiEventToObserve, miNumEventsObserved);
         // ARTIST 0x82478558: the empty-name sentinel targets the same display level
         // used by SaveLoadComponent (level 3), so that prompt is gone before the
-        // post-title intro state can begin.
-        GuiAptNameFlagEvent20 lUnload; lUnload.mpacAptName = ""; lUnload.miFlag = 3;
-        mpStateInterface->OutputViewState(lUnload);
-        if (!mbCheckDiskSpace)
+        // post-title intro state can begin (DWARF: StateInterface::PlayAptMovie inlined).
+        mpStateInterface->PlayAptMovie("", 3);
+        if (mbCheckDiskSpace == true)   // ARTIST 0x82478580 cmplwi 1
+        {
+            mbCheckDiskSpace = false;
+        }
+        else
         {
             if (mpGuiCache != 0)
                 mpGuiCache->UnloadResources(maResourcesToLoad, muNumResourcesToLoad);
@@ -394,11 +394,11 @@ namespace BrnGui
             // +0x13B90 -- see the GuiCache.h note at +0x4B4F, issue #29 wave). Same byte
             // as before, read under its real name.
             if (mpGuiCache == 0 || !mpGuiCache->IsPerformingInvite())
-                PostCommand16<507>(mpStateInterface);
-        }
-        else
-        {
-            mbCheckDiskSpace = false;
+            {
+                // DWARF BrnBootProfile.cpp:517 local; X360 id 507 (ARTIST li 0x1FB).
+                GuiEventTriggerGetPlayerName lTriggerGetPlayerNameEvent;
+                mpStateInterface->OutputGuiEvent(lTriggerGetPlayerNameEvent);
+            }
         }
     }
 
@@ -409,34 +409,37 @@ namespace BrnGui
     // RUNNING resolves through the manager's task callback.
     void BootProfile::HandleControllerInput(const CgsModule::Event* lpEvent)
     {
-        const s32 liSubId =
-            reinterpret_cast<const ControllerInputPressedPayload*>(lpEvent)->miButtonId;
-        if (liSubId == KI_ACTION_GUI_SELECT)
+        // DWARF cpp:536 lpControllerEvent; the option count is re-read per test (ARTIST
+        // 0x82478638/0x8247864C/0x82478684) and the manager is called unguarded.
+        const ControllerInputPressedPayload* lpControllerEvent =
+            reinterpret_cast<const ControllerInputPressedPayload*>(lpEvent);
+        switch (lpControllerEvent->miButtonId)
         {
-            const s32 liNumOptions = mProfileMessage.GetNumOptions();
-            if (liNumOptions >= 1)
+        case KI_ACTION_GUI_SELECT:
+            if (mProfileMessage.GetNumOptions() >= 1)
             {
-                // X360: GuiAudioTriggerEvent::Construct(7, "", "Accept") + OutputGuiEvent.
-                BrnGui::GuiAudioTriggerEvent lAudio;
-                lAudio.Construct(7, "", "Accept", "");
-                mpStateInterface->OutputGuiEvent<BrnGui::GuiAudioTriggerEvent>(lAudio);
+                // DWARF cpp:545 lAudioTrigger.
+                BrnGui::GuiAudioTriggerEvent lAudioTrigger;
+                lAudioTrigger.Construct(7, "", "Accept", "");
+                mpStateInterface->OutputGuiEvent<BrnGui::GuiAudioTriggerEvent>(lAudioTrigger);
             }
 
-            if (liNumOptions == 1)
+            if (mProfileMessage.GetNumOptions() == 1)
             {
-                if (mpProfileManager != 0)
-                    mpProfileManager->HandleMessageChoice(0);
-            }
-            else if (liNumOptions == 2)
-            {
-                if (mpProfileManager != 0)
-                    mpProfileManager->HandleMessageChoice(1);
-            }
-        }
-        else if (liSubId == KI_ACTION_GUI_CANCEL && mProfileMessage.GetNumOptions() == 2)
-        {
-            if (mpProfileManager != 0)
                 mpProfileManager->HandleMessageChoice(0);
+            }
+            else if (mProfileMessage.GetNumOptions() == 2)
+            {
+                mpProfileManager->HandleMessageChoice(1);
+            }
+            break;
+
+        case KI_ACTION_GUI_CANCEL:
+            if (mProfileMessage.GetNumOptions() == 2)
+            {
+                mpProfileManager->HandleMessageChoice(0);
+            }
+            break;
         }
     }
 
@@ -455,32 +458,34 @@ namespace BrnGui
     // @ 0x8247E500 -- the profile stage machine (see the header's InternalState).
     void BootProfile::Update()
     {
-
-        if (mpInGuiEventQueue == 0)
-            return;
-
-        const CgsModule::Event* lpEvent;
-        s32 liSize;
-
         switch (meInternalState)
         {
         case E_INTERNALSTATE_GETCACHE:
-            for (s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liSize);
-                 lpEvent != 0;
-                 liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
+        {
+            // DWARF cpp:342..344 / cpp:350 locals.
+            const CgsModule::Event* lpEvent;
+            s32 liEventSize;
+            s32 liEventId;
+            for (liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liEventSize);
+                 lpEvent != NULL;
+                 liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize))
             {
                 if (liEventId == KI_EVENT_GUI_CACHE)
                 {
-                    GuiCache* lpCache = reinterpret_cast<const GuiEventCache*>(lpEvent)->mpGuiCache;
-                    CGS_ASSERT(lpCache != 0, "Invalid cache pointer");   // cpp:351
-                    mpGuiCache = lpCache;
-                    if (mbCheckDiskSpace && mpProfileManager != 0)
+                    const GuiEventCache* lpCacheEvent = reinterpret_cast<const GuiEventCache*>(lpEvent);
+                    CGS_ASSERT_STREAM_AT(lpCacheEvent->mpGuiCache != NULL, "Invalid cache pointer",
+                                         CGS_ARTIST_FILE, 351);
+                    mpGuiCache = lpCacheEvent->mpGuiCache;
+                    if (mbCheckDiskSpace == true)
+                    {
                         mpProfileManager->CheckDiskSpace(this);
+                    }
                     meInternalState = E_INTERNALSTATE_WAIT_RESOURCES;
                 }
             }
             mpInGuiEventQueue->Clear();
             break;
+        }
 
         case E_INTERNALSTATE_WAIT_RESOURCES:
             CGS_ASSERT_AT(mpGuiCache != 0, "mpGuiCache != NULL", CGS_ARTIST_FILE, 376);   // cpp:376
@@ -505,58 +510,63 @@ namespace BrnGui
                 mpInGuiEventQueue->Clear();
                 break;
             }
-            // Post the render-mode command 138 (the game bridges it to the dispatch
-            // buffer's render state) and play the save/load prompt at display level 3.
-            PostCommand16<138>(mpStateInterface);
-            mpStateInterface->PlayAptMovie("SaveLoadComponent", 3);
+        {
+            // DWARF cpp:395 lShowLoadingScreenAsBackground (X360 id 138), then the save/load
+            // prompt at display level 3 from the resource table (ARTIST lwz 0x1FC).
+            GuiEventShowLoadingScreenAsBackground lShowLoadingScreenAsBackground;
+            mpStateInterface->OutputGuiEvent(lShowLoadingScreenAsBackground);
+            mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[E_GUI_RESOURCEID_APT_SAVELOAD], 3);
             meInternalState = E_INTERNALSTATE_WAIT_INITIALISE;
             mpInGuiEventQueue->Clear();
             break;
+        }
 
         case E_INTERNALSTATE_WAIT_INITIALISE:
             CGS_ASSERT_AT(mpGuiCache != 0, "NULL != mpGuiCache", CGS_ARTIST_FILE, 410);   // cpp:410
-            if (!CacheAreAllAptComponentsInitialised(mpGuiCache))
+            if (mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN) == true)
             {
-                mpInGuiEventQueue->Clear();
-                break;
+                if (mbCheckDiskSpace == true)
+                {
+                    mProfileMessage.ResendMessageToApt();
+                }
+                else
+                {
+                    // The boot-up task (auto-load the profile as part of boot-up). The
+                    // completion comes back through HandleProfileTaskResult.
+                    mpProfileManager->Bootup(*this, true);
+                }
+                meInternalState = E_INTERNALSTATE_RUNNING;
             }
-            if (!mbCheckDiskSpace && mpProfileManager != 0
-                && mpProfileManager->GetProgressionData() == 0)
-            {
-                mpInGuiEventQueue->Clear();
-                break;
-            }
-            if (mbCheckDiskSpace)
-            {
-                mProfileMessage.ResendMessageToApt();
-            }
-            else if (mpProfileManager != 0)   // X360 unconditional; PC null-guard
-            {
-                // The boot-up task (auto-load the profile as part of boot-up). The
-                // completion comes back through HandleProfileTaskResult.
-                mpProfileManager->Bootup(*this, true);
-            }
-            meInternalState = E_INTERNALSTATE_RUNNING;
             mpInGuiEventQueue->Clear();
             break;
 
         case E_INTERNALSTATE_RUNNING:
-            for (s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liSize);
-                 lpEvent != 0;
-                 liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
+        {
+            // DWARF cpp:433..435 locals.
+            const CgsModule::Event* lpEvent;
+            s32 liEventSize;
+            s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liEventSize);
+            while (lpEvent != NULL)
             {
                 if (liEventId == KI_EVENT_CONTROLLER)
+                {
                     HandleControllerInput(lpEvent);
+                }
+                liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize);
             }
             mpInGuiEventQueue->Clear();
             break;
+        }
 
         case E_INTERNALSTATE_LEAVING:
+        {
             if (!mbCheckDiskSpace)
                 mpStateInterface->PlayLoadingScreen();
-            PostCommand16<70>(mpStateInterface);
+            CgsGui::GuiEvent<70> lEvent;   // DWARF cpp:457
+            mpStateInterface->OutputGuiEvent(lEvent);
             mpInGuiEventQueue->Clear();
             break;
+        }
 
         default:
             CGS_ASSERT_AT(false, "Invalid internal state", CGS_ARTIST_FILE, 464);   // cpp:464

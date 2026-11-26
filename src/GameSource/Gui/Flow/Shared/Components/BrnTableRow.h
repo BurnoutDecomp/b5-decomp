@@ -63,12 +63,12 @@ namespace BrnGui
         void SetText(s32 liCell, const char* lpacText);
         void SetInteger(s32 liCell, s32 liValue);
         void SetColourValue(s32 liCell, s32 liValue);   // writes maiCellInt[liCell]   (@0x824835A0)
-        void SetUseColour(s32 liCell, u8 lbUseColour);  // writes mabCellFlags[liCell] (@0x82483658)
+        void SetUseColour(s32 liCell, bool lbUseColour);  // writes mabCellFlags[liCell] (@0x82483658)
 
     private:
         CellData maCellData[KI_MAX_CELLS_PER_ROW];   // +0x000 (each 64 bytes)
         s32      maiCellInt[KI_MAX_CELLS_PER_ROW];   // +0x400 (per-cell secondary int)
-        u8       mabCellFlags[KI_MAX_CELLS_PER_ROW]; // +0x440 (per-cell flag byte)
+        bool     mabCellFlags[KI_MAX_CELLS_PER_ROW]; // +0x440 (per-cell use-colour flag)
     };
 
     class TableRow : public SelectableGroup

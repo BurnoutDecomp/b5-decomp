@@ -20,6 +20,9 @@
 
 #include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"             // BrnFlapt::FileRef
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT
+#include "GameShared/GameClasses/Development/CgsStrStream.h"  // CGS_ASSERT_STREAM_AT
+
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptHelpItem.cpp"
 
 namespace BrnGui
 {
@@ -29,23 +32,18 @@ namespace BrnGui
                                   CgsGui::StateInterface* lpStateInterface,
                                   const char* /*lpcParentName*/)
     {
-        CGS_ASSERT(lacName != 0, "Invalid name");
-        CGS_ASSERT(lpStateInterface != 0, "Invalid state interface");
-        CGS_ASSERT(lpStateInterface != 0, "lpStateInterface");
+        CGS_ASSERT_STREAM_AT(lacName != NULL, "Invalid name", CGS_ARTIST_FILE, 45);
+        CGS_ASSERT_STREAM_AT(lpStateInterface != NULL, "Invalid state interface", CGS_ARTIST_FILE, 46);
 
-        // Help item's own base (state interface + invalidate the movie-clip handle).
-        mpStateInterface = lpStateInterface;
-        mAptRef.mpMovieClipInst = 0;
-        mAptRef.mpTransform     = 0;
+        // Help item's own base (BrnGuiFlaptComponent.h:113 assert, interface, clip cleared).
+        BrnFlaptComponent::Construct(lpStateInterface);
 
         // Construct both flanking button icons (X360 inlined their base init here).
         mIconLeft.Construct(lacName, lpStateInterface, 0);
         mIconRight.Construct(lacName, lpStateInterface, 0);
 
         // Invalidate the text-field handle.
-        mTextField.mpTextFieldInstance = 0;
-        mTextField.mpParentMovie       = 0;
-        mTextField.mpTransform         = 0;
+        mTextField.SetInvalid();
     }
 
     // @ 0x82428070 -- bind the help item's own clip, prepare + set up both button
@@ -108,18 +106,16 @@ namespace BrnGui
                                 FlaptButtonIconComponent::EPadButton leButtonRight,
                                 bool /*lbRemapButtons*/)
     {
-        CGS_ASSERT(lpText != 0, "Invalid text string");
+        CGS_ASSERT_STREAM_AT(lpText != NULL, "Invalid text string", CGS_ARTIST_FILE, 117);
         // NOTE: matches the X360 asm exactly (0x8241D3DC-0x8241D3EC): the first
         // range check mixes leButtonLeft's sign test with leButtonRight's upper
         // bound (no upper-bound test on leButtonLeft here); the second check
         // below re-tests leButtonRight fully. This looks like an original-source
         // quirk, not a decompiler artifact -- reproduced verbatim.
-        CGS_ASSERT(static_cast<s32>(leButtonLeft) >= 0
-                       && static_cast<s32>(leButtonRight) < FlaptButtonIconComponent::E_PADBUTTON_COUNT,
-                   "Invalid button state");
-        CGS_ASSERT(static_cast<s32>(leButtonRight) >= 0
-                       && static_cast<s32>(leButtonRight) < FlaptButtonIconComponent::E_PADBUTTON_COUNT,
-                   "Invalid button state");
+        CGS_ASSERT_STREAM_AT(leButtonLeft >= 0 && leButtonRight < FlaptButtonIconComponent::E_PADBUTTON_COUNT,
+                             "Invalid button state", CGS_ARTIST_FILE, 118);
+        CGS_ASSERT_STREAM_AT(leButtonRight >= 0 && leButtonRight < FlaptButtonIconComponent::E_PADBUTTON_COUNT,
+                             "Invalid button state", CGS_ARTIST_FILE, 119);
 
         // Left glyph: remember the button and stop its clip on the matching label.
         mIconLeft.meButton = leButtonLeft;

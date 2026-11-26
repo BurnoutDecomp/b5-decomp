@@ -95,17 +95,11 @@ namespace BrnGui
         mfCurrentGameTime_Seconds = 0.0f;
 
         // Invalidate the three text-field handles (inlined TextFieldRef::SetInvalid).
-        mArtistNameRef.mpTextFieldInstance = 0;
-        mArtistNameRef.mpParentMovie       = 0;
-        mArtistNameRef.mpTransform         = 0;
+        mArtistNameRef.SetInvalid();
 
-        mSongNameRef.mpTextFieldInstance = 0;
-        mSongNameRef.mpParentMovie       = 0;
-        mSongNameRef.mpTransform         = 0;
+        mSongNameRef.SetInvalid();
 
-        mAlbumNameRef.mpTextFieldInstance = 0;
-        mAlbumNameRef.mpParentMovie       = 0;
-        mAlbumNameRef.mpTransform         = 0;
+        mAlbumNameRef.SetInvalid();
     }
 
     // @ 0x82415AA8 -- bind this component's own apt clip, then locate the EATrax box

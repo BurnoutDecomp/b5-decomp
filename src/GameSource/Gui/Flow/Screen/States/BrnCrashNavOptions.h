@@ -283,7 +283,9 @@ namespace BrnGui
             E_OPTIONROW_COUNT        = 4,
         };
 
-        CrashNavOptions();          // @0x82508AA0
+        // No user constructor (DWARF lists only the implicit one at the class line h:250):
+        // the compiler's @0x82508AA0 installs the vptrs and constructs the members, and
+        // leaves the scalars to OnEnter.
 
         virtual void OnEnter();     // @0x824BCEE8
         virtual void OnLeave();     // @0x824CF5A0

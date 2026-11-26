@@ -239,7 +239,7 @@ namespace BrnGui
 
         maCells[liColumn].SetColourValue(static_cast<u32>(liColour));
         mpData->SetColourValue(liColumn, liColour);
-        mpData->SetUseColour(liColumn, 1);
+        mpData->SetUseColour(liColumn, true);
 
         SetDirty();
     }
@@ -297,7 +297,7 @@ namespace BrnGui
             // arrays -> 0.
             maCellData[liCell].miInt = -1;
             maiCellInt[liCell]       = 0;
-            mabCellFlags[liCell]     = 0;
+            mabCellFlags[liCell]     = false;
         }
     }
 
@@ -334,10 +334,12 @@ namespace BrnGui
     // flag. NB: the X360 asserts with the GetInteger() message text (shared string).
     bool TableRowDataSet::GetUseColour(s32 liCell) const
     {
-        CGS_ASSERT(liCell >= 0 && liCell < KI_MAX_CELLS_PER_ROW,
-                   "TableRowDataSet::GetInteger() invalid index specified"); // X360 line 481
+        // ARTIST 0x824E4790 streams GetInteger's message (line 481) and returns the flag byte
+        // as it is stored (lbz, no compare): the array holds bools.
+        CGS_ASSERT_STREAM_AT(liCell >= 0 && liCell < KI_MAX_CELLS_PER_ROW,
+            "TableRowDataSet::GetInteger() invalid index specified", CGS_ARTIST_FILE, 481);
 
-        return mabCellFlags[liCell] != 0;
+        return mabCellFlags[liCell];
     }
 
     // @0x82483340 -- format text into the cell's value buffer (&maCellData[liCell]).
@@ -373,10 +375,10 @@ namespace BrnGui
     }
 
     // @0x82483658 -- store the "use colour" flag byte mabCellFlags[liCell] (0x440 + liCell).
-    void TableRowDataSet::SetUseColour(s32 liCell, u8 lbUseColour)
+    void TableRowDataSet::SetUseColour(s32 liCell, bool lbUseColour)
     {
-        CGS_ASSERT(static_cast<u32>(liCell) < 16,
-                   "TableRowDataSet::SetUseColour() invalid index specified");  // X360 line 542
+        CGS_ASSERT_STREAM_AT(liCell >= 0 && liCell < KI_MAX_CELLS_PER_ROW,
+            "TableRowDataSet::SetUseColour() invalid index specified", CGS_ARTIST_FILE, 542);
 
         mabCellFlags[liCell] = lbUseColour;   // X360 stb value, 0x440(this + index)
     }

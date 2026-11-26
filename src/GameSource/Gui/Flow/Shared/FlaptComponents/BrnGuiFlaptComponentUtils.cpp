@@ -77,9 +77,7 @@ namespace BrnGui
             return true;
         }
 
-        lpOutTextFieldRef->mpTextFieldInstance = 0;
-        lpOutTextFieldRef->mpParentMovie       = 0;
-        lpOutTextFieldRef->mpTransform         = 0;
+        lpOutTextFieldRef->SetInvalid();
         return false;
     }
 }

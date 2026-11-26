@@ -29,91 +29,61 @@
 
 namespace BrnGui
 {
-    // Default mode boundaries the X360 installs in Construct (flt_820047C4 == 15.0f,
-    // flt_8204C54C == 5.0f). For a countdown the safe band is the high time and the
-    // danger band the low time; counting up reverses that.
-    static const f32 KF_DEFAULT_OUTER_BOUNDARY = 15.0f;
-    static const f32 KF_DEFAULT_INNER_BOUNDARY = 5.0f;
+    // DWARF cpp:28 (decl h:134): the child clip holding the timer's text field.
+    const char FlaptTimerFieldComponent::macTimerTextFieldName[13] = "TimerText_mc";
 
     // SetLocalisedText format selector the X360 passes when refreshing the timer text
     // (li r5, 2). Documented external-API integer (the ParameterFormatType enum value).
     static const s32 KI_TIMER_TEXT_FORMAT = 2;
 
-    // @ 0x8241C810 -- initialise the timer field.
-    void FlaptTimerFieldComponent::Construct(const void* /*lpDEBUGName*/,
+    // @ 0x8241C810 -- initialise the timer field. Default boundaries 15/5 are ARTIST's
+    // literal-pool floats (0x820047C4 == 15.0f, 0x8204C54C == 5.0f).
+    void FlaptTimerFieldComponent::Construct(const void* /*lpUnused1*/,
                                              CgsGui::StateInterface* lpStateInterface,
                                              ETimerMode leCountingMode,
-                                             const void* /*lpcParentName*/)
+                                             const void* /*lpUnused2*/)
     {
-        CGS_ASSERT(lpStateInterface != 0, "lpStateInterface");
+        BrnFlaptComponent::Construct(lpStateInterface);
+        mTimerTextField.SetInvalid();
 
-        // Base init (inlined by the X360): bind the state interface and clear the
-        // movie-clip handle + the text-field handle.
-        mpStateInterface = lpStateInterface;
-        mAptRef.mpMovieClipInst = 0;
-        mAptRef.mpTransform     = 0;
-        mTimerTextField.mpTextFieldInstance = 0;
-        mTimerTextField.mpParentMovie       = 0;
-        mTimerTextField.mpTransform         = 0;
-
-        // Default colours: safe = white (1,1,1), danger = red (1,0,0), current = 0
-        // (the X360 builds these into the three colour lanes after zeroing them).
         mv4SafeColour.SetZero();
-        mv4SafeColour.mV.x = 1.0f;
-        mv4SafeColour.mV.y = 1.0f;
-        mv4SafeColour.mV.z = 1.0f;
-
+        meCountingMode = leCountingMode;
         mv4DangerColour.SetZero();
-        mv4DangerColour.mV.x = 1.0f;
-
         mv4CurrentColour.SetZero();
 
-        meCountingMode = leCountingMode;
+        SetSafeColours(255, 255, 255);
+        SetDangerColours(255, 0, 0);
 
-        // Pick the default safe/danger boundaries for the active mode. Counting down,
-        // the safe band is the high time (15) and danger the low time (5); counting up
-        // reverses that (safe=5, danger=15). NOT_COUNTING leaves both at 0.
-        f32 lfSafeBoundary;
-        f32 lfDangerBoundary;
-        if (leCountingMode == E_TIMER_MODE_COUNTING_DOWN)
+        if (meCountingMode == E_TIMER_MODE_COUNTING_DOWN)
         {
-            lfSafeBoundary   = KF_DEFAULT_OUTER_BOUNDARY;   // 15.0
-            lfDangerBoundary = KF_DEFAULT_INNER_BOUNDARY;   // 5.0
+            SetBoundaries(15.0f, 5.0f);
         }
-        else if (leCountingMode == E_TIMER_MODE_COUNTING_UP)
+        else if (meCountingMode == E_TIMER_MODE_COUNTING_UP)
         {
-            lfSafeBoundary   = KF_DEFAULT_INNER_BOUNDARY;   // 5.0
-            lfDangerBoundary = KF_DEFAULT_OUTER_BOUNDARY;   // 15.0
+            SetBoundaries(5.0f, 15.0f);
         }
         else
         {
-            lfSafeBoundary   = 0.0f;
-            lfDangerBoundary = 0.0f;
+            SetBoundaries(0.0f, 0.0f);
         }
-        SetBoundaries(lfSafeBoundary, lfDangerBoundary);
 
         mfCurrentTime = 0.0f;
     }
 
-    // @ 0x82427CB8 -- resolve, bind and reset the component, then attach the timer
-    // text field and prime it.
-    void FlaptTimerFieldComponent::Prepare(const char* lpcTextFieldName,
+    // @ 0x82427CB8 -- bind this component's clip (the base Prepare, no parent prefix:
+    // its h:133 assert and the MovieClipRef::ResetTimeline h:272 assert are inlined),
+    // then attach the timer's text field and prime it.
+    void FlaptTimerFieldComponent::Prepare(const char* lacTargetMovieclip,
                                            const char* lacName,
-                                           const BrnFlapt::FileRef& lFlaptFile)
+                                           const BrnFlapt::FileRef& lFile)
     {
         CGS_ASSERT_AT(lacName != 0, "lacName", CGS_ARTIST_FILE, 91);
-        CGS_ASSERT(lacName != 0, "lacName != NULL");
 
-        // Bind this component's own movie clip and reset its timeline.
-        mAptRef = lFlaptFile.FindComponent(lacName);
-        CGS_ASSERT(mAptRef.mpMovieClipInst != 0, "mpMovieClipInst");
-        mAptRef.mpMovieClipInst->ResetTimeline();
+        BrnFlaptComponent::Prepare(lacName, lFile, NULL);
 
-        // Dig the "TimerText_mc" sub-component's named text field out of the file.
-        mTimerTextField = AttachToTextFieldComponent(lpcTextFieldName,
-                                   "TimerText_mc", lacName, lFlaptFile);
+        mTimerTextField = AttachToTextFieldComponent(lacTargetMovieclip,
+                                   macTimerTextFieldName, lacName, lFile);
 
-        // Push the current band colour + formatted time to the field.
         mTimerTextField.SetColour(mv4CurrentColour);
         mTimerTextField.SetLocalisedText(mfCurrentTime, KI_TIMER_TEXT_FORMAT);
     }
@@ -125,7 +95,7 @@ namespace BrnGui
         mfCurrentTime = lfTime;
         CalculateColour();
 
-        if (mTimerTextField.mpTextFieldInstance != 0)
+        if (mTimerTextField.IsValid())
         {
             mTimerTextField.SetColour(mv4CurrentColour);
             mTimerTextField.SetLocalisedText(lfTime, KI_TIMER_TEXT_FORMAT);   // the parameter (fmr f1,f31 @0x82427E2C)
@@ -175,79 +145,6 @@ namespace BrnGui
         }
     }
 
-    // @ 0x824100A8 -- true while the current time sits in the safe colour band.
-    bool FlaptTimerFieldComponent::IsTimeSafe()
-    {
-        if (meCountingMode == E_TIMER_MODE_COUNTING_DOWN)
-        {
-            // Counting down: safe boundary is reached before the danger boundary,
-            // so the danger boundary must be the lower value.
-            CGS_ASSERT(mfDangerColourBoundary < mfSafeColourBoundary,
-                       "Danger colour boundry isn't less than the safe colour boundary\n");
-            return mfCurrentTime > mfSafeColourBoundary;
-        }
-
-        if (meCountingMode != E_TIMER_MODE_COUNTING_UP)
-        {
-            // Not actively counting -> always considered safe.
-            return true;
-        }
-
-        // Counting up: the safe boundary is the lower value (danger above it).
-        CGS_ASSERT(mfDangerColourBoundary > mfSafeColourBoundary,
-                   "Danger colour boundry isn't greater than the safe colour boundary\n");
-        return mfCurrentTime < mfSafeColourBoundary;
-    }
-
-    // @ 0x82410280 -- true while the current time sits in the danger colour band.
-    bool FlaptTimerFieldComponent::IsTimeDangerous()
-    {
-        if (meCountingMode == E_TIMER_MODE_COUNTING_DOWN)
-        {
-            CGS_ASSERT(mfDangerColourBoundary < mfSafeColourBoundary,
-                       "Danger colour boundry isn't less than the safe colour boundary\n");
-            return mfCurrentTime < mfDangerColourBoundary;
-        }
-
-        if (meCountingMode != E_TIMER_MODE_COUNTING_UP)
-        {
-            // Not actively counting -> never considered dangerous.
-            return false;
-        }
-
-        CGS_ASSERT(mfDangerColourBoundary > mfSafeColourBoundary,
-                   "Danger colour boundry isn't greater than the safe colour boundary\n");
-        return mfCurrentTime > mfDangerColourBoundary;
-    }
-
-    // @ 0x8240FED0 -- [H2 wave 2026-08-25] install the safe/danger boundaries and
-    // recompute 1/(difference) for the active mode. Counting DOWN requires
-    // danger < safe (1/(safe-danger)); counting UP requires danger > safe
-    // (1/(danger-safe)); NOT_COUNTING zeroes the reciprocal. The order asserts
-    // (BrnGuiFlaptTimerFieldComponent.h:177/:182) are non-gating -- the X360 divides
-    // regardless.
-    void FlaptTimerFieldComponent::SetBoundaries(f32 lfSafeColourBoundary, f32 lfDangerColourBoundary)
-    {
-        mfSafeColourBoundary   = lfSafeColourBoundary;
-        mfDangerColourBoundary = lfDangerColourBoundary;
-
-        if (meCountingMode == E_TIMER_MODE_COUNTING_DOWN)
-        {
-            CGS_ASSERT(lfDangerColourBoundary < lfSafeColourBoundary,
-                       "Danger colour boundry (  ) isn't less than the safe colour boundary (  )\n");   // h:177 (non-gating)
-            mfOneOverBoundaryDifference = 1.0f / (mfSafeColourBoundary - mfDangerColourBoundary);
-        }
-        else if (meCountingMode == E_TIMER_MODE_COUNTING_UP)
-        {
-            CGS_ASSERT(lfDangerColourBoundary > lfSafeColourBoundary,
-                       "Danger colour boundry (  ) isn't greater than the safe colour boundary (  )\n");   // h:182 (non-gating)
-            mfOneOverBoundaryDifference = 1.0f / (mfDangerColourBoundary - mfSafeColourBoundary);
-        }
-        else
-        {
-            mfOneOverBoundaryDifference = 0.0f;
-        }
-    }
-
+    // SetBoundaries, IsTimeSafe and IsTimeDangerous are header-inline (DWARF h:170/321/349).
     // SetSafeColours / SetDangerColours / SetCountingMode are header-inline (DWARF h:204/225/244).
 }
