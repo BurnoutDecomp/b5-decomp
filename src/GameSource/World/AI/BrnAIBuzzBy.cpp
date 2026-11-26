@@ -62,9 +62,9 @@ namespace BrnAI
     // split between the head-on and from-turnings reset types.
     const f32 KF_SIDE_TURNING_PROBABILITY = 0.800000012f;  // flt_820C4330 (plain .rdata, 0x3F4CCCCD)
 
-    // DWARF marks BuzzBy::mRandom `extern` -- it is a TU-local file-scope static (mirroring
-    // BrnRouteRequestManager's mRandom), NOT a per-instance member.
-    static CgsNumeric::Random mRandom;
+    // DWARF BrnAIBuzzBy.h:115 lists BuzzBy::mRandom as a static data member (`extern` in the dump,
+    // the member DIE's external declaration); its one object is .bss 0x8300D5A0.
+    CgsNumeric::Random BuzzBy::mRandom;
 
     // No-buzz sphere geometry -- seven zones, 16-byte centres at unk_8300DB30 (the 0x70 loop span
     // IsPositionInNoBuzzZone walks, 0x82766FC8..0x8276700C) and 4-byte radii at unk_820C4334.

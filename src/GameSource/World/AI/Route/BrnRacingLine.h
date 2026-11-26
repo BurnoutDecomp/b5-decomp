@@ -137,8 +137,8 @@ namespace BrnAI
         static const s32 KI_SECTION_CACHE_COUNT = KI_RACING_LINE_MAX_AVAILABLE_SECTIONS;
 
         // @0x8276E090 -- reset every cached section to its empty sentinels and clear the
-        // spread cursor triple. Returns this (the X360 threads r3 back out).
-        RacingLine* ClearSectionCache();
+        // spread cursor triple. DWARF BrnRacingLine.h:260: void.
+        void ClearSectionCache();
 
         // DWARF hint (BrnAIDriver.cpp:876 InitialiseRacingLine calls RacingLine::SetInitialised);
         // the X360 inlines it to the `stb` at driver+0x1AF0.

@@ -58,6 +58,7 @@
 #include "GameSource/World/AI/ResetOnTrack/BrnResetOnTrackManager.h"
 
 #include "GameSource/World/AI/BrnAICar.h"                              // AICar (section/portal members)
+#include "SharedClasses/World/BrnCollisionTag.h"   // BrnWorld::KI_INVALID_SECTION_INDEX (DWARF h:45)
 #include "GameSource/World/AI/BrnAIPortal.h"                           // BrnAI::Portal / BoundaryLine
 #include "GameSource/World/AI/RacingLine/BrnRacingLineGenerator.h"     // ExtrapolateRoute* + ExtrapolatedIndexArray
 #include "GameSource/World/AI/Route/BrnRouteMapModule.h"               // BrnAI::SectionAndPortalIndices
@@ -103,9 +104,6 @@ namespace
     const f32 KF_AWAY_FROM_PLAYER_MIN_DISTANCE = 2000.0f;
     const s32 KI_AWAY_FROM_PLAYER_MAX_REPEATS  = 10;
 
-    // The value AICar::Reset writes into every section-index member (BrnWorld::
-    // KI_INVALID_SECTION_INDEX; AICar.h spells it AICar::KI_INVALID_SECTION_INDEX).
-    const u16 KU_INVALID_SECTION_INDEX = 0x7FFFu;
 
     // The scan loops compare their running best against 0.0 (flt_82001CC0) and seed the node
     // distance-to-checkpoint slot with the same zero.
@@ -282,7 +280,7 @@ bool ResetOnTrackManager::ScanBackwardsAlongExtrapolatedRoute(const RouteNode*& 
     const Vector2 lPlayerPosition  = BrnMath::Flatten(lpPlayerAICar->GetPosition());
 
     u16 luStartSection = lpPlayerAICar->muBestSectionIndex;
-    if (luStartSection == KU_INVALID_SECTION_INDEX)
+    if (luStartSection == BrnWorld::KI_INVALID_SECTION_INDEX)
     {
         luStartSection = lpPlayerAICar->muDefaultSectionIndex;
     }
@@ -298,7 +296,7 @@ bool ResetOnTrackManager::ScanBackwardsAlongExtrapolatedRoute(const RouteNode*& 
 
     // The console re-reads the section indices here rather than reusing luStartSection; kept.
     u16 luBackwardsStartSection = lpPlayerAICar->muBestSectionIndex;
-    if (luBackwardsStartSection == KU_INVALID_SECTION_INDEX)
+    if (luBackwardsStartSection == BrnWorld::KI_INVALID_SECTION_INDEX)
     {
         luBackwardsStartSection = lpPlayerAICar->muDefaultSectionIndex;
     }
@@ -430,7 +428,7 @@ bool ResetOnTrackManager::ScanForwardsAlongExtrapolatedRoute(const RouteNode*& l
     const Vector2 lPlayerPosition  = BrnMath::Flatten(lpPlayerAICar->GetPosition());
 
     u16 luStartSection = lpPlayerAICar->muBestSectionIndex;
-    if (luStartSection == KU_INVALID_SECTION_INDEX)
+    if (luStartSection == BrnWorld::KI_INVALID_SECTION_INDEX)
     {
         luStartSection = lpPlayerAICar->muDefaultSectionIndex;
     }
@@ -769,7 +767,7 @@ bool ResetOnTrackManager::ResetNearRoutelessPlayer(ResetOnTrackCoords* lpResetDa
     const AICar* lpPlayerAICar = GetAICar(mePlayerGlobalRaceCarIndex);
 
     const u16 liResetOnTrackIndex = lpPlayerAICar->muResetOnTrackSectionIndex;
-    if (liResetOnTrackIndex == KU_INVALID_SECTION_INDEX)
+    if (liResetOnTrackIndex == BrnWorld::KI_INVALID_SECTION_INDEX)
     {
         // `ld gxMessageFilterFlags ; clrldi 63 ; cmpldi ; beq` 0x8278450C..0x8278451C: bit 0 gates the line.
         // [FX-TAILS-A item 8 2026-09-24: printed whenever gpDebugPrint was set]
@@ -951,11 +949,11 @@ bool ResetOnTrackManager::ResetFixedDistanceBehindPlayerAtStartOfRace(ResetOnTra
     const AICar* lpPlayerAICar = GetAICar(mePlayerGlobalRaceCarIndex);
 
     u16 luSection = lpPlayerAICar->muBestSectionIndex;
-    if (luSection == KU_INVALID_SECTION_INDEX)
+    if (luSection == BrnWorld::KI_INVALID_SECTION_INDEX)
     {
         luSection = lpPlayerAICar->muDefaultSectionIndex;
     }
-    if (luSection == KU_INVALID_SECTION_INDEX)
+    if (luSection == BrnWorld::KI_INVALID_SECTION_INDEX)
     {
         return false;
     }
@@ -999,11 +997,11 @@ bool ResetOnTrackManager::ResetFixedDistanceBehindPlayer(ResetOnTrackCoords* lpR
     const AICar* lpPlayerAICar = GetAICar(mePlayerGlobalRaceCarIndex);
 
     u16 luSection = lpPlayerAICar->muBestSectionIndex;
-    if (luSection == KU_INVALID_SECTION_INDEX)
+    if (luSection == BrnWorld::KI_INVALID_SECTION_INDEX)
     {
         luSection = lpPlayerAICar->muDefaultSectionIndex;
     }
-    if (luSection == KU_INVALID_SECTION_INDEX)
+    if (luSection == BrnWorld::KI_INVALID_SECTION_INDEX)
     {
         return false;
     }
@@ -1046,11 +1044,11 @@ bool ResetOnTrackManager::ResetFixedDistanceAheadOfPlayer(ResetOnTrackCoords* lp
     const AICar* lpPlayerAICar = GetAICar(mePlayerGlobalRaceCarIndex);
 
     u16 luSection = lpPlayerAICar->muBestSectionIndex;
-    if (luSection == KU_INVALID_SECTION_INDEX)
+    if (luSection == BrnWorld::KI_INVALID_SECTION_INDEX)
     {
         luSection = lpPlayerAICar->muDefaultSectionIndex;
     }
-    if (luSection == KU_INVALID_SECTION_INDEX)
+    if (luSection == BrnWorld::KI_INVALID_SECTION_INDEX)
     {
         return false;
     }
@@ -1463,11 +1461,11 @@ bool ResetOnTrackManager::ResetAheadFromSideTurnings(ResetOnTrackCoords* lpReset
     const AICar* lpPlayerAICar = GetAICar(mePlayerGlobalRaceCarIndex);
 
     u16 luSection = lpPlayerAICar->muBestSectionIndex;
-    if (luSection == KU_INVALID_SECTION_INDEX)
+    if (luSection == BrnWorld::KI_INVALID_SECTION_INDEX)
     {
         luSection = lpPlayerAICar->muDefaultSectionIndex;
     }
-    if (luSection == KU_INVALID_SECTION_INDEX)
+    if (luSection == BrnWorld::KI_INVALID_SECTION_INDEX)
     {
         return false;
     }

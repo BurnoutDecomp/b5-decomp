@@ -282,6 +282,9 @@ public:
     // GetAISectionsData). GetAICar returns the per-slot AI car (FindAICar @0x827676F8 walks indices
     // 0..34); GetAISectionsData returns the loaded section data the speed read-outs query.
     AICar*          GetAICar(EGlobalRaceCarIndex leGlobalRaceCarIndex);   // DWARF BrnAIModule.h:442
+    // DWARF BrnAIModule.h:435, no ARTIST copy (every caller inlines it): the player's slot through
+    // GetAICar (OnModeStartRacing 0x8276E58C..0x8276E590: lwzx mePlayerGlobalRaceCarIndex; bl GetAICar).
+    AICar*          GetPlayerCar() { return GetAICar(mePlayerGlobalRaceCarIndex); }
     AISectionsData* GetAISectionsData() const;            // BrnAI::AIModule::GetAISectionsData(this)
 
     // RenderHUD reads this scalar at 0x82796EDC and displays it as the difficulty percentage.

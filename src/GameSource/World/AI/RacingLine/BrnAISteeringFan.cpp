@@ -151,6 +151,7 @@ namespace BrnAI
 #include "GameSource/World/AI/RacingLine/BrnAISteeringFan_AggressionConstants.h"
 
 #include "GameSource/World/AI/BrnAICar.h"                             // AICar getters
+#include "SharedClasses/World/BrnCollisionTag.h"   // BrnWorld::KI_INVALID_SECTION_INDEX (DWARF h:45)
 #include "GameSource/World/AI/BrnAIDriver.h"                          // NearbyVehicle / NearbyVehicles
 #include "GameSource/World/AI/BrnAIUtils.h"                           // DistancePosVelToOrigin
 #include "GameSource/World/AI/Route/BrnRacingLine.h"                  // RacingLine
@@ -788,10 +789,6 @@ namespace BrnAI
 {
 namespace
 {
-    // DWARF BrnAICar.cpp:49 `const uint16_t KU_INVALID_SECTION_INDEX = 32767`. Both Include*
-    // bodies compare the section id against 0x7FFF as a signed 32-bit value (`cmpwi cr6, rN,
-    // 0x7FFF`), so it is spelled s32 here; same value AICar.h already carries.
-    const s32 KI_INVALID_SECTION_INDEX = 0x7FFF;
 
     // IncludeHardNoGo @0x82779F00 / @0x82779F3C -- flt_82F302D0 / flt_82F302D4.
     const f32 KF_HNG_EDGE_MARGIN   = 0.0625f;
@@ -831,9 +828,9 @@ namespace
 //
 //   0x82779DB8  !lpRacingLine->mbIsInitialised (racingline+0xBD0) -> return, rows UNTOUCHED.
 //   0x82779DC4  liSection = lpRacingLine->miLastKnownSectionID (racingline+0xC00).
-//   0x82779DCC  only when that is KI_INVALID_SECTION_INDEX:
+//   0x82779DCC  only when that is BrnWorld::KI_INVALID_SECTION_INDEX:
 //   0x82779DE4     liSection = GetLocalSectionID(lpRacingLine, mFanOrigin2D (this+0x350, loaded
-//                              by `lvx128 v1, r24, 0x350`), KI_INVALID_SECTION_INDEX)
+//                              by `lvx128 v1, r24, 0x350`), BrnWorld::KI_INVALID_SECTION_INDEX)
 //   0x82779DF4     still invalid -> zero ALL THREE rows (three unrolled 17-word `stw 0` loops at
 //                              +0x3F8 / +0x43C / +0x480) and return.
 //   0x82779E58     otherwise write it back to miLastKnownSectionID.
@@ -871,11 +868,11 @@ void SteeringFan::IncludeHardNoGo(RacingLineGenerator* lpRacingLineGenerator,
 
 #if BRN_AI_STEERINGFAN_HNG_PRESENT
     s32 liSection = lpRacingLine->miLastKnownSectionID;
-    if (liSection == KI_INVALID_SECTION_INDEX)
+    if (liSection == BrnWorld::KI_INVALID_SECTION_INDEX)
     {
         liSection = lpRacingLineGenerator->GetLocalSectionID(lpRacingLine, mFanOrigin2D,
-                                                             KI_INVALID_SECTION_INDEX);
-        if (liSection == KI_INVALID_SECTION_INDEX)
+                                                             BrnWorld::KI_INVALID_SECTION_INDEX);
+        if (liSection == BrnWorld::KI_INVALID_SECTION_INDEX)
         {
             for (s32 liStep = 0; liStep < KI_FAN_STEPS; ++liStep)
             {
@@ -892,7 +889,7 @@ void SteeringFan::IncludeHardNoGo(RacingLineGenerator* lpRacingLineGenerator,
     {
         liSection = lpRacingLineGenerator->GetNearSectionID(lpRacingLine, mHNGTarget[liStep],
                                                             liSection);
-        if (liSection == KI_INVALID_SECTION_INDEX)
+        if (liSection == BrnWorld::KI_INVALID_SECTION_INDEX)
         {
             mfWeighting[eFan_AvoidHNG][liStep]        = 0.0f;
             mfWeighting[eFan_ExitHNG][liStep]         = 1.0f;
@@ -1069,7 +1066,7 @@ f32 SteeringFan::FanIntersectsEdge(Vector2* lpEdge, s32 liIndex, Vector2 lA, Vec
 //   0x8277A3C8  liSection = GetLocalSectionID(lpRacingLine, lCarPosition2D,
 //                                             lpRacingLine->miLastKnownSectionID)
 //               -- unlike IncludeHardNoGo this call is UNCONDITIONAL, and the last known id is
-//               the hint rather than KI_INVALID_SECTION_INDEX.
+//               the hint rather than BrnWorld::KI_INVALID_SECTION_INDEX.
 //   0x8277A3D8  invalid -> zero the 17 words at this+0x54C and return.
 //   0x8277A408  lpRacingLine->miLastKnownSectionID = liSection.
 //   0x8277A41C  GATHER, at most KI_ROUTE_EDGE_SECTIONS entries (`cmpwi cr6, r30, 0x30`):
@@ -1129,7 +1126,7 @@ void SteeringFan::IncludeRouteEdgeIntersection(RacingLineGenerator* lpRacingLine
 
     s32 liSection = lpRacingLineGenerator->GetLocalSectionID(lpRacingLine, lCarPosition2D,
                                                              lpRacingLine->miLastKnownSectionID);
-    if (liSection == KI_INVALID_SECTION_INDEX)
+    if (liSection == BrnWorld::KI_INVALID_SECTION_INDEX)
     {
         for (s32 liStep = 0; liStep < KI_FAN_STEPS; ++liStep)
             mfWeighting[eFan_AvoidEdges][liStep] = 0.0f;

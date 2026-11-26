@@ -4,6 +4,7 @@
 #include "GameSource/World/AI/BrnAICar.h"
 #include "GameSource/World/AI/BrnAIDriver.h"
 #include "GameSource/World/AI/BrnAISharedConstants.h"
+#include "GameSource/World/AI/BrnAIDebugUtils.h"     // K_WHITE / K_GREEN / K_BLUE
 #include "GameSource/World/AI/BrnHNGTest.h"
 #include "GameSource/World/AI/ResetOnTrack/BrnResetOnTrackManager.h"
 #include "SharedClasses/AI/AISectionsResourceType.h"
@@ -24,10 +25,8 @@ namespace
     const s32 KI_AI_CAR_COUNT = 35;
     const f32 KF_DEGREES_PER_RADIAN = 57.295780181884766f; // flt_820C3B48
 
-    const CgsDev::RGBA K_WHITE = 0xFFFFFFFFu;
+    // K_WHITE / K_GREEN / K_BLUE: BrnAIDebugUtils.h (shared with the RaceBalancing component).
     const CgsDev::RGBA K_CYAN  = 0xFF00FFFFu;
-    const CgsDev::RGBA K_GREEN = 0xFF00FF00u;
-    const CgsDev::RGBA K_BLUE  = 0xFF0000FFu;
 
     rw::RGBA RenderColour(u32 luPacked)
     {

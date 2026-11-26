@@ -61,7 +61,7 @@
 //       @0x8278EE0C) stores the PREVIOUS corner in mA4XCoords/mA4YCoords and (corner - previous)
 //       in mEdge4X/mEdge4Y -- the identical winding IsInside walks.
 // Left untouched because BrnAIUtils.cpp is outside this lane. With it inverted, GetLocalSectionID
-// answers KI_INVALID_SECTION_INDEX for every position and the whole racing line is inert.
+// answers BrnWorld::KI_INVALID_SECTION_INDEX for every position and the whole racing line is inert.
 // =================================================================================================
 
 #define CGS_ARTIST_UNITY_BRNRACINGLINEGENERATOR_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/RacingLine/BrnRacingLineGenerator.cpp"
@@ -74,6 +74,7 @@
 #include "GameSource/World/AI/Route/BrnRoute.h"          // Route / RouteNode
 #include "GameSource/World/AI/Route/BrnRouteMapModule.h" // SectionAndPortalIndices
 #include "GameSource/World/AI/BrnAICar.h"                // AICar (GetPosition/GetDirection/GetBestSectionIndex)
+#include "SharedClasses/World/BrnCollisionTag.h"   // BrnWorld::KI_INVALID_SECTION_INDEX (DWARF h:45)
 #include "GameSource/World/AI/BrnAIPortal.h"             // Portal / BoundaryLine
 #include "GameSource/World/AI/BrnAIUtils.h"              // IsInsideSectionFast / Calc2DIntersectionEquationData
 #include "GameSource/Math/BrnMathUtils.h"                // BrnMath::Flatten
@@ -103,9 +104,6 @@ namespace
 // DropHardNoGoLinesIntoMap @0x8278F600).
 const s32 KI_MAX_HNG_LINES_TO_PLACE_PER_FRAME = 60;
 
-// BrnWorld::KI_INVALID_SECTION_INDEX. Asm literal `cmpwi cr6, r29, 0x7FFF` @0x827762D4 and
-// `li r3, 0x7FFF` @0x82776584.
-const s32 KI_INVALID_SECTION_INDEX = 0x7FFF;
 
 // The cache is 16 slots addressed by `sectionIndex & 15` (`clrlwi r11, r5, 28` everywhere).
 const s32 KI_SECTION_CACHE_MASK = KI_RACING_LINE_MAX_AVAILABLE_SECTIONS - 1;
@@ -326,7 +324,7 @@ bool RacingLineGenerator::CacheUpToDate(RacingLine* lpRacingLine, s32 liSectionI
 // Bracketed by PerfMonCpu Start/StopMonitor(miGenerateInSectionPM == dword_82F30258) on EVERY
 // exit. Four probes, in order:
 //   0x827762C4  if (!lpRacingLine->mbIsInitialised)                       -> invalid
-//   0x827762E4  liSectionID == KI_INVALID_SECTION_INDEX: scan the whole cache window
+//   0x827762E4  liSectionID == BrnWorld::KI_INVALID_SECTION_INDEX: scan the whole cache window
 //               [mFirstSectionInCache .. mLastSectionInCache] and return the first hit
 //   0x827763A4  else test liSectionID itself, then +1 and -1 (each guarded by CacheUpToDate)
 //   0x8277647C  then walk forwards from liSectionID+2 to mLastSectionInCache
@@ -341,7 +339,7 @@ s32 RacingLineGenerator::GetLocalSectionID(RacingLine* lpRacingLine, Vector2 lPo
 
     if (lpRacingLine->mbIsInitialised)
     {
-        if (liSectionID == KI_INVALID_SECTION_INDEX)
+        if (liSectionID == BrnWorld::KI_INVALID_SECTION_INDEX)
         {
             for (s32 liSection = lpRacingLine->mFirstSectionInCache;
                  liSection <= lpRacingLine->mLastSectionInCache;
@@ -407,7 +405,7 @@ s32 RacingLineGenerator::GetLocalSectionID(RacingLine* lpRacingLine, Vector2 lPo
     }
 
     CgsDev::PerfMonCpu::StopMonitor(miGenerateInSectionPM);
-    return KI_INVALID_SECTION_INDEX;
+    return BrnWorld::KI_INVALID_SECTION_INDEX;
 }
 
 // =================================================================================================
@@ -415,7 +413,7 @@ s32 RacingLineGenerator::GetLocalSectionID(RacingLine* lpRacingLine, Vector2 lPo
 //
 // The neighbour-only twin: the seed section, then +1, then -1, each guarded by CacheUpToDate;
 // no walk. Same PerfMon bracket. The leading streamed assert fires when the caller hands it
-// KI_INVALID_SECTION_INDEX (@0x827765E0..0x82776658, .cpp:1516) and is a REPORT -- the console
+// BrnWorld::KI_INVALID_SECTION_INDEX (@0x827765E0..0x82776658, .cpp:1516) and is a REPORT -- the console
 // then runs the whole body anyway, with GetSectionPointer(0x7FFF) resolving to slot 15.
 // =================================================================================================
 s32 RacingLineGenerator::GetNearSectionID(RacingLine* lpRacingLine, Vector2 lPosition,
@@ -423,7 +421,7 @@ s32 RacingLineGenerator::GetNearSectionID(RacingLine* lpRacingLine, Vector2 lPos
 {
     CgsDev::PerfMonCpu::StartMonitor(miGenerateInSectionPM);
 
-    if (liSectionID == KI_INVALID_SECTION_INDEX)
+    if (liSectionID == BrnWorld::KI_INVALID_SECTION_INDEX)
     {
         FireStreamedTextAssert("Invalid section used in guess\n", 1516);
     }
@@ -455,7 +453,7 @@ s32 RacingLineGenerator::GetNearSectionID(RacingLine* lpRacingLine, Vector2 lPos
     }
 
     CgsDev::PerfMonCpu::StopMonitor(miGenerateInSectionPM);
-    return KI_INVALID_SECTION_INDEX;
+    return BrnWorld::KI_INVALID_SECTION_INDEX;
 }
 
 // =================================================================================================
@@ -885,7 +883,7 @@ f32 RacingLineGenerator::GetHalfRoadWidthHere(RacingLine* lpRacingLine, Vector2 
     const s32 liSection = GetLocalSectionID(lpRacingLine, lPosition,
                                             lpRacingLine->miLastKnownSectionID);
 
-    if (liSection == KI_INVALID_SECTION_INDEX)
+    if (liSection == BrnWorld::KI_INVALID_SECTION_INDEX)
     {
         return KF_HALF_ROAD_WIDTH_FALLBACK;
     }
@@ -1210,7 +1208,7 @@ bool RacingLineGenerator::GetCentreCentreLineHere(RacingLine* lpRacingLine, Vect
 
     s32 liFirstSection;
     s32 liLastSection;
-    if (liLocalSection == KI_INVALID_SECTION_INDEX)
+    if (liLocalSection == BrnWorld::KI_INVALID_SECTION_INDEX)
     {
         liFirstSection = lpRacingLine->mFirstSectionInCache;
         liLastSection  = lpRacingLine->mLastSectionInCache;
@@ -1385,7 +1383,7 @@ s32 RacingLineGenerator::CacheLocalSections(RacingLine* lpRacingLine, const Rout
         return lpRacingLine->mFirstSectionInCache;
     }
 
-    if (lpCar->GetBestSectionIndex() == KI_INVALID_SECTION_INDEX)
+    if (lpCar->GetBestSectionIndex() == BrnWorld::KI_INVALID_SECTION_INDEX)
     {
         return 0;
     }
@@ -1992,10 +1990,6 @@ namespace
     // The "no portal chosen" marker written to SectionAndPortalIndices::muPortal (li r11,0xFF).
     const u32 KU_NO_PORTAL = 0xFF;
 
-    // BrnWorld::KI_INVALID_SECTION_INDEX (the assert text at :3087); the asm literal is
-    // `cmplwi cr6, r31, 0x7FFF` @0x827825BC. AICar.h carries the same value as
-    // AICar::KI_INVALID_SECTION_INDEX; repeated here so this leaf does not pull BrnAICar.h.
-    const u16 KU_INVALID_SECTION_INDEX = 0x7FFF;
 
     // Stuck budget: the third single-portal dead end ends the walk (`cmpwi cr6, r11, 2 ; bgt`).
     const s32 KI_MAX_STUCK_ITERATIONS = 2;
@@ -2121,7 +2115,7 @@ s32 RacingLineGenerator::ExtrapolateRouteBackwards(s32 liNumSectionsToGenerate,
 {
     (void)lCarPosition;   // v2: never read (0x82782580..0x82782BB8 copy only v1)
 
-    CGS_ASSERT(luStartSectionIndex != KU_INVALID_SECTION_INDEX,
+    CGS_ASSERT(luStartSectionIndex != BrnWorld::KI_INVALID_SECTION_INDEX,
                CGS_ASSERT_MESSAGE_AT("luStartSectionIndex != BrnWorld::KI_INVALID_SECTION_INDEX", __FILE__, 3087));   // :3087
 
     s32 liCurrentSectionIndex = luStartSectionIndex;
@@ -3092,7 +3086,7 @@ bool RacingLineGenerator::SpreadHNGBackOneStep(RacingLine* lpRacingLine)
 //
 //   0x827900DC  StartMonitor(miFarAheadPM) -- the WHOLE body is bracketed, both exits included
 //   0x827900F0  GetLocalSectionID(lpRacingLine, lFrom2D, miLastKnownSectionID (lwz 0xC00))
-//   0x827900FC  == 0x7FFF (KI_INVALID_SECTION_INDEX) -> fail
+//   0x827900FC  == 0x7FFF (BrnWorld::KI_INVALID_SECTION_INDEX) -> fail
 //   0x82790118  lbz 0x98(section) == mHardNoGoMap.mbReady (SectionData +0x50 plus 0x48) -> fail
 //   0x82790134  GetSectionInterpPosition(lpRacingLine, liSectionID, lFrom2D)
 //   0x8279014C  SectionLength(0.5f)

@@ -47,8 +47,8 @@ namespace BrnAI
 //  BrnRacingLineGenerator_GetForwardPortalIndex.cpp). The `class` shim also mangled BuzzBy with the
 //  wrong class-key, which made RouteRequestManager::Update unresolvable from AIModule::Update.)
 
-// DWARF BrnRouteRequestManager.h:158 marks mRandom `extern` -- it is a file-scope static, NOT a
-// per-instance member, at X360 0x8300D570 (findinit: exactly two sites, the Construct below at
+// DWARF BrnRouteRequestManager.h:158 lists mRandom as a static data member (`extern` in the dump,
+// the member DIE's external declaration), NOT a per-instance member, at X360 0x8300D570 (findinit: exactly two sites, the Construct below at
 // 0x8278A3B8 and GenerateFreeRoamingDestination's draw at 0x82769670). GenerateFreeRoamingDestination
 // draws section indices from it.
 // ⛔ CORRECTED 2026-09-22 (crash parity, found with G04-D1): Construct used to write an unread
@@ -57,7 +57,7 @@ namespace BrnAI
 // 0x8278A3B0..0x8278A434 are exactly CgsNumeric::Random::Construct() constant-folded: the ring
 // 3F800000 3FE43E6C 3F98B09C 3FDA23E0 3FE21EDC 3FDDEB96 3F9C9A72 3F923D76, the seed
 // 0xB5E330D0_2EC654DA at +0x20 (insrdi at 0x8278A418) and index 0 at +0x28.
-static CgsNumeric::Random mRandom;
+CgsNumeric::Random RouteRequestManager::mRandom;
 
 // After the opening burst, one further line per car every N eligible frames (600 == about ten
 // seconds at 60 Hz), until the overall cap is reached.

@@ -144,6 +144,10 @@ namespace BrnAI
     const f32       KF_BEHIND_SHUNT_MARKED_MAN_MIN_SPEED  = 90.0f * CgsCore::KF_MPH_TO_MPS;      // :156 bss 0x8300D774
     const f32       KF_BEHIND_SHUNT_MIN_SPEED_DIFFERENCE  = 10.0f * CgsCore::KF_MPH_TO_MPS;      // :157 bss 0x8300D934
 
+    // :171, rdata 0x820C4250 (the 6.0 UpdatePlayerTimers caps mfPlayerSlowSpeedTime with, read there
+    // directly at 0x827703A8; the PID gains :2798.. follow it at 0x820C4254).
+    const f32       KF_PLAYER_SLOW_SPEED_AGGRESSIVE_TIME = 6.0f;
+
     static inline f32 NativeVmxMadd(f32 a, f32 b, f32 c)
     {
         const __vector4 va = { a, a, a, a };
@@ -1414,16 +1418,12 @@ namespace BrnAI
         if (!(lfPlayerSpeed < lfDecentSpeed) || IsPlayerProtected(lpPlayerCar))
         {
             // decay, floored at 0 (fsel f0, f0, f0, 0.0)
-            const f32 lfNew = mfPlayerSlowSpeedTime - lfTimeStep;
-            mfPlayerSlowSpeedTime = (lfNew >= 0.0f) ? lfNew : 0.0f;
+            mfPlayerSlowSpeedTime = rw::math::fpu::Max(mfPlayerSlowSpeedTime - lfTimeStep, 0.0f);
         }
         else
         {
-            // climb, capped at 6 s (fsel f0, (sum - 6.0), 6.0, sum)
-            const f32 lfNew = mfPlayerSlowSpeedTime + lfTimeStep;
-            mfPlayerSlowSpeedTime = (lfNew - 6.0f >= 0.0f)
-                                        ? 6.0f
-                                        : lfNew;
+            // climb, capped at 6 s (fsel f0, (sum - 6.0), 6.0, sum); DWARF calls fpu::Max then fpu::Min
+            mfPlayerSlowSpeedTime = rw::math::fpu::Min(mfPlayerSlowSpeedTime + lfTimeStep, KF_PLAYER_SLOW_SPEED_AGGRESSIVE_TIME);
         }
 
         if (lpPlayerCar->IsCrashing())              // lbz 0x1542
@@ -1955,16 +1955,17 @@ namespace BrnAI
         mbBoosting       = 0;        // stb 0, 0x1D6B
 
         // 0x8277C90C `fcmpu ratio, flt_820C41D4 (0.75) ; bge` -> the full-throttle arm; bge is taken
-        // on >= AND on unordered (FX-AINAN2; `>=` sent a NaN ratio to full brake).
-        if (!(mSteeringFan.GetSpeedRatio() < KF_BRAKE_DURING_DRIFT))  // flt_820C41D4 == 0.75
+        // on >= AND on unordered (FX-AINAN2), so a NaN ratio takes the else arm. The brake arm is
+        // the if-arm: ARTIST falls through into it (0x8277C914).
+        if (mSteeringFan.GetSpeedRatio() < KF_BRAKE_DURING_DRIFT)  // flt_820C41D4 == 0.75
         {
-            mfBrake       = 0.0f;    // 0x1D2C
-            mfAccelerator = 1.0f;    // 0x1D28
+            mfBrake       = 1.0f;    // 0x1D2C
+            mfAccelerator = 0.0f;    // 0x1D28
         }
         else
         {
-            mfBrake       = 1.0f;
-            mfAccelerator = 0.0f;
+            mfBrake       = 0.0f;
+            mfAccelerator = 1.0f;
         }
     }
 
@@ -2347,6 +2348,15 @@ namespace BrnAI
     // (0x8277DA68..0x8277DAC4) WITHOUT reading a single field out of it -- the whole block is the
     // Attrib layer's own validation/lifetime sequence, preserved before the PID prepares.
     // ================================================================================
+    // DWARF BrnAIDriver.cpp:2798..2804: the gains are file-scope constants defined just above this
+    // function (ARTIST AI unity .rdata 0x820C4254..0x820C4268 = 1.5, 0.0, 0.5, 2.0, 0.0, 1.0).
+    const f32 KF_P      = 1.5f;     // :2798
+    const f32 KF_I      = 0.0f;     // :2799
+    const f32 KF_D      = 0.5f;     // :2800
+    const f32 KF_DRIFTP = 2.0f;     // :2802
+    const f32 KF_DRIFTI = 0.0f;     // :2803
+    const f32 KF_DRIFTD = 1.0f;     // :2804
+
     void AIDriver::ResetPIDTuningState()
     {
         // `NULL != GetCar()` (DWARF: GetCar is called) is the signed compare ARTIST has (cmpwi
@@ -2362,8 +2372,8 @@ namespace BrnAI
         }
 
         // DWARF: non-const float32_t[3] lafPIDCoefficients (cpp:2817) / lafDriftPIDCoefficients (:2818).
-        f32 lafPIDCoefficients[3]      = { 1.5f, 0.0f, 0.5f };
-        f32 lafDriftPIDCoefficients[3] = { 2.0f,  0.0f,  1.0f  };
+        f32 lafPIDCoefficients[3]      = { KF_P, KF_I, KF_D };
+        f32 lafDriftPIDCoefficients[3] = { KF_DRIFTP, KF_DRIFTI, KF_DRIFTD };
 
         mPIDController.Prepare(lafPIDCoefficients);           // r3 = this + 0x1B34
         mPIDControllerDrift.Prepare(lafDriftPIDCoefficients); // r3 = this + 0x1B98

@@ -2,6 +2,7 @@
 
 #include "GameSource/World/AI/BrnAIModule.h"                                      // BrnAI::AIModule (GetAICar / GetAISectionsData)
 #include "GameSource/World/AI/BrnAICar.h"                                         // BrnAI::AICar
+#include "GameSource/World/AI/BrnAIDebugUtils.h"                                  // K_WHITE / K_GREEN / K_BLUE
 #include "GameSource/World/AI/Route/BrnRoute.h"                                   // BrnAI::Route / RouteNode
 #include "GameSource/World/AI/RaceBalancing/BrnRaceBalancingManager.h"            // BrnAI::RaceBalancingManager / Graph / Route
 #include "SharedClasses/AI/AISectionsResourceType.h"                             // BrnAI::AISectionsData / AISection
@@ -40,10 +41,6 @@ void RaceBalancingDebugComponent::Construct(AIModule* lpAIModule, RaceBalancingM
 
 namespace
 {
-    // Source path reproduced verbatim for the asserts (matches the X360 string literal).
-    const char* const KPC_SOURCE_FILE =
-        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/RaceBalancing/BrnRaceBalancingDebugComponent.cpp";
-
     // ---- HUD layout constants (read straight off the X360 float literals) ------------------------
     // The speed-ratio graph (top-left): a 150x100 frame whose origin (bottom-left, screen coords) is
     // (200,180). The speed ratio (0..1) is drawn as 0..100 up the Y axis (y = 180 - ratio*100); the
@@ -81,9 +78,8 @@ namespace
     const f32 KF_MS_TO_MPH            = 2.2369363f;
 
     // Packed RGBA8 colours (read off the X360 li/lis/ori immediates; the 2D renderer takes AARRGGBB).
-    const CgsDev::RGBA K_WHITE = 0xFFFFFFFFu;  // -1
-    const CgsDev::RGBA K_BLUE  = 0xFF0000FFu;  // -16776961  (par / ahead line)
-    const CgsDev::RGBA K_GREEN = 0xFF00FF00u;  // -16711936  (target / behind line)
+    // K_WHITE (-1), K_BLUE (-16776961, par / ahead line), K_GREEN (-16711936, target / behind
+    // line): BrnAIDebugUtils.h (shared with the ResetOnTrack component).
     const CgsDev::RGBA K_RED   = 0xFFFF0000u;  // -65536     (current-time marker)
 
     // The DWARF lists FindAICar's slot sweep as 0..34 (35 race-car slots).

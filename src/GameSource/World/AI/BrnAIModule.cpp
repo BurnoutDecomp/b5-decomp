@@ -1389,13 +1389,10 @@ void AIModule::OnModeStartRacing(bool lbSkipPlayerCar)
     // asm 0x8276E55C..0x8276E578: offline only -- rebuild the master route from the player's car.
     // `Route::Construct(this + 289632, GetAICar(mePlayerGlobalRaceCarIndex))` -- the console hands
     // the AICar POINTER straight in as the source Route because mRoute sits at AICar+0.
+    // DWARF lists GetPlayerCar (no local); ARTIST has no null test of it (0x8276E594..0x8276E5A0).
     if (!mbIsInOnlineGameMode)
     {
-        AICar* const lpPlayerCar = GetAICar(mePlayerGlobalRaceCarIndex);
-        if (lpPlayerCar != 0)
-        {
-            mMasterRoute.Construct(lpPlayerCar->GetRoute());
-        }
+        mMasterRoute.Construct(GetPlayerCar()->GetRoute());
     }
 
     mbFullRollingStart = false;                                                             // 0x8276E584

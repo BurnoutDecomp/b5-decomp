@@ -14,8 +14,8 @@
 //
 // LAYOUT AUTHORITY is the X360 asm (BURNOUT_X360_ARTIST.XEX). The DecFIGS DWARF
 // (BrnRouteRequestManager.h) supplies the member names/types/order and the method
-// signatures; it marks mRandom `extern` -- i.e. mRandom is a FILE-SCOPE static, not a
-// member (it is not part of the per-instance layout). The recovered member layout is:
+// signatures; it marks mRandom `extern` -- i.e. mRandom is a STATIC data member (h:158), not
+// part of the per-instance layout. The recovered member layout is:
 //   +0x000  Array<u32,8> mauBlockSectionIds[16]   (16 * 36 == 576 bytes; count word at +0x20)
 //   +0x240  AStarDistanceFunction meDefaultAStarDistanceFunction
 // Construct() (X360 @0x8278A3B0) Constructs the file-static mRandom (0x8300D570), zeroes every
@@ -38,6 +38,7 @@
 #include "GameSource/World/AI/Route/BrnRouteMapModuleIO.h"// RaceRouteRequest / InputBuffer / queues
 #include "SharedClasses/AI/AISectionsResourceType.h"      // BrnAI::AISectionsData / AISection / Portal
 #include "GameShared/GameClasses/Containers/CgsArray.h"   // Array<u32,8u> (mauBlockSectionIds, DWARF :157)
+#include "GameShared/GameClasses/Numeric/CgsRandom.h"     // CgsNumeric::Random (mRandom, DWARF :158)
 
 namespace BrnAI
 {
@@ -129,6 +130,7 @@ private:
     // One slot per mode checkpoint: 16 == BrnGameState::GameStateModuleIO::KI_MAX_LANDMARKS_IN_MODE
     // (the DWARF spells the extent as the literal; SetBlockSections asserts against the constant).
     CgsContainers::Array<u32, 8u>        mauBlockSectionIds[16];                          // +0x000 (16 * 36 == 576) DWARF :157
+    static CgsNumeric::Random            mRandom;                                         // DWARF :158 (static data member, .bss 0x8300D570)
     AStarDistanceFunction meDefaultAStarDistanceFunction;                 // +0x240 (576) DWARF :159
 };
 }

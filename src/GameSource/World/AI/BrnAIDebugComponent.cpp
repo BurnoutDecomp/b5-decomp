@@ -1,3 +1,4 @@
+#define CGS_ARTIST_UNITY_BRNAIDEBUGCOMPONENT_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/BrnAIDebugComponent.cpp"
 #include "GameSource/World/AI/BrnAIDebugComponent.h"
 
 #include "GameSource/World/AI/BrnAIModule.h"                                      // BrnAI::AIModule (member-pointer completeness)
@@ -541,8 +542,11 @@ void AIDebugComponent::Construct(AIModule* lpAIModule)
 // Inlined by AIModule::Destruct at 0x8276E3C0..0x8276E400.
 void AIDebugComponent::Destruct()
 {
-    CGS_ASSERT(mpAIModule != 0, "mpAIModule != NULL");
+    // ARTIST (inlined into AIModule::Destruct, unity TU): li r5,0x109 at 0x8276E3DC, then the base
+    // DebugComponent::Destruct (bl 0x8284CB38, the folded empty body) at 0x8276E400.
+    CGS_ASSERT_AT(mpAIModule != 0, "mpAIModule != NULL", CGS_ARTIST_UNITY_BRNAIDEBUGCOMPONENT_CPP_FILE, 265);
     mpAIModule = 0;
+    CgsDev::DebugComponent::Destruct();
 }
 
 // @0x827671B8  The component's display name in the debug menu.

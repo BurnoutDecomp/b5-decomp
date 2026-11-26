@@ -27,6 +27,13 @@ namespace CgsDev { struct Debug3DImmediateRender; }
 
 namespace BrnAI
 {
+    // Packed debug-render colours (AARRGGBB, the li/lis/ori immediates the AI debug components
+    // pass to the 2D/3D renderers). Shared by the RaceBalancing and ResetOnTrack debug components,
+    // which ARTIST compiles in one unity TU (BrnWorldAIUnity), so they are defined once here.
+    const u32 K_WHITE = 0xFFFFFFFFu;
+    const u32 K_GREEN = 0xFF00FF00u;
+    const u32 K_BLUE  = 0xFF0000FFu;
+
     namespace BrnAIDebugUtils
     {
         using rw::RGBA;

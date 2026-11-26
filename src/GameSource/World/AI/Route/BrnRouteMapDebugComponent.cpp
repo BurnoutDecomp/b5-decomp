@@ -48,10 +48,6 @@ namespace
         return lColour;
     }
 
-    // Source path reproduced verbatim for the asserts (matches the X360 string literal).
-    const char* const KPC_SOURCE_FILE =
-        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/Route/BrnRouteMapDebugComponent.cpp";
-
     // Section/colour-mode tuning constants (BrnRouteMapDebugComponent.cpp:34-55 in the DWARF). Only
     // the ones this TU's bodies actually load are pinned to their X360 literal values.
     const f32  KF_MAP_SCALE_DEFAULT   = 0.1f;   // flt_820C424C (Construct)
@@ -176,7 +172,8 @@ const char* RouteMapDebugComponent::GetPath() const
 // ARTIST inlined in RouteMapModule::Destruct @0x827750E8..0x82775124.
 void RouteMapDebugComponent::Destruct()
 {
-    CGS_ASSERT(mpRouteMapModule != 0, "mpRouteMapModule != NULL");
+    // ARTIST (inlined into RouteMapModule::Destruct, unity TU): li r5,0x8E at 0x82775100.
+    CGS_ASSERT_AT(mpRouteMapModule != 0, "mpRouteMapModule != NULL", CGS_ARTIST_UNITY_BRNROUTEMAPDEBUGCOMPONENT_CPP_FILE, 142);
     mpRouteMapModule = 0;
     CgsDev::DebugComponent::Destruct();
 }

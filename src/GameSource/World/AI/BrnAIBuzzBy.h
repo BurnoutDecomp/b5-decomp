@@ -19,8 +19,8 @@
 //   mpResetOnTrackManager    @+0x128  ResetOnTrackManager*  (StartABuzzBy lwz 0x128)
 //   miCarsAwaitingCollection @+0x12C  s32
 //
-// The DWARF marks mRandom `extern` -- it is a FILE-SCOPE static in the .cpp (mirroring
-// BrnRouteRequestManager's mRandom), NOT a per-instance member; it is not part of this layout.
+// The DWARF marks mRandom `extern` -- a STATIC data member (h:115, .bss 0x8300D5A0, like
+// RouteRequestManager's mRandom), NOT a per-instance member; it is not part of this layout.
 // NOTE: past mpGlobalRaceCars the host widens the pointer (8B vs 4B on X360), so only the
 // pointer-free head is static_asserted; the bodies reach every field by name (faithful).
 
@@ -30,6 +30,7 @@
 #include "BrnCommonTypes.h"                             // Vector3
 #include "GameSource/BurnoutConstants.h"                // EGlobalRaceCarIndex
 #include "GameSource/World/AI/BrnAISharedConstants.h"   // BrnAI::EResetType, EAICarState
+#include "GameShared/GameClasses/Numeric/CgsRandom.h"   // CgsNumeric::Random (mRandom, DWARF h:115)
 
 namespace BrnAI
 {
@@ -122,6 +123,8 @@ namespace BrnAI
         f32 GetBuzzFrequency(const AICar* lpAICar) const;
 
     private:
+        static CgsNumeric::Random mRandom;                 // DWARF h:115 (static data member, .bss 0x8300D5A0)
+
         f32                  mfTimeInFreeRoam;             // +0x000
         bool                 mbIsInGameMode;               // +0x004
         bool                 mbIsInJunkyard;               // +0x005
