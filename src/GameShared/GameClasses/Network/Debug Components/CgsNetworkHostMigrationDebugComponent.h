@@ -29,6 +29,11 @@ namespace CgsNetwork
         HostMigrationManager* mpHostMigrationManager;  // +0x0C (Construct: = &owner)
         NetworkPlayerID       mLocalPlayerID;          // +0x10 (Construct: = -1)
 
+        // DWARF CgsNetworkHostMigrationDebugComponent.cpp:41/62 (out of line; the unity TU
+        // inlines them into HostMigrationManager's Construct / Destruct).
+        void Construct(HostMigrationManager* lpHostMigrationManager);
+        void Destruct();
+
         // X360 0x8287F398. "Force host migration" menu action (static DebugCallbackFunction).
         static void ForceHostMigration(void* lpData);
         // X360 0x8287F408. "Update Local Player ID" menu action (static DebugCallbackFunction).

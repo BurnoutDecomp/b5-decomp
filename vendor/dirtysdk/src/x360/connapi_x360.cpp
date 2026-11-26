@@ -173,7 +173,7 @@ void DefaultCallback(ConnApiRefT*, ConnApiCbInfoT* info, void*)
         "CONNAPI_STATUS_DEST"
     };
     static const char* const types[] = {"CONNAPI_CBTYPE_GAMEEVENT", "CONNAPI_CBTYPE_VOIPEVENT", 0};
-    NetPrintfCode("connapi: client %d) [%s] %s -> %s\n", info->iClientIndex,
+    NetPrintfCode("connapi: client %d) [%s] %s -> %s\n", info->iClientId,
                   types[info->eType], states[info->eOldStatus], states[info->eNewStatus]);
 }
 
@@ -567,7 +567,7 @@ void _ConnApiUpdateCallback(ConnApiRefT* ref, s32 clientIndex, s32 type,
     if (oldStatus != newStatus)
     {
         ConnApiCbInfoT info;
-        info.iClientIndex = clientIndex;
+        info.iClientId = clientIndex;
         info.eType = type;
         info.eOldStatus = oldStatus;
         info.eNewStatus = newStatus;

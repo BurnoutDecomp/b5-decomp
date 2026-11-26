@@ -77,9 +77,7 @@ namespace CgsNetwork
             mapHostMigrationCallbackData[liIndex] = 0;
         }
 
-        mHostMigrationDebugComponent.mpHostMigrationManager = this;
-        mHostMigrationDebugComponent.mLocalPlayerID         = KI_INVALID_PLAYER_ID;
-        mHostMigrationDebugComponent.Register();
+        mHostMigrationDebugComponent.Construct(this);
     }
 
     // -------------------------------------------------------------------------------
@@ -157,11 +155,11 @@ namespace CgsNetwork
             "mpPlayerManager",
             __FILE__, 225 /* ARTIST 0x828998B0 */));
 
-        ClearAllCallbacks();
+        UnregisterMessages();   // ARTIST 0x828998BC
 
-        for (s32 liIndex = 0; liIndex < KI_MAX_NETWORK_PLAYERS; ++liIndex)
+        for (s32 liDataCount = 0; liDataCount < KI_MAX_NETWORK_PLAYERS; ++liDataCount)
         {
-            HostMigrationNetworkPlayerData& lData = maMessageData[liIndex];
+            HostMigrationNetworkPlayerData& lData = maMessageData[liDataCount];
             lData.mOwnerPlayer = KI_INVALID_PLAYER_ID;
             lData.mHostKeepAliveMessageSend.Construct();
             lData.mHostKeepAliveMessageRecv.Construct();
@@ -178,8 +176,8 @@ namespace CgsNetwork
         return true;
     }
 
-    // ClearAllCallbacks @ CgsHostMigrationManager.cpp:1348 -- reachable only through Release
-    // (the X360 build inlined it there). Clears the registered host-migration callback table.
+    // ClearAllCallbacks @ CgsHostMigrationManager.cpp:1348 -- Destruct's (the X360 build inlines
+    // it there, 0x82883474). Clears the registered host-migration callback table.
     void HostMigrationManager::ClearAllCallbacks()
     {
         for (s32 liIndex = 0; liIndex < KI_MAX_HOST_MIGRATION_CALLBACKS; ++liIndex)
@@ -190,10 +188,17 @@ namespace CgsNetwork
     }
 
     // -------------------------------------------------------------------------------
+    // ARTIST 0x82883440 (unnamed in the export set; NetworkManager::Destruct calls it at
+    // 0x82899844 with this = &mHostMigrationManager): reset the frame rate, the keep-alive
+    // timeouts and the callbacks, then destruct the debug component.
     void HostMigrationManager::Destruct()
     {
-        // The X360 Destruct is empty (the manager owns no heap resources; Release tears the
-        // session-scoped state down). Kept as a named no-op for the lifecycle symmetry.
+        meFrameRate                     = static_cast<CgsSystem::EFrameRate>(-1);
+        mu16HostKeepAliveSendTimeout    = KU16_INVALID_FRAME;
+        mu16HostKeepAliveTimeout        = KU16_INVALID_FRAME;
+        mu16HostKeepAliveInitialTimeout = KU16_INVALID_FRAME;
+        ClearAllCallbacks();
+        mHostMigrationDebugComponent.Destruct();
     }
 
     // -------------------------------------------------------------------------------
@@ -358,6 +363,22 @@ namespace CgsNetwork
         // registered any).
         if (liPlayerID != mpPlayerManager->GetLocalPlayerID())
             UnregisterMessages(liPlayerID);
+    }
+
+    // -------------------------------------------------------------------------------
+    // ARTIST 0x82894F58 (unnamed in the export set; Release calls it): unregister the
+    // host-migration messages of every player that still has a network player.
+    void HostMigrationManager::UnregisterMessages()
+    {
+        NetworkPlayerID lPlayerID = KI_INVALID_PLAYER_ID;
+        while (mpPlayerManager->GetNextPlayerID(&lPlayerID, PlayerManager::E_CONSIDER_ALL_PLAYERS))
+        {
+            NetworkPlayer* lpNetPlayer = mpPlayerManager->GetPlayerByID(lPlayerID);
+            if (lpNetPlayer)
+            {
+                UnregisterMessages(lPlayerID);
+            }
+        }
     }
 
     // -------------------------------------------------------------------------------

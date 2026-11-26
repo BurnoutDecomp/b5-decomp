@@ -93,13 +93,13 @@ namespace CgsNetwork
             ConnApiClientT Clients[1];       // +0x08
         };
 
-        // Status-change callback payload.
+        // Status-change callback payload (DWARF connapi.h:86-89: the three codes are uint32_t).
         struct ConnApiCbInfoT
         {
-            s32 iClientIndex;   // +0x00  index into the client list
-            s32 eType;          // +0x04  ConnApiCbTypeE
-            s32 eOldStatus;     // +0x08  ConnApiConnStatusE
-            s32 eNewStatus;     // +0x0C  ConnApiConnStatusE
+            s32 iClientId;      // +0x00  index into the client list
+            u32 eType;          // +0x04  ConnApiCbTypeE
+            u32 eOldStatus;     // +0x08  ConnApiConnStatusE
+            u32 eNewStatus;     // +0x0C  ConnApiConnStatusE
         };
 
         struct ConnApiRefT;     // opaque (defined by the backend)

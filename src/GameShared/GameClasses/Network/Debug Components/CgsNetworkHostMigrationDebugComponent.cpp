@@ -17,6 +17,24 @@ namespace CgsNetwork
     // @ 0x8287F398. "Force host migration" menu action: rewind the last-keep-alive-received
     // time by twice the keep-alive timeout so the host-alive watchdog (IsHostAlive) trips and
     // a migration election is forced. The u16 field wraps -- this is a deliberate underflow.
+    // ARTIST 0x82883418..0x82883430 (inlined into HostMigrationManager::Construct): the base
+    // first, then the owner and no local player, then registration.
+    void HostMigrationDebugComponent::Construct(HostMigrationManager* lpHostMigrationManager)
+    {
+        CgsDev::DebugComponent::Construct();
+        mpHostMigrationManager = lpHostMigrationManager;
+        mLocalPlayerID         = K_INVALID_PLAYER_ID;
+        Register();
+    }
+
+    // ARTIST 0x8288348C..0x82883498 (inlined into HostMigrationManager::Destruct).
+    void HostMigrationDebugComponent::Destruct()
+    {
+        mpHostMigrationManager = 0;
+        mLocalPlayerID         = K_INVALID_PLAYER_ID;
+        CgsDev::DebugComponent::Destruct();
+    }
+
     void HostMigrationDebugComponent::ForceHostMigration(void* lpData)
     {
         HostMigrationDebugComponent* lpHostMigrationDebugComponent =

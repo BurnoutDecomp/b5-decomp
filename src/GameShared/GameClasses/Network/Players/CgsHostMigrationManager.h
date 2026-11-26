@@ -138,6 +138,7 @@ namespace CgsNetwork
         void            SetFrameRate(CgsSystem::EFrameRate leFrameRate);
         void            RegisterMessages(NetworkPlayerID liPlayerID);
         void            UnregisterMessages(NetworkPlayerID liPlayerID);
+        void            UnregisterMessages();   // DWARF cpp:968, every player's
         void            UpdateSendingOfHostKeepAliveMessage(u16 lu16CurrentFrame);
         void            SetNewHost(NetworkPlayerID liNewHostID,
                                    const CgsSystem::TimerStatus* lpTimerStatus, u16 lu16CurrentFrame);

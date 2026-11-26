@@ -451,25 +451,14 @@ void NetworkPlayer::CheckForPlayerDisconnectTimeout(const CgsSystem::TimerStatus
     if (mTimeLastPacketReceived.GetFloatVal() == 0.0f)
         return;
 
-    const CgsSystem::Time lTimeGap = lpTimerStatus->GetTime() - mTimeLastPacketReceived;
+    CgsSystem::Time lTimeGap;
+    lTimeGap = lpTimerStatus->GetTime() - mTimeLastPacketReceived;
     CGS_ASSERT(lTimeGap.GetFloatVal() >= 0.0f, CGS_ASSERT_MESSAGE_AT(
         "lTimeGap.GetFloatVal() >= 0.0f",
         CGS_ARTIST_FILE, 1324 /* ARTIST 0x828731B4 */));
 
-    // mbNetworkPlayerPaused = lTimeGap > K_NETWORK_PLAYER_TIMEOUT. The X360 inlines the
-    // CgsSystem::Time::operator> compare (seconds first, then fraction) against the two
-    // timeout words; read off the real branch structure, not the Hex-Rays simplification.
-    const s32 liGapSeconds   = lTimeGap.GetSeconds();
-    const f32 lfGapFraction  = lTimeGap.GetFraction();
-    bool lbTimedOut;
-    if (liGapSeconds > K_NETWORK_PLAYER_TIMEOUT.GetSeconds())
-        lbTimedOut = true;
-    else if (liGapSeconds < K_NETWORK_PLAYER_TIMEOUT.GetSeconds())
-        lbTimedOut = false;
-    else
-        lbTimedOut = (lfGapFraction > K_NETWORK_PLAYER_TIMEOUT.GetFraction());
-
-    mbNetworkPlayerPaused = lbTimedOut;
+    // DWARF: the timeout test is CgsSystem::Time::operator> (inlined).
+    mbNetworkPlayerPaused = lTimeGap > K_NETWORK_PLAYER_TIMEOUT;
 }
 
 // ---- Update @ 0x82899BF8 -------------------------------------------------------------

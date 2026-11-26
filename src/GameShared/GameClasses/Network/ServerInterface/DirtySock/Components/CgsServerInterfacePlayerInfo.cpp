@@ -139,8 +139,8 @@ namespace CgsNetwork
         mpPlayerInfo      = 0;                        // +0x18
         mpFindUser        = 0;                        // +0x1C
         mpStatbook        = 0;                        // +0x20
-        miEventCallback   = -1;                       // +0x24
         mpXUID = 0;                                   // +0x28 (one stw)
+        miEventCallback   = -1;                       // +0x24
     }
 
     // -----------------------------------------------------------------------------------

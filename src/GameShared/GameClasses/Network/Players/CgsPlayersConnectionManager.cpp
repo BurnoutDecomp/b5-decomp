@@ -676,8 +676,8 @@ void PlayersConnectionManager::ConnApiStatusChangeCallback(DirtySock::ConnApiRef
         return;
     }
 
-    NetworkPlayer* lpPlayer = lpSelf->mpPlayerManager->GetPlayerByName(
-        lpClientList->Clients[lpCbInfo->iClientIndex].UserInfo.strName);
+    const DirtySock::ConnApiClientT* lpClient = &lpClientList->Clients[lpCbInfo->iClientId];
+    NetworkPlayer* lpPlayer = lpSelf->mpPlayerManager->GetPlayerByName(lpClient->UserInfo.strName);
     if (lpPlayer == 0)
     {
         return;
