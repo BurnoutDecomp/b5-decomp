@@ -7,6 +7,15 @@
 #include "SDKs/EATech/include/rw/math/vpu/detail/scalar_operation_platform_inline.h"
 
 namespace rw { namespace math { namespace vpu {
+// DecFIGS scalar_operation_inline.h:112 (rwmath 1.02.00 :71): clear the sign bit of every lane
+// with a vspltisw(-1) << itself mask (ARTIST AIAggression::GetAcrossSeparation 0x827711DC..0x8277122C).
+template <>
+inline VecFloat Abs<VecFloat>(const VecFloat& a)
+{
+    const VectorIntrinsic mask = __vspltisw(-1);
+    const VectorIntrinsic signBitMask = __vslw(mask, mask);
+    return VecFloat(__vandc(a.mV, signBitMask));
+}
 // DecFIGS scalar_operation_inline.h:163.
 inline VecFloat Lerp(VecFloat::InParam a, VecFloat::InParam b, VecFloat::InParam t)
 {

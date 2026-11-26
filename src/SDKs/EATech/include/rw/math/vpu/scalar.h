@@ -9,6 +9,10 @@ namespace rw { namespace math { namespace vpu {
 // (detail/scalar_operation_platform_inline.h).
 template <class T> inline T Min(const T& a, const T& b) { return (a < b? a : b); }
 template <class T> inline T Max(const T& a, const T& b) { return (a > b? a : b); }
+// DecFIGS vpu/scalar.h:36 (rwmath 1.02.00 scalar.h): the generic Abs; VecFloat has the
+// sign-mask specialisation in detail/scalar_operation_inline.h.
+template <class T> inline T Abs(const T& a) { return a >= static_cast<T>(0.0f) ? a : -a; }
+template <> inline VecFloat Abs<VecFloat>(const VecFloat& a);
 }}}
 
 #include "SDKs/EATech/include/rw/math/vpu/detail/scalar_operation_inline.h"
