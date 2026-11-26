@@ -105,7 +105,7 @@ namespace CgsNetwork
     // Re-enable voice for every registered talker: set mbCanTalk on all seven
     // slots, then (if voice is up) restore full speaker + headset-gated microphone
     // routing to the current connection mask.
-    VoIPManager* VoIPManager::EnableAllComms()
+    void VoIPManager::EnableAllComms()
     {
         for (s32 liIndex = 0; liIndex < 7; ++liIndex)
             maRegisteredTalkers[liIndex].mbCanTalk = true;
@@ -118,13 +118,13 @@ namespace CgsNetwork
                 CGS_ARTIST_FILE, 1041 /* ARTIST 0x828938DC */));
 
             VoipSpeaker(mpVoiceRef, lu32ConnectionMask);
-
+            // ARTIST 0x828938F4 loads mpVoiceRef ahead of the headset test (score 97.9; a ternary
+            // or two calls both score lower).
             u32 lu32MicMask = 0;
             if (mbLocalPlayerHasHeadset)
                 lu32MicMask = lu32ConnectionMask;
             VoipMicrophone(mpVoiceRef, lu32MicMask);
         }
-        return this;
     }
 
     // ---------------------------------------------------------------------------
@@ -427,14 +427,18 @@ namespace CgsNetwork
     {
         VoIPClient lClient;
 
-        CGS_ASSERT(lPlayerID != K_INVALID_PLAYER_ID, "lPlayerID != K_INVALID_PLAYER_ID");
+        CGS_ASSERT(lPlayerID != K_INVALID_PLAYER_ID, CGS_ASSERT_MESSAGE_AT(
+            "lPlayerID != K_INVALID_PLAYER_ID",
+            CGS_ARTIST_FILE, 647 /* ARTIST 0x828996BC */));
 
         if (meStatus == E_VOIP_MANAGER_STATUS_UNPREPARED)
         {
             return false;
         }
 
-        CGS_ASSERT(mpVoiceRef, "mpVoiceRef");
+        CGS_ASSERT(mpVoiceRef, CGS_ASSERT_MESSAGE_AT(
+            "mpVoiceRef",
+            CGS_ARTIST_FILE, 655 /* ARTIST 0x828996F0 */));
 
         if (mpPlayerManager->IsLocalPlayer(lPlayerID))
         {

@@ -103,7 +103,8 @@ namespace CgsNetwork
     bool NetworkTexture::Prepare(CgsMemory::HeapMalloc* lpHeapMalloc, s32 liWidth, s32 liHeight,
                                  renderengine::PixelFormat lFormat)
     {
-        CGS_ASSERT(lpHeapMalloc, "lpHeapMalloc");
+        CGS_ASSERT(lpHeapMalloc, CGS_ASSERT_MESSAGE_AT(
+            "lpHeapMalloc", KAC_ARTIST_ASSERT_FILE, 72 /* ARTIST 0x8289396C */));
 
         miWidth        = liWidth;
         miHeight       = liHeight;
@@ -113,17 +114,21 @@ namespace CgsNetwork
 
         CGS_ASSERT(mpHeapMalloc->GetAllocator()->ValidateHeap(
                        EA::Allocator::GeneralAllocator::kHeapValidationLevelFull),
-                   "mpHeapMalloc->GetAllocator()->ValidateHeap(rw::core::GeneralAllocator::kHeapValidationLevelFull)");
+                   CGS_ASSERT_MESSAGE_AT(
+                       "mpHeapMalloc->GetAllocator()->ValidateHeap(rw::core::GeneralAllocator::kHeapValidationLevelFull)",
+                       KAC_ARTIST_ASSERT_FILE, 81 /* ARTIST 0x828939C8 */));
 
-        // GetTextureSize() == (miWidth * miBitsPerPixel * miHeight + 7) / 8, 4-byte aligned.
-        const s32 liTextureSize = (miWidth * miBitsPerPixel * miHeight + 7) / 8;
-        mpcTexture                 = static_cast<char*>(mpHeapMalloc->Malloc(liTextureSize, 4));
+        // DWARF CgsNetworkTexture.h:105 GetTextureSize() (header inline).
+        mpcTexture                 = static_cast<char*>(mpHeapMalloc->Malloc(GetTextureSize(), 4));
         mbTextureAllocatedFromHeap = true;
 
         CGS_ASSERT(mpHeapMalloc->GetAllocator()->ValidateHeap(
                        EA::Allocator::GeneralAllocator::kHeapValidationLevelFull),
-                   "mpHeapMalloc->GetAllocator()->ValidateHeap(rw::core::GeneralAllocator::kHeapValidationLevelFull)");
-        CGS_ASSERT(mpcTexture, "mpcTexture");
+                   CGS_ASSERT_MESSAGE_AT(
+                       "mpHeapMalloc->GetAllocator()->ValidateHeap(rw::core::GeneralAllocator::kHeapValidationLevelFull)",
+                       KAC_ARTIST_ASSERT_FILE, 84 /* ARTIST 0x82893A38 */));
+        CGS_ASSERT(mpcTexture, CGS_ASSERT_MESSAGE_AT(
+            "mpcTexture", KAC_ARTIST_ASSERT_FILE, 85 /* ARTIST 0x82893A60 */));
 
         mbIsUncompressedYUV = false;
         return true;

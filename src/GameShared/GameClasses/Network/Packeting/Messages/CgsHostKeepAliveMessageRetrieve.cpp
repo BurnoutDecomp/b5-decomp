@@ -25,18 +25,21 @@
 namespace CgsNetwork
 {
 
+// ARTIST 0x82880380 branches to a trailing `return false` (0x828803CC): the consume is the body of
+// the valid test. The assert names the header (CgsHostKeepAliveMessage.h:128): the original
+// defined Retrieve inline there.
 bool HostKeepAliveMessage::Retrieve()
 {
-    if ((mx8Flags & KX8_FLAGS_VALID) == 0)
+    if (IsMessageValid())
     {
-        return false;
+        SetMessageInvalid();
+        CGS_ASSERT_AT(!IsMessageValid(), "!IsMessageValid()",
+                      "..\\..\\..\\GameShared\\GameClasses\\Network/Packeting/Messages/CgsHostKeepAliveMessage.h",
+                      128);
+        return true;
     }
 
-    mx8Flags = static_cast<u8>(mx8Flags & static_cast<u8>(~KX8_FLAGS_VALID));
-
-    CGS_ASSERT((mx8Flags & KX8_FLAGS_VALID) == 0, "!IsMessageValid()");
-
-    return true;
+    return false;
 }
 
 }

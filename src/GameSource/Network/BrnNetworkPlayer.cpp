@@ -698,9 +698,7 @@ namespace BrnNetwork
         CGS_ASSERT(mpNetworkModule->GetNetworkEventQueue() != 0, CGS_ASSERT_MESSAGE_AT(
             "mpNetworkModule->GetNetworkEventQueue()",
             __FILE__, 1673 /* ARTIST 0x82593FCC */));
-        mpNetworkModule->GetNetworkEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lEvent),
-            lEvent.GetEventType(), sizeof(lEvent));   // console record: 16 bytes
+        mpNetworkModule->GetNetworkEventQueue()->AddEvent(lEvent);   // console record: 16 bytes
     }
 
     // ---- reliable-message arrived callbacks ----------------------------------------------
@@ -776,10 +774,7 @@ namespace BrnNetwork
                 break;
         }
 
-        lpNetPlayer->mpNetworkModule->GetNetworkEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lNetworkPlayerCollectableEvent),
-            lNetworkPlayerCollectableEvent.GetEventType(),
-            sizeof(lNetworkPlayerCollectableEvent));   // console record: 16 bytes
+        lpNetPlayer->mpNetworkModule->GetNetworkEventQueue()->AddEvent(lNetworkPlayerCollectableEvent);   // console record: 16 bytes
     }
 
     // Queue the new Burning Home Run runner for the game side (network event 61).
@@ -803,9 +798,7 @@ namespace BrnNetwork
             "lSwitchRunnerEvent.mNewRunnerID != CgsNetwork::K_INVALID_PLAYER_ID",
             CGS_ARTIST_FILE, 2248 /* ARTIST 0x825941A0 */));
 
-        lpNetPlayer->mpNetworkModule->GetNetworkEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lSwitchRunnerEvent),
-            lSwitchRunnerEvent.GetEventType(), sizeof(lSwitchRunnerEvent));   // console record: 4 bytes
+        lpNetPlayer->mpNetworkModule->GetNetworkEventQueue()->AddEvent(lSwitchRunnerEvent);   // console record: 4 bytes
     }
 
     // Queue a remote player's new skillz for the game side (network event 62).
@@ -827,9 +820,7 @@ namespace BrnNetwork
         lSkillzEvent.mPlayerID = lNetworkPlayerID;
         if (lpBurnoutSkillzMessage->Retrieve(&lSkillzEvent.mNewSkillzData, &lSkillzEvent.mbInitialData))
         {
-            lpPlayer->mpNetworkModule->GetNetworkEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lSkillzEvent),
-                lSkillzEvent.GetEventType(), sizeof(lSkillzEvent));   // console record: 64 bytes
+            lpPlayer->mpNetworkModule->GetNetworkEventQueue()->AddEvent(lSkillzEvent);   // console record: 64 bytes
         }
     }
 
@@ -852,9 +843,7 @@ namespace BrnNetwork
         if (lpShowtimeSwitchMessage->Retrieve(&lShowtimeSwitchEvent.miFinalShowtimeScore,
                                               &lShowtimeSwitchEvent.mbEnteringShowtime))
         {
-            lpPlayer->mpNetworkModule->GetNetworkEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lShowtimeSwitchEvent),
-                lShowtimeSwitchEvent.GetEventType(), sizeof(lShowtimeSwitchEvent));   // console record: 12 bytes
+            lpPlayer->mpNetworkModule->GetNetworkEventQueue()->AddEvent(lShowtimeSwitchEvent);   // console record: 12 bytes
         }
     }
 
@@ -881,9 +870,7 @@ namespace BrnNetwork
                 &lChallengeEvent.meChallengeStatus,
                 &lChallengeEvent.miActionIndex))
         {
-            lpPlayer->mpNetworkModule->GetNetworkEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lChallengeEvent),
-                lChallengeEvent.GetEventType(), sizeof(lChallengeEvent));   // console record: 32 bytes
+            lpPlayer->mpNetworkModule->GetNetworkEventQueue()->AddEvent(lChallengeEvent);   // console record: 32 bytes
         }
     }
 
@@ -962,9 +949,7 @@ namespace BrnNetwork
             CGS_ASSERT(lpNetworkPlayer->mpNetworkModule->GetNetworkEventQueue() != 0, CGS_ASSERT_MESSAGE_AT(
                 "lpNetworkPlayer->mpNetworkModule->GetNetworkEventQueue()",
                 __FILE__, 2502 /* ARTIST 0x825944EC */));
-            lpNetworkPlayer->mpNetworkModule->GetNetworkEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lActiveChallengeEvent),
-                lActiveChallengeEvent.GetEventType(), sizeof(lActiveChallengeEvent));   // console record: 48 bytes
+            lpNetworkPlayer->mpNetworkModule->GetNetworkEventQueue()->AddEvent(lActiveChallengeEvent);   // console record: 48 bytes
         }
     }
 
@@ -988,9 +973,7 @@ namespace BrnNetwork
                 __FILE__, 2571 /* ARTIST 0x82594590 */));
 
             lCheckpointEvent.mNetworkPlayerID = lNetworkPlayerID;
-            lpPlayer->mpNetworkModule->GetNetworkEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lCheckpointEvent),
-                lCheckpointEvent.GetEventType(), sizeof(lCheckpointEvent));   // console record: 8 bytes
+            lpPlayer->mpNetworkModule->GetNetworkEventQueue()->AddEvent(lCheckpointEvent);   // console record: 8 bytes
         }
     }
 
@@ -1014,9 +997,7 @@ namespace BrnNetwork
                 __FILE__, 2622 /* ARTIST 0x82594638 */));
 
             lEvent.mNetworkPlayerID = lNetworkPlayerID;
-            lpPlayer->mpNetworkModule->GetNetworkEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lEvent),
-                lEvent.GetEventType(), sizeof(lEvent));   // console record: 8 bytes
+            lpPlayer->mpNetworkModule->GetNetworkEventQueue()->AddEvent(lEvent);   // console record: 8 bytes
         }
     }
 
@@ -1455,9 +1436,7 @@ namespace BrnNetwork
             lShowtimeUpdateEvent.miShowtimeScore  = -1;
             if (mShowtimeUpdateMessageRecv.Retrieve(&lShowtimeUpdateEvent.miShowtimeScore))
             {
-                mpNetworkModule->GetNetworkEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lShowtimeUpdateEvent),
-                    lShowtimeUpdateEvent.GetEventType(), sizeof(lShowtimeUpdateEvent));   // console record: 8 bytes
+                mpNetworkModule->GetNetworkEventQueue()->AddEvent(lShowtimeUpdateEvent);   // console record: 8 bytes
             }
 
             mShowtimeUpdateMessageRecv.SetMessageInvalid();
@@ -1695,9 +1674,7 @@ namespace BrnNetwork
         BrnNetworkModuleIO::NetworkOutPlayerCarSelectStatus lCarSelectStatusEvent;
         lCarSelectStatusEvent.meActiveRaceCarIndex = leActiveRaceCarIndex;
         lCarSelectStatusEvent.mbInCarSelect        = lpUpdateData->mbIsInCarSelect;
-        mpNetworkModule->GetNetworkEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lCarSelectStatusEvent),
-            lCarSelectStatusEvent.GetEventType(), sizeof(lCarSelectStatusEvent));   // console record: 8 bytes
+        mpNetworkModule->GetNetworkEventQueue()->AddEvent(lCarSelectStatusEvent);   // console record: 8 bytes
 
         mbFirstUpdateMessage = false;
     }

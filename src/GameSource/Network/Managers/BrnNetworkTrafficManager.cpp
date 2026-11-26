@@ -1328,8 +1328,7 @@ namespace BrnNetwork
 
             if (!mbSuppressTrafficRestart)
             {
-                mpNetworkModule->GetNetworkEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lRestartEvent),
-                                                                  lRestartEvent.GetEventType(), sizeof(lRestartEvent));
+                mpNetworkModule->GetNetworkEventQueue()->AddEvent(lRestartEvent);
                 mu16LastTrafficResetFrame   = lu16RestartFrame;
                 mu16NumFramesSinceLastReset = 0;
                 OnTrafficRestarted();

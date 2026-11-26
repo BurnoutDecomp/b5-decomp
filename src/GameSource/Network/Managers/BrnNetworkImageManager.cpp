@@ -570,8 +570,7 @@ namespace BrnNetwork
             }
         }
 
-        lpOutput->GetNetworkEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lScalpsEvent),
-                                                   lScalpsEvent.GetEventType(), sizeof(lScalpsEvent));
+        lpOutput->GetNetworkEventQueue()->AddEvent(lScalpsEvent);
     }
 
     // ----------------------------------------------------------------------------------
@@ -591,13 +590,9 @@ namespace BrnNetwork
             "mpNetworkModule->GetNetworkEventQueue()",
             __FILE__, 794 /* ARTIST 0x82564A2C */));
 
-        // The queue is fetched before the event address is formed (ARTIST 0x82564A4C `addi r4,r1,0x50`
-        // after the GetNetworkEventQueue call), as StateManager::PostGameProcessingFinished does.
         BrnNetworkModuleIO::NetworkOutAbortImageCaptureEvent lAbortEvent;
         lAbortEvent.mbCapture = true;
-        BrnNetworkModuleIO::NetworkEventQueue* lpNetworkEventQueue = mpNetworkModule->GetNetworkEventQueue();
-        lpNetworkEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lAbortEvent),
-                                      lAbortEvent.GetEventType(), sizeof(lAbortEvent));
+        mpNetworkModule->GetNetworkEventQueue()->AddEvent(lAbortEvent);
 
         mpNetworkModule->GetNetworkManager()->PackTextureAndSendDisplayEventToGui(0, -1);
 
@@ -623,9 +618,7 @@ namespace BrnNetwork
 
         BrnNetworkModuleIO::NetworkOutAbortImageCaptureEvent lAbortEvent;
         lAbortEvent.mbCapture = false;
-        BrnNetworkModuleIO::NetworkEventQueue* lpNetworkEventQueue = mpNetworkModule->GetNetworkEventQueue();
-        lpNetworkEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lAbortEvent),
-                                      lAbortEvent.GetEventType(), sizeof(lAbortEvent));
+        mpNetworkModule->GetNetworkEventQueue()->AddEvent(lAbortEvent);
 
         mpNetworkModule->GetNetworkManager()->PackTextureAndSendDisplayEventToGui(0, -1);
 
@@ -1268,8 +1261,7 @@ namespace BrnNetwork
             mpNetworkModule->GetNetworkManager()->CaptureTelemetryEvent(E_TELEMETRY_MUGSHOT_PHOTO, 0);
 
             BrnNetworkModuleIO::NetworkOutSentMugshot lMugshotSentEvent;
-            mpNetworkModule->GetNetworkEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lMugshotSentEvent),
-                                                              lMugshotSentEvent.GetEventType(), sizeof(lMugshotSentEvent));
+            mpNetworkModule->GetNetworkEventQueue()->AddEvent(lMugshotSentEvent);
             return;
         }
 
@@ -1411,8 +1403,7 @@ namespace BrnNetwork
                 lImageReceivedEvent.mRoadID                   = lRoadRuleBeatenID;
                 lImageReceivedEvent.meImageSenderRaceCarIndex = lePaybackVictimRaceCarIndex;
                 lImageReceivedEvent.meReceivedImageType       = leReceivedImageType;
-                mpNetworkModule->GetNetworkEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lImageReceivedEvent),
-                                                                  lImageReceivedEvent.GetEventType(), sizeof(lImageReceivedEvent));
+                mpNetworkModule->GetNetworkEventQueue()->AddEvent(lImageReceivedEvent);
             }
             else if ( lu16PhotoPacketNumber == 0 &&
                       meState == E_IMAGE_MANAGER_STATE_COUNT &&
@@ -1424,8 +1415,7 @@ namespace BrnNetwork
                 lCapturingImageEvent.mRoadId      = lRoadRuleBeatenID;
                 lCapturingImageEvent.meImageType  = leReceivedImageType;
                 lCapturingImageEvent.meVictimARCI = lePaybackVictimRaceCarIndex;
-                mpNetworkModule->GetNetworkEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lCapturingImageEvent),
-                                                                  lCapturingImageEvent.GetEventType(), sizeof(lCapturingImageEvent));
+                mpNetworkModule->GetNetworkEventQueue()->AddEvent(lCapturingImageEvent);
             }
         }
         else
@@ -1439,8 +1429,7 @@ namespace BrnNetwork
             lImageReceivedEvent.mRoadID                   = lRoadRuleBeatenID;
             lImageReceivedEvent.meImageSenderRaceCarIndex = lePaybackVictimRaceCarIndex;
             lImageReceivedEvent.meReceivedImageType       = leReceivedImageType;
-            mpNetworkModule->GetNetworkEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lImageReceivedEvent),
-                                                              lImageReceivedEvent.GetEventType(), sizeof(lImageReceivedEvent));
+            mpNetworkModule->GetNetworkEventQueue()->AddEvent(lImageReceivedEvent);
         }
 
     }
@@ -1566,8 +1555,7 @@ namespace BrnNetwork
             GetUniqueIDByPlayerID(lImageSenderPlayerID, &lMugshotToSaveEvent.mUniquePlayerID);
             lMugshotToSaveEvent.mpTexture          = &lpLocalMugshotData->mPicture;
             lMugshotToSaveEvent.meImageGalleryType = leMugshotType;
-            mpNetworkModule->GetNetworkEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lMugshotToSaveEvent),
-                                                              lMugshotToSaveEvent.GetEventType(), sizeof(lMugshotToSaveEvent));
+            mpNetworkModule->GetNetworkEventQueue()->AddEvent(lMugshotToSaveEvent);
             break;
         }
 

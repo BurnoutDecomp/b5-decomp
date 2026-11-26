@@ -439,8 +439,7 @@ namespace BrnNetwork
 
         BrnNetworkModuleIO::NetworkOutInstantFreeburnEvent lInstantFreeburnEvent;
         lInstantFreeburnEvent.mbIsDoingInstantFreeburn = false;
-        mpNetworkModule->GetNetworkEventQueue()->AddEvent(lInstantFreeburnEvent,
-                                                          lInstantFreeburnEvent.GetEventType());
+        mpNetworkModule->GetNetworkEventQueue()->AddEvent(lInstantFreeburnEvent);
     }
 
     const f32 StateManager::CachedDistrictData::KF_DISTRICT_UPDATE_INTERVAL     = 15.0f;
@@ -587,8 +586,7 @@ namespace BrnNetwork
             if (HaveAllSelectedACar())
             {
                 BrnNetworkModuleIO::NetworkOutShowLoadingScreen lShowLoadingScreen;
-                mpNetworkModule->GetNetworkEventQueue()->AddEvent(lShowLoadingScreen,
-                                                                  lShowLoadingScreen.GetEventType());
+                mpNetworkModule->GetNetworkEventQueue()->AddEvent(lShowLoadingScreen);
                 meState = E_STATE_WAIT_FOR_LOADING_SCREEN;
 
                 NetworkPlayerID lPlayerID = -1;
@@ -701,8 +699,7 @@ namespace BrnNetwork
         case E_STATE_WAIT_FOR_LOADING_SCREEN:
         {
             BrnNetworkModuleIO::NetworkOutShowLoadingScreen lShowLoadingScreen;
-            mpNetworkModule->GetNetworkEventQueue()->AddEvent(lShowLoadingScreen,
-                                                              lShowLoadingScreen.GetEventType());
+            mpNetworkModule->GetNetworkEventQueue()->AddEvent(lShowLoadingScreen);
             break;
         }
 
@@ -723,8 +720,7 @@ namespace BrnNetwork
             case CgsNetwork::ServerInterfaceDirtySock::E_STATUS_ERROR:
             {
                 BrnNetworkModuleIO::NetworkOutAccountUpdateComplete lNetworkUpdateAccountCompleteEvent;
-                mpNetworkModule->GetNetworkEventQueue()->AddEvent(lNetworkUpdateAccountCompleteEvent,
-                                                                  lNetworkUpdateAccountCompleteEvent.GetEventType());
+                mpNetworkModule->GetNetworkEventQueue()->AddEvent(lNetworkUpdateAccountCompleteEvent);
                 mpNetworkManager->GetServerInterface()->GetPlayerInfoComponent()->ClearLastError();
                 meState = E_STATE_COUNT;
                 break;
@@ -733,8 +729,7 @@ namespace BrnNetwork
             case CgsNetwork::ServerInterfaceDirtySock::E_STATUS_IDLE:
             {
                 BrnNetworkModuleIO::NetworkOutAccountUpdateComplete lNetworkUpdateAccountCompleteEvent;
-                mpNetworkModule->GetNetworkEventQueue()->AddEvent(lNetworkUpdateAccountCompleteEvent,
-                                                                  lNetworkUpdateAccountCompleteEvent.GetEventType());
+                mpNetworkModule->GetNetworkEventQueue()->AddEvent(lNetworkUpdateAccountCompleteEvent);
 
                 bool lbAgreeToShareInfoEA;
                 bool lbAgreeToShareInfoPartners;
@@ -923,8 +918,7 @@ namespace BrnNetwork
                     lNetworkLaunchEvent.meGameModeType =
                         static_cast<BrnGameState::GameStateModuleIO::EGameModeType>(lGameParams.GameMode());
                     lNetworkLaunchEvent.mHostPlayerID = mpNetworkManager->GetPlayerManager()->GetHostPlayerID();
-                    mpNetworkModule->GetNetworkEventQueue()->AddEvent(lNetworkLaunchEvent,
-                                                                      lNetworkLaunchEvent.GetEventType());
+                    mpNetworkModule->GetNetworkEventQueue()->AddEvent(lNetworkLaunchEvent);
 
                     mpNetworkManager->GetLaunchManager()->Start();
                     mpNetworkManager->OnGameLaunching();
@@ -1103,8 +1097,7 @@ namespace BrnNetwork
             BrnNetworkModuleIO::NetworkOutPlayerLeftGame lLeftGameEvent;
             lLeftGameEvent.meLeftGameReason = lpStateManager->meLeftReason;
             lLeftGameEvent.meKickReason     = lpStateManager->meKickReason;
-            lpStateManager->mpNetworkModule->GetNetworkEventQueue()->AddEvent(
-                AsEvent(&lLeftGameEvent), lLeftGameEvent.GetEventType(), sizeof(lLeftGameEvent));
+            lpStateManager->mpNetworkModule->GetNetworkEventQueue()->AddEvent(lLeftGameEvent);
         }
 
         lpStateManager->meState = E_STATE_COUNT;
@@ -1147,8 +1140,7 @@ namespace BrnNetwork
         CGS_ASSERT(lpStateManager->mpNetworkModule->GetNetworkEventQueue() != 0, CGS_ASSERT_MESSAGE_AT(
             "lpStateManager->mpNetworkModule->GetNetworkEventQueue()",
             __FILE__, 5612 /* ARTIST 0x8256344C */));
-        lpStateManager->mpNetworkModule->GetNetworkEventQueue()->AddEvent(
-            AsEvent(&lHostChangedEvent), lHostChangedEvent.GetEventType(), sizeof(lHostChangedEvent));
+        lpStateManager->mpNetworkModule->GetNetworkEventQueue()->AddEvent(lHostChangedEvent);
     }
 
     // -----------------------------------------------------------------------------------
@@ -1173,8 +1165,7 @@ namespace BrnNetwork
         lCompressedEvent.miCompressedPixelSize = KI_COMPRESSED_CAMERA_PIC_SIZE;
         lCompressedEvent.meCompressedFormat    = renderengine::PIXELFORMAT_DXT1;
         lCompressedEvent.mpcCompressedPixels   = static_cast<char*>(lpPixels);
-        lpStateManager->mpNetworkModule->GetNetworkEventQueue()->AddEvent(
-            AsEvent(&lCompressedEvent), lCompressedEvent.GetEventType(), sizeof(lCompressedEvent));
+        lpStateManager->mpNetworkModule->GetNetworkEventQueue()->AddEvent(lCompressedEvent);
     }
 
     // -----------------------------------------------------------------------------------
@@ -1617,8 +1608,7 @@ namespace BrnNetwork
                 lChangeCarEvent.mWheelModelId       = lpStateManager->mpNetworkManager->GetFreeBurnWheelID();
                 lChangeCarEvent.mbResetPlayerCamera = false;
                 lChangeCarEvent.mbKeepResetSection  = true;
-                lpStateManager->mpNetworkModule->GetGameEventQueue()->AddEvent(
-                    AsEvent(&lChangeCarEvent), GsmIO::E_EVENT_CHANGE_PLAYER_CAR, sizeof(lChangeCarEvent));
+                lpStateManager->mpNetworkModule->GetGameEventQueue()->AddGameEvent(lChangeCarEvent);
             }
         }
 
@@ -1678,8 +1668,7 @@ namespace BrnNetwork
 
             BrnNetworkModuleIO::NetworkOutInstantFreeburnComplete lCompleteEvent;
             lCompleteEvent.mbSuccess = lbInGame;
-            lpStateManager->mpNetworkModule->GetNetworkEventQueue()->AddEvent(
-                AsEvent(&lCompleteEvent), lCompleteEvent.GetEventType(), sizeof(lCompleteEvent));
+            lpStateManager->mpNetworkModule->GetNetworkEventQueue()->AddEvent(lCompleteEvent);
 
             if (!lbInGame)
             {
@@ -1693,8 +1682,7 @@ namespace BrnNetwork
 
         BrnNetworkModuleIO::NetworkOutInstantFreeburnEvent lInstantFreeburnEvent;
         lInstantFreeburnEvent.mbIsDoingInstantFreeburn = false;
-        lpStateManager->mpNetworkModule->GetNetworkEventQueue()->AddEvent(
-            AsEvent(&lInstantFreeburnEvent), lInstantFreeburnEvent.GetEventType(), sizeof(lInstantFreeburnEvent));
+        lpStateManager->mpNetworkModule->GetNetworkEventQueue()->AddEvent(lInstantFreeburnEvent);
     }
 
     // -----------------------------------------------------------------------------------
@@ -1748,16 +1736,14 @@ namespace BrnNetwork
             SetPayloadWord(&lLaunchedEvent, KI_LAUNCHED_STATUS_SUCCESS);
             mpNetworkModule->AddOutputGuiEvent(lLaunchedEvent);
 
-            mpNetworkModule->GetGameEventQueue()->AddEvent(
-                AsEvent(&lCarSelectEvent), GsmIO::E_EVENT_ONLINE_CAR_SELECT, sizeof(lCarSelectEvent));
+            mpNetworkModule->GetGameEventQueue()->AddGameEvent(lCarSelectEvent);
 
             lNetworkLaunchedEvent.mbSuccessfulLaunch  = true;
             lNetworkLaunchedEvent.miVehicleClassLimit = lGameParams.VehicleLevelLimit();
             lNetworkLaunchedEvent.mbHostChoiceCarAndNotHost =
                 lGameParams.VehicleChoice() == 1
                 && !mpNetworkManager->GetServerInterface()->GetGameComponent()->IsLocalPlayerHost();
-            mpNetworkModule->GetNetworkEventQueue()->AddEvent(
-                AsEvent(&lNetworkLaunchedEvent), lNetworkLaunchedEvent.GetEventType(), sizeof(lNetworkLaunchedEvent));
+            mpNetworkModule->GetNetworkEventQueue()->AddEvent(lNetworkLaunchedEvent);
 
             mpNetworkManager->GetLaunchManager()->Stop();
             mpNetworkModule->CacheNetworkPlayerIDsAtGameStart();
@@ -1799,8 +1785,7 @@ namespace BrnNetwork
             // mbHostChoiceCarAndNotHost is not written on this path.
             lNetworkLaunchedEvent.mbSuccessfulLaunch  = false;
             lNetworkLaunchedEvent.miVehicleClassLimit = 9;
-            mpNetworkModule->GetNetworkEventQueue()->AddEvent(
-                AsEvent(&lNetworkLaunchedEvent), lNetworkLaunchedEvent.GetEventType(), sizeof(lNetworkLaunchedEvent));
+            mpNetworkModule->GetNetworkEventQueue()->AddEvent(lNetworkLaunchedEvent);
 
             mpNetworkManager->GetLaunchManager()->Stop();
             mpNetworkModule->ClearCachedNetworkPlayerIDsAtGameEnd();
@@ -2052,13 +2037,13 @@ namespace BrnNetwork
         lEvent.mbIsStartingGameAfterPlayerJoin =
             lpGames->IsLocalPlayerInGame() && lpGames->IsLocalPlayerHost() && lbStartingAfterJoin;
         lEvent.mbIsStartingFreeburnLobbyAfterOnlineEvent = lbStartingAfterOnlineEvent;
-        mpNetworkModule->GetGameEventQueue()->AddEvent(AsEvent(&lEvent), GsmIO::E_EVENT_START_NETWORK_GAME, sizeof(lEvent));
+        mpNetworkModule->GetGameEventQueue()->AddGameEvent(lEvent);
 
         if (!lbRefreshOnly)
         {
             GsmIO::StartNetworkRoundEvent lRoundEvent;
             lRoundEvent.miNumLandmarksInRound = 0;
-            mpNetworkModule->GetGameEventQueue()->AddEvent(AsEvent(&lRoundEvent), GsmIO::E_EVENT_START_NETWORK_ROUND, sizeof(lRoundEvent));
+            mpNetworkModule->GetGameEventQueue()->AddGameEvent(lRoundEvent);
         }
 
         CGS_ASSERT(mpNetworkModule != 0, "mpNetworkModule");
@@ -2069,9 +2054,7 @@ namespace BrnNetwork
             && !GsmIO::IsOnlineFreeBurnLobby(mpNetworkModule->GetGameStateToNetworkInterface()->GetCurrentGameMode()))
         {
             BrnNetworkModuleIO::NetworkOutStartingGameDueToPlayerJoin lStartingGameDueToPlayerJoin;
-            mpNetworkModule->GetNetworkEventQueue()->AddEvent(
-                AsEvent(&lStartingGameDueToPlayerJoin), lStartingGameDueToPlayerJoin.GetEventType(),
-                sizeof(lStartingGameDueToPlayerJoin));
+            mpNetworkModule->GetNetworkEventQueue()->AddEvent(lStartingGameDueToPlayerJoin);
         }
     }
 
@@ -2216,9 +2199,7 @@ namespace BrnNetwork
                 CGS_ASSERT(mpNetworkModule != 0, "mpNetworkModule");
                 CGS_ASSERT(mpNetworkModule->GetNetworkEventQueue() != 0, "mpNetworkModule->GetNetworkEventQueue()");
                 BrnNetworkModuleIO::NetworkOutNoPhotoBoothGamerPic lNoPhotoBoothGamerPicEvent;
-                mpNetworkModule->GetNetworkEventQueue()->AddEvent(
-                    AsEvent(&lNoPhotoBoothGamerPicEvent), lNoPhotoBoothGamerPicEvent.GetEventType(),
-                    sizeof(lNoPhotoBoothGamerPicEvent));
+                mpNetworkModule->GetNetworkEventQueue()->AddEvent(lNoPhotoBoothGamerPicEvent);
             }
             for (s32 liPlayerIndex = 1; liPlayerIndex < 3; ++liPlayerIndex)
             {
@@ -2243,9 +2224,7 @@ namespace BrnNetwork
                 CGS_ASSERT(mpNetworkModule != 0, "mpNetworkModule");
                 CGS_ASSERT(mpNetworkModule->GetNetworkEventQueue() != 0, "mpNetworkModule->GetNetworkEventQueue()");
                 BrnNetworkModuleIO::NetworkOutNoPhotoBoothGamerPic lNoPhotoBoothGamerPicEvent;
-                mpNetworkModule->GetNetworkEventQueue()->AddEvent(
-                    AsEvent(&lNoPhotoBoothGamerPicEvent), lNoPhotoBoothGamerPicEvent.GetEventType(),
-                    sizeof(lNoPhotoBoothGamerPicEvent));
+                mpNetworkModule->GetNetworkEventQueue()->AddEvent(lNoPhotoBoothGamerPicEvent);
             }
         }
 
@@ -2311,9 +2290,7 @@ namespace BrnNetwork
                 lLocalPlayerConnectedEvent.mPlayerID = lPlayerInfo.GetID();
                 CGS_ASSERT(lPlayerInfo.GetID() != CgsNetwork::K_INVALID_PLAYER_ID,
                            "lPlayerInfo.GetID() != CgsNetwork::K_INVALID_PLAYER_ID");
-                mpNetworkModule->GetNetworkEventQueue()->AddEvent(
-                    AsEvent(&lLocalPlayerConnectedEvent), lLocalPlayerConnectedEvent.GetEventType(),
-                    sizeof(lLocalPlayerConnectedEvent));
+                mpNetworkModule->GetNetworkEventQueue()->AddEvent(lLocalPlayerConnectedEvent);
                 BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
 
                 bool lbAgreeToShareInfoEA;
@@ -2331,8 +2308,7 @@ namespace BrnNetwork
                 if (mpNetworkManager->GetServerInterface()->GetDownloadableConfigComponent()->IsGamertagInFeverList(lPlayerInfo.GetName()))
                 {
                     BrnNetworkModuleIO::NetworkOutCaughtFever lCaughtFeverEvent;
-                    mpNetworkModule->GetNetworkEventQueue()->AddEvent(
-                        AsEvent(&lCaughtFeverEvent), lCaughtFeverEvent.GetEventType(), sizeof(lCaughtFeverEvent));
+                    mpNetworkModule->GetNetworkEventQueue()->AddEvent(lCaughtFeverEvent);
                     mpNetworkManager->SetIsDeveloper(true);
                 }
 
@@ -2390,8 +2366,7 @@ namespace BrnNetwork
             {
                 BrnNetworkModuleIO::NetworkOutInstantFreeburnEvent lInstantFreeburnEvent;
                 lInstantFreeburnEvent.mbIsDoingInstantFreeburn = false;
-                mpNetworkModule->GetNetworkEventQueue()->AddEvent(
-                    AsEvent(&lInstantFreeburnEvent), lInstantFreeburnEvent.GetEventType(), sizeof(lInstantFreeburnEvent));
+                mpNetworkModule->GetNetworkEventQueue()->AddEvent(lInstantFreeburnEvent);
             }
         }
 
@@ -2509,9 +2484,7 @@ namespace BrnNetwork
                 {
                     // Not online yet: sign in first, then create a game and invite from it.
                     BrnNetworkModuleIO::NetworkOutShowSignInGui lShowSignInGui;
-                    mpNetworkModule->GetNetworkEventQueue()->AddEvent(
-                        reinterpret_cast<const CgsModule::Event*>(&lShowSignInGui),
-                        lShowSignInGui.GetEventType(), static_cast<s32>(sizeof(lShowSignInGui)));
+                    mpNetworkModule->GetNetworkEventQueue()->AddEvent(lShowSignInGui);
 
                     if (lpBuddyEvent->mBuddyToSendTo.macName[0] != 0)
                     {
@@ -2570,18 +2543,14 @@ namespace BrnNetwork
                 CGS_ASSERT(mpNetworkModule->GetNetworkEventQueue() != 0, "mpNetworkModule->GetNetworkEventQueue()");
 
                 BrnNetworkModuleIO::NetworkOutShowSignInGui lShowSignInGui;
-                mpNetworkModule->GetNetworkEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lShowSignInGui),
-                    lShowSignInGui.GetEventType(), static_cast<s32>(sizeof(lShowSignInGui)));
+                mpNetworkModule->GetNetworkEventQueue()->AddEvent(lShowSignInGui);
 
                 BrnNetworkModuleIO::NetworkOutInstantFreeburnEvent lInstantFreeburnEvent;
                 lInstantFreeburnEvent.mbIsDoingInstantFreeburn = true;
                 mbInstantFreeburn     = true;
                 mbSuspendAfterSignIn  = false;
                 mbDoInviteAfterCreate = false;
-                mpNetworkModule->GetNetworkEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lInstantFreeburnEvent),
-                    lInstantFreeburnEvent.GetEventType(), static_cast<s32>(sizeof(lInstantFreeburnEvent)));
+                mpNetworkModule->GetNetworkEventQueue()->AddEvent(lInstantFreeburnEvent);
                 break;
             }
 
@@ -2632,9 +2601,7 @@ namespace BrnNetwork
                     BrnNetworkModuleIO::NetworkOutPlayerLeftGame lLeftGameEvent;
                     lLeftGameEvent.meLeftGameReason = E_LEFT_GAME_REASON_GAME_DELETED;
                     lLeftGameEvent.meKickReason     = CgsNetwork::E_KICKREASON_COUNT;
-                    mpNetworkModule->GetNetworkEventQueue()->AddEvent(
-                        reinterpret_cast<const CgsModule::Event*>(&lLeftGameEvent),
-                        lLeftGameEvent.GetEventType(), static_cast<s32>(sizeof(lLeftGameEvent)));
+                    mpNetworkModule->GetNetworkEventQueue()->AddEvent(lLeftGameEvent);
                 }
                 break;
 
@@ -2696,9 +2663,7 @@ namespace BrnNetwork
 
                     BrnNetworkModuleIO::NetworkOutSwitchBurningHomeRunRunner lSwitchRunnerEvent;
                     lSwitchRunnerEvent.mNewRunnerID = lpSwitchRunnerEvent->mNewRunnerID;
-                    mpNetworkModule->GetNetworkEventQueue()->AddEvent(
-                        reinterpret_cast<const CgsModule::Event*>(&lSwitchRunnerEvent),
-                        lSwitchRunnerEvent.GetEventType(), static_cast<s32>(sizeof(lSwitchRunnerEvent)));
+                    mpNetworkModule->GetNetworkEventQueue()->AddEvent(lSwitchRunnerEvent);
                 }
                 break;
             }
@@ -3006,9 +2971,7 @@ namespace BrnNetwork
                     &lNetworkAccountSettings.mbAgreeToShareInfoEA,
                     &lNetworkAccountSettings.mbAgreeToShareInfoPartners,
                     &lNetworkAccountSettings.mbTelemetryEnable);
-                mpNetworkModule->GetNetworkEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lNetworkAccountSettings),
-                    lNetworkAccountSettings.GetEventType(), static_cast<s32>(sizeof(lNetworkAccountSettings)));
+                mpNetworkModule->GetNetworkEventQueue()->AddEvent(lNetworkAccountSettings);
                 break;
             }
 
@@ -3031,10 +2994,7 @@ namespace BrnNetwork
                 {
                     // The player-info component is busy: report the update as done (unchanged).
                     BrnNetworkModuleIO::NetworkOutAccountUpdateComplete lNetworkUpdateAccountCompleteEvent;
-                    mpNetworkModule->GetNetworkEventQueue()->AddEvent(
-                        reinterpret_cast<const CgsModule::Event*>(&lNetworkUpdateAccountCompleteEvent),
-                        lNetworkUpdateAccountCompleteEvent.GetEventType(),
-                        static_cast<s32>(sizeof(lNetworkUpdateAccountCompleteEvent)));
+                    mpNetworkModule->GetNetworkEventQueue()->AddEvent(lNetworkUpdateAccountCompleteEvent);
                 }
                 break;
             }
@@ -4062,9 +4022,7 @@ namespace BrnNetwork
             lEvent.maLandmarks[liLandmarkIndex] = laEvents[liRoundIndex].GetLandmark(liLandmarkIndex);
         }
 
-        mpNetworkModule->GetGameEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lEvent),
-                                                       GsmIO::E_EVENT_START_NETWORK_ROUND,
-                                                       static_cast<s32>(sizeof(lEvent)));
+        mpNetworkModule->GetGameEventQueue()->AddGameEvent(lEvent);
 
         mpNetworkManager->GetPlayerManager()->GetNextLocalPlayerID(&lPlayerID);
         CGS_ASSERT(lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID, CGS_ASSERT_MESSAGE_AT(
@@ -4196,9 +4154,7 @@ namespace BrnNetwork
             {
                 GsmIO::PreparedForInviteEvent lPreparedForInviteEvent;
                 lPreparedForInviteEvent.meModulePreparedForInvite = KI_MODULE_PREPARED_FOR_INVITE_NETWORK;
-                mpNetworkModule->GetGameEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lPreparedForInviteEvent),
-                    GsmIO::E_EVENT_PREPARED_FOR_INVITE, static_cast<s32>(sizeof(lPreparedForInviteEvent)));
+                mpNetworkModule->GetGameEventQueue()->AddGameEvent(lPreparedForInviteEvent);
                 meState = E_STATE_PREPARED_FOR_INVITE;
             }
         }
@@ -4223,9 +4179,7 @@ namespace BrnNetwork
         lGameParams.SetSession(lpcSessionID);
         mpNetworkManager->GetMatchMakingManager()->JoinGame(&lGameParams, true, JoinGameFinishedCallback, this);
 
-        mpNetworkModule->GetNetworkEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lJoiningGameEvent),
-                                                          lJoiningGameEvent.GetEventType(),
-                                                          static_cast<s32>(sizeof(lJoiningGameEvent)));
+        mpNetworkModule->GetNetworkEventQueue()->AddEvent(lJoiningGameEvent);
         meState = E_STATE_WAIT_MATCHMAKING;
     }
 
@@ -4465,9 +4419,7 @@ namespace BrnNetwork
             ++liGridPosition;
         }
 
-        mpNetworkModule->GetGameEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lEvent),
-                                                       GsmIO::E_EVENT_START_NETWORK_GAME,
-                                                       static_cast<s32>(sizeof(lEvent)));
+        mpNetworkModule->GetGameEventQueue()->AddGameEvent(lEvent);
 
         SendStartNextRoundMessage(0);
 
@@ -4753,9 +4705,7 @@ namespace BrnNetwork
                             mpNetworkManager->GetServerInterface()->GetGameComponent()->GetGameParameters(&lGameParams);
                             lNetworkLaunchEvent.meGameModeType = static_cast<GsmIO::EGameModeType>(lGameParams.GameMode());
                             lNetworkLaunchEvent.mHostPlayerID  = mpNetworkManager->GetPlayerManager()->GetHostPlayerID();
-                            mpNetworkModule->GetNetworkEventQueue()->AddEvent(
-                                reinterpret_cast<const CgsModule::Event*>(&lNetworkLaunchEvent),
-                                lNetworkLaunchEvent.GetEventType(), static_cast<s32>(sizeof(lNetworkLaunchEvent)));
+                            mpNetworkModule->GetNetworkEventQueue()->AddEvent(lNetworkLaunchEvent);
 
                             mpNetworkManager->GetLaunchManager()->Start();
                             mpNetworkManager->OnGameLaunching();
@@ -4793,9 +4743,7 @@ namespace BrnNetwork
                 mpNetworkManager->GetServerInterface()->GetGameComponent()->GetGameParameters(&lGameParams);
                 lNetworkLaunchEvent.meGameModeType = static_cast<GsmIO::EGameModeType>(lGameParams.GameMode());
                 lNetworkLaunchEvent.mHostPlayerID  = mpNetworkManager->GetPlayerManager()->GetHostPlayerID();
-                mpNetworkModule->GetNetworkEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lNetworkLaunchEvent),
-                    lNetworkLaunchEvent.GetEventType(), static_cast<s32>(sizeof(lNetworkLaunchEvent)));
+                mpNetworkModule->GetNetworkEventQueue()->AddEvent(lNetworkLaunchEvent);
 
                 mpNetworkManager->GetLaunchManager()->Start();
                 mpNetworkManager->OnGameLaunching();
@@ -4973,9 +4921,7 @@ namespace BrnNetwork
                 // E_GUI_NETWORK_QUIT_PLAYING_EVENT - SO SEND PlayerExitedModeEvent\n" to the
                 // unhomed network debug stream; the log line is not reproduced.
                 GsmIO::PlayerExitedModeEvent lPlayerExitedModeEvent;
-                mpNetworkModule->GetGameEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lPlayerExitedModeEvent),
-                    GsmIO::E_EVENT_PLAYER_EXITED_MODE, static_cast<s32>(sizeof(lPlayerExitedModeEvent)));
+                mpNetworkModule->GetGameEventQueue()->AddGameEvent(lPlayerExitedModeEvent);
                 break;
             }
 

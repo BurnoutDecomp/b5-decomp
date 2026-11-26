@@ -173,7 +173,8 @@ namespace CgsNetwork
 
         // EnableAllComms @ 0x82893868: re-enable mbCanTalk for every talker and
         // restore full speaker/microphone routing.
-        VoIPManager* EnableAllComms();
+        // void: ARTIST 0x82893868 leaves VoipMicrophone's r3 in place.
+        void EnableAllComms();
 
     private:
         void ClearData();

@@ -95,6 +95,21 @@ namespace BrnNetworkModuleIO
 
     struct NetworkEventQueue : public CgsModule::VariableEventQueue<KI_NETWORK_EVENT_QUEUE_SIZE, 16>
     {
+        // The base posts stay reachable for the callers that pass a record pointer and size.
+        using CgsModule::VariableEventQueue<KI_NETWORK_EVENT_QUEUE_SIZE, 16>::AddEvent;
+
+        // DecFIGS BrnNetworkEvent.h:91 (114 instances): post one NetworkEvent<N> record with its
+        // own type tag and size. ARTIST keeps no copy and inlines it at every post: the caller
+        // fetches the queue, then li r6,sizeof / li r5,type / addi r4,&event and calls
+        // VariableEventQueue<14000,16>::AddEvent 0x823C7C98 (e.g. NetworkImageManager::
+        // AbortMugshotCapture 0x82564A40..50; PS3 0x62C79C likewise).
+        template <typename TEvent>
+        void AddEvent(const TEvent& lEvent)
+        {
+            CgsModule::VariableEventQueue<KI_NETWORK_EVENT_QUEUE_SIZE, 16>::AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lEvent), lEvent.GetEventType(),
+                sizeof(TEvent));
+        }
     };
 
     // ========================================================================

@@ -186,9 +186,7 @@ namespace BrnNetwork
     void NetworkPlayerStatsManager::UploadOfflineProgression()
     {
         BrnNetworkModuleIO::NetworkOutGetOfflineProgression lRequestEvent;
-        mpNetworkModule->GetNetworkEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lRequestEvent),
-            lRequestEvent.GetEventType(), sizeof(lRequestEvent));
+        mpNetworkModule->GetNetworkEventQueue()->AddEvent(lRequestEvent);
         mbWaitingForOfflineProgressFromGamestate = true;
     }
 

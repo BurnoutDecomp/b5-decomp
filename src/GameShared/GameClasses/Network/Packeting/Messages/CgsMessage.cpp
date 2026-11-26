@@ -680,25 +680,7 @@ namespace CgsNetwork
         return mu8GameID;
     }
 
-    // ---- SetType @ 0x82579C30 --------------------------------------------------
-    void Message::SetType(::EMessageType leType)
-    {
-        CGS_ASSERT_AT(leType >= 0, "leType >= 0", KAC_ARTIST_HEADER, 633);
-        CGS_ASSERT_AT(leType < E_MESSAGE_TYPE_COUNT, "leType < E_MESSAGE_TYPE_COUNT", KAC_ARTIST_HEADER, 634);
-        CGS_ASSERT_AT(leType < 255, "leType < 255", KAC_ARTIST_HEADER, 635);
-        mi8Type = static_cast<s8>(leType);
-    }
-
-    // ---- PrepareForSend @ 0x8257D5F8 ------------------------------------------
-    void Message::PrepareForSend(s32 leType, u16 lu16Frame)
-    {
-        CGS_ASSERT(lu16Frame != KU16_INVALID_FRAME,
-            CGS_ASSERT_MESSAGE_AT(
-                "lu16Frame != KU16_INVALID_FRAME", KAC_ARTIST_HEADER, 594 /* ARTIST 0x8257D624 */));
-        SetType(static_cast<::EMessageType>(leType));
-        mu16Frame = lu16Frame;
-        mx8Flags |= KX8_FLAGS_VALID;
-    }
+    // SetType (h:624) and PrepareForSend @ 0x8257D5F8 (h:585) are header inline (CgsMessage.h).
 
     // ---- PrepareAck @ 0x8286F488 ----------------------------------------------
     void Message::PrepareAck(::EMessageType leType, u16 lu16Frame, u8 lu8GameID)

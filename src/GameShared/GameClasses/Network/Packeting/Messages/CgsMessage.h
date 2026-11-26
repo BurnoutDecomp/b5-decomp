@@ -97,7 +97,19 @@ namespace CgsNetwork
         // --- reconstructed members (this TU) ---
         void Construct();
         u8   GetGameID() const;
-        void SetType(::EMessageType leType);
+        // DecFIGS CgsMessage.h:624, asserts h:633-635: header inline. ARTIST inlines it where the
+        // type is a constant (the asserts fold: HostKeepAliveMessage::PrepareForSend 0x82880348
+        // `li r10,8 / stb r10,0x1A`) and keeps a copy for the variable callers (0x82579C30).
+        void SetType(::EMessageType leType)
+        {
+            CGS_ASSERT_AT(leType >= 0, "leType >= 0",
+                          "..\\..\\..\\GameShared\\GameClasses\\Network/Packeting/Messages/CgsMessage.h", 633);
+            CGS_ASSERT_AT(leType < E_MESSAGE_TYPE_COUNT, "leType < E_MESSAGE_TYPE_COUNT",
+                          "..\\..\\..\\GameShared\\GameClasses\\Network/Packeting/Messages/CgsMessage.h", 634);
+            CGS_ASSERT_AT(leType < 255, "leType < 255",
+                          "..\\..\\..\\GameShared\\GameClasses\\Network/Packeting/Messages/CgsMessage.h", 635);
+            mi8Type = static_cast<s8>(leType);
+        }
 
         // --- inline flag/scalar accessors (used by the NetworkPlayer send pump) ------------
         // The "valid" flag (KX8_FLAGS_VALID, bit 0 of mx8Flags) marks a message that has been
@@ -112,7 +124,16 @@ namespace CgsNetwork
         bool IsMessageValid() const         { return (mx8Flags & KX8_FLAGS_VALID) != 0; }
         void SetMessageValid()              { mx8Flags |=  KX8_FLAGS_VALID; }
         void SetMessageInvalid()            { mx8Flags &= ~KX8_FLAGS_VALID; }
-        void PrepareForSend(s32 leType, u16 lu16Frame);
+        // DecFIGS CgsMessage.h:585, assert h:594: header inline (ARTIST keeps a copy, 0x8257D5F8,
+        // for the callers it does not inline).
+        void PrepareForSend(s32 leType, u16 lu16Frame)
+        {
+            CGS_ASSERT_AT(lu16Frame != KU16_INVALID_FRAME, "lu16Frame != KU16_INVALID_FRAME",
+                          "..\\..\\..\\GameShared\\GameClasses\\Network/Packeting/Messages/CgsMessage.h", 594);
+            SetType(static_cast< ::EMessageType>(leType));
+            mu16Frame = lu16Frame;
+            mx8Flags |= KX8_FLAGS_VALID;
+        }
         void PrepareAck(::EMessageType leType, u16 lu16Frame, u8 lu8GameID);
         void PrepareNack(::EMessageType leType, u16 lu16Frame, u8 lu8GameID);
 

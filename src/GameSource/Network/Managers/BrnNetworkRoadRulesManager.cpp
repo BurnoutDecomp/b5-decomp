@@ -141,9 +141,7 @@ namespace BrnNetwork
             BrnNetworkModuleIO::NetworkOutRoadRulesConnectedOnlineEvent lConnectedEvent;
             lConnectedEvent.muLastRoadRulesResetTime =
                 mpServerInterface->GetServerInfoComponent()->GetTimeStampFromClientConfig( "ROAD_RULES_RESET_DATE" );
-            mpNetworkModule->GetNetworkEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>( &lConnectedEvent ),
-                lConnectedEvent.GetEventType(), sizeof( lConnectedEvent ) );
+            mpNetworkModule->GetNetworkEventQueue()->AddEvent(lConnectedEvent);
         }
 
         if ( !mbDownloadedLocalScores )
@@ -1793,9 +1791,7 @@ namespace BrnNetwork
             CGS_ASSERT(lpRoadRulesManager->mpNetworkModule->GetNetworkEventQueue() != 0, CGS_ASSERT_MESSAGE_AT(
                 "lpRoadRulesManager->mpNetworkModule->GetNetworkEventQueue()",
                 __FILE__, 1855 /* ARTIST 0x82564704 */));
-            lpRoadRulesManager->mpNetworkModule->GetNetworkEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>( &lRoadRulesPbEvent ),
-                lRoadRulesPbEvent.GetEventType(), sizeof( lRoadRulesPbEvent ) );
+            lpRoadRulesManager->mpNetworkModule->GetNetworkEventQueue()->AddEvent(lRoadRulesPbEvent);
         }
     }
 
