@@ -772,29 +772,29 @@ namespace BrnGameState
 
         const EActiveRaceCarIndex lePlayerActiveRaceCarIndex = LocalIndex(lpActiveCarInterface->GetPlayerActiveRaceCarIndex());
 
+        // DWARF BrnTakedownManager.cpp:404 / :410 / :411 locals.
         for (s32 liCrashIndex = 0; liCrashIndex < lpCrashQueue->GetLength(); ++liCrashIndex)
         {
             const RaceCarCrashEvent* lpCrashEvent = &lpCrashQueue->GetEvent(liCrashIndex);
-            if (!lpCrashEvent->mbIsPrimaryCrash)
+            if (lpCrashEvent->mbIsPrimaryCrash)
             {
-                continue;
-            }
+                const CgsSceneManager::VolumeInstanceId lCrashedCarInstanceID = lpCrashEvent->mRaceCarVolumeInstanceID;
+                if (!mpModeManager->IsOnlineGameMode() ||
+                    static_cast<EActiveRaceCarIndex>(lCrashedCarInstanceID.GetEntityIDEntityIndex()) == lePlayerActiveRaceCarIndex)
+                {
+                    const EActiveRaceCarIndex leCrashedActiveRaceCarIndex =
+                        static_cast<EActiveRaceCarIndex>(lCrashedCarInstanceID.GetEntityIDEntityIndex());
+                    // The crashed car is the victim of whatever follows: its own pending takedown
+                    // (if it was the aggressor of an unconfirmed one) is dropped.
+                    RaceCarData* lpVictimCarData = GetRaceCarData(leCrashedActiveRaceCarIndex);
+                    lpVictimCarData->mfTimeSinceVictimCrashed = 0.0f;
+                    lpVictimCarData->mbWaitingOnTakedown      = false;
 
-            const EActiveRaceCarIndex leCrashedActiveRaceCarIndex = GetCrashedActiveRaceCarIndex(lpCrashEvent);
-            if (mpModeManager->IsOnlineGameMode() && leCrashedActiveRaceCarIndex != lePlayerActiveRaceCarIndex)
-            {
-                continue;
-            }
-
-            // The crashed car is the victim of whatever follows: its own pending takedown (if it was
-            // the aggressor of an unconfirmed one) is dropped.
-            RaceCarData* lpVictimCarData = GetRaceCarData(leCrashedActiveRaceCarIndex);
-            lpVictimCarData->mfTimeSinceVictimCrashed = 0.0f;
-            lpVictimCarData->mbWaitingOnTakedown      = false;
-
-            if (!DetectInstantTakedown(lpInput, lpOutput, lpActiveCarInterface, lpCrashEvent))
-            {
-                DetectStandardTakedown(lpInput, lpOutput, lpActiveCarInterface, lpCrashEvent, lpLastTrafficTypeResponseQueue);
+                    if (!DetectInstantTakedown(lpInput, lpOutput, lpActiveCarInterface, lpCrashEvent))
+                    {
+                        DetectStandardTakedown(lpInput, lpOutput, lpActiveCarInterface, lpCrashEvent, lpLastTrafficTypeResponseQueue);
+                    }
+                }
             }
         }
     }

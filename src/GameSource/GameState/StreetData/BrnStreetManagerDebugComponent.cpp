@@ -414,7 +414,7 @@ void StreetManagerDebugComponent::WinSpecificNumberOfCrashRoadRules( void* lpDat
 
 #include "GameSource/GameState/StreetData/BrnStreetManagerDebugComponent.h"
 
-#include "GameSource/GameState/StreetData/BrnGameStateStreetManager.h"  // StreetManager::GetProgressionManager (:450)
+#include "GameSource/GameState/StreetData/BrnGameStateStreetManager.h"  // StreetManager::mpProgressionManager (friend access, as the assert text spells it)
 #include "GameSource/GameState/BrnGameStateModuleIO.h"                  // OutputBuffer::GetGameActionQueue / GetGuiOutputQueue
 #include "GameSource/GameState/Progression/BrnProgressionManager.h"     // ProgressionManager::GetProfile (:103)
 #include "GameSource/GameState/Progression/BrnProfile.h"                // Profile::GetRoadRulesID / GetNetworkChallengeDownloadTimestamp
@@ -424,34 +424,6 @@ void StreetManagerDebugComponent::WinSpecificNumberOfCrashRoadRules( void* lpDat
 
 namespace BrnGameState
 {
-    namespace
-    {
-        // The 16-byte road-rules score-summary game action (type 232). Copied
-        // verbatim from the committed precedent in
-        // BrnGameStateStreetManager_wC_03.cpp (an anonymous-namespace type is
-        // local to its TU, so this duplicate is a distinct type -- no ODR issue;
-        // re-homing both onto the DWARF-named
-        // GameStateModuleIO::RoadRulesChallengeScoresAction is a later,
-        // both-sides-at-once job). The X360 builds it as three contiguous stack
-        // slots -- the profile's road-rules session id (8B), the download
-        // timestamp (4B) and the posting StreetManager (4B) -- and hands the
-        // leading address to VariableEventQueue<13312,16>::AddEvent(&payload, 232, 16).
-        //
-        // HOST-vs-CONSOLE (gotcha 1). The X360 immediate is 16 because 32-bit
-        // pointers pack mpStreetManager at +12. MEASURED on the x64 gate: the
-        // pointer aligns to +16 and the struct is sizeof == 24. Posting the
-        // console 16 here would copy the u64, the u32 and 4 bytes of padding and
-        // DROP THE MANAGER POINTER ENTIRELY, so the byte count is sizeof(lSummary)
-        // and the console value survives only in this comment. The payload is
-        // zero-initialised so the alignment hole is never an indeterminate read.
-        // The event id 232 IS verbatim from the asm.
-        struct RoadRulesScoreSummaryPayload
-        {
-            u64            mu64RoadRulesID;       // +0
-            u32            muDownloadTimestamp;   // +8
-            StreetManager* mpStreetManager;       // +12 (X360)
-        };
-    }
 
     // -----------------------------------------------------------------------
     // @ 0x8234A7E0. Per-frame pump. The whole body sits under the armed flag
@@ -475,26 +447,25 @@ namespace BrnGameState
     {
         if ( mbOutputRoadRulesScoresToNetwork )
         {
+            // DWARF cpp:107 lRoadRulesChallengeScoresAction; Construct (BrnGameActions.h:4254)
+            // and AddGameAction (h:501) inlined, the action posted to the game-action queue
+            // (0x8231D4B8, id 232 at 0x8234A8F8).
+            GameStateModuleIO::RoadRulesChallengeScoresAction lRoadRulesChallengeScoresAction;
+
             CGS_ASSERT_AT( lpOutput != NULL, "lpOutput", CGS_ARTIST_FILE, 111 );
             CGS_ASSERT_AT( lpOutput->GetGameActionQueue(), "lpOutput->GetGameActionQueue()", CGS_ARTIST_FILE, 112 );
-            CGS_ASSERT_AT( mpStreetManager->GetProgressionManager(),
-                        "mpStreetManager->mpProgressionManager", CGS_ARTIST_FILE, 113 );
+            CGS_ASSERT_AT( mpStreetManager->mpProgressionManager,
+                           "mpStreetManager->mpProgressionManager", CGS_ARTIST_FILE, 113 );
             // The X360 spells this null-check `addic. r11,pm,0x170` -- the folded
             // `&pm->mProfile != NULL` of the embedded-by-value profile.
-            CGS_ASSERT_AT( mpStreetManager->GetProgressionManager()->GetProfile(),
-                        "mpStreetManager->mpProgressionManager->GetProfile()", CGS_ARTIST_FILE, 114 );
+            CGS_ASSERT_AT( mpStreetManager->mpProgressionManager->GetProfile(),
+                           "mpStreetManager->mpProgressionManager->GetProfile()", CGS_ARTIST_FILE, 114 );
 
-            BrnProgression::Profile* lpProfile = mpStreetManager->GetProgressionManager()->GetProfile();
-
-            RoadRulesScoreSummaryPayload lSummary = {};
-            // `lwzx` the high half (profile+0x1CD30) and the low half
-            // (profile+0x1CD1C), then `extldi/add` -- literally GetRoadRulesID().
-            lSummary.mu64RoadRulesID     = lpProfile->GetRoadRulesID();
-            lSummary.muDownloadTimestamp = lpProfile->GetNetworkChallengeDownloadTimestamp();
-            lSummary.mpStreetManager     = mpStreetManager;
-
-            lpOutput->GetGuiOutputQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>( &lSummary ), 232, sizeof( lSummary ) );
+            lRoadRulesChallengeScoresAction.Construct(
+                mpStreetManager->mpProgressionManager->GetProfile()->GetRoadRulesID(),
+                mpStreetManager->mpProgressionManager->GetProfile()->GetNetworkChallengeDownloadTimestamp(),
+                mpStreetManager );
+            lpOutput->GetGameActionQueue()->AddGameAction( lRoadRulesChallengeScoresAction );
 
             mbOutputRoadRulesScoresToNetwork = false;
         }

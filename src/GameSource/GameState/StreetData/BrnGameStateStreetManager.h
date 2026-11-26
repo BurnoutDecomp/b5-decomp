@@ -616,6 +616,7 @@ namespace BrnGameState
 
     private:
         friend class GameStateDebugComponent; // ARTIST GameStateDebugComponent::OnActivate binds the road-index state
+        friend class StreetManagerDebugComponent; // Update reads mpProgressionManager directly (assert text "mpStreetManager->mpProgressionManager", ARTIST cmplwi at 0x8234A860)
         // ===== member layout (DWARF :499..:618 order; X360 offsets in comments) =====
         BrnStreetData::ChallengeHighScoreEntry   maNetworkChallengeData[KI_MAX_CHALLENGES];   // +0x0000
         BrnStreetData::ChallengePlayerScoreEntry maChallengeData[KI_MAX_CHALLENGES];          // +0x0E00
