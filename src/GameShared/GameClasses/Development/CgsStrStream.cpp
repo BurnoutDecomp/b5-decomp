@@ -64,11 +64,6 @@ namespace CgsDev
         return *this;
     }
 
-    StrStreamBase& StrStreamBase::operator<<(PrintMode leMode)
-    {
-        return SetPrintMode(leMode);
-    }
-
     StrStreamBase& StrStreamBase::operator<<(bool lbValue)
     {
         return *this << (lbValue ? "true" : "false");

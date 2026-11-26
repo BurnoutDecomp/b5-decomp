@@ -64,7 +64,14 @@ namespace CgsDev
             (*this << reinterpret_cast<u32>(lpValue)).SetPrintMode(lePreviousMode);
             return *this;
         }
-        StrStreamBase& operator<<(PrintMode leMode);
+        // DWARF CgsStrStream.h:635: defined in the header. ARTIST has no out-of-line copy and
+        // stores the mode straight into mePrintMode at each site (e.g. RaceCarStreamer::
+        // OnResourceUnloading 0x822A18F4 `stw r11,4(r31)`).
+        StrStreamBase& operator<<(PrintMode leMode)
+        {
+            mePrintMode = leMode;
+            return *this;
+        }
         StrStreamBase& operator<<(bool lbValue);   // streams "true" / "false" through the sink
 
         // ARTIST inlines signed formatting in the event-queue histogram.
