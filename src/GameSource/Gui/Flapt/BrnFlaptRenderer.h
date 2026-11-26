@@ -49,12 +49,8 @@ namespace BrnFlapt
 
     struct FlaptRenderer
     {
-        // ARTIST827E3D88..8C: both embedded stacks start unconstructed.
-        FlaptRenderer()
-        {
-            maTransformStack.miLength = CgsContainers::KI_STACK_UNCONSTRUCTED;
-            mMaskMeshCounts.miLength = CgsContainers::KI_STACK_UNCONSTRUCTED;
-        }
+        // No user constructor: both embedded stacks start unconstructed through Stack()
+        // (ARTIST 0x827E3D88..8C, inlined into ViewModule's constructor).
 
         // Construct @ 0x82472270 : store the four collaborators (render set, text
         // renderer, language manager, font collection), clear the cached

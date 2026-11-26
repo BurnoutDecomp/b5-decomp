@@ -33,8 +33,10 @@ template <class Type, s32 Length>
 class Stack
 {
 public:
-    // h:36 (LegacySrc: `Stack() { miLength=0x7FFFFFFF; }`) is not restored: the owners in this
-    // tree construct their stacks explicitly and rely on the type staying an aggregate.
+    // h:36 (DWARF CgsStack.h:12 `Stack()`, LegacySrc `Stack() { miLength=0x7FFFFFFF; }`): an
+    // owner's implicit constructor inlines it with the stack's own base (ARTIST
+    // BrnGui::ViewModule::ViewModule 0x827E3D60: &mRenderer formed, then +0x870 / +0x884).
+    Stack() { miLength = KI_STACK_UNCONSTRUCTED; }
 
     // Construct h:89 / Clear h:191: empty but usable.
     inline void Construct();
