@@ -152,42 +152,43 @@ const Name& AemsFactorySkName()
 // the retained GenericRwacFactory.
 bool AemsFactory::DoCreateVoice(const VoiceSpec& lVoiceSpec,
                                 Handle<Voice>& lhVoiceOut,
-                                u32 luIdent)
+                                u32 luiIdent)
 {
     // ARTIST 0x826E9AC8: the assert (CgsAemsFactory.cpp:112, file string 0x820AD860), then the
-    // new voice assigned to the out-handle through a Handle<AemsPlayerVoice> temporary (its
-    // acquire and operator='s merge into the `+2` at 0x826E9B48; the old out-object released,
-    // the temporary destroyed), and the handle's validity returned.
+    // FactoryNew<AemsPlayerVoice> handle (DWARF: inlined here) assigned to the out-handle
+    // through the CgsHandle.h:239 view (its acquire and operator='s merge into the `+2` at
+    // 0x826E9B48; the old out-object released, the temporary destroyed), and the handle's
+    // validity returned.
     CGS_ASSERT_AT(E_PLAYER_VOICE == lVoiceSpec.mu8VoiceType,
                   "E_PLAYER_VOICE == lVoiceSpec.GetVoiceType()",
                   "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/AEMS/CgsAemsFactory.cpp", 112);
-    lhVoiceOut = Handle<AemsPlayerVoice>(new (*this, lVoiceSpec)
-                                             AemsPlayerVoice(*this, lVoiceSpec, luIdent));
+    lhVoiceOut = FactoryNew<AemsPlayerVoice>(lVoiceSpec, luiIdent);
     return lhVoiceOut;
 }
 
 // ARTIST @0x826E9B98. The AEMS factory owns exactly two concrete content
 // classes: native module banks and CSIS class/interface descriptors.
-bool AemsFactory::DoCreateContent(const ContentSpec& akrSpec,
-                                  Handle<Content>& arHandleOut,
-                                  u32 au32Ident)
+// DWARF (BrnSoundUnity) parameters lContentSpec / lhContentOut / luiIdent and the local
+// `const ContentType& lContentType` (CgsAemsFactory.cpp:129): the type is read once
+// (ARTIST 0x826E9BB8), each class's SK_CONTENT_TYPE compared against its name, the
+// FactoryNew<T> handle assigned through Handle<Content>::operator= (0x826A7070); an unknown
+// type returns false without an assert (`li r3,0` at 0x826E9C78; PS3 the same).
+bool AemsFactory::DoCreateContent(const ContentSpec& lContentSpec,
+                                  Handle<Content>& lhContentOut,
+                                  u32 luiIdent)
 {
-    const Name& lkrContentTypeName = akrSpec.GetContentType().GetName();
-    Content* lpContent = 0;
-
-    if (lkrContentTypeName == skCsisContentType)
+    const ContentType& lContentType = lContentSpec.GetContentType();
+    if (skCsisContentType == lContentType.GetName())
     {
-        lpContent = new (*this, akrSpec) CsisContent(*this, akrSpec, au32Ident);
+        lhContentOut = FactoryNew<CsisContent>(lContentSpec, luiIdent);
+        return lhContentOut;
     }
-    else if (lkrContentTypeName == skAemsContentType)
+    else if (skAemsContentType == lContentType.GetName())
     {
-        lpContent = new (*this, akrSpec) AemsContent(*this, akrSpec, au32Ident);
+        lhContentOut = FactoryNew<AemsContent>(lContentSpec, luiIdent);
+        return lhContentOut;
     }
-
-    if (lpContent)
-        lpContent->Acquire();
-    arHandleOut.SetObject(lpContent);
-    return lpContent != 0;
+    return false;
 }
 
 // ARTIST @0x826C2358. Drain the fixed CSIS command ring on the playback thread.

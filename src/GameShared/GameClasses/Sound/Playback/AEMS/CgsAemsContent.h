@@ -53,7 +53,14 @@ namespace Playback
 // DoOnPostLoad/DoOnPreUnload subscribe the loaded MOIR image with Csis::System.
 struct CsisContent : public Content
 {
-    CsisContent(Factory& arFactory, const ContentSpec& akrSpec, u32 au32Ident);
+    // DWARF CgsAemsContent.h:46, in-class (ARTIST inlines it into FactoryNew<CsisContent>
+    // 0x826DD888 and keeps no copy).
+    CsisContent(Factory& arFactory, const ContentSpec& akrSpec, u32 au32Ident)
+        : Content(arFactory, akrSpec, au32Ident),
+          mLoader(),
+          mpCsisData(0)
+    {
+    }
     virtual ~CsisContent();
 
 protected:

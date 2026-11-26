@@ -15,7 +15,9 @@ class GenericRwacFactory;
 class GenericRwacPlayerVoice : public PlayerVoice, public GenericRwacVoice
 {
 public:
-    GenericRwacPlayerVoice(GenericRwacFactory& arFactory,
+    // DWARF CgsGenericRwacPlayerVoice.h:139 takes the base Factory& (ARTIST keeps an
+    // out-of-line copy, 0x826C7FB8, called from CreateVoiceInternal 0x826EB560).
+    GenericRwacPlayerVoice(Factory& arFactory,
                            const VoiceSpec& akrSpec, u32 au32Ident);
     // No user-declared destructor (DWARF CgsGenericRwacPlayerVoice.h declares none): ARTIST's
     // deleting destructor 0x826E0CE8 is the implicit one (no own vtable store).

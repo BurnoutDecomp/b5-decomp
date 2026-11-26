@@ -159,6 +159,20 @@ namespace Playback
                 mu8ContentState = static_cast<u8>(leContentState | E_CONTENT_STATE_CHANGED);
         }
 
+        // DWARF CgsContent.h:215 (local lbResult :217), header-inline; ARTIST keeps an
+        // out-of-line copy (0x82680AA8, called by Environment::~Environment 0x826D77D8): while
+        // the content is loaded, repeat its DoOnPreUnload hook (vtable +0x14) until it agrees,
+        // then mark it unloaded (PS3 Environment::~Environment 0x851D14 inlines the same loop).
+        void StallUnload()
+        {
+            bool lbResult;
+            do
+            {
+                lbResult = (E_CONTENT_STATE_LOADED == mu8ContentState) ? DoOnPreUnload() : true;
+            } while (!lbResult);
+            mu8ContentState = E_CONTENT_STATE_UNLOADED;
+        }
+
         // DWARF CgsContent.h:393 (non-const). ARTIST materialises it in BeginRemove
         // (0x82680CE0 subfic/subfe/clrlwi: the load count is above one).
         bool IsAttached()

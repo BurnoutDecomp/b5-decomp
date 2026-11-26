@@ -30,13 +30,6 @@ namespace CgsSound
 namespace Playback
 {
 
-CsisContent::CsisContent(Factory& arFactory, const ContentSpec& akrSpec, u32 au32Ident)
-    : Content(arFactory, akrSpec, au32Ident),
-      mLoader(),
-      mpCsisData(0)
-{
-}
-
 CsisContent::~CsisContent()
 {
 }

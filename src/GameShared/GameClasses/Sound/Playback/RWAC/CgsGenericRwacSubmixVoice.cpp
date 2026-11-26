@@ -7,13 +7,6 @@ namespace CgsSound
 namespace Playback
 {
 
-GenericRwacSubmixVoice::GenericRwacSubmixVoice(
-    GenericRwacFactory& arFactory, const VoiceSpec& akrSpec, u32 au32Ident)
-    : SubmixVoice(sizeof(GenericRwacSubmixVoice), arFactory, akrSpec, au32Ident),
-      GenericRwacVoice()
-{
-}
-
 GenericRwacSubmixVoice::~GenericRwacSubmixVoice()
 {
 }

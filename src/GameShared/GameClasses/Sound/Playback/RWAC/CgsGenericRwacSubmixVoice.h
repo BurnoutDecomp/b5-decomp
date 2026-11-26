@@ -14,8 +14,15 @@ class GenericRwacFactory;
 class GenericRwacSubmixVoice : public SubmixVoice, public GenericRwacVoice
 {
 public:
-    GenericRwacSubmixVoice(GenericRwacFactory& arFactory,
-                           const VoiceSpec& akrSpec, u32 au32Ident);
+    // DWARF CgsGenericRwacSubmixVoice.h:109, header-inline with the base Factory&: ARTIST
+    // FactoryNew<GenericRwacSubmixVoice> 0x826DFDA0 calls Voice's constructor and inlines
+    // the rest.
+    GenericRwacSubmixVoice(Factory& arFactory,
+                           const VoiceSpec& akrSpec, u32 au32Ident)
+        : SubmixVoice(sizeof(GenericRwacSubmixVoice), arFactory, akrSpec, au32Ident),
+          GenericRwacVoice()
+    {
+    }
     virtual ~GenericRwacSubmixVoice();
 
     virtual f32 GetCpuTicks();

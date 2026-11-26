@@ -141,6 +141,29 @@ private:
                            const uintptr_t* apuCommandWords);
     const GenericRwacFeatureImplementation& GetFeatureImplementation(Name aName);
 
+    // DWARF CgsGenericRwacFactory.h:949 (private member template; locals lhVoice :951,
+    // lBaseVoice :958). ARTIST instances 0x826EB528 (PlayerVoice), 0x826EB5F0 (SubmixVoice),
+    // 0x826EB6B8 (MasterVoice): the FactoryNew<T> handle assigned into lhVoice; inside the
+    // validity test (the operator-> / operator* asserts fold away) the RWAC instance is
+    // created on the voice's GenericRwacVoice half; the live handle is returned on success,
+    // an empty one otherwise.
+    template <class T>
+    Handle<T> CreateVoiceInternal(const VoiceSpec& lVoiceSpec, uint32_t luiIdent)
+    {
+        Handle<T> lhVoice;
+        lhVoice = FactoryNew<T>(lVoiceSpec, luiIdent);
+        if (lhVoice)
+        {
+            Voice& lBaseVoice = *lhVoice;
+            if (lhVoice->CreateVoiceInstance(lVoiceSpec, lBaseVoice, *this,
+                                             lhVoice->GetSubmixAddress()))
+            {
+                return lhVoice;
+            }
+        }
+        return Handle<T>();
+    }
+
     rw::audio::core::System* mpSystem;                    // console +0x10
     RwacCommandQueue mCommandQueue;                       // console +0x14
     Registry* mpRegistry;                                 // console +0x401C

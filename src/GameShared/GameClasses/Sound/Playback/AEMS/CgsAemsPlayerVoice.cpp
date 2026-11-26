@@ -36,11 +36,14 @@ size_t AemsPlayerVoice::GetClientAllocationSize(
          lrAemsFeature.GetParameterSchemaCount());
 }
 
-AemsPlayerVoice::AemsPlayerVoice(AemsFactory& arFactory,
+// DWARF CgsAemsPlayerVoice.h:283 takes the base Factory& (FactoryNew<AemsPlayerVoice> passes
+// the factory's Factory sub-object); ARTIST reaches the AemsFactory with a null-checked
+// pointer downcast (`addi r22,r30,-4`, 0x826DA280..0x826DA290).
+AemsPlayerVoice::AemsPlayerVoice(Factory& arBaseFactory,
                                  const VoiceSpec& arVoiceSpec,
                                  u32 au32Ident)
-    : PlayerVoice(GetClientAllocationSize(arFactory, arVoiceSpec),
-                  arFactory, arVoiceSpec, au32Ident),
+    : PlayerVoice(GetClientAllocationSize(arBaseFactory, arVoiceSpec),
+                  arBaseFactory, arVoiceSpec, au32Ident),
       GenericRwacVoice(),
       mfSamplePlayerCpuTicks(0.0f),
       mpFirstPlayer(0),
@@ -54,12 +57,13 @@ AemsPlayerVoice::AemsPlayerVoice(AemsFactory& arFactory,
       mpAemsParameters(reinterpret_cast<s32*>(
           reinterpret_cast<u8*>(this) + sizeof(AemsPlayerVoice)))
 {
+    AemsFactory& lrAemsFactory = *static_cast<AemsFactory*>(&arBaseFactory);
     const VoiceSchema& lrSourceSchema = arVoiceSpec.GetVoiceSchema();
     CGS_ASSERT(lrSourceSchema.GetFeatureSchemaCount() != 0,
                "AEMS voice has an AEMS feature");
 
     Name lSchemaName = lrSourceSchema.GetName();
-    const AemsVoiceCsisClass* lpCsis = arFactory.GetRegistry()->
+    const AemsVoiceCsisClass* lpCsis = lrAemsFactory.GetRegistry()->
         GetEntity<AemsVoiceCsisClass>(lSchemaName);
     CGS_ASSERT(lpCsis, "lpCsis");
     const FeatureSchema& lrAemsFeature = lrSourceSchema.GetFeatureSchema(0);
@@ -104,17 +108,17 @@ AemsPlayerVoice::AemsPlayerVoice(AemsFactory& arFactory,
     lpRwacSpec->mu8VoiceType = E_SUBMIX_VOICE;
 
     mbCreated = CreateVoiceInstance(*lpRwacSpec, *this,
-                                    arFactory.GetRwacFactory(),
+                                    lrAemsFactory.GetRwacFactory(),
                                     &mpInternalSubmix);
 
     CsisSetClassHandleCommand lSetClass(
         reinterpret_cast<uintptr_t>(&mhClass), lpCsis->GetClassName(),
         lpCsis->GetSystemCrc(), lpCsis->GetClassCrc());
-    arFactory.GetCommandQueue() << lSetClass;
+    lrAemsFactory.GetCommandQueue() << lSetClass;
 
     if (GetSlotCount() != 0)
     {
-        void* lpSlotMemory = arFactory.GetEnvironment().Allocate(
+        void* lpSlotMemory = lrAemsFactory.GetEnvironment().Allocate(
             static_cast<u32>(sizeof(AemsContentSlot)),
             static_cast<u32>(__alignof(AemsContentSlot)), "AemsContentSlot");
         CGS_ASSERT(lpSlotMemory, "lpSlotMemory");

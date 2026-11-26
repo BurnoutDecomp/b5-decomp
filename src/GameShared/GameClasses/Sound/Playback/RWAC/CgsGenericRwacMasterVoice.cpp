@@ -7,13 +7,6 @@ namespace CgsSound
 namespace Playback
 {
 
-GenericRwacMasterVoice::GenericRwacMasterVoice(
-    GenericRwacFactory& arFactory, const VoiceSpec& akrSpec, u32 au32Ident)
-    : MasterVoice(sizeof(GenericRwacMasterVoice), arFactory, akrSpec, au32Ident),
-      GenericRwacVoice()
-{
-}
-
 f32 GenericRwacMasterVoice::GetCpuTicks()
 {
     return GenericRwacVoice::GetCpuTicks();

@@ -25,6 +25,9 @@ namespace CgsSound
 namespace Playback
 {
 
+// DWARF CgsSplicerContent.cpp:36 (string 0x820BA1A0).
+const Name SplicerContent::SK_CONTENT_TYPE("~SplicerContent::SK_CONTENT_TYPE~");
+
 SplicerContent::SplicerContent(Factory& arFactory, const ContentSpec& akrSpec,
                                u32 au32Ident)
     : Content(arFactory, akrSpec, au32Ident)

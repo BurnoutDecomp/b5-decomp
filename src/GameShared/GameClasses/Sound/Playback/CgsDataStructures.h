@@ -33,6 +33,16 @@ namespace CgsSound
 namespace Playback
 {
 
+// DWARF CgsDataStructures.h:85. The kind of voice a VoiceSpec describes (VoiceSpec::
+// GetVoiceType, the factories' DoCreateVoice switch).
+enum EVoiceType
+{
+    E_PLAYER_VOICE = 0,
+    E_SUBMIX_VOICE = 1,
+    E_MASTER_VOICE = 2,
+    E_VOICE_TYPE_COUNT = 3
+};
+
 // DWARF CgsDataStructures.h:1773. How a piece of playback content gets loaded --
 // the IContentLoadService::DoServiceContentLoadRequest method selector (the
 // Module's override @0x826F9F88 services only the RESOURCE_MODULE method,
@@ -450,6 +460,10 @@ struct VoiceSpec : public Entity
     // was an invention.)
     u32 GetSendCount() const     { return mu8SendCount; }
     u32 GetTailUnitCount() const { return mu8SendCount; }
+
+    // DWARF CgsDataStructures.h:1533, header-inline (ARTIST reads the +0xF byte at every
+    // site, e.g. GenericRwacFactory::DoCreateVoice 0x826FA49C).
+    EVoiceType GetVoiceType() const { return static_cast<EVoiceType>(mu8VoiceType); }
 
     // DWARF :380 (real out-of-line symbol -- `bl VoiceSpec::GetVoiceSchema` in
     // AemsPlayerVoice::GetClientAllocationSize @0x826A2B58 / operator new).

@@ -13,6 +13,7 @@
 #include "GameShared/GameClasses/Sound/Playback/CgsDataStructures.h" // ContentType, ContentClass
 
 namespace rw { namespace audio { namespace core { class System; } } }   // the Update-context alias below
+namespace rw { namespace audio { namespace core { class PlugIn; } } }   // PlayerVoice::GetSubmixAddress
 
 // NOTE (fold DONE 2026-08-25, audio-faithfulness wave 3): there is now ONE
 // CgsSound::Playback::Object -- the canonical CgsObject.h home, which CgsContent.h
@@ -303,6 +304,10 @@ public:
 
     u32 GetSlotCount() const { return mu32SlotCount; }
     u32 GetSendCount() const { return mu32SendCount; }
+
+    // DWARF CgsVoice.h:1432, header-inline: the master voice is the one voice with no sends
+    // (Environment::~Environment 0x826D76C4 tests +0x18, PS3 0x851D14 the same word).
+    bool IsMasterVoice() { return 0 == mu32SendCount; }
     u32 GetInputParameterCount() const { return mu32InputParameterCount; }
     u32 GetOutputParameterCount() const { return mu32OutputParameterCount; }
 
@@ -389,6 +394,11 @@ public:
     // its player slot and move the playback state on success. Defined after Slot.
     void Play(u32 au32OptionalParam);
     void Stop();
+
+    // DWARF CgsPlayerVoice.h:96, header-inline: a player voice owns no submix plug-in
+    // (GenericRwacFactory::CreateVoiceInternal<GenericRwacPlayerVoice> passes 0 as
+    // CreateVoiceInstance's submix address, `li r7,0` at 0x826EB580).
+    rw::audio::core::PlugIn** GetSubmixAddress() { return 0; }
 };
 
 // ---------------------------------------------------------------------------
@@ -478,13 +488,24 @@ inline void PlayerVoice::Stop()
     }
 }
 
-enum EVoiceType
+// CgsVoice.h:1469 (DWARF), header-inline: its assert names CgsVoice.h:1471. Set the low-7-bit
+// playback state, raising the CHANGED (0x80) bit iff the state actually differs from the
+// latched one. ARTIST keeps an out-of-line copy (0x82680E18: the CHANGED bit cleared
+// unconditionally (stb at 0x82680E70), the state compared signed (cmpw at 0x82680E6C), the
+// new state stored with the CHANGED bit inserted (rlwimi at 0x82680E7C)) and inlines it with
+// a constant state (GenericRwacPlayerVoice's constructor 0x826C7FFC..0x826C8018).
+inline void Voice::SetPlaybackState(EPlaybackState lePlaybackState)
 {
-    E_PLAYER_VOICE = 0,
-    E_SUBMIX_VOICE = 1,
-    E_MASTER_VOICE = 2,
-    E_VOICE_TYPE_COUNT = 3
-};
+    CGS_ASSERT_AT(!(lePlaybackState & E_PLAYBACK_STATE_CHANGED),
+               "!(lePlaybackState & E_PLAYBACK_STATE_CHANGED)",
+               CGS_ARTIST_CGSVOICE_H_FILE, 1471);
+
+    AcknowledgePlaybackStateChange();
+    if (GetPlaybackState() != lePlaybackState)
+        mu8PlaybackState = static_cast<u8>(lePlaybackState | E_PLAYBACK_STATE_CHANGED);
+}
+
+// EVoiceType: DWARF home CgsDataStructures.h:85 (included above).
 
 } // namespace Playback
 } // namespace CgsSound

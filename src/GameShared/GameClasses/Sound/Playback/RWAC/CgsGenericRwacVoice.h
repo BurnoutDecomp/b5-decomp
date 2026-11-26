@@ -40,7 +40,15 @@ struct GenericRwacVoice
         u8 mu8Direction;
     };
 
-    GenericRwacVoice();
+    // DWARF CgsGenericRwacVoice.h:408, header-inline: ARTIST's inlined copies store only
+    // these four members (+0x00, +0x04, +0x50 word, +0x54 byte: GenericRwacPlayerVoice ctor
+    // 0x826C7FEC..0x826C7FF8, FactoryNew<GenericRwacSubmixVoice> 0x826DFDF4..0x826DFE04,
+    // AemsPlayerVoice ctor 0x826DA244..0x826DA250); the plug-in table fields are written
+    // by CreateVoiceInstance.
+    GenericRwacVoice()
+        : mpFactory(0), mpVoice(0), mu32ParameterMapCount(0), mu8Flags(0)
+    {
+    }
     ~GenericRwacVoice();
 
     bool CreateVoiceInstance(const VoiceSpec& akrSpec, Voice& arBaseVoice,

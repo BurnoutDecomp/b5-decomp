@@ -518,22 +518,6 @@ void Voice::SetParameter(s32 as32Index, f32 af32Value, Name akParamName)
     lrParam.SetChanged(lbChanged);                           // stb  @0x10
 }
 
-// @ 0x82680E18. Set the low-7-bit playback state, raising the CHANGED (0x80) bit iff the
-// state actually differs from the currently-latched one.
-// The original body is a header inline (its assert names CgsVoice.h:1471). ARTIST clears the
-// CHANGED bit unconditionally (stb at 0x82680E70), compares the state signed (cmpw at
-// 0x82680E6C) and stores the new state with the CHANGED bit inserted (rlwimi at 0x82680E7C).
-void Voice::SetPlaybackState(EPlaybackState lePlaybackState)
-{
-    CGS_ASSERT_AT(!(lePlaybackState & E_PLAYBACK_STATE_CHANGED),
-               "!(lePlaybackState & E_PLAYBACK_STATE_CHANGED)",
-               CGS_ARTIST_FILE, 1471);
-
-    AcknowledgePlaybackStateChange();
-    if (GetPlaybackState() != lePlaybackState)
-        mu8PlaybackState = static_cast<u8>(lePlaybackState | E_PLAYBACK_STATE_CHANGED);
-}
-
 // @ 0x826A24F0. Per-frame tick. While ALIVE, update each slot then run the type-specific
 // DoUpdate; while REMOVING, run DoRemove and advance to REMOVED when it reports done.
 // (mu8RemoveState @+0x11: 1=ALIVE, 2=REMOVING, 3=REMOVED.)

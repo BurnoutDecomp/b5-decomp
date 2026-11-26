@@ -34,6 +34,10 @@ namespace Playback
 
 struct SplicerContent : public Content
 {
+    // DWARF CgsSplicerContent.cpp:36. The content type the SplicerFactory accepts
+    // (0x830082D8, Name::MakeHash("~SplicerContent::SK_CONTENT_TYPE~") at 0x82C65A58).
+    static const Name SK_CONTENT_TYPE;
+
     SplicerContent(Factory& aFactory, const ContentSpec& aSpec, u32 au32DataSize); // own TU
 
     // @ 0x826D5A60. Empty out-of-line dtor (member + Content base dtors run implicitly).

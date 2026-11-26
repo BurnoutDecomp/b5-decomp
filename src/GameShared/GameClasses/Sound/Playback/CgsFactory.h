@@ -109,6 +109,19 @@ protected:
     virtual bool DoCreateContent(const ContentSpec& akrSpec, Handle<Content>& arHandleOut, u32 au32Ident);
     virtual void DoUpdate(f32 af32DeltaTime);
 
+    // DWARF CgsFactory.h:195 (protected member template, parameters lParam / lParam2):
+    // carve a T from this factory (T::operator new(size_t, Factory&, const S&)), construct
+    // it with (Factory&, const S&, const A&) and return the owning handle. ARTIST keeps
+    // the content and RWAC submix/master instances out of line (0x826DD6F8 WaveContent,
+    // 0x826DD7C0 ReverbIRContent, 0x826DD888 CsisContent, 0x826DD950 AemsContent,
+    // 0x826DDA18 SplicerContent, 0x826DFDA0 SubmixVoice, 0x826DFE38 MasterVoice):
+    // operator new, the constructor, then Handle(T*)'s store and acquire.
+    template <class T, class S, class A>
+    Handle<T> FactoryNew(const S& lParam, const A& lParam2)
+    {
+        return Handle<T>(new (*this, lParam) T(*this, lParam, lParam2));
+    }
+
     Name              mName;         // X360 +0x8   (DWARF h:201)
     Environment&      mEnvironment;  // X360 +0xC   (DWARF h:202 spells `const
                                      // Environment&`; kept non-const here because the

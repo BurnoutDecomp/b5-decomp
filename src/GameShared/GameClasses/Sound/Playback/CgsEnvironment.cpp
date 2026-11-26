@@ -285,12 +285,43 @@ void Environment::StopDac()
     rw::audio::core::RwacSystemUnlock(GetDefaultRwacSystem());
 }
 
-// @ 0x826E9020. Out-of-line destructor PLACEHOLDER. The X360 scalar-deleting thunk
-// runs ~Environment() then frees on (flag & 1); MSVC re-synthesises that thunk from
-// this out-of-line dtor. FLAG: real member teardown is external -- fill in when the
-// full ~Environment lands so teardown is not silently lost.
+// @ 0x826D7628 (scalar deleting destructor 0x826E9020). DWARF (BrnSoundUnity) locals lu32I
+// (CgsEnvironment.cpp:269) and lhMasterVoice (:270); PS3 0x851D14. Tear the handle tables
+// down: every voice handle is destroyed in table order, the master voice (the one voice
+// with no sends) kept alive in lhMasterVoice (assert :280, string 0x820B507C) until every
+// content has been stall-unloaded and destroyed, last first; then the master voice goes,
+// then the factories. The tables are raw carves, so each slot's handle is destroyed in
+// place (ARTIST releases without clearing the slot, 0x826D7720 / 0x826D77DC / 0x826D78B0).
 Environment::~Environment()
 {
+    uint32_t lu32I;
+    Handle<Voice> lhMasterVoice;
+
+    for (lu32I = 0; lu32I < mu32VoiceCount; ++lu32I)
+    {
+        if (mphVoice[lu32I] && mphVoice[lu32I]->IsMasterVoice())
+        {
+            CGS_ASSERT_AT(0 == lhMasterVoice, "0 == lhMasterVoice", KAC_ARTIST_ASSERT_FILE, 280);
+            lhMasterVoice = mphVoice[lu32I];
+        }
+        mphVoice[lu32I].~Handle();
+    }
+
+    for (lu32I = mu32ContentCount; lu32I > 0; --lu32I)
+    {
+        if (mphContent[lu32I - 1])
+        {
+            mphContent[lu32I - 1]->StallUnload();
+        }
+        mphContent[lu32I - 1].~Handle();
+    }
+
+    lhMasterVoice = Handle<Voice>();
+
+    for (lu32I = 0; lu32I < mu32FactoryCount; ++lu32I)
+    {
+        mphFactory[lu32I].~Handle();
+    }
 }
 
 // @ 0x826BFD60. Allocator-keyed placement delete: hand the carve back to the rw

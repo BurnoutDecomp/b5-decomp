@@ -19,11 +19,6 @@ namespace CgsSound
 namespace Playback
 {
 
-GenericRwacVoice::GenericRwacVoice()
-    : mpFactory(0), mpVoice(0), mppPlugin(0), mu16PluginCount(0),
-      mu16FirstSendPlugin(0), mu32ParameterMapCount(0), mu8Flags(0)
-{
-}
 
 // ARTIST's file string for this file's asserts (0x820B2E60).
 #define CGS_GENERIC_RWAC_VOICE_CPP_ASSERT_FILE \

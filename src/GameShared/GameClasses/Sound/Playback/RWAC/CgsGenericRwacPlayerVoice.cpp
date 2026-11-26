@@ -7,14 +7,16 @@ namespace CgsSound
 namespace Playback
 {
 
+// ARTIST 0x826C7FB8 (PS3 inlined into CreateVoiceInternal<GenericRwacPlayerVoice> 0x90C738):
+// the bases, then the playback state reset to E_PLAYBACK_STATE_INVALID (SetPlaybackState's
+// clear / compare / CHANGED store, 0x826C7FFC..0x826C8018) and the change acknowledged
+// (0x826C801C..0x826C8028). mIsRequestDoneParams is left as allocated (no store to +0x84/+0x88).
 GenericRwacPlayerVoice::GenericRwacPlayerVoice(
-    GenericRwacFactory& arFactory, const VoiceSpec& akrSpec, u32 au32Ident)
+    Factory& arFactory, const VoiceSpec& akrSpec, u32 au32Ident)
     : PlayerVoice(sizeof(GenericRwacPlayerVoice), arFactory, akrSpec, au32Ident),
-      GenericRwacVoice(),
-      mIsRequestDoneParams()
+      GenericRwacVoice()
 {
-    mIsRequestDoneParams.requestHandle = 0.0f;
-    mIsRequestDoneParams.isRequestDone = 0.0f;
+    SetPlaybackState(E_PLAYBACK_STATE_INVALID);
     AcknowledgePlaybackStateChange();
 }
 

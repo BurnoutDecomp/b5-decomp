@@ -34,7 +34,8 @@ struct AemsPlayerVoice : public PlayerVoice, public GenericRwacVoice
     void* operator new(size_t auSize, Factory& arFactory,
                        const VoiceSpec& arVoiceSpec);
 
-    AemsPlayerVoice(AemsFactory& arFactory, const VoiceSpec& arVoiceSpec,
+    // DWARF CgsAemsPlayerVoice.h:283: the base Factory& (FactoryNew passes *this).
+    AemsPlayerVoice(Factory& arFactory, const VoiceSpec& arVoiceSpec,
                     u32 au32Ident);
     virtual ~AemsPlayerVoice();
 

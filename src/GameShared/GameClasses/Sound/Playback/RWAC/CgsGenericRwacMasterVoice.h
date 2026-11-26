@@ -14,8 +14,15 @@ class GenericRwacFactory;
 class GenericRwacMasterVoice : public MasterVoice, public GenericRwacVoice
 {
 public:
-    GenericRwacMasterVoice(GenericRwacFactory& arFactory,
-                           const VoiceSpec& akrSpec, u32 au32Ident);
+    // DWARF CgsGenericRwacMasterVoice.h:121, header-inline with the base Factory&: ARTIST
+    // FactoryNew<GenericRwacMasterVoice> 0x826DFE38 calls MasterVoice's constructor and
+    // inlines the rest.
+    GenericRwacMasterVoice(Factory& arFactory,
+                           const VoiceSpec& akrSpec, u32 au32Ident)
+        : MasterVoice(sizeof(GenericRwacMasterVoice), arFactory, akrSpec, au32Ident),
+          GenericRwacVoice()
+    {
+    }
     // No user-declared destructor: DWARF lists ~GenericRwacMasterVoice without a declaration line and
     // places its body on the class's closing line (CgsGenericRwacMasterVoice.h:40), the compiler's implicit
     // one; ARTIST's scalar deleting destructor 0x826E9928 calls the base destructor without

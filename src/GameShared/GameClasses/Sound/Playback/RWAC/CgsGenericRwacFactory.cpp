@@ -500,55 +500,33 @@ GenericRwacVoiceConfig* GenericRwacFactory::SetupConfig(
     return lpConfig;
 }
 
-bool GenericRwacFactory::DoCreateVoice(const VoiceSpec& akrSpec,
-                                       Handle<Voice>& arHandleOut,
-                                       u32 au32Ident)
+// ARTIST 0x826FA468 (unnamed export; called through the vtable slot, DWARF BrnSoundUnity
+// parameters lVoiceSpec / lhVoiceOut / luiIdent; PS3 0x8A9BD0): drop the out-handle's voice,
+// create the voice class GetVoiceType names through CreateVoiceInternal<T> (each result
+// assigned through the view and Handle<Voice>::operator=, 0x826A7640), assert "BAD VOICE"
+// otherwise (CgsGenericRwacFactory.cpp:280, 0x118 at 0x826FA4BC), `return lhVoiceOut;`.
+bool GenericRwacFactory::DoCreateVoice(const VoiceSpec& lVoiceSpec,
+                                       Handle<Voice>& lhVoiceOut,
+                                       u32 luiIdent)
 {
-    arHandleOut.SetObject(0);
-    Voice* lpVoice = 0;
-    GenericRwacVoice* lpRwacVoice = 0;
-    rw::audio::core::PlugIn** lppSubmix = 0;
-
-    switch (static_cast<EVoiceType>(akrSpec.mu8VoiceType))
+    lhVoiceOut = Handle<Voice>();
+    switch (lVoiceSpec.GetVoiceType())
     {
     case E_PLAYER_VOICE:
-    {
-        GenericRwacPlayerVoice* lpPlayer = new (*this, akrSpec)
-            GenericRwacPlayerVoice(*this, akrSpec, au32Ident);
-        lpVoice = lpPlayer;
-        lpRwacVoice = lpPlayer;
+        lhVoiceOut = CreateVoiceInternal<GenericRwacPlayerVoice>(lVoiceSpec, luiIdent);
         break;
-    }
     case E_SUBMIX_VOICE:
-    {
-        GenericRwacSubmixVoice* lpSubmix = new (*this, akrSpec)
-            GenericRwacSubmixVoice(*this, akrSpec, au32Ident);
-        lpVoice = lpSubmix;
-        lpRwacVoice = lpSubmix;
-        lppSubmix = lpSubmix->GetSubmixAddress();
+        lhVoiceOut = CreateVoiceInternal<GenericRwacSubmixVoice>(lVoiceSpec, luiIdent);
         break;
-    }
     case E_MASTER_VOICE:
-    {
-        GenericRwacMasterVoice* lpMaster = new (*this, akrSpec)
-            GenericRwacMasterVoice(*this, akrSpec, au32Ident);
-        lpVoice = lpMaster;
-        lpRwacVoice = lpMaster;
-        lppSubmix = lpMaster->GetSubmixAddress();
+        lhVoiceOut = CreateVoiceInternal<GenericRwacMasterVoice>(lVoiceSpec, luiIdent);
+        break;
+    default:
+        CGS_FAIL_AT("BAD VOICE",
+                    "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/RWAC/CgsGenericRwacFactory.cpp", 280);
         break;
     }
-    default:
-        CGS_FAIL("Invalid Voice Type");
-        return false;
-    }
-
-    if (lpVoice == 0 || lpRwacVoice == 0 ||
-        !lpRwacVoice->CreateVoiceInstance(akrSpec, *lpVoice, *this, lppSubmix))
-        return false;
-
-    lpVoice->Acquire();
-    arHandleOut.SetObject(lpVoice);
-    return true;
+    return lhVoiceOut;
 }
 
 // ARTIST @0x826D8748. A plug-in event command optionally consumes the next
@@ -724,32 +702,29 @@ void GenericRwacFactory::DoUpdate(f32 /*af32DeltaTime*/)
 
 // @0x826E9990. Select the concrete content class from the authored ContentType,
 // construct it in a factory-owned carve, and return one owned handle reference.
-bool GenericRwacFactory::DoCreateContent(const ContentSpec& akrSpec,
-                                         Handle<Content>& arHandleOut,
-                                         u32 au32Ident)
+// DWARF (BrnSoundUnity) parameters lContentSpec / lhContentOut / luiIdent; GetContentType
+// is read once per test (two calls, ARTIST 0x826E99B0 / 0x826E9A00); each branch assigns
+// the FactoryNew<T> handle through the CgsHandle.h:239 view and Handle<Content>::operator=
+// (0x826A7070), the temporary released after it; the fail is CgsGenericRwacFactory.cpp:303
+// (0x12F at 0x826E9A54, PS3 the same line); `return lhContentOut;` is operator bool.
+bool GenericRwacFactory::DoCreateContent(const ContentSpec& lContentSpec,
+                                         Handle<Content>& lhContentOut,
+                                         u32 luiIdent)
 {
-    const Name& lkrContentTypeName = akrSpec.GetContentType().GetName();
-    Content* lpContent = 0;
-
-    if (lkrContentTypeName == skWaveContentType)
+    if (lContentSpec.GetContentType().GetName() == skWaveContentType)
     {
-        lpContent = new (*this, akrSpec)
-            GenericRwacWaveContent(*this, akrSpec, au32Ident);
+        lhContentOut = FactoryNew<GenericRwacWaveContent>(lContentSpec, luiIdent);
     }
-    else if (lkrContentTypeName == skReverbIrContentType)
+    else if (lContentSpec.GetContentType().GetName() == skReverbIrContentType)
     {
-        lpContent = new (*this, akrSpec)
-            GenericRwacReverbIRContent(*this, akrSpec, au32Ident);
+        lhContentOut = FactoryNew<GenericRwacReverbIRContent>(lContentSpec, luiIdent);
     }
     else
     {
-        CGS_FAIL("Unknown content type");
+        CGS_FAIL_AT("Unknown content type",
+                    "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/RWAC/CgsGenericRwacFactory.cpp", 303);
     }
-
-    if (lpContent)
-        lpContent->Acquire();
-    arHandleOut.SetObject(lpContent);
-    return lpContent != 0;
+    return lhContentOut;
 }
 
 // The per-factory registry accessor (CgsSoundPlaybackModule.h:99 -- the console

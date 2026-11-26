@@ -11,6 +11,9 @@
 
 #include <new>   // placement new (the in-carve constructs)
 
+// This file's path as ARTIST's asserts spell it (string 0x820ADA88).
+#define KAC_SPLICER_FACTORY_FILE "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/Splicer/CgsSplicerFactory.cpp"
+
 namespace CgsSound
 {
 namespace Playback
@@ -121,36 +124,34 @@ GenericRwacFactory& SplicerFactory::GetRwacFactory() const
 // @ 0x826E9C88. A SplicerFactory owns the single SplicerContent class. The
 // console checks the authored ContentType, then uses FactoryNew to allocate and
 // construct this exact object and publishes one owned handle reference.
-bool SplicerFactory::DoCreateContent(const ContentSpec& akrSpec,
-                                     Handle<Content>& arHandleOut,
-                                     u32 au32Ident)
+// DWARF (BrnSoundUnity) parameters lContentSpec / lhContentOut / luiIdent: assert the
+// type (CgsSplicerFactory.cpp:121, 0x79 at 0x826E9CC8; the text spells the comparison),
+// then the FactoryNew<SplicerContent> handle assigned through the CgsHandle.h:239 view and
+// Handle<Content>::operator= (inlined here, 0x826E9CF8..0x826E9D2C), `return lhContentOut;`.
+bool SplicerFactory::DoCreateContent(const ContentSpec& lContentSpec,
+                                     Handle<Content>& lhContentOut,
+                                     u32 luiIdent)
 {
-    SplicerContent* lpContent = new (*this, akrSpec)
-        SplicerContent(*this, akrSpec, au32Ident);
-    if (lpContent)
-        lpContent->Acquire();
-    arHandleOut.SetObject(lpContent);
-    return lpContent != 0;
+    CGS_ASSERT_AT(SplicerContent::SK_CONTENT_TYPE == lContentSpec.GetContentType().GetName(),
+                  "SplicerContent::SK_CONTENT_TYPE == lContentSpec.GetContentType().GetName()",
+                  KAC_SPLICER_FACTORY_FILE, 121);
+    lhContentOut = FactoryNew<SplicerContent>(lContentSpec, luiIdent);
+    return lhContentOut;
 }
 
-// @ 0x826FA578. Splicer voices are player voices. The concrete constructor
-// builds the slot implementation and delegates its render graph to RWAC.
-bool SplicerFactory::DoCreateVoice(const VoiceSpec& akrSpec,
-                                   Handle<Voice>& arHandleOut,
-                                   u32 au32Ident)
+// @ 0x826FA578. Splicer voices are player voices: assert the type
+// (CgsSplicerFactory.cpp:104, 0x68 at 0x826FA5A8), then the FactoryNew<SplicerPlayerVoice>
+// handle (inlined: operator new, the constructor, the acquire merged with operator='s into
+// `+2` at 0x826FA5F8) assigned through the view, `return lhVoiceOut;`.
+bool SplicerFactory::DoCreateVoice(const VoiceSpec& lVoiceSpec,
+                                   Handle<Voice>& lhVoiceOut,
+                                   u32 luiIdent)
 {
-    arHandleOut.SetObject(0);
-    CGS_ASSERT(akrSpec.mu8VoiceType == E_PLAYER_VOICE,
-               "E_PLAYER_VOICE == lVoiceSpec.GetVoiceType()");
-    if (akrSpec.mu8VoiceType != E_PLAYER_VOICE)
-        return false;
-
-    SplicerPlayerVoice* lpVoice = new (*this, akrSpec)
-        SplicerPlayerVoice(*this, akrSpec, au32Ident);
-    if (lpVoice)
-        lpVoice->Acquire();
-    arHandleOut.SetObject(lpVoice);
-    return lpVoice != 0;
+    CGS_ASSERT_AT(E_PLAYER_VOICE == lVoiceSpec.mu8VoiceType,
+                  "E_PLAYER_VOICE == lVoiceSpec.GetVoiceType()",
+                  KAC_SPLICER_FACTORY_FILE, 104);
+    lhVoiceOut = FactoryNew<SplicerPlayerVoice>(lVoiceSpec, luiIdent);
+    return lhVoiceOut;
 }
 
 // @ 0x8268AB60. The retail body brackets no work between the Splicer monitor
@@ -162,3 +163,5 @@ void SplicerFactory::DoUpdate(f32 /*af32DeltaTime*/)
 
 } // namespace Playback
 } // namespace CgsSound
+
+#undef KAC_SPLICER_FACTORY_FILE
