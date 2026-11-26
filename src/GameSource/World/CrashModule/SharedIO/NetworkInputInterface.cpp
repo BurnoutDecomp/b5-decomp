@@ -2,6 +2,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficConstants.h" // BrnTraffic::KU_MAX_TOTAL_TRAFFIC
 #include "rw/math/vpu/vector3_operation.h"   // rw::math::vpu::IsValid (per-row matrix validity)
+#define CGS_ARTIST_BRNCRASHMODULENETWORKIOINTERFACES_H_FILE "..\\..\\..\\GameSource\\World/CrashModule/SharedIO/BrnCrashModuleNetworkIOInterfaces.h"
 
 // BrnWorld::CrashIO::NetworkInputInterface
 // Reconstructed from BURNOUT_X360_ARTIST.XEX (Construct @ 0x82592798,
@@ -35,8 +36,8 @@ void NetworkInputInterface::Construct()
 // non-gating asserts, then ORs 1 << (liRaceCarId & 63) into the single 64-bit field.
 void NetworkInputInterface::MarkRaceCarForUpdate(s32 liRaceCarId)
 {
-    CGS_ASSERT(liRaceCarId >= 0, "liRaceCarId >= 0");
-    CGS_ASSERT(liRaceCarId < KI_MAX_ACTIVE_RACE_CARS, "liRaceCarId < BrnWorld::KI_MAX_ACTIVE_RACE_CARS");
+    CGS_ASSERT_AT(liRaceCarId >= 0, "liRaceCarId >= 0", CGS_ARTIST_BRNCRASHMODULENETWORKIOINTERFACES_H_FILE, 204);
+    CGS_ASSERT_AT(liRaceCarId < KI_MAX_ACTIVE_RACE_CARS, "liRaceCarId < BrnWorld::KI_MAX_ACTIVE_RACE_CARS", CGS_ARTIST_BRNCRASHMODULENETWORKIOINTERFACES_H_FILE, 205);
 
     mActiveRaceCars.SetBit(static_cast<u32>(liRaceCarId));
 }
@@ -71,8 +72,8 @@ void NetworkInputInterface::AddTrafficUpdate(u32 luVehicleIndex, u32 luOwnerRace
 // (non-gating) first.
 bool NetworkInputInterface::IsRaceCarMarkedForUpdate(s32 liRaceCarId) const
 {
-    CGS_ASSERT(liRaceCarId >= 0, "liRaceCarId >= 0");
-    CGS_ASSERT(liRaceCarId < KI_MAX_ACTIVE_RACE_CARS, "liRaceCarId < BrnWorld::KI_MAX_ACTIVE_RACE_CARS");
+    CGS_ASSERT_AT(liRaceCarId >= 0, "liRaceCarId >= 0", CGS_ARTIST_BRNCRASHMODULENETWORKIOINTERFACES_H_FILE, 247);
+    CGS_ASSERT_AT(liRaceCarId < KI_MAX_ACTIVE_RACE_CARS, "liRaceCarId < BrnWorld::KI_MAX_ACTIVE_RACE_CARS", CGS_ARTIST_BRNCRASHMODULENETWORKIOINTERFACES_H_FILE, 248);
 
     return mActiveRaceCars.IsBitSet(static_cast<u32>(liRaceCarId));
 }

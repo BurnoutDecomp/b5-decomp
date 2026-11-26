@@ -13,5 +13,7 @@
 // Stride 8 and count word at +0x80 (== 16*8) confirm N=16 and sizeof(SectionAndPortalIndices) == 8.
 // Callers: RacingLineGenerator::ExtrapolateRoute{Forwards,Backwards}/ExtrapolateTwistyRoute,
 // ResetOnTrackManager::Scan{Forwards,Backwards}AlongExtrapolatedRoute, RouteMapModule::ProcessExtrapolatedRoute.
-template const BrnAI::SectionAndPortalIndices&
-CgsContainers::Array<BrnAI::SectionAndPortalIndices, 16>::operator[](u32) const;
+// ARTIST @0x8276AA08 is the non-const GetItem: its asserts bake CgsArray.h:556/557 (const 538/539, non-const
+// 556/557; caller RacingLineGenerator::ExtrapolateRouteForwards et al.).
+template BrnAI::SectionAndPortalIndices&
+CgsContainers::Array<BrnAI::SectionAndPortalIndices, 16>::GetItem(u32);

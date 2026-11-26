@@ -1,7 +1,7 @@
 // ============================================================================
 // GameSource/Effects/Particles/Native/SparkBatchArray_operator_index.cpp
 //
-// Array<BrnParticle::Native::SparkBatch, 4>::operator[] (non-const) @ 0x8227CAD8
+// Array<BrnParticle::Native::SparkBatch, 4>::GetItem const @ 0x8227CAD8
 //   (BrnParticle::Native::SparkRenderer::Dispatch)
 //
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. The generic Array<T,N>::operator[] body is
@@ -29,5 +29,7 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"  // Array<T,N>::operator[] (inline generic)
 #include "GameSource/Effects/Particles/Native/BrnSparkRenderer.h"
 
-template BrnParticle::Native::SparkBatch&
-CgsContainers::Array<BrnParticle::Native::SparkBatch, 4>::operator[](u32);
+// ARTIST @0x8227CAD8 is the const GetItem: its asserts bake CgsArray.h:538/539 (const 538/539, non-const
+// 556/557; caller SparkRenderer::Dispatch).
+template const BrnParticle::Native::SparkBatch&
+CgsContainers::Array<BrnParticle::Native::SparkBatch, 4>::GetItem(u32) const;

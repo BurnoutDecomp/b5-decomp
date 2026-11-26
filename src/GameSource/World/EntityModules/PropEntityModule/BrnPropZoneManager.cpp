@@ -44,6 +44,7 @@
 #include "GameSource/World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h" // OutputBuffer_PreScene / _PostPhysics / _PrePhysics
 #include "GameSource/World/EntityModules/PropEntityModule/SharedIO/BrnPropToTrafficInterface.h" // PropToTrafficInterface (SendTrafficLightRestoreEvents)
 #include <vectorintrinsics.h>
+#define CGS_ARTIST_UNITY_BRNPROPZONEMANAGER_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/PropEntityModule/BrnPropZoneManager.cpp"
 
 static const char KAC_ARTIST_ASSERT_FILE[] =
     "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropZoneManager.h";
@@ -319,13 +320,13 @@ namespace BrnWorld
     // marked used, then clear its used bit.
     void PropZoneManager::DeallocatePropInstancesBlock(u32 luStartOfBlock, u32 luSizeOfBlock)
     {
-        CGS_ASSERT(luSizeOfBlock < KU_MAX_PROP_INSTANCES_PER_ZONE,
-                   "luSizeOfBlock < BrnPhysics::Props::KU_MAX_PROP_INSTANCES_PER_ZONE");
-        CGS_ASSERT(luStartOfBlock % KU_SIZE_OF_PROP_ZONE_SLOT == 0,
-                   "luStartOfBlock % KU_SIZE_OF_PROP_ZONE_SLOT == 0");
+        CGS_ASSERT_AT(luSizeOfBlock < KU_MAX_PROP_INSTANCES_PER_ZONE,
+                   "luSizeOfBlock < BrnPhysics::Props::KU_MAX_PROP_INSTANCES_PER_ZONE", CGS_ARTIST_UNITY_BRNPROPZONEMANAGER_CPP_FILE, 650);
+        CGS_ASSERT_AT(luStartOfBlock % KU_SIZE_OF_PROP_ZONE_SLOT == 0,
+                   "luStartOfBlock % KU_SIZE_OF_PROP_ZONE_SLOT == 0", CGS_ARTIST_UNITY_BRNPROPZONEMANAGER_CPP_FILE, 651);
 
         const u32 luSlotIndex = luStartOfBlock / KU_SIZE_OF_PROP_ZONE_SLOT;
-        CGS_ASSERT(maUsedProps.IsBitSet(luSlotIndex), "maUsedProps.IsBitSet(liSlotIndex)");
+        CGS_ASSERT_AT(maUsedProps.IsBitSet(luSlotIndex), "maUsedProps.IsBitSet(liSlotIndex)", CGS_ARTIST_UNITY_BRNPROPZONEMANAGER_CPP_FILE, 653);
         maUsedProps.UnSetBit(luSlotIndex);
     }
 
@@ -335,13 +336,13 @@ namespace BrnWorld
     // The part-pool twin of the above (KU_SIZE_OF_PART_ZONE_SLOT slots, maUsedParts).
     void PropZoneManager::DeallocatePartInstancesBlock(u32 luStartOfBlock, u32 luSizeOfBlock)
     {
-        CGS_ASSERT(luSizeOfBlock < KU_MAX_PROP_PARTS_PER_ZONE,
-                   "luSizeOfBlock < BrnPhysics::Props::KU_MAX_PROP_PARTS_PER_ZONE");
-        CGS_ASSERT(luStartOfBlock % KU_SIZE_OF_PART_ZONE_SLOT == 0,
-                   "luStartOfBlock % KU_SIZE_OF_PART_ZONE_SLOT == 0");
+        CGS_ASSERT_AT(luSizeOfBlock < KU_MAX_PROP_PARTS_PER_ZONE,
+                   "luSizeOfBlock < BrnPhysics::Props::KU_MAX_PROP_PARTS_PER_ZONE", CGS_ARTIST_UNITY_BRNPROPZONEMANAGER_CPP_FILE, 669);
+        CGS_ASSERT_AT(luStartOfBlock % KU_SIZE_OF_PART_ZONE_SLOT == 0,
+                   "luStartOfBlock % KU_SIZE_OF_PART_ZONE_SLOT == 0", CGS_ARTIST_UNITY_BRNPROPZONEMANAGER_CPP_FILE, 670);
 
         const u32 luSlotIndex = luStartOfBlock / KU_SIZE_OF_PART_ZONE_SLOT;
-        CGS_ASSERT(maUsedParts.IsBitSet(luSlotIndex), "maUsedParts.IsBitSet(liSlotIndex)");
+        CGS_ASSERT_AT(maUsedParts.IsBitSet(luSlotIndex), "maUsedParts.IsBitSet(liSlotIndex)", CGS_ARTIST_UNITY_BRNPROPZONEMANAGER_CPP_FILE, 672);
         maUsedParts.UnSetBit(luSlotIndex);
     }
 
@@ -652,7 +653,7 @@ namespace BrnWorld
     // into maPreviouslyHitProps (BitArray<300000>).
     bool PropZoneManager::HasPropBeenHit(u32 luZoneIndex, u32 luPropIndex) const
     {
-        CGS_ASSERT(luZoneIndex < KU_MAX_ZONES, "luZoneIndex < BrnPhysics::Props::KU_MAX_ZONES");
+        CGS_ASSERT_AT(luZoneIndex < KU_MAX_ZONES, "luZoneIndex < BrnPhysics::Props::KU_MAX_ZONES", CGS_ARTIST_FILE, 715);
 
         const u32 luBitIndex = KU_MAX_PROP_INSTANCES_PER_ZONE * luZoneIndex + luPropIndex;
         return maPreviouslyHitProps.IsBitSet(luBitIndex);

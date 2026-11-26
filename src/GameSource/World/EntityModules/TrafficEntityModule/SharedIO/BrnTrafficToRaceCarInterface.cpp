@@ -3,6 +3,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
 #include <cstddef>   // offsetof
+#define CGS_ARTIST_ABS_BRNTRAFFICTORACECARINTERFACE_H_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\SharedIO/BrnTrafficToRaceCarInterface.h"
 
 // BrnTraffic::BrnTrafficIO::TrafficToRaceCarInterface_PreScene member bodies, reconstructed from
 // BURNOUT_X360_ARTIST.XEX. Two producers on the traffic module's pre-scene race-car interface:
@@ -100,9 +101,9 @@ namespace BrnTrafficIO
     // BrnTraffic::TrafficEntityModule::GenerateSympatheticCrasherOutput.
     void TrafficToRaceCarInterface_PreScene::SetSympatheticCrasher(s32 liTrafficCarIndex, bool lbIsCrasher)
     {
-        CGS_ASSERT(liTrafficCarIndex >= 0, "liTrafficCarIndex >= 0");
-        CGS_ASSERT(static_cast<u32>(liTrafficCarIndex) < KU_MAX_STANDARD_TRAFFIC,
-                   "uint32_t(liTrafficCarIndex) < BrnTraffic::KU_MAX_STANDARD_TRAFFIC");
+        CGS_ASSERT_AT(liTrafficCarIndex >= 0, "liTrafficCarIndex >= 0", CGS_ARTIST_ABS_BRNTRAFFICTORACECARINTERFACE_H_FILE, 229);
+        CGS_ASSERT_AT(static_cast<u32>(liTrafficCarIndex) < KU_MAX_STANDARD_TRAFFIC,
+                   "uint32_t(liTrafficCarIndex) < BrnTraffic::KU_MAX_STANDARD_TRAFFIC", CGS_ARTIST_ABS_BRNTRAFFICTORACECARINTERFACE_H_FILE, 230);
 
         if (lbIsCrasher)
         {

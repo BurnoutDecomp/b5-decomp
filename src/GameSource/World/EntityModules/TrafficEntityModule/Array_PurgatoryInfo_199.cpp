@@ -29,4 +29,6 @@
 
 template void CgsContainers::Array<BrnTraffic::PurgatoryInfo, 199>::Append(const BrnTraffic::PurgatoryInfo&);
 template void CgsContainers::Array<BrnTraffic::PurgatoryInfo, 199>::Erase(u32);
-template BrnTraffic::PurgatoryInfo& CgsContainers::Array<BrnTraffic::PurgatoryInfo, 199>::GetItem(u32);
+// ARTIST @0x82753108 is the const GetItem: its asserts bake CgsArray.h:538/539 (const 538/539, non-const
+// 556/557; caller Logger::HashState).
+template const BrnTraffic::PurgatoryInfo& CgsContainers::Array<BrnTraffic::PurgatoryInfo, 199>::GetItem(u32) const;

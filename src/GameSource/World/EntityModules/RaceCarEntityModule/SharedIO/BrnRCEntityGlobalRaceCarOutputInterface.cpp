@@ -127,24 +127,24 @@ EGlobalRaceCarIndex RCEntityGlobalRaceCarOutputInterface::GetGlobalRaceCarIndex(
 // ============================================================================
 bool RCEntityGlobalRaceCarOutputInterface::IsPlayer(EGlobalRaceCarIndex leGlobalRaceCarIndex) const
 {
-    CGS_ASSERT(leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0,     "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0");
-    CGS_ASSERT(leGlobalRaceCarIndex <  E_GLOBAL_RACE_CAR_INDEX_COUNT, "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT");
+    CGS_ASSERT_AT(leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0,     "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 1558);
+    CGS_ASSERT_AT(leGlobalRaceCarIndex <  E_GLOBAL_RACE_CAR_INDEX_COUNT, "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 1559);
     return mIsPlayerFlags.IsBitSet(static_cast<u32>(leGlobalRaceCarIndex));
 }
 
 // X360 0x823B20C8 -- IsRivalAI(EGlobalRaceCarIndex): per-car bit of mIsRivalAIFlags (@+0x940).
 bool RCEntityGlobalRaceCarOutputInterface::IsRivalAI(EGlobalRaceCarIndex leGlobalRaceCarIndex) const
 {
-    CGS_ASSERT(leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0,     "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0");
-    CGS_ASSERT(leGlobalRaceCarIndex <  E_GLOBAL_RACE_CAR_INDEX_COUNT, "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT");
+    CGS_ASSERT_AT(leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0,     "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 1568);
+    CGS_ASSERT_AT(leGlobalRaceCarIndex <  E_GLOBAL_RACE_CAR_INDEX_COUNT, "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 1569);
     return mIsRivalAIFlags.IsBitSet(static_cast<u32>(leGlobalRaceCarIndex));
 }
 
 // X360 0x823B2218 -- IsNetwork(EGlobalRaceCarIndex): per-car bit of mIsNetworkFlags (@+0x948).
 bool RCEntityGlobalRaceCarOutputInterface::IsNetwork(EGlobalRaceCarIndex leGlobalRaceCarIndex) const
 {
-    CGS_ASSERT(leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0,     "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0");
-    CGS_ASSERT(leGlobalRaceCarIndex <  E_GLOBAL_RACE_CAR_INDEX_COUNT, "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT");
+    CGS_ASSERT_AT(leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0,     "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 1589);
+    CGS_ASSERT_AT(leGlobalRaceCarIndex <  E_GLOBAL_RACE_CAR_INDEX_COUNT, "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 1590);
     return mIsNetworkFlags.IsBitSet(static_cast<u32>(leGlobalRaceCarIndex));
 }
 
@@ -214,8 +214,8 @@ CgsContainers::BitArray<35u> RCEntityGlobalRaceCarOutputInterface::GetGlobalRace
 // X360 0x8231CAF8 -- IsInRange(EGlobalRaceCarIndex): per-car bit of mIsInRangeFlags (@+0x960).
 bool RCEntityGlobalRaceCarOutputInterface::IsInRange(EGlobalRaceCarIndex leGlobalRaceCarIndex) const
 {
-    CGS_ASSERT(leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0,     "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0");
-    CGS_ASSERT(leGlobalRaceCarIndex <  E_GLOBAL_RACE_CAR_INDEX_COUNT, "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT");
+    CGS_ASSERT_AT(leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0,     "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 1620);
+    CGS_ASSERT_AT(leGlobalRaceCarIndex <  E_GLOBAL_RACE_CAR_INDEX_COUNT, "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 1621);
     return mIsInRangeFlags.IsBitSet(static_cast<u32>(leGlobalRaceCarIndex));
 }
 

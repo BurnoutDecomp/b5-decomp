@@ -1,4 +1,4 @@
-// Array<BrnTraffic::CrashingThingData, 168>::operator[] (non-const) @ 0x8270BE68
+// Array<BrnTraffic::CrashingThingData, 168>::GetItem const @ 0x8270BE68
 //   (BrnTrafficEntityModule::UpdateParams_TryStartSympatheticCrashing / _TryAvoidCrashing)
 //
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. The generic Array<T,N>::operator[] body is
@@ -23,7 +23,9 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"  // Array<T,N>::operator[] (inline generic)
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h" // CrashingThingData (32-byte element)
 
-template BrnTraffic::CrashingThingData& CgsContainers::Array<BrnTraffic::CrashingThingData, 168>::operator[](u32);
+// ARTIST @0x8270BE68 is the const GetItem: its asserts bake CgsArray.h:538/539 (const 538/539, non-const
+// 556/557; caller UpdateParams_TryStartSympatheticCrashing / TryAvoidCrashing).
+template const BrnTraffic::CrashingThingData& CgsContainers::Array<BrnTraffic::CrashingThingData, 168>::GetItem(u32) const;
 
 // Array<BrnTraffic::CrashingThingData, 168>::Append @ 0x8270BCD8
 //   (BrnTraffic::TrafficEntityModule::UpdateParams_BuildListOfCrashingThings)

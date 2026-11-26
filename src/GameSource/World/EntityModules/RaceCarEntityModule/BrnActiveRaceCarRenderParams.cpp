@@ -168,7 +168,7 @@ void ActiveRaceCar::RenderParams::SetWheelScale(u32 luWheel, const Vector3& lrSc
 // down to bit 0, mask. Word index = luPart>>6, bit index = luPart&63.
 bool ActiveRaceCar::RenderParams::IsPartVisible(u8 lu8Part) const
 {
-    CGS_ASSERT(lu8Part < KU_MAX_BODY_PARTS_PER_RACE_CAR, "( 0 <= n ) && ( 96 > n )");
+    CGS_ASSERT_AT(lu8Part < KU_MAX_BODY_PARTS_PER_RACE_CAR, "( 0 <= n ) && ( 96 > n )", CGS_ARTIST_FILE, 1988);
     return mBodyPartVisibility.IsBitSet(lu8Part);
 }
 

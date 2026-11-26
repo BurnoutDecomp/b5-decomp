@@ -1,6 +1,7 @@
 #include "GameSource/World/AI/SharedIO/BrnRaceCarAIInterfaces.h"
 #include "GameSource/World/AI/BrnAICar.h"          // BrnAI::AICar / Route / RouteNode accessors
 #include "GameSource/World/AI/Route/BrnRoute.h"    // BrnAI::Route / RouteNode
+#define CGS_ARTIST_ABS_BRNRACECARAIINTERFACES_H_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\SharedIO/BrnRaceCarAIInterfaces.h"
 
 // Out-of-line bodies of BrnAI::AIModuleIO::AIRaceCarInterface's 7-function TU: the
 // inactive/out-of-range per-car snapshot published by the AI module each frame
@@ -16,11 +17,11 @@ namespace AIModuleIO
     void AIRaceCarInterface::UpdateInactiveRaceCarData(EGlobalRaceCarIndex leGlobalRaceCarIndex,
                                                        Vector3 lPosition, Vector3 lAt)
     {
-        CGS_ASSERT((leGlobalRaceCarIndex < BrnWorld::KI_MAX_OUT_OF_RANGE_RACE_CARS) &&
+        CGS_ASSERT_AT((leGlobalRaceCarIndex < BrnWorld::KI_MAX_OUT_OF_RANGE_RACE_CARS) &&
                        (leGlobalRaceCarIndex != E_GLOBAL_RACE_CAR_INDEX_INVALID),
-                   "( leGlobalRaceCarIndex < BrnWorld::KI_MAX_OUT_OF_RANGE_RACE_CARS ) && ( leGlobalRaceCarIndex != E_GLOBAL_RACE_CAR_INDEX_INVALID )");
-        CGS_ASSERT(!mSetRaceCars.IsBitSet(static_cast<u32>(leGlobalRaceCarIndex)),
-                   "Inactive race car AI data being set twice");
+                   "( leGlobalRaceCarIndex < BrnWorld::KI_MAX_OUT_OF_RANGE_RACE_CARS ) && ( leGlobalRaceCarIndex != E_GLOBAL_RACE_CAR_INDEX_INVALID )", CGS_ARTIST_ABS_BRNRACECARAIINTERFACES_H_FILE, 904);
+        CGS_ASSERT_AT(!mSetRaceCars.IsBitSet(static_cast<u32>(leGlobalRaceCarIndex)),
+                   "Inactive race car AI data being set twice", CGS_ARTIST_ABS_BRNRACECARAIINTERFACES_H_FILE, 905);
 
         mSetRaceCars.SetBit(static_cast<u32>(leGlobalRaceCarIndex));
 
@@ -32,8 +33,8 @@ namespace AIModuleIO
     void AIRaceCarInterface::UpdateAllRaceCarData(EGlobalRaceCarIndex leGlobalRaceCarIndex,
                                                   bool lbCanPassThroughTraffic)
     {
-        CGS_ASSERT(leGlobalRaceCarIndex < BrnWorld::KI_MAX_OUT_OF_RANGE_RACE_CARS,
-                   "leGlobalRaceCarIndex < BrnWorld::KI_MAX_OUT_OF_RANGE_RACE_CARS");
+        CGS_ASSERT_AT(leGlobalRaceCarIndex < BrnWorld::KI_MAX_OUT_OF_RANGE_RACE_CARS,
+                   "leGlobalRaceCarIndex < BrnWorld::KI_MAX_OUT_OF_RANGE_RACE_CARS", CGS_ARTIST_ABS_BRNRACECARAIINTERFACES_H_FILE, 924);
 
         if (lbCanPassThroughTraffic)
         {
@@ -67,8 +68,8 @@ namespace AIModuleIO
     // @0x822B2DC0  True iff UpdateInactiveRaceCarData has recorded this car.
     bool AIRaceCarInterface::WasInactiveRaceCarUpdated(s8 liRaceCar) const
     {
-        CGS_ASSERT(liRaceCar < BrnWorld::KI_MAX_OUT_OF_RANGE_RACE_CARS,
-                   "liRaceCar < BrnWorld::KI_MAX_OUT_OF_RANGE_RACE_CARS");
+        CGS_ASSERT_AT(liRaceCar < BrnWorld::KI_MAX_OUT_OF_RANGE_RACE_CARS,
+                   "liRaceCar < BrnWorld::KI_MAX_OUT_OF_RANGE_RACE_CARS", CGS_ARTIST_ABS_BRNRACECARAIINTERFACES_H_FILE, 978);
 
         return mSetRaceCars.IsBitSet(static_cast<u32>(liRaceCar));
     }
@@ -76,10 +77,10 @@ namespace AIModuleIO
     // @0x822B3010  The recorded world position of an updated inactive car.
     Vector3 AIRaceCarInterface::GetInactiveRaceCarPosition(s8 liRaceCar) const
     {
-        CGS_ASSERT(liRaceCar < BrnWorld::KI_MAX_OUT_OF_RANGE_RACE_CARS,
-                   "liRaceCar < BrnWorld::KI_MAX_OUT_OF_RANGE_RACE_CARS");
-        CGS_ASSERT(mSetRaceCars.IsBitSet(static_cast<u32>(liRaceCar)),
-                   "mSetRaceCars.IsBitSet( liRaceCar )");
+        CGS_ASSERT_AT(liRaceCar < BrnWorld::KI_MAX_OUT_OF_RANGE_RACE_CARS,
+                   "liRaceCar < BrnWorld::KI_MAX_OUT_OF_RANGE_RACE_CARS", CGS_ARTIST_ABS_BRNRACECARAIINTERFACES_H_FILE, 995);
+        CGS_ASSERT_AT(mSetRaceCars.IsBitSet(static_cast<u32>(liRaceCar)),
+                   "mSetRaceCars.IsBitSet( liRaceCar )", CGS_ARTIST_ABS_BRNRACECARAIINTERFACES_H_FILE, 996);
 
         return maPositions[liRaceCar];
     }
@@ -87,10 +88,10 @@ namespace AIModuleIO
     // @0x822B3178  The recorded facing ("at") of an updated inactive car.
     Vector3 AIRaceCarInterface::GetInactiveRaceCarAt(s8 liRaceCar) const
     {
-        CGS_ASSERT(liRaceCar < BrnWorld::KI_MAX_OUT_OF_RANGE_RACE_CARS,
-                   "liRaceCar < BrnWorld::KI_MAX_OUT_OF_RANGE_RACE_CARS");
-        CGS_ASSERT(mSetRaceCars.IsBitSet(static_cast<u32>(liRaceCar)),
-                   "mSetRaceCars.IsBitSet( liRaceCar )");
+        CGS_ASSERT_AT(liRaceCar < BrnWorld::KI_MAX_OUT_OF_RANGE_RACE_CARS,
+                   "liRaceCar < BrnWorld::KI_MAX_OUT_OF_RANGE_RACE_CARS", CGS_ARTIST_ABS_BRNRACECARAIINTERFACES_H_FILE, 1004);
+        CGS_ASSERT_AT(mSetRaceCars.IsBitSet(static_cast<u32>(liRaceCar)),
+                   "mSetRaceCars.IsBitSet( liRaceCar )", CGS_ARTIST_ABS_BRNRACECARAIINTERFACES_H_FILE, 1005);
 
         return maAts[liRaceCar];
     }
@@ -98,8 +99,8 @@ namespace AIModuleIO
     // @0x822B2EE8  True iff the car is permitted to pass through traffic.
     bool AIRaceCarInterface::CanPassThroughTraffic(s8 liRaceCar) const
     {
-        CGS_ASSERT(liRaceCar < BrnWorld::KI_MAX_OUT_OF_RANGE_RACE_CARS,
-                   "liRaceCar < BrnWorld::KI_MAX_OUT_OF_RANGE_RACE_CARS");
+        CGS_ASSERT_AT(liRaceCar < BrnWorld::KI_MAX_OUT_OF_RANGE_RACE_CARS,
+                   "liRaceCar < BrnWorld::KI_MAX_OUT_OF_RANGE_RACE_CARS", CGS_ARTIST_ABS_BRNRACECARAIINTERFACES_H_FILE, 987);
 
         return mCanPassThroughTraffic.IsBitSet(static_cast<u32>(liRaceCar));
     }

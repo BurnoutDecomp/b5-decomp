@@ -49,6 +49,7 @@
 
 // includes folded in from the BrnPropCellManager_w*.cpp partfiles (2026-09-15)
 #include "rw/physics/rigidbody.h"                                   // rw::physics::FROZEN_BODY
+#define CGS_ARTIST_BRNPROPCELLMANAGER_H_FILE "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropCellManager.h"
 
 namespace BrnWorld
 {
@@ -870,18 +871,18 @@ namespace BrnWorld
     // < 15 bounds path (the CgsBitArray IsBitSet[] / UnSetBit bounds checks, inlined here).
     void PropCellManager::FreePhysicalPropSlot(s32 liPhysicsIndex)
     {
-        CGS_ASSERT(liPhysicsIndex != -1, "liProp != -1");                           // BrnPropCellManager.h:611
-        CGS_ASSERT(mPhysicalProps.IsBitSet(static_cast<u32>(liPhysicsIndex)),
-                   "mPhysicalProps.IsBitSet( liProp )");                            // BrnPropCellManager.h:612
+        CGS_ASSERT_AT(liPhysicsIndex != -1, "liProp != -1", CGS_ARTIST_BRNPROPCELLMANAGER_H_FILE, 611);                           // BrnPropCellManager.h:611
+        CGS_ASSERT_AT(mPhysicalProps.IsBitSet(static_cast<u32>(liPhysicsIndex)),
+                   "mPhysicalProps.IsBitSet( liProp )", CGS_ARTIST_BRNPROPCELLMANAGER_H_FILE, 612);                            // BrnPropCellManager.h:612
         mPhysicalProps.UnSetBit(static_cast<u32>(liPhysicsIndex));
     }
 
     // @ 0x822BC0A0. Release a physical-part slot (30-bit array; asserts liPart != -1).
     void PropCellManager::FreePhysicalPartSlot(s32 liPhysicsIndex)
     {
-        CGS_ASSERT(liPhysicsIndex != -1, "liPart!= -1");                            // BrnPropCellManager.h:624
-        CGS_ASSERT(mPhysicalParts.IsBitSet(static_cast<u32>(liPhysicsIndex)),
-                   "mPhysicalParts.IsBitSet( liPart )");                            // BrnPropCellManager.h:625
+        CGS_ASSERT_AT(liPhysicsIndex != -1, "liPart!= -1", CGS_ARTIST_BRNPROPCELLMANAGER_H_FILE, 624);                            // BrnPropCellManager.h:624
+        CGS_ASSERT_AT(mPhysicalParts.IsBitSet(static_cast<u32>(liPhysicsIndex)),
+                   "mPhysicalParts.IsBitSet( liPart )", CGS_ARTIST_BRNPROPCELLMANAGER_H_FILE, 625);                            // BrnPropCellManager.h:625
         mPhysicalParts.UnSetBit(static_cast<u32>(liPhysicsIndex));
     }
 
@@ -889,16 +890,16 @@ namespace BrnWorld
     // The asm asserts the < 15 bounds (inlined IsBitSet[]) then that the slot bit is set.
     void PropCellManager::IncrementPropsTimeInSim(u32 luPhysicsIndex, f32 lfTimeStep)
     {
-        CGS_ASSERT(mPhysicalProps.IsBitSet(luPhysicsIndex),
-                   "mPhysicalProps.IsBitSet( liPhysicalPropIndex )");               // BrnPropCellManager.h:639
+        CGS_ASSERT_AT(mPhysicalProps.IsBitSet(luPhysicsIndex),
+                   "mPhysicalProps.IsBitSet( liPhysicalPropIndex )", CGS_ARTIST_BRNPROPCELLMANAGER_H_FILE, 639);               // BrnPropCellManager.h:639
         maPhysicalPropParams[luPhysicsIndex].mfTimeInSim += lfTimeStep;
     }
 
     // @ 0x822BC380. Accumulate the frame time step into a physical part's time-in-sim.
     void PropCellManager::IncrementPartsTimeInSim(u32 luPhysicsIndex, f32 lfTimeStep)
     {
-        CGS_ASSERT(mPhysicalParts.IsBitSet(luPhysicsIndex),
-                   "mPhysicalParts.IsBitSet( liPhysicalPartIndex )");               // BrnPropCellManager.h:652
+        CGS_ASSERT_AT(mPhysicalParts.IsBitSet(luPhysicsIndex),
+                   "mPhysicalParts.IsBitSet( liPhysicalPartIndex )", CGS_ARTIST_BRNPROPCELLMANAGER_H_FILE, 652);               // BrnPropCellManager.h:652
         maPhysicalPartParams[luPhysicsIndex].mfTimeInSim += lfTimeStep;
     }
 

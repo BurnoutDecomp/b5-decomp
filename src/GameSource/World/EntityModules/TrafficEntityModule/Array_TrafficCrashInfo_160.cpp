@@ -1,5 +1,5 @@
 // Array<BrnTraffic::TrafficCrashInfo, 160>::Erase           @ 0x8270B230
-// Array<BrnTraffic::TrafficCrashInfo, 160>::operator[] const (GetI) @ 0x8270CF08
+// Array<BrnTraffic::TrafficCrashInfo, 160>::GetItem (non-const) @ 0x8270CF08
 //
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. The generic Array<T,N>::Erase / indexed-accessor
 // bodies are already committed inline in CgsArray.h; this TU is the thin explicit instantiation
@@ -20,4 +20,6 @@
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h" // TrafficCrashInfo (16-byte element)
 
 template void CgsContainers::Array<BrnTraffic::TrafficCrashInfo, 160>::Erase(u32);
-template const BrnTraffic::TrafficCrashInfo& CgsContainers::Array<BrnTraffic::TrafficCrashInfo, 160>::operator[](u32) const;
+// ARTIST @0x8270CF08 is the non-const GetItem: its asserts bake CgsArray.h:556/557 (const 538/539, non-const
+// 556/557; caller GenerateCrashedVehicleEvents et al.).
+template BrnTraffic::TrafficCrashInfo& CgsContainers::Array<BrnTraffic::TrafficCrashInfo, 160>::GetItem(u32);

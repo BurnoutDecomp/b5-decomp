@@ -66,13 +66,13 @@ namespace AIModuleIO
                                                         Vector3 lDirection,
                                                         EActiveRaceCarIndex leActiveRaceCarIndex)
     {
-        CGS_ASSERT(rw::math::vpu::IsValid(lPosition), "RwMath::IsValid( lPosition )");
-        CGS_ASSERT(!mbPlayerDataSet, "!mbPlayerDataSet");
+        CGS_ASSERT_AT(rw::math::vpu::IsValid(lPosition), "RwMath::IsValid( lPosition )", KAC_ARTIST_ASSERT_FILE, 561);
+        CGS_ASSERT_AT(!mbPlayerDataSet, "!mbPlayerDataSet", KAC_ARTIST_ASSERT_FILE, 562);
 
-        mePlayerActiveRaceCarIndex = leActiveRaceCarIndex;
+        mbPlayerDataSet = true;
         mPlayerCarPosition = lPosition;
         mPlayerCarDirection = lDirection;
-        mbPlayerDataSet = true;
+        mePlayerActiveRaceCarIndex = leActiveRaceCarIndex;
     }
 
     // @0x822FD7E8  Queue a "set up this out-of-range car" management event.
@@ -139,12 +139,12 @@ namespace AIModuleIO
     // @0x8276BF18  The active car's AI section index.
     u16 RaceCarAIInterface::GetActiveRaceCarSection(EActiveRaceCarIndex leActiveRaceCarIndex) const
     {
-        CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-                   "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-        CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
-        CGS_ASSERT(mSetActiveRaceCars.IsBitSet(leActiveRaceCarIndex),
-                   "mSetActiveRaceCars.IsBitSet( leActiveRaceCarIndex )");
+        CGS_ASSERT_AT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+                   "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 747);
+        CGS_ASSERT_AT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 748);
+        CGS_ASSERT_AT(mSetActiveRaceCars.IsBitSet(leActiveRaceCarIndex),
+                   "mSetActiveRaceCars.IsBitSet( leActiveRaceCarIndex )", KAC_ARTIST_ASSERT_FILE, 749);
 
         return mauSectionIndices[leActiveRaceCarIndex];
     }
@@ -152,12 +152,12 @@ namespace AIModuleIO
     // @0x8276C0A0  Is the active car airborne?
     bool RaceCarAIInterface::IsActiveRaceCarInAir(EActiveRaceCarIndex leActiveRaceCarIndex) const
     {
-        CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-                   "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-        CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
-        CGS_ASSERT(mSetActiveRaceCars.IsBitSet(leActiveRaceCarIndex),
-                   "mSetActiveRaceCars.IsBitSet( leActiveRaceCarIndex )");
+        CGS_ASSERT_AT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+                   "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 757);
+        CGS_ASSERT_AT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 758);
+        CGS_ASSERT_AT(mSetActiveRaceCars.IsBitSet(leActiveRaceCarIndex),
+                   "mSetActiveRaceCars.IsBitSet( leActiveRaceCarIndex )", KAC_ARTIST_ASSERT_FILE, 759);
 
         return mInAirBits.IsBitSet(leActiveRaceCarIndex);
     }
@@ -165,12 +165,12 @@ namespace AIModuleIO
     // @0x8276C2D0  Is the active car crashing?
     bool RaceCarAIInterface::IsActiveRaceCarCrashing(EActiveRaceCarIndex leActiveRaceCarIndex) const
     {
-        CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-                   "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-        CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
-        CGS_ASSERT(mSetActiveRaceCars.IsBitSet(leActiveRaceCarIndex),
-                   "mSetActiveRaceCars.IsBitSet( leActiveRaceCarIndex )");
+        CGS_ASSERT_AT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+                   "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 767);
+        CGS_ASSERT_AT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 768);
+        CGS_ASSERT_AT(mSetActiveRaceCars.IsBitSet(leActiveRaceCarIndex),
+                   "mSetActiveRaceCars.IsBitSet( leActiveRaceCarIndex )", KAC_ARTIST_ASSERT_FILE, 769);
 
         return mCrashingBits.IsBitSet(leActiveRaceCarIndex);
     }
@@ -178,12 +178,12 @@ namespace AIModuleIO
     // @0x8276C500  Is the active car in showtime?
     bool RaceCarAIInterface::IsActiveRaceCarInShowtime(EActiveRaceCarIndex leActiveRaceCarIndex) const
     {
-        CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-                   "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-        CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
-        CGS_ASSERT(mSetActiveRaceCars.IsBitSet(leActiveRaceCarIndex),
-                   "mSetActiveRaceCars.IsBitSet( leActiveRaceCarIndex )");
+        CGS_ASSERT_AT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+                   "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 777);
+        CGS_ASSERT_AT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 778);
+        CGS_ASSERT_AT(mSetActiveRaceCars.IsBitSet(leActiveRaceCarIndex),
+                   "mSetActiveRaceCars.IsBitSet( leActiveRaceCarIndex )", KAC_ARTIST_ASSERT_FILE, 779);
 
         return mShowtimeBits.IsBitSet(leActiveRaceCarIndex);
     }
@@ -191,12 +191,12 @@ namespace AIModuleIO
     // @0x8276C730  Is the active car on the start line?
     bool RaceCarAIInterface::IsActiveRaceCarOnStartLine(EActiveRaceCarIndex leActiveRaceCarIndex) const
     {
-        CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-                   "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-        CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
-        CGS_ASSERT(mSetActiveRaceCars.IsBitSet(leActiveRaceCarIndex),
-                   "mSetActiveRaceCars.IsBitSet( leActiveRaceCarIndex )");
+        CGS_ASSERT_AT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+                   "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 787);
+        CGS_ASSERT_AT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 788);
+        CGS_ASSERT_AT(mSetActiveRaceCars.IsBitSet(leActiveRaceCarIndex),
+                   "mSetActiveRaceCars.IsBitSet( leActiveRaceCarIndex )", KAC_ARTIST_ASSERT_FILE, 789);
 
         return mOnStartLineBits.IsBitSet(leActiveRaceCarIndex);
     }
@@ -204,12 +204,12 @@ namespace AIModuleIO
     // @0x8276C960  Is the active car drifting?
     bool RaceCarAIInterface::IsActiveRaceCarDrifting(EActiveRaceCarIndex leActiveRaceCarIndex) const
     {
-        CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-                   "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-        CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
-        CGS_ASSERT(mSetActiveRaceCars.IsBitSet(leActiveRaceCarIndex),
-                   "mSetActiveRaceCars.IsBitSet( leActiveRaceCarIndex )");
+        CGS_ASSERT_AT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+                   "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 798);
+        CGS_ASSERT_AT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 799);
+        CGS_ASSERT_AT(mSetActiveRaceCars.IsBitSet(leActiveRaceCarIndex),
+                   "mSetActiveRaceCars.IsBitSet( leActiveRaceCarIndex )", KAC_ARTIST_ASSERT_FILE, 800);
 
         return mDriftingBits.IsBitSet(leActiveRaceCarIndex);
     }
@@ -217,12 +217,12 @@ namespace AIModuleIO
     // @0x8276CB90  Is the active car touching another car?
     bool RaceCarAIInterface::IsActiveRaceCarTouchingAnother(EActiveRaceCarIndex leActiveRaceCarIndex) const
     {
-        CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-                   "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-        CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
-        CGS_ASSERT(mSetActiveRaceCars.IsBitSet(leActiveRaceCarIndex),
-                   "mSetActiveRaceCars.IsBitSet( leActiveRaceCarIndex )");
+        CGS_ASSERT_AT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+                   "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 808);
+        CGS_ASSERT_AT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 809);
+        CGS_ASSERT_AT(mSetActiveRaceCars.IsBitSet(leActiveRaceCarIndex),
+                   "mSetActiveRaceCars.IsBitSet( leActiveRaceCarIndex )", KAC_ARTIST_ASSERT_FILE, 810);
 
         return mRaceCarContactBits.IsBitSet(leActiveRaceCarIndex);
     }
@@ -230,12 +230,12 @@ namespace AIModuleIO
     // @0x8276CDC0  Is the active car touching the player?
     bool RaceCarAIInterface::IsActiveRaceCarTouchingPlayer(EActiveRaceCarIndex leActiveRaceCarIndex) const
     {
-        CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-                   "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-        CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
-        CGS_ASSERT(mSetActiveRaceCars.IsBitSet(leActiveRaceCarIndex),
-                   "mSetActiveRaceCars.IsBitSet( leActiveRaceCarIndex )");
+        CGS_ASSERT_AT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+                   "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 818);
+        CGS_ASSERT_AT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 819);
+        CGS_ASSERT_AT(mSetActiveRaceCars.IsBitSet(leActiveRaceCarIndex),
+                   "mSetActiveRaceCars.IsBitSet( leActiveRaceCarIndex )", KAC_ARTIST_ASSERT_FILE, 820);
 
         return mPlayerContactBits.IsBitSet(leActiveRaceCarIndex);
     }
