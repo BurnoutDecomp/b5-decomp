@@ -140,7 +140,7 @@ namespace BrnReplays
         // mutex's first member). Modelled as an opaque blob reached by name -- same
         // pattern as the sibling GPUDiskWriteStream's lock; the real threading type lands
         // with the mutex layer.
-        CGS_ALIGN(4) u8 mMutex[40];                        // +0x000
+        CGS_ALIGN(4) u8 mMutex[0x24];                      // +0x000 (ARTIST: macFileName at +0x24)
         char            macFileName[256];                    // X360 +0x024 stream file name
         char*           mpBuffer;                            // X360 +0x124 ring backing store
         s32             miBufferSize;                        // X360 +0x128
@@ -156,23 +156,28 @@ namespace BrnReplays
         s32             mUnidentified13C;                    // ARTIST Construct stores -1; role unknown
         // The compound device file handle {device, device-private handle}. The console packed
         // the pair into the two words here; this is the typed value itself.
+        // DWARF h:140..154 declares the stream state below volatile (it is shared with the device
+        // callbacks); ARTIST re-reads meStatus at each test (Service 0x82659DE8/0x82659DF4).
         CgsFileSystem::Handle mHandle;                       // +0x140 open device file handle
         ReadStreamBlock maBlocks[KI_MAX_STREAM_BLOCKS];      // X360 +0x148 the ring
+        // ARTIST: the 32 x 0x20 ring ends at +0x548 but the next field is at +0x550; no ARTIST
+        // DiskReadStream function reads +0x548..+0x54F. Kept opaque.
+        u8              maUnaccounted548[8];                 // X360 +0x548
         u64             muLastReadSize;                      // X360 +0x550; OnRead's full completion size
-        s32             miOutputBlock;                       // X360 +0x558 next slot to consume
+        volatile s32    miOutputBlock;                       // X360 +0x558 next slot to consume
         bool            mbLockedForRead;                     // X360 +0x55C locked by a reader
         s64             miReadPosition;                      // X360 +0x560 playback read cursor
-        s32             miInputBlock;                        // X360 +0x568 next slot to fill
+        volatile s32    miInputBlock;                        // X360 +0x568 next slot to fill
         s32             miInputRequestCount;                 // X360 +0x56C async reads outstanding
-        s64             miNextInputPosition;                 // X360 +0x570 file pos of next read (wraps)
+        volatile s64    miNextInputPosition;                 // X360 +0x570 file pos of next read (wraps)
         bool            mbServiced;                          // X360 +0x578 service settled flag
-        bool            mbWaitingToClose;                    // X360 +0x579 close requested
-        s32             miBlocksUsed;                        // X360 +0x57C buffered slot count
+        volatile bool   mbWaitingToClose;                    // X360 +0x579 close requested
+        volatile s32    miBlocksUsed;                        // X360 +0x57C buffered slot count
         s32             miCurrentPriority;                   // X360 +0x580 current file priority
-        bool            mbAdjustingRange;                    // X360 +0x584 range change pending
-        EStreamStatus   meStatus;                            // X360 +0x588 lifecycle status
-        s32             miPendingOperationCount;             // X360 +0x58C device ops outstanding
-        s32             miLoopStart;                         // X360 +0x590 loop window start
-        s32             miLoopEnd;                           // X360 +0x594 loop window end
+        volatile bool   mbAdjustingRange;                    // X360 +0x584 range change pending
+        volatile EStreamStatus meStatus;                            // X360 +0x588 lifecycle status
+        volatile s32    miPendingOperationCount;             // X360 +0x58C device ops outstanding
+        volatile s32    miLoopStart;                         // X360 +0x590 loop window start
+        volatile s32    miLoopEnd;                           // X360 +0x594 loop window end
     };
 }
