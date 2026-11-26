@@ -112,10 +112,15 @@ struct AptRenderItem
 
     // The base render hooks are empty (@0x7E49A8/0x7E499C/0x7E49A4/0x7E49A0); each
     // character subtype (Shape/Sprite/Button/Text/...) overrides Render to draw.
-    virtual void Render(AptRenderingContext* pCtx, AptMaskRenderOperation eOp, int nTick) const;
+    // Slot order from ARTIST's derived vtables:
+    // 0x821458B4 overrides only slot 4 (Render, 0x82AEFAD0), the sprite item 0x82145898
+    // overrides slots 1-3 (PushRenderData 0x82AEF300, PushRenderDataAbsolute 0x82AEF378,
+    // PopRenderData 0x82AEBFD0); AptRenderLeaf 0x82AD98B4/0x82AD98D4/0x82AD98FC dispatches
+    // +0x04 / +0x10 / +0x0C.
     virtual void PushRenderData(AptRenderingContext* pCtx, AptMaskRenderOperation eOp, int nTick) const;
-    virtual void PopRenderData(AptRenderingContext* pCtx, AptMaskRenderOperation eOp, int nTick) const;
     virtual void PushRenderDataAbsolute(AptRenderingContext* pCtx) const;
+    virtual void PopRenderData(AptRenderingContext* pCtx, AptMaskRenderOperation eOp, int nTick) const;
+    virtual void Render(AptRenderingContext* pCtx, AptMaskRenderOperation eOp, int nTick) const;
 
     // ---- visual state -----------------------------------------------------
     const AptMatrix* GetPositionMatrixConst() const;      // @0x7DFB60
@@ -132,8 +137,8 @@ struct AptRenderItem
     // this one: the position + colour transforms (lazily (re)allocated, or reset to
     // identity when the source has none), the clip depth, and the isVisible flag.
     // (Used by AptCIH::ReplaceZombieChild to carry a swapped node's look over.)
-    // Virtual: ARTIST's AptRenderItem vtable 0x821455D8 is Clone, Render, PushRenderData,
-    // PopRenderData, PushRenderDataAbsolute, CopyRenderDataFrom (+0x14, the slot its
+    // Virtual: ARTIST's AptRenderItem vtable 0x821455D8 is Clone, PushRenderData,
+    // PushRenderDataAbsolute, PopRenderData, Render, CopyRenderDataFrom (+0x14, the slot its
     // callers dispatch through), then the deleting destructor (+0x18, 0x82AEF2B0).
     virtual void CopyRenderDataFrom(const AptRenderItem* pSource);
 
