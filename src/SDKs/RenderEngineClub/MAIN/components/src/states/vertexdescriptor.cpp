@@ -150,7 +150,7 @@ void VertexDescriptor::Release(VertexDescriptorData* lpData)
 {
     if (lpData->mpDeclaration != 0)
     {
-        sub_82B61F90(lpData);
+        Device::UnSetResource(lpData);   // ARTIST 0x82B61F90
         lpData->mpDeclaration->Release();
         lpData->mpDeclaration = 0;
     }

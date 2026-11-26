@@ -17,8 +17,7 @@
 //   TextField::OutputAptData          @0x824E52B8
 //   TextField::SetText                @0x824E7240
 //   TextField::SetLocalisedText       @0x824E7418
-//   TextField::SetLocalisedText(int)  @0x824E7708 (ledger-unnamed sub_; + its free
-//                                      forwarder spelling)
+//   TextField::SetLocalisedText(int)  @0x824E7708 (IDA sub_824E7708; identified in the ledger)
 // (SetColour @0x82481E48 / operator= @0x824470F0 are their own ledger functions --
 // not part of this TU's export set.)
 
@@ -299,19 +298,6 @@ bool TextField::SetLocalisedText(const char* lpacText,
     SetDatabaseText(lacFormatted);
     OutputAptData();
     return true;
-}
-
-// The ledger-named free shape of the integer SetLocalisedText: the consumer TU
-// (BrnShowtimeInstantResults.cpp) declared the un-named export as a free function
-// over the field pointer before the member homing landed; forward it so both
-// spellings resolve to the one body above.
-int sub_824E7708(TextField* lpField, s32 liValue, s32 liFormatType)
-{
-    return lpField->SetLocalisedText(
-               liValue,
-               static_cast<CgsLanguage::LanguageManager::ParameterFormatType>(liFormatType))
-               ? 1
-               : 0;
 }
 
 }

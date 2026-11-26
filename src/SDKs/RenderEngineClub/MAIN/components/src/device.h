@@ -227,6 +227,12 @@ namespace renderengine
 
         // ARTIST 82B61F08: remove every texture binding of this resource.
         static void UnSetResource(D3DResource* lpResource);
+        // ARTIST 82B61F90: clear the vertex declaration when this descriptor's is bound.
+        // PROVISIONAL NAME: no DWARF/PS3/SDK name found; ARTIST 0x82B61F90 (IDA sub_82B61F90).
+        // Named as an UnSetResource overload: it lies in device.cpp's run of resource unbinders
+        // between UnSetResource(D3DResource*) 0x82B61F08 and the ProgramBufferData overload
+        // 0x82B62088, and has their shape (D3D*_IsSet on the captured device, clear the binding).
+        static void UnSetResource(const VertexDescriptorData* lpDescriptor);
         static void UnSetResource(const ProgramBufferData* lpProgram);
 
     protected:
@@ -244,7 +250,3 @@ namespace renderengine
     CGS_STATIC_ASSERT((sizeof(Device::Parameters) == 0x64), "ARTIST device creation parameters");
     CGS_STATIC_ASSERT((sizeof(D3DVIDEO_SCALER_PARAMETERS) == 0x1C), "ARTIST SDK video scaler");
 }
-
-// ARTIST82B61F90 has no recovered debug name or namespace. It unbinds the
-// descriptor's D3D declaration when that resource is set on the captured device.
-void sub_82B61F90(const renderengine::VertexDescriptorData* lpDescriptor);

@@ -15,8 +15,8 @@
 // definition here):
 //   * AS_GetStateI is the integer sibling accessor -- bodied below from the
 //     same +0x44/+0x08 reads the float accessor attests.
-//   * sub_82C22190(value, buffer) -- the SSM value->text trace formatter; the
-//     CompileGet* getters call it to fill the 80-byte trace buffer.
+//   * XGRAPHICS::FloatToString(value, buffer) (ARTIST 0x82C22190) -- the trace
+//     formatter the CompileGet* getters call to fill the 80-byte trace buffer.
 //   * the off_82FA5xxx state-name pointers -- the per-state debug-name strings
 //     the optional trace callback prints; their CONTENTS live in un-recovered
 //     X360 rodata, so they are referenced through extern symbols (the pointer is
@@ -25,10 +25,22 @@
 //     header builders SetBaseTextureHeader forwards to.
 // ===========================================================================
 
-// ---- un-homed externals referenced verbatim from the attested asm -----------
-extern "C" int  sub_82C22190(int aiValue, void* apTextBuffer); // SSM value->text
-extern "C" int  sub_82C217C8(int aiSentinel, int aiItem);      // list splice
-extern "C" int* sub_82C21750(int aiPoolHead);                  // pool new-node
+// ---- xgraphics.lib internals ARTIST links (sdk; never written here) ----------
+// Names and signatures are the library's own symbols (XDK 6534 lib/xbox/xgraphics.lib,
+// byte-identical to ARTIST at these addresses): linkedlist.obj
+// ?LST_CreateItem@XGRAPHICS@@YAPAXPAU_MEM_HEAD@1@@Z (0x82C21750, IDA sub_82C21750) and
+// ?LST_InsertBeforeItem@XGRAPHICS@@YAXPAU_LIST_PRIM_ITEM@1@0@Z (0x82C217C8, IDA
+// sub_82C217C8); compilertossm.obj ?FloatToString@XGRAPHICS@@YAXMPAD@Z (0x82C22190, IDA
+// sub_82C22190). FloatToString takes the value in f1 and the buffer in r4 (the float
+// argument takes the first GPR slot), exactly what every ARTIST call site passes.
+namespace XGRAPHICS
+{
+    struct _MEM_HEAD;
+    struct _LIST_PRIM_ITEM;
+    void* LST_CreateItem(_MEM_HEAD* apHead);
+    void  LST_InsertBeforeItem(_LIST_PRIM_ITEM* apItem, _LIST_PRIM_ITEM* apNewItem);
+    void  FloatToString(float afValue, char* apcText);
+}
 
 namespace D3D
 {
@@ -122,25 +134,27 @@ s32 CS_SetRequiredRenderState(int aiCompiledShader, int aiRenderStateId,
     return 16;
 }
 
-// @ 0x82C218B0
-int OBJLIST_AppendItem(int aiObjList, int aiItem)
+// @ 0x82C218B0. Returns void like xgraphics.lib's own
+// ?OBJLIST_AppendItem@XGRAPHICS@@YAXPAU_OBJECT_LIST@1@PAU_OBJECT_LIST_ITEM@1@@Z (ARTIST leaves
+// r3 unset after the LST_InsertBeforeItem call).
+void OBJLIST_AppendItem(int aiObjList, int aiItem)
 {
     CGS_ASSERT(aiObjList, "pObjList");
     CGS_ASSERT(aiItem, "pItem");
     int* lpList = reinterpret_cast<int*>(aiObjList);
     CGS_ASSERT(aiItem != lpList[4] /* *(a1+16) pSentinel */, "pItem != pObjList->pSentinel");
-    int liResult = sub_82C217C8(lpList[4], aiItem); // splice before sentinel
+    LST_InsertBeforeItem(reinterpret_cast<_LIST_PRIM_ITEM*>(lpList[4]),   // splice before sentinel
+                         reinterpret_cast<_LIST_PRIM_ITEM*>(aiItem));
     if (!lpList[5] /* *(a1+20) count */)
         *reinterpret_cast<int*>(lpList[4] + 8) = aiItem; // *(*(a1+16)+8) = pItem
     ++lpList[5];
-    return liResult;
 }
 
 // @ 0x82C21978
 int OBJLIST_AppendNewItem(u32* apObjList, int aiPayload)
 {
     CGS_ASSERT(apObjList, "pObjList");
-    int* lpNewItem = sub_82C21750(static_cast<int>(apObjList[0])); // *a1 = pool head
+    int* lpNewItem = static_cast<int*>(LST_CreateItem(reinterpret_cast<_MEM_HEAD*>(apObjList[0]))); // *a1 = pool head
     CGS_ASSERT(lpNewItem, "pNewItem");
     lpNewItem[3] = aiPayload; // *(pNewItem+12) = payload
     OBJLIST_AppendItem(reinterpret_cast<int>(apObjList), reinterpret_cast<int>(lpNewItem));
@@ -484,22 +498,22 @@ namespace
             apfn(aiChannel, "%s (%d) : %d\n", kpcUnknownStateName, aiMsgIndex, aiValue);
     }
     inline void TraceText(CompilePrintFn apfn, int aiChannel,
-                         int aiMsgIndex, int aiStage, int aiValueForFmt)
+                         int aiMsgIndex, int aiStage, f32 afValueForFmt)
     {
         if (apfn && aiChannel)
         {
             char laText[80];
-            sub_82C22190(aiValueForFmt, laText);
+            FloatToString(afValueForFmt, laText);
             apfn(aiChannel, "%s (%d) %d : %s\n", kpcUnknownStateName, aiMsgIndex, aiStage, laText);
         }
     }
     inline void TraceTextNoStage(CompilePrintFn apfn, int aiChannel,
-                                int aiMsgIndex, int aiValueForFmt)
+                                int aiMsgIndex, f32 afValueForFmt)
     {
         if (apfn && aiChannel)
         {
             char laText[80];
-            sub_82C22190(aiValueForFmt, laText);
+            FloatToString(afValueForFmt, laText);
             apfn(aiChannel, "%s (%d) : %s\n", kpcUnknownStateName, aiMsgIndex, laText);
         }
     }
@@ -514,7 +528,7 @@ int CompileGetBorderColorR(AS_Object* apObject, int aiStage, f32* apOut, Compile
 {
     CGS_ASSERT(apObject, "pAS_Object");
     *apOut = AS_GetArrayStateF(apObject, 16, static_cast<u32>(aiStage));
-    TraceText(apfnPrint, aiChannel, 71, aiStage, 0);
+    TraceText(apfnPrint, aiChannel, 71, aiStage, *apOut);
     return 1;
 }
 
@@ -523,7 +537,7 @@ int CompileGetBorderColorG(AS_Object* apObject, int aiStage, f32* apOut, Compile
 {
     CGS_ASSERT(apObject, "pAS_Object");
     *apOut = AS_GetArrayStateF(apObject, 17, static_cast<u32>(aiStage));
-    TraceText(apfnPrint, aiChannel, 72, aiStage, 0);
+    TraceText(apfnPrint, aiChannel, 72, aiStage, *apOut);
     return 1;
 }
 
@@ -532,7 +546,7 @@ int CompileGetBorderColorB(AS_Object* apObject, int aiStage, f32* apOut, Compile
 {
     CGS_ASSERT(apObject, "pAS_Object");
     *apOut = AS_GetArrayStateF(apObject, 18, static_cast<u32>(aiStage));
-    TraceText(apfnPrint, aiChannel, 73, aiStage, 0);
+    TraceText(apfnPrint, aiChannel, 73, aiStage, *apOut);
     return 1;
 }
 
@@ -541,7 +555,7 @@ int CompileGetBorderColorA(AS_Object* apObject, int aiStage, f32* apOut, Compile
 {
     CGS_ASSERT(apObject, "pAS_Object");
     *apOut = AS_GetArrayStateF(apObject, 19, static_cast<u32>(aiStage));
-    TraceText(apfnPrint, aiChannel, 74, aiStage, 0);
+    TraceText(apfnPrint, aiChannel, 74, aiStage, *apOut);
     return 1;
 }
 
@@ -556,7 +570,7 @@ int CompileGetFogBias(AS_Object* apObject, int aiStage, f32* apOut, CompilePrint
         *apOut = 0.0f;
     CGS_ASSERT(AS_GetStateI(apObject, 170) == 1,
                "CompileGetFogBias -- why are we calculating a bias for Z-fog?");
-    TraceText(apfnPrint, aiChannel, 26, aiStage, 0);
+    TraceText(apfnPrint, aiChannel, 26, aiStage, *apOut);
     return 1;
 }
 
@@ -565,7 +579,7 @@ int CompileGetFogColorR(AS_Object* apObject, int aiStage, f32* apOut, CompilePri
 {
     CGS_ASSERT(apObject, "pAS_Object");
     *apOut = AS_GetStateF(apObject, 1000);
-    TraceText(apfnPrint, aiChannel, 9, aiStage, 0);
+    TraceText(apfnPrint, aiChannel, 9, aiStage, *apOut);
     return 1;
 }
 
@@ -574,7 +588,7 @@ int CompileGetFogColorG(AS_Object* apObject, int aiStage, f32* apOut, CompilePri
 {
     CGS_ASSERT(apObject, "pAS_Object");
     *apOut = AS_GetStateF(apObject, 1001);
-    TraceText(apfnPrint, aiChannel, 10, aiStage, 0);
+    TraceText(apfnPrint, aiChannel, 10, aiStage, *apOut);
     return 1;
 }
 
@@ -583,7 +597,7 @@ int CompileGetFogDensity(AS_Object* apObject, int aiStage, f32* apOut, CompilePr
 {
     CGS_ASSERT(apObject, "pAS_Object");
     *apOut = AS_GetStateF(apObject, 168);
-    TraceText(apfnPrint, aiChannel, 65, aiStage, 0);
+    TraceText(apfnPrint, aiChannel, 65, aiStage, *apOut);
     return 1;
 }
 
@@ -592,7 +606,7 @@ int CompileGetFogEnd(AS_Object* apObject, int aiStage, f32* apOut, CompilePrintF
 {
     CGS_ASSERT(apObject, "pAS_Object");
     *apOut = AS_GetStateF(apObject, 167);
-    TraceText(apfnPrint, aiChannel, 66, aiStage, 0);
+    TraceText(apfnPrint, aiChannel, 66, aiStage, *apOut);
     return 1;
 }
 
@@ -610,7 +624,7 @@ int CompileGetFogScale(AS_Object* apObject, int aiStage, f32* apOut, CompilePrin
             *apOut = FLT_MAX; // ARTIST 82C25488/8C stores 0x7F7FFFFF
             CGS_ASSERT(AS_GetStateI(apObject, 170) == 1,
                        "CompileGetFogScale -- why are we calculating a scale for Z-fog?");
-            TraceText(apfnPrint, aiChannel, 27, aiStage, 0);
+            TraceText(apfnPrint, aiChannel, 27, aiStage, *apOut);
             return 1;
         }
         *apOut = 1.0f / (lfEnd - lfStart);
@@ -621,7 +635,7 @@ int CompileGetFogScale(AS_Object* apObject, int aiStage, f32* apOut, CompilePrin
     }
     CGS_ASSERT(AS_GetStateI(apObject, 170) == 1,
                "CompileGetFogScale -- why are we calculating a scale for Z-fog?");
-    TraceText(apfnPrint, aiChannel, 27, aiStage, 0);
+    TraceText(apfnPrint, aiChannel, 27, aiStage, *apOut);
     return 1;
 }
 
@@ -630,7 +644,7 @@ int CompileGetFogStart(AS_Object* apObject, int aiStage, f32* apOut, CompilePrin
 {
     CGS_ASSERT(apObject, "pAS_Object");
     *apOut = AS_GetStateF(apObject, 166);
-    TraceText(apfnPrint, aiChannel, 67, aiStage, 0);
+    TraceText(apfnPrint, aiChannel, 67, aiStage, *apOut);
     return 1;
 }
 
@@ -669,7 +683,7 @@ int CompileGetLodBias(AS_Object* apObject, int aiStage, f32* apOut, CompilePrint
 {
     CGS_ASSERT(apObject, "pAS_Object");
     *apOut = 0.0f;
-    TraceText(apfnPrint, aiChannel, 64, aiStage, 0);
+    TraceText(apfnPrint, aiChannel, 64, aiStage, *apOut);
     return 1;
 }
 
@@ -678,7 +692,7 @@ int CompileGetLodClampMax(AS_Object* apObject, int aiStage, f32* apOut, CompileP
 {
     CGS_ASSERT(apObject, "pAS_Object");
     *apOut = AS_GetArrayStateF(apObject, 26, static_cast<u32>(aiStage));
-    TraceText(apfnPrint, aiChannel, 65, aiStage, 0);
+    TraceText(apfnPrint, aiChannel, 65, aiStage, *apOut);
     return 1;
 }
 
@@ -688,7 +702,7 @@ int CompileGetMemExportConstant0(AS_Object* apObject, u32 auStage, u32* apOut, C
     CGS_ASSERT(apObject, "pAS_Object");
     u32 luState = static_cast<u32>(AS_GetArrayStateI(apObject, 0x59u, auStage));
     *apOut = (luState >> 2) | 0x40000000u;
-    TraceText(apfnPrint, aiChannel, 62, static_cast<int>(auStage), static_cast<int>(luState));
+    TraceText(apfnPrint, aiChannel, 62, static_cast<int>(auStage), *reinterpret_cast<const f32*>(apOut));
     return 1;
 }
 
@@ -697,7 +711,7 @@ int CompileGetMemExportConstant1(AS_Object* apObject, int aiStage, u32* apOut, C
 {
     (void)apObject;
     *apOut = 1258291200u;
-    TraceText(apfnPrint, aiChannel, 88, aiStage, 0);
+    TraceText(apfnPrint, aiChannel, 88, aiStage, *reinterpret_cast<const f32*>(apOut));
     return 1;
 }
 
@@ -745,10 +759,8 @@ int CompileGetMemExportConstant2(AS_Object* apObject, int aiStage, u32* apOut, C
     if (apfnPrint && aiChannel)
     {
         char laText[112]; // frame-attested buffer (sp+0x50 .. sp+0xC0 of a 0xC0 frame)
-        // the binary passes *(float*)apOut to the formatter in f1; the un-homed
-        // sub_82C22190 shim is declared (int, void*), so 0 goes through here exactly
-        // as every committed sibling does. FLAG.
-        sub_82C22190(0, laText);
+        // the binary passes *(float*)apOut to the formatter in f1.
+        FloatToString(*reinterpret_cast<const f32*>(apOut), laText);
         // name-table entry 89 @ 0x82FA51C4 -> "CompileGetMemExportConstant2"
         // (RECOVERED rodata, so the real name prints instead of kpcUnknownStateName)
         apfnPrint(aiChannel, "%s (%d) %d : %s\n", "CompileGetMemExportConstant2", 89, aiStage, laText);
@@ -762,7 +774,7 @@ int CompileGetMemExportConstant3(AS_Object* apObject, int aiStage, int* apOut, C
     CGS_ASSERT(apObject, "pAS_Object");
     int liState = AS_GetArrayStateI(apObject, 90, static_cast<u32>(aiStage));
     *apOut = liState | 0x4B000000;
-    TraceText(apfnPrint, aiChannel, 90, aiStage, liState);
+    TraceText(apfnPrint, aiChannel, 90, aiStage, *reinterpret_cast<const f32*>(apOut));
     return 1;
 }
 
@@ -774,7 +786,7 @@ int CompileGetPointSizeMax(AS_Object* apObject, int aiStage, f32* apOut, Compile
     if (apfnPrint && aiChannel)
     {
         char laText[80];
-        sub_82C22190(0, laText);
+        FloatToString(*apOut, laText);
         apfnPrint(aiChannel, "%s (%d) : %s\n", kpcUnknownStateName, 103, laText);
     }
     (void)aiStage;
@@ -789,7 +801,7 @@ int CompileGetPointSizeMin(AS_Object* apObject, int aiStage, f32* apOut, Compile
     if (apfnPrint && aiChannel)
     {
         char laText[80];
-        sub_82C22190(0, laText);
+        FloatToString(*apOut, laText);
         apfnPrint(aiChannel, "%s (%d) : %s\n", kpcUnknownStateName, 104, laText);
     }
     (void)aiStage;
@@ -801,7 +813,7 @@ int CompileGetShadowFailThreshold(AS_Object* apObject, int aiStage, f32* apOut, 
 {
     CGS_ASSERT(apObject, "pAS_Object");
     *apOut = AS_GetArrayStateF(apObject, 86, static_cast<u32>(aiStage));
-    TraceText(apfnPrint, aiChannel, 51, aiStage, 0);
+    TraceText(apfnPrint, aiChannel, 51, aiStage, *apOut);
     return 1;
 }
 
@@ -834,7 +846,7 @@ int CompileGetVertexStreamFrequencyDivideInterval(AS_Object* apObject, int aiSta
     if (apfnPrint && aiChannel)
     {
         char laText[80];
-        sub_82C22190(liState, laText);
+        FloatToString(*apOut, laText);
         apfnPrint(aiChannel, "%s (%d) : %s\n", kpcUnknownStateName, 54, laText);
     }
     (void)aiStage;
@@ -863,7 +875,7 @@ int CompileGetWincoordOffsetsForPolyStippleY(AS_Object* apObject, int aiStage, f
     if (apfnPrint && aiChannel)
     {
         char laText[80];
-        sub_82C22190(liMode, laText);
+        FloatToString(*apOut, laText);
         apfnPrint(aiChannel, "%s (%d) : %s\n", kpcUnknownStateName, 67, laText);
     }
     (void)aiStage;

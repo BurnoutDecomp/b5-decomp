@@ -91,7 +91,10 @@ void VMXBlend(u8* lpDestination, const u8* lpSource0, const u8* lpSource1, __vec
 }
 
 // ARTIST 82AD2F38, genuine destination/source-pointer and VMX weight arguments.
-void sub_82AD2F38(u8* lpDestination, const u8* lpSource0, const u8* lpSource1, const u8* lpSource2, __vector4 lvWeight0, __vector4 lvWeight1, __vector4 lvWeight2)
+// PROVISIONAL NAME: no DWARF/PS3/SDK name found; ARTIST 0x82AD2F38 (IDA sub_82AD2F38). The
+// 3-source sibling of the ARTIST-named VMXBlend (0x82AD2CF0); its only caller is
+// Blend3Cubes. The PS3 build runs this job on the SPU; its embedded job ELF has no symbols.
+void VMXBlend3(u8* lpDestination, const u8* lpSource0, const u8* lpSource1, const u8* lpSource2, __vector4 lvWeight0, __vector4 lvWeight1, __vector4 lvWeight2)
 {
     const u8* const lapSource[3] = { lpSource0, lpSource1, lpSource2 };
     const __vector4 lavWeight[3] = { lvWeight0, lvWeight1, lvWeight2 };
@@ -99,7 +102,10 @@ void sub_82AD2F38(u8* lpDestination, const u8* lpSource0, const u8* lpSource1, c
 }
 
 // ARTIST 82AD3250, genuine destination/source-pointer and VMX weight arguments.
-void sub_82AD3250(u8* lpDestination, const u8* lpSource0, const u8* lpSource1, const u8* lpSource2, const u8* lpSource3, __vector4 lvWeight0, __vector4 lvWeight1, __vector4 lvWeight2, __vector4 lvWeight3)
+// PROVISIONAL NAME: no DWARF/PS3/SDK name found; ARTIST 0x82AD3250 (IDA sub_82AD3250). The
+// 4-source sibling of the ARTIST-named VMXBlend (0x82AD2CF0); its only caller is
+// Blend4Cubes. The PS3 build runs this job on the SPU; its embedded job ELF has no symbols.
+void VMXBlend4(u8* lpDestination, const u8* lpSource0, const u8* lpSource1, const u8* lpSource2, const u8* lpSource3, __vector4 lvWeight0, __vector4 lvWeight1, __vector4 lvWeight2, __vector4 lvWeight3)
 {
     const u8* const lapSource[4] = { lpSource0, lpSource1, lpSource2, lpSource3 };
     const __vector4 lavWeight[4] = { lvWeight0, lvWeight1, lvWeight2, lvWeight3 };
@@ -107,7 +113,10 @@ void sub_82AD3250(u8* lpDestination, const u8* lpSource0, const u8* lpSource1, c
 }
 
 // ARTIST 82AD3668, genuine destination/source-pointer and VMX weight arguments.
-void sub_82AD3668(u8* lpDestination, const u8* lpSource0, const u8* lpSource1, const u8* lpSource2, const u8* lpSource3, const u8* lpSource4, __vector4 lvWeight0, __vector4 lvWeight1, __vector4 lvWeight2, __vector4 lvWeight3, __vector4 lvWeight4)
+// PROVISIONAL NAME: no DWARF/PS3/SDK name found; ARTIST 0x82AD3668 (IDA sub_82AD3668). The
+// 5-source sibling of the ARTIST-named VMXBlend (0x82AD2CF0); its only caller is
+// Blend5Cubes. The PS3 build runs this job on the SPU; its embedded job ELF has no symbols.
+void VMXBlend5(u8* lpDestination, const u8* lpSource0, const u8* lpSource1, const u8* lpSource2, const u8* lpSource3, const u8* lpSource4, __vector4 lvWeight0, __vector4 lvWeight1, __vector4 lvWeight2, __vector4 lvWeight3, __vector4 lvWeight4)
 {
     const u8* const lapSource[5] = { lpSource0, lpSource1, lpSource2, lpSource3, lpSource4 };
     const __vector4 lavWeight[5] = { lvWeight0, lvWeight1, lvWeight2, lvWeight3, lvWeight4 };
@@ -115,7 +124,10 @@ void sub_82AD3668(u8* lpDestination, const u8* lpSource0, const u8* lpSource1, c
 }
 
 // ARTIST 82AD3AF8, genuine destination/source-pointer and VMX weight arguments.
-void sub_82AD3AF8(u8* lpDestination, const u8* lpSource0, const u8* lpSource1, const u8* lpSource2, const u8* lpSource3, const u8* lpSource4, const u8* lpSource5, __vector4 lvWeight0, __vector4 lvWeight1, __vector4 lvWeight2, __vector4 lvWeight3, __vector4 lvWeight4, __vector4 lvWeight5)
+// PROVISIONAL NAME: no DWARF/PS3/SDK name found; ARTIST 0x82AD3AF8 (IDA sub_82AD3AF8). The
+// 6-source sibling of the ARTIST-named VMXBlend (0x82AD2CF0); its only caller is
+// Blend6Cubes. The PS3 build runs this job on the SPU; its embedded job ELF has no symbols.
+void VMXBlend6(u8* lpDestination, const u8* lpSource0, const u8* lpSource1, const u8* lpSource2, const u8* lpSource3, const u8* lpSource4, const u8* lpSource5, __vector4 lvWeight0, __vector4 lvWeight1, __vector4 lvWeight2, __vector4 lvWeight3, __vector4 lvWeight4, __vector4 lvWeight5)
 {
     const u8* const lapSource[6] = { lpSource0, lpSource1, lpSource2, lpSource3, lpSource4, lpSource5 };
     const __vector4 lavWeight[6] = { lvWeight0, lvWeight1, lvWeight2, lvWeight3, lvWeight4, lvWeight5 };
@@ -200,7 +212,7 @@ void Blend3Cubes(TintBlendParameters& lrParameters)
             u8* lpDestination = lpRow;
             for (u32 b = 0; b < luBlocks; ++b)
             {
-                sub_82AD2F38(lpDestination, lpSource0, lpSource1, lpSource2, lvWeight0, lvWeight1, lvWeight2);
+                VMXBlend3(lpDestination, lpSource0, lpSource1, lpSource2, lvWeight0, lvWeight1, lvWeight2);
                 lpSource0 += 48;
                 lpSource1 += 48;
                 lpSource2 += 48;
@@ -232,7 +244,7 @@ void Blend4Cubes(TintBlendParameters& lrParameters)
             u8* lpDestination = lpRow;
             for (u32 b = 0; b < luBlocks; ++b)
             {
-                sub_82AD3250(lpDestination, lpSource0, lpSource1, lpSource2, lpSource3, lvWeight0, lvWeight1, lvWeight2, lvWeight3);
+                VMXBlend4(lpDestination, lpSource0, lpSource1, lpSource2, lpSource3, lvWeight0, lvWeight1, lvWeight2, lvWeight3);
                 lpSource0 += 48;
                 lpSource1 += 48;
                 lpSource2 += 48;
@@ -267,7 +279,7 @@ void Blend5Cubes(TintBlendParameters& lrParameters)
             u8* lpDestination = lpRow;
             for (u32 b = 0; b < luBlocks; ++b)
             {
-                sub_82AD3668(lpDestination, lpSource0, lpSource1, lpSource2, lpSource3, lpSource4, lvWeight0, lvWeight1, lvWeight2, lvWeight3, lvWeight4);
+                VMXBlend5(lpDestination, lpSource0, lpSource1, lpSource2, lpSource3, lpSource4, lvWeight0, lvWeight1, lvWeight2, lvWeight3, lvWeight4);
                 lpSource0 += 48;
                 lpSource1 += 48;
                 lpSource2 += 48;
@@ -305,7 +317,7 @@ void Blend6Cubes(TintBlendParameters& lrParameters)
             u8* lpDestination = lpRow;
             for (u32 b = 0; b < luBlocks; ++b)
             {
-                sub_82AD3AF8(lpDestination, lpSource0, lpSource1, lpSource2, lpSource3, lpSource4, lpSource5, lvWeight0, lvWeight1, lvWeight2, lvWeight3, lvWeight4, lvWeight5);
+                VMXBlend6(lpDestination, lpSource0, lpSource1, lpSource2, lpSource3, lpSource4, lpSource5, lvWeight0, lvWeight1, lvWeight2, lvWeight3, lvWeight4, lvWeight5);
                 lpSource0 += 48;
                 lpSource1 += 48;
                 lpSource2 += 48;

@@ -111,7 +111,7 @@ s32  CS_SetRequiredRenderState(int aiCompiledShader, int aiRenderStateId,
 // ===== plumbing helpers ====================================================
 
 // @ 0x82C218B0 -- splice apItem before the sentinel of the object list.
-int  OBJLIST_AppendItem(int aiObjList, int aiItem);
+void OBJLIST_AppendItem(int aiObjList, int aiItem);
 // @ 0x82C21978 -- allocate a new node from the pool and append it.
 int  OBJLIST_AppendNewItem(u32* apObjList, int aiPayload);
 // @ 0x82C21BE0 -- build a fixed-size free-list memory pool.

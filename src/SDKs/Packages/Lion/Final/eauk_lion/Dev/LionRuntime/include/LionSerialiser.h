@@ -53,6 +53,14 @@ struct sLionSerialiserRemapEntry
     void* mpNew;
 };
 
+// LionSerialiser.h:26 -- the sink cLionFX::BinSave (DWARF LionFX.h:65 takes an
+// iLionBinWriter*) hands each block of a saved effect to. One virtual, Write (:28); pure: the
+// PS3 build has _ZTV14iLionBinWriter but no iLionBinWriter::Write body.
+struct iLionBinWriter
+{
+    virtual void Write(void* apData, u32 aSize) = 0;
+};
+
 // LionSerialiser.h:39
 class cLionSerialiser
 {

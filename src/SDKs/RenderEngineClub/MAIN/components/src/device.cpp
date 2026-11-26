@@ -19,18 +19,6 @@
 
 D3DDevice* gpD3DDevice = 0;
 
-// ARTIST82B61F90..82B61FD8. Keep the provisional original identity until its
-// declaration name is recovered; this is distinct from Device::UnSetResource.
-void sub_82B61F90(const renderengine::VertexDescriptorData* lpDescriptor)
-{
-    D3DVertexDeclaration* const lpDeclaration = lpDescriptor->mpDeclaration;
-    D3DDevice* const lpDevice = ::gpD3DDevice;
-    if (D3DVertexDeclaration_IsSet(lpDeclaration, lpDevice))
-    {
-        D3DDevice_SetVertexDeclaration(lpDevice, 0);
-    }
-}
-
 namespace renderengine
 {
     Device::State Device::m_currentState = Device::STATE_COLD;
@@ -395,6 +383,17 @@ namespace renderengine
                     }
                 }
             }
+        }
+    }
+
+    // ARTIST 82B61F90..82B61FD8 (PROVISIONAL NAME, see device.h; IDA sub_82B61F90).
+    void Device::UnSetResource(const VertexDescriptorData* lpDescriptor)
+    {
+        D3DVertexDeclaration* const lpDeclaration = lpDescriptor->mpDeclaration;
+        D3DDevice* const lpDevice = ::gpD3DDevice;
+        if (D3DVertexDeclaration_IsSet(lpDeclaration, lpDevice))
+        {
+            D3DDevice_SetVertexDeclaration(lpDevice, 0);
         }
     }
 

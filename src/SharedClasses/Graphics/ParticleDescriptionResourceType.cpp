@@ -2,6 +2,8 @@
 #include "rw/rwcore_structs.h"   // rw::Resource complete for the bodies
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionFX.h"       // cLionFX
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionEffect.h"   // cLionEffectDefinition
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionSerialiser.h" // iLionBinWriter
+#include <cstring>   // memcpy (SerialMemoryWriter::Write)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnParticle::ParticleDescriptionCollectionResourceType::FixUp            @ 0x8267DF40
@@ -136,17 +138,36 @@ namespace BrnParticle
         u32*       lpDst = reinterpret_cast<u32*>(lrDest.m_baseResources[0]);
         const u32* lpSrc = reinterpret_cast<const u32*>(lpResource);
 
-        u32 luPayload = reinterpret_cast<u32>(lpDst) + 16;
+        // The LION writer BinSave appends each saved block through: DWARF
+        // ParticleDescriptionResourceType.cpp:347-362 (_compile/BrnSharedClassesUnity.cpp), a
+        // local struct deriving iLionBinWriter, with mpDestinationData (:362), the constructor
+        // (:350), Write (:352) and GetDataPointer (:358). PS3 symtab names its vtable
+        // _ZTVZNK11BrnParticle31ParticleDescriptionResourceType9Serialise...E18SerialMemoryWriter;
+        // ARTIST's is 0x820A7F30 (IDA off_820A7F30), whose one slot is Write at 0x82675808:
+        // memcpy, then advance the cursor by the size rounded up to 16 (clrrwi 4).
+        struct SerialMemoryWriter : public iLionBinWriter
+        {
+        public:
+            SerialMemoryWriter(u8* pDest) : mpDestinationData(pDest) {}
+
+            virtual void Write(void* apData, u32 aSize)
+            {
+                memcpy(mpDestinationData, apData, aSize);
+                mpDestinationData += (aSize + 15) & ~15u;
+            }
+
+            u8* GetDataPointer() { return mpDestinationData; }
+
+        private:
+            u8* mpDestinationData;
+        };
+
+        u8* lpDestination = reinterpret_cast<u8*>(lpDst) + 16;
         lpDst[0] = lpSrc[0];
-        // Two-entry LionFX save stream descriptor: vtable + payload pointer.
-        extern void* off_820A7F30;
-        u32 laStream[4] = {};
-        laStream[0] = reinterpret_cast<u32>(&off_820A7F30);
-        laStream[1] = luPayload;
-        lpDst[1] = luPayload;
-        cLionFX::BinSave(reinterpret_cast<void*>(lpSrc[1]), 1, laStream);
-        return lpDst;
+        SerialMemoryWriter lWriter(lpDestination);
+        lpDst[1] = reinterpret_cast<u32>(lpDestination);
+        cLionFX::BinSave(reinterpret_cast<void*>(lpSrc[1]), 1, &lWriter);
+        // ARTIST 0x8267C26C re-reads the destination from the resource after the call.
+        return lrDest.GetMemoryResource();
     }
 }
-
-void* off_820A7F30 = 0;
