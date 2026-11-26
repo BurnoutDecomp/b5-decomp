@@ -230,7 +230,7 @@ void StuntModeScoring::UpdateCombo(f32 lfDelta, const ActiveRaceCarOutputInterfa
 // (X360 vtable +0x28 dispatch -> the virtual CalculateMultiplier), writes the result into
 // lpRecentStunt->miStuntMultiplier (StuntInfo +0x0C), and returns it.
 // Reconstructed store-for-store from the X360 asm.
-s32 StuntModeScoring::BankMultiplier(StuntInfo* lpRecentStunt)
+void StuntModeScoring::BankMultiplier(StuntInfo* lpRecentStunt)
 {
     CGS_ASSERT(lpRecentStunt, CGS_ASSERT_MESSAGE_AT("lpRecentStunt", CGS_ARTIST_FILE, 503));  // X360 cmplwi r31,0 -> FireAssert ...:503
 
@@ -239,7 +239,6 @@ s32 StuntModeScoring::BankMultiplier(StuntInfo* lpRecentStunt)
     const s32 liMultiplier = CalculateMultiplier(lpRecentStunt, &loMultiplierOutInfo);
 
     lpRecentStunt->miStuntMultiplier = liMultiplier;  // X360 stw r3, 0xC(r31) -> StuntInfo +0x0C
-    return liMultiplier;
 }
 
 // ----------------------------------------------------------------------------

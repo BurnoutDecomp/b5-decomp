@@ -96,12 +96,12 @@ namespace BrnGameState
                    (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
                    CGS_ASSERT_MESSAGE_AT("(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex<E_ACTIVE_RACE_CAR_INDEX_COUNT)", CGS_ARTIST_FILE_BRNSCORINGSYSTEM, 1549));
 
-        const CarData* lpCar = GetCarData(leRaceCarIndex);
-        if (lpCar)
+        const CarData* lpCarData = GetCarData(leRaceCarIndex);   // DWARF cpp:1541
+        if (lpCarData == 0)
         {
-            return lpCar->GetTeam();
+            return GameStateModuleIO::E_PLAYER_TEAM_NONE;
         }
-        return GameStateModuleIO::E_PLAYER_TEAM_NONE;
+        return lpCarData->GetTeam();
     }
 
     // ------------------------------------------------------------------------
@@ -246,7 +246,8 @@ namespace BrnGameState
             GameStateModuleIO::CarScoreData* lpScore = lpEliminatedCar->GetScoreData();
             lpScore->SetEliminatorRaceCarIndex(leEliminator);
             lpScore->SetEliminated(true);
-            lpScore->SetDistanceToFinish(lpScore->GetDistanceToFinishLive());
+            // ARTIST 0x82326844 reads the live distance through a second GetCarData call.
+            lpScore->SetDistanceToFinish(GetCarData(leRaceCarIndex)->GetScoreData()->GetDistanceToFinishLive());
         }
 
         CarData* lpEliminatorCar = GetCarData(leEliminator);
@@ -297,7 +298,8 @@ namespace BrnGameState
             if (lpCar->GetTeam() != leTeam)
             {
                 lpCar->SetTeam(leTeam);
-                lpCar->GetScoreData()->SetTimeInCurrentTeam(CgsSystem::Time(0.0f));
+                // DWARF/ARTIST: Time::SetFloatVal on the member in place (0x8231FEDC, r3 = score + 0x6C).
+                lpCar->GetScoreData()->GetTimeInCurrentTeam().SetFloatVal(0.0f);
             }
         }
     }
@@ -314,11 +316,11 @@ namespace BrnGameState
                    CGS_ASSERT_MESSAGE_AT("(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)", CGS_ARTIST_FILE, 2606));
 
         const CarData* lpCar = GetCarData(leRaceCarIndex);
-        if (lpCar)
+        if (lpCar == NULL)   // the missing record first (ARTIST `bne` past it)
         {
-            return lpCar->GetScoreData()->GetTimeInFirstPlace();
+            return CgsSystem::Time(0.0f);
         }
-        return CgsSystem::Time(0.0f);
+        return lpCar->GetScoreData()->GetTimeInFirstPlace();
     }
 
     // ------------------------------------------------------------------------
@@ -333,11 +335,11 @@ namespace BrnGameState
                    CGS_ASSERT_MESSAGE_AT("(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)", CGS_ARTIST_FILE, 2628));
 
         const CarData* lpCar = GetCarData(leRaceCarIndex);
-        if (lpCar)
+        if (lpCar == NULL)   // the missing record first (ARTIST `bne` past it)
         {
-            return lpCar->GetScoreData()->GetTimeInLastPlace();
+            return CgsSystem::Time(0.0f);
         }
-        return CgsSystem::Time(0.0f);
+        return lpCar->GetScoreData()->GetTimeInLastPlace();
     }
 
     // ------------------------------------------------------------------------
@@ -352,11 +354,11 @@ namespace BrnGameState
                    CGS_ASSERT_MESSAGE_AT("(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)", CGS_ARTIST_FILE, 2662));
 
         const CarData* lpCar = GetCarData(leRaceCarIndex);
-        if (lpCar)
+        if (lpCar == NULL)   // the missing record first (ARTIST `bne` past it)
         {
-            return lpCar->GetScoreData()->GetTimeBoosting();
+            return CgsSystem::Time(0.0f);
         }
-        return CgsSystem::Time(0.0f);
+        return lpCar->GetScoreData()->GetTimeBoosting();
     }
 
     // ------------------------------------------------------------------------

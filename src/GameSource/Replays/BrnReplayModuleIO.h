@@ -102,14 +102,12 @@ namespace ReplayIO
     //   +0x000   CgsModule::IOBuffer base                            (status byte @+0)
     //   +0x004   GameActionQueue (VariableEventQueue<13312,16>) mGameActionQueue (sizeof 0x3410 = 13312+16)
     //   +0x3414  CgsSystem::TimerStatusInterface mTimerStatusInterface (sizeof 48)
-    // FLAG (X360-vs-DWARF order divergence; asm authoritative): the DWARF declares the member
-    // order { mGameActionQueue, mPadInput, mTimerStatusInterface }, but the X360 accessor
-    // offsets pin mGameActionQueue @+4 (13328 bytes) and mTimerStatusInterface @+0x3414 --
-    // those two are byte-adjacent, leaving no room for the 932-byte mPadInput between them.
-    // mPadInput (CgsInput::InputIO::PadOutputInformation) is therefore placed after the
-    // timer-status block here so the two asm-attested offsets (queue +4, timer +0x3414) are
-    // exact. GetTimerStatusI / SetTimerStatusInterface (this TU) reach the timer block by
-    // name; AppendGameActionQueue bulk-appends into the queue base at +4.
+    // X360-vs-DWARF divergence (asm authoritative): the PS3 DWARF declares
+    // { mGameActionQueue, mPadInput, mTimerStatusInterface } (h:82..84), but the X360 accessor
+    // offsets pin mGameActionQueue @+4 (13328 bytes) and mTimerStatusInterface @+0x3414, and
+    // ARTIST allocates and frees sizeof == 0x3444 = 4 + 0x3410 + 0x30
+    // (CreateIOBuffer<InputBuffer_PreSim> 0x823AFC14 `li r4,0x3444`). The X360 buffer has no
+    // 932-byte mPadInput at all, so it is not declared here.
     class InputBuffer_PreSim : public CgsModule::IOBuffer
     {
     public:
@@ -138,8 +136,7 @@ namespace ReplayIO
     private:
         u8                              maStatusPad[3];        // +0x001..+0x003 (force +4 placement)
         GameActionQueue                 mGameActionQueue;      // +0x004
-        CgsSystem::TimerStatusInterface mTimerStatusInterface; // +0x3414
-        InputPadInformation             mPadInput;             // after timer (see FLAG above)
+        CgsSystem::TimerStatusInterface mTimerStatusInterface; // +0x3414 (sizeof 0x3444)
     };
 
     // ---- post-sim INPUT buffer -----------------------------------------------------

@@ -61,6 +61,9 @@ void StuntModeScoringOnline::Construct(AchievementManager* lpAchievementManager)
 
     maMultiplierData.Clear();              // stw 0, 0x24F0
     maChainableMultiplierInfo.Clear();     // stw 0, 0x2470
+    // Two-phase pool bring-up: ARTIST stores the occupancy word twice, std 0 0x23E0 off `this`
+    // (0x8232D0A0, the pool's Construct) and again off the pool (0x8232D0A8, inside Clear).
+    mStoredLeapingDataPool.Construct();
     mStoredLeapingDataPool.Clear();        // +0x23E0 bits 0, free queue 6..0, count 7
     mCarsAroundPlayerAtTakeoff = 0;        // std 0, 0x22D0
 
@@ -77,10 +80,11 @@ void StuntModeScoringOnline::Construct(AchievementManager* lpAchievementManager)
 // std 0 0x22D0, and the pool's Clear image (std 0 0x23E0, queue 6..0, count 7).
 void StuntModeScoringOnline::Destruct()
 {
+    // ARTIST store order (0x8232D114..0x8232D128): +0x2510, +0x2516, +0x2514, +0x2515.
     miOnlineDisplayScore       = 0;
+    mbCarsAroundPlayerCaptured = false;
     mbPendingMultiplierValid   = false;
     mbStuntModeEndedCached     = false;
-    mbCarsAroundPlayerCaptured = false;
     maMultiplierData.Clear();
     maChainableMultiplierInfo.Clear();
     mCarsAroundPlayerAtTakeoff = 0;        // std 0, 0x22D0 (was seeded 0x600000000)
@@ -101,9 +105,9 @@ bool StuntModeScoringOnline::Prepare()
 }
 
 // ----------------------------------------------------------------------------
-// Release (X360 0x82321878, ledger "Relase")
+// Relase (X360 0x82321878, the original spelling; a new virtual, vtable 0x820CF9EC slot 11)
 // ----------------------------------------------------------------------------
-bool StuntModeScoringOnline::Release()
+bool StuntModeScoringOnline::Relase()
 {
     mbStuntModeEndedCached = false;        // *(a1 + 0x2515) = 0
     return true;

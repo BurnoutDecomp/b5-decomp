@@ -142,6 +142,8 @@ namespace ReplayIO
                       "mGameActionQueue @0x0004 (AppendGameActionQueue -> this+4)");
         CGS_STATIC_ASSERT((offsetof(InputBuffer_PreSim, mTimerStatusInterface) == 0x3414),
                       "mTimerStatusInterface @0x3414 (Get/SetTimerStatusInterface -> this+0x3414)");
+        CGS_STATIC_ASSERT((sizeof(InputBuffer_PreSim) == 0x3444),
+                      "sizeof 0x3444 (CreateIOBuffer<InputBuffer_PreSim> 0x823AFC14 li r4,0x3444)");
     }
 
     // X360 0x823C9A38: write-lock; bulk-append the source game-action queue into

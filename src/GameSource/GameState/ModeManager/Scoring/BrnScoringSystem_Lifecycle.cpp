@@ -9,6 +9,9 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
+// ARTIST's FireAssert file string 0x82022420 for the bodies built from BrnScoringSystem.h.
+#define CGS_ARTIST_FILE_BRNSCORINGSYSTEM_H "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\Scoring/BrnScoringSystem.h"
+
 // ============================================================================
 // BrnScoringSystem_Lifecycle.cpp
 // ============================================================================
@@ -226,14 +229,15 @@ GameStateModuleIO::EPlayerScoringIndex ScoringSystem::AddPlayer(BrnNetwork::Netw
 void ScoringSystem::SetPlayerRaceCarIndex(GameStateModuleIO::EPlayerScoringIndex leScoringIndex,
                                           EActiveRaceCarIndex leRaceCarIndex)
 {
-    CarData* lpCarData = GetCarDataFromPlayerScoringIndex(leScoringIndex);
+    // ARTIST indexes maCarData directly (0x82310FC4 mulli 0x158), as the assert text spells it;
+    // the body is built from BrnScoringSystem.h (FireAssert 0x82310FFC, line 3278).
+    CGS_ASSERT_AT((maCarData[leScoringIndex].GetActiveRaceCarIndex() == E_ACTIVE_RACE_CAR_INDEX_INVALID) ||
+                      (maCarData[leScoringIndex].GetActiveRaceCarIndex() == leRaceCarIndex),
+                  "(maCarData[ lePlayerIndex ].GetActiveRaceCarIndex() == E_ACTIVE_RACE_CAR_INDEX_INVALID) || "
+                  "(maCarData[ lePlayerIndex ].GetActiveRaceCarIndex() == leActiveRaceCarIndex)",
+                  CGS_ARTIST_FILE_BRNSCORINGSYSTEM_H, 3278);
 
-    CGS_ASSERT((lpCarData->GetActiveRaceCarIndex() == E_ACTIVE_RACE_CAR_INDEX_INVALID) ||
-               (lpCarData->GetActiveRaceCarIndex() == leRaceCarIndex),
-               "(maCarData[ lePlayerIndex ].GetActiveRaceCarIndex() == E_ACTIVE_RACE_CAR_INDEX_INVALID) || "
-               "(maCarData[ lePlayerIndex ].GetActiveRaceCarIndex() == leActiveRaceCarIndex)");
-
-    lpCarData->SetActiveRaceCarIndex(leRaceCarIndex);
+    maCarData[leScoringIndex].SetActiveRaceCarIndex(leRaceCarIndex);
 }
 
 // :358. Remove the player occupying a given active-race-car slot: reset the record and drop the

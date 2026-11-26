@@ -29,6 +29,10 @@
 
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"
 
+// ARTIST builds this query family from BrnScoringSystem.h (FireAssert file 0x82022420, lines
+// 1968..2387); each body tests the missing record first (e.g. 0x823269DC `bne`, `li r3,8`).
+#define CGS_ARTIST_FILE_BRNSCORINGSYSTEM_H "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\Scoring/BrnScoringSystem.h"
+
 namespace BrnGameState
 {
     // ------------------------------------------------------------------------
@@ -38,17 +42,17 @@ namespace BrnGameState
     // ------------------------------------------------------------------------
     CgsSystem::Time ScoringSystem::GetFinishTime(EActiveRaceCarIndex leActiveRaceCarIndex) const
     {
-        CGS_ASSERT((leActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
-                   (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
-                   "(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) && "
-                   "(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)");
+        CGS_ASSERT_AT((leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) &&
+                          (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
+                      "(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)",
+                      CGS_ARTIST_FILE_BRNSCORINGSYSTEM_H, 2314);
 
         const CarData* lpCarData = GetCarData(leActiveRaceCarIndex);
-        if (lpCarData != NULL)
+        if (lpCarData == NULL)
         {
-            return lpCarData->GetScoreData()->GetFinishTime();
+            return CgsSystem::Time(0.0f);
         }
-        return CgsSystem::Time(0.0f);
+        return lpCarData->GetScoreData()->GetFinishTime();
     }
 
     // ------------------------------------------------------------------------
@@ -58,17 +62,17 @@ namespace BrnGameState
     // ------------------------------------------------------------------------
     f32 ScoringSystem::GetRaceCarDistanceToFinishAtRoundEnd(EActiveRaceCarIndex leActiveRaceCarIndex) const
     {
-        CGS_ASSERT((leActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
-                   (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
-                   "(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && "
-                   "(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)");
+        CGS_ASSERT_AT((leActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
+                          (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
+                      "(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)",
+                      CGS_ARTIST_FILE_BRNSCORINGSYSTEM_H, 2130);
 
-        const CarData* lpCarData = GetCarData(leActiveRaceCarIndex);
-        if (lpCarData != NULL)
+        // ARTIST 0x82326B6C / 0x82326B8C calls GetCarData twice: once for the test, once for the read.
+        if (GetCarData(leActiveRaceCarIndex) == NULL)
         {
-            return lpCarData->GetScoreData()->GetDistanceToFinish();
+            return 0.0f;
         }
-        return 0.0f;
+        return GetCarData(leActiveRaceCarIndex)->GetScoreData()->GetDistanceToFinish();
     }
 
     // ------------------------------------------------------------------------
@@ -78,17 +82,17 @@ namespace BrnGameState
     // ------------------------------------------------------------------------
     const s32 ScoringSystem::GetNumberOfTakedowns(EActiveRaceCarIndex leActiveRaceCarIndex) const
     {
-        CGS_ASSERT((leActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
-                   (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
-                   "(leActiveRaceCarIndex>=E_ACTIVE_RACE_CAR_INDEX_0) && "
-                   "(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)");
+        CGS_ASSERT_AT((leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) &&
+                          (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
+                      "(leActiveRaceCarIndex>=E_ACTIVE_RACE_CAR_INDEX_0) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)",
+                      CGS_ARTIST_FILE_BRNSCORINGSYSTEM_H, 2335);
 
         const CarData* lpCarData = GetCarData(leActiveRaceCarIndex);
-        if (lpCarData != NULL)
+        if (lpCarData == NULL)
         {
-            return lpCarData->GetScoreData()->GetTakedowns();
+            return 0;
         }
-        return 0;
+        return lpCarData->GetScoreData()->GetTakedowns();
     }
 
     // ------------------------------------------------------------------------
@@ -98,17 +102,17 @@ namespace BrnGameState
     // ------------------------------------------------------------------------
     u32 ScoringSystem::GetRaceCarNumCompletedLaps(EActiveRaceCarIndex leRaceCarIndex) const
     {
-        CGS_ASSERT((leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
-                   (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
-                   "(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && "
-                   "(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)");
+        CGS_ASSERT_AT((leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
+                          (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
+                      "(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)",
+                      CGS_ARTIST_FILE_BRNSCORINGSYSTEM_H, 1968);
 
         const CarData* lpCarData = GetCarData(leRaceCarIndex);
-        if (lpCarData != NULL)
+        if (lpCarData == NULL)
         {
-            return static_cast<u32>(lpCarData->GetScoreData()->GetCompletedLaps());
+            return 0;
         }
-        return 0;
+        return static_cast<u32>(lpCarData->GetScoreData()->GetCompletedLaps());
     }
 
     // ------------------------------------------------------------------------
@@ -118,17 +122,17 @@ namespace BrnGameState
     // ------------------------------------------------------------------------
     u32 ScoringSystem::GetCarRacePosition(EActiveRaceCarIndex leRaceCarIndex) const
     {
-        CGS_ASSERT((leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
-                   (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
-                   "(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && "
-                   "(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)");
+        CGS_ASSERT_AT((leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
+                          (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
+                      "(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)",
+                      CGS_ARTIST_FILE_BRNSCORINGSYSTEM_H, 2027);
 
         const CarData* lpCarData = GetCarData(leRaceCarIndex);
-        if (lpCarData != NULL)
+        if (lpCarData == NULL)
         {
-            return static_cast<u32>(lpCarData->GetScoreData()->GetRacePosition());
+            return static_cast<u32>(E_ACTIVE_RACE_CAR_INDEX_COUNT);
         }
-        return static_cast<u32>(E_ACTIVE_RACE_CAR_INDEX_COUNT);
+        return static_cast<u32>(lpCarData->GetScoreData()->GetRacePosition());
     }
 
     // ------------------------------------------------------------------------
@@ -138,17 +142,17 @@ namespace BrnGameState
     // ------------------------------------------------------------------------
     s32 ScoringSystem::GetCarRaceFinishPosition(EActiveRaceCarIndex leRaceCarIndex) const
     {
-        CGS_ASSERT((leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
-                   (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
-                   "(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && "
-                   "(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)");
+        CGS_ASSERT_AT((leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
+                          (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
+                      "(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)",
+                      CGS_ARTIST_FILE_BRNSCORINGSYSTEM_H, 2048);
 
         const CarData* lpCarData = GetCarData(leRaceCarIndex);
-        if (lpCarData != NULL)
+        if (lpCarData == NULL)
         {
-            return lpCarData->GetScoreData()->GetFinishPosition();
+            return static_cast<s32>(E_ACTIVE_RACE_CAR_INDEX_COUNT);
         }
-        return static_cast<s32>(E_ACTIVE_RACE_CAR_INDEX_COUNT);
+        return lpCarData->GetScoreData()->GetFinishPosition();
     }
 
     // ------------------------------------------------------------------------
@@ -158,17 +162,17 @@ namespace BrnGameState
     // ------------------------------------------------------------------------
     f32 ScoringSystem::GetRaceCarDistanceToFinish(EActiveRaceCarIndex leRaceCarIndex) const
     {
-        CGS_ASSERT((leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
-                   (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
-                   "(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && "
-                   "(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)");
+        CGS_ASSERT_AT((leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
+                          (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
+                      "(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)",
+                      CGS_ARTIST_FILE_BRNSCORINGSYSTEM_H, 2070);
 
         const CarData* lpCarData = GetCarData(leRaceCarIndex);
-        if (lpCarData != NULL)
+        if (lpCarData == NULL)
         {
-            return lpCarData->GetScoreData()->GetDistanceToFinishLive();
+            return 0.0f;
         }
-        return 0.0f;
+        return lpCarData->GetScoreData()->GetDistanceToFinishLive();
     }
 
     // ------------------------------------------------------------------------
@@ -179,17 +183,17 @@ namespace BrnGameState
     // ------------------------------------------------------------------------
     EActiveRaceCarIndex ScoringSystem::GetRaceCarEliminatorIndex(EActiveRaceCarIndex leRaceCarIndex) const
     {
-        CGS_ASSERT((leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
-                   (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
-                   "(leRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && "
-                   "(leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)");
+        CGS_ASSERT_AT((leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
+                          (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
+                      "(leRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)",
+                      CGS_ARTIST_FILE_BRNSCORINGSYSTEM_H, 2179);
 
         const CarData* lpCarData = GetCarData(leRaceCarIndex);
-        if (lpCarData != NULL)
+        if (lpCarData == NULL)
         {
-            return lpCarData->GetScoreData()->GetEliminatorRaceCarIndex();
+            return E_ACTIVE_RACE_CAR_INDEX_INVALID;
         }
-        return E_ACTIVE_RACE_CAR_INDEX_INVALID;
+        return lpCarData->GetScoreData()->GetEliminatorRaceCarIndex();
     }
 
     // ------------------------------------------------------------------------
@@ -199,17 +203,17 @@ namespace BrnGameState
     // ------------------------------------------------------------------------
     s32 ScoringSystem::GetNumberOfEliminations(EActiveRaceCarIndex leRaceCarIndex) const
     {
-        CGS_ASSERT((leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
-                   (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
-                   "(leRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && "
-                   "(leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)");
+        CGS_ASSERT_AT((leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
+                          (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
+                      "(leRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)",
+                      CGS_ARTIST_FILE_BRNSCORINGSYSTEM_H, 2202);
 
         const CarData* lpCarData = GetCarData(leRaceCarIndex);
-        if (lpCarData != NULL)
+        if (lpCarData == NULL)
         {
-            return lpCarData->GetScoreData()->GetNumEliminations();
+            return 0;
         }
-        return 0;
+        return lpCarData->GetScoreData()->GetNumEliminations();
     }
 
     // ------------------------------------------------------------------------
@@ -219,17 +223,17 @@ namespace BrnGameState
     // ------------------------------------------------------------------------
     const s32 ScoringSystem::GetNumberOfTakedownsAgainst(EActiveRaceCarIndex leRaceCarIndex) const
     {
-        CGS_ASSERT((leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
-                   (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
-                   "(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && "
-                   "(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)");
+        CGS_ASSERT_AT((leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
+                          (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
+                      "(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)",
+                      CGS_ARTIST_FILE_BRNSCORINGSYSTEM_H, 2387);
 
         const CarData* lpCarData = GetCarData(leRaceCarIndex);
-        if (lpCarData != NULL)
+        if (lpCarData == NULL)
         {
-            return lpCarData->GetScoreData()->GetTakedownsAgainst();
+            return 0;
         }
-        return 0;
+        return lpCarData->GetScoreData()->GetTakedownsAgainst();
     }
 
     // ------------------------------------------------------------------------

@@ -204,13 +204,20 @@ namespace BrnGameState
         // GameStateModule::Construct supplies this pointer through ModeManager and ScoringSystem.
         typedef BrnGameState::AchievementManagerX360 AchievementManager;
 
-        void       Construct(AchievementManager* lpAchievementManager);                 // :123
-        bool       Prepare();                                                           // :127
+        // VIRTUAL (X360 vtable 0x820CEF50, eleven slots in this declaration order): Construct,
+        // Prepare, Release, Destruct, ClearData, HasStuntModeEnded, WasStuntRecentlyPerformed,
+        // BeginCombo, EndCombo, BankMultiplier, CalculateMultiplier. The PS3 DWARF predates the
+        // X360-only StuntModeScoringOnline and spells them plain; ARTIST dispatches them through
+        // the vtable (e.g. ScoringSystem::Prepare 0x8232A454 slot 1, HasStuntAttackModeEnded
+        // 0x82326738 slot 5, BankMultiplier 0x82312DBC slot 10) and the online scorer overrides
+        // all but Release (vtable 0x820CF9EC).
+        virtual void Construct(AchievementManager* lpAchievementManager);               // :123
+        virtual bool Prepare();                                                         // :127
         void       Update(const ActiveRaceCarOutputInterface* lpRaceCar, f32 lfDelta);  // :133
-        bool       Release();                                                           // :137
-        void       Destruct();                                                          // :141
+        virtual bool Release();                                                         // :137
+        virtual void Destruct();                                                        // :141
         void       Activate(s32 liTargetScore);                                         // :145
-        void       ClearData();                                                         // :149
+        virtual void ClearData();                                                       // :149
         void       OutputStuntsToDisplay(s32 liCount, StuntToDisplay* lpStunts);        // :153
 
         // Trivial direct-member getters -- bodied inline (return type matches the member type).
@@ -284,7 +291,7 @@ namespace BrnGameState
         void       DealWithHitProp(u16 luPropId, u8 luFlags);                           // :199
         void       DealWithPowerPark(const GameStateModuleIO::PowerParkResultAction* lpAction); // :203
 
-        bool       WasStuntRecentlyPerformed(StuntInfo* lpStuntInfo);                   // :208
+        virtual bool WasStuntRecentlyPerformed(StuntInfo* lpStuntInfo);                 // :208
         // GROWN signature (additive, own home): the DWARF (BrnStuntModeScoring.h:214) spelt this
         // with two out-params, but the X360 body (0x823132D0) writes THREE: the combo score
         // (s32*), the "is this a valid/qualifying combo" flag (bool*, derived from miCurrentScore
@@ -321,8 +328,8 @@ namespace BrnGameState
         }
 
         // --- protected helpers (DECLARE-ONLY) ---
-        void       BeginCombo();                                                        // :224
-        void       EndCombo();                                                          // :229
+        virtual void BeginCombo();                                                      // :224
+        virtual void EndCombo();                                                        // :229
         void       ClearStuntTypeInfo();                                                // :233
         void       UpdateCombo(f32 lfDelta, const ActiveRaceCarOutputInterface* lpRaceCar); // :239
         void       UpdateBufferedScore(f32 lfDelta);                                    // :242
@@ -364,7 +371,8 @@ namespace BrnGameState
         // +0x28). We declare CalculateMultiplier virtual so the override can bind; the full vtable
         // ORDER is still deferred (see the HasStuntModeEnded note above) -- declaring this one extra
         // virtual is enough for the body + the dispatch to compile (semantic parity; no layout assert).
-        s32        BankMultiplier(StuntInfo* lpRecentStunt);                            // X360 0x82312D68 (grown per asm)
+        // void: the online override (0x8232DE08) returns nothing and the one caller discards it.
+        virtual void BankMultiplier(StuntInfo* lpRecentStunt);                          // X360 0x82312D68 (vtable +0x24)
         virtual s32 CalculateMultiplier(const StuntInfo* lpStuntInfo,
                                         MultiplierOutInfo* lpMultiplierOutInfo);        // X360 0x82312DE8 (grown per asm; virtual)
 

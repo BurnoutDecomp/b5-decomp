@@ -110,7 +110,9 @@ namespace BrnGameState
         // through (ScoringSystem::Construct hands both stunt scorers r28 @0x823380E4).
         void Construct(AchievementManager* lpAchievementManager);                    // X360 0x8232D060
         bool Prepare();                                                              // X360 0x82338B50
-        bool Release();                                                              // X360 0x82321878 (ledger "Relase")
+        // ARTIST's online vtable 0x820CF9EC keeps the base Release in slot 2 and adds this as a new
+        // twelfth slot (+0x2C): the original spells it "Relase", so it never overrode Release.
+        virtual bool Relase();                                                       // X360 0x82321878
         void Destruct();                                                             // X360 0x8232D0F8
         void ClearData();                                                            // X360 0x82321968
         void Update(const ActiveRaceCarOutputInterface* lpRaceCar, f32 lfDelta);     // X360 0x82340C20

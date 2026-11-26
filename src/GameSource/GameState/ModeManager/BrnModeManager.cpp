@@ -804,11 +804,11 @@ bool ModeManager::IsInGameMode() const
 // GameMode::meCurrentState, the same word IsInPostEvent reads.) 2 == E_GMS_IN_PROGRESS.
 bool ModeManager::IsInProgress() const
 {
-    if (mpCurrentGameMode == 0)
+    if (mpCurrentGameMode != 0)
     {
-        return false;
+        return (mpCurrentGameMode->GetCurrentState() == GameStateModuleIO::E_GMS_IN_PROGRESS);
     }
-    return (mpCurrentGameMode->GetCurrentState() == GameStateModuleIO::E_GMS_IN_PROGRESS);
+    return false;
 }
 
 // [!] PROVISIONAL -- SEMANTICS DERIVED, NOT ASM-PINNED, AND SAID SO OUT LOUD.

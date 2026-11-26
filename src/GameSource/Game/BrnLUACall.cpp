@@ -45,19 +45,44 @@ namespace BrnGame
         miNumResults = lua_gettop(mpLuaHandle);
     }
 
+    // DWARF BrnLUACall.h:71/:74/:90 (and the IsNil/IsBool pair beside them). ARTIST has no
+    // standalone copy of any of them: every accessor below inlines them, recomputing the stack
+    // index from miNumResults after each Lua call (e.g. GetArgType 0x823C02D4/0x823C02F4).
+    s32 LUACall::ResultIndexToStackIndex(s32 liResultIndex) const
+    {
+        return liResultIndex - miNumResults;
+    }
+
+    bool LUACall::IsNil(s32 liResultIndex) const
+    {
+        return lua_type(mpLuaHandle, ResultIndexToStackIndex(liResultIndex)) == 0;   // LUA_TNIL
+    }
+
+    bool LUACall::IsNumber(s32 liResultIndex) const
+    {
+        return lua_isnumber(mpLuaHandle, ResultIndexToStackIndex(liResultIndex)) != 0;
+    }
+
+    bool LUACall::IsString(s32 liResultIndex) const
+    {
+        return lua_isstring(mpLuaHandle, ResultIndexToStackIndex(liResultIndex)) != 0;
+    }
+
+    bool LUACall::IsBool(s32 liResultIndex) const
+    {
+        return lua_type(mpLuaHandle, ResultIndexToStackIndex(liResultIndex)) == 1;   // LUA_TBOOLEAN
+    }
+
     // @ 0x823C0298
     LUACall::EArgType LUACall::GetArgType(s32 liResultIndex) const
     {
-        // subf r4, r11, r30 -- ResultIndexToStackIndex(liResultIndex) inlined.
-        const s32 liStackIndex = liResultIndex - miNumResults;
-
-        if (lua_type(mpLuaHandle, liStackIndex) == 0)   // LUA_TNIL
+        if (IsNil(liResultIndex))
             return E_NIL;
-        if (lua_isnumber(mpLuaHandle, liStackIndex))
+        if (IsNumber(liResultIndex))
             return E_NUMBER;
-        if (lua_isstring(mpLuaHandle, liStackIndex))
+        if (IsString(liResultIndex))
             return E_STRING;
-        if (lua_type(mpLuaHandle, liStackIndex) == 1)   // LUA_TBOOLEAN
+        if (IsBool(liResultIndex))
             return E_BOOL;
 
         // Unconditional fall-through: fire the assert then return E_UNKNOWN.
@@ -68,25 +93,19 @@ namespace BrnGame
     // @ 0x823C5C60
     s32 LUACall::GetInt32(s32 liResultIndex)
     {
-        // subf r4, r11, r30 -- ResultIndexToStackIndex(liResultIndex) inlined.
-        const s32 liStackIndex = liResultIndex - miNumResults;
-
-        CGS_ASSERT(lua_isnumber(mpLuaHandle, liStackIndex), CGS_ASSERT_MESSAGE_AT("IsNumber(liResultIndex)", CGS_ARTIST_FILE, 149));
+        CGS_ASSERT(IsNumber(liResultIndex), CGS_ASSERT_MESSAGE_AT("IsNumber(liResultIndex)", CGS_ARTIST_FILE, 149));
 
         // fctiwz f0, f1 ; stfiwx -- truncate the Lua number to a 32-bit int.
-        return static_cast<s32>(lua_tonumber(mpLuaHandle, liStackIndex));
+        return static_cast<s32>(lua_tonumber(mpLuaHandle, ResultIndexToStackIndex(liResultIndex)));
     }
 
     // @ 0x823C5CF0
     const char* LUACall::GetString(s32 liResultIndex) const
     {
-        // subf r4, r11, r30 -- ResultIndexToStackIndex(liResultIndex) inlined.
-        const s32 liStackIndex = liResultIndex - miNumResults;
-
-        CGS_ASSERT(lua_isstring(mpLuaHandle, liStackIndex), CGS_ASSERT_MESSAGE_AT("IsString(liResultIndex)", CGS_ARTIST_FILE, 156));
+        CGS_ASSERT(IsString(liResultIndex), CGS_ASSERT_MESSAGE_AT("IsString(liResultIndex)", CGS_ARTIST_FILE, 156));
 
         // li r5, 0 -- length out-param is null.
-        return lua_tolstring(mpLuaHandle, liStackIndex, 0);
+        return lua_tolstring(mpLuaHandle, ResultIndexToStackIndex(liResultIndex), 0);
     }
 }
 
