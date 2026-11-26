@@ -1,5 +1,6 @@
 #include "GameSource/World/ShadowMap/BrnShadowMap.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                 // CGS_ASSERT
+#include "SDKs/EATech/include/rw/math/vpu/constants.h"           // rw::math::vpu::GetVecFloat_Zero (CalcLodDistanceModifier)
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"            // CgsCore::SnPrintf (Construct's per-CSM debug paths)
 #include "GameShared/GameClasses/Numeric/CgsBranchlessOperations.h" // CgsNumeric::Min (CalcOptimisedLod)
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h" // Construct's debug-variable registration
@@ -127,13 +128,15 @@ namespace BrnWorld
     // four lanes of the returned VecFloat -- i.e. `VecFloat(scalar)` construction.
     VecFloat ShadowMap::CalcLodDistanceModifier()
     {
+        // DWARF (BrnShadowMap.cpp:251 hints) calls GetVecFloat_Zero and VecFloat(const float&): the
+        // zero is vspltisw (0x827B43B8) and the table entry is splatted straight from memory (lvlx
+        // off the table, 0x827B43D4), no float local.
         if (!sbOptimiseShadowLodDistances)
         {
-            { const VecFloat lResult = VecFloat(0.0f); return lResult; }
+            return rw::math::vpu::GetVecFloat_Zero();
         }
 
-        const f32 lfModifier = KA_SHADOWMAP_LOD_DISTANCE_MODIFIER[muCurrentShadowMap];
-        { const VecFloat lResult = VecFloat(lfModifier); return lResult; }
+        return VecFloat(KA_SHADOWMAP_LOD_DISTANCE_MODIFIER[muCurrentShadowMap]);
     }
 
     // ========================================================================

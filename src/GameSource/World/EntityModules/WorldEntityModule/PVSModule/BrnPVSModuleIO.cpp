@@ -24,6 +24,15 @@ namespace BrnWorld
 {
 namespace PVSIO
 {
+    // X360 0x822EE620, DWARF BrnPVSModuleIO.cpp:36: InputInterface::Construct then InputInterface::Clear,
+    // both inlined (the zone-request queue is the interface's only member, DWARF
+    // BrnPVSModuleInputInterface.h:74): bl EventQueue::Construct, then stw 0,8(this).
+    void InputBuffer::Construct()
+    {
+        mZoneRequestQueue.Construct();
+        mZoneRequestQueue.Clear();
+    }
+
     // X360 0x822D8C20. Readies the input buffer for a new frame and reports success.
     // Store-for-store: reset the zone-request queue length (this+8 -> miLength=0),
     // return true (li r3,1).

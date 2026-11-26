@@ -182,7 +182,8 @@ public:
 // the DataStructure lifecycle hooks the ModuleSingleBufferedTemplate calls.
 struct InputBuffer : public CgsModule::DataStructure
 {
-    void Construct() { mZoneRequestQueue.Construct(); }
+    // DWARF BrnPVSModuleIO.cpp:36: out of line (ARTIST 0x822EE620); body in BrnPVSModuleIO.cpp.
+    void Construct();
     // X360 0x822D8C20 -- real body (clears the zone-request queue length, returns true).
     // De-inlined; body in BrnPVSModuleIO.cpp.
     bool Prepare();
