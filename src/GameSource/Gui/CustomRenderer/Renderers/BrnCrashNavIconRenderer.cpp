@@ -1606,9 +1606,8 @@ void CrashNavIconRenderer::GetIconInformation(u32 luIndex, bool* lpbFiltered,
         *lpuEventTypeIndex = KU_ICON_EVENT_TYPE_ONLINE_OFFSET;   // li r10, 6
 
         // The five authored start-points Construct appended are keyed on the JUNCTION id
-        // (`lwz r11, 0x14(r29)` -> the Array<int,5>::Contains stack argument).
-        *lpbFiltered    = mOnlineStartpointsToIgnore.Contains(
-                              static_cast<s32>(lpEventStart->muJunctionId));
+        // (`lwz r11, 0x14(r29)` -> the Array<unsigned int,5>::Contains stack argument).
+        *lpbFiltered    = mOnlineStartpointsToIgnore.Contains(lpEventStart->muJunctionId);
         *lpbUseMiniIcon = false;
 
         lrv3Position = lpEventStart->mv3Position;

@@ -352,10 +352,10 @@ namespace BrnGui
         renderengine::TextureState*   mpRoadSignsTextureState;                // h:411 X360 +0x128 (texture id 235)
 
         GuiEventDrawEventIcons::EIconDisplayType meIconDisplayType; // h:414 X360 +0x12C (Construct/Release/Destruct = COUNT)
-        // h:417 X360 +0x130 (count word @+0x144). The DWARF types the element uint32_t, but
-        // the X360 MANGLING is Array<int,5> (Append @0x82448C28 / Contains @0x8244FE48, the
-        // instantiation committed in CgsArrayInt5.cpp), so the element is s32 here.
-        CgsContainers::Array<s32, 5>                 mOnlineStartpointsToIgnore;
+        // h:417 X360 +0x130 (count word @+0x144). DWARF types it Array<uint32_t,5u>, and
+        // ARTIST's FindFirstInstanceOf @0x824494B8 compares the elements unsigned (cmplw
+        // @0x8244951C); the IDA name "Array<int,5>" is front-truncated from "unsigned int,5".
+        CgsContainers::Array<u32, 5>                 mOnlineStartpointsToIgnore;
         u32                           muInspectedEventID;           // h:420 X360 +0x148 (event 558)
         GuiEventSetHoveredEventIcon   mHoveredEventIcon;            // h:423 X360 +0x150 (24 B, event 559)
         GuiEventSetHoveredEventIcon   mHoveredEventIconLastFrame;   // h:424 X360 +0x168 (24 B)
@@ -417,7 +417,7 @@ namespace BrnGui
             CGS_STATIC_ASSERT((E_CRASHNAVICON_NUM == 2),
                           "InitResources walks exactly two icon atlases (ids 204/205)");
             // Construct's five int_5_::Append calls must fit the array (X360 +0x130).
-            CGS_STATIC_ASSERT((CgsContainers::Array<s32, 5>::KU_SIZE == 5),
+            CGS_STATIC_ASSERT((CgsContainers::Array<u32, 5>::KU_SIZE == 5),
                           "Construct appends five online start-points to ignore");
             // The four big UV tables are 2 x 11 entries; the four mini tables 2 x 6.
             CGS_STATIC_ASSERT((KU_ICON_EVENT_TYPE_COUNT == 11),
