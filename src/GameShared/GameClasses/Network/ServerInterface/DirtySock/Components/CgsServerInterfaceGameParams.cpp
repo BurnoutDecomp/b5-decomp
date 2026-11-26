@@ -1,7 +1,7 @@
 #include "CgsServerInterfaceGameParams.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceGames.h"          // DirtySock::LobbyApiPlayT
-#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfacePlayerInfoData.h"   // EConversionFlags
+#include "GameShared/GameClasses/Network/CgsNetworkConstants.h"   // EConversionFlags
 #include "lobbytagfield.h"   // TagFieldSet* / TagFieldGetStructure
 
 #include <string.h>
@@ -155,7 +155,7 @@ namespace CgsNetwork
         TagFieldSetNumber(lpcString, liLength, "MAXSIZE", miMaxNumPlayers);
         TagFieldSetNumber(lpcString, liLength, "CUSTFLAGS", static_cast<s32>(muCustomFlags));
         TagFieldSetNumber(lpcString, liLength, "SYSFLAGS",
-                          static_cast<s32>(ConvertFlags(muGameFlags, E_CONVERSION_TO_WIRE)));
+                          static_cast<s32>(ConvertFlags(muGameFlags, E_FLAGS_DIRTYSOCK)));
         if (miRoomID != -1)
         {
             TagFieldSetNumber(lpcString, liLength, "ROOM", miRoomID);
@@ -197,7 +197,7 @@ namespace CgsNetwork
         miNumPrivateSlots = lpRecord->iPrivSlots;
         muCustomFlags     = lpRecord->uCustflags;
         muRandomSeed      = lpRecord->uSeed;
-        muGameFlags       = ConvertFlags(lpRecord->uSysflags, E_CONVERSION_FROM_WIRE);
+        muGameFlags       = ConvertFlags(lpRecord->uSysflags, E_FLAGS_GAMESHARED);
 
         if (GetData() != 0 && GetDataSize() != 0)
         {

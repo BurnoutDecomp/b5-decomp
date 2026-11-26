@@ -13,8 +13,8 @@
 // ending the action when the "GPS_REGIONS" list runs out.
 
 // Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfacePingRegions.cpp".
-static const char KAC_ARTIST_ASSERT_HEADER[] =
-    "..\\..\\..\\GameShared\\GameClasses\\Network/ServerInterface/DirtySock/Components/CgsServerInterfacePingRegions.h";
+#define CGS_ARTIST_HEADER \
+    "..\\..\\..\\GameShared\\GameClasses\\Network/ServerInterface/DirtySock/Components/CgsServerInterfacePingRegions.h"
 
 namespace CgsNetwork
 {
@@ -28,7 +28,7 @@ namespace CgsNetwork
         const s32 KI_NAME_RESOLVE_TIMEOUT = 5000;
 
         // LobbyApiInfo selector of the lobby config record.
-        const s32 KI_SELECT_CONF = 0x636F6E66;   // 'conf'
+        // (selector 'conf' written as a four-character code at the call)
 
         // Recorded ping for a region whose lookup or ping failed.
         const s32 KI_PING_FAILED = -1;
@@ -58,10 +58,10 @@ namespace CgsNetwork
     s32 ServerInterfacePingRegions::GetPingValue(s32 liRegion) const
     {
         CGS_ASSERT(liRegion >= 0,
-            CGS_ASSERT_MESSAGE_AT("liRegion >= 0", KAC_ARTIST_ASSERT_HEADER, 201 /* ARTIST 0x82877994 */));
+            CGS_ASSERT_MESSAGE_AT("liRegion >= 0", CGS_ARTIST_HEADER, 201 /* ARTIST 0x82877994 */));
         CGS_ASSERT(liRegion < miCurrentRegion,
             CGS_ASSERT_MESSAGE_AT(
-                "liRegion < miCurrentRegion", KAC_ARTIST_ASSERT_HEADER, 202 /* ARTIST 0x828779BC */));
+                "liRegion < miCurrentRegion", CGS_ARTIST_HEADER, 202 /* ARTIST 0x828779BC */));
 
         return maiPingResults[liRegion];
     }
@@ -266,7 +266,7 @@ namespace CgsNetwork
     bool ServerInterfacePingRegions::ResolveRegion(s32 liRegion)
     {
         const char* lpcConf = static_cast<const char*>(
-            LobbyApiInfo(mpServerInterface->GetLobbyAPIRef(), KI_SELECT_CONF));
+            LobbyApiInfo(mpServerInterface->GetLobbyAPIRef(), 'conf'));
         const char* lpcRegions = TagFieldFind(lpcConf, "GPS_REGIONS");
 
         char lacHostName[KI_MAX_HOST_NAME_LENGTH];
@@ -319,3 +319,5 @@ namespace CgsNetwork
         static_cast<ServerInterfacePingRegions*>(lpUserData)->HandlePingResults(static_cast<s32>(luPing));
     }
 }
+
+#undef CGS_ARTIST_HEADER

@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfacePlayerInfoData.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CgsDev::Assert Begin/Fire/End
-#include "GameShared/GameClasses/Development/CgsStrStream.h"  // CgsDev::StrStream (over-length assert)
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"      // CgsCore::StrnCpy (over-length assert)
 #include "lobbytagfield.h"                                    // DirtySDK TagFieldGetStructure
 #include <cstring>                                            // std::strlen / std::strncpy
 
@@ -77,29 +77,8 @@ namespace
 {
     using CgsNetwork::FlagMapping;
 
-    // The inlined StrnCpy<N> over-length guard (CgsStringUtils.h:55).
-    void FireStringTooLong(const char* lpcValue)
-    {
-        CgsDev::Assert::BeginAssert();
-        char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-        CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-        lStrStream << "String too long: " << (lpcValue ? lpcValue : "<NULLSTRING>");
-        CgsDev::Assert::FireAssert(
-            lacMessageBuffer,
-            CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h",
-            55));
-        CgsDev::Assert::EndAssert();
-    }
-
-    // strncpy with the leading StrnCpy<liMax> over-length bounds check.
-    void StrnCpyChecked(char* lpcDest, const char* lpcSrc, s32 liMax)
-    {
-        if (std::strlen(lpcSrc) >= static_cast<u32>(liMax))
-        {
-            FireStringTooLong(lpcSrc);
-        }
-        std::strncpy(lpcDest, lpcSrc, static_cast<u32>(liMax));
-    }
+    // The StrnCpy over-length guard is CgsCore::StrnCpy's own (CgsStringUtils.h:53, assert
+    // at :55); a file-local copy of it collided with its siblings in CgsNetworkUnity.
 
     // Fold an input flag word through a {mask,value} table.
     u32 FoldFlags(u32 luInput, const FlagMapping* lpTable, s32 liCount)
@@ -123,7 +102,7 @@ s32 ConvertHWFlags(s32 liFlags, EConversionFlags leDirection)
 {
     // The X360 build picks one of two interleaved columns of the mapping table by the
     // direction argument (cntlzw-based select). Only the to-player-info direction
-    // (E_CONVERSION_FROM_WIRE == 0, the sole reachable caller) is reconstructed: fold the
+    // (E_FLAGS_GAMESHARED == 0, the sole reachable caller) is reconstructed: fold the
     // input flag word through the 14-entry hardware-flag mapping table.
     (void)leDirection;
     // The console walks KI_NUM_HW_FLAGS rows of the seven-row table (reading past its end);
@@ -173,11 +152,11 @@ void ServerInterfacePlayerInfoDataBase::SerialiseFromUser(const LobbyApiUserT* l
     // Lobby user record fields, by byte offset (the record type has no home here).
     const u8* lpcRec = reinterpret_cast<const u8*>(lpUser);
 
-    StrnCpyChecked(macName,          reinterpret_cast<const char*>(lpcRec + 0x008), 16);   // name
-    StrnCpyChecked(macAuxiliaryData, reinterpret_cast<const char*>(lpcRec + 0x12C), 132);  // aux
-    StrnCpyChecked(macClubID,        reinterpret_cast<const char*>(lpcRec + 0x218), 20);   // club id
-    StrnCpyChecked(macClubTag,       reinterpret_cast<const char*>(lpcRec + 0x22C), 8);    // club tag
-    StrnCpyChecked(macPing,          reinterpret_cast<const char*>(lpcRec + 0x018), 8);    // ping
+    CgsCore::StrnCpy(macName,          reinterpret_cast<const char*>(lpcRec + 0x008), 16);   // name
+    CgsCore::StrnCpy(macAuxiliaryData, reinterpret_cast<const char*>(lpcRec + 0x12C), 132);  // aux
+    CgsCore::StrnCpy(macClubID,        reinterpret_cast<const char*>(lpcRec + 0x218), 20);   // club id
+    CgsCore::StrnCpy(macClubTag,       reinterpret_cast<const char*>(lpcRec + 0x22C), 8);    // club tag
+    CgsCore::StrnCpy(macPing,          reinterpret_cast<const char*>(lpcRec + 0x018), 8);    // ping
 
     maColour[0] = lpcRec[0x1B8];
     maColour[1] = lpcRec[0x1B9];
@@ -200,7 +179,7 @@ void ServerInterfacePlayerInfoDataBase::SerialiseFromUser(const LobbyApiUserT* l
     muLevel      = *reinterpret_cast<const u32*>(lpcRec + 0x1BC);   // level
     muMedals     = *reinterpret_cast<const u32*>(lpcRec + 0x1C0);   // medals
     muHwFlags    = static_cast<u32>(ConvertHWFlags(*reinterpret_cast<const s32*>(lpcRec + 0x1C8),
-                                                   E_CONVERSION_FROM_WIRE));
+                                                   E_FLAGS_GAMESHARED));
     muLocalAddr  = *reinterpret_cast<const u32*>(lpcRec + 0x210);   // local addr
     muLocality   = *reinterpret_cast<const u32*>(lpcRec + 0x214);   // locality
 

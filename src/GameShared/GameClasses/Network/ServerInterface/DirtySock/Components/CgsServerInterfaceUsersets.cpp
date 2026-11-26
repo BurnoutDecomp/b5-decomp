@@ -36,7 +36,7 @@ namespace CgsNetwork
         const s32 KI_LOBBY_LIST_USERSET_USERS = 10;
 
         // LobbyApiStatus 'self' record.
-        const s32 KI_SELECT_SELF             = 0x73656C66;   // 'self'
+        // (selector 'self' written as a four-character code at the calls)
         const s32 KI_SELF_STATUS_BUFFER_SIZE = 564;
         const s32 KI_SELF_NAME_OFFSET        = 0x08;         // local persona name
         const s32 KI_SELF_USERSET_OFFSET     = 0x1C4;        // ident of the userset we are in
@@ -241,7 +241,7 @@ namespace CgsNetwork
     const LobbyApiUserSetT* ServerInterfaceUsersets::GetUserSet() const
     {
         char lacSelf[KI_SELF_STATUS_BUFFER_SIZE];
-        LobbyApiStatus(mpServerInterface->GetLobbyAPIRef(), KI_SELECT_SELF, lacSelf, KI_SELF_STATUS_BUFFER_SIZE);
+        LobbyApiStatus(mpServerInterface->GetLobbyAPIRef(), 'self', lacSelf, KI_SELF_STATUS_BUFFER_SIZE);
 
         const s32 liUsersetIdent = *reinterpret_cast<const s32*>(lacSelf + KI_SELF_USERSET_OFFSET);
         if (liUsersetIdent == 0)
@@ -313,7 +313,7 @@ namespace CgsNetwork
         }
 
         char lacSelf[KI_SELF_STATUS_BUFFER_SIZE];
-        LobbyApiStatus(mpServerInterface->GetLobbyAPIRef(), KI_SELECT_SELF, lacSelf, KI_SELF_STATUS_BUFFER_SIZE);
+        LobbyApiStatus(mpServerInterface->GetLobbyAPIRef(), 'self', lacSelf, KI_SELF_STATUS_BUFFER_SIZE);
 
         return LobbyNameCmp(reinterpret_cast<const char*>(lpUserSet) + KI_USERSET_HOST_NAME_OFFSET,
                             lacSelf + KI_SELF_NAME_OFFSET) == 0;

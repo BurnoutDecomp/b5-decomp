@@ -1,5 +1,6 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceGameSearchParams.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+#include "GameShared/GameClasses/Network/CgsNetworkConstants.h"   // EConversionFlags
 #include "lobbytagfield.h"                            // DirtySDK TagFieldSet*
 #include <cstring>                                    // std::strlen, std::memset
 
@@ -15,15 +16,6 @@
 
 namespace CgsNetwork
 {
-    // CgsNetwork::EConversionFlags -- conversion-table selector (homed alongside
-    // ConvertFlags in CgsServerInterfaceGameFlags.*). Only the "to wire" direction
-    // (value 1) is referenced here; declared minimally so the call type-checks.
-    enum EConversionFlags
-    {
-        E_CONVERSION_FROM_WIRE = 0,
-        E_CONVERSION_TO_WIRE   = 1,
-    };
-
     // Homed in CgsServerInterfaceGameFlags.cpp (another component TU).
     extern u32 ConvertFlags(u32 luFlags, EConversionFlags leDirection);
 }
@@ -52,9 +44,9 @@ void ServerInterfaceGameSearchParamsBase::SerialiseToString(char* lpcRecord, s32
     }
     TagFieldSetNumber(lpcRecord, liRecLen, "ASYNC", 1);
     TagFieldSetNumber(lpcRecord, liRecLen, "SYSMASK",
-                      static_cast<s32>(ConvertFlags(muGameFlagsMask, E_CONVERSION_TO_WIRE)));
+                      static_cast<s32>(ConvertFlags(muGameFlagsMask, E_FLAGS_DIRTYSOCK)));
     TagFieldSetNumber(lpcRecord, liRecLen, "SYSFLAGS",
-                      static_cast<s32>(ConvertFlags(muGameFlagsValue, E_CONVERSION_TO_WIRE)));
+                      static_cast<s32>(ConvertFlags(muGameFlagsValue, E_FLAGS_DIRTYSOCK)));
     if (mbReturnPlayers)
     {
         TagFieldSetNumber(lpcRecord, liRecLen, "PLAYERS", 1);

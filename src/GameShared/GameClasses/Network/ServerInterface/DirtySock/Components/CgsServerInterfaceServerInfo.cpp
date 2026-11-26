@@ -37,8 +37,8 @@ namespace CgsNetwork
     {
         // LobbyApiInfo / LobbyApiStatus selector fourccs (big-endian packed, as the
         // X360 immediates show).
-        const s32 KI_SELECT_SELF = 0x73656C66;   // 'self'
-        const s32 KI_SELECT_CONF = 0x636F6E66;   // 'conf'
+        // ('self' / 'conf': written as four-character codes at the calls; DWARF lists
+        // no such constants for this file)
         const s32 KI_SELECT_PRED = 0x70657264;   // 'perd'
 
     }
@@ -107,11 +107,11 @@ void ServerInterfaceServerInfo::FindUrl(const char* lpcUrlKey, char* lpcOut, s32
     // Pull the 'self' status record and the 'conf' info record, then read the named
     // URL template out of the config record (defaulting to the empty error string).
     LobbyApiUserT lPlayerInfo;
-    LobbyApiStatus(mpServerInterface->GetLobbyAPIRef(), KI_SELECT_SELF,
+    LobbyApiStatus(mpServerInterface->GetLobbyAPIRef(), 'self',
                    &lPlayerInfo, sizeof(lPlayerInfo));
 
     const char* lpcConf = static_cast<const char*>(
-        LobbyApiInfo(mpServerInterface->GetLobbyAPIRef(), KI_SELECT_CONF));
+        LobbyApiInfo(mpServerInterface->GetLobbyAPIRef(), 'conf'));
     const char* lpcField = TagFieldFind(lpcConf, lpcUrlKey);
 
     char lacUrlTemplate[KI_URL_LENGTH];
@@ -166,14 +166,14 @@ void ServerInterfaceServerInfo::GetStringFromClientConfig(const char* lpcKey,
                   "NULL != mpServerInterface->GetLobbyAPIRef()", CGS_ARTIST_FILE, 572);
 
     const char* lpcConf = static_cast<const char*>(
-        LobbyApiInfo(mpServerInterface->GetLobbyAPIRef(), KI_SELECT_CONF));
+        LobbyApiInfo(mpServerInterface->GetLobbyAPIRef(), 'conf'));
     TagFieldGetString(TagFieldFind(lpcConf, lpcKey), lpcOut, liOutLen, "");
 }
 
 bool ServerInterfaceServerInfo::IsNewsUpdated() const
 {
     const char* lpcConf = static_cast<const char*>(
-        LobbyApiInfo(mpServerInterface->GetLobbyAPIRef(), KI_SELECT_CONF));
+        LobbyApiInfo(mpServerInterface->GetLobbyAPIRef(), 'conf'));
     const char* lpcPred = static_cast<const char*>(
         LobbyApiInfo(mpServerInterface->GetLobbyAPIRef(), KI_SELECT_PRED));
 

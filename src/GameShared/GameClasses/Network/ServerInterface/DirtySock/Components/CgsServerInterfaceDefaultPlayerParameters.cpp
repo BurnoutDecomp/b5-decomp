@@ -1,12 +1,7 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceDefaultPlayerParameters.h"
 
 #include <new>
-
-// Platform memset (declared exactly as the other network TUs declare it).
-extern "C"
-{
-    void* XMemSet(void* lpDest, s32 liValue, u32 luCount);
-}
+#include <xtl.h>  // XMemSet
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsNetwork::DefaultPlayerParameters::`vector deleting destructor' @ 0x82890260
@@ -55,20 +50,9 @@ namespace CgsNetwork
         return true;
     }
 
-    namespace
-    {
-        // The default record's pattern length (the console constant 20).
-        const s32 KI_DEFAULT_PATTERN_LENGTH = 20;
-    }
-
     const char* DefaultPlayerParameters::GetPattern() const
     {
         return "";
-    }
-
-    s32 DefaultPlayerParameters::GetPatternLength() const
-    {
-        return KI_DEFAULT_PATTERN_LENGTH;
     }
 
     u32 DefaultPlayerParameters::GetDataSize() const

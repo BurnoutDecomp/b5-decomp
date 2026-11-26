@@ -1,7 +1,7 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfacePlayerParams.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CgsDev::Assert Begin/Fire/End
-#include "GameShared/GameClasses/Development/CgsStrStream.h"  // CgsDev::StrStream (over-length assert)
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"      // CgsCore::StrnCpy (over-length assert)
 #include "lobbytagfield.h"                                    // DirtySDK TagFieldGet/Set*
 #include <cstring>                                            // std::strlen / std::strncpy
 
@@ -18,22 +18,8 @@
 // FLAGGED: LobbyApiPlayerT has no reconstructed home; its fields are read by the
 // documented byte offsets the X360 asm uses (verified store-for-store below).
 
-namespace
-{
-    // The over-length guard inlined from CgsStringUtils.h:55 (StrnCpy bounds check).
-    void FireStringTooLong(const char* lpcValue)
-    {
-        CgsDev::Assert::BeginAssert();
-        char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-        CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-        lStrStream << "String too long: " << (lpcValue ? lpcValue : "<NULLSTRING>");
-        CgsDev::Assert::FireAssert(
-            lacMessageBuffer,
-            CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h",
-            55));
-        CgsDev::Assert::EndAssert();
-    }
-}
+// The StrnCpy over-length guard is CgsCore::StrnCpy's own (CgsStringUtils.h:53, assert
+// at :55); a file-local copy of it collided with its siblings in CgsNetworkUnity.
 
 namespace CgsNetwork
 {
@@ -45,11 +31,7 @@ void ServerInterfacePlayerParamsBase::SerialiseFromPlayer(const void* lpPlayer)
     // Machine address string lives at LobbyApiPlayerT + 0x1C; copy it into the
     // 64-byte machine-address buffer (inlined StrnCpy<64> bounds guard first).
     const char* lpcMachineAddr = reinterpret_cast<const char*>(lpcRec + 0x1C);
-    if (std::strlen(lpcMachineAddr) >= 0x40u)
-    {
-        FireStringTooLong(lpcMachineAddr);
-    }
-    std::strncpy(macMachineAddress, lpcMachineAddr, 64);
+    CgsCore::StrnCpy(macMachineAddress, lpcMachineAddr, 64);
 
     // mpcName points at the lobby record's name field (LobbyApiPlayerT + 4).
     mpcName           = reinterpret_cast<const char*>(lpcRec + 4);

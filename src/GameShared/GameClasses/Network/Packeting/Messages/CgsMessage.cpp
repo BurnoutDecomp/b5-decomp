@@ -44,10 +44,10 @@ namespace CgsNetwork
 
     namespace
     {
-        const char KAC_ARTIST_FILE[] =
-            "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\Messages\\CgsMessage.cpp";
-        const char KAC_ARTIST_HEADER[] =
-            "..\\..\\..\\GameShared\\GameClasses\\Network/Packeting/Messages/CgsMessage.h";
+#define CGS_ARTIST_FILE \
+            "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\Messages\\CgsMessage.cpp"
+#define CGS_ARTIST_HEADER \
+            "..\\..\\..\\GameShared\\GameClasses\\Network/Packeting/Messages/CgsMessage.h"
 
         const f32 KF_ANGLE_PI      = 3.14159274f;
         const f32 KF_ANGLE_HALF_PI = 1.57079637f;
@@ -55,12 +55,12 @@ namespace CgsNetwork
         // A vector shorter than this has no direction worth encoding.
         const f32 KF_MIN_ANGLES_MAGNITUDE = 1.52587890625e-05f;   // 2^-16
 
-        // Keep the native fmadds boundary out of line: /O2 otherwise reassociates
-        // the rounded addend product into a different fused operation.
-        __declspec(noinline) f32 MultiplyAdd(f32 lfA, f32 lfB, f32 lfAddend)
-        {
-            return lfA * lfB + lfAddend;
-        }
+        // (No multiply-add helper: SetMatrixFromEulerAngles writes the four products
+        // as plain expressions, which the compiler fuses into fmadds/fmsubs as ARTIST
+        // 0x82870C64/0x82870C74 shows. An out-of-line helper here had no evidence and
+        // collided with CgsOldFrameConversionFunctions.cpp's in CgsNetworkUnity.)
+        //
+        //
 
         // ARTIST 82881748..828817E4 and 82881B40..82881BB0: one reciprocal
         // refinement, the original XboxMath arctangent, then VMX quadrant selects.
@@ -156,7 +156,7 @@ namespace CgsNetwork
     // Rotation rows from the negated roll / pitch / yaw (cos and sin in double, rounded to
     // single). Only the x, y and z lanes of the three rotation rows are written; the
     // translation row and the w lanes keep their values. The console fuses the four
-    // multiply-adds; MultiplyAdd preserves their native scalar fmadds boundary.
+    // multiply-adds into fmadds/fmsubs (ARTIST 0x82870C64..0x82870C98).
     void Message::SetMatrixFromEulerAngles(rw::math::vpu::Matrix44Affine* lpMatrix,
                                            f32 lfRoll, f32 lfPitch, f32 lfYaw)
     {
@@ -170,13 +170,13 @@ namespace CgsNetwork
         const f32 lfCosYawSinPitch = lfCosYaw * lfSinPitch;
         const f32 lfSinYawSinPitch = lfSinYaw * lfSinPitch;
 
-        lpMatrix->xAxis.mV.x = MultiplyAdd(lfSinYawSinPitch, lfSinRoll, lfCosYaw * lfCosRoll);
+        lpMatrix->xAxis.mV.x = lfSinYawSinPitch * lfSinRoll + lfCosYaw * lfCosRoll;
         lpMatrix->xAxis.mV.y = lfCosPitch * lfSinRoll;
-        lpMatrix->xAxis.mV.z = MultiplyAdd(lfCosYawSinPitch, lfSinRoll, -(lfSinYaw * lfCosRoll));
+        lpMatrix->xAxis.mV.z = lfCosYawSinPitch * lfSinRoll - lfSinYaw * lfCosRoll;
 
-        lpMatrix->yAxis.mV.x = MultiplyAdd(lfSinYawSinPitch, lfCosRoll, -(lfCosYaw * lfSinRoll));
+        lpMatrix->yAxis.mV.x = lfSinYawSinPitch * lfCosRoll - lfCosYaw * lfSinRoll;
         lpMatrix->yAxis.mV.y = lfCosPitch * lfCosRoll;
-        lpMatrix->yAxis.mV.z = MultiplyAdd(lfCosYawSinPitch, lfCosRoll, lfSinYaw * lfSinRoll);
+        lpMatrix->yAxis.mV.z = lfCosYawSinPitch * lfCosRoll + lfSinYaw * lfSinRoll;
 
         lpMatrix->zAxis.mV.x = lfSinYaw * lfCosPitch;
         lpMatrix->zAxis.mV.y = -lfSinPitch;
@@ -213,7 +213,7 @@ namespace CgsNetwork
         default:
             CGS_ASSERT_STREAM_AT(false, "CgsNetwork::Message::PackOrUnpack"
                                          << " called without telling it which it is doing\n",
-                                 KAC_ARTIST_FILE, 518);
+                                 CGS_ARTIST_FILE, 518);
             break;
         }
         return KX_PACK_OR_UNPACK_SUCCESS;
@@ -239,7 +239,7 @@ namespace CgsNetwork
         default:
             CGS_ASSERT_STREAM_AT(false, "CgsNetwork::Message::PackOrUnpack"
                                          << " called without telling it which it is doing\n",
-                                 KAC_ARTIST_FILE, 556);
+                                 CGS_ARTIST_FILE, 556);
             break;
         }
         return KX_PACK_OR_UNPACK_SUCCESS;
@@ -264,7 +264,7 @@ namespace CgsNetwork
             break;
         default:
             CGS_ASSERT_AT(false, "PackOrUnpack called without telling it which operation to do\n",
-                          KAC_ARTIST_FILE, 595);
+                          CGS_ARTIST_FILE, 595);
             break;
         }
         return KX_PACK_OR_UNPACK_SUCCESS;
@@ -289,7 +289,7 @@ namespace CgsNetwork
         default:
             CGS_ASSERT_STREAM_AT(false, "CgsNetwork::Message::PackOrUnpack"
                                          << " called without telling it which it is doing\n",
-                                 KAC_ARTIST_FILE, 635);
+                                 CGS_ARTIST_FILE, 635);
             break;
         }
         return KX_PACK_OR_UNPACK_SUCCESS;
@@ -315,7 +315,7 @@ namespace CgsNetwork
         default:
             CGS_ASSERT_STREAM_AT(false, "CgsNetwork::Message::PackOrUnpack"
                                          << " called without telling it which it is doing\n",
-                                 KAC_ARTIST_FILE, 674);
+                                 CGS_ARTIST_FILE, 674);
             break;
         }
         return KX_PACK_OR_UNPACK_SUCCESS;
@@ -634,7 +634,7 @@ namespace CgsNetwork
         default:
             CGS_ASSERT_STREAM_AT(false, "CgsNetwork::Message::PackOrUnpack"
                                          << " called without telling it which it is doing\n",
-                                 KAC_ARTIST_FILE, 1377);
+                                 CGS_ARTIST_FILE, 1377);
             break;
         }
         return KX_PACK_OR_UNPACK_SUCCESS;
@@ -659,7 +659,7 @@ namespace CgsNetwork
         default:
             CGS_ASSERT_STREAM_AT(false, "CgsNetwork::Message::PackOrUnpackBuffer"
                                          << " called without telling it which it is doing\n",
-                                 KAC_ARTIST_FILE, 1417);
+                                 CGS_ARTIST_FILE, 1417);
             break;
         }
         return KX_PACK_OR_UNPACK_SUCCESS;
@@ -676,7 +676,7 @@ namespace CgsNetwork
             ServerInterfaceDirtySock::mNetStreamLogChannelOutput << static_cast<s32>(lu8Type) << "\n";
         }
         CGS_ASSERT_AT(mu8GameID != KU8_INVALID_GAME_ID, "mu8GameID != KU8_INVALID_GAME_ID",
-                      KAC_ARTIST_HEADER, 772);
+                      CGS_ARTIST_HEADER, 772);
         return mu8GameID;
     }
 
@@ -686,7 +686,7 @@ namespace CgsNetwork
     void Message::PrepareAck(::EMessageType leType, u16 lu16Frame, u8 lu8GameID)
     {
         CGS_ASSERT((mx8Flags & KX8_FLAGS_VALID) == 0,
-            CGS_ASSERT_MESSAGE_AT("!IsMessageValid()", KAC_ARTIST_HEADER, 888 /* ARTIST 0x8286F4BC */));
+            CGS_ASSERT_MESSAGE_AT("!IsMessageValid()", CGS_ARTIST_HEADER, 888 /* ARTIST 0x8286F4BC */));
         mu16Frame = lu16Frame;
         mx8Flags  = KX8_FLAGS_ACK;
         SetType(leType);
@@ -698,7 +698,7 @@ namespace CgsNetwork
     void Message::PrepareNack(::EMessageType leType, u16 lu16Frame, u8 lu8GameID)
     {
         CGS_ASSERT((mx8Flags & KX8_FLAGS_VALID) == 0,
-            CGS_ASSERT_MESSAGE_AT("!IsMessageValid()", KAC_ARTIST_HEADER, 915 /* ARTIST 0x8286F53C */));
+            CGS_ASSERT_MESSAGE_AT("!IsMessageValid()", CGS_ARTIST_HEADER, 915 /* ARTIST 0x8286F53C */));
         mu16Frame = lu16Frame;
         mx8Flags  = KX8_FLAGS_NACK;
         SetType(leType);
@@ -791,7 +791,7 @@ namespace CgsNetwork
 
         CGS_ASSERT_AT(lxPackOrUnpackResult == KX_PACK_OR_UNPACK_SUCCESS,
                       "lxPackOrUnpackResult == KX_PACK_OR_UNPACK_SUCCESS",
-                      KAC_ARTIST_HEADER, 1031);
+                      CGS_ARTIST_HEADER, 1031);
     }
 
     // ---- GetPackedMessageSize ------------------------------------------------------
@@ -803,7 +803,7 @@ namespace CgsNetwork
                                    &liMessageSizeInBits);
         CGS_ASSERT_AT(lbPacked,
                       "Pack(lacTmpBuffer, 0, KI_MAX_PACKED_MESSAGE_SIZE*8, &liMessageSizeInBits)",
-                      KAC_ARTIST_FILE, 416);
+                      CGS_ARTIST_FILE, 416);
 
         const s32 liMessageSizeInBytes = (liMessageSizeInBits + 7) / 8;
         ServerInterfaceDirtySock::mNetStreamLogChannelOutput
@@ -1320,3 +1320,6 @@ namespace CgsNetwork
         return KX_PACK_OR_UNPACK_SUCCESS;
     }
 }
+
+#undef CGS_ARTIST_FILE
+#undef CGS_ARTIST_HEADER

@@ -19,7 +19,7 @@ namespace CgsNetwork
     namespace
     {
         // The headset status message type id.
-        const s32 KI_E_MESSAGE_TYPE_HEADSET_STATUS = 10;
+        // (message type: EMessageType's E_MESSAGE_TYPE_HEADSET_STATUS, MessageTypes.h)
     }
 
     // The message base fields and no headset. (The voice manager's Construct inlines it.)
@@ -34,7 +34,7 @@ namespace CgsNetwork
     void HeadsetStatusMessage::PrepareForSend(u16 lu16CurrentFrame, u8 lu8HeadsetStatus)
     {
         mu8HeadsetStatus = lu8HeadsetStatus;
-        Message::PrepareForSend(KI_E_MESSAGE_TYPE_HEADSET_STATUS, lu16CurrentFrame);
+        Message::PrepareForSend(E_MESSAGE_TYPE_HEADSET_STATUS, lu16CurrentFrame);
         CGS_ASSERT(!IsReliable(), "!IsReliable()");
     }
 

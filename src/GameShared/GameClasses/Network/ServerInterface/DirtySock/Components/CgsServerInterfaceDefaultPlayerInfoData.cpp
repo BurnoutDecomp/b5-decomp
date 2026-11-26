@@ -35,20 +35,9 @@ namespace CgsNetwork
         return ServerInterfacePlayerInfoDataBase::Prepare();
     }
 
-    namespace
-    {
-        // The default record's pattern length (the console constant 20).
-        const s32 KI_DEFAULT_PATTERN_LENGTH = 20;
-    }
-
     const char* DefaultPlayerInfoData::GetPattern() const
     {
         return "";
-    }
-
-    s32 DefaultPlayerInfoData::GetPatternLength() const
-    {
-        return KI_DEFAULT_PATTERN_LENGTH;
     }
 
     u32 DefaultPlayerInfoData::GetDataSize() const

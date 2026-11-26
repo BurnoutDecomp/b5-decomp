@@ -18,11 +18,11 @@
 //
 // The Voip* entry points (voice ref, headset flags, speaker / microphone routing)
 // come from voip.h through the manager's header. The mute-list query is a
-// platform call; its shape is taken from the call site.
-extern "C"
-{
-    u32  XUserMuteListQuery(u32 luUserIndex, u64 luXuidRemoteTalker, s32* lpbOnMuteList);
-}
+// platform call: the XDK declares it, so there is no local extern "C" copy
+// (a re-declaration with other parameter types collided with <xtl.h> once the
+// network sources compile as CgsNetworkUnity).
+#include <xtl.h>   // XUserMuteListQuery
+
 
 // Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameShared\\GameClasses\\Network/VoIP/DirtySock/CgsVoIPManagerDirtySock.cpp".
 
@@ -132,7 +132,7 @@ namespace CgsNetwork
     // player, the two VoipControl selectors ('port' and 'plvl' as four-character
     // codes) and the two VoipLocal flag bits the headset queries test.
     static const s32 KI_NUM_TALKERS                   = 7;
-    static const s32 KI_E_MESSAGE_TYPE_HEADSET_STATUS = 10;
+    // (message type: EMessageType's E_MESSAGE_TYPE_HEADSET_STATUS, MessageTypes.h)
     static const s32 KI_VOIP_CONTROL_PORT             = 0x706F7274;
     static const s32 KI_VOIP_CONTROL_VOLUME           = 0x706C766C;
     static const u32 KU_VOIP_LOCAL_HEADSET            = 0x40;
@@ -523,7 +523,7 @@ namespace CgsNetwork
         }
 
         const s32 liIndex = GetIndexFromID(lPlayerID);
-        lpNetworkPlayer->RegisterMessageType(KI_E_MESSAGE_TYPE_HEADSET_STATUS, sizeof(HeadsetStatusMessage),
+        lpNetworkPlayer->RegisterMessageType(E_MESSAGE_TYPE_HEADSET_STATUS, sizeof(HeadsetStatusMessage),
                                              &maRegisteredTalkers[liIndex].mHeadsetSendMsg,
                                              &maRegisteredTalkers[liIndex].mHeadsetRecMsg,
                                              0, 0, 0);
@@ -539,7 +539,7 @@ namespace CgsNetwork
         NetworkPlayer* lpNetworkPlayer = mpPlayerManager->GetPlayerByID(lPlayerID);
         if (lpNetworkPlayer != 0)
         {
-            lpNetworkPlayer->UnRegisterMessageType(KI_E_MESSAGE_TYPE_HEADSET_STATUS);
+            lpNetworkPlayer->UnRegisterMessageType(E_MESSAGE_TYPE_HEADSET_STATUS);
         }
     }
 

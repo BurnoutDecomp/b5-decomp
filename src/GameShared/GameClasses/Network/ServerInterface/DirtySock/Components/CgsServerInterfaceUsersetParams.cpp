@@ -1,6 +1,6 @@
 #include "CgsServerInterfaceUsersetParams.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
-#include "GameShared/GameClasses/Development/CgsStrStream.h"  // CgsDev::StrStream (over-length assert)
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"      // CgsCore::StrnCpy (over-length assert)
 #include "lobbytagfield.h"                                    // DirtySDK TagFieldGet/Set*
 
 #include <string.h>
@@ -31,23 +31,8 @@
 // virtuals, mirroring the sibling PlayerParams / GameParams components.
 // ---------------------------------------------------------------------------
 
-namespace
-{
-    // The over-length guard inlined from CgsStringUtils.h:55 (StrnCpy bounds check).
-    // Mirrors the sibling ServerInterfacePlayerParams.cpp helper verbatim.
-    void FireStringTooLong(const char* lpcValue)
-    {
-        CgsDev::Assert::BeginAssert();
-        char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-        CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-        lStrStream << "String too long: " << (lpcValue ? lpcValue : "<NULLSTRING>");
-        CgsDev::Assert::FireAssert(
-            lacMessageBuffer,
-            CGS_ASSERT_LOCATION("..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h",
-            55));
-        CgsDev::Assert::EndAssert();
-    }
-}
+// The StrnCpy over-length guard is CgsCore::StrnCpy's own (CgsStringUtils.h:53, assert
+// at :55); a file-local copy of it collided with its siblings in CgsNetworkUnity.
 
 namespace CgsNetwork
 {
@@ -168,11 +153,7 @@ namespace CgsNetwork
         // Host name lives at record + 0x10; copy 16 bytes into macHostName, guarding
         // the over-length case (inlined StrnCpy<16> bounds check).
         const char* lpcHostName = reinterpret_cast<const char*>(lpcRec + 0x10);
-        if (std::strlen(lpcHostName) >= 0x10u)
-        {
-            FireStringTooLong(lpcHostName);
-        }
-        std::strncpy(macHostName, lpcHostName, KI_USERSETPARAMS_HOSTNAME_LENGTH);
+        CgsCore::StrnCpy(macHostName, lpcHostName, KI_USERSETPARAMS_HOSTNAME_LENGTH);
 
         miNumPlayers   = *reinterpret_cast<const s32*>(lpcRec + 0x24); // stw -> 0x98
         miUsersetId    = *reinterpret_cast<const s32*>(lpcRec + 0x00); // stw -> 0x90

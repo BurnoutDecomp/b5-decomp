@@ -1,6 +1,7 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceBroadcastMessages.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceEvents.h"
 #include "lobbyapi.h"                                 // DirtySDK LobbyApiSetCallback / LobbyApiClearCallback + LobbyApiRefT / LobbyApiMsgT / LobbyApiCallbackT
 #include "lobbytagfield.h"                            // DirtySDK TagFieldFind / Get*
 
@@ -39,10 +40,9 @@ namespace CgsNetwork
         // `(code >> 21) & 1`).
         const s32 KI_CODE_SELF_ECHO_SHIFT = 21;
 
-        // OnEvent ids (the asm dispatches on 0 / 1 / 5).
-        const s32 KI_EVENT_PREPARE = 0;
-        const s32 KI_EVENT_RELEASE = 1;
-        const s32 KI_EVENT_RESET   = 5;
+        // OnEvent dispatches on three EServerInterfaceEvent ids (0 / 1 / 5): lobby API
+        // created, lobby API destroying, disconnected (CgsServerInterfaceEvents.h,
+        // DWARF; the file-local copies of these ids collided in CgsNetworkUnity).
 
         // No registered chat callback handle.
         const s32 KI_NO_CHAT_CALLBACK = -1;
@@ -123,7 +123,7 @@ namespace CgsNetwork
     void ServerInterfaceBroadcastMessages::OnEvent(EServerInterfaceEvent leEvent, void* /*lpData*/)
     {
         const s32 liEvent = static_cast<s32>(leEvent);
-        if (liEvent == KI_EVENT_PREPARE)
+        if (liEvent == E_SERVER_INTERFACE_GENERAL_EVENT_LOBBY_API_CREATED)
         {
             if (miChatCallback == KI_NO_CHAT_CALLBACK)
             {
@@ -133,7 +133,7 @@ namespace CgsNetwork
                                                      this);                // +0x58C
             }
         }
-        else if (liEvent == KI_EVENT_RELEASE)
+        else if (liEvent == E_SERVER_INTERFACE_GENERAL_EVENT_LOBBY_API_DESTROYING)
         {
             if (miChatCallback > KI_NO_CHAT_CALLBACK)
             {
@@ -141,7 +141,7 @@ namespace CgsNetwork
                 miChatCallback = KI_NO_CHAT_CALLBACK;                      // +0x58C
             }
         }
-        else if (liEvent == KI_EVENT_RESET)
+        else if (liEvent == E_SERVER_INTERFACE_CONNECTION_EVENT_DISCONNECTED)
         {
             meCurrentAction         = E_ACTION_COUNT;                     // +0x588
             miNumArbPacketsBuffered = 0;                                   // +0x580

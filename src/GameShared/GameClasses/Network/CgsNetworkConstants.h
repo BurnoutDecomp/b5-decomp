@@ -22,6 +22,15 @@ namespace CgsNetwork
     // [takedown P1 wave 2026-09-03, additive.]
     const s32 KI_MAX_TELEMETRY_DATA_SIZE = 16;
 
+    // DWARF CgsNetworkConstants.h:90. Which flag space a conversion maps to: the game's
+    // own flags or DirtySock's wire flags (ConvertFlags, ConvertHWFlags).
+    enum EConversionFlags
+    {
+        E_FLAGS_GAMESHARED = 0,
+        E_FLAGS_DIRTYSOCK,
+        E_FLAGS_COUNT
+    };
+
     // The session-wide player handle and its "no player" sentinel (all bits set; the
     // console compares against -1).
     typedef s32 NetworkPlayerID;

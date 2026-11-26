@@ -29,10 +29,11 @@ namespace CgsNetwork
         // Vtable slot 6: reset the record to its defaults before a new game.
         virtual bool Prepare();
 
-        // The structure-interface slots: an empty pattern of length 20, and no data block
-        // (each is a shared folded body on the console).
+        // The structure-interface slots: an empty pattern and no data block (each is a
+        // shared folded body on the console). GetPatternLength is not overridden (DWARF
+        // CgsPlayersConnectionManager.cpp:73/52 list only these four): the base's
+        // CgsServerInterfaceStructureInterface.cpp:41 default (20) serves.
         virtual const char* GetPattern() const;
-        virtual s32         GetPatternLength() const;
         virtual u32         GetDataSize() const;
         virtual void*       GetData();
         virtual const void* GetData() const;

@@ -3,6 +3,11 @@
 #include "GameShared/GameClasses/Network/ServerInterface/CgsServerInterfaceErrors.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySockErrorHelpers.h"
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h"   // mNetStreamLogChannelOutput
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
+
+#define CGS_ARTIST_FILE \
+    "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceComponent.cpp"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsNetwork::ServerInterfaceComponent::ClearLastError       @ 0x828766F0
@@ -57,12 +62,15 @@ namespace CgsNetwork
         miLastError = 0;
     }
 
-    // The progress lines both action hooks stream to the network log channel ("StartAction: ",
-    // "Finish Action: ... successfully" / "... with error N") are not reproduced: that stream
-    // object has no home in the tree. The streamed assert text is reduced to its lead literal.
+    // Both action hooks report progress on the network log stream (ARTIST writes through
+    // ServerInterfaceDirtySock::mNetStreamLogChannelOutput, 0x82F335C8): "StartAction: <name>"
+    // (0x82876438) and "Finish Action: <name> successfully" / "... with error <n>" (0x828765D0).
     void ServerInterfaceComponent::StartActionCore(const char* lpcAction)
     {
-        CGS_ASSERT(meStatus != 0, "Trying to start ");
+        ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "StartAction: " << lpcAction << "\n";
+        CGS_ASSERT_STREAM_AT(meStatus != 0,
+            "Trying to start " << lpcAction << " when still doing " << mpcCurrentAction << "\n",
+            CGS_ARTIST_FILE, 84 /* ARTIST 0x828765A8 */);
 
         mpcCurrentAction = lpcAction;
         meStatus         = 0;
@@ -73,15 +81,16 @@ namespace CgsNetwork
     {
         if (liError == 0)
         {
-            miLastError      = liError;
+            ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "Finish Action: " << mpcCurrentAction << " successfully\n";
             mpcCurrentAction = 0;
             meStatus         = 2;
         }
         else
         {
-            miLastError = liError;
+            ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "Finish Action: " << mpcCurrentAction << " with error " << liError << "\n";
             meStatus    = 1;
         }
+        miLastError = liError;
     }
 
     int ServerInterfaceComponent::GetAndClearLastError()
@@ -133,3 +142,5 @@ namespace CgsNetwork
         }
     }
 }
+
+#undef CGS_ARTIST_FILE

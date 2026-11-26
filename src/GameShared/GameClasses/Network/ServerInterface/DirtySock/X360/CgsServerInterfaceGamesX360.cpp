@@ -42,14 +42,14 @@ struct LobbyApiRefT;       // opaque DirtySDK lobby API ref (matches CgsServerIn
 
 #include "connapi.h"       // ConnApiControl / ConnApiStatus / ConnApiStop / ConnApiGetClientList
 
-extern "C"
-{
-    // XDK Xbox LIVE matchmaking context setter.
-    void XUserSetContext(u32 uUserIndex, u32 uContextId, u32 uContextValue);
+// The XDK's Xbox LIVE matchmaking context setter and DirtySDK's name compare come
+// from their own headers: local extern "C" re-declarations collided with them once
+// the network sources compile as one unity TU (CgsNetworkUnity).
+#include <xtl.h>        // XUserSetContext
+#include "lobbyname.h"  // LobbyNameCmp
 
-    // DirtySDK lobby name compare.
-    s32  LobbyNameCmp(const char* pNameA, const char* pNameB);
-}
+
+
 
 namespace CgsNetwork
 {
@@ -62,7 +62,7 @@ namespace CgsNetwork
     {
         // The shared message-buffer size (mirrors the base component's anon-namespace
         // constant; not visible across TUs, so redefined leaf-local).
-        const s32 KI_MESSAGE_BUFFER_LEN = 2048;
+        // (record length: CgsServerInterfaceDirtySock.h's KI_MESSAGE_BUFFER_SIZE)
     }
 }
 
@@ -208,8 +208,8 @@ namespace CgsNetwork
         CGS_ASSERT(liNumContexts < KI_MAX_SEARCH_PARAMS,
                    "lpSearchParams->miNumSearchContexts < KI_MAX_SEARCH_PARAMS");
 
-        TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "XNCONTEXTS", liNumContexts);
-        TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "XNRANK", lpParams->IsRanked() ? 1 : 0); // +0x48
+        TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_SIZE, "XNCONTEXTS", liNumContexts);
+        TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_SIZE, "XNRANK", lpParams->IsRanked() ? 1 : 0); // +0x48
 
         if (liNumContexts > 0)
         {
@@ -219,9 +219,9 @@ namespace CgsNetwork
             {
                 char lacKey[32];
                 CgsCore::SPrintf(lacKey, 32, "XNCONTEXTID%d", i);
-                TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_LEN, lacKey, lpauContext[0]);
+                TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_SIZE, lacKey, lpauContext[0]);
                 CgsCore::SPrintf(lacKey, 32, "XNCONTEXTVALUE%d", i);
-                TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_LEN, lacKey, lpauContext[1]);
+                TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_SIZE, lacKey, lpauContext[1]);
                 lpauContext += 2;
             }
         }
@@ -245,8 +245,8 @@ namespace CgsNetwork
         CGS_ASSERT(liNumContexts < KI_MAX_SEARCH_PARAMS,
                    "lpSearchParams->miNumSearchContexts < KI_MAX_SEARCH_PARAMS");
 
-        TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "XNCONTEXTS", liNumContexts);
-        TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "XNRANK",
+        TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_SIZE, "XNCONTEXTS", liNumContexts);
+        TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_SIZE, "XNRANK",
                           ((luGameFlagsValue >> 10) & 1) != 0 ? 1 : 0);
 
         if (liNumContexts > 0)
@@ -257,9 +257,9 @@ namespace CgsNetwork
             {
                 char lacKey[32];
                 CgsCore::SPrintf(lacKey, 32, "XNCONTEXTID%d", i);
-                TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_LEN, lacKey, lpauContext[0]);
+                TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_SIZE, lacKey, lpauContext[0]);
                 CgsCore::SPrintf(lacKey, 32, "XNCONTEXTVALUE%d", i);
-                TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_LEN, lacKey, lpauContext[1]);
+                TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_SIZE, lacKey, lpauContext[1]);
                 lpauContext += 2;
             }
         }

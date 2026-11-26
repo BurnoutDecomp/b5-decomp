@@ -23,8 +23,8 @@
 #include <cstring>  // std::memset
 #include <xtl.h>    // XMemCpy
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameShared\\GameClasses\\Network/CgsNetworkTexture.cpp";
+#define CGS_ARTIST_FILE \
+    "..\\..\\..\\GameShared\\GameClasses\\Network/CgsNetworkTexture.cpp"
 
 namespace CgsNetwork
 {
@@ -89,7 +89,7 @@ namespace CgsNetwork
                 CgsDev::StrStreamBase& lrStream = lStrStream;
                 lrStream << "Invalid pixel format!";
                 CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                                           CGS_ASSERT_LOCATION(KAC_ARTIST_ASSERT_FILE, 225));
+                                           CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 225));
                 CgsDev::Assert::EndAssert();
                 return 0;
             }
@@ -104,7 +104,7 @@ namespace CgsNetwork
                                  renderengine::PixelFormat lFormat)
     {
         CGS_ASSERT(lpHeapMalloc, CGS_ASSERT_MESSAGE_AT(
-            "lpHeapMalloc", KAC_ARTIST_ASSERT_FILE, 72 /* ARTIST 0x8289396C */));
+            "lpHeapMalloc", CGS_ARTIST_FILE, 72 /* ARTIST 0x8289396C */));
 
         miWidth        = liWidth;
         miHeight       = liHeight;
@@ -116,7 +116,7 @@ namespace CgsNetwork
                        EA::Allocator::GeneralAllocator::kHeapValidationLevelFull),
                    CGS_ASSERT_MESSAGE_AT(
                        "mpHeapMalloc->GetAllocator()->ValidateHeap(rw::core::GeneralAllocator::kHeapValidationLevelFull)",
-                       KAC_ARTIST_ASSERT_FILE, 81 /* ARTIST 0x828939C8 */));
+                       CGS_ARTIST_FILE, 81 /* ARTIST 0x828939C8 */));
 
         // DWARF CgsNetworkTexture.h:105 GetTextureSize() (header inline).
         mpcTexture                 = static_cast<char*>(mpHeapMalloc->Malloc(GetTextureSize(), 4));
@@ -126,9 +126,9 @@ namespace CgsNetwork
                        EA::Allocator::GeneralAllocator::kHeapValidationLevelFull),
                    CGS_ASSERT_MESSAGE_AT(
                        "mpHeapMalloc->GetAllocator()->ValidateHeap(rw::core::GeneralAllocator::kHeapValidationLevelFull)",
-                       KAC_ARTIST_ASSERT_FILE, 84 /* ARTIST 0x82893A38 */));
+                       CGS_ARTIST_FILE, 84 /* ARTIST 0x82893A38 */));
         CGS_ASSERT(mpcTexture, CGS_ASSERT_MESSAGE_AT(
-            "mpcTexture", KAC_ARTIST_ASSERT_FILE, 85 /* ARTIST 0x82893A60 */));
+            "mpcTexture", CGS_ARTIST_FILE, 85 /* ARTIST 0x82893A60 */));
 
         mbIsUncompressedYUV = false;
         return true;
@@ -197,7 +197,7 @@ namespace CgsNetwork
     {
         CGS_ASSERT(renderengine::PIXELFORMAT_DXT1 == mFormat, CGS_ASSERT_MESSAGE_AT(
             "rw::graphics::core::PIXELFORMAT_LIN_DXT1 == mFormat",
-            KAC_ARTIST_ASSERT_FILE, 308 /* ARTIST 0x8287E7E0 */));
+            CGS_ARTIST_FILE, 308 /* ARTIST 0x8287E7E0 */));
 
         s32 liWidthInBlocks = 1;
         if (miWidth > KI_DXT1_BLOCK_WIDTH)
@@ -211,7 +211,7 @@ namespace CgsNetwork
     {
         CGS_ASSERT(renderengine::PIXELFORMAT_DXT1 == mFormat, CGS_ASSERT_MESSAGE_AT(
             "rw::graphics::core::PIXELFORMAT_LIN_DXT1 == mFormat",
-            KAC_ARTIST_ASSERT_FILE, 339 /* ARTIST 0x8287E858 */));
+            CGS_ARTIST_FILE, 339 /* ARTIST 0x8287E858 */));
 
         s32 liHeightInBlocks = 1;
         if (miHeight > KI_DXT1_BLOCK_HEIGHT)
@@ -252,7 +252,7 @@ namespace CgsNetwork
                 CgsDev::StrStreamBase& lrStream = lStrStream;
                 lrStream << "Invalid pixel format!";
                 CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                                           CGS_ASSERT_LOCATION(KAC_ARTIST_ASSERT_FILE, 285));
+                                           CGS_ASSERT_LOCATION(CGS_ARTIST_FILE, 285));
                 CgsDev::Assert::EndAssert();
                 return 0;
             }
@@ -284,3 +284,5 @@ namespace CgsNetwork
         XMemCpy(mpcTexture, lpcPixelData, static_cast<SIZE_T>(liDataSizeInBytes));
     }
 }
+
+#undef CGS_ARTIST_FILE

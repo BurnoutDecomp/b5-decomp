@@ -39,11 +39,8 @@
 namespace CgsNetwork
 {
     // A single Xbox LIVE matchmaking context entry (id paired with its value).
-    // NOTE: the canonical definition currently lives (headerless) in
-    // CgsNetworkRankedContexts.cpp alongside AmendRankedContexts; this mirrors it
-    // so the X360 leaf can size its array. The consolidator should reconcile the
-    // two (ideally by promoting RankedContext + AmendRankedContexts into a shared
-    // CgsNetworkRankedContexts.h that both TUs include).
+    // The one definition: CgsNetworkRankedContexts.cpp (AmendRankedContexts) includes
+    // this header (both sit in CgsNetworkUnity).
     struct RankedContext
     {
         u32 muContextId;   // +0x00

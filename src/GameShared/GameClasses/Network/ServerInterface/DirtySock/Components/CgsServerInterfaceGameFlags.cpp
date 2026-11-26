@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceGameFlags.h"
-#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfacePlayerInfoData.h" // EConversionFlags
+#include "GameShared/GameClasses/Network/CgsNetworkConstants.h" // EConversionFlags
 
 // Translate a game-flag word between the game's own bit layout (column 0) and the lobby's
 // game-record system flags (column 1) through a fixed 14-row pair table: every row whose
@@ -35,7 +35,7 @@ namespace CgsNetwork
     u32 ConvertFlags(u32 luFlags, EConversionFlags leConvertTo)
     {
         const EConversionFlags leConvertFrom =
-            (leConvertTo == E_CONVERSION_FROM_WIRE) ? E_CONVERSION_TO_WIRE : E_CONVERSION_FROM_WIRE;
+            (leConvertTo == E_FLAGS_GAMESHARED) ? E_FLAGS_DIRTYSOCK : E_FLAGS_GAMESHARED;
 
         u32 luNewFlags = 0;
         for (u32 luIndex = 0; luIndex < KU_NUM_FLAGS; ++luIndex)

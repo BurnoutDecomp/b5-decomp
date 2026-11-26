@@ -38,20 +38,20 @@
 struct LobbyApiRefT;
 #include "connapi.h"   // ConnApiControl, DirtySock::ConnApiRefT / ConnApiCbInfoT
 
-extern "C"
-{
-    s32  LobbyNameCmp(const char* pNameA, const char* pNameB);
-    void* XMemSet(void* pDest, s32 iValue, u32 uCount);
-
-    // lobbytagfield C-API (vendor/dirtysdk/include/lobbytagfield.h homes some of these;
-    // the rest are declared here so the component links under cl /c).
-    void* TagFieldFind(const char* pRecord, const char* pKey);
-    s32  TagFieldGetNumber(const char* pField, s32 iDefault);
-    s32  TagFieldSetNumber(char* pRecord, s32 iRecLen, const char* pKey, s32 iValue);
-    s32  TagFieldSetString(char* pRecord, s32 iRecLen, const char* pKey, const char* pValue);
-    s32  TagFieldSetRaw(char* pRecord, s32 iRecLen, const char* pKey, const u8* pValue);
-    s32  TagFieldSetEpoch(char* pRecord, s32 iRecLen, const char* pKey, s32 iEpoch);
-}
+#include "lobbyname.h"       // LobbyNameCmp
+#include "lobbytagfield.h"   // TagFieldFind / TagFieldGetNumber / TagFieldSet*
+#include <xtl.h>             // XMemSet
+// The DirtySDK and XDK entry points come from their own headers: a local extern "C"
+// re-declaration with other parameter types collided with them in CgsNetworkUnity.
+//
+//
+//
+//
+//
+//
+//
+//
+//
 
 #define CGS_ARTIST_SERVER_GAMES_FILE "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceGames.cpp"
 
@@ -103,7 +103,7 @@ namespace CgsNetwork
         const s32 KI_ERR_NO_RESULTS = 1852206692;
 
         // The shared message-buffer size.
-        const s32 KI_MESSAGE_BUFFER_LEN = 2048;
+        // (record length: CgsServerInterfaceDirtySock.h's KI_MESSAGE_BUFFER_SIZE)
         const s32 KI_PLAYER_RECORD_SIZE = 2136;
 
         // EventStatusCallback / OnEvent event ids passed up to the server interface.
@@ -459,8 +459,8 @@ namespace CgsNetwork
         s32 liError = lpMsg->code;
         if (liError == 0)
         {
-            void* lpField = TagFieldFind(lpMsg->pData, "COUNT");
-            if (TagFieldGetNumber(reinterpret_cast<const char*>(lpField), 0) == 0)
+            const char* lpField = TagFieldFind(lpMsg->pData, "COUNT");
+            if (TagFieldGetNumber(lpField, 0) == 0)
                 liError = KI_ERR_NO_RESULTS;
         }
         lpSelf->EndAction(liError);
@@ -471,8 +471,8 @@ namespace CgsNetwork
         ServerInterfaceGames* lpSelf = this;
         if (static_cast<u32>(lpSelf->meCurrentAction) < 3u)
         {
-            void* lpField = TagFieldFind(lpMsg->pData, "IDENT");
-            s32 liIdent = TagFieldGetNumber(reinterpret_cast<const char*>(lpField), -1);
+            const char* lpField = TagFieldFind(lpMsg->pData, "IDENT");
+            s32 liIdent = TagFieldGetNumber(lpField, -1);
             if (liIdent == lpSelf->mLastGameRecord.iIdent)
             {
                 lpSelf->EndAction(lpMsg->code);
@@ -496,8 +496,8 @@ namespace CgsNetwork
             break;
         case KI_EVENT_TAG_KICKED:
             {
-                void* lpField = TagFieldFind(lpMsg->pData, "REASON");
-                s32 liReason = TagFieldGetNumber(reinterpret_cast<const char*>(lpField), 5);
+                const char* lpField = TagFieldFind(lpMsg->pData, "REASON");
+                s32 liReason = TagFieldGetNumber(lpField, 5);
                 s32 laReason[4];
                 laReason[0] = liReason;
                 RaiseServerInterfaceEvent(lpSelf->mpServerInterface, KI_EVT_GAME_RESET, laReason);
@@ -564,8 +564,8 @@ namespace CgsNetwork
 
         char* lpcBuffer = mpServerInterface->GetMessageBuffer();
 
-        lpGameParams->SerialiseToString(lpcBuffer, KI_MESSAGE_BUFFER_LEN);
-        lpPlayerParams->SerialiseToString(lpcBuffer, KI_MESSAGE_BUFFER_LEN);
+        lpGameParams->SerialiseToString(lpcBuffer, KI_MESSAGE_BUFFER_SIZE);
+        lpPlayerParams->SerialiseToString(lpcBuffer, KI_MESSAGE_BUFFER_SIZE);
 
         // Game-server games append the ping-region preference list to the request.
         if (GameManagerStatus(mpServerInterface->GetGameManagerRef(), KI_GM_SELECT_HASSRV, 0, 0) == 1)
@@ -593,8 +593,8 @@ namespace CgsNetwork
                             CgsCore::StrCat(lacRegions, sizeof(lacRegions), ",");
                     }
                     lacRegions[sizeof(lacRegions) - 1] = 0;
-                    TagFieldSetRaw(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "REGIONS",
-                                   reinterpret_cast<const u8*>(lacRegions));
+                    TagFieldSetRaw(lpcBuffer, KI_MESSAGE_BUFFER_SIZE, "REGIONS",
+                                   lacRegions);
                 }
             }
         }
@@ -609,8 +609,8 @@ namespace CgsNetwork
 
         char* lpcBuffer = mpServerInterface->GetMessageBuffer();
 
-        lpGameParams->SerialiseToString(lpcBuffer, KI_MESSAGE_BUFFER_LEN);
-        lpPlayerParams->SerialiseToString(lpcBuffer, KI_MESSAGE_BUFFER_LEN);
+        lpGameParams->SerialiseToString(lpcBuffer, KI_MESSAGE_BUFFER_SIZE);
+        lpPlayerParams->SerialiseToString(lpcBuffer, KI_MESSAGE_BUFFER_SIZE);
 
         StartGameManagerAction(E_ACTION_JOIN_GAME, &OnlyFinishOnErrorCallback);
     }
@@ -622,9 +622,9 @@ namespace CgsNetwork
 
         char* lpcBuffer = mpServerInterface->GetMessageBuffer();
 
-        TagFieldSetString(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "MODE", 0);
-        lpQuickJoinParams->SerialiseToString(lpcBuffer, KI_MESSAGE_BUFFER_LEN);
-        lpPlayerParams->SerialiseToString(lpcBuffer, KI_MESSAGE_BUFFER_LEN);
+        TagFieldSetString(lpcBuffer, KI_MESSAGE_BUFFER_SIZE, "MODE", 0);
+        lpQuickJoinParams->SerialiseToString(lpcBuffer, KI_MESSAGE_BUFFER_SIZE);
+        lpPlayerParams->SerialiseToString(lpcBuffer, KI_MESSAGE_BUFFER_SIZE);
 
         StartGameManagerAction(E_ACTION_QUICK_JOIN_GAME, &OnlyFinishOnErrorCallback);
     }
@@ -640,7 +640,7 @@ namespace CgsNetwork
         LobbyApiListFlush(mpServerInterface->GetLobbyAPIRef(), KI_LIST_FOUND_GAMES);
         DispListClear(mpFoundGames);
         DispListOrder(mpFoundGames);
-        lpSearchParams->SerialiseToString(lpcBuffer, KI_MESSAGE_BUFFER_LEN);
+        lpSearchParams->SerialiseToString(lpcBuffer, KI_MESSAGE_BUFFER_SIZE);
 
         StartAction(E_ACTION_SEARCH_FOR_GAMES, &SearchForGamesCallback);
     }
@@ -654,7 +654,7 @@ namespace CgsNetwork
         char* lpcBuffer = mpServerInterface->GetMessageBuffer();
 
         lpcBuffer[0] = 0;
-        TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "CANCEL", 1);
+        TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_SIZE, "CANCEL", 1);
         StartAction(E_ACTION_CANCEL_SEARCH_FOR_GAMES, &DefaultCallback);
     }
 
@@ -665,7 +665,7 @@ namespace CgsNetwork
         // GetMessageBuffer asserts itself (h:719); no second check here.
         char* lpcBuffer = mpServerInterface->GetMessageBuffer();
 
-        lpGameParams->SerialiseToString(lpcBuffer, KI_MESSAGE_BUFFER_LEN);
+        lpGameParams->SerialiseToString(lpcBuffer, KI_MESSAGE_BUFFER_SIZE);
         StartAction(E_ACTION_UPDATE_GAME_PARAMS, &DefaultCallback);
     }
 
@@ -678,7 +678,7 @@ namespace CgsNetwork
         char* lpcBuffer = mpServerInterface->GetMessageBuffer();
 
         lpcBuffer[0] = 0;
-        TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "SYSFLAGS",
+        TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_SIZE, "SYSFLAGS",
                           static_cast<s32>(mLastGameRecord.uSysflags | 0x1000));
         StartAction(E_ACTION_LOCK_GAME, &DefaultCallback);
     }
@@ -692,7 +692,7 @@ namespace CgsNetwork
         char* lpcBuffer = mpServerInterface->GetMessageBuffer();
 
         lpcBuffer[0] = 0;
-        TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "SYSFLAGS",
+        TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_SIZE, "SYSFLAGS",
                           static_cast<s32>(mLastGameRecord.uSysflags & 0xFFFFEFFF));
         StartAction(E_ACTION_UNLOCK_GAME, &DefaultCallback);
     }
@@ -781,26 +781,26 @@ namespace CgsNetwork
         }
 
         lpcBuffer[0] = 0;
-        TagFieldSetEpoch(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "WHEN",
-                         static_cast<s32>(mLastGameRecord.uWhen));
-        TagFieldSetString(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "REPT", lUser.name);
-        TagFieldSetString(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "AUTH", mLastGameRecord.strAuth);
-        TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "VENUE", 0);
-        TagFieldSetString(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "SKU", mpServerInterface->GetSKU());
+        TagFieldSetEpoch(lpcBuffer, KI_MESSAGE_BUFFER_SIZE, "WHEN",
+                         mLastGameRecord.uWhen);
+        TagFieldSetString(lpcBuffer, KI_MESSAGE_BUFFER_SIZE, "REPT", lUser.name);
+        TagFieldSetString(lpcBuffer, KI_MESSAGE_BUFFER_SIZE, "AUTH", mLastGameRecord.strAuth);
+        TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_SIZE, "VENUE", 0);
+        TagFieldSetString(lpcBuffer, KI_MESSAGE_BUFFER_SIZE, "SKU", mpServerInterface->GetSKU());
 
         for (s32 i = 0; i < mLastGameRecord.iCount; ++i)
         {
             char lacKey[32];
             CgsCore::SPrintf(lacKey, 32, "NAME%d", i);
-            TagFieldSetString(lpcBuffer, KI_MESSAGE_BUFFER_LEN, lacKey,
+            TagFieldSetString(lpcBuffer, KI_MESSAGE_BUFFER_SIZE, lacKey,
                               mLastGameRecord.aOpponents[i].strPers);
             CgsCore::SPrintf(lacKey, 32, "TEAM%d", i);
-            TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_LEN, lacKey, i);
+            TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_SIZE, lacKey, i);
             CgsCore::SPrintf(lacKey, 32, "WEIGHT%d", i);
-            TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_LEN, lacKey, 0);
+            TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_SIZE, lacKey, 0);
         }
 
-        lpGameResults->SerialiseToString(lpcBuffer, KI_MESSAGE_BUFFER_LEN);
+        lpGameResults->SerialiseToString(lpcBuffer, KI_MESSAGE_BUFFER_SIZE);
         ServerInterfaceDirtySock::mNetStreamLogChannelOutput << "Uploading: " << lpcBuffer << "\n";
 
         StartAction(E_ACTION_SEND_RESULTS, &DefaultCallback);
@@ -848,7 +848,7 @@ namespace CgsNetwork
 
         lpcBuffer = mpServerInterface->GetMessageBuffer();
         CGS_ASSERT(lpcBuffer != 0, "mpacMessageBuffer");
-        lpPlayerParams->SerialiseToString(lpcBuffer, KI_MESSAGE_BUFFER_LEN);
+        lpPlayerParams->SerialiseToString(lpcBuffer, KI_MESSAGE_BUFFER_SIZE);
 
         if (lbDifferentPlayer)
         {
@@ -862,7 +862,7 @@ namespace CgsNetwork
             {
                 lpcBuffer = mpServerInterface->GetMessageBuffer();
                 CGS_ASSERT(lpcBuffer != 0, "mpacMessageBuffer");
-                TagFieldSetString(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "PERS",
+                TagFieldSetString(lpcBuffer, KI_MESSAGE_BUFFER_SIZE, "PERS",
                                   mLastGameRecord.aOpponents[i].strPers);
             }
         }
@@ -1153,7 +1153,7 @@ namespace CgsNetwork
         CGS_ASSERT(IsLocalPlayerInGame(),
             CGS_ASSERT_MESSAGE_AT(
                 "IsLocalPlayerInGame()", __FILE__, 1903 /* ARTIST 0x82887D7C */));
-        return ((ConvertFlags(mLastGameRecord.uSysflags, E_CONVERSION_FROM_WIRE) >> 5) & 1) != 0;
+        return ((ConvertFlags(mLastGameRecord.uSysflags, E_FLAGS_GAMESHARED) >> 5) & 1) != 0;
     }
 
     bool ServerInterfaceGames::IsGameStarted()
@@ -1161,7 +1161,7 @@ namespace CgsNetwork
         CGS_ASSERT(IsLocalPlayerInGame(),
             CGS_ASSERT_MESSAGE_AT(
                 "IsLocalPlayerInGame()", __FILE__, 1881 /* ARTIST 0x82887D14 */));
-        return ((ConvertFlags(mLastGameRecord.uSysflags, E_CONVERSION_FROM_WIRE) >> 11) & 1) != 0;
+        return ((ConvertFlags(mLastGameRecord.uSysflags, E_FLAGS_GAMESHARED) >> 11) & 1) != 0;
     }
 
     bool ServerInterfaceGames::IsGameServerGame() const
@@ -1304,8 +1304,8 @@ namespace CgsNetwork
 
         char* lpcBuffer = mpServerInterface->GetMessageBuffer();
         lpcBuffer[0] = 0;
-        TagFieldSetString(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "SET", lbSet ? "1" : "0");
-        TagFieldSetString(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "FORCE", lbForce ? "1" : "0");
+        TagFieldSetString(lpcBuffer, KI_MESSAGE_BUFFER_SIZE, "SET", lbSet ? "1" : "0");
+        TagFieldSetString(lpcBuffer, KI_MESSAGE_BUFFER_SIZE, "FORCE", lbForce ? "1" : "0");
         StartGameManagerAction(E_ACTION_LEAVE_GAME, &LeaveGameCallback);
     }
 
@@ -1315,9 +1315,9 @@ namespace CgsNetwork
         if (IsLocalPlayerInGame() && IsLocalPlayerHost())
         {
             lpcBuffer[0] = 0;
-            TagFieldSetString(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "KICK", lpcPlayerName);
-            TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "KICK_REASON", liReason);
-            TagFieldSetString(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "KICK_SET", lbBan ? "1" : "0");
+            TagFieldSetString(lpcBuffer, KI_MESSAGE_BUFFER_SIZE, "KICK", lpcPlayerName);
+            TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_SIZE, "KICK_REASON", liReason);
+            TagFieldSetString(lpcBuffer, KI_MESSAGE_BUFFER_SIZE, "KICK_SET", lbBan ? "1" : "0");
             StartAction(E_ACTION_KICK_PLAYER, &DefaultCallback);
         }
     }
@@ -1369,3 +1369,7 @@ void ServerInterfaceGames::ConnApiCallback(DirtySock::ConnApiCbInfoT* lpCbInfo,
 }
 
 }
+
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma auto_inline(on)   // the file-top auto_inline(off) is this file's own (x360 b1db9d56c): end it here
+#endif

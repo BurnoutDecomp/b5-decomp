@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "../CgsServerInterfaceStructureInterface.h"
+#include "GameShared/GameClasses/Network/CgsNetworkConstants.h"   // EConversionFlags
 
 struct LobbyApiUserT;   // DirtySDK lobby user record (lobbyapi.h)
 
@@ -71,13 +72,6 @@ namespace CgsNetwork
     const s32 KI_PLAYER_INFO_HW_FLAG_PPPOE          = 16;
     const s32 KI_PLAYER_INFO_HW_FLAG_VOIP_USED      = 32;
     const s32 KI_PLAYER_INFO_HW_FLAG_VOIP_ACTIVE    = 64;
-
-    // Conversion-table direction selector (homed with the Convert* family).
-    enum EConversionFlags
-    {
-        E_CONVERSION_FROM_WIRE = 0,
-        E_CONVERSION_TO_WIRE   = 1,
-    };
 
     // Fold a lobby hardware-flag set onto the player-info hardware-flag space.
     //   Home: CgsServerInterfacePlayerInfoData.cpp:153

@@ -3,6 +3,7 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySockErrorHelpers.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceEvents.h"
 #include "lobbyapi.h"                                 // LobbyApiRequestCB / LobbyApiMsgT / LobbyApiCallbackT
 #include "lobbytagfield.h"                            // TagFieldFind / Get* / SetNumber
 
@@ -51,8 +52,7 @@ namespace CgsNetwork
         // The "NAME" tagfield carries the requested news index in the outgoing request.
         const int KI_NAME_FIELD_RECLEN = 2048;   // == KI_MESSAGE_BUFFER_SIZE
 
-        // OnEvent reset trigger (the asm compares the event id against 5).
-        const s32 KI_EVENT_RESET = 5;
+        // OnEvent resets on E_SERVER_INTERFACE_CONNECTION_EVENT_DISCONNECTED (5).
 
         // DirtySock-error -> EServerInterfaceError map for the game-news download
         // (2 entries, as the console rodata holds them): no error maps to none, and
@@ -156,7 +156,7 @@ namespace CgsNetwork
     // @ 0x8287AD68 -- on the reset event (id 5) drop the in-flight action.
     void ServerInterfaceDownloadableConfig::OnEvent(EServerInterfaceEvent leEvent, void* /*lpData*/)
     {
-        if (static_cast<s32>(leEvent) == KI_EVENT_RESET)
+        if (leEvent == E_SERVER_INTERFACE_CONNECTION_EVENT_DISCONNECTED)
         {
             mpaDataIDToMemAddrs = 0;                        // +0x14
             meCurrentAction     = E_ACTION_COUNT;          // +0x18

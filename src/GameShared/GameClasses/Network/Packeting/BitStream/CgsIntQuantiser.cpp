@@ -22,8 +22,8 @@ namespace CgsNetwork
 {
     namespace
     {
-        const char KAC_ARTIST_FILE[] =
-            "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\BitStream\\CgsIntQuantiser.cpp";
+#define CGS_ARTIST_FILE \
+            "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\BitStream\\CgsIntQuantiser.cpp"
     }
 
     // ---- Pack @ 0x82871568 -----------------------------------------------------
@@ -34,7 +34,7 @@ namespace CgsNetwork
     {
         CGS_ASSERT_STREAM_AT(liValue >= liMinValue && liValue <= liMaxValue,
                              "Value " << liValue << " is outside the range " << liMinValue << ":" << liMaxValue << "\n",
-                             KAC_ARTIST_FILE, 59);
+                             CGS_ARTIST_FILE, 59);
         if (liValue > liMaxValue)
         {
             liValue = liMaxValue;
@@ -49,7 +49,7 @@ namespace CgsNetwork
         *lpiNumBitsUsed = liNumBits;
         CGS_ASSERT_AT(liNumBits == 32 || *lpuPackedValue < (1u << liNumBits),
                       "liNumBits == 32 || ((*lpuPackedValue) < (uint32_t)(1 << liNumBits))",
-                      KAC_ARTIST_FILE, 67);
+                      CGS_ARTIST_FILE, 67);
     }
 
     // ---- UnPack @ 0x82871710 ---------------------------------------------------
@@ -59,9 +59,11 @@ namespace CgsNetwork
         *lpiValue = static_cast<s32>(static_cast<u32>(liMinValue) + luPackedValue);
         CGS_ASSERT_STREAM_AT(*lpiValue >= liMinValue && *lpiValue <= liMaxValue,
                              "Value " << *lpiValue << " is outside the range " << liMinValue << ":" << liMaxValue << "\n",
-                             KAC_ARTIST_FILE, 89);
+                             CGS_ARTIST_FILE, 89);
 
         *lpiValue = *lpiValue > liMaxValue ? liMaxValue : *lpiValue;
         *lpiValue = *lpiValue >= liMinValue ? *lpiValue : liMinValue;
     }
 }
+
+#undef CGS_ARTIST_FILE
