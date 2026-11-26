@@ -323,7 +323,7 @@ namespace Deformation
                 // still showed `rec 1` for the reset wheel -- the record survived the reset in BOTH
                 // the fixed and the control build (runs wrst_A2 / wrst_CTL). The call was reaching
                 // a gate that cannot fire.
-                const u32 luWheelWord = maWheels[liSlot].GetWheelBodyId().muEntityWord;
+                const u32 luWheelWord = maWheels[liSlot].GetWheelBodyId().GetEntityId();
                 const u32 luHandlingWord = static_cast<u32>(static_cast<u64>(lHandlingBodyId) >> 32);
                 if ((((luWheelWord >> 10) ^ (luHandlingWord >> 10)) & 0x3FFFu) == 0u)
                 {

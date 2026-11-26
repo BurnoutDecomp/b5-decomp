@@ -79,6 +79,14 @@ namespace BrnPhysics
             muCurrentRaceCarState |= static_cast<u32>(leState);
         }
 
+        // DWARF BrnStuntOffencesManager.h:241 `bool GetCurrentRaceCarState(ECurrentCarState)`.
+        // Attested inline in CheckForTakenOffLanding @0x825BB0C0: the flag is materialised as a
+        // bool (`rlwinm r10,r11,29,31,31`) and compared with true/false (cmplwi 1 / cmplwi 0).
+        bool GetCurrentRaceCarState(ECurrentCarState leState)
+        {
+            return (muCurrentRaceCarState & static_cast<u32>(leState)) != 0;
+        }
+
     private:
         void SetCurrentCarInAirStatus(Vehicle::RaceCarPhysics* lpRaceCarPhysics, f32 lfTimeStep);   // @0x826135A8
         void CheckForTakenOffLanding(Vehicle::RaceCarPhysics* lpRaceCarPhysics);                    // @0x825BB078

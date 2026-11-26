@@ -34,8 +34,10 @@ struct Entity
     // CgsDataStructures.h (DWARF, part of the deferred Entity surface above). The
     // interned entry name accessor. FLAG (additive home-grow): the SpliceBankStatistics
     // TTY dump reads a ContentSpec's name via GetName() (X360 SpliceBankStatistics::
-    // DumpToTty inlines the `*(spec + 0)` mName read). Shape-only trivial getter.
-    const Name& GetName() const { return mName; }
+    // DumpToTty inlines the `*(spec + 0)` mName read). DWARF CgsDataStructures.h:145 returns
+    // the Name BY VALUE (`Name GetName() const`): DumpToTty 0x826A2FE0 copies it into a stack
+    // temporary and streams that through operator<<(StrStreamBase&, const Name&).
+    Name GetName() const { return mName; }
 
     // CgsDataStructures.h:178/187/198 (DWARF). The serialization member-pointer
     // fixup helpers, static templates on Entity. A serialized entity stores every

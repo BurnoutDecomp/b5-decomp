@@ -486,8 +486,10 @@ namespace PhysicsSimulationIO
         rw::math::vpu::Vector3 mNormal;          // @+0x20  DWARF :386 -- the drain event's mNormal
         rw::math::vpu::Vector3 mPointOnA;        // @+0x30  DWARF :387 -- the drain event's mPointOnA
         rw::math::vpu::Vector3 mPointOnB;        // @+0x40  DWARF :388 -- the drain event's mPointOnB
-        u64                    mIDA;             // @+0x50  DWARF :389 (a CgsPhysics::RigidBodyId handle)
-        u64                    mIDB;             // @+0x58  DWARF :390
+        // DWARF :389/:390 type both ids RigidBodyId; DeformationManager::CreateDetachedWheelContactEvent
+        // 0x825B9618 reads mIDA.GetEntityId().GetOwner() (`ld; rldicl 32,32; srwi 24`, its assert string).
+        RigidBodyId            mIDA;             // @+0x50  DWARF :389
+        RigidBodyId            mIDB;             // @+0x58  DWARF :390
         u32                    muTag;            // @+0x60  DWARF :391 -- the drain event's muTag
 
         // DWARF :379. ⭐ DECLARED 2026-08-06 -- the old gating note ("no X360 body or caller in

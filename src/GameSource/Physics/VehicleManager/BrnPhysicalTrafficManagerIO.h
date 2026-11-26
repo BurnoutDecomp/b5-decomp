@@ -53,9 +53,14 @@ namespace Vehicle
         // the console -- only the two masks decide which slots are live.
         // NOTE: nothing cleared these masks before, because the old PC CreateIOBuffer<T>
         // value-initialised the whole 2 KB buffer; without this body they would be garbage.
+        // DecFIGS PS3 0x6D8C34 (this Construct, out of line) shows the console's body: the base
+        // status store, BitArray<10>::Construct on both masks (bl 0x642B10 x2), then both masks
+        // cleared again inline -- the doubled std pair ARTIST keeps.
         void Construct()
         {
             CgsModule::IOBuffer::Construct();
+            mCreatedJointBitArray.Construct();
+            mRemovedJointBitArray.Construct();
             mCreatedJointBitArray.UnSetAll();
             mRemovedJointBitArray.UnSetAll();
         }

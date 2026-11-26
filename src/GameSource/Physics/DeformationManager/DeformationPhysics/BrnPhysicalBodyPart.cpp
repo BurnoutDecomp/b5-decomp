@@ -2191,7 +2191,7 @@ namespace Deformation
         // here from the SAME three extracts the asm feeds that call -- the field geometry is
         // BurnoutBodyPartIDLayout's, the one place this packing is spelled.
         const u32 luOwner       = mRigidBodyId.GetOwner();                 // srwi r4, r11, 24
-        const u32 luPartIndex   = mRigidBodyId.GetPartIndex();             // clrlwi r6, r11, 22
+        const u32 luPartIndex   = mRigidBodyId.GetIKPartIndex();           // clrlwi r6, r11, 22
         const u32 luEntityIndex =                                          // extrwi r5, r10, 14, 8
             (mGlobalVehicleId.muValue >> BurnoutBodyPartIDLayout::KU_ENTITY_INDEX_BASE)
             & ((1u << BurnoutBodyPartIDLayout::KU_NUM_BITS_FOR_ENTITY_NUM) - 1u);
@@ -2557,9 +2557,7 @@ namespace Deformation
         // the same constant RemovePart re-seeds from (0x8260CAEC; ClearPoolSlotBindings). Crash parity
         // G28-D2 (2026-09-23): the old "rodata-not-recovered" FLAG seeded only the entity word and left
         // muSubA/muSubB zero, so GetBaseRigidBodyID() read 0xFFFFFFFF00000000 instead of all ones.
-        mRigidBodyId.muEntityWord = 0xFFFFFFFFu;
-        mRigidBodyId.muSubA       = 0xFFFFu;
-        mRigidBodyId.muSubB       = 0xFFFFu;
+        mRigidBodyId.SetInvalid();
 
         mpIKPart           = 0;       // *(this+476) = 0
         mpDeformableObject = 0;       // *(this+480) = 0

@@ -537,8 +537,15 @@ namespace
 
         const u32 luPlayer = static_cast<u32>(mePlayerActiveRaceCarIndex);
 
-        if (!mUsedRaceCars.IsBitSet(luPlayer)
-            || (maRaceCarVehicles[luPlayer].GetTimeUntilStuckInCollisionTest() > 0.0f))
+        if (!mUsedRaceCars.IsBitSet(luPlayer))
+        {
+            return;
+        }
+
+        // DWARF local lpPlayerCar (BrnVehicleManager.cpp:2245): ARTIST forms &maRaceCarVehicles[i]
+        // once (0x825C39B8 addi r30,r11,0x740) and reads/writes the timer off it.
+        RaceCarPhysics* lpPlayerCar = &maRaceCarVehicles[luPlayer];
+        if (lpPlayerCar->GetTimeUntilStuckInCollisionTest() > 0.0f)
         {
             return;
         }
@@ -554,9 +561,9 @@ namespace
 
         // Lines 0/1 are FL<->RR both ways, 2/3 are FR<->RL both ways (see the Add's store map).
         // A diagonal counts only when BOTH directions hit: geometry between the two wheels.
-        const bool lbStuckAlongFrontLeftToRearRight =
+        bool lbStuckAlongFrontLeftToRearRight =
             (lpResult->mabHit[0] != 0) && (lpResult->mabHit[1] != 0);
-        const bool lbStuckAlongFrontRightToRearLeft =
+        bool lbStuckAlongFrontRightToRearLeft =
             (lpResult->mabHit[2] != 0) && (lpResult->mabHit[3] != 0);
 
         if (lbStuckAlongFrontLeftToRearRight || lbStuckAlongFrontRightToRearLeft)
@@ -564,7 +571,7 @@ namespace
             mbPlayerCarStuckInCollision = true;
         }
 
-        maRaceCarVehicles[luPlayer].SetTimeUntilStuckInCollisionTest(KF_STUCK_IN_COLLISION_TEST_INTERVAL);
+        lpPlayerCar->SetTimeUntilStuckInCollisionTest(KF_STUCK_IN_COLLISION_TEST_INTERVAL);
     }
 
     // =============================================================================================

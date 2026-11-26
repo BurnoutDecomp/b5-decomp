@@ -86,17 +86,23 @@
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"                         // GetFirstEvent / GetNextEvent
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                       // CGS_ASSERT
 
+// ---------------------------------------------------------------------------------------------
+// The fixed steering-decay step and its factor. DWARF lists file-scope constants
+// KF_PLAYER_RECENT_STEERING_DAMPING_FACTOR / KF_STEERING_UPDATE_STEP (BrnVehicleManager.cpp:137/138),
+// and ARTIST emits their storage (0x8208FA18 = 0.5f, 0x8208FA1C = 0.02f, in the unit's constant
+// block beside KF_MIN_GRIND_SPEED 0x8208FA0C) -- but no function reads either address: UpdateDrivers
+// loads the shared float pool instead (0x82005574 = 0.02f, used by 29 functions in other units;
+// 0x82001DA0 = 0.5f). The body below therefore uses the literal values; a named file-scope
+// const here would be loaded from its own storage (our compiler addresses both through one anchor).
+// ---------------------------------------------------------------------------------------------
+
+// The unity path ARTIST's asserts name (string 0x82091150).
+#define BRN_VEHICLEMANAGER_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/VehicleManager/BrnVehicleManager.cpp"
+
 namespace BrnPhysics
 {
 namespace Vehicle
 {
-    // ---------------------------------------------------------------------------------------------
-    // The fixed steering-decay step and its factor. Both are .rdata float-pool immediates the X360
-    // decompiler resolved directly out of the image (flt_82005574 / flt_82001DA0); flt_82001DA0 ==
-    // 0.5f is the same constant a dozen other bodies in this tree already home.
-    // ---------------------------------------------------------------------------------------------
-    static const f32 KF_STEERING_DECAY_STEP  = 0.02f;   // flt_82005574
-    static const f32 KF_STEERING_DECAY_SCALE = 0.5f;    // flt_82001DA0
 
     // ==============================================================================================
     // @0x82642C68  BrnPhysics::Vehicle::VehicleManager::UpdateDrivers  (120 insns)
@@ -109,68 +115,80 @@ namespace Vehicle
             BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
             VehicleOutputInterface* lpVehicleOutputInterface)
     {
-        // 0x82642C8C..0x82642CA8: the stack bitset is zeroed BEFORE the queue is opened.
-        CgsContainers::BitArray<8> lUpdatedCars;
-        lUpdatedCars.UnSetAll();                                    // `li r11,0 ; std r11,0(r10)`
-
+        // DWARF locals (BrnVehicleManager.cpp:3579..3585): lpDriverQueue, liId, liSize, lpEvent,
+        // lUpdatedVehicles; ARTIST stores nothing into liSize / lpEvent before GetFirstEvent.
         mbUpdatedPlayerDriver = false;                              // stbx 0, this + 0x2A11C
         mbPlayerAiDriverValid = false;                              // stbx 0, this + 0x2A0A0
 
-        const VehicleDriverInputInterface::UpdateDriverEventQueue* const lpQueue =
+        const VehicleDriverInputInterface::UpdateDriverEventQueue* lpDriverQueue =
             lpDriverInputInterface->GetUpdateDriverQueue();
+        s32 liId;
+        s32 liSize;
+        const CgsModule::Event* lpEvent;
 
-        const CgsModule::Event* lpEvent = 0;
-        s32 liEventSize = 0;
-        s32 liEventType = lpQueue->GetFirstEvent(&lpEvent, &liEventSize);   // bl @0x82642CC4
+        CgsContainers::BitArray<8> lUpdatedVehicles;
+        lUpdatedVehicles.UnSetAll();                                // `li r11,0 ; std r11,0(r10)`
 
-        // Issued AFTER GetFirstEvent and BEFORE the loop -- the console interleaves it into the
-        // call's shadow (0x82642CC8..0x82642CE4), so the order is preserved rather than tidied.
-        maRaceCarDrivers[mePlayerActiveRaceCarIndex].mControls.mbIsInvulnerableToWorld = true;
+        liId = lpDriverQueue->GetFirstEvent(&lpEvent, &liSize);    // bl @0x82642CC4
 
-        while (liEventType >= 0)
+        maRaceCarDrivers[mePlayerActiveRaceCarIndex].SetInvulnerableToWorld(true);
+
+        while (liId >= 0)
         {
-            const CgsModule::Event* const lpThisEvent = lpEvent;     // `lwz r30, var_70(r1)`
-
-            switch (liEventType)
+            // Case blocks in the DWARF's line order (player :3608, network :3616, AI :3624,
+            // traffic :3632) -- ARTIST's block order behind the jump table.
+            switch (liId)
             {
-                case E_DRIVER_TYPE_PLAYER:                                   // jumptable case 0
-                    UpdatePlayerDriver(
-                        static_cast<const BrnPlayerDriverControls*>(lpThisEvent), lUpdatedCars);
+                case E_DRIVER_TYPE_PLAYER:
+                {
+                    const BrnPlayerDriverControls* lpControls =
+                        static_cast<const BrnPlayerDriverControls*>(lpEvent);
+                    UpdatePlayerDriver(lpControls, lUpdatedVehicles);
                     break;
+                }
 
-                case E_DRIVER_TYPE_AI:                                       // jumptable case 1
-                    UpdateAIDriver(
-                        static_cast<const BrnAIDriverControls*>(lpThisEvent), lUpdatedCars);
+                case E_DRIVER_TYPE_NETWORK:
+                {
+                    const BrnNetworkDriverControls* lpControls =
+                        static_cast<const BrnNetworkDriverControls*>(lpEvent);
+                    UpdateNetworkDriver(lpControls, lUpdatedVehicles);
                     break;
+                }
 
-                case E_DRIVER_TYPE_NETWORK:                                  // jumptable case 2
-                    UpdateNetworkDriver(
-                        static_cast<const BrnNetworkDriverControls*>(lpThisEvent), lUpdatedCars);
+                case E_DRIVER_TYPE_AI:
+                {
+                    const BrnAIDriverControls* lpControls =
+                        static_cast<const BrnAIDriverControls*>(lpEvent);
+                    UpdateAIDriver(lpControls, lUpdatedVehicles);
                     break;
+                }
 
-                case E_DRIVER_TYPE_TRAFFIC:                                  // jumptable case 3
+                case E_DRIVER_TYPE_TRAFFIC:
+                {
                     // `add r3, r31, r28` with r28 == 0xAEE0 == 44768 == the embedded manager.
-                    mPhysicalTrafficManager.UpdateTrafficDriver(
-                        static_cast<const BrnTrafficDriverControls*>(lpThisEvent), lUpdatedCars);
+                    const BrnTrafficDriverControls* lpControls =
+                        static_cast<const BrnTrafficDriverControls*>(lpEvent);
+                    mPhysicalTrafficManager.UpdateTrafficDriver(lpControls, lUpdatedVehicles);
                     break;
+                }
 
                 default:
-                    CGS_ASSERT(false, "Unrecognised event in update queue");   // :3644 (0xE3C)
+                    CGS_ASSERT_AT(false, "Unrecognised event in update queue",
+                                  BRN_VEHICLEMANAGER_CPP_FILE, 3644);   // li r5,0xE3C
                     break;
             }
 
-            liEventType = lpQueue->GetNextEvent(lpThisEvent, &lpEvent, &liEventSize);
+            liId = lpDriverQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
         }
 
         // ---- the fixed-step steering decay (0x82642DBC..0x82642E10) -------------------------------
         // mfSteeringUpdateRemainder accumulates real time; every whole 0.02 s of it halves the
-        // player's recent-steering average. The console emits this as a do/while behind an entry
-        // compare -- one loop here, same trip count.
+        // player's recent-steering average.
         mfSteeringUpdateRemainder += lfTimeStep;
-        while (mfSteeringUpdateRemainder >= KF_STEERING_DECAY_STEP)
+        while (mfSteeringUpdateRemainder >= 0.02f)                  // 0x82005574
         {
-            mfPlayerRecentSteering    *= KF_STEERING_DECAY_SCALE;
-            mfSteeringUpdateRemainder -= KF_STEERING_DECAY_STEP;
+            mfPlayerRecentSteering    *= 0.5f;                      // 0x82001DA0
+            mfSteeringUpdateRemainder -= 0.02f;
         }
 
         // ---- 0x82642E14..0x82642E28: r4..r7 == requests / vehicleOut / managerOut / deformationIn,

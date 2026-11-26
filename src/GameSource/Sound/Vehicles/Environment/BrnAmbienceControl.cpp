@@ -28,21 +28,28 @@ namespace Environment
 
 bool KB_AMBIENCE_DRAW_REGION = false; // ARTIST byte_82FFB8BF
 
-// The streamed 2D ambience map.
-static const char* const KPC_AMBIENCE_MAP_FILE  = "sound\\regions\\ambiences.dat";
-static const char* const KPC_AMBIENCE_MAP_ASSET = "Ambiences";
+// The unit's tunable data (ARTIST .data 0x82F2CDF8..0x82F2CE08) has internal linkage: ARTIST
+// addresses neighbours through one anchor (SetupLoadData 0x826E6128 `addi r11,-0x3208` then
+// lwz 4/0; SelectSpecialAmbience 0x826B991C `addi r30,-0x3200` then lwz 4/0), which the
+// compiler only does for file-local data.
+// The streamed 2D ambience map. DWARF BrnAmbienceEffect.cpp:45/46 `const char *` (the pointers
+// themselves are data: ARTIST 0x82F2CDF8 / 0x82F2CDFC).
+static const char* KPC_AMBIENCE_MAP_FILE  = "sound\\regions\\ambiences.dat";
+static const char* KPC_AMBIENCE_MAP_ASSET = "Ambiences";
 
 // Region values the control substitutes for the map byte.
 static const u8 KU8_TRAFFIC_AMBIENCE       = 18;
 static const u8 KU8_HEAVY_TRAFFIC_AMBIENCE = 19;
 static const u8 KU8_TUNNEL_AMBIENCE        = 20;
 
-// More live traffic entities than these select the traffic beds.
-static const s32 KI_TRAFFIC_THRESHOLD       = 14;
-static const s32 KI_HEAVY_TRAFFIC_THRESHOLD = 22;
+// More live traffic entities than these select the traffic beds. DWARF
+// BrnAmbienceEffect.cpp:127/128 declares both as plain (tunable) `int32_t`; ARTIST reads them
+// from .data (0x82F2CE00 = 14, 0x82F2CE04 = 22) in SelectSpecialAmbience 0x826B9920/0x826B9948.
+static s32 KI_TRAFFIC_THRESHOLD       = 14;
+static s32 KI_HEAVY_TRAFFIC_THRESHOLD = 22;
 
-// Seconds between two region selections.
-static const f32 KF_AMBIENCE_UPDATE_TIME = 5.0f;
+// Seconds between two region selections. DWARF cpp:131 plain `float32_t`, ARTIST 0x82F2CE08.
+static f32 KF_AMBIENCE_UPDATE_TIME = 5.0f;
 
 // The world rectangle the ambience map covers (the same Paradise City rectangle the
 // district map uses): origin and size in x/z.
@@ -204,7 +211,9 @@ void AmbienceControl::SetupLoadData()
 // ---------------------------------------------------------------------------
 bool AmbienceControl::SelectSpecialAmbience(u8& aru8Ambience) const
 {
-    CGS_ASSERT(mpEnclosureControl != 0, "mpEnclosureControl");
+    // DWARF BrnAmbienceEffect.cpp:360; asserts on its unity path at :365 / :379. ARTIST re-reads
+    // mpLogicModule for each use (0x826B98C4 / 0x826B98D4).
+    CGS_ASSERT_AT(mpEnclosureControl != 0, "mpEnclosureControl", BRN_AMBIENCEEFFECT_CPP_FILE, 365);
     if (mpEnclosureControl->GetTriggerInfo(E_TRIGGER_POSITION_AT_ENTITY)
             .IsTypeActive(BrnTrigger::GenericRegion::E_TYPE_TUNNEL))
     {
@@ -212,25 +221,24 @@ bool AmbienceControl::SelectSpecialAmbience(u8& aru8Ambience) const
         return true;
     }
 
-    BrnSound::Module::SoundLogicModule* lpLogicModule =
-        static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
-    if (BrnSound::Logic::CameraControl::GetCameraModeFromLogicModule(lpLogicModule) ==
+    if (BrnSound::Logic::CameraControl::GetCameraModeFromLogicModule(
+            static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule)) ==
         BrnSound::E_CAMERA_MODE_PICTURE_PARADISE)
     {
         return false;
     }
 
     const BrnSound::Module::Io::RootInputBuffer* lpInputBuffer =
-        lpLogicModule->GetBrnInputStructure();
-    CGS_ASSERT(lpInputBuffer != 0, "lpInputBuffer");
+        static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule)->GetBrnInputStructure();
+    CGS_ASSERT_AT(lpInputBuffer != 0, "lpInputBuffer", BRN_AMBIENCEEFFECT_CPP_FILE, 379);
     const BrnSound::Module::Io::RootInputBuffer::TrafficSoundOutputInterface& lrTraffic =
         lpInputBuffer->GetTrafficOutputInterface();
-    if (static_cast<s32>(lrTraffic.GetTrafficEntityCount()) > KI_HEAVY_TRAFFIC_THRESHOLD)
+    if (lrTraffic.GetTrafficEntityCount() > KI_HEAVY_TRAFFIC_THRESHOLD)
     {
         aru8Ambience = KU8_HEAVY_TRAFFIC_AMBIENCE;
         return true;
     }
-    if (static_cast<s32>(lrTraffic.GetTrafficEntityCount()) > KI_TRAFFIC_THRESHOLD)
+    if (lrTraffic.GetTrafficEntityCount() > KI_TRAFFIC_THRESHOLD)
     {
         aru8Ambience = KU8_TRAFFIC_AMBIENCE;
         return true;

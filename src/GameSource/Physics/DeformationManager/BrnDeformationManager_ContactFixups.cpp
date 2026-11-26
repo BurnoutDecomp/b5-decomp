@@ -17,6 +17,12 @@
 #include "GameSource/Physics/DeformationManager/BrnDeformationManager.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                                // CGS_ASSERT
+#include "GameSource/World/BrnEntityTypes.h"                                                       // BrnWorld::E_ENTITYTYPE_*
+
+// The header the two Fixup*VehicleContact bodies are inline in on the original (string 0x8208C7E0).
+#define BRN_DEFORMATIONMANAGER_H_FILE "..\\..\\..\\GameSource\\Physics/DeformationManager/BrnDeformationManager.h"
+// The unity path ARTIST's asserts name (string 0x820923C0).
+#define BRN_DEFORMATIONMANAGER_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/DeformationManager/BrnDeformationManager.cpp"
 #include "GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h"                     // CgsSceneManager::SceneManagerIO::PotentialContact
 #include "GameShared/GameClasses/Physics/CgsPhysicsSimulationIO_Events.h"                          // CgsPhysics::PhysicsSimulationIO::OutContactSpy
 #include "GameSource/Physics/ContactSpies/BrnContactSpyEvents.h"                                   // ContactSpy::PhysicalCarPartContact (+EBodyParts placeholder)
@@ -76,44 +82,36 @@ namespace Deformation
     // false otherwise (slot not live -> contact dropped).
     // ==========================================================================================
     bool DeformationManager::FixupBodyPartVehicleContact(
-        CgsSceneManager::SceneManagerIO::PotentialContact* lpContact)
+        CgsSceneManager::SceneManagerIO::PotentialContact* lpPotContact)
     {
-        CGS_ASSERT(GetVolumeInstanceOwner(lpContact->muVolumeInstanceIdA) == KU_OWNER_RACECAR_DEFORMABLE_PART,
-                   "lpPotContact->muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_RACECAR_DEFORMABLE_PART");
-        CGS_ASSERT(GetVolumeInstanceOwner(lpContact->muVolumeInstanceIdB) == KU_OWNER_RACECAR,
-                   "lpPotContact->muVolumeInstanceIdB.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_RACECAR");
-        CGS_ASSERT(lpContact->muPolyTagA < KU_MAX_DETACHED_PARTS,
-                   "lpPotContact->muPolyTagA < KU_MAX_DETACHED_PARTS");
+        // Inline in BrnDeformationManager.h on the original (DWARF h:301): ARTIST's copy asserts on
+        // the header's lines 589/590/592. The owner reads go through the 32-bit entity word
+        // (`ld; rldicl 32,32; srwi 24`) as the assert strings spell them.
+        CGS_ASSERT_AT(lpPotContact->muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_RACECAR_DEFORMABLE_PART,
+                      "lpPotContact->muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_RACECAR_DEFORMABLE_PART",
+                      BRN_DEFORMATIONMANAGER_H_FILE, 589);
+        CGS_ASSERT_AT(lpPotContact->muVolumeInstanceIdB.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_RACECAR,
+                      "lpPotContact->muVolumeInstanceIdB.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_RACECAR",
+                      BRN_DEFORMATIONMANAGER_H_FILE, 590);
+        CGS_ASSERT_AT(lpPotContact->muPolyTagA < KU_MAX_DETACHED_PARTS,
+                      "lpPotContact->muPolyTagA < KU_MAX_DETACHED_PARTS",
+                      BRN_DEFORMATIONMANAGER_H_FILE, 592);
 
-        // The destination detached-part pool slot (poly tag A). If the slot is not live -> drop.
-        const s32 liPartIndex = static_cast<s32>(lpContact->muPolyTagA);
-        if (!mDetachedPartManager.IsPartIndexUsed(liPartIndex))
+        // Re-key the contact only when the detached-part slot (poly tag A) and its owning model
+        // slot (poly tag B) are both live; one shared `return false` (0x825A0D88). The poly tags are
+        // re-read at each use (0x825A0D40 / 0x825A0D60). idA <- the part's whole 64-bit id
+        // (`ld 0x1D0(part)`), idB <- the model's handling-body word (`ld 0x6710(model)`).
+        if (mDetachedPartManager.IsPartIndexUsed(lpPotContact->muPolyTagA) &&
+            mModelsAdded.IsBitSet(lpPotContact->muPolyTagB))
         {
-            return false;
+            lpPotContact->muVolumeInstanceIdA =
+                mDetachedPartManager.GetPartFromIndex(static_cast<u16>(lpPotContact->muPolyTagA))
+                    ->GetContactVolumeInstanceId();
+            lpPotContact->muVolumeInstanceIdB =
+                mpaModels[lpPotContact->muPolyTagB].GetHandlingBodyVolumeInstanceId();
+            return true;
         }
-
-        // The owning car model slot (poly tag B). Tripwire-bound, then tested live.
-        const u32 luModelIndex = lpContact->muPolyTagB;
-        if (!mModelsAdded.IsBitSet(luModelIndex))
-        {
-            return false;
-        }
-
-        // ⭐ FLAG CLOSED 2026-08-06 (FixUpVehicleContacts wave). The two 8-byte id writes are now
-        // byte-decoded from the X360 asm (@0x825A0D40..0x825A0D7C):
-        //   * idA: the console fetches the part (`GetPartFromIndex(low 16 bits of muPolyTagA)`,
-        //     bl @0x825A0D4C) and stores its 64-bit BurnoutBodyPartID whole
-        //     (`ld 0x1D0(part) ; std 0x30(contact)`) -- the packed part handle IS the part's
-        //     volume-instance id. Exposed as PhysicalBodyPart::GetContactVolumeInstanceId().
-        //   * idB: `ld 0x6710(mpaModels[muPolyTagB]) ; std 0x38(contact)` -- the model's
-        //     {mHandlingBodyID, mGlobalEntityId} pair read as one 8-byte volume-instance word
-        //     (the banked "+26384 is an 8-byte word" lead, confirmed). Exposed as
-        //     DeformableObject::GetHandlingBodyVolumeInstanceId().
-        const PhysicalBodyPart* lpPart =
-            mDetachedPartManager.GetPartFromIndex(static_cast<u16>(lpContact->muPolyTagA));
-        lpContact->muVolumeInstanceIdA = lpPart->GetContactVolumeInstanceId();
-        lpContact->muVolumeInstanceIdB = mpaModels[luModelIndex].GetHandlingBodyVolumeInstanceId();
-        return true;
+        return false;
     }
 
     // ==========================================================================================
@@ -125,43 +123,34 @@ namespace Deformation
     // handling-body word. Returns true iff re-keyed.
     // ==========================================================================================
     bool DeformationManager::FixupWheelVehicleContact(
-        CgsSceneManager::SceneManagerIO::PotentialContact* lpContact)
+        CgsSceneManager::SceneManagerIO::PotentialContact* lpPotContact)
     {
-        const u32 luOwnerA = GetVolumeInstanceOwner(lpContact->muVolumeInstanceIdA);
-        CGS_ASSERT(luOwnerA == KU_OWNER_DETACHED_RACECAR_WHEEL || luOwnerA == KU_OWNER_DETACHED_TRAFFIC_WHEEL,
-                   "lpPotContact->muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_DETACHED_RACECAR_WHEEL || "
-                   "lpPotContact->muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_DETACHED_TRAFFIC_WHEEL");
-        CGS_ASSERT(GetVolumeInstanceOwner(lpContact->muVolumeInstanceIdB) == KU_OWNER_RACECAR,
-                   "lpPotContact->muVolumeInstanceIdB.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_RACECAR");
-        CGS_ASSERT(lpContact->muPolyTagA < KU_MAX_DETACHED_WHEELS,
-                   "lpPotContact->muPolyTagA < KU_MAX_DETACHED_WHEELS");
+        // Inline in BrnDeformationManager.h on the original (DWARF h:305): asserts on the header's
+        // lines 622/623/625.
+        CGS_ASSERT_AT(lpPotContact->muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_DETACHED_RACECAR_WHEEL ||
+                      lpPotContact->muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_DETACHED_TRAFFIC_WHEEL,
+                      "lpPotContact->muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_DETACHED_RACECAR_WHEEL || "
+                      "lpPotContact->muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_DETACHED_TRAFFIC_WHEEL",
+                      BRN_DEFORMATIONMANAGER_H_FILE, 622);
+        CGS_ASSERT_AT(lpPotContact->muVolumeInstanceIdB.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_RACECAR,
+                      "lpPotContact->muVolumeInstanceIdB.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_RACECAR",
+                      BRN_DEFORMATIONMANAGER_H_FILE, 623);
+        CGS_ASSERT_AT(lpPotContact->muPolyTagA < KU_MAX_DETACHED_WHEELS,
+                      "lpPotContact->muPolyTagA < KU_MAX_DETACHED_WHEELS",
+                      BRN_DEFORMATIONMANAGER_H_FILE, 625);
 
-        const u16 lu16Slot = static_cast<u16>(lpContact->muPolyTagA);
-        if (!mDetachedWheelManager.IsSlotUsed(lu16Slot))
+        // As FixupBodyPartVehicleContact, for a detached wheel (idA <- `ld 0x70(wheel)`).
+        if (mDetachedWheelManager.IsSlotUsed(static_cast<u16>(lpPotContact->muPolyTagA)) &&
+            mModelsAdded.IsBitSet(lpPotContact->muPolyTagB))
         {
-            return false;
+            lpPotContact->muVolumeInstanceIdA =
+                mDetachedWheelManager.GetWheel(static_cast<u16>(lpPotContact->muPolyTagA))
+                    ->GetVolumeInstanceId();
+            lpPotContact->muVolumeInstanceIdB =
+                mpaModels[lpPotContact->muPolyTagB].GetHandlingBodyVolumeInstanceId();
+            return true;
         }
-
-        const u32 luModelIndex = lpContact->muPolyTagB;
-        if (!mModelsAdded.IsBitSet(luModelIndex))
-        {
-            return false;
-        }
-
-        // Re-key the contact off the live detached wheel + its owning car model. The wheel's
-        // volume-instance id IS publicly reachable (PhysicalWheel::GetVolumeInstanceId()), so A is
-        // re-keyed faithfully; B is the owning model's handling-body word.
-        const PhysicalWheel* lpWheel = mDetachedWheelManager.GetWheel(lu16Slot);
-        lpContact->muVolumeInstanceIdA = lpWheel->GetVolumeInstanceId();
-
-        // ⭐ FLAG CLOSED 2026-08-06 (FixUpVehicleContacts wave). The B-id write is byte-decoded
-        // from the X360 asm (@0x825A0F7C..0x825A0F98): `ld 0x6710(mpaModels[muPolyTagB]) ;
-        // std 0x38(contact)` -- the owning model's {mHandlingBodyID, mGlobalEntityId} pair read
-        // as ONE 8-byte volume-instance word (the banked "+26384 is an 8-byte word" lead,
-        // confirmed), not the 32-bit GetHandlingBodyID() the old flag assumed. Exposed as
-        // DeformableObject::GetHandlingBodyVolumeInstanceId().
-        lpContact->muVolumeInstanceIdB = mpaModels[luModelIndex].GetHandlingBodyVolumeInstanceId();
-        return true;
+        return false;
     }
 
     // ==========================================================================================
@@ -189,18 +178,24 @@ namespace Deformation
         const CgsPhysics::PhysicsSimulationIO::OutContactSpy* lpInContact,
         const CgsSceneManager::SceneManagerIO::PotentialContact* lpInPotentialContact)
     {
-        CGS_ASSERT(lpOutPhysicalCarPartContact != 0, "lpOutPhysicalCarPartContact != NULL");   // :1960
-        CGS_ASSERT(lpInContact != 0, "lpInContact != NULL");                                   // :1961
+        CGS_ASSERT_AT(lpOutPhysicalCarPartContact != 0, "lpOutPhysicalCarPartContact != NULL",
+                      BRN_DEFORMATIONMANAGER_CPP_FILE, 1960);
+        CGS_ASSERT_AT(lpInContact != 0, "lpInContact != NULL", BRN_DEFORMATIONMANAGER_CPP_FILE, 1961);
 
-        const u32 luSpyOwnerA = static_cast<u32>(lpInContact->mIDA >> 56);
-        CGS_ASSERT(luSpyOwnerA == KU_OWNER_DETACHED_RACECAR_WHEEL || luSpyOwnerA == KU_OWNER_DETACHED_TRAFFIC_WHEEL,
-                   "lpInContact->mIDA.GetEntityId().GetOwner() == BrnWorld::E_ENTITYTYPE_DETACHED_RACECAR_WHEEL || "
-                   "lpInContact->mIDA.GetEntityId().GetOwner() == BrnWorld::E_ENTITYTYPE_DETACHED_TRAFFIC_WHEEL");   // :1965
+        // The owner tests read the 32-bit entity word (`ld 0x50; rldicl 32,32; srwi 24`), as the
+        // assert strings spell them: mIDA.GetEntityId().GetOwner() (mIDA is a DWARF RigidBodyId)
+        // and muVolumeInstanceIdA.GetEntityIDOwner().
+        CGS_ASSERT_AT(lpInContact->mIDA.GetEntityId().GetOwner() == BrnWorld::E_ENTITYTYPE_DETACHED_RACECAR_WHEEL ||
+                      lpInContact->mIDA.GetEntityId().GetOwner() == BrnWorld::E_ENTITYTYPE_DETACHED_TRAFFIC_WHEEL,
+                      "lpInContact->mIDA.GetEntityId().GetOwner() == BrnWorld::E_ENTITYTYPE_DETACHED_RACECAR_WHEEL || "
+                      "lpInContact->mIDA.GetEntityId().GetOwner() == BrnWorld::E_ENTITYTYPE_DETACHED_TRAFFIC_WHEEL",
+                      BRN_DEFORMATIONMANAGER_CPP_FILE, 1965);
 
-        const u32 luPotOwnerA = GetVolumeInstanceOwner(lpInPotentialContact->muVolumeInstanceIdA);
-        CGS_ASSERT(luPotOwnerA == KU_OWNER_DETACHED_RACECAR_WHEEL || luPotOwnerA == KU_OWNER_DETACHED_TRAFFIC_WHEEL,
-                   "lpInPotentialContact->muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_DETACHED_RACECAR_WHEEL || "
-                   "lpInPotentialContact->muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_DETACHED_TRAFFIC_WHEEL");   // :1967
+        CGS_ASSERT_AT(lpInPotentialContact->muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_DETACHED_RACECAR_WHEEL ||
+                      lpInPotentialContact->muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_DETACHED_TRAFFIC_WHEEL,
+                      "lpInPotentialContact->muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_DETACHED_RACECAR_WHEEL || "
+                      "lpInPotentialContact->muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_DETACHED_TRAFFIC_WHEEL",
+                      BRN_DEFORMATIONMANAGER_CPP_FILE, 1967);
 
         // The event tail (the BaseContact head was stamped by the caller).
         lpOutPhysicalCarPartContact->mVelocity.SetZero();   // stvx zero splat @+96
@@ -235,22 +230,30 @@ namespace Deformation
         const CgsPhysics::PhysicsSimulationIO::OutContactSpy* lpInContact,
         const CgsSceneManager::SceneManagerIO::PotentialContact* lpInPotentialContact)
     {
-        CGS_ASSERT(lpOutPhysicalCarPartContact != 0, "lpOutPhysicalCarPartContact != NULL");   // :1932
-        CGS_ASSERT(lpInContact != 0, "lpInContact != NULL");                                   // :1933
+        CGS_ASSERT_AT(lpOutPhysicalCarPartContact != 0, "lpOutPhysicalCarPartContact != NULL",
+                      BRN_DEFORMATIONMANAGER_CPP_FILE, 1932);
+        CGS_ASSERT_AT(lpInContact != 0, "lpInContact != NULL", BRN_DEFORMATIONMANAGER_CPP_FILE, 1933);
 
-        const u32 luSpyOwnerA = static_cast<u32>(lpInContact->mIDA >> 56);
-        CGS_ASSERT(luSpyOwnerA == KU_OWNER_RACECAR_DEFORMABLE_PART || luSpyOwnerA == KU_OWNER_TRAFFIC_DEFORMABLE_PART,
-                   "lpInContact->mIDA.GetEntityId().GetOwner() == BrnWorld::E_ENTITYTYPE_RACECAR_DEFORMABLE_PART || "
-                   "lpInContact->mIDA.GetEntityId().GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_DEFORMABLE_PART");   // :1937
+        CGS_ASSERT_AT(lpInContact->mIDA.GetEntityId().GetOwner() == BrnWorld::E_ENTITYTYPE_RACECAR_DEFORMABLE_PART ||
+                      lpInContact->mIDA.GetEntityId().GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_DEFORMABLE_PART,
+                      "lpInContact->mIDA.GetEntityId().GetOwner() == BrnWorld::E_ENTITYTYPE_RACECAR_DEFORMABLE_PART || "
+                      "lpInContact->mIDA.GetEntityId().GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_DEFORMABLE_PART",
+                      BRN_DEFORMATIONMANAGER_CPP_FILE, 1937);
 
-        const u32 luPotOwnerA = GetVolumeInstanceOwner(lpInPotentialContact->muVolumeInstanceIdA);
-        CGS_ASSERT(luPotOwnerA == KU_OWNER_RACECAR_DEFORMABLE_PART || luPotOwnerA == KU_OWNER_TRAFFIC_DEFORMABLE_PART,
-                   "Potential contact IDs don't match. PotCont owner is ");   // :1940 (streamed on console)
+        // Streamed (DWARF cpp:1938 lStrStream): the owner byte goes through operator<<(s32).
+        CGS_ASSERT_STREAM_AT(lpInPotentialContact->muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_RACECAR_DEFORMABLE_PART ||
+                             lpInPotentialContact->muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_DEFORMABLE_PART,
+                             "Potential contact IDs don't match. PotCont owner is "
+                                 << lpInPotentialContact->muVolumeInstanceIdA.GetEntityIDOwner(),
+                             BRN_DEFORMATIONMANAGER_CPP_FILE, 1940);
 
-        // The detached-part pool slot rides the packed handle's low 16 bits.
-        const u16 lu16PartSlot = static_cast<u16>(lpInContact->mIDA & 0xFFFFu);
-        const PhysicalBodyPart* lpPart = mDetachedPartManager.GetPartFromIndex(lu16PartSlot);
-        CGS_ASSERT(lpPart != 0, "lpPart");   // :1947
+        // DWARF locals lBodyId (cpp:1943), liPartPoolIndex (:1945), lpPart (:1946): the
+        // detached-part pool slot is the id's UserIDB (`ld 0x50; clrlwi r4, r11, 16`).
+        BurnoutBodyPartID lBodyId;
+        lBodyId = lpInContact->mIDA;
+        u16 liPartPoolIndex = lBodyId.GetPartPoolIndex();
+        const PhysicalBodyPart* lpPart = mDetachedPartManager.GetPartFromIndex(liPartPoolIndex);
+        CGS_ASSERT_AT(lpPart != 0, "lpPart", BRN_DEFORMATIONMANAGER_CPP_FILE, 1947);
 
         // The event tail.
         lpOutPhysicalCarPartContact->meType =

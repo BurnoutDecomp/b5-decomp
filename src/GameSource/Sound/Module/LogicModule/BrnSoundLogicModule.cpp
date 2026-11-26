@@ -409,7 +409,7 @@ bool SoundLogicModule::Release()
         meBrnPrepareStage = E_PREPSTAGE_PERFMON;
         return true;
     default:
-        CGS_ASSERT(false, "Invalid Stage\n");
+        CGS_ASSERT_AT(false, "Invalid Stage\n", CGS_ARTIST_FILE, 450);   // li r5,0x1C2
         return false;
     }
 }

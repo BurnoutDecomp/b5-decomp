@@ -13,6 +13,10 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDetachedWheelManager.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
+// GetWheel(u16) is inline in the original header: ARTIST's copy 0x825A0B10 asserts on
+// BrnDetachedWheelManager.h:114 through the relative include (string 0x8208D620).
+#define BRN_DETACHEDWHEELMANAGER_H_FILE "..\\..\\..\\GameSource\\Physics/DeformationManager/DeformationPhysics/BrnDetachedWheelManager.h"
+
 namespace BrnPhysics
 {
 namespace Deformation
@@ -28,7 +32,7 @@ namespace Deformation
     // ============================================================================================
     const PhysicalWheel* DetachedWheelManager::GetWheel(u16 lu16Slot)
     {
-        CGS_ASSERT(IsSlotUsed(lu16Slot), "IsSlotUsed(luSlot)");
+        CGS_ASSERT_AT(IsSlotUsed(lu16Slot), "IsSlotUsed(luSlot)", BRN_DETACHEDWHEELMANAGER_H_FILE, 114);
         return &maWheels[lu16Slot];
     }
 

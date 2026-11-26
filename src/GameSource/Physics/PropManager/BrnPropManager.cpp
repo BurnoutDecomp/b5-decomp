@@ -7013,7 +7013,8 @@ void PropManager::RemovePart( PropEntityID                                      
     // IsBitSet's own bound tripwire (CgsBitArray.h:203) -- see the CreatePart note for why it is
     // spelled here rather than in the container header.
     // :811. 0x8260FA74..0x8260FAC8.
-    CGS_ASSERT( mUsedParts.IsBitSet( luPartIndex ), "mUsedParts.IsBitSet( luPartIndex )" );
+    CGS_ASSERT_AT( mUsedParts.IsBitSet( luPartIndex ), "mUsedParts.IsBitSet( luPartIndex )",
+                   CGS_ARTIST_FILE, 811 );   // li r5,0x32B
 
     // UnSetBit's bound tripwire (CgsBitArray.h:241), then the ld/andc/std at
     // 0x8260FAF4..0x8260FB08. The message is the binary's own and matches the committed spelling in
@@ -7027,13 +7028,9 @@ void PropManager::RemovePart( PropEntityID                                      
     lSimulationRemoveBodyEvent.mID =
         ( static_cast<u64>( lEntityId.GetValue() ) << 32 )
         | static_cast<u64>( static_cast<u16>( luPartIndex ) );
-    // ⚠️ The console's 16-byte stack record only ever writes the leading 8 bytes -- the
-    // mbFailIfRigidBodyNotFound byte at +8 is UNINITIALISED stack on the X360 (measured: the only
-    // store into var_60 is the `std` at 0x8260FB44). The host sets it FALSE == the tolerant remove,
-    // which is both what ProcessRemoveRigidBodyQueue's not-found-tolerant arm does with a clear byte
-    // and the committed treatment of the identical console quirk in
-    // BrnPhysicalBodyPartPool_Remove.cpp:51.
-    lSimulationRemoveBodyEvent.mbFailIfRigidBodyNotFound = false;
+    // The console's 16-byte stack record only ever writes the leading 8 bytes -- the
+    // mbFailIfRigidBodyNotFound byte at +8 is left as it is on the X360 (measured: the only store
+    // into var_60 is the `std` at 0x8260FB44), so the original source never assigned it here.
 
     // 0x8260FB48 `bl sub_825BCF58` == InputBuffer::GetRemoveRigidBodyQueue() (the write-lock
     // producer overload; its "Not locked for writing\n" assert bakes

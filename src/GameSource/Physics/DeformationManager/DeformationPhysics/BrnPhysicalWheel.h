@@ -131,9 +131,7 @@ namespace Deformation
         CgsSceneManager::VolumeInstanceId GetVolumeInstanceId() const
         {
             CgsSceneManager::VolumeInstanceId lId;
-            lId.muId = (static_cast<u64>(mWheelBodyId.muEntityWord) << 32)
-                     | (static_cast<u64>(mWheelBodyId.muSubA) << 16)
-                     |  static_cast<u64>(mWheelBodyId.muSubB);
+            lId.muId = mWheelBodyId.GetRawId();
             return lId;
         }
 
@@ -144,7 +142,7 @@ namespace Deformation
         // (`ld 0x70(wheel) ; clrlwi r,r,24` at 0x82609A4C and 0x82609A1C -- the LOW byte of the
         // 8-byte packed id, i.e. mWheelBodyId.muSubB's low byte). Identical shape to the committed
         // PhysicalBodyPart::GetPoolIndex, which reads `ld 0x1D0(part) ; clrlwi 24`.
-        u8 GetPoolIndex() const { return static_cast<u8>(mWheelBodyId.muSubB); }
+        u8 GetPoolIndex() const { return static_cast<u8>(mWheelBodyId.GetPartPoolIndex()); }
 
         // BrnPhysicalWheel.h:182. The triangle-cache slot this wheel's collision mesh occupies.
         // INLINE for the same reason; base 123 (`addi r30, r11, 0x7B` @0x8260995C), the SAME base
@@ -152,7 +150,7 @@ namespace Deformation
         // twin's base is 73 -- the two pools occupy disjoint cache-slot ranges.
         u16 GetTriangleCacheSlot() const
         {
-            return static_cast<u16>((mWheelBodyId.muSubB & 0xFFu) + 123u);
+            return static_cast<u16>((mWheelBodyId.GetPartPoolIndex() & 0xFFu) + 123u);
         }
 
         // ----- queries / geometry --------------------------------------------------------

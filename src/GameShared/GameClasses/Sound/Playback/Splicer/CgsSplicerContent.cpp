@@ -121,9 +121,9 @@ void SpliceBankStatistics::DumpToTty() const
 
     if ((CgsDev::Message::gxMessageFilterFlags & 1u) != 0)
     {
-        const Name& lrName = mpSpliceContent->GetContentSpec().GetName();
-        *CgsDev::Log::gpDebugPrint << "Name hash: "
-                                   << static_cast<u32>(lrName.GetValue()) << "\n"
+        // ARTIST strings 0x820B0404 "Name: " / 0x820B03F4 "SpliceCount: "; the Name goes
+        // through CgsSound::Playback::operator<<(StrStreamBase&, const Name&) 0x82691420.
+        *CgsDev::Log::gpDebugPrint << "Name: " << mpSpliceContent->GetContentSpec().GetName() << "\n"
                                    << "SpliceCount: " << muStatCount << "\n";
     }
 

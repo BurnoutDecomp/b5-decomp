@@ -49,7 +49,7 @@ namespace Deformation
         {
             CgsPhysics::PhysicsSimulationIO::InRemoveRigidBody lRemoveEvent;
             lRemoveEvent.mID = lrPart.GetContactVolumeInstanceId().muId;   // ld part+0x1D0, std -> record+0
-            lRemoveEvent.mbFailIfRigidBodyNotFound = false;                // ⚠️ console leaves this byte as stack garbage; see banner
+            // mbFailIfRigidBodyNotFound is not assigned: ARTIST 0x8260CA5C..68 stores only mID.
             lpSimInput->GetRemoveRigidBodyQueue()->AddEvent(lRemoveEvent);
         }
 

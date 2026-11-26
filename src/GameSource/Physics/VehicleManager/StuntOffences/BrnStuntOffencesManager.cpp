@@ -206,17 +206,19 @@ namespace BrnPhysics
         if (!lpRaceCarPhysics) FireAssert("lpRaceCarPhysics != NULL", 367);
 
         // was-airborne(bit8) && !airborne-now(bit4)  -> JUST_LANDED(bit2)
-        if ((muCurrentRaceCarState & E_CURRENT_CAR_STATE_IN_THE_AIR_LAST_FRAME) != 0
-            && (muCurrentRaceCarState & E_CURRENT_CAR_STATE_IN_THE_AIR_NOW) == 0)
+        // DWARF: GetCurrentRaceCarState x2 / SetCurrentRaceCarState (cpp:52..54 of the dump); ARTIST
+        // compares each materialised flag with true / false (cmplwi 1 / 0 at 0x825BB0C4..0x825BB0F4).
+        if (GetCurrentRaceCarState(E_CURRENT_CAR_STATE_IN_THE_AIR_LAST_FRAME) == true
+            && GetCurrentRaceCarState(E_CURRENT_CAR_STATE_IN_THE_AIR_NOW) == false)
         {
-            muCurrentRaceCarState |= E_CURRENT_CAR_STATE_JUST_LANDED;
+            SetCurrentRaceCarState(E_CURRENT_CAR_STATE_JUST_LANDED);
         }
 
         // !was-airborne(bit8) && airborne-now(bit4)  -> JUST_TAKEN_OFF(bit1); compute reverse-takeoff.
-        if ((muCurrentRaceCarState & E_CURRENT_CAR_STATE_IN_THE_AIR_LAST_FRAME) == 0
-            && (muCurrentRaceCarState & E_CURRENT_CAR_STATE_IN_THE_AIR_NOW) != 0)
+        if (GetCurrentRaceCarState(E_CURRENT_CAR_STATE_IN_THE_AIR_LAST_FRAME) == false
+            && GetCurrentRaceCarState(E_CURRENT_CAR_STATE_IN_THE_AIR_NOW) == true)
         {
-            muCurrentRaceCarState |= E_CURRENT_CAR_STATE_JUST_TAKEN_OFF;
+            SetCurrentRaceCarState(E_CURRENT_CAR_STATE_JUST_TAKEN_OFF);
             if (!mbKeepCheckingForCleanLanding)   // +0x80 == 0 (asm reads this byte here)
             {
                 // dot(forward axis = transform.zAxis @+0x30, linear velocity @+0x50) < 0 -> took off reversed.

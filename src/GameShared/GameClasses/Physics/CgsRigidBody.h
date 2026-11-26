@@ -10,9 +10,12 @@
 // SetEntityId clears the high dword then ORs the new EntityId back in
 // (`stw 0,0x38; ld; or; std`), i.e. mId = (mId & 0xFFFFFFFF) | ((u64)EntityId << 32).
 // The DecFIGS DWARF (CgsRigidBody.h) confirms the { u64 mId } shape and these method
-// signatures. Members whose exact low-32 split (the DWARF-declared UserIDA/UserIDB and the
-// multi-arg Set() packers) is NOT evidenced by this build's asm are intentionally omitted
-// rather than guessed (they carry heavy version drift from the LegacySrc tree).
+// signatures. The low dword splits into two 16-bit user ids: UserIDA at bits 16..31 (byte +4)
+// and UserIDB at bits 0..15 (byte +6). Evidence: BurnoutBodyPartID::Set 0x825C1A10 /
+// BurnoutWheelBodyID::Set 0x825C1D40 inline Set(EntityId, u16, u16) as
+// `std 0; stw 0,0 / ld / or / std; sth 0,4 / ld / or (a<<16) / std; sth 0,6 / ld / or b / std`
+// (mId = 0, SetEntityId, SetUserIDA, SetUserIDB), and every pool reads its slot from the low
+// 16 bits (`ld; clrlwi 16`).
 //
 // Mirrors the sibling value-handle CgsSceneManager::EntityId (CgsEntityId.h): all-inline,
 // header-only, with a namespace-scope K_INVALID sentinel.
@@ -24,12 +27,19 @@ namespace CgsPhysics
     class RigidBodyId
     {
     public:
+        inline void                      Set( CgsSceneManager::EntityId lEntityId, u16 lu16UserIDA, u16 lu16UserIDB );   // DWARF h:54
+        inline void                      Set( u64 lu64Id );                                                             // DWARF h:66
         inline void                      SetEntityId( CgsSceneManager::EntityId lEntityId );
         inline CgsSceneManager::EntityId GetEntityId() const;
         inline u8                        GetEntityIDOwner() const;
+        inline u16                       GetUserIDA() const;                                                            // DWARF h:88
+        inline u16                       GetUserIDB() const;                                                            // DWARF h:91
         inline u16                       GetIndex() const;
+        inline void                      SetUserIDA( u16 lu16UserIDA );                                                 // DWARF h:98
+        inline void                      SetUserIDB( u16 lu16UserIDB );                                                 // DWARF h:102
         inline void                      SetInvalid();
         inline bool                      IsInvalid() const;
+        inline u64                       GetRawId() const;                                                              // DWARF h:111
 
         RigidBodyId() {}
         RigidBodyId( u64 lId ) { mId = lId; }
@@ -41,6 +51,21 @@ namespace CgsPhysics
 
     static const RigidBodyId K_INVALID_RIGID_BODY_ID = 0xFFFFFFFFFFFFFFFFULL;
 
+
+    inline void
+    RigidBodyId::Set( CgsSceneManager::EntityId lEntityId, u16 lu16UserIDA, u16 lu16UserIDB )
+    {
+        mId = 0;
+        SetEntityId( lEntityId );
+        SetUserIDA( lu16UserIDA );
+        SetUserIDB( lu16UserIDB );
+    }
+
+    inline void
+    RigidBodyId::Set( u64 lu64Id )
+    {
+        mId = lu64Id;
+    }
 
     inline void
     RigidBodyId::SetEntityId( CgsSceneManager::EntityId lEntityId )
@@ -68,9 +93,35 @@ namespace CgsPhysics
     }
 
     inline u16
+    RigidBodyId::GetUserIDA() const
+    {
+        return (u16)( mId >> 16 );
+    }
+
+    inline u16
+    RigidBodyId::GetUserIDB() const
+    {
+        return (u16)( mId & 0xFFFF );
+    }
+
+    inline u16
     RigidBodyId::GetIndex() const
     {
         return (u16)( mId & 0xFFFF );
+    }
+
+    inline void
+    RigidBodyId::SetUserIDA( u16 lu16UserIDA )
+    {
+        mId &= ~( 0xFFFFULL << 16 );
+        mId |= ( (u64)lu16UserIDA << 16 );
+    }
+
+    inline void
+    RigidBodyId::SetUserIDB( u16 lu16UserIDB )
+    {
+        mId &= ~0xFFFFULL;
+        mId |= (u64)lu16UserIDB;
     }
 
     inline void
@@ -83,5 +134,11 @@ namespace CgsPhysics
     RigidBodyId::IsInvalid() const
     {
         return mId == K_INVALID_RIGID_BODY_ID;
+    }
+
+    inline u64
+    RigidBodyId::GetRawId() const
+    {
+        return mId;
     }
 }

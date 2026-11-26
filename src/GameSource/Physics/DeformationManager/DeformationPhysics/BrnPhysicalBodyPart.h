@@ -295,10 +295,10 @@ namespace Deformation
         // ----- pool / spec indices -------------------------------------------------------
 
         // BrnPhysicalBodyPart.h:196. This part's slot index inside its PhysicalBodyPartPool.
-        u8 GetPoolIndex() const { return static_cast<u8>(mRigidBodyId.muSubB); }   // (inlined walls leg 4: the handle's low sub-id, the _Detach '+464 low byte' read)
+        u8 GetPoolIndex() const { return static_cast<u8>(mRigidBodyId.GetPartPoolIndex()); }   // (inlined walls leg 4: the handle's low sub-id, the _Detach '+464 low byte' read)
 
         // BrnPhysicalBodyPart.h:200. The index of this part's IK spec within the deformable model.
-        s32 GetIKPartIndex() const { return static_cast<s32>(mRigidBodyId.muEntityWord & 0x3FFu); }   // (inlined walls leg 4: the entity word's part-index field)
+        s32 GetIKPartIndex() const { return static_cast<s32>(mRigidBodyId.GetIKPartIndex()); }   // (inlined walls leg 4: the entity word's part-index field)
 
         // ----- collision geometry --------------------------------------------------------
 
@@ -349,7 +349,7 @@ namespace Deformation
         void UpdateBoundingBox(CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface);
 
         // BrnPhysicalBodyPart.h:238. The triangle-cache slot this part's collision mesh occupies.
-        u16 GetTriangleCacheSlot() const { return static_cast<u16>((mRigidBodyId.muSubB & 0xFFu) + 73u); }   // (inlined walls leg 4: the _Remove slice's attested (handle&0xFF)+73)
+        u16 GetTriangleCacheSlot() const { return static_cast<u16>((mRigidBodyId.GetPartPoolIndex() & 0xFFu) + 73u); }   // (inlined walls leg 4: the _Remove slice's attested (handle&0xFF)+73)
 
         // ----- joint model (attached-part deformation) -----------------------------------
 
@@ -442,12 +442,13 @@ namespace Deformation
         // friendship, no raw offsets).
         void ClearPoolSlotBindings()
         {
+            // The id is reset first: ARTIST 0x8260CAEC loads K_INVALID_RIGID_BODY_ID (0x82F2A3A8)
+            // ahead of the three field stores, which only the source order allows (a later
+            // load of the global could not be hoisted over them); the std itself is scheduled last.
+            mRigidBodyId.SetInvalid();     // std -> +0x1D0
             mpIKPart           = 0;        // stw 0 -> +0x1DC
             mpDeformableObject = 0;        // stw 0 -> +0x1E0
-            mbAddedToScene     = false;          // stb 0 -> +0x1E5
-            mRigidBodyId.muEntityWord = 0xFFFFFFFFu;   // std K_INVALID_RIGID_BODY_ID (~0ull)
-            mRigidBodyId.muSubA       = 0xFFFFu;       //   spread over the packed id's
-            mRigidBodyId.muSubB       = 0xFFFFu;       //   three fields
+            mbAddedToScene     = false;    // stb 0 -> +0x1E5
         }
 
         // ⭐ ADDED 2026-08-06 (FixUpVehicleContacts wave): the packed 8-byte word
