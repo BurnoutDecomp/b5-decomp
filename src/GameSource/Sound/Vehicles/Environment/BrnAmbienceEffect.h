@@ -27,16 +27,14 @@ struct AmbienceControl;
 struct AmbienceEffect : public BrnSound::Logic::BrnEffectObject,
                         public BrnSound::Logic::Streaming::IStreamUser
 {
-    AmbienceEffect();
+    // AmbienceEffect() is implicit (DWARF BrnAmbienceEffect.h lists it without a line): ARTIST's
+    // 0x826B9600 builds the bases and mParams and leaves mpAmbienceControl unset.
     virtual ~AmbienceEffect();
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const;
     virtual const char* GetTypeName() const;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
     static CgsSound::Logic::EffectObject* CreateObject(u32 luAllocator);
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F7A8)
-
-    // Effect-object factory hook. Returns the IResourceRequester view.
-    static BrnSound::Logic::IResourceRequester* CreateObj( u32 luFlavour );
 
     s32 GetController(s32 aiIndex) ;
     void AttachController(CgsSound::Logic::EffectBase* apController) ;

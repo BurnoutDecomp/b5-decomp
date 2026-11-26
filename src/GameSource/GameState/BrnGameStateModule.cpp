@@ -5345,7 +5345,7 @@ void GameStateModule::CheckForTailingRivals(GameStateModuleIO::OutputBuffer* lpO
     }
 
     const f32 lfPlayerSpeed = rw::math::vpu::Magnitude(
-        lpVehicleOutput->GetRaceCar(static_cast<u32>(GetPlayerActiveRaceCarIndex()))->mLinearVelocity);
+        lpVehicleOutput->GetRaceCarState(GetPlayerActiveRaceCarIndex())->mLinearVelocity);
     if (!(lfPlayerSpeed > 50.0f))
     {
         return;
@@ -5372,7 +5372,7 @@ void GameStateModule::CheckForTailingRivals(GameStateModuleIO::OutputBuffer* lpO
         if (lfPlayerDistanceToFinish < lfDistanceToFinish
             && !((lfPlayerDistanceToFinish + 20.0f) < lfDistanceToFinish)
             && lpVehicleOutput->GetUsedCarsBitArray().IsBitSet(static_cast<u32>(leIndex))
-            && lpVehicleOutput->GetRaceCar(static_cast<u32>(leIndex))->mfSpeedMPH > 50.0f)
+            && lpVehicleOutput->GetRaceCarState(leIndex)->mfSpeedMPH > 50.0f)
         {
             lfTime = lfTime + lfTimeStep;
         }

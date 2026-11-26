@@ -4,6 +4,11 @@
 #include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManagerIO.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
+// The original defines FlagJointToBeCreated / FlagJointToBeRemoved inline below the class in the header
+// (DWARF declarations h:76 / h:82); ARTIST's out-of-line copies (0x825C23B0 / 0x825C24F8) assert on
+// that header, lines 183 / 195, under this include spelling (string 0x82093930).
+#define BRN_PHYSICALTRAFFICMANAGERIO_H_FILE "..\\..\\..\\GameSource\\Physics/VehicleManager/BrnPhysicalTrafficManagerIO.h"
+
 // BrnPhysics::Vehicle::ArticulatedJointCreateBuffer -- the two frame-batch "flag a joint" methods.
 // Reconstructed from BURNOUT_X360_ARTIST.XEX.
 
@@ -18,8 +23,9 @@ namespace Vehicle
     void ArticulatedJointCreateBuffer::FlagJointToBeCreated(s32 liJointIndex,
                                                             const InAddJoint& lrAddJointEvent)
     {
-        CGS_ASSERT(liJointIndex >= 0 && liJointIndex < KI_MAX_ARTICULATED_TRAFFIC_VEHICLES,
-                   "liJointIndex >= 0 && liJointIndex < kiMaxArticulatedTrafficVehicles");
+        CGS_ASSERT_AT(liJointIndex >= 0 && liJointIndex < KI_MAX_ARTICULATED_TRAFFIC_VEHICLES,
+                      "liJointIndex >= 0 && liJointIndex < kiMaxArticulatedTrafficVehicles",
+                      BRN_PHYSICALTRAFFICMANAGERIO_H_FILE, 183);
 
         maCreatedJointEvents[liJointIndex] = lrAddJointEvent;   // 192-byte copy
         mCreatedJointBitArray.SetBit(static_cast<u32>(liJointIndex));
@@ -32,8 +38,9 @@ namespace Vehicle
     void ArticulatedJointCreateBuffer::FlagJointToBeRemoved(s32 liJointIndex,
                                                             const InRemoveJoint& lrRemoveJointEvent)
     {
-        CGS_ASSERT(liJointIndex >= 0 && liJointIndex < KI_MAX_ARTICULATED_TRAFFIC_VEHICLES,
-                   "liJointIndex >= 0 && liJointIndex < kiMaxArticulatedTrafficVehicles");
+        CGS_ASSERT_AT(liJointIndex >= 0 && liJointIndex < KI_MAX_ARTICULATED_TRAFFIC_VEHICLES,
+                      "liJointIndex >= 0 && liJointIndex < kiMaxArticulatedTrafficVehicles",
+                      BRN_PHYSICALTRAFFICMANAGERIO_H_FILE, 195);
 
         if (!mCreatedJointBitArray.IsBitSet(static_cast<u32>(liJointIndex)))
         {

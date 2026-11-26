@@ -80,7 +80,6 @@ CrashStreamEffect::CrashStreamEffect()
     , mParams()
     , mbShowTime(false)
     , mbIsCrashing(false)
-    , mpPhysicsControl(0)
     , mSubmix()
     , mePrepareState(E_PREPARE_STATE_CONSTRUCT_VOICE)
 {

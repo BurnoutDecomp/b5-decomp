@@ -84,10 +84,9 @@ struct DynamicMixer : public Nicotine::IDynamicMixer
     // (0x827DC970) is the implicit one -- it calls ~IDynamicMixer without first
     // re-storing the DynamicMixer vtable.
 
-    // DWARF :562. FLAG (DEFER): declared-only -- bodied with the mixer slices
-    // (the Environment's Construct wires mpEnvironment + CreateInstance directly,
-    // matching the @0x8268D050 asm).
-    void Construct(Environment* apEnvironment);
+    // DWARF CgsEnvironment.h:562, inline: the owner back-pointer (Environment::Construct
+    // 0x8268D0E4 stores it between the create-params' count and allocator).
+    void Construct(Environment* lpEnvironment) { mpEnvironment = lpEnvironment; }
 
     bool ConnectDMixIO(Nicotine::DMixIO* apDMixIO) ;
     int  GetStateCount(int aiState) ;
@@ -97,14 +96,23 @@ struct DynamicMixer : public Nicotine::IDynamicMixer
     Environment* mpEnvironment;   // DWARF :212 (console mixer +0x20)
 };
 
-// DWARF CgsEnvironment.h (the Logic-side per-stage CPU perf-monitor ids, in the
-// Construct's store order at console +0x304..+0x310).
-struct EnvironmentCpuMonitors
+// DWARF CgsSound::Logic::CpuMonitors (CgsEnvironment.h:92): the Logic-side per-stage CPU
+// perf-monitor ids at console +0x304..+0x310.
+struct CpuMonitors
 {
-    s32 miDynamicMixer;        // +0x304  "Dynamic Mixer"
-    s32 miProcessUpdate;       // +0x308  "Process Update"
-    s32 miUpdateParams;        // +0x30C  "Update Params"
-    s32 miEnvironmentUpdate;   // +0x310  "Logic Environment"
+    // DWARF h:101, inline: every id starts invalid (Environment::Construct 0x8268D11C..28).
+    void Construct()
+    {
+        miDynamicMixer     = -1;
+        miProcessUpdate    = -1;
+        miUpdateParams     = -1;
+        miLogicEnvironment = -1;
+    }
+
+    s32 miDynamicMixer;        // h:107  +0x304  "Dynamic Mixer"
+    s32 miProcessUpdate;       // h:108  +0x308  "Process Update"
+    s32 miUpdateParams;        // h:109  +0x30C  "Update Params"
+    s32 miLogicEnvironment;    // h:110  +0x310  "Logic Environment"
 };
 
 struct Environment
@@ -124,10 +132,7 @@ struct Environment
         mModuleParams.mu16MaxVoiceProxies   = 0;
         mModuleParams.mu16MaxContentProxies = 0;
         mModuleParams.mu16MaxStateManagers  = 0;
-        mCpuMonitors.miDynamicMixer      = -1;
-        mCpuMonitors.miProcessUpdate     = -1;
-        mCpuMonitors.miUpdateParams      = -1;
-        mCpuMonitors.miEnvironmentUpdate = -1;
+        mCpuMonitors.Construct();
     }
 
     // @ 0x8268D050 (DWARF h:245). Adopt the spec (allocator asserted, cpp:66),
@@ -161,6 +166,8 @@ struct Environment
     // DWARF h:129 / h:132. Accessors for the embedded systems.
     MicrophoneSystem&        GetMicrophoneSystem() { return mMicrophoneSystem; }
     Nicotine::IDynamicMixer& GetDynamicMixer()     { return mDynamicMixer; }
+    // DWARF h:364.
+    CpuMonitors&             GetCpuMonitors()      { return mCpuMonitors; }
 
     // ---- members (DWARF order/names; console offsets in the banner) ----
     rw::IResourceAllocator* mpAllocator;                            // +0x000 (:397)
@@ -169,7 +176,7 @@ struct Environment
     u32                     mu32StateManagerCount;                  // +0x04C (:404)
     MicrophoneSystem        mMicrophoneSystem;                      // +0x050 (:406)
     DynamicMixer            mDynamicMixer;                          // +0x2E0 (:407)
-    EnvironmentCpuMonitors  mCpuMonitors;                           // +0x304 (:408)
+    CpuMonitors             mCpuMonitors;                           // +0x304 (:408)
     f32                     mfGameTime;                             // +0x314 (:410)
 };
 

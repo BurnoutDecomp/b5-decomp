@@ -1,5 +1,11 @@
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+// GetRaceCarState is inline below the class in the original header (DWARF declarations h:343 / h:347);
+// ARTIST's two out-of-line copies assert on that header under the spelling of the unit that emitted
+// them: the const one (0x822B4860) on h:834 through the relative include, the non-const one
+// (0x825C08D0) on h:842 through the absolute path.
+#define BRN_VEHICLEOUTPUTINTERFACE_H_FILE_REL "..\\..\\..\\GameSource\\Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h"
+#define BRN_VEHICLEOUTPUTINTERFACE_H_FILE_ABS "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\vehiclemanager\\SharedIO/BrnVehicleOutputInterface.h"
 // CgsPhysics::K_INVALID_RIGID_BODY_ID, the real one (X360 qword_82F2A3A8 in this TU). Was
 // mirrored as a local u64 constant until 2026-08-04 because the RigidBodyId ODR fork made
 // including this header a hard C2011; the fork is retired (task #141) and the mirror with it.
@@ -35,31 +41,23 @@ namespace Vehicle
     // Number of race-car slots (BitArray<8> width).
     static const s32 KI_NUM_RACE_CARS = 8;
 
-    // @0x822B4860  VehicleOutputInterface::GetRaceCarState (non-const)
-    //   (dossier 'GetRaceCar' is a stripped-name artifact; DWARF has the const/non-const
-    //   GetRaceCarState overloads at :343/:347, both returning RaceCarState*.)
-    RaceCarState* VehicleOutputInterface::GetRaceCarState(s32 liRaceCarIndex)
-    {
-        CGS_ASSERT(mUsedRaceCars.IsBitSet(static_cast<u32>(liRaceCarIndex)),
-                   "mUsedRaceCars.IsBitSet( liRaceCarIndex )");
-        return &maRaceCarStates[liRaceCarIndex];
-    }
-
-    // @0x825C08D0  VehicleOutputInterface::GetRaceCarState (const)
-    //   The const overload (DWARF :343); the only difference from the non-const @0x822B4860 is the
-    //   dropped FireAssert file/line args.
+    // @0x822B4860  VehicleOutputInterface::GetRaceCarState (const, DWARF h:343; IDA truncates the
+    //   name to "GetRaceCar"). Its callers hold a const interface (CrashingRaceCarInterface::
+    //   SetFromVehicleOutputInterface 0x823625C0, DWARF const VehicleOutputInterface*).
     const RaceCarState* VehicleOutputInterface::GetRaceCarState(s32 liRaceCarIndex) const
     {
-        CGS_ASSERT(mUsedRaceCars.IsBitSet(static_cast<u32>(liRaceCarIndex)),
-                   "mUsedRaceCars.IsBitSet( liRaceCarIndex )");
+        CGS_ASSERT_AT(mUsedRaceCars.IsBitSet(static_cast<u32>(liRaceCarIndex)),
+                      "mUsedRaceCars.IsBitSet( liRaceCarIndex )", BRN_VEHICLEOUTPUTINTERFACE_H_FILE_REL, 834);
         return &maRaceCarStates[liRaceCarIndex];
     }
 
-    // The X360 asm-called symbol distinct from GetRaceCarState: returns &maRaceCarStates[i] for the
-    // CrashingRaceCarInterface's per-in-use-car walk.
-    const RaceCarState* VehicleOutputInterface::GetRaceCar(u32 luRaceCarIndex) const
+    // @0x825C08D0  VehicleOutputInterface::GetRaceCarState (non-const, DWARF h:347): called by the
+    //   writers VehicleManager::UpdateFatalCrashFlags / WriteOutVehicleStats.
+    RaceCarState* VehicleOutputInterface::GetRaceCarState(s32 liRaceCarIndex)
     {
-        return &maRaceCarStates[luRaceCarIndex];
+        CGS_ASSERT_AT(mUsedRaceCars.IsBitSet(static_cast<u32>(liRaceCarIndex)),
+                      "mUsedRaceCars.IsBitSet( liRaceCarIndex )", BRN_VEHICLEOUTPUTINTERFACE_H_FILE_ABS, 842);
+        return &maRaceCarStates[liRaceCarIndex];
     }
 
     // @0x823C89C8  VehicleOutputInterface::operator=
@@ -383,7 +381,7 @@ namespace Vehicle
 
             if (lpOutput->GetUsedCarsBitArray().IsBitSet(static_cast<u32>(liIndex)))
             {
-                const RaceCarState* lpState = lpOutput->GetRaceCar(static_cast<u32>(liIndex));
+                const RaceCarState* lpState = lpOutput->GetRaceCarState(liIndex);
                 mabCrashingRaceCars[liIndex] = lpState->mbCrashing;
             }
         }

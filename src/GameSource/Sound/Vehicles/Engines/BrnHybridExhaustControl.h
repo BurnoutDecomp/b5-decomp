@@ -63,10 +63,8 @@ struct HybridExhaustControl : public BrnSound::Logic::BrnEffectControl
     virtual bool Attach(); // @ 0x826997B0
     virtual void UpdateParams(f32 afTimeStep); // @ 0x826E3DE0
 
-    // @ 0x826B34E0 -- RTTI factory hook. Returns the +4 IResourceRequester base view.
-    // NOTE: Create allocates 0x130 == sizeof(HybridExhaustControl) -- the fact that
-    // pins +0x130 as the FIRST derived-class member slot (see HybridEngineControl).
-    static BrnSound::Logic::IResourceRequester* Create( bool abFlavour );
+    // CreateObject (ARTIST 0x826B34E0, IDA-truncated "Create") allocates 0x130 == sizeof(HybridExhaustControl),
+    // which pins +0x130 as the first derived-class member slot (see HybridEngineControl).
 
     // DWARF BrnHybridEngineControl.h:177 (public accessor). The current Ginsu RPM
     // sample -- the `lfs 0x8C(control)` read the paired HybridEngineControl's

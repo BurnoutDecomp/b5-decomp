@@ -82,8 +82,6 @@ struct EnclosureControl : public BrnSound::Logic::BrnEffectControl
 
     // @ 0x82685FA0 -- map a region type (19..31) to an enclosure index (pure; `this` unused).
     int ConvertRegionTypeToIndex( int liRegionType ) const;
-    // @ 0x826D0A30 -- allocate + construct factory. Returns the EffectObject* base view.
-    static CgsSound::Logic::EffectControl* Create( bool lbFlavour );
 
     s32 GetController(s32 aiIndex) ;
     void AttachController(CgsSound::Logic::EffectBase* apController) ;

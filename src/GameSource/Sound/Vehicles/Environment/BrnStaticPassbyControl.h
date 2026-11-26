@@ -54,7 +54,8 @@ struct StaticPassbyControl : public BrnSound::Logic::BrnEffectControl
         void Update( f32 lfDeltaTime );
     };
 
-    StaticPassbyControl();          // @ 0x826B9A90
+    // StaticPassbyControl() is implicit (DWARF: the class line h:77): ARTIST 0x826B9A90 runs only the
+    // member constructors (19 PassbyHistory, each Array<PassbyRecord,5> sets its count to -1).
     virtual ~StaticPassbyControl(); // anchor for the vector deleting destructor @ 0x826B9B48
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const;
     virtual const char* GetTypeName() const;

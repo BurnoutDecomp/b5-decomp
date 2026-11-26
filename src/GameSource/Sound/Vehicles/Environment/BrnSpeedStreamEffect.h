@@ -29,16 +29,13 @@ struct SpeedStreamControl;
 struct SpeedStreamEffect : public BrnSound::Logic::BrnEffectObject,
                            public BrnSound::Logic::Streaming::IStreamUser
 {
-    SpeedStreamEffect();            // @ 0x826BA148
+    // SpeedStreamEffect() is implicit (DWARF: the class line h:152); ARTIST 0x826BA148.
     virtual ~SpeedStreamEffect();   // anchor for the scalar deleting destructor @ 0x826BA1F8
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const;
     virtual const char* GetTypeName() const;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
     static CgsSound::Logic::EffectObject* CreateObject(u32 luAllocator);
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F7E8)
-
-    // @ 0x826D13D8 -- static allocate+construct factory. Returns the +4 IResourceRequester view.
-    static BrnSound::Logic::IResourceRequester* Create( int aiFlavour );
 
     s32 GetController(s32 aiIndex) ;
     void AttachController(CgsSound::Logic::EffectBase* apController) ;

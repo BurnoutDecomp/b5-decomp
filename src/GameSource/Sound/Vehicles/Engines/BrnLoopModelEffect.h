@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "GameSource/Sound/Module/LogicModule/BrnEffectObject.h"
+#include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"   // CgsResource::ResourceHandle
 
 // =============================================================================
 // BrnSound::Vehicles::Engines::LoopModelEffect
@@ -64,6 +65,8 @@ namespace Engines
 // virtual `scalar deleting destructor' @ 0x826AFBA0 runs the inherited
 // BrnEffectObject teardown (both vptr settles + the attach/detach/resources-ready
 // member clears).
+struct EngineControl;
+
 struct LoopModelEffect : public BrnSound::Logic::BrnEffectObject
 {
     LoopModelEffect() {}
@@ -73,6 +76,11 @@ struct LoopModelEffect : public BrnSound::Logic::BrnEffectObject
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
     static CgsSound::Logic::EffectObject* CreateObject(u32 luAllocator);
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject> sTypeInfo;   // DWARF static data member (ARTIST 0x82F2F618)
+
+    // DWARF members (BrnLoopModelEffect.h:84/86): the object is 0x44 bytes (CreateObject 0x826B40F8 allocates
+    // li r3,0x44); the constructor (h:102) leaves both unset.
+    CgsResource::ResourceHandle mDataHandle;
+    EngineControl*              mpControl;
 };
 
 } // namespace Engines

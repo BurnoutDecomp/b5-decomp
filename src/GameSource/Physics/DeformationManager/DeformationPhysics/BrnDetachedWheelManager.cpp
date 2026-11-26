@@ -1,6 +1,9 @@
 // ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
 // containers\./CgsBitArray.h, e.g. DetachedWheelManager::DetachWheel 0x8260E430): see CgsBitArray.h.
 #define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
+// RemoveWheel is inline in the original header (DWARF declaration h:124); ARTIST's out-of-line copy
+// (0x82615778) asserts on BrnDetachedWheelManager.h:162/163 through the relative include.
+#define BRN_DETACHEDWHEELMANAGER_H_FILE "..\\..\\..\\GameSource\\Physics/DeformationManager/DeformationPhysics/BrnDetachedWheelManager.h"
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDetachedWheelManager.h"
 
 #include "GameShared/GameClasses/Physics/CgsPhysicsSimulationModuleIO.h"   // OutputBuffer + OutUpdateRigidBody queue (walls leg 4)
@@ -150,8 +153,9 @@ namespace Deformation
                                            CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput,
                                            CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface)
     {
-        CGS_ASSERT(liSlot < KI_MAX_DETACHED_WHEELS, "liSlot < KI_MAX_DETACHED_WHEELS");
-        CGS_ASSERT(mUsedWheels.IsBitSet(static_cast<u32>(liSlot)), "mUsedWheels.IsBitSet(liSlot)");
+        CGS_ASSERT_AT(liSlot < KI_MAX_DETACHED_WHEELS, "liSlot < KI_MAX_DETACHED_WHEELS", BRN_DETACHEDWHEELMANAGER_H_FILE, 162);
+        CGS_ASSERT_AT(mUsedWheels.IsBitSet(static_cast<u32>(liSlot)), "mUsedWheels.IsBitSet(liSlot)",
+                      BRN_DETACHEDWHEELMANAGER_H_FILE, 163);
 
         PhysicalWheel* lpWheel = &maWheels[liSlot];
 

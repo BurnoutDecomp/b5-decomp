@@ -88,13 +88,6 @@ const char* AmbienceEffect::GetTypeName() const
     return sTypeInfo.typeName;
 }
 
-AmbienceEffect::AmbienceEffect()
-    : BrnSound::Logic::BrnEffectObject()
-    , BrnSound::Logic::Streaming::IStreamUser()
-    , mParams()
-    , mpAmbienceControl(0)
-{
-}
 
 // ---------------------------------------------------------------------------
 // ~AmbienceEffect  (the leaf vtable emission point). The teardown is the inherited
@@ -102,15 +95,6 @@ AmbienceEffect::AmbienceEffect()
 // ---------------------------------------------------------------------------
 AmbienceEffect::~AmbienceEffect()
 {
-}
-
-// ---------------------------------------------------------------------------
-// AmbienceEffect::CreateObj(u32)   (the effect-object factory hook)
-// Allocation uses the shared sound allocator with its original tag and flavour.
-// ---------------------------------------------------------------------------
-BrnSound::Logic::IResourceRequester* AmbienceEffect::CreateObj(u32 flavour)
-{
-    return static_cast<BrnSound::Logic::IResourceRequester*>( new (sTypeInfo.typeName, flavour != 0) AmbienceEffect() );
 }
 
 // Controller slot 0 is the ambience control.

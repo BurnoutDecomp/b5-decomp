@@ -19218,7 +19218,7 @@ void TrafficEntityModule::ProcessNearbyTrafficSceneQueryResults(
                                 "!RwMathVPU::IsZero(lPlayerPosition)" );        // baked line 14402
 
                     const Vector3 lActiveRaceCarPosition =
-                        lpInput->GetVehicleOutputInterface()->GetRaceCar( luIndex )->mTransform.Pos();
+                        lpInput->GetVehicleOutputInterface()->GetRaceCarState( luIndex )->mTransform.Pos();
 
                     CGS_ASSERT( !IsZeroPosition( lActiveRaceCarPosition ),
                                 "!RwMathVPU::IsZero(lActiveRaceCarPosition)" ); // baked line 14405

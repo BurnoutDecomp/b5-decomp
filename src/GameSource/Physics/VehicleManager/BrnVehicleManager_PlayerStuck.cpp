@@ -1,6 +1,8 @@
 // ARTIST compiled this unit through the nested CgsBitArray.h include (its BitArray asserts name
 // containers\./CgsBitArray.h, e.g. VehicleManager::ReadPlayerStuckTractionLineTestResults 0x825C3898): see CgsBitArray.h.
 #define CGS_ARTIST_CGSBITARRAY_NESTED_INCLUDE
+// These functions live in BrnVehicleManager.cpp in the original (DWARF); ARTIST asserts with that unity path.
+#define BRN_VEHICLEMANAGER_CPP_FILE "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/VehicleManager/BrnVehicleManager.cpp"
 #include <float.h>
 // =================================================================================================
 // GameSource/Physics/VehicleManager/BrnVehicleManager_PlayerStuck.cpp
@@ -343,7 +345,7 @@ namespace
             const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpTriCacheInterface,
             f32 lfTimeStep)
     {
-        CGS_ASSERT(lpTriCacheInterface != 0, "lpTriCacheInterface != NULL");        // :3334
+        CGS_ASSERT_AT(lpTriCacheInterface != 0, "lpTriCacheInterface != NULL", BRN_VEHICLEMANAGER_CPP_FILE, 3334);
 
         if (mePlayerActiveRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID)
         {

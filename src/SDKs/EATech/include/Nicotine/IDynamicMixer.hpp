@@ -58,7 +58,7 @@ public:
     void InitMap(int* lpMapData);                 // @0x82B44C40
     void DestroyMap();                            // @0x82B44D20
     void InitSnapshots(void* apSnapshotData);     // @0x82B44D68
-    void ProcessMixMap(int liUnused, float lfDeltaTime); // @0x82B44CA8
+    void ProcessMixMap(float lfDeltaTime);        // @0x82B44CA8 (PS3 mangling ProcessMixMapEf)
 
     // @0x825487C0 -- set the camera/mix state index; returns this (X360 returns r3).
     IDynamicMixer* SetCameraState(int liState);

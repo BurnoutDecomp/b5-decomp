@@ -73,22 +73,6 @@ f32 SmoothTowards(f32 lfCurrent, f32 lfTarget, f32 lfStep)
 }
 
 // ---------------------------------------------------------------------------
-// HybridExhaustControl::Create  @ 0x826B34E0   (the factory hook)
-//
-// The X360 allocates a 304-byte (0x130) block through CgsSound::MemBase::operator
-// new(size, tag, flavour) tagged "HybridExhaustControl" and inline-constructs a
-// HybridExhaustControl, returning it as the +4 IResourceRequester second-base view.
-// `abFlavour` selects only the operator-new flavour (0/1); both arms allocate the same
-// size and run the same ctor.
-//
-// Allocation uses the shared sound allocator with its original tag and flavour.
-// ---------------------------------------------------------------------------
-BrnSound::Logic::IResourceRequester* HybridExhaustControl::Create(bool flavour)
-{
-    return static_cast<BrnSound::Logic::IResourceRequester*>( new (sTypeInfo.typeName, flavour != 0) HybridExhaustControl() );
-}
-
-// ---------------------------------------------------------------------------
 // HybridExhaustControl::HybridExhaustControl  @ 0x826AF938  (field-init ctor)
 //
 // The BrnEffectControl dual-base sub-object (both vptr stores + the base bookkeeping

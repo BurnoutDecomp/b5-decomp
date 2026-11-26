@@ -77,26 +77,6 @@ const char* StaticPassbyControl::GetTypeName() const
     return sTypeInfo.typeName;
 }
 
-// StaticPassbyControl::StaticPassbyControl()  @ 0x826B9A90
-//
-// After the (X360-inlined) BrnEffectControl base ctor chain installs the two leaf vptrs
-// and value-inits the base members, this leaf body brings the 19-entry PassbyHistory
-// table at this+0x40 to its unconstructed state: each PassbyHistory's Array<PassbyRecord,
-// 5> has its count word set to the -1 (KI_UNCONSTRUCTED) sentinel.
-//
-// NOTE: mpPhysicsControl (X360 +3408) is deliberately NOT initialised here -- the X360
-// ctor stores nothing to that offset (indeterminate until Attach).
-// ---------------------------------------------------------------------------
-StaticPassbyControl::StaticPassbyControl()
-{
-    // X360: 19 PassbyHistory sub-objects at this+0x40, stride 0xB0. Each history's
-    // Array<PassbyRecord,5> has its count word set to the -1 (unconstructed) sentinel.
-    for ( u32 luHistory = 0; luHistory < 19; ++luHistory )
-    {
-        mafHistoryTimeouts[ luHistory ].mPassbyRecords.MarkUnconstructed();
-    }
-}
-
 // ---------------------------------------------------------------------------
 // ~StaticPassbyControl  @ 0x826B9B48  (anchor for the X360 `vector deleting destructor').
 // The observable member teardown lives in the inherited ~BrnEffectControl base chain;

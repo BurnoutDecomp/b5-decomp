@@ -177,8 +177,9 @@ EntityId PhysicalTrafficManager::GetGlobalTrafficEntityId(u16 lu16TrafficCarInde
     // CgsBitArray.h:203 bounds assert ("invalid index : <i> < 20"), built by the inlined
     // StrStream in the X360; the house CGS_ASSERT carries the stringized condition.
 
-    CGS_ASSERT(mUsedTrafficVehicles.IsBitSet(lu16TrafficCarIndex),
-               "mUsedTrafficVehicles.IsBitSet( lu16TrafficCarIndex )");
+    // Header-inline in the original: ARTIST asserts on BrnPhysicalTrafficManager.h:796 (0x825C2D48).
+    CGS_ASSERT_AT(mUsedTrafficVehicles.IsBitSet(lu16TrafficCarIndex),
+                  "mUsedTrafficVehicles.IsBitSet( lu16TrafficCarIndex )", KAC_ARTIST_ASSERT_FILE, 796);
 
     return maTrafficEntityIDs[lu16TrafficCarIndex];
 }

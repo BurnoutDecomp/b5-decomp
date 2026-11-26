@@ -173,7 +173,7 @@ void IDynamicMixer::InitSnapshots(void* apSnapshotData)
 //   if (mpSnapshot) mpSnapshot->Update(dt);
 //   if (mMixMaster) mMixMaster->ProcessMixMap(dt, miCamState);
 // ---------------------------------------------------------------------------
-void IDynamicMixer::ProcessMixMap(int /*liUnused*/, float lfDeltaTime)
+void IDynamicMixer::ProcessMixMap(float lfDeltaTime)
 {
     if (mLiveLink)
         mLiveLink->ProcessLiveLink(mpSnapshot, lfDeltaTime);

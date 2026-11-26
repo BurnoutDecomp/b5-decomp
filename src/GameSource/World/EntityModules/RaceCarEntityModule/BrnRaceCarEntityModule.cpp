@@ -5164,7 +5164,7 @@ void RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics(
                     static bool sabHopSeen[E_ACTIVE_RACE_CAR_INDEX_COUNT] = { false };
                 }
                 lpActiveRaceCar->UpdatePhysicsState(
-                    lpVehicleOutput->GetRaceCar( static_cast<u32>( liCar ) ),
+                    lpVehicleOutput->GetRaceCarState( liCar ),
                     &mWorldMap2D );
 
                 // ⭐⭐ UpdateRaceCarCollisionTagging @0x822D2280 LANDED 2026-08-26 (aicar_reset
@@ -5175,7 +5175,7 @@ void RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics(
                 // reset-on-track ring can hold anything and which needs none of it. Body + park
                 // inventory in BrnRaceCarEntityModule_ResetOnTrack.cpp.
                 UpdateRaceCarCollisionTagging(
-                    liCar, lpVehicleOutput->GetRaceCar( static_cast<u32>( liCar ) ) );
+                    liCar, lpVehicleOutput->GetRaceCarState( liCar ) );
 
                 // ⭐ UpdateDeformationState @0x822D4A58 LANDED 2026-08-24 (deform-land wave):
                 // the per-car deformation readback runs at the console's own position. The

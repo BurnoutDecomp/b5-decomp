@@ -119,11 +119,8 @@ namespace Vehicle
         // mTrafficStateQueue's seat below), then walks it with GetLength()/GetEvent.
         const PhysicalTrafficStateQueue* GetTrafficStateQueue() const { return &mTrafficStateQueue; }
 
-        RaceCarState*       GetRaceCarState(s32 liRaceCarIndex);         // @0x822B4860 (non-const)
-        const RaceCarState* GetRaceCarState(s32 liRaceCarIndex) const;  // @0x825C08D0 (const)
-
-        // The X360 asm-called symbol distinct from GetRaceCarState -- returns the same &maRaceCarStates[i].
-        const RaceCarState* GetRaceCar(u32 luRaceCarIndex) const;
+        const RaceCarState* GetRaceCarState(s32 liRaceCarIndex) const;  // DWARF h:343, @0x822B4860
+        RaceCarState*       GetRaceCarState(s32 liRaceCarIndex);         // DWARF h:347, @0x825C08D0
 
         const CgsContainers::BitArray<8u>& GetUsedCarsBitArray() const { return mUsedRaceCars; } // DWARF :370
 

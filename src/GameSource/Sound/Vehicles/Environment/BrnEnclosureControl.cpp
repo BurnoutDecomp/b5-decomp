@@ -48,19 +48,6 @@ int EnclosureControl::ConvertRegionTypeToIndex( int liRegionType ) const
     }
 }
 
-// ---------------------------------------------------------------------------
-// EnclosureControl::Create(bool)  @ 0x826D0A30   (the factory)
-// Allocates a 0x50 (80) byte block via CgsSound::MemBase::operator new(size, tag,
-// flavour) tagged "EnclosureControl" and inline-constructs an EnclosureControl, upcast
-// to the EffectObject* base (+4 adjust). The bool arg only selects the operator-new
-// flavour (0/1); both arms use the same size + ctor.
-// Tagged allocation now dispatches through the shared sound MemBase allocator.
-// ---------------------------------------------------------------------------
-CgsSound::Logic::EffectControl* EnclosureControl::Create( bool lbFlavour )
-{
-    return new (sTypeInfo.typeName, lbFlavour) EnclosureControl();
-}
-
 // ARTIST debug-menu backing cells. These exact globals are registered by the Sound page.
 bool KB_SPEW_WHOOSH_INFO = false; // byte_82FFB8BE
 f32 KF_WHOOSH_MIN_VELOCITY_THRESHOLD = 60.0f; // flt_82F2CDF0

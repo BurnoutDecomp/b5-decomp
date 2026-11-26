@@ -9089,38 +9089,23 @@ namespace Props
     }
 
     // HasPropJustBeenRemoved @ 0x825DEAC0. If the prop slot's used-bit is clear the prop is
-    // gone -> true. Otherwise owner-check the stored + query ids and report removal iff the
-    // slot has been recycled to a different entity (stored != lEntityId).
+    // gone -> true. Otherwise report removal iff the slot has been recycled to a different entity.
+    // One short-circuit expression: ARTIST merges the "not used" true with the compare result into
+    // one bool (cmplw; li 0; beq; li 1; clrlwi 24 at 0x825DEC30); GetValue() is each id's owner
+    // tripwire (BrnPropEntityID.h:278, stored id first).
     bool PropManager::HasPropJustBeenRemoved( PropEntityID lEntityId, int32_t liPropIndex )
     {
-
-        if ( !mUsedProps.IsBitSet( static_cast<u32>( liPropIndex ) ) )
-        {
-            return true;
-        }
-
-        PropEntityID lStoredEntityId = mpaPropInstances[liPropIndex].mEntityId;
-        lStoredEntityId.AssertIsProp();
-        lEntityId.AssertIsProp();
-
-        return !( lStoredEntityId == lEntityId );
+        return !mUsedProps.IsBitSet( static_cast<u32>( liPropIndex ) )
+            || mpaPropInstances[liPropIndex].GetEntityId().GetValue() != lEntityId.GetValue();
     }
 
     // HasPartJustBeenRemoved @ 0x825DE930. Part-instance analogue of HasPropJustBeenRemoved
     // over mUsedParts<30> / mpaPartInstances (stride 64, mEntityId @+0x30 -> GetEntityId()).
+    //   Same short-circuit shape as HasPropJustBeenRemoved (ARTIST 0x825DEAA0..0x825DEAB0).
     bool PropManager::HasPartJustBeenRemoved( PropEntityID lEntityId, int32_t liPartIndex )
     {
-
-        if ( !mUsedParts.IsBitSet( static_cast<u32>( liPartIndex ) ) )
-        {
-            return true;
-        }
-
-        PropEntityID lStoredEntityId = mpaPartInstances[liPartIndex].GetEntityId();
-        lStoredEntityId.AssertIsProp();
-        lEntityId.AssertIsProp();
-
-        return !( lStoredEntityId == lEntityId );
+        return !mUsedParts.IsBitSet( static_cast<u32>( liPartIndex ) )
+            || mpaPartInstances[liPartIndex].GetEntityId().GetValue() != lEntityId.GetValue();
     }
 }
 }

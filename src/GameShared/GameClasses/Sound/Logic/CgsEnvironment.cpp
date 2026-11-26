@@ -23,6 +23,9 @@
 #include "GameShared/GameClasses/Sound/Logic/CgsState.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsEffectBase.h"
 
+// ARTIST's asserts in this file name it through the GameShared include path.
+#define CGS_ENVIRONMENT_CPP_FILE "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/CgsEnvironment.cpp"
+
 namespace CgsSound
 {
 namespace Logic
@@ -90,30 +93,28 @@ StateManager* Environment::GetStateManager(s32 liStateManId) const
 // ---------------------------------------------------------------------------
 void Environment::Construct(const EnvironmentSpec& akrSpec)
 {
-    CGS_ASSERT(akrSpec.mpAllocator != 0, "lEnvironmentSpec.mpAllocator");
+    CGS_ASSERT_AT(akrSpec.mpAllocator != 0, "lEnvironmentSpec.mpAllocator", CGS_ENVIRONMENT_CPP_FILE, 66);
 
+    // ARTIST reads the spec's count before it stores the game time (0x8268D0B4 / 0x8268D0BC).
     mpAllocator = akrSpec.mpAllocator;
-    mfGameTime  = 0.0f;
     mu32StateManagerCount = akrSpec.mu32StateManagerCount;
+    mfGameTime  = 0.0f;
 
-    for (s32 liSlot = 0; liSlot < KI_MAX_NUMBER_OF_STATES; ++liSlot)
-        mapStateManagers[liSlot] = 0;
+    for (s32 lCnt = 0; lCnt < KI_MAX_NUMBER_OF_STATES; ++lCnt)   // DWARF lCnt (cpp:72)
+        mapStateManagers[lCnt] = 0;
 
-    // The mixer's creation descriptor the X360 builds on the stack:
-    // {mPrintSelect = 0, NumMixStates = managerCount, MixerAllocator = the
-    // Environment's allocator}. The PC/x64 allocation boundary is described above.
-    mDynamicMixer.mpEnvironment = this;
+    // The mixer's creation descriptor (DWARF lCreateParams, cpp:81): the count comes from the
+    // spec before DynamicMixer::Construct stores the back-pointer, the allocator after it.
     Nicotine::IDynamicMixer::MAP_CREATE_PARAMS lCreateParams;
     lCreateParams.mPrintSelect   = 0;
-    lCreateParams.NumMixStates   = static_cast<int>(mu32StateManagerCount);
+    lCreateParams.NumMixStates   = static_cast<int>(akrSpec.mu32StateManagerCount);
+    mDynamicMixer.Construct(this);
     lCreateParams.MixerAllocator = mpAllocator;
     mDynamicMixer.CreateInstance(&lCreateParams);
 
-    mCpuMonitors.miDynamicMixer      = -1;
-    mCpuMonitors.miProcessUpdate     = -1;
-    mCpuMonitors.miUpdateParams      = -1;
-    mCpuMonitors.miEnvironmentUpdate = -1;
-    mCpuMonitors.miEnvironmentUpdate = CgsDev::PerfMonCpu::AddMonitor(
+    // DWARF: GetCpuMonitors() then CpuMonitors::Construct() (both inline).
+    GetCpuMonitors().Construct();
+    mCpuMonitors.miLogicEnvironment = CgsDev::PerfMonCpu::AddMonitor(
         "Logic Environment", (CgsDev::PerfMonCpuPage)14, false, 1.0f, true);
     mCpuMonitors.miDynamicMixer = CgsDev::PerfMonCpu::AddMonitor(
         "Dynamic Mixer", (CgsDev::PerfMonCpuPage)14, false, 1.0f, true);
@@ -146,40 +147,39 @@ void Environment::Construct(const EnvironmentSpec& akrSpec)
 // ---------------------------------------------------------------------------
 void Environment::Update(f32 af32GameDt, f32 af32SimDt)
 {
-    CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miEnvironmentUpdate);
+    CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miLogicEnvironment);
 
     mfGameTime += af32GameDt;
     mMicrophoneSystem.UpdateMicrophones(af32GameDt);
 
     CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUpdateParams);
-    for (u32 luSlot = 0; luSlot < mu32StateManagerCount; ++luSlot)
+    // DWARF uint32_t luIndex (cpp:177). ARTIST re-reads the slot for every setter (0x826C3FEC /
+    // 0x826C3FF4): the original indexes the map each time rather than holding a local.
+    for (u32 luIndex = 0; luIndex < mu32StateManagerCount; ++luIndex)
     {
-        StateManager* lpManager = mapStateManagers[luSlot];
-        if (lpManager)
+        if (mapStateManagers[luIndex])
         {
-            lpManager->SetTimeStepGame(af32GameDt);
-            lpManager->SetTimeStepSimulation(af32SimDt);
-            lpManager->SetCurrentTime(mfGameTime);
-            lpManager->UpdateParams(af32GameDt);
+            mapStateManagers[luIndex]->SetTimeStepGame(af32GameDt);
+            mapStateManagers[luIndex]->SetTimeStepSimulation(af32SimDt);
+            mapStateManagers[luIndex]->SetCurrentTime(mfGameTime);
+            mapStateManagers[luIndex]->UpdateParams(af32GameDt);
         }
     }
     CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUpdateParams);
 
     CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miDynamicMixer);
-    // (the liUnused first arg rides the r5->r6 float-slot-skip; the asm passes only dt)
-    mDynamicMixer.ProcessMixMap(0, af32GameDt);
+    mDynamicMixer.ProcessMixMap(af32GameDt);
     CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miDynamicMixer);
 
     CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miProcessUpdate);
-    for (u32 luSlot = 0; luSlot < mu32StateManagerCount; ++luSlot)
+    for (u32 luIndex = 0; luIndex < mu32StateManagerCount; ++luIndex)
     {
-        StateManager* lpManager = mapStateManagers[luSlot];
-        if (lpManager)
-            lpManager->ProcessUpdate();
+        if (mapStateManagers[luIndex])
+            mapStateManagers[luIndex]->ProcessUpdate();
     }
     CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miProcessUpdate);
 
-    CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miEnvironmentUpdate);
+    CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miLogicEnvironment);
 }
 
 static void NotifyStateAndEffects(State* apState,

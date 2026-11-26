@@ -172,7 +172,7 @@ void MixerControl::RestartMixer()
     lrMixer.InitMap(reinterpret_cast<int*>(mpMixerData));
     lrMixer.InitSnapshots(const_cast<void*>(lSnapshots->GetData()));
     lrMixer.SetSnapshot(0, true);
-    lrMixer.ProcessMixMap(0, 0.16f);
+    lrMixer.ProcessMixMap(0.16f);
 
 }
 
