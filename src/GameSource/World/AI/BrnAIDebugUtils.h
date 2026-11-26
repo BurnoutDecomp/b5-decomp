@@ -37,10 +37,6 @@ namespace BrnAI
     namespace BrnAIDebugUtils
     {
         using rw::RGBA;
-        // Half-height of a drawn boundary-line quad: the vertical drop from the top
-        // (ground-height) edge to the bottom edge. X360 rodata flt_82004D0C == 40.0f
-        // (DWARF BrnAIDebugUtils.cpp:33 KF_BLINE_HALF_HEIGHT).
-        const f32 KF_BLINE_HALF_HEIGHT = 40.0f;
 
         // @0x8277F8C8 -- draw all debug geometry for one AI section: the HNG (hard-
         // no-go) lines then every portal's boundary lines. The bool is forwarded to

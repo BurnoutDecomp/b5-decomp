@@ -29,6 +29,11 @@ namespace BrnAIDebugUtils
     u32  _guLineToHighlight  = 0;     // dword_8300D538
     bool _gbHighlightOneLine = false; // byte_8300D53C
 
+    // DWARF BrnAIDebugUtils.cpp:33 (PS3 value 20.0; the AI unity's .rdata 0x820C4788). The quad
+    // is twice it tall: both builds subtract the folded 40.0 (ARTIST 0x82767618 reads the global
+    // literal 0x82004D0C, PS3 `a4 - 40.0`).
+    const f32 KF_BLINE_HALF_HEIGHT = 20.0f;
+
     // ---- Mutable module colour / counter words (read as data, not immediates). ----
     // Modelled as raw u32 colour words -- the X360 reads/writes them with plain
     // lwz/stw + oris/clrlwi bit-ops, i.e. as the packed RGBA8 word (rw::RGBA::m_rgba),
@@ -75,13 +80,13 @@ namespace BrnAIDebugUtils
                          RGBA lColour,
                          f32 lfY)
     {
+        // DWARF locals :522 lafTopY, :523 lafBottomY, :525 uint8_t luVertIndex.
         f32 lafTopY[2];
         f32 lafBottomY[2];
-        const f32 lfBottomY = lfY - KF_BLINE_HALF_HEIGHT;
-        for (u32 lu = 0; lu < 2; ++lu)
+        for (u8 luVertIndex = 0; luVertIndex < 2; ++luVertIndex)
         {
-            lafTopY[lu]    = lfY;
-            lafBottomY[lu] = lfBottomY;
+            lafTopY[luVertIndex]    = lfY;
+            lafBottomY[luVertIndex] = lfY - KF_BLINE_HALF_HEIGHT * 2.0f;
         }
         DrawBoundryLineWithY(lpRenderer, lpLine, lColour, lafTopY, lafBottomY);
     }
@@ -215,7 +220,7 @@ namespace BrnAIDebugUtils
             return;
         }
 
-        const f32 lfBottomY = lfPortalY - KF_BLINE_HALF_HEIGHT;       // fsubs f31, 40.0
+        const f32 lfBottomY = lfPortalY - KF_BLINE_HALF_HEIGHT * 2.0f; // fsubs f31, 40.0
 
         for (u32 lu = 0; lu < luNumBoundaryLines; ++lu)
         {
